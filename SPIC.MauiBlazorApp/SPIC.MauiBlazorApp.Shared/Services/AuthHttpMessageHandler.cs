@@ -1,20 +1,19 @@
 using System.Net;
 using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Components;
-using Microsoft.JSInterop;
 
 namespace SPIC.MauiBlazorApp.Shared.Services
 {
     public class AuthHttpMessageHandler : DelegatingHandler
     {
         private readonly NavigationManager _navigation;
-        private readonly IJSRuntime _js;
+        private readonly ISessionStore _session;
         private readonly LoginState _loginState;
 
-        public AuthHttpMessageHandler(NavigationManager navigation, IJSRuntime js, LoginState loginState)
+        public AuthHttpMessageHandler(NavigationManager navigation, ISessionStore session, LoginState loginState)
         {
             _navigation = navigation;
-            _js = js;
+            _session = session;
             _loginState = loginState;
         }
 
@@ -36,8 +35,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             {
                 _loginState.Token = null;
                 _loginState.ClearAllowedPages();
-                await _js.InvokeVoidAsync("sessionStorage.removeItem", "jwt_token");
-                await _js.InvokeVoidAsync("sessionStorage.removeItem", "spic_role_access");
+                await _session.ClearAsync();
             }
             catch
             {

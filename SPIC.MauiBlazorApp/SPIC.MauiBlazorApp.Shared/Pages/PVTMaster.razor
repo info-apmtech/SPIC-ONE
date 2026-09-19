@@ -840,11 +840,23 @@
         }
     }
 
-    private void DownloadSampleTemplate()
+    private async Task DownloadSampleTemplate()
     {
-        var baseAddress = Http.BaseAddress ?? new Uri(Nav.BaseUri);
-        var templateUrl = new Uri(baseAddress, "api/PVTMaster/template").ToString();
-        Nav.NavigateTo(templateUrl, forceLoad: true);
+        // Fetched through HttpClient so the bearer token goes with it (the endpoint
+        // requires authorization); a plain browser navigation would get a 401.
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync("api/PVTMaster/template");
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFileFromBytes",
+                "PVTMaster_Template.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                base64);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Template download failed: {ex.Message}");
+        }
     }
 
     private async Task DownloadRakePointSampleTemplate()

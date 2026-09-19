@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject NavigationManager Nav
+@inject ISessionStore SessionStore
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
 @using System.Linq
@@ -28,11 +29,11 @@
         Nav.LocationChanged += OnLocationChanged;
         LoginState.OnChange += OnLoginStateChanged;
 
-        // Restore role access from sessionStorage BEFORE the first check,
+        // Restore role access from the session store BEFORE the first check,
         // so a hard navigation (URL typed into address bar) doesn't slip through.
         try
         {
-            var roleAccess = await JS.InvokeAsync<string?>("sessionStorage.getItem", "spic_role_access");
+            var roleAccess = await SessionStore.GetAsync(SessionKeys.RoleAccess);
             if (roleAccess != null)
             {
                 LoginState.SetAllowedPages(roleAccess);
@@ -50,7 +51,7 @@
     private void OnLoginStateChanged()
     {
         // Re-check the current URL whenever LoginState changes (e.g. after login,
-        // or after MainLayout restores AllowedPages from sessionStorage).
+        // or after MainLayout restores AllowedPages from the session store).
         if (_restored) Check(Nav.Uri);
     }
 

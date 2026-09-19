@@ -8,6 +8,7 @@
 @using Microsoft.AspNetCore.Components
 @using SPIC.Core.Entities
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject NavigationManager Nav
@@ -1543,7 +1544,7 @@ else
                 <div class="basic-info-card">
                     <div class="basic-info-header">
                         <h3 class="basic-info-title">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/BasicInfoIcon.svg"
                                  class="formicon"
                                  alt="icon" /> Port Information
                         </h3>
@@ -1639,7 +1640,7 @@ else
                 <div class="basic-info-card">
                     <div class="basic-info-header">
                         <h3 class="basic-info-title">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/BasicInfoIcon.svg"
                                  class="formicon"
                                  alt="icon" /> Basic Information
                         </h3>
@@ -1656,7 +1657,7 @@ else
                                         <div class="card-checkbox">
                                             <i class="bi bi-check-lg"></i>
                                         </div>
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/logo.png" />
                                         <span>SPIC</span>
                                     </div>
                                 </div>
@@ -1667,7 +1668,7 @@ else
                                         <div class="card-checkbox">
                                             <i class="bi bi-check-lg"></i>
                                         </div>
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/GreenSratIcon.svg" />
                                         <span>GREEN STAR</span>
                                     </div>
                                 </div>
@@ -1982,7 +1983,7 @@ else
                 <div class="form-card">
                     <div class="primary-location-header">
                         <div class="card-header-title mb-0">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg"
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/LocationIcon.svg"
                                  alt="Location"
                                  class="formicon" />Primary Location
                         </div>
@@ -1998,7 +1999,7 @@ else
                             }
                             else
                             {
-                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg"
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/CurrentLocation.svg"
                                      alt="Current Location"
                                      class="verifyicon" />
                                 <span>Use Current Location</span>
@@ -3398,7 +3399,7 @@ else
                                             class="lm-company-pdf-btn"
                                             title="View SPIC @ActiveTabDisplayName PDF"
                                             @onclick='() => OpenLogisticsPdf(item, "SPIC")'>
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png"
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/logo.png"
                                              class="lm-company-pdf-logo"
                                              alt="SPIC PDF" />
                                     </button>
@@ -3410,7 +3411,7 @@ else
                                             class="lm-company-pdf-btn"
                                             title="View GreenStar @ActiveTabDisplayName PDF"
                                             @onclick='() => OpenLogisticsPdf(item, "GreenStar")'>
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg"
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/GreenSratIcon.svg"
                                              class="lm-company-pdf-logo greenstar"
                                              alt="GreenStar PDF" />
                                     </button>
@@ -3826,13 +3827,15 @@ else
     // Keep PDF rendering inside the already-authorized /Logistics route.
     // ===============================================================
     [SupplyParameterFromQuery(Name = "pdf")]
-    public bool PdfViewMode { get; set; }
+    public bool? PdfViewModeQuery { get; set; }
+    private bool PdfViewMode => PdfViewModeQuery ?? false;
 
     [SupplyParameterFromQuery(Name = "pdfTab")]
     public string? PdfViewTab { get; set; }
 
     [SupplyParameterFromQuery(Name = "pdfId")]
-    public int PdfViewId { get; set; }
+    public int? PdfViewIdQuery { get; set; }
+    private int PdfViewId => PdfViewIdQuery ?? 0;
 
     [SupplyParameterFromQuery(Name = "company")]
     public string? PdfViewCompany { get; set; }
@@ -4128,7 +4131,7 @@ else
 
         try
         {
-            var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+            var token = await SessionStore.GetAsync(SessionKeys.Token);
             if (!string.IsNullOrWhiteSpace(token))
                 _currentUserId = GetUserIdFromToken(token);
         }
@@ -6415,7 +6418,7 @@ else
 
             if (string.IsNullOrWhiteSpace(LoginState.Token) && !url.Contains("access_token=", StringComparison.OrdinalIgnoreCase))
             {
-                var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+                var token = await SessionStore.GetAsync(SessionKeys.Token);
                 if (!string.IsNullOrWhiteSpace(token))
                 {
                     var rawToken = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)

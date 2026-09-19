@@ -1,4 +1,5 @@
 ﻿using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using SPIC.Core.Entities;
 
 namespace SpicAPI.Controllers
 {
+	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class PVTMasterController : ControllerBase

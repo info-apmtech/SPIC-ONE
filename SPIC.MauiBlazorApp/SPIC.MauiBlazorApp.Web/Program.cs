@@ -45,6 +45,8 @@ builder.Services.AddRazorComponents()
 
 // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
+builder.Services.AddScoped<ISessionStore, BrowserSessionStore>();
+builder.Services.AddScoped<FileDownloadService>();
 builder.Services.AddScoped<LoginState>();
 builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();

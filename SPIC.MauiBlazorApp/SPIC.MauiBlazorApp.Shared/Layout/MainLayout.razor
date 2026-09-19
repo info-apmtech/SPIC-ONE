@@ -7,6 +7,7 @@
 @using SPIC.Core.Entities
 
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.AppSearchState SearchState
 @inject IJSRuntime JS
@@ -75,60 +76,6 @@
                     </i>
                 }
 
-<script>
-    window.spic = window.spic || {};
-
-    // Move the user profile menu into document.body on small viewports so
-    // it is independent from the offcanvas/sidebar stacking context.
-    // When open === true, the element is appended to body and styled as fixed.
-    // When open === false the element is moved back to its original parent.
-    window.spic.reparentUserMenu = function (menuId, open) {
-        try {
-            var menu = document.getElementById(menuId);
-            if (!menu) return;
-
-            if (open && window.innerWidth <= 768) {
-                // store original parent & next sibling for restoration
-                if (!menu.__originalParent) {
-                    menu.__originalParent = menu.parentNode;
-                    menu.__originalNext = menu.nextSibling;
-                }
-
-                document.body.appendChild(menu);
-
-                // Inline styles ensure the menu is anchored to viewport top-right
-                menu.style.position = 'fixed';
-                // place just below the topbar (approx 62px) with small inset
-                menu.style.top = '62px';
-                menu.style.right = '8px';
-                menu.style.left = 'auto';
-                menu.style.bottom = 'auto';
-                menu.style.width = 'min(340px, calc(100vw - 16px))';
-                menu.style.maxHeight = 'calc(100vh - 72px)';
-                menu.style.overflowY = 'auto';
-            }
-            else {
-                // restore original placement
-                if (menu.__originalParent) {
-                    if (menu.__originalNext) menu.__originalParent.insertBefore(menu, menu.__originalNext);
-                    else menu.__originalParent.appendChild(menu);
-                }
-
-                // remove inline styles we set earlier
-                menu.style.position = '';
-                menu.style.top = '';
-                menu.style.right = '';
-                menu.style.left = '';
-                menu.style.bottom = '';
-                menu.style.width = '';
-                menu.style.maxHeight = '';
-                menu.style.overflowY = '';
-            }
-        } catch (e) {
-            // swallow errors
-        }
-    };
-</script>
             </div>
 
 
@@ -140,7 +87,7 @@
                         type="button"
                         title="Notifications">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationBell.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/NotificationBell.svg"
                          alt="Notification"
                          class="iconimg" />
 
@@ -180,7 +127,7 @@
                                 <div class="reference-header-wave"></div>
 
                                 @* Tree Pattern *@
-                                   <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/logouttreeimg.svg" class="reference-leaf-pattern-img" alt="logout" />
+                                   <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/logouttreeimg.svg" class="reference-leaf-pattern-img" alt="logout" />
 
 
                                 <div class="reference-profile-user">
@@ -294,7 +241,22 @@
         @* ================= MAIN CONTENT ================= *@
         <div class="main-content">
 
-            @Body
+            <ErrorBoundary @ref="_pageErrorBoundary">
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent Context="pageError">
+                    <div class="page-error" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <h5>This page hit a problem</h5>
+                        <p>Something went wrong while loading this screen. You can try again or go back to the dashboard.</p>
+                        <div class="page-error-actions">
+                            <button type="button" class="btn btn-success btn-sm" @onclick="() => _pageErrorBoundary?.Recover()">Try again</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="@(() => Navigation.NavigateTo(LoginState.LandingPage))">Go to dashboard</button>
+                        </div>
+                    </div>
+                </ErrorContent>
+            </ErrorBoundary>
 
         </div>
 
@@ -343,7 +305,7 @@
                          href="/Dashboard"
                          Match="NavLinkMatch.All">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DashboardIcon.svg"
                          class="SideBariconimg" />
 
                     Register
@@ -359,7 +321,7 @@
                          href="/SubDealerList"
                          Match="NavLinkMatch.All">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DashboardIcon.svg"
                          class="SideBariconimg" />
 
                     Sub Dealer Master
@@ -374,7 +336,7 @@
                 <NavLink class="nav-link"
                          href="/Purchases">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg"
                          class="SideBariconimg" />
 
                     Purchases
@@ -389,7 +351,7 @@
                 <NavLink class="nav-link"
                          href="/Rewards">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/RewardIcon.svg"
                          class="SideBariconimg" />
 
                     Rewards
@@ -404,7 +366,7 @@
                 <NavLink class="nav-link"
                          href="/CropAdvice">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/CropAdviceIcon.svg"
                          class="SideBariconimg" />
 
                     Crop Advice
@@ -419,7 +381,7 @@
                 <NavLink class="nav-link"
                          href="/YieldPrediction">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/YieldPredictionIcon.svg"
                          class="SideBariconimg" />
 
                     Yield Prediction
@@ -434,7 +396,7 @@
                 <NavLink class="nav-link"
                          href="/DiseaseDetection">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DiseaseDetectionIcon.svg"
                          class="SideBariconimg" />
 
                     Disease Detection
@@ -449,7 +411,7 @@
                 <NavLink class="nav-link"
                          href="/Community">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/Community.svg"
                          class="SideBariconimg" />
 
                     Community
@@ -464,7 +426,7 @@
                 <NavLink class="nav-link"
                          href="/Notifications">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/NotificationsIcon.svg"
                          class="SideBariconimg" />
 
                     Notifications
@@ -479,7 +441,7 @@
                 <NavLink class="nav-link"
                          href="/Profile">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg"
                          class="SideBariconimg" />
 
                     Profile
@@ -494,7 +456,7 @@
                 <NavLink class="nav-link"
                          href="/EmployeeManagement">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg"
                          class="SideBariconimg" />
 
                     Employee
@@ -509,7 +471,7 @@
                 <NavLink class="nav-link"
                          href="/DealerReviewList">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg"
                          class="SideBariconimg" />
 
                     Dealer Application Review
@@ -524,7 +486,7 @@
                 <NavLink class="nav-link"
                          href="/CreditLimitSales">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg"
                          class="SideBariconimg" />
 
                     Financial Year Sales Data
@@ -542,7 +504,7 @@
                 <NavLink class="nav-link"
                          href="/IfmsRelaySetup">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg"
                          class="SideBariconimg" />
 
                     IFMS OTP Relay
@@ -557,7 +519,7 @@
                 <NavLink class="nav-link"
                          href="/IfmsAutoImport">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg"
                          class="SideBariconimg" />
 
                     IFMS Auto Import
@@ -570,7 +532,7 @@
                 <NavLink class="nav-link"
                          href="/IfmsLogins">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg"
                          class="SideBariconimg" />
 
                     IFMS Logins
@@ -589,7 +551,7 @@
                        class="nav-link mt-2 @(isSubsidyOpen ? "active" : "")"
                        @onclick="ToggleSubsidyMenu">
 
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/StockReport.svg"
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg"
                              class="SideBariconimg" />
 
                         Subsidy Management System
@@ -791,7 +753,7 @@
                        class="nav-link mt-2 @(isMdPortalOpen ? "active" : "")"
                        @onclick="ToggleMdPortalMenu">
 
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/MDportal.png"
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/MDportal.png"
                              class="SideBariconimg" />
 
                         MD Portal
@@ -995,7 +957,7 @@
                        class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
                        @onclick="ToggleSettingsMenu">
 
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg"
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/SettingsIcon.svg"
                              class="SideBariconimg" />
 
                         Settings
@@ -1154,7 +1116,7 @@
                        class="nav-link mt-2 @(isSdwaOpen ? "active" : "")"
                        @onclick="ToggleSdwaMenu">
 
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg"
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DashboardIcon.svg"
                              class="SideBariconimg" />
 
                         SDWA
@@ -1322,7 +1284,7 @@
                 <NavLink class="nav-link"
                          href="/ContactUs">
 
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg"
                          class="SideBariconimg" />
 
                     Contact Us
@@ -1948,6 +1910,11 @@ else
 
 
 @code {
+    private ErrorBoundary? _pageErrorBoundary;
+
+    // A page that threw is given a fresh start on the next navigation.
+    protected override void OnParametersSet() => _pageErrorBoundary?.Recover();
+
 
     /* =========================================================
        VARIABLES
@@ -2499,10 +2466,7 @@ else
              */
 
             var token =
-                await JS.InvokeAsync<string?>(
-                    "sessionStorage.getItem",
-                    "jwt_token"
-                );
+                await SessionStore.GetAsync(SessionKeys.Token);
 
 
             if (!string.IsNullOrWhiteSpace(token))
@@ -2538,10 +2502,7 @@ else
                  */
 
                 var roleAccess =
-                    await JS.InvokeAsync<string?>(
-                        "sessionStorage.getItem",
-                        "spic_role_access"
-                    );
+                    await SessionStore.GetAsync(SessionKeys.RoleAccess);
 
                 LoginState.SetAllowedPages(
                     roleAccess
@@ -2553,10 +2514,7 @@ else
                  */
 
                 var designationName =
-                    await JS.InvokeAsync<string?>(
-                        "sessionStorage.getItem",
-                        "spic_designation_name"
-                    );
+                    await SessionStore.GetAsync(SessionKeys.DesignationName);
 
                 LoginState.SetDesignationName(
                     designationName
@@ -2568,10 +2526,7 @@ else
                  */
 
                 var expStr =
-                    await JS.InvokeAsync<string?>(
-                        "sessionStorage.getItem",
-                        "jwt_expiration"
-                    );
+                    await SessionStore.GetAsync(SessionKeys.Expiration);
 
 
                 if (
@@ -2659,29 +2614,17 @@ else
 
         try
         {
-            await JS.InvokeVoidAsync(
-                "sessionStorage.removeItem",
-                "jwt_token"
-            );
+            await SessionStore.RemoveAsync(SessionKeys.Token);
 
-            await JS.InvokeVoidAsync(
-                "sessionStorage.removeItem",
-                "jwt_expiration"
-            );
+            await SessionStore.RemoveAsync(SessionKeys.Expiration);
 
-            await JS.InvokeVoidAsync(
-                "sessionStorage.removeItem",
-                "spic_role_access"
-            );
+            await SessionStore.RemoveAsync(SessionKeys.RoleAccess);
 
-            await JS.InvokeVoidAsync(
-                "sessionStorage.removeItem",
-                "spic_designation_name"
-            );
+            await SessionStore.RemoveAsync(SessionKeys.DesignationName);
         }
         catch
         {
-            // Ignore sessionStorage cleanup errors
+            // Ignore session store cleanup errors
         }
 
 
@@ -2755,25 +2698,13 @@ else
 
         try
         {
-            await JS.InvokeVoidAsync(
-                "sessionStorage.removeItem",
-                "jwt_token"
-            );
+            await SessionStore.RemoveAsync(SessionKeys.Token);
 
-            await JS.InvokeVoidAsync(
-                "sessionStorage.removeItem",
-                "jwt_expiration"
-            );
+            await SessionStore.RemoveAsync(SessionKeys.Expiration);
 
-            await JS.InvokeVoidAsync(
-                "sessionStorage.removeItem",
-                "spic_role_access"
-            );
+            await SessionStore.RemoveAsync(SessionKeys.RoleAccess);
 
-            await JS.InvokeVoidAsync(
-                "sessionStorage.removeItem",
-                "spic_designation_name"
-            );
+            await SessionStore.RemoveAsync(SessionKeys.DesignationName);
         }
         catch
         {

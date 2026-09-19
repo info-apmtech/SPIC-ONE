@@ -14,6 +14,7 @@ using SPIC.Core.Interfaces;
 
 namespace SpicAPI.Controllers
 {
+	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public sealed class ExcelBulkUploadController : ControllerBase

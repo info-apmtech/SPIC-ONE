@@ -29,13 +29,13 @@
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
 
     <!-- Display name -->
-    <ApplicationTitle>SPIC.MauiBlazorApp</ApplicationTitle>
+    <ApplicationTitle>SPIC ONE</ApplicationTitle>
 
     <!-- App Identifier -->
-    <ApplicationId>com.companyname.spic.mauiblazorapp</ApplicationId>
+    <ApplicationId>com.apmiot.spicone</ApplicationId>
 
     <!-- Versions -->
-    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
 
     <!-- To develop, package, and publish an app to the Microsoft Store, see: https://aka.ms/MauiTemplateUnpackaged -->
@@ -50,14 +50,15 @@
 
   <ItemGroup>
     <!-- App Icon -->
-    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+    <!-- Brand-green background with the SPIC logo in front. The logo is a 120px PNG:
+         replace appiconfg.png with a vector or 1024px version before the store listing. -->
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" ForegroundScale="0.65" Color="#0b6b3a" />
 
     <!-- Splash Screen -->
-    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+    <MauiSplashScreen Include="Resources\Splash\splash.png" Color="#0b6b3a" BaseSize="120,120" />
 
     <!-- Images -->
     <MauiImage Include="Resources\Images\*" />
-    <MauiImage Update="Resources\Images\dotnet_bot.svg" BaseSize="168,208" />
 
     <!-- Custom Fonts -->
     <MauiFont Include="Resources\Fonts\*" />
@@ -79,5 +80,39 @@
   <ItemGroup>
     <ProjectReference Include="..\SPIC.MauiBlazorApp.Shared\SPIC.MauiBlazorApp.Shared.csproj" />
   </ItemGroup>
+  <!-- API address. Override per environment at build time:
+         dotnet publish ... -p:SpicApiBaseUrl=https://previewspicapi.apmiot.com/
+       MauiProgram reads it back from the AssemblyMetadata attribute below. -->
+  <PropertyGroup>
+    <SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://api.spicone.in/</SpicApiBaseUrl>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>SpicApiBaseUrl</_Parameter1>
+      <_Parameter2>$(SpicApiBaseUrl)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+
+  <!-- ===== Store publishing =====
+       Android: Release builds produce an .aab (what Google Play requires). Signing is
+       switched on only when the keystore variables are present in the environment, so a
+       plain developer build never needs the keystore. See docs/store-publishing.md. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <AndroidPackageFormats>aab</AndroidPackageFormats>
+    <AndroidUseAapt2>true</AndroidUseAapt2>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(SPICONE_ANDROID_KEYSTORE)' != '' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <AndroidKeyStore>true</AndroidKeyStore>
+    <AndroidSigningKeyStore>$(SPICONE_ANDROID_KEYSTORE)</AndroidSigningKeyStore>
+    <AndroidSigningKeyAlias>$(SPICONE_ANDROID_KEY_ALIAS)</AndroidSigningKeyAlias>
+    <AndroidSigningKeyPass>$(SPICONE_ANDROID_KEY_PASS)</AndroidSigningKeyPass>
+    <AndroidSigningStorePass>$(SPICONE_ANDROID_STORE_PASS)</AndroidSigningStorePass>
+  </PropertyGroup>
+
+  <!-- iOS: SecureStorage uses the Keychain, which needs the keychain-access-groups entitlement. -->
+  <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+    <CodesignEntitlements>Platforms/iOS/Entitlements.plist</CodesignEntitlements>
+  </PropertyGroup>
 
 </Project>
