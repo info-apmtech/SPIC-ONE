@@ -4,6 +4,7 @@
 @inject NavigationManager Navigation
 @inject LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
+@inject ToastService Toast
 
 @using System.Globalization
 @using System.IO
@@ -244,13 +245,27 @@
         .page-title { font-size: 1.25rem; }
         .summary-total .val { font-size: 1.15rem; }
     }
+
+    /* native: phone */
+    .btn-action-row > .fb-actionbar { flex: 1 1 100%; }
+    @@media (min-width: 768px) {
+        .btn-action-row > .fb-actionbar { padding: 0; gap: 12px; }
+    }
+    @@media (max-width: 767.98px) {
+        .form-card, .summary-card { padding: 1rem; height: auto; }
+        .form-control-custom, .form-select-custom { min-height: 44px; font-size: 16px; }
+        .upload-box { height: auto; min-height: 110px; padding: 12px; }
+        .summary-title { font-size: 1.1rem; margin-bottom: 1rem; }
+        .summary-row { margin-bottom: 0.85rem; }
+        .btn-action-row { margin-top: 0.5rem; }
+        .btn-outline-back, .btn-primary-continue { min-height: 44px; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
     
     <div class="mb-4">
-        <h1 class="page-title">Guest Details</h1>
-        <p class="page-subtitle">Please provide your information to complete the booking</p>
+        <PageHeader Title="Guest Details" Subtitle="Step 3 of 5 · Please provide your information to complete the booking" />
     </div>
 
     <div class="row g-4">
@@ -383,9 +398,7 @@
 
                 @if (_isLoading)
                 {
-                    <div class="summary-row bold-val mt-4">
-                        <span class="val" style="color:#6b7280;">Loading...</span>
-                    </div>
+                    <Skeleton Variant="text" Rows="6" LoadingText="Loading booking summary" />
                 }
                 else if (!string.IsNullOrEmpty(_loadError))
                 {
@@ -453,8 +466,14 @@
     </div>
 
     <div class="btn-action-row">
-        <button class="btn-outline-back" @onclick="GoBack">Back</button>
-        <button class="btn-primary-continue" @onclick="ContinueToPreview">Continue Review</button>
+        <ActionBar AriaLabel="Guest details actions">
+            <Secondary>
+                <button class="btn-outline-back" @onclick="GoBack">Back</button>
+            </Secondary>
+            <ChildContent>
+                <button class="btn-primary-continue" @onclick="ContinueToPreview">Continue Review</button>
+            </ChildContent>
+        </ActionBar>
     </div>
 
 </div>
@@ -800,6 +819,13 @@
     private async Task ContinueToPreview()
     {
         _loadError = "";
+        var validationError = ValidateForm();
+        if (validationError != null)
+        {
+            _loadError = validationError;
+            Toast.Error(validationError);
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(_form.EmployeeOrDealerCode))
         {
@@ -863,6 +889,16 @@
         BookingState.MarkInitialized();
 
         Navigation.NavigateTo("/BookingPreview");
+    }
+
+    private string? ValidateForm()
+    {
+        if (string.IsNullOrWhiteSpace(_form.EmployeeOrDealerCode)) return "Employee ID / Dealer Code is required to continue.";
+        if (string.IsNullOrWhiteSpace(_form.GuestName)) return "Guest Name is required to continue.";
+        if (string.IsNullOrWhiteSpace(_form.PhoneNumber)) return "Phone Number is required to continue.";
+        if (string.IsNullOrWhiteSpace(_form.Email)) return "Email ID is required to continue.";
+        if (string.IsNullOrWhiteSpace(_form.Nationality)) return "Please select the Nationality.";
+        return null;
     }
 
     public class RoomDetailDto

@@ -223,42 +223,53 @@
         color: #6b7280;
         margin-bottom: 1.25rem;
     }
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .detail-card { margin-bottom: 0; }
+        .detail-card-header { padding: 10px 16px; }
+        .detail-card-body { padding: 16px; }
+        .kv-row { gap: 8px; }
+        .room-details-container { flex-direction: column; align-items: stretch; gap: 12px; }
+        .room-image { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+        .btn-outline-custom { min-height: 44px; }
+        .bd-footer-actions .btn-outline-custom { width: 100%; justify-content: center; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1300px; margin: auto;">
     
     @if (_isLoading)
     {
-        <div class="detail-loading">Loading booking details...</div>
+        <PageHeader Title="Booking Details" Subtitle="Loading your booking" BackHref="/MyBookings" />
+        <Skeleton Variant="card" Rows="3" LoadingText="Loading booking details" />
     }
     else if (_booking == null)
     {
-        <div class="detail-error">
-            @(string.IsNullOrWhiteSpace(_loadError) ? "Booking not found." : _loadError)
-        </div>
-        <button class="btn-outline-custom" @onclick="GoBack"><i class="bi bi-arrow-left"></i> Back to My Bookings</button>
+        <PageHeader Title="Booking Details" BackHref="/MyBookings" />
+        <EmptyState Icon="bi-journal-x" Title="Booking not available" Message="@(string.IsNullOrWhiteSpace(_loadError) ? "Booking not found." : _loadError)">
+            <button class="btn-outline-custom" @onclick="GoBack"><i class="bi bi-arrow-left"></i> Back to My Bookings</button>
+        </EmptyState>
     }
     else
     {
-        <div class="page-header-container">
-            <div>
-                <h1 class="page-title">Booking Details</h1>
-                <p class="page-subtitle">Booking ID: <span class="text-blue">@_booking.BookingReference</span></p>
-            </div>
-            @if (_booking.HasInvoice && string.Equals(_booking.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
-            {
-                <button class="btn-outline-custom" @onclick="DownloadInvoiceAsync" disabled="@(_isDownloading)">
-                    @if (_isDownloading)
-                    {
-                        <span>Downloading...</span>
-                    }
-                    else
-                    {
-                        <text><i class="bi bi-file-earmark-arrow-down"></i> Download Invoice</text>
-                    }
-                </button>
-            }
-        </div>
+        <PageHeader Title="Booking Details" Subtitle="@($"Booking ID: {_booking.BookingReference}")" BackHref="/MyBookings">
+            <Actions>
+                @if (_booking.HasInvoice && string.Equals(_booking.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+                {
+                    <button class="btn-outline-custom" @onclick="DownloadInvoiceAsync" disabled="@(_isDownloading)">
+                        @if (_isDownloading)
+                        {
+                            <span>Downloading...</span>
+                        }
+                        else
+                        {
+                            <text><i class="bi bi-file-earmark-arrow-down"></i> Download Invoice</text>
+                        }
+                    </button>
+                }
+            </Actions>
+        </PageHeader>
 
         <div class="row g-4">
         
@@ -269,7 +280,7 @@
                     </div>
                     <div class="detail-card-body h-100">
                         <div class="room-details-container">
-                            <img src="@(string.IsNullOrEmpty(_booking.RoomImagePath) ? FallbackImage : GetImageUrl(_booking.RoomImagePath))" alt="Room Image" class="room-image" onerror="this.style.backgroundColor='#e2e8f0';" />
+                            <img src="@(string.IsNullOrEmpty(_booking.RoomImagePath) ? FallbackImage : GetImageUrl(_booking.RoomImagePath))" alt="Room Image" class="room-image" loading="lazy" onerror="this.style.backgroundColor='#e2e8f0';" />
                             <div class="room-info">
                                 <div class="kv-row mb-0">
                                     <span class="kv-label">Guest House</span>
@@ -479,7 +490,7 @@
 
         </div>
 
-        <div style="margin-top: 1.5rem;">
+        <div class="bd-footer-actions" style="margin-top: 1.5rem;">
             <button class="btn-outline-custom" @onclick="GoBack"><i class="bi bi-arrow-left"></i> Back to My Bookings</button>
         </div>
     }

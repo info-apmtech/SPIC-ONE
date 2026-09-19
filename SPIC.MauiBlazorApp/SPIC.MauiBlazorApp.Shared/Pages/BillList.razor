@@ -4,6 +4,7 @@
 @inject LoginState LoginState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 @using System.Globalization
 @using System.Linq
@@ -63,28 +64,74 @@
     .inv-sigs { display: flex; justify-content: space-between; padding-top: 24px; font-weight: 700; font-size: 11px; }
     .inv-thanks { text-align: center; font-weight: 700; font-size: 12px; padding-top: 9px; }
     @@media (max-width: 640px) { .inv-header { flex-direction: column; align-items: flex-start; } .inv-band { width: 5px; flex-basis: 5px; } .inv-doc { padding: 6px 10px 14px; } }
+
+    /* native: phone */
+    @@media (max-width: 1199.98px) {
+        /* tablet: keep the table, scroll it inside the card with a sticky header */
+        .bl-card-body.table-responsive { max-height: 70vh; overflow: auto; -webkit-overflow-scrolling: touch; }
+        .bl-table thead th { position: sticky; top: 0; z-index: 1; }
+    }
+    @@media (max-width: 767.98px) {
+        .bl-header { margin-bottom: 8px; }
+        .bl-btn { min-height: 44px; }
+        .bl-card { background: transparent; border: 0; box-shadow: none; }
+        .bl-card-body.table-responsive { max-height: none; overflow: visible; }
+        /* the table renders as a list of cards */
+        .bl-table, .bl-table tbody, .bl-table tr, .bl-table td { display: block; width: 100%; }
+        .bl-table thead { display: none; }
+        .bl-table tbody tr {
+            background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+        .bl-table tbody tr:hover { background: #fff; }
+        .bl-table tbody td {
+            display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            padding: 6px 0; border-bottom: 1px dashed #eef0f3; text-align: right;
+        }
+        .bl-table tbody td:last-child { border-bottom: none; }
+        .bl-table tbody td::before { content: attr(data-label); color: #6b7280; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; text-align: left; flex-shrink: 0; }
+        .bl-table tbody td.bl-actions-cell { white-space: normal !important; justify-content: stretch; gap: 8px; padding-top: 10px; }
+        .bl-table tbody td.bl-actions-cell::before { display: none; }
+        .bl-table tbody td.bl-actions-cell .bl-btn { flex: 1 1 0; justify-content: center; margin: 0; }
+        .bl-row-highlight { border-color: #93c5fd !important; }
+
+        /* Invoice dialog: full-height bottom sheet */
+        .bl-modal .modal-dialog { max-width: none; margin: 0; position: fixed; left: 0; right: 0; bottom: 0; align-items: flex-end; min-height: 0; }
+        .bl-modal .modal-content { border-radius: 16px 16px 0 0 !important; max-height: 94vh; }
+        .bl-modal .modal-body { padding: 10px !important; max-height: none !important; overflow: auto; -webkit-overflow-scrolling: touch; }
+        .bl-modal .modal-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); flex-wrap: wrap; gap: 8px; }
+        .bl-modal .modal-footer .bl-btn { flex: 1 1 0; margin: 0; justify-content: center; }
+        .bl-modal .btn-close { width: 44px; height: 44px; padding: 0; margin: -10px -10px -10px auto; background-size: 14px; }
+        .inv-wrap { min-width: 560px; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4 bl-container">
 
     <div class="bl-header">
-        <div>
-            <h1 class="bl-title">Bill List</h1>
-            <p class="bl-subtitle">Generated invoices, view and download</p>
-        </div>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="bl-btn bl-btn-secondary" @onclick='() => Navigation.NavigateTo("/GenerateBill")'><i class="bi bi-plus-circle"></i> Generate Bill</button>
-            <button class="bl-btn bl-btn-secondary" @onclick="LoadBillsAsync"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
-        </div>
+        <PageHeader Title="Bill List" Subtitle="Generated invoices, view and download" BackHref="/FrontOffice">
+            <Actions>
+                <button class="bl-btn bl-btn-secondary" @onclick='() => Navigation.NavigateTo("/GenerateBill")'><i class="bi bi-plus-circle"></i> Generate Bill</button>
+                <button class="bl-btn bl-btn-secondary" @onclick="LoadBillsAsync" aria-label="Refresh"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+            </Actions>
+        </PageHeader>
     </div>
 
     @if (_isLoading)
     {
-        <div class="bl-loading">Loading bills...</div>
+        <Skeleton Variant="table" Rows="6" LoadingText="Loading bills" />
     }
     else if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="bl-error">@_error</div>
+        <EmptyState Icon="bi-exclamation-circle" Title="Could not load bills" Message="@_error">
+            <button class="bl-btn bl-btn-secondary" @onclick="LoadBillsAsync"><i class="bi bi-arrow-clockwise"></i> Retry</button>
+        </EmptyState>
+    }
+    else if (_bills.Count == 0)
+    {
+        <EmptyState Icon="bi-receipt" Title="No bills yet" Message="Bills appear here once they are generated at check-out.">
+            <button class="bl-btn bl-btn-view" @onclick='() => Navigation.NavigateTo("/GenerateBill")'><i class="bi bi-plus-circle"></i> Generate Bill</button>
+        </EmptyState>
     }
     else
     {
@@ -112,22 +159,22 @@
                         {
                             var cls = bill.BillId == _highlightId ? "bl-row-highlight" : "";
                             <tr class="@cls">
-                                <td><span class="bl-strong">@bill.BillNumber</span></td>
-                                <td>@bill.BookingReference</td>
-                                <td>@(string.IsNullOrEmpty(bill.GuestName) ? "-" : bill.GuestName)</td>
-                                <td>@bill.GuestHouseName</td>
-                                <td>@(string.IsNullOrEmpty(bill.RoomNumber) ? "-" : bill.RoomNumber)</td>
-                                <td>@FormatDate(bill.BillDate)</td>
-                                <td>@FormatDate(bill.CheckInDate)</td>
-                                <td>@FormatDate(bill.CheckOutDate)</td>
-                                <td class="bl-strong">@FormatMoney(bill.TotalAmount)</td>
-                                <td>@FormatMoney(bill.BalanceAmount)</td>
-                                <td>
+                                <td data-label="Bill #"><span class="bl-strong">@bill.BillNumber</span></td>
+                                <td data-label="Booking">@bill.BookingReference</td>
+                                <td data-label="Guest">@(string.IsNullOrEmpty(bill.GuestName) ? "-" : bill.GuestName)</td>
+                                <td data-label="Guest House">@bill.GuestHouseName</td>
+                                <td data-label="Room">@(string.IsNullOrEmpty(bill.RoomNumber) ? "-" : bill.RoomNumber)</td>
+                                <td data-label="Bill Date">@FormatDate(bill.BillDate)</td>
+                                <td data-label="Check-in">@FormatDate(bill.CheckInDate)</td>
+                                <td data-label="Check-out">@FormatDate(bill.CheckOutDate)</td>
+                                <td data-label="Total" class="bl-strong">@FormatMoney(bill.TotalAmount)</td>
+                                <td data-label="Balance">@FormatMoney(bill.BalanceAmount)</td>
+                                <td data-label="Payment">
                                     <span class="bl-badge @(bill.PaymentStatus == 1 ? "bl-badge-paid" : "bl-badge-pending")">
                                         @(bill.PaymentStatus == 1 ? "Paid" : "Pending")
                                     </span>
                                 </td>
-                                <td style="white-space:nowrap;">
+                                <td class="bl-actions-cell" style="white-space:nowrap;">
                                     <button class="bl-btn bl-btn-view" @onclick="() => OpenBill(bill.BillId)"><i class="bi bi-eye"></i> View</button>
                                     <button class="bl-btn bl-btn-pdf" @onclick="() => DownloadPdf(bill.BillId, bill.BillNumber)"><i class="bi bi-download"></i> PDF</button>
                                 </td>
@@ -135,10 +182,6 @@
                         }
                     </tbody>
                 </table>
-                @if (_bills.Count == 0)
-                {
-                    <div class="bl-empty">No bills have been generated yet.</div>
-                }
             </div>
         </div>
     }
@@ -147,7 +190,7 @@
 @* ------------------------- VIEW BILL MODAL ------------------------- *@
 @if (_viewBill != null)
 {
-    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+    <div class="modal d-block bl-modal" tabindex="-1" style="background: rgba(0,0,0,0.5);">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
                 <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
@@ -385,9 +428,14 @@
             {
                 _viewBill = await response.Content.ReadFromJsonAsync<BillViewDto>();
             }
+            else
+            {
+                Toast.Error("Could not open the bill. Please try again.");
+            }
         }
         catch (Exception)
         {
+            Toast.Error("Could not open the bill. Please try again.");
         }
     }
 
@@ -417,6 +465,7 @@
         }
         catch (Exception)
         {
+            Toast.Error("The bill PDF could not be fetched. Please try again.");
         }
     }
 

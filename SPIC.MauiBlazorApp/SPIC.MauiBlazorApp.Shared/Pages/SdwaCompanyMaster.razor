@@ -3,6 +3,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject ToastService Toast
 
 <style>
 	.searchable-select-input {
@@ -36,11 +37,37 @@
 	.searchable-dropdown-item:hover { background-color: #DCFCE7; color: #059669; }
 	.searchable-dropdown-item.selected { background-color: #D1FAE5; color: #059669; font-weight: 600; }
 	.gh-tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; margin: 2px 4px 2px 0; background: #E0F2FE; color: #0369A1; }
+
+	/* native: phone */
+	.scm-form-actions > .fb-actionbar { flex: 1 1 100%; }
+	@@media (min-width: 768px) {
+		.scm-form-actions > .fb-actionbar { padding: 0; }
+	}
+	.scm-card-actions .btn-outline-green,
+	.scm-card-actions .btn-cancel { margin: 0; }
+	@@media (max-width: 767.98px) {
+		.btn-outline-green, .btn-save, .btn-cancel { min-height: 44px; }
+		.form-control-custom, .form-select-custom { min-height: 44px; font-size: 16px; } /* prevents iOS zoom on focus */
+		.searchable-dropdown-item { min-height: 44px; display: flex; align-items: center; }
+		.gh-tag { min-height: 32px; display: inline-flex; align-items: center; }
+		.scm-form-actions { padding-top: 0 !important; margin-top: 8px !important; }
+		.scm-form-actions .btn-save, .scm-form-actions .btn-cancel { margin-top: 0 !important; }
+		.main-card { padding: 14px; }
+		.metric-card { padding: 14px; }
+		.status-pill { min-height: 32px; display: inline-flex; align-items: center; }
+
+		/* Delete dialog: bottom sheet */
+		.scm-modal .modal-dialog { max-width: none; margin: 0; position: fixed; left: 0; right: 0; bottom: 0; align-items: flex-end; min-height: 0; }
+		.scm-modal .modal-content { border-radius: 16px 16px 0 0; max-height: 92vh; }
+		.scm-modal .modal-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); flex-wrap: wrap; gap: 8px; }
+		.scm-modal .modal-footer .btn { flex: 1 1 0; margin: 0; min-height: 44px; }
+		.scm-modal .btn-close { width: 44px; height: 44px; padding: 0; margin: -10px -10px -10px auto; background-size: 14px; }
+	}
 </style>
 
 <div class="container-fluid">
 
-	<h2 class="page-title">SDWA Company Details</h2>
+	<PageHeader Title="SDWA Company Details" Subtitle="Companies mapped to the guest houses for billing" ShowBack="false" />
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -129,15 +156,21 @@
 			</div>
 		</div>
 
-		<div class="d-flex justify-content-end pt-2 mt-4">
-			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
-			@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.SDWADashboard, "Entry"))
-				|| (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.SDWADashboard, "Update")))
-			{
-				<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
-					<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
-				</button>
-			}
+		<div class="d-flex justify-content-end pt-2 mt-4 scm-form-actions">
+			<ActionBar AriaLabel="Company form actions">
+				<Secondary>
+					<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+				</Secondary>
+				<ChildContent>
+					@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.SDWADashboard, "Entry"))
+						|| (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.SDWADashboard, "Update")))
+					{
+						<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+							<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+						</button>
+					}
+				</ChildContent>
+			</ActionBar>
 		</div>
 	</div>
 
@@ -167,7 +200,9 @@
 				   Title="Existing Companies"
 				   FileName="SdwaCompanies"
 				   ExportColumns="GetExportColumns()"
-				   SearchText="@_searchText">
+				   SearchText="@_searchText"
+				   EmptyTitle="No companies yet"
+				   EmptyMessage="Add the first company with the form above.">
 
 		<FilterControls>
 			<div class="search-box">
@@ -224,6 +259,16 @@
 				</div>
 			</td>
 		</TableRow>
+
+		<CardActions Context="item">
+			<div class="scm-card-actions d-flex gap-2 w-100 flex-wrap">
+				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
+					@(item.IsActive ? "Active" : "Inactive")
+				</span>
+				<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+				<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+			</div>
+		</CardActions>
 	</SpicDataTable>
 
 </div>
@@ -231,7 +276,7 @@
 @if (_showDeleteConfirm)
 {
 	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+	<div class="modal fade show d-block scm-modal" tabindex="-1" role="dialog">
 		<div class="modal-dialog modal-dialog-centered" role="document">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -537,6 +582,7 @@
 	{
 		_message = msg;
 		_isError = isError;
+		if (isError) Toast.Error(msg); else Toast.Success(msg);
 	}
 
 	private static string? ExtractMessage(string body)

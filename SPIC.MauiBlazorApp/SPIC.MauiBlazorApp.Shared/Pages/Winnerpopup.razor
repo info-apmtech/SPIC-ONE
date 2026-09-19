@@ -1,4 +1,5 @@
 ﻿@page "/WinnerPopUp"
+@inject NavigationManager Navigation
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
@@ -227,16 +228,20 @@
     .header-text h1 { font-size: 18px; line-height: 28px; }
     .header-text p { font-size: 14px; line-height: 22px; }
   }
+
+  /* native: phone (content now lives inside the bottom sheet component) */
+  .wp-sheet .wp-sheet-body { padding: 0; }
+  .wp-sheet .cta-btn { width: 100%; }
+  @@media (max-width: 767.98px) {
+    .wp-sheet .cta-btn { min-height: 44px; }
+    .wp-sheet .trophy-svg { width: 140px; height: 140px; }
+  }
 </style>
-<!-- Modal Overlay -->
-<div class="modal-overlay">
-  <div class="modal-card">
-
-    <!-- Close Button -->
-    <button class="close-btn" type="button" aria-label="Close" onclick="closeModal()"></button>
-
-    <!-- Modal Content -->
-    <div class="modal-content">
+@* Mock page: the winner announcement renders inside <BottomSheet> (bottom sheet on phones,
+   right-side drawer on tablet/desktop). Closing it returns to the lucky draw page. *@
+<BottomSheet @bind-IsOpen="_open" Title="Congratulations!" Subtitle="You are a Lucky Draw Winner" CssClass="wp-sheet" OnClosed="OnSheetClosed">
+  <ChildContent>
+    <div class="modal-content wp-sheet-body">
 
       <!-- Trophy Celebration Illustration -->
       <div class="trophy-section">
@@ -296,19 +301,15 @@
         </svg>
       </div>
 
-      <!-- Header -->
-      <div class="header-text">
-        <h1>Congratulations!</h1>
-        <p>You are a Lucky Draw Winner</p>
-      </div>
 
       <!-- Prize Section -->
       <div class="prize-section">
         <div class="prize-image-container">
           <img
             class="prize-image"
-            src="https://images.pexels.com/photos/1457842/pexels-photo-1457842.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop"
+            src="_content/SPIC.MauiBlazorApp.Shared/Images/Schemes/img_ellipse_249.png"
             alt="Single Door Wardrobe"
+            loading="lazy"
           />
           <div class="prize-label-overlay">
             <p class="prize-label-text">Single Door Wardrobe</p>
@@ -317,43 +318,25 @@
         <p class="scheme-name">Tamil New Year Special Scheme</p>
       </div>
 
-      <!-- CTA Button -->
-      <button class="cta-btn" type="button" onclick="viewDetails()">View Details</button>
-
     </div>
-  </div>
-</div>
+  </ChildContent>
+  <Footer>
+    <button class="cta-btn" type="button" @onclick="ViewDetails">View Details</button>
+  </Footer>
+</BottomSheet>
 
-<script>
-  function closeModal() {
-    const overlay = document.querySelector('.modal-overlay');
-    overlay.style.opacity = '0';
-    overlay.style.pointerEvents = 'none';
-    setTimeout(() => overlay.style.display = 'none', 300);
-  }
+@code {
+    private bool _open = true;
 
-  function viewDetails() {
-    alert('Opening prize details...');
-  }
+    private void ViewDetails() => Navigation.NavigateTo("/WinnerDetails");
 
-  // Optional: Create confetti effect on load
-  function createConfetti() {
-    const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#66BB6A'];
-    for (let i = 0; i < 20; i++) {
-      const confetti = document.createElement('div');
-      confetti.className = 'confetti';
-      confetti.style.left = Math.random() * 100 + '%';
-      confetti.style.top = '-10px';
-      confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
-      confetti.style.width = (Math.random() * 8 + 4) + 'px';
-      confetti.style.height = (Math.random() * 8 + 4) + 'px';
-      confetti.style.borderRadius = '50%';
-      confetti.style.animationDelay = (Math.random() * 0.5) + 's';
-      confetti.style.animationDuration = (Math.random() * 1.5 + 2.5) + 's';
-      document.body.appendChild(confetti);
+    private void OnSheetClosed(BottomSheet.CloseReason reason)
+    {
+        // Same semantics as the old close button: the popup goes away and the user lands on the lucky draw page.
+        if (reason != BottomSheet.CloseReason.History)
+        {
+            Navigation.NavigateTo("/Luckydraw");
+        }
     }
-  }
+}
 
-  // Uncomment to enable confetti on page load
-  // createConfetti();
-</script>

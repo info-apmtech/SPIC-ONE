@@ -4,32 +4,38 @@
 @inject LoginState LoginState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 @using System.Globalization
 
 <div class="container-fluid py-4 px-3 px-md-4 fo-wrapper">
 
     <div class="fo-header">
-        <div class="fo-header-text">
-            <h1>Front Office</h1>
-            <p>Room availability, check-in and check-out management</p>
-        </div>
-        <div class="fo-header-actions">
-            <button class="fo-btn fo-btn-secondary" @onclick="GoToGenerateBill"><i class="bi bi-receipt"></i> Generate Bill</button>
-            <button class="fo-btn fo-btn-secondary" @onclick="LoadRoomsAsync"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
-        </div>
+        <PageHeader Title="Front Office" Subtitle="Room availability, check-in and check-out management" ShowBack="false">
+            <Actions>
+                <button class="fo-btn fo-btn-secondary" @onclick="GoToGenerateBill"><i class="bi bi-receipt"></i> Generate Bill</button>
+                <button class="fo-btn fo-btn-secondary" @onclick="LoadRoomsAsync" aria-label="Refresh"><i class="bi bi-arrow-clockwise"></i> <span class="fo-btn-text">Refresh</span></button>
+            </Actions>
+        </PageHeader>
     </div>
 
     @if (_isLoading)
     {
-        <div class="fo-loading">Loading room availability...</div>
+        <Skeleton Variant="table" Rows="6" LoadingText="Loading room availability" />
     }
-    else if (!string.IsNullOrWhiteSpace(_loadError))
+    else if (!string.IsNullOrWhiteSpace(_loadError) && _houses.Count == 0)
     {
-        <div class="fo-error-card">@_loadError</div>
+        <EmptyState Icon="bi-exclamation-circle" Title="Could not load rooms" Message="@_loadError">
+            <button class="fo-btn fo-btn-secondary" @onclick="LoadRoomsAsync"><i class="bi bi-arrow-clockwise"></i> Retry</button>
+        </EmptyState>
     }
     else
     {
+        @if (!string.IsNullOrWhiteSpace(_loadError))
+        {
+            <div class="fo-error-card">@_loadError</div>
+        }
+
         <div class="fo-summary-grid">
             <div class="fo-stat-card fo-stat-total">
                 <div class="fo-stat-title">Total Rooms</div>
@@ -64,7 +70,9 @@
                        Title="Rooms"
                        FileName="FrontOffice_Rooms"
                        ExportColumns="GetExportColumns()"
-                       SearchText="@_searchText">
+                       SearchText="@_searchText"
+                       EmptyTitle="No rooms found"
+                       EmptyMessage="Try another status, guest house or search term.">
 
             <FilterControls>
                 <div class="search-box">
@@ -124,6 +132,38 @@
                     }
                 </td>
             </TableRow>
+
+            <CardTemplate Context="room">
+                <div class="fo-card-head">
+                    <div>
+                        <span class="fo-room-no">@(string.IsNullOrEmpty(room.RoomNumber) ? "-" : room.RoomNumber)</span>
+                        <span class="fo-room-type">@room.RoomType</span>
+                    </div>
+                    <span class="fo-badge @StatusBadge(room.StatusKey)">@room.StatusText</span>
+                </div>
+                <div class="fo-card-rows">
+                    <div class="fo-kv"><span class="fo-kv-label">Guest House</span><span class="fo-kv-value">@room.GuestHouseName</span></div>
+                    <div class="fo-kv"><span class="fo-kv-label">Capacity</span><span class="fo-kv-value">@(room.Capacity?.ToString() ?? "-")</span></div>
+                    @if (room.CurrentBookingId.HasValue)
+                    {
+                        <div class="fo-kv"><span class="fo-kv-label">Booking</span><span class="fo-kv-value">@room.BookingReference</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Guest</span><span class="fo-kv-value">@(string.IsNullOrEmpty(room.GuestName) ? "-" : room.GuestName)</span></div>
+                    }
+                    <div class="fo-kv"><span class="fo-kv-label">Check-in</span><span class="fo-kv-value">@FormatDate(room.CheckInDate)</span></div>
+                    <div class="fo-kv"><span class="fo-kv-label">Check-out</span><span class="fo-kv-value">@FormatDate(room.CheckOutDate)</span></div>
+                </div>
+            </CardTemplate>
+
+            <CardActions Context="room">
+                @if (room.StatusKey == "Reserved")
+                {
+                    <button class="fo-btn fo-btn-checkin" @onclick="() => OpenCheckIn(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-in-right"></i> Check-In</button>
+                }
+                else if (room.StatusKey == "CheckedIn")
+                {
+                    <button class="fo-btn fo-btn-checkout" @onclick="() => OpenCheckOut(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-right"></i> Check-Out</button>
+                }
+            </CardActions>
         </SpicDataTable>
     }
 </div>
@@ -131,7 +171,7 @@
 @* ------------------------- CHECK-IN MODAL ------------------------- *@
 @if (_showCheckIn)
 {
-    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+    <div class="modal d-block fo-modal" tabindex="-1" style="background: rgba(0,0,0,0.5);">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
                 <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
@@ -237,7 +277,7 @@
 @* ------------------------- CHECK-OUT MODAL ------------------------- *@
 @if (_showCheckOut)
 {
-    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+    <div class="modal d-block fo-modal" tabindex="-1" style="background: rgba(0,0,0,0.5);">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
                 <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
@@ -414,11 +454,13 @@
             else
             {
                 _loadError = "Could not load booking for check-in.";
+                Toast.Error(_loadError);
             }
         }
         catch (Exception)
         {
             _loadError = "Could not load booking for check-in.";
+            Toast.Error(_loadError);
         }
     }
 
@@ -507,11 +549,13 @@
             else
             {
                 _loadError = "Could not load booking for check-out.";
+                Toast.Error(_loadError);
             }
         }
         catch (Exception)
         {
             _loadError = "Could not load booking for check-out.";
+            Toast.Error(_loadError);
         }
     }
 
@@ -610,6 +654,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 _loadError = "Could not open the ID proof document.";
+                Toast.Error(_loadError);
                 return;
             }
             var bytes = await response.Content.ReadAsByteArrayAsync();
@@ -619,6 +664,7 @@
         catch (Exception)
         {
             _loadError = "Could not open the ID proof document.";
+            Toast.Error(_loadError);
         }
         finally
         {
@@ -636,6 +682,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 _loadError = "Could not download the ID proof document.";
+                Toast.Error(_loadError);
                 return;
             }
             var bytes = await response.Content.ReadAsByteArrayAsync();
@@ -646,6 +693,7 @@
         catch (Exception)
         {
             _loadError = "Could not download the ID proof document.";
+            Toast.Error(_loadError);
         }
         finally
         {

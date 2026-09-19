@@ -3,6 +3,7 @@
 @inject HttpClient Http
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
+@inject ToastService Toast
 
 @using System.Globalization
 @using System.Net.Http.Json
@@ -415,13 +416,39 @@
     .m-val { font-size: 0.85rem; color: #1f2937; font-weight: 500; text-align: right; }
     .m-row { display: flex; justify-content: space-between; margin-bottom: 12px; }
     .m-row:last-child { margin-bottom: 0; }
+
+    /* native: phone */
+    .bottom-actions > .fb-actionbar { flex: 1 1 100%; }
+    @@media (min-width: 768px) {
+        .bottom-actions > .fb-actionbar { padding: 0; gap: 12px; }
+    }
+    @@media (max-width: 767.98px) {
+        .payment-card { margin-bottom: 12px; }
+        .payment-card-header { padding: 12px 16px; }
+        .payment-card-body { padding: 16px; }
+        .payment-option { min-height: 56px; }
+        .bottom-actions { margin-top: 0; padding-bottom: 0; }
+        .btn-outline-back, .btn-primary-continue { min-height: 44px; }
+
+        /* Confirmation dialog becomes a bottom card */
+        .modal-overlay { align-items: flex-end; }
+        .modal-card {
+            width: 100%;
+            max-width: none;
+            border-radius: 16px 16px 0 0;
+            padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+            max-height: 92vh;
+            animation: none;
+        }
+        .modal-actions { flex-direction: column; }
+        .btn-modal-outline, .btn-modal-solid { min-height: 44px; width: 100%; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
     
     <div class="mb-4">
-        <h1 class="page-title">Payment</h1>
-        <p class="page-subtitle">Select a payment method to complete your booking</p>
+        <PageHeader Title="Payment" Subtitle="Step 5 of 5 · Select a payment method to complete your booking" />
     </div>
 
     @if (_submitError != null)
@@ -624,11 +651,17 @@
     }
 
     <div class="bottom-actions">
-        <button class="btn-outline-back" @onclick="GoBack">Back</button>
-        <button class="btn-primary-continue" @onclick="SubmitBooking"
-                disabled="@(!BookingState.IsInitialized || _isSubmitting)">
-            @(_isSubmitting ? "Submitting..." : "Complete Booking")
-        </button>
+        <ActionBar AriaLabel="Payment actions">
+            <Secondary>
+                <button class="btn-outline-back" @onclick="GoBack">Back</button>
+            </Secondary>
+            <ChildContent>
+                <button class="btn-primary-continue" @onclick="SubmitBooking"
+                        disabled="@(!BookingState.IsInitialized || _isSubmitting)">
+                    @(_isSubmitting ? "Submitting..." : "Complete Booking")
+                </button>
+            </ChildContent>
+        </ActionBar>
     </div>
 
 </div>
@@ -849,6 +882,11 @@
         finally
         {
             _isSubmitting = false;
+        }
+
+        if (_submitError != null)
+        {
+            Toast.Error(_submitError);
         }
     }
 

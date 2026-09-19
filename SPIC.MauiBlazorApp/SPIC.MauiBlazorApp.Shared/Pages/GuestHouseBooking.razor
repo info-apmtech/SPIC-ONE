@@ -1,13 +1,13 @@
 ﻿@page "/GuestHouseBooking"
 @using System.Globalization
 @inject NavigationManager Navigation
+@inject ToastService Toast
 
 <div class="container-fluid py-4 px-0">
     <div class="ghb-wrapper">
 
         <div class="ghb-header-text">
-            <h1>Guest House Booking</h1>
-            <p>Book your room and enjoy a comfortable stay at SDWA Guest House</p>
+            <PageHeader Title="Guest House Booking" Subtitle="Step 1 of 5 · Choose your check-in and check-out" BackHref="/GuestHouse" />
         </div>
 
         <div class="ghb-card">
@@ -66,14 +66,16 @@
 
             </div>
 
-            <div style="margin-top: 24px; text-align: center;">
-                <button class="gh-btn-select" @onclick="CheckAvailability">Check Availability</button>
-            </div>
-
             @if (!string.IsNullOrEmpty(_message))
             {
                 <div style="margin-top: 12px; text-align: center; font-size: 0.85rem; color: #b91c1c;">@_message</div>
             }
+
+            <div class="ghb-actions" style="margin-top: 24px; text-align: center;">
+                <ActionBar AriaLabel="Availability actions" Align="ActionBar.BarAlign.Start">
+                    <button class="gh-btn-select" @onclick="CheckAvailability">Check Availability</button>
+                </ActionBar>
+            </div>
         </div>
 
         <div class="ghb-info-box">
@@ -154,6 +156,7 @@
         if (checkOut <= checkIn)
         {
             _message = "Check-out must be after Check-in.";
+            Toast.Error(_message);
             return;
         }
 
