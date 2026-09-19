@@ -2,10 +2,21 @@
 @using System.Text
 @using System.IO
 @using ClosedXML.Excel
+@using SPIC.MauiBlazorApp.Shared.Components.DataDisplay
 @inject IJSRuntime JSRuntime
 @inject FileDownloadService Downloads
 
-<div class="main-card">
+@*
+    Responsive behaviour (see SpicDataTable.razor.css; desktop >= 1200px is unchanged):
+      - phone  (<= 767px):  the <table> is hidden and each row renders as a card (.spic-cards);
+                            export buttons collapse into one "Export" dropdown; 44px pagination.
+      - tablet (768-1199px): table stays, in a scroll container with a sticky header row and a
+                            right-edge shadow hint while more columns are off-screen.
+    Both the table and the card list are always in the DOM; CSS media queries pick which is shown,
+    so the component needs no JS to detect the viewport.
+*@
+
+<div class="main-card spic-dt">
     <div class="section-header">
         <h3 class="section-title">@Title</h3>
 
@@ -17,7 +28,7 @@
         }
     </div>
 
-    <!-- Export Buttons (unchanged layout) -->
+    <!-- Export Buttons (unchanged layout on tablet/desktop; hidden on phone) -->
     <div class="export-buttons mb-3 d-flex flex-wrap gap-2">
         <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportCopy"><i class="bi bi-front"></i> <span class="d-none d-sm-inline">Copy</span></button>
         <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportCsv"><i class="bi bi-filetype-csv"></i> <span class="d-none d-sm-inline">CSV</span></button>
@@ -26,9 +37,26 @@
         <button class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1" @onclick="ExportPrint"><i class="bi bi-printer"></i> <span class="d-none d-sm-inline">Print</span></button>
     </div>
 
-    <!-- Table -->
+    <!-- Export dropdown (phone only; Bootstrap dropdown JS is loaded globally by both hosts).
+         Deliberately NOT given the .dropdown class: Schemes.css styles .dropdown globally
+         (grey box + chevron). Bootstrap only needs the toggle + sibling .dropdown-menu. -->
+    <div class="export-dropdown mb-3">
+        <button class="btn btn-outline-secondary dropdown-toggle export-dropdown-btn" type="button"
+                id="@_exportMenuId" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-download"></i> Export
+        </button>
+        <ul class="dropdown-menu" aria-labelledby="@_exportMenuId">
+            <li><button type="button" class="dropdown-item" @onclick="ExportCopy"><i class="bi bi-front"></i> Copy to clipboard</button></li>
+            <li><button type="button" class="dropdown-item" @onclick="ExportCsv"><i class="bi bi-filetype-csv"></i> CSV</button></li>
+            <li><button type="button" class="dropdown-item" @onclick="ExportExcel"><i class="bi bi-file-earmark-excel"></i> Excel</button></li>
+            <li><button type="button" class="dropdown-item" @onclick="ExportPdf"><i class="bi bi-filetype-pdf"></i> PDF</button></li>
+            <li><button type="button" class="dropdown-item" @onclick="ExportPrint"><i class="bi bi-printer"></i> Print</button></li>
+        </ul>
+    </div>
+
+    <!-- Table (tablet + desktop) -->
     <div class="table-wrapper">
-        <div class="table-responsive">
+        <div class="table-responsive spic-scroll">
             <table class="spic-table">
                 <thead>
                     <tr>
@@ -39,22 +67,19 @@
                 <tbody>
                     @if (IsLoading)
                     {
-                        <tr>
-                            <td colspan="100%" class="text-center text-muted">Loading...</td>
+                        <tr class="spic-state-row">
+                            <td colspan="100%" class="spic-state-cell">
+                                <Skeleton Variant="table" Rows="5" />
+                            </td>
                         </tr>
                     }
                     else if (!PagedItems.Any())
                     {
-                        <tr>
-                            <td colspan="100%" class="text-center text-muted">
-                                @if (!string.IsNullOrEmpty(SearchText))
-                                {
-                                    <span>No results found for "<strong>@SearchText</strong>".</span>
-                                }
-                                else
-                                {
-                                    <span>No data found.</span>
-                                }
+                        <tr class="spic-state-row">
+                            <td colspan="100%" class="spic-state-cell">
+                                <EmptyState Icon="@ResolvedEmptyIcon" Title="@ResolvedEmptyTitle" Message="@ResolvedEmptyMessage" Compact="true">
+                                    @EmptyActions
+                                </EmptyState>
                             </td>
                         </tr>
                     }
@@ -73,6 +98,91 @@
         </div>
     </div>
 
+    <!-- Cards (phone only) -->
+    <div class="spic-cards">
+        @if (IsLoading)
+        {
+            <Skeleton Variant="card" Rows="5" />
+        }
+        else if (!PagedItems.Any())
+        {
+            <EmptyState Icon="@ResolvedEmptyIcon" Title="@ResolvedEmptyTitle" Message="@ResolvedEmptyMessage">
+                @EmptyActions
+            </EmptyState>
+        }
+        else
+        {
+            var cardColumns = CardColumns;
+
+            @foreach (var (item, index) in PagedItems.Select((v, i) => (v, i)))
+            {
+                var rowNo = ((CurrentPage - 1) * PageSize) + index + 1;
+
+                <article class="spic-card">
+                    @if (CardTemplate != null)
+                    {
+                        @CardTemplate(item)
+                    }
+                    else
+                    {
+                        var title = cardColumns.Count > 0
+                            ? Display(cardColumns[0].ValueSelector(item))
+                            : Display(item?.ToString());
+                        var details = cardColumns.Skip(1).ToList();
+                        var primary = details.Take(CardPrimaryRows).ToList();
+                        var extra = details.Skip(CardPrimaryRows).ToList();
+                        var expanded = _expandedCards.Contains(rowNo);
+
+                        <header class="spic-card-head">
+                            <span class="spic-card-no" aria-label="Row @rowNo">#@rowNo</span>
+                            <h4 class="spic-card-title">@title</h4>
+                        </header>
+
+                        @if (primary.Count > 0)
+                        {
+                            <dl class="spic-card-rows">
+                                @foreach (var col in primary)
+                                {
+                                    <div class="spic-card-row">
+                                        <dt>@col.Header</dt>
+                                        <dd>@Display(col.ValueSelector(item))</dd>
+                                    </div>
+                                }
+                                @if (expanded)
+                                {
+                                    @foreach (var col in extra)
+                                    {
+                                        <div class="spic-card-row">
+                                            <dt>@col.Header</dt>
+                                            <dd>@Display(col.ValueSelector(item))</dd>
+                                        </div>
+                                    }
+                                }
+                            </dl>
+                        }
+
+                        @if (extra.Count > 0)
+                        {
+                            <button type="button" class="spic-card-more"
+                                    aria-expanded="@(expanded ? "true" : "false")"
+                                    @onclick="() => ToggleCard(rowNo)">
+                                @(expanded ? "Show less" : $"Show more ({extra.Count})")
+                                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                            </button>
+                        }
+                    }
+
+                    @if (CardActions != null)
+                    {
+                        <div class="spic-card-actions">
+                            @CardActions(item)
+                        </div>
+                    }
+                </article>
+            }
+        }
+    </div>
+
     <!-- Pagination -->
     <div class="pagination-container">
         <div class="items-per-page">
@@ -84,8 +194,10 @@
             </select>
         </div>
 
+        <div class="spic-page-status">Page @CurrentPage of @TotalPages</div>
+
         <div class="pagination-controls">
-            <div class="page-btn @(CurrentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage">
+            <div class="page-btn @(CurrentPage <= 1 ? "disabled" : "")" @onclick="PreviousPage" role="button" aria-label="Previous page">
                 <i class="bi bi-chevron-left"></i>
             </div>
             @foreach (var thispage in PageNumbers)
@@ -96,10 +208,11 @@
                 }
                 else
                 {
-                    <div class="page-btn @(thispage == CurrentPage ? "active" : "")" @onclick="() => GoToPage(thispage)">@(thispage)</div>
+                    <div class="page-btn @(thispage == CurrentPage ? "active" : "") @(Math.Abs(thispage - CurrentPage) <= 1 ? "spic-pg-near" : "spic-pg-far")"
+                         @onclick="() => GoToPage(thispage)" role="button" aria-label="Page @thispage">@(thispage)</div>
                 }
             }
-            <div class="page-btn @(CurrentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage">
+            <div class="page-btn @(CurrentPage >= TotalPages ? "disabled" : "")" @onclick="NextPage" role="button" aria-label="Next page">
                 <i class="bi bi-chevron-right"></i>
             </div>
         </div>
@@ -125,12 +238,39 @@
     [Parameter] public RenderFragment? TableHeader { get; set; }
     [Parameter] public RenderFragment<TItem>? TableRow { get; set; }
 
+    // ---- Phone card mode (<= 767px) ----
+    /// <summary>
+    /// Body of each phone card. When null the card is generated from ExportColumns: the first
+    /// column (skipping "S:No" and HideInCard columns) is the title, the next five are
+    /// "Label: value" rows and the rest sit behind a per-card "Show more" toggle.
+    /// </summary>
+    [Parameter] public RenderFragment<TItem>? CardTemplate { get; set; }
+
+    /// <summary>Buttons row rendered at the bottom of each phone card (edit/delete etc.).</summary>
+    [Parameter] public RenderFragment<TItem>? CardActions { get; set; }
+
+    // ---- Empty state ----
+    /// <summary>Optional actions shown under the empty-state message (e.g. an "Add" button).</summary>
+    [Parameter] public RenderFragment? EmptyActions { get; set; }
+
+    /// <summary>Overrides the empty-state title. Default: "No data found" / "No results found".</summary>
+    [Parameter] public string? EmptyTitle { get; set; }
+
+    /// <summary>Overrides the empty-state message.</summary>
+    [Parameter] public string? EmptyMessage { get; set; }
+
     // Universal Search — parent binds its existing search textbox to this
     [Parameter] public string SearchText { get; set; } = "";
 
     // Pagination State
     public int CurrentPage { get; set; } = 1;
     public int PageSize { get; set; } = 16;
+
+    // Number of "Label: value" rows shown before the per-card "Show more" toggle.
+    private const int CardPrimaryRows = 5;
+
+    private readonly HashSet<int> _expandedCards = new();
+    private readonly string _exportMenuId = $"spic-export-{Guid.NewGuid():N}";
 
     /// <summary>
     /// Filters Items by the current SearchText across every ExportColumn (except S:No).
@@ -159,16 +299,39 @@
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(SearchedItems.Count() / (double)PageSize));
     private IEnumerable<TItem> PagedItems => SearchedItems.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
 
+    // Columns used to build the auto card: everything exportable except the serial number
+    // (the card shows its own row number) and columns flagged HideInCard.
+    private List<ExportColumn<TItem>> CardColumns =>
+        (ExportColumns ?? new())
+            .Where(c => c != null
+                        && !c.HideInCard
+                        && !string.Equals(c.Header, "S:No", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private bool HasSearch => !string.IsNullOrWhiteSpace(SearchText);
+    private string ResolvedEmptyIcon => HasSearch ? "bi-search" : "bi-inbox";
+    private string ResolvedEmptyTitle => EmptyTitle ?? (HasSearch ? "No results found" : "No data found");
+    private string ResolvedEmptyMessage => EmptyMessage
+        ?? (HasSearch ? $"Nothing matches \"{SearchText.Trim()}\". Try a different search."
+                      : "There are no records to show yet.");
+
     protected override void OnParametersSet()
     {
         // If parent filter/search shrinks the dataset, jump back to page 1
         if (CurrentPage > TotalPages && TotalPages > 0) CurrentPage = 1;
     }
 
-    private void ResetPage() { CurrentPage = 1; }
-    private void GoToPage(int page) { CurrentPage = page; }
-    private void PreviousPage() { if (CurrentPage > 1) CurrentPage--; }
-    private void NextPage() { if (CurrentPage < TotalPages) CurrentPage++; }
+    private void ResetPage() { CurrentPage = 1; _expandedCards.Clear(); }
+    private void GoToPage(int page) { CurrentPage = page; _expandedCards.Clear(); }
+    private void PreviousPage() { if (CurrentPage > 1) { CurrentPage--; _expandedCards.Clear(); } }
+    private void NextPage() { if (CurrentPage < TotalPages) { CurrentPage++; _expandedCards.Clear(); } }
+
+    private void ToggleCard(int rowNo)
+    {
+        if (!_expandedCards.Remove(rowNo)) _expandedCards.Add(rowNo);
+    }
 
     private IEnumerable<int> PageNumbers
     {
