@@ -8,6 +8,7 @@ using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 using System.Security.Claims;
 using System.Text;
 
@@ -79,6 +80,12 @@ builder.Services.AddScoped<IAckCycleService, AckCycleService>();
 builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
 builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
 builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
+
+// Contact Us enquiry email. Options bind to the SAME "Alerts:Email" section that
+// SPIC.Ifms.Automation uses, so both apps share one SMTP configuration/pattern.
+builder.Services.Configure<ContactUsMailOptions>(
+    builder.Configuration.GetSection(ContactUsMailOptions.SectionName));
+builder.Services.AddScoped<IContactUsMailService, ContactUsMailService>();
 
 // Shares the IFMS portal-password encryption keys with the automation service.
 // The application name is part of the key derivation, so it must match the

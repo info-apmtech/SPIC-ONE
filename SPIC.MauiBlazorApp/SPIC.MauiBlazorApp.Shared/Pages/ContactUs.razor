@@ -1,5 +1,7 @@
 ﻿@page "/ContactUs"
+@using SPIC.Core.Entities
 @inject IJSRuntime JS
+@inject HttpClient Http
 
 <div class="container-fluid py-4 px-0">
     <h1 class="cu-page-title">Contact Us</h1>
@@ -60,7 +62,7 @@ Chennai – 600032</h3>
                 </svg>
                 Mon–Fri  •  9:30 AM – 6:00 PM
             </div>
-            <button class="cu-card-btn">Open in Maps</button>
+            <button class="cu-card-btn" @onclick="OpenInMapsAsync">Open in Maps</button>
         </div>
 
         <div class="cu-contact-card cu-card-email">
@@ -111,7 +113,7 @@ Chennai – 600032</h3>
                 Send Email
             </button>
 
-            <button class="cu-qca-btn cu-btn-maps">
+            <button class="cu-qca-btn cu-btn-maps" @onclick="OpenInMapsAsync">
                 <img src="_content/SPIC.MauiBlazorApp.Shared/Images/ContactUs/Location2.png" />
                 Open in Maps
             </button>
@@ -141,6 +143,8 @@ Chennai – 600032</h3>
                     else if (_distanceToSpic.HasValue)
                     {
                         <span>Distance to SPIC Office: @_distanceToSpic.Value.ToString("F1") km (approx.)</span>
+                        <br />
+                        <span>Estimated travel time: @(_travelTimeMin.HasValue ? _travelTimeMin.Value.ToString("0") : "?") min (approx.)</span>
                     }
                     else if (!string.IsNullOrEmpty(_locationErrorMessage))
                     {
@@ -175,37 +179,60 @@ Chennai – 600032</h3>
                 <div class="cu-form-row">
                     <div class="cu-form-group">
                         <label class="cu-form-label">Full Name</label>
-                        <input type="text" class="cu-form-input" placeholder="Enter Full Name" />
+                        <input type="text" class="cu-form-input" placeholder="Enter Full Name" @bind="_fullName" />
                     </div>
                     <div class="cu-form-group">
                         <label class="cu-form-label">Email Address</label>
-                        <input type="email" class="cu-form-input" placeholder="Enter Email Address" />
+                        <input type="email" class="cu-form-input" placeholder="Enter Email Address" @bind="_emailAddress" />
                     </div>
                 </div>
 
                 <div class="cu-form-row">
                     <div class="cu-form-group">
                         <label class="cu-form-label">Enquiry Type</label>
-                        <select class="cu-form-select">
+                        <select class="cu-form-select" @bind="_enquiryType">
                             <option value="" disabled selected hidden>Select an enquiry type</option>
-                            <option value="welfare">Welfare Schemes</option>
-                            <option value="booking">Room Bookings</option>
-                            <option value="general">General Enquiry</option>
+                            <option value="@EnquiryType.WelfareSchemes">Welfare Schemes</option>
+                            <option value="@EnquiryType.RoomBookings">Room Bookings</option>
+                            <option value="@EnquiryType.GeneralEnquiry">General Enquiry</option>
                         </select>
                     </div>
                     <div class="cu-form-group">
                         <label class="cu-form-label">Subject</label>
-                        <input type="text" class="cu-form-input" placeholder="Briefly describe your issue" />
+                        <input type="text" class="cu-form-input" placeholder="Briefly describe your issue" @bind="_subject" />
                     </div>
                 </div>
 
                 <div class="cu-form-group">
                     <label class="cu-form-label">Message</label>
-                    <textarea class="cu-form-textarea" placeholder="Type your message here..."></textarea>
+                    <textarea class="cu-form-textarea" placeholder="Type your message here..." @bind="_message"></textarea>
                 </div>
             </div>
 
-            <button class="cu-btn-primary">Send Feedback</button>
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="cu-form-feedback cu-form-feedback-error">
+                    <span>@_errorMessage</span>
+                </div>
+            }
+
+            @if (_sent)
+            {
+                <div class="cu-form-feedback cu-form-feedback-success">
+                    <span>Thank you! Your enquiry has been sent. We will get back to you shortly.</span>
+                </div>
+            }
+
+            <button class="cu-btn-primary" @onclick="SendFeedbackAsync" disabled="@_sending">
+                @if (_sending)
+                {
+                    <span>Sending...</span>
+                }
+                else
+                {
+                    <span>Send Feedback</span>
+                }
+            </button>
         </div>
 
     </div>
@@ -214,7 +241,18 @@ Chennai – 600032</h3>
 @code {
     private bool _isGettingLocation;
     private double? _distanceToSpic;
+    private double? _travelTimeMin;
     private string? _locationErrorMessage;
+
+    private string _fullName = string.Empty;
+    private string _emailAddress = string.Empty;
+    private EnquiryType? _enquiryType;
+    private string _subject = string.Empty;
+    private string _message = string.Empty;
+
+    private string? _errorMessage;
+    private bool _sending;
+    private bool _sent;
 
     private const string MapElementId = "contactUsLeafletMap";
     private const double SpicOfficeLatitude = 13.011683879768821;
@@ -236,6 +274,70 @@ Chennai – 600032</h3>
         }
     }
 
+    private async Task SendFeedbackAsync()
+    {
+        _errorMessage = null;
+        _sent = false;
+
+        if (string.IsNullOrWhiteSpace(_fullName) ||
+            string.IsNullOrWhiteSpace(_emailAddress) ||
+            !_enquiryType.HasValue ||
+            string.IsNullOrWhiteSpace(_subject) ||
+            string.IsNullOrWhiteSpace(_message))
+        {
+            _errorMessage = "Please fill in every field before sending.";
+            return;
+        }
+
+        if (!_emailAddress.Contains('@') || !_emailAddress.Contains('.'))
+        {
+            _errorMessage = "Please enter a valid email address.";
+            return;
+        }
+
+        _sending = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/ContactUs/enquiry", new ContactUsMessage
+            {
+                FullName = _fullName.Trim(),
+                EmailAddress = _emailAddress.Trim(),
+                EnquiryType = _enquiryType,
+                Subject = _subject.Trim(),
+                Message = _message.Trim()
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _sent = true;
+                _fullName = string.Empty;
+                _emailAddress = string.Empty;
+                _enquiryType = null;
+                _subject = string.Empty;
+                _message = string.Empty;
+            }
+            else
+            {
+                _errorMessage = "Your enquiry could not be sent. Please try again later.";
+            }
+        }
+        catch
+        {
+            _errorMessage = "Your enquiry could not be sent. Please try again later.";
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private async Task OpenInMapsAsync()
+    {
+        var url =
+            $"https://maps.google.com/maps?q={SpicOfficeLatitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{SpicOfficeLongitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
     private async Task GetDirectionsAsync()
     {
         _isGettingLocation = true;
@@ -254,13 +356,18 @@ Chennai – 600032</h3>
                 return;
             }
 
-            _distanceToSpic = CalculateDistanceKm(
+            var route = await JS.InvokeAsync<RoadRouteResult>("showRouteOnMap", MapElementId,
                 result.Latitude, result.Longitude,
                 SpicOfficeLatitude, SpicOfficeLongitude);
 
-            await JS.InvokeVoidAsync("showRouteOnMap", MapElementId,
-                result.Latitude, result.Longitude,
-                SpicOfficeLatitude, SpicOfficeLongitude);
+            if (!string.IsNullOrEmpty(route.Error))
+            {
+                _locationErrorMessage = "Unable to calculate road route right now.";
+                return;
+            }
+
+            _distanceToSpic = route.DistanceKm;
+            _travelTimeMin = route.DurationMin;
         }
         catch (Exception ex)
         {
@@ -273,15 +380,11 @@ Chennai – 600032</h3>
         }
     }
 
-    private static double CalculateDistanceKm(double lat1, double lng1, double lat2, double lng2)
+    private class RoadRouteResult
     {
-        const double R = 6371.0;
-        var dLat = (lat2 - lat1) * Math.PI / 180.0;
-        var dLng = (lng2 - lng1) * Math.PI / 180.0;
-        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
-                + Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0)
-                * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
-        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        public double DistanceKm { get; set; }
+        public double DurationMin { get; set; }
+        public string? Error { get; set; }
     }
 
     private class GeoLocationResult
