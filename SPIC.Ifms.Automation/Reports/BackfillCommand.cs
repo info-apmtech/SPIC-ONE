@@ -303,6 +303,20 @@ namespace SPIC.Ifms.Automation.Reports
 		/// </summary>
 		private static async Task<bool> LoginAsync(IfmsPortalClient portal, IfmsAccountCredentials account)
 		{
+			// A login that fails for a passing reason (no OTP because the handset or the portal's
+			// SMS gateway is down, portal offline) is tried again every ten minutes for up to two
+			// hours rather than ending the run in the middle of the night.
+			for (var round = 1; ; round++)
+			{
+				if (await LoginOnceAsync(portal, account)) return true;
+				if (round >= 12) return false;
+				Console.WriteLine($"  sign-in failed; trying again in 10 minutes ({round} of 12)");
+				await Task.Delay(TimeSpan.FromMinutes(10));
+			}
+		}
+
+		private static async Task<bool> LoginOnceAsync(IfmsPortalClient portal, IfmsAccountCredentials account)
+		{
 			var lockPath = Path.Combine(AppContext.BaseDirectory, "login.lock");
 			FileStream? held = null;
 			var waited = false;
