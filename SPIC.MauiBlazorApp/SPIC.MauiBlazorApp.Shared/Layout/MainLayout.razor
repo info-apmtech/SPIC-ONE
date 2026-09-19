@@ -5,6 +5,7 @@
 @using System.Text
 @using System.Text.Json
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Shell
 
 @inject HttpClient Http
 @inject ISessionStore SessionStore
@@ -26,35 +27,31 @@
 
         <LoadingOverlay />
 
+    @* Desktop (>= 1200px): full sidebar. Hidden on phone + tablet by Layout.css. *@
     <aside class="sidebar">
         <NavMenu />
     </aside>
 
+    @* Tablet (768 .. 1199.98px): 72px icon rail (Components/Shell/NavRail). Self-hides elsewhere. *@
+    <NavRail />
+
     <main class="content-wrap">
 
-        @* ================= MOBILE TOP BAR ================= *@
-        <div class="mobile-topbar">
-
-            <div class="brand p-0 m-0"
-                 style="font-size: 1.7rem;">
-                SPIC
-            </div>
-
-            <button class="btn btn-outline-secondary"
-                    type="button"
-                    data-bs-toggle="offcanvas"
-                    data-bs-target="#mobileSidebar"
-                    aria-controls="mobileSidebar">
-
-                <i class="bi bi-list"></i>
-
-            </button>
-
-        </div>
-
-
-        @* ================= DESKTOP TOP BAR ================= *@
+        @* ================= TOP BAR =================
+           Desktop: search + actions, exactly as before.
+           Phone (<= 767.98px, Layout.css): becomes the compact sticky bar
+           logo + notification + avatar; the search box is hidden and the
+           brand in .shell-topbar-lead is shown. *@
         <div class="topbar">
+
+            @* Brand - display:none on desktop/tablet (Layout.css) *@
+            <div class="shell-topbar-lead">
+                <a class="brand shell-topbar-brand"
+                   href="@LoginState.LandingPage"
+                   aria-label="SPIC home">
+                    SPIC
+                </a>
+            </div>
 
             @* Search *@
             <div class="search-box">
@@ -262,11 +259,16 @@
 
     </main>
 
+    @* Phone (<= 767.98px): fixed bottom tab bar + "More" sheet (Components/Shell).
+       Self-hides on tablet/desktop. Logout is owned by this layout. *@
+    <BottomTabBar OnLogout="Logout" />
+
 </div>
 
 
 @* =========================================================
-   MOBILE SIDEBAR
+   FULL MENU OFFCANVAS (phone + tablet)
+   Opened from MoreSheet "Full menu" and the NavRail menu button.
    ========================================================= *@
 
 <div class="offcanvas offcanvas-start"
@@ -1740,9 +1742,10 @@ else
        ================================================================ */
     @@media (max-width: 768px) {
 
-        /* Give the avatar toggle comfortable touch size */
+        /* Give the avatar toggle a full 44px touch target (tokens.css --tap-min) */
         .user-menu-toggle {
-            min-height: 36px;
+            min-height: var(--tap-min, 44px);
+            min-width: var(--tap-min, 44px);
             padding: 2px 4px;
   /* Allow Bootstrap mobile offcanvas to stay above profile button */
         z-index: auto;
