@@ -400,6 +400,20 @@ namespace SpicAPI.Controllers
 
 			if (id != dealer.Id) return BadRequest("ID mismatch");
 
+			// A dealer's State/HQ/Region are assigned once at registration from the
+			// original registering MO and must remain permanently fixed. Editors of any
+			// role (MO/RM/SM/AVP/Admin/other MOs) must never be able to overwrite them
+			// with their own State/HQ/Region while updating an existing dealer.
+			var persisted = await _db.DealerRegistrations
+				.AsNoTracking()
+				.FirstOrDefaultAsync(d => d.Id == id);
+			if (persisted == null)
+				return NotFound(new { message = "Dealer registration was not found." });
+
+			dealer.StateId = persisted.StateId;
+			dealer.Region = persisted.Region;
+			dealer.HQ = persisted.HQ;
+
 			if (string.IsNullOrEmpty(dealer.UserTableId) && !string.IsNullOrEmpty(dealer.DealerCode))
 			{
 				var userError = await EnsureDealerUserAsync(dealer);
