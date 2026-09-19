@@ -1,25 +1,12 @@
-@if (IsOpen)
-{
-    <div class="pd-overlay" @onclick="CloseDrawer">
-        <div class="pd-drawer" @onclick:stopPropagation="true">
-            
-            <!-- Drawer Header -->
-            <div class="pd-header">
-                <div class="pd-header-titles">
-                    <h2>CSR-2 Program Details</h2>
-                    <p>Crop Protection Workshop</p>
-                </div>
-                <button class="pd-close-icon" @onclick="CloseDrawer" aria-label="Close">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="15" y1="9" x2="9" y2="15"></line>
-                        <line x1="9" y1="9" x2="15" y2="15"></line>
-                    </svg>
-                </button>
-            </div>
-
+@* native: BottomSheet = bottom sheet on phone, right-side drawer on tablet/desktop.
+   The former .pd-overlay/.pd-drawer/.pd-header markup is replaced by the sheet's own chrome;
+   the body sections and footer buttons are unchanged. *@
+<BottomSheet IsOpen="IsOpen" IsOpenChanged="OnSheetOpenChanged"
+             Title="CSR-2 Program Details" Subtitle="Crop Protection Workshop"
+             Size="BottomSheet.SheetSize.Full" CssClass="pd-sheet">
+    <ChildContent>
             <!-- Drawer Body -->
-            <div class="pd-body">
+            <div class="pd-body pd-body--sheet">
                 
                 <!-- Program Information -->
                 <div class="pd-section">
@@ -264,10 +251,9 @@
                 </div>
 
             </div>
-
-            <!-- Drawer Footer -->
-            <div class="pd-footer">
-                <button class="pd-btn-action pd-btn-print">
+    </ChildContent>
+    <Footer>
+                <button type="button" class="pd-btn-action pd-btn-print">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="6 9 6 2 18 2 18 9"></polyline>
                         <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
@@ -275,7 +261,7 @@
                     </svg>
                     Print
                 </button>
-                <button class="pd-btn-action pd-btn-export">
+                <button type="button" class="pd-btn-action pd-btn-export">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                         <polyline points="7 10 12 15 17 10"></polyline>
@@ -283,11 +269,8 @@
                     </svg>
                     Export PDF
                 </button>
-            </div>
-
-        </div>
-    </div>
-}
+    </Footer>
+</BottomSheet>
 
 
 @code {
@@ -297,9 +280,10 @@
     [Parameter]
     public EventCallback<bool> IsOpenChanged { get; set; }
 
-    private async Task CloseDrawer()
+    // Raised by the sheet (close button, backdrop, Escape, hardware/browser back, swipe).
+    private async Task OnSheetOpenChanged(bool open)
     {
-        IsOpen = false;
+        IsOpen = open;
         await IsOpenChanged.InvokeAsync(IsOpen);
     }
 }
