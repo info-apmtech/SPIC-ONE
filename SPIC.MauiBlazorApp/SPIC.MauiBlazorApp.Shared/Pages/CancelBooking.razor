@@ -1,26 +1,27 @@
 ﻿@page "/CancelBooking"
+@inject NavigationManager Navigation
 
 <div class="container-fluid py-4 px-0">
 @*     <div class="cb-wrapper">
  *@
         <div class="cb-header-row">
-            <div class="cb-header-text">
-                <h1>Cancel Booking</h1>
-                <p>Please review your cancellation details carefully before proceeding</p>
-            </div>
-            <button class="cb-btn-outline">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="12" y1="18" x2="12" y2="12"></line>
-                    <polyline points="9 15 12 18 15 15"></polyline>
-                </svg>
-                Download Invoice
-            </button>
+            <PageHeader Title="Cancel Booking" Subtitle="Please review your cancellation details carefully before proceeding" BackHref="/MyBookings" CssClass="w-100">
+                <Actions>
+                    <button class="cb-btn-outline">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="12" y1="18" x2="12" y2="12"></line>
+                            <polyline points="9 15 12 18 15 15"></polyline>
+                        </svg>
+                        Download Invoice
+                    </button>
+                </Actions>
+            </PageHeader>
         </div>
 
         <div class="cb-card cb-booking-summary-card">
-            <img src="https://images.unsplash.com/photo-1611892440504-42a792e24d32?auto=format&fit=crop&w=300&q=80" alt="Room" class="cb-summary-img">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image20.jpg" alt="Room" class="cb-summary-img" loading="lazy">
             <div class="cb-summary-content">
                 <div class="cb-summary-title-row">
                     <div>
@@ -179,23 +180,27 @@
         </div>
 
         <div class="cb-bottom-actions">
-            <button class="cb-btn-outline" style="padding: 10px 24px;">Back</button>
-            <button class="cb-btn-danger" @onclick="OpenConfirmPopup">Continue Cancellation</button>
+            <ActionBar AriaLabel="Cancellation actions">
+                <Secondary>
+                    <button class="cb-btn-outline" style="padding: 10px 24px;" @onclick="GoBack">Back</button>
+                </Secondary>
+                <ChildContent>
+                    <button class="cb-btn-danger" @onclick="OpenConfirmPopup">Continue Cancellation</button>
+                </ChildContent>
+            </ActionBar>
         </div>
 
 @*     </div>
  *@</div>
 
-@if (showConfirmPopup)
-{
-    <div class="cb-modal-overlay">
-        <div class="cb-modal-container">
+<BottomSheet @bind-IsOpen="showConfirmPopup" Title="Confirm Cancellation?" Subtitle="This action cannot be undone and your stay will be released." CssClass="cb-sheet">
+    <ChildContent>
+        <div class="cb-modal-container cb-sheet-body">
             <div class="cb-modal-icon-wrapper confirm">
                 <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
             </div>
             
-            <h2 class="cb-modal-title red">Confirm Cancellation?</h2>
-            <p class="cb-modal-subtitle">Are you sure you want to cancel this booking? This action cannot be undone and your stay will be released.</p>
+            <p class="cb-modal-subtitle">Are you sure you want to cancel this booking?</p>
 
             <div class="cb-modal-data-box">
                 <div class="cb-m-row">
@@ -216,23 +221,21 @@
                 </div>
             </div>
 
-            <div class="cb-modal-actions">
-                <button class="cb-btn-outline" @onclick="CloseConfirmPopup" style="flex: 1;">Keep My Booking</button>
-                <button class="cb-btn-danger" @onclick="ConfirmAndCancelBooking" style="flex: 1;">Cancel Booking</button>
-            </div>
         </div>
-    </div>
-}
+    </ChildContent>
+    <Footer>
+        <button class="cb-btn-outline" @onclick="CloseConfirmPopup" style="flex: 1;">Keep My Booking</button>
+        <button class="cb-btn-danger" @onclick="ConfirmAndCancelBooking" style="flex: 1;">Cancel Booking</button>
+    </Footer>
+</BottomSheet>
 
-@if (showSuccessPopup)
-{
-    <div class="cb-modal-overlay">
-        <div class="cb-modal-container">
+<BottomSheet @bind-IsOpen="showSuccessPopup" Title="Booking Cancelled Successfully" CssClass="cb-sheet">
+    <ChildContent>
+        <div class="cb-modal-container cb-sheet-body">
             <div class="cb-modal-icon-wrapper success">
                 <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
             </div>
             
-            <h2 class="cb-modal-title green">Booking Cancelled Successfully</h2>
             <p class="cb-modal-subtitle">Your cancellation request has been completed. Refund will be processed within 5–7 business days to your original payment method.</p>
 
             <div class="cb-modal-data-box">
@@ -254,18 +257,20 @@
                 <p class="cb-info-text m-0" style="font-size: 12px;">Cancellation confirmation and refund details have been sent to <strong>hi@gmail.com</strong></p>
             </div>
 
-            <div class="cb-modal-actions" style="flex-wrap: wrap;">
-                <button class="cb-btn-outline" style="flex: 1 1 calc(50% - 6px);">Download Receipt</button>
-                <button class="cb-btn-outline" style="flex: 1 1 calc(50% - 6px);">View Booking</button>
-                <button class="cb-btn-primary" @onclick="CloseSuccessPopup" style="flex: 1 1 100%;">Go to My Bookings</button>
-            </div>
         </div>
-    </div>
-}
+    </ChildContent>
+    <Footer>
+        <button class="cb-btn-outline" style="flex: 1 1 calc(50% - 6px);">Download Receipt</button>
+        <button class="cb-btn-outline" style="flex: 1 1 calc(50% - 6px);">View Booking</button>
+        <button class="cb-btn-primary" @onclick="CloseSuccessPopup" style="flex: 1 1 100%;">Go to My Bookings</button>
+    </Footer>
+</BottomSheet>
 
 @code {
     private bool showConfirmPopup = false;
     private bool showSuccessPopup = false;
+
+    private void GoBack() => Navigation.NavigateTo("/MyBookings");
 
     private void OpenConfirmPopup()
     {
