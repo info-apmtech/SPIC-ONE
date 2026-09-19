@@ -1,0 +1,86 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Feedback
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    ActionBar: primary/secondary buttons for a form or detail page.
+    Phone (<= 767px): fixed to the bottom of the viewport, above the shell's tab bar
+    (bottom: var(--shell-bottom-offset, 0px)), with safe-area padding and a top shadow.
+    A spacer of equal height is rendered in the flow so content never hides behind it.
+    Tablet/desktop (>= 768px): a static, right-aligned row where it is placed.
+
+    Usage:
+      <ActionBar>
+          <Secondary><button class="btn btn-outline-secondary">Cancel</button></Secondary>
+          <ChildContent><button class="btn btn-success">Save</button></ChildContent>
+      </ActionBar>
+    (or just put the primary buttons directly inside when there is no secondary slot).
+*@
+
+<div class="fb-actionbar-spacer @(Sticky ? "" : "fb-actionbar-spacer--off")" aria-hidden="true" @ref="_spacer"></div>
+
+<div class="fb-actionbar @(Sticky ? "fb-actionbar--sticky" : "") @AlignClass @CssClass"
+     role="group"
+     aria-label="@AriaLabel"
+     @ref="_bar">
+    @if (Secondary is not null)
+    {
+        <div class="fb-actionbar__secondary">@Secondary</div>
+    }
+    <div class="fb-actionbar__primary">@ChildContent</div>
+</div>
+
+@code {
+    public enum BarAlign { End, Start, Between }
+
+    /// <summary>Primary action buttons.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    /// <summary>Secondary actions (Cancel, Back...). Rendered before the primary group.</summary>
+    [Parameter] public RenderFragment? Secondary { get; set; }
+    /// <summary>Phone only: fix the bar to the bottom. Set false to keep it inline everywhere.</summary>
+    [Parameter] public bool Sticky { get; set; } = true;
+    /// <summary>Tablet/desktop alignment of the inline row.</summary>
+    [Parameter] public BarAlign Align { get; set; } = BarAlign.End;
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Actions";
+
+    private ElementReference _bar;
+    private ElementReference _spacer;
+    private bool _observing;
+    private bool _disposed;
+
+    private string AlignClass => Align switch
+    {
+        BarAlign.Start => "fb-actionbar--start",
+        BarAlign.Between => "fb-actionbar--between",
+        _ => "fb-actionbar--end"
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _disposed || !Sticky) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("spicFeedback.actionBar.observe", _bar, _spacer);
+            _observing = true;
+        }
+        catch (JSException) { /* interop missing: CSS fallback height keeps content clear */ }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        if (!_observing) return;
+        try { await JS.InvokeVoidAsync("spicFeedback.actionBar.unobserve", _bar); }
+        catch (JSException) { }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+        catch (TaskCanceledException) { }
+    }
+}
