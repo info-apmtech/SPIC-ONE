@@ -1,22 +1,11 @@
-﻿@if (IsOpen)
-{
-    <div class="csr-pd-overlay" @onclick="CloseDrawer">
-        <div class="csr-pd-drawer" @onclick:stopPropagation="true">
-            
-            <div class="csr-pd-header">
-                <div class="csr-pd-header-titles">
-                    <h2>CSR-1 Program Details</h2>
-                    <p>Crop Protection Workshop</p>
-                </div>
-                <button class="csr-pd-close-icon" @onclick="CloseDrawer" aria-label="Close">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
-
-            <div class="csr-pd-body">
+﻿@* native: BottomSheet = bottom sheet on phone, right-side drawer on tablet/desktop.
+   The former .csr-pd-overlay/.csr-pd-drawer/.csr-pd-header markup is replaced by the sheet's
+   own chrome; the body sections and footer buttons are unchanged. *@
+<BottomSheet IsOpen="IsOpen" IsOpenChanged="OnSheetOpenChanged"
+             Title="CSR-1 Program Details" Subtitle="Crop Protection Workshop"
+             Size="BottomSheet.SheetSize.Full" CssClass="csr-pd-sheet">
+    <ChildContent>
+            <div class="csr-pd-body csr-pd-body--sheet">
                 
                 <div class="csr-pd-section">
                     <h3>Program Information</h3>
@@ -216,7 +205,8 @@
 
             </div>
 
-            <div class="csr-pd-footer">
+    </ChildContent>
+    <Footer>
                 <button class="csr-pd-btn-action csr-pd-btn-dark">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -241,11 +231,8 @@
                     </svg>
                     Export PDF
                 </button>
-            </div>
-
-        </div>
-    </div>
-}
+    </Footer>
+</BottomSheet>
 
 
 @code {
@@ -255,9 +242,10 @@
     [Parameter]
     public EventCallback<bool> IsOpenChanged { get; set; }
 
-    private async Task CloseDrawer()
+    // Raised by the sheet (close button, backdrop, Escape, hardware/browser back, swipe).
+    private async Task OnSheetOpenChanged(bool open)
     {
-        IsOpen = false;
+        IsOpen = open;
         await IsOpenChanged.InvokeAsync(IsOpen);
     }
 }
