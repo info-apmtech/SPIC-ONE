@@ -50,26 +50,27 @@
 
 <div class="container-fluid py-4 px-0">
     <div class="mb-header-row">
-        <div class="mb-header-text">
-            <h1>My Bookings</h1>
-            <p>View and manage your room reservations</p>
-        </div>
-        
-        <button class="mb-btn-new" @onclick="NewBooking">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            New Booking
-        </button>
+        <PageHeader Title="My Bookings" Subtitle="View and manage your room reservations" BackHref="/SDWADashboard">
+            <Actions>
+                <button class="mb-btn-new" @onclick="NewBooking">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    New Booking
+                </button>
+            </Actions>
+        </PageHeader>
     </div>
 
     @if (_isLoading)
     {
-        <div class="mb-empty-card">Loading your bookings...</div>
+        <Skeleton Variant="card" Rows="3" LoadingText="Loading your bookings" />
     }
     else if (!string.IsNullOrWhiteSpace(_loadError))
     {
-        <div class="mb-error-card">@_loadError</div>
+        <EmptyState Icon="bi-exclamation-circle" Title="Could not load bookings" Message="@_loadError">
+            <button class="bk-btn bk-btn-default" @onclick="LoadBookingsAsync">Retry</button>
+        </EmptyState>
     }
     else
     {
@@ -155,7 +156,16 @@
 
             @if (VisibleBookings.Count == 0)
             {
-                <div class="mb-empty-card">No @SelectedTab.ToLowerInvariant() bookings found.</div>
+                @if (SelectedTab == "Upcoming")
+                {
+                    <EmptyState Icon="bi-house-door" Title="No upcoming bookings" Message="Book a guest house room for your next visit.">
+                        <button class="bk-btn bk-btn-default" @onclick="NewBooking">Book a room</button>
+                    </EmptyState>
+                }
+                else
+                {
+                    <EmptyState Icon="bi-inbox" Title="@($"No {SelectedTab.ToLowerInvariant()} bookings")" Message="Bookings will appear here once they reach this status." />
+                }
             }
             else
             {
@@ -165,7 +175,7 @@
                     {
                         <div class="bk-card">
                             <div class="bk-image-wrap">
-                                <img src="@(string.IsNullOrEmpty(booking.RoomImagePath) ? FallbackImage : GetImageUrl(booking.RoomImagePath))" alt="@booking.RoomType" onerror="this.style.backgroundColor='#e2e8f0';" />
+                                <img src="@(string.IsNullOrEmpty(booking.RoomImagePath) ? FallbackImage : GetImageUrl(booking.RoomImagePath))" alt="@booking.RoomType" loading="lazy" onerror="this.style.backgroundColor='#e2e8f0';" />
                             </div>
                             
                             <div class="bk-content">
