@@ -8,8 +8,125 @@
 @inject LoginState LoginState
 @inject NavigationManager Navigation
 
-<div class="container-fluid">
-	<h2 class="page-title">AVP Approval - Sub Dealers & Employees</h2>
+<style>
+	/* native: phone (all rules scoped to .sa-page; desktop >= 1200px untouched) */
+	@@media (max-width: 767.98px) {
+		.sa-page .tab-item {
+			min-height: 44px;
+			display: inline-flex;
+			align-items: center;
+		}
+
+		.sa-page .form-control-custom {
+			min-height: 44px;
+			font-size: 16px; /* prevents iOS zoom on focus */
+		}
+
+		/* Table is replaced by the card list on phones. */
+		.sa-page .table-responsive {
+			display: none;
+		}
+
+		.sa-cards {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+
+		.sa-card {
+			background: #ffffff;
+			border: 1px solid #e2e8f0;
+			border-radius: 12px;
+			padding: 14px;
+			box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+		}
+
+		.sa-card-head {
+			display: flex;
+			justify-content: space-between;
+			align-items: flex-start;
+			gap: 10px;
+		}
+
+		.sa-card-titles {
+			min-width: 0;
+			flex: 1 1 auto;
+		}
+
+		.sa-card-title {
+			margin: 0;
+			font-size: 15px;
+			font-weight: 600;
+			color: #0f172a;
+			line-height: 1.3;
+			overflow-wrap: anywhere;
+		}
+
+		.sa-card-sub {
+			margin-top: 2px;
+			font-size: 12px;
+			color: #64748b;
+			overflow-wrap: anywhere;
+		}
+
+		.sa-card-rows {
+			margin: 10px 0 0;
+			display: grid;
+			gap: 6px;
+		}
+
+		.sa-card-row {
+			display: flex;
+			justify-content: space-between;
+			gap: 12px;
+			font-size: 13px;
+		}
+
+			.sa-card-row dt {
+				color: #64748b;
+				font-weight: 500;
+				flex-shrink: 0;
+			}
+
+			.sa-card-row dd {
+				margin: 0;
+				text-align: right;
+				color: #1e293b;
+				font-weight: 500;
+				overflow-wrap: anywhere;
+			}
+
+		.sa-card-actions {
+			display: flex;
+			gap: 10px;
+			margin-top: 12px;
+		}
+
+			.sa-card-actions .btn {
+				flex: 1 1 0;
+				min-height: 44px;
+			}
+
+		/* Sheet footer: the ActionBar sits inline inside the sheet's own footer. */
+		.sa-page .fb-sheet__footer .fb-actionbar__secondary,
+		.sa-page .fb-sheet__footer .fb-actionbar__primary {
+			flex: 1 1 0;
+		}
+
+		.sa-page .fb-sheet__footer .fb-actionbar__secondary .btn,
+		.sa-page .fb-sheet__footer .fb-actionbar__primary .btn {
+			width: 100%;
+		}
+	}
+
+	.sa-page .fb-sheet__footer .fb-actionbar {
+		padding: 0;
+		width: 100%;
+	}
+</style>
+
+<div class="container-fluid sa-page">
+	<PageHeader Title="AVP Approval" Subtitle="@HeaderSubtitle" />
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -29,11 +146,14 @@
 
 	@if (_isLoading)
 	{
-		<div class="text-center py-5">
+		<div class="text-center py-5 tablet-up">
 			<div class="spinner-border text-success" role="status">
 				<span class="visually-hidden">Loading...</span>
 			</div>
 			<p class="mt-2 text-muted">Loading pending AVP approvals...</p>
+		</div>
+		<div class="phone-only">
+			<Skeleton Variant="card" Rows="4" LoadingText="Loading pending AVP approvals..." />
 		</div>
 	}
 	else if (_pendingItems.Count == 0)
@@ -49,7 +169,7 @@
 	else
 	{
 		<div class="row g-3 mb-4">
-			<div class="col-md-3">
+			<div class="col-6 col-md-3">
 				<div class="metric-card bg-blue-light">
 					<div class="metric-header">
 						<h4 class="metric-title">Total Pending</h4>
@@ -57,7 +177,7 @@
 					<div class="metric-val">@FilteredItems.Count</div>
 				</div>
 			</div>
-			<div class="col-md-3">
+			<div class="col-6 col-md-3">
 				<div class="metric-card bg-mint-light">
 					<div class="metric-header">
 						<h4 class="metric-title">Sub Dealers</h4>
@@ -65,7 +185,7 @@
 					<div class="metric-val">@FilteredItems.Count(x => x.Type == "Sub Dealer")</div>
 				</div>
 			</div>
-			<div class="col-md-3">
+			<div class="col-6 col-md-3">
 				<div class="metric-card bg-mint-light">
 					<div class="metric-header">
 						<h4 class="metric-title">Employees</h4>
@@ -73,7 +193,7 @@
 					<div class="metric-val">@FilteredItems.Count(x => x.Type == "Employee")</div>
 				</div>
 			</div>
-			<div class="col-md-3">
+			<div class="col-6 col-md-3">
 				<div class="metric-card bg-gray-light">
 					<div class="metric-header">
 						<h4 class="metric-title">Filter</h4>
@@ -130,41 +250,74 @@
 					</tbody>
 				</table>
 			</div>
+
+			@* native: phone card list (<= 767px). Same rows and the same OpenApproveModal calls as the table. *@
+			<div class="sa-cards phone-only">
+				@if (FilteredItems.Count == 0)
+				{
+					<EmptyState Icon="bi-inbox" Title="Nothing waiting for your approval" Message="No records match the selected filter." />
+				}
+				else
+				{
+					@foreach (var item in FilteredItems)
+					{
+						<article class="sa-card">
+							<header class="sa-card-head">
+								<div class="sa-card-titles">
+									<h4 class="sa-card-title">@item.ItemName</h4>
+									<div class="sa-card-sub">@item.ItemCode · Dealer @item.DealerCode</div>
+								</div>
+								<span class="badge @(item.Type == "Sub Dealer" ? "bg-info" : "bg-warning")">@item.Type</span>
+							</header>
+							<dl class="sa-card-rows">
+								<div class="sa-card-row"><dt>Beneficiary</dt><dd>@(item.BeneficiaryName ?? "-")</dd></div>
+								<div class="sa-card-row"><dt>Nominee</dt><dd>@(item.NomineeName ?? "-")</dd></div>
+							</dl>
+							<div class="sa-card-actions">
+								<button type="button" class="btn btn-success" @onclick="() => OpenApproveModal(item, true)">
+									<i class="bi bi-check-lg"></i> Approve
+								</button>
+								<button type="button" class="btn btn-outline-danger" @onclick="() => OpenApproveModal(item, false)">
+									<i class="bi bi-x-lg"></i> Reject
+								</button>
+							</div>
+						</article>
+					}
+				}
+			</div>
 		</div>
 	}
-</div>
 
-@if (_showActionModal)
-{
-	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
-		<div class="modal-dialog modal-dialog-centered" role="document">
-			<div class="modal-content">
-				<div class="modal-header">
-					<h5 class="modal-title">@(_actionIsApprove ? "Approve" : "Reject") @(_actionTarget?.Type)</h5>
-					<button type="button" class="btn-close" @onclick="CloseActionModal"></button>
-				</div>
-				<div class="modal-body">
-					<p><strong>@(_actionTarget?.ItemName)</strong> (@(_actionTarget?.ItemCode))</p>
-					<p class="text-muted">Dealer: @(_actionTarget?.DealerCode)</p>
-					<p class="text-muted">SM Status: Approved</p>
-					<div class="mb-3">
-						<label class="form-label-custom">Remarks (optional for approve, recommended for reject)</label>
-						<textarea class="form-control-custom w-100" rows="3" placeholder="Enter remarks..."
-								  @bind="_actionRemarks"></textarea>
-					</div>
-				</div>
-				<div class="modal-footer">
-					<button class="btn btn-secondary" @onclick="CloseActionModal" disabled="@_isProcessing">Cancel</button>
-					<button class="btn @(_actionIsApprove ? "btn-success" : "btn-danger")"
+	@* Approve / Reject confirmation: bottom sheet on phone, right-side drawer on tablet/desktop.
+	   Same remarks field and the same ConfirmAction call as the former Bootstrap modal. *@
+	<BottomSheet IsOpen="_showActionModal" IsOpenChanged="OnSheetOpenChanged"
+				 Title="@($"{(_actionIsApprove ? "Approve" : "Reject")} {_actionTarget?.Type}")"
+				 Subtitle="@($"{_actionTarget?.ItemName} ({_actionTarget?.ItemCode})")"
+				 CloseOnBackdrop="@(!_isProcessing)" ShowCloseButton="@(!_isProcessing)">
+		<ChildContent>
+			<p class="text-muted">Dealer: @(_actionTarget?.DealerCode)</p>
+			<p class="text-muted">SM Status: Approved</p>
+			<div class="mb-3">
+				<label class="form-label-custom">Remarks (optional for approve, recommended for reject)</label>
+				<textarea class="form-control-custom w-100" rows="3" placeholder="Enter remarks..."
+						  @bind="_actionRemarks"></textarea>
+			</div>
+		</ChildContent>
+		<Footer>
+			<ActionBar Sticky="false" AriaLabel="Confirm approval action">
+				<Secondary>
+					<button type="button" class="btn btn-secondary" @onclick="CloseActionModal" disabled="@_isProcessing">Cancel</button>
+				</Secondary>
+				<ChildContent>
+					<button type="button" class="btn @(_actionIsApprove ? "btn-success" : "btn-danger")"
 							@onclick="ConfirmAction" disabled="@_isProcessing">
 						@(_isProcessing ? "Processing..." : (_actionIsApprove ? "Confirm Approve" : "Confirm Reject"))
 					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-}
+				</ChildContent>
+			</ActionBar>
+		</Footer>
+	</BottomSheet>
+</div>
 
 @code {
 	private string ActiveTab = "All";
@@ -183,6 +336,9 @@
 
 	private List<PendingApprovalItemDto> FilteredItems =>
 		_typeFilter == "All" ? _pendingItems : _pendingItems.Where(x => x.Type == _typeFilter).ToList();
+
+	private string HeaderSubtitle =>
+		_isLoading ? "Sub Dealers & Employees" : $"Sub Dealers & Employees · {_pendingItems.Count} pending";
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -230,6 +386,13 @@
 	{
 		_showActionModal = false;
 		_actionTarget = null;
+	}
+
+	// Sheet closed by its own controls (backdrop, Escape, hardware/browser back, swipe).
+	private void OnSheetOpenChanged(bool open)
+	{
+		if (open) { _showActionModal = true; return; }
+		if (!_isProcessing) CloseActionModal();
 	}
 
 	private async Task ConfirmAction()
