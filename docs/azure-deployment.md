@@ -12,7 +12,9 @@ products deploy.
 | Container app `ca-spicone-api-<env>` | SpicAPI, 8080, public HTTPS, 1–2 replicas (staging) / 2–4 (prod) |
 | Container app `ca-spicone-web-<env>` | Blazor Server web portal, sticky sessions, same scaling |
 | PostgreSQL Flexible Server `pg-spicone-<env>-xxxxxx` | Database `spicone`, automated backups, optional zone-redundant standby |
-| Storage account, Azure Files shares | `api-uploads` (Uploads), `api-webuploads` (wwwroot/uploads), `api-keys`, `web-keys` |
+| Storage account, Azure Files shares | `api-uploads` (Uploads), `api-webuploads` (wwwroot/uploads), `api-keys`, `web-keys`; deleted shares recoverable for 14 days |
+| Backup storage account `stspiconebk<env>xxxxxx` | Nightly `pg_dump` copies in container `pg-dumps`, kept 35 days, delete-locked in prod |
+| Container Apps job `caj-spicone-dbbackup-<env>` | Runs the nightly dump at 02:00 IST (image `spicone-backup`) |
 | Container Registry `crspicone<env>xxxxxx` | Images `spicone-api`, `spicone-web` |
 | Key Vault `kv-spicone-<env>-xxxxxx` | DB password, connection string, JWT key, IFMS keys |
 | Managed identity `id-spicone-<env>` | Apps pull images and read secrets; no passwords in app config |
@@ -159,13 +161,59 @@ from `appsettings.json` in Azure except defaults.
 Health endpoint: `/health` on both apps. Container Apps uses it for startup, readiness and
 liveness probes; a replica that fails it is replaced and receives no traffic.
 
+## Backups
+
+Three layers, all created by the template; nothing runs on a developer PC.
+
+| Layer | What it protects against | Where |
+|---|---|---|
+| PostgreSQL automated backups, **35 days** in prod (`postgresBackupRetentionDays`), locally redundant | Bad data, a mistaken migration: point-in-time restore to any minute in the window | Portal → PostgreSQL server → Backup and restore |
+| Nightly `pg_dump` copy, **02:00 IST**, kept 35 days | Loss of the server itself; anything the automated backups go down with | Storage account `stspiconebk<env>…`, container `pg-dumps/<yyyy>/<mm>/` |
+| Azure Files share soft delete, 14 days | A share (`api-uploads`, key rings) deleted by mistake | Portal → storage account → File shares → Show deleted shares |
+
+The dump job is a scheduled Container Apps job, `caj-spicone-dbbackup-<env>`, running the image
+`spicone-backup:latest` (`deploy/azure/backup/`: Azure CLI image plus PostgreSQL 16 client).
+It dumps the Azure server in custom format with the same flags as `copy-db.ps1`, checks the
+archive opens, and uploads it with the managed identity (no storage keys exist: shared-key access
+is off on that account). Dumps are Cool-tier blobs; a lifecycle rule deletes them after
+`backupDumpRetentionDays`, deleted blobs stay recoverable for 14 days, and in prod the account
+carries a `CanNotDelete` lock, so `az group delete` fails until the lock is removed on purpose.
+`deploy.ps1` builds and pushes the image with every release; the job always pulls `:latest`.
+
+```powershell
+# Run a dump now and watch it
+az containerapp job start --name caj-spicone-dbbackup-prd --resource-group rg-spicone-prod
+az containerapp job execution list --name caj-spicone-dbbackup-prd --resource-group rg-spicone-prod -o table
+az containerapp job logs show --name caj-spicone-dbbackup-prd --resource-group rg-spicone-prod --container backup
+
+# List and download copies (needs Storage Blob Data Reader on the backup account)
+az storage blob list --auth-mode login --account-name <stspiconebk…> --container-name pg-dumps -o table
+az storage blob download --auth-mode login --account-name <stspiconebk…> --container-name pg-dumps `
+    --name 2026/09/spicone-20260918T203000Z.dump --file C:\restore\spicone-20260918T203000Z.dump
+```
+
+Restore a copy over the live database (replaces every table; stop writes first):
+
+```powershell
+.\deploy\azure\copy-db.ps1 -Environment prod -DumpFile C:\restore\spicone-20260918T203000Z.dump
+```
+
+For a point-in-time restore of the last 35 days use the portal (Backup and restore → Restore)
+into a **new** server, then either repoint the API with `provision.ps1 -DatabaseConnectionStringFile`
+or dump that server and load it with `copy-db.ps1 -DumpFile`. Do a restore drill into a scratch
+database every few months; a backup nobody has restored is a hope, not a backup.
+
+Not yet in place (decided 2026-09-18, to revisit): geo-redundant backup and zone-redundant HA on
+PostgreSQL, GRS on the uploads account, Azure Backup for the file shares.
+
 ## Sizes and cost
 
 | | staging | prod |
 |---|---|---|
 | API / Web replicas | 1–2 each, 0.5 vCPU 1 GiB | 2–4 each, 1 vCPU 2 GiB |
-| PostgreSQL | B1ms, 32 GB, 7-day backup | D2ds_v4, 128 GB, 14-day backup |
-| Zone redundancy | off | Container Apps on; PostgreSQL standby optional (`postgresHaMode`) |
+| PostgreSQL | B1ms, 32 GB, 7-day backup | D2ds_v4, 128 GB, 35-day backup |
+| Nightly dump copies | 35 days, no lock | 35 days, delete lock |
+| Zone redundancy | off | off (`zoneRedundant`; needs a new environment); PostgreSQL standby optional (`postgresHaMode`) |
 
 Edit `infra/azure/<env>.parameters.json` to change sizes; the next `deploy.ps1` applies them.
 

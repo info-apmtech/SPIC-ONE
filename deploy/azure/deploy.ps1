@@ -47,6 +47,8 @@ if (-not $Tag) {
 }
 $apiImage = "$acr/spicone-api:$Tag"
 $webImage = "$acr/spicone-web:$Tag"
+# The nightly database dump job pulls :latest at every run, so it is never pinned to a release tag.
+$backupImage = "$acr/spicone-backup:latest"
 
 if (-not $SkipBuild -and $RemoteBuild) {
     # ACR Tasks: the repository (minus .dockerignore exclusions) is uploaded and built in Azure.
@@ -54,11 +56,12 @@ if (-not $SkipBuild -and $RemoteBuild) {
     Push-Location $script:RepoRoot
     try {
         foreach ($b in @(
-            @{ Name = 'spicone-api'; File = 'SpicAPI/Dockerfile' },
-            @{ Name = 'spicone-web'; File = 'SPIC.MauiBlazorApp/SPIC.MauiBlazorApp.Web/Dockerfile' })) {
+            @{ Name = 'spicone-api'; File = 'SpicAPI/Dockerfile'; Context = '.' },
+            @{ Name = 'spicone-web'; File = 'SPIC.MauiBlazorApp/SPIC.MauiBlazorApp.Web/Dockerfile'; Context = '.' },
+            @{ Name = 'spicone-backup'; File = 'deploy/azure/backup/Dockerfile'; Context = 'deploy/azure/backup' })) {
             Write-Host "Building $($b.Name):$Tag in registry $($outputs.acrName) ..." -ForegroundColor Cyan
             & $az acr build --registry $outputs.acrName --image "$($b.Name):$Tag" --image "$($b.Name):latest" `
-                --file $b.File --platform linux/amd64 .
+                --file $b.File --platform linux/amd64 $b.Context
             if ($LASTEXITCODE -ne 0) { throw "Remote build failed: $($b.Name)" }
         }
     } finally { Pop-Location }
@@ -71,11 +74,13 @@ elseif (-not $SkipBuild) {
         if ($LASTEXITCODE -ne 0) { throw 'API image build failed.' }
         docker build -f SPIC.MauiBlazorApp/SPIC.MauiBlazorApp.Web/Dockerfile -t $webImage -t "$acr/spicone-web:latest" .
         if ($LASTEXITCODE -ne 0) { throw 'Web image build failed.' }
+        docker build -f deploy/azure/backup/Dockerfile -t $backupImage deploy/azure/backup
+        if ($LASTEXITCODE -ne 0) { throw 'Backup image build failed.' }
     } finally { Pop-Location }
 
     Write-Host "Pushing to $acr ..." -ForegroundColor Cyan
     Invoke-Az acr login --name $outputs.acrName | Out-Null
-    foreach ($img in @($apiImage, "$acr/spicone-api:latest", $webImage, "$acr/spicone-web:latest")) {
+    foreach ($img in @($apiImage, "$acr/spicone-api:latest", $webImage, "$acr/spicone-web:latest", $backupImage)) {
         docker push $img
         if ($LASTEXITCODE -ne 0) { throw "Push failed: $img" }
     }
@@ -83,6 +88,7 @@ elseif (-not $SkipBuild) {
 
 if ($Quick) {
     # Image swap only. Apps must already exist (first deploy must use the default mode).
+    # The dump job is not touched: it pulls spicone-backup:latest, which was just pushed.
     foreach ($app in @(@{ Name = $outputs.apiAppName; Image = $apiImage }, @{ Name = $outputs.webAppName; Image = $webImage })) {
         Write-Host "Updating $($app.Name) -> $($app.Image)" -ForegroundColor Cyan
         Invoke-Az containerapp update --name $app.Name --resource-group $names.ResourceGroup --image $app.Image | Out-Null
@@ -116,6 +122,7 @@ try {
         'deployApps=true',
         "apiImage=$apiImage",
         "webImage=$webImage",
+        "backupImage=$backupImage",
         "deployerObjectId=$deployer",
         "webApiBaseUrl=$WebApiBaseUrl"
     )

@@ -37,6 +37,15 @@ param postgresHaMode string = 'Disabled'
 param postgresBackupRetentionDays int = 7
 param postgresVersion string = '16'
 
+@description('Days a deleted Azure Files share can be undeleted from the portal.')
+param fileShareSoftDeleteDays int = 14
+@description('Image of the nightly pg_dump job (deploy.ps1 pushes spicone-backup:latest). Empty = no job.')
+param backupImage string = ''
+@description('Cron (UTC) of the nightly pg_dump job. 20:30 UTC = 02:00 IST.')
+param backupCron string = '30 20 * * *'
+@description('Days a dump copy is kept in the backup storage account before the lifecycle rule deletes it.')
+param backupDumpRetentionDays int = 35
+
 @description('Spread Container Apps replicas across availability zones (production).')
 param zoneRedundant bool = false
 param logRetentionDays int = 30
@@ -84,6 +93,8 @@ var tags = { app: 'spicone', env: envName, client: 'SPIC' }
 var lawName = 'log-spicone-${envShort}'
 var vnetName = 'vnet-spicone-${envShort}'
 var storageName = 'stspicone${envShort}${suffix}'
+var backupStorageName = 'stspiconebk${envShort}${suffix}'
+var backupJobName = 'caj-spicone-dbbackup-${envShort}'
 var acrName = 'crspicone${envShort}${suffix}'
 var uaiName = 'id-spicone-${envShort}'
 var kvName = 'kv-spicone-${envShort}-${suffix}'
@@ -160,6 +171,10 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
 resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01' = {
   parent: storage
   name: 'default'
+  properties: {
+    // A deleted share (uploads, key rings) can be undeleted for this long.
+    shareDeleteRetentionPolicy: { enabled: true, days: fileShareSoftDeleteDays }
+  }
 }
 
 resource fileShares 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-05-01' = [for share in shares: {
@@ -167,6 +182,70 @@ resource fileShares 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-
   name: share
   properties: { shareQuota: shareQuotaGb[share], accessTier: 'TransactionOptimized' }
 }]
+
+// ---------------------------------------------------------------- database dump copies
+// The nightly job (below, with the apps) writes a pg_dump into this account: a copy of the
+// database that lives outside the PostgreSQL server and its automated backups. Dumps are
+// cold blobs, expire by lifecycle rule, and deleted blobs stay recoverable for two weeks.
+// In prod the account carries a delete lock so `az group delete` cannot take the copies with it.
+resource backupStorage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: backupStorageName
+  location: location
+  tags: union(tags, { component: 'db-backup' })
+  kind: 'StorageV2'
+  sku: { name: 'Standard_LRS' }
+  properties: {
+    accessTier: 'Cool'
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+    supportsHttpsTrafficOnly: true
+    allowSharedKeyAccess: false // the job and the developers write/read with Entra identities
+  }
+}
+
+resource backupBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: backupStorage
+  name: 'default'
+  properties: {
+    deleteRetentionPolicy: { enabled: true, days: 14 }
+    containerDeleteRetentionPolicy: { enabled: true, days: 14 }
+  }
+}
+
+resource backupContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: backupBlobService
+  name: 'pg-dumps'
+  properties: { publicAccess: 'None' }
+}
+
+resource backupLifecycle 'Microsoft.Storage/storageAccounts/managementPolicies@2023-05-01' = {
+  parent: backupStorage
+  name: 'default'
+  properties: {
+    policy: {
+      rules: [
+        {
+          name: 'expire-dumps'
+          enabled: true
+          type: 'Lifecycle'
+          definition: {
+            filters: { blobTypes: ['blockBlob'], prefixMatch: ['pg-dumps/'] }
+            actions: { baseBlob: { delete: { daysAfterModificationGreaterThan: backupDumpRetentionDays } } }
+          }
+        }
+      ]
+    }
+  }
+}
+
+resource backupLock 'Microsoft.Authorization/locks@2020-05-01' = if (envName == 'prod') {
+  name: 'keep-db-dumps'
+  scope: backupStorage
+  properties: {
+    level: 'CanNotDelete'
+    notes: 'Nightly database dump copies. Remove this lock on purpose before deleting the account or the resource group.'
+  }
+}
 
 // ---------------------------------------------------------------- registry + identity
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -184,6 +263,7 @@ resource uai 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
 }
 
 var acrPullRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+var blobDataContributorRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 var kvSecretsUserRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
 var kvSecretsOfficerRoleId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')
 
@@ -192,6 +272,17 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: acr
   properties: {
     roleDefinitionId: acrPullRoleId
+    principalId: uai.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// The dump job writes blobs with the same identity the apps use.
+resource backupWriter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(backupStorage.id, uai.id, 'blob-data-contributor')
+  scope: backupStorage
+  properties: {
+    roleDefinitionId: blobDataContributorRoleId
     principalId: uai.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -522,12 +613,64 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
   dependsOn: [acrPull, caeStorages]
 }
 
+// ---------------------------------------------------------------- nightly database dump job
+// Runs deploy/azure/backup/backup.sh on the schedule: pg_dump of the Azure server into the
+// backup storage account. Always dumps the Azure server, even while db-connection-override
+// points the API at an external database.
+resource backupJob 'Microsoft.App/jobs@2024-03-01' = if (deployApps && !empty(backupImage)) {
+  name: backupJobName
+  location: location
+  tags: union(tags, { component: 'db-backup' })
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${uai.id}': {} }
+  }
+  properties: {
+    environmentId: cae.id
+    workloadProfileName: 'Consumption'
+    configuration: {
+      triggerType: 'Schedule'
+      scheduleTriggerConfig: { cronExpression: backupCron, parallelism: 1, replicaCompletionCount: 1 }
+      replicaTimeout: 3600
+      replicaRetryLimit: 1
+      registries: [
+        { server: acr.properties.loginServer, identity: uai.id }
+      ]
+      secrets: [
+        { name: 'pg-password', keyVaultUrl: secretPgPassword.properties.secretUri, identity: uai.id }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'backup'
+          image: backupImage
+          // 1 vCPU gives 4 GiB of ephemeral disk for the dump file before upload.
+          resources: { cpu: json('1'), memory: '2Gi' }
+          env: [
+            { name: 'PGHOST', value: pg.properties.fullyQualifiedDomainName }
+            { name: 'PGUSER', value: pgAdminLogin }
+            { name: 'PGDATABASE', value: pgDatabaseName }
+            { name: 'PGPASSWORD', secretRef: 'pg-password' }
+            { name: 'STORAGE_ACCOUNT', value: backupStorage.name }
+            { name: 'CONTAINER', value: backupContainer.name }
+            { name: 'AZURE_CLIENT_ID', value: uai.properties.clientId }
+          ]
+        }
+      ]
+    }
+  }
+  dependsOn: [acrPull, kvSecretsUser, backupWriter]
+}
+
 // ---------------------------------------------------------------- outputs
 output resourceGroupName string = resourceGroup().name
 output acrName string = acr.name
 output acrLoginServer string = acr.properties.loginServer
 output keyVaultName string = kv.name
 output storageAccountName string = storage.name
+output backupStorageAccountName string = backupStorage.name
+output backupJobName string = backupJobName
 output postgresServerName string = pg.name
 output postgresFqdn string = pg.properties.fullyQualifiedDomainName
 output postgresDatabase string = pgDatabaseName
