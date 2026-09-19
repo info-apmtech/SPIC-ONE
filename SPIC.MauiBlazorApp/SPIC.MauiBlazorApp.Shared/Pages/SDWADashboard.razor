@@ -5,13 +5,13 @@
 @using SPIC.Core.DTOs
 
 
-<div class="pgr-title">Dashboard</div>
+<PageHeader Title="Dashboard" Subtitle="Welfare applications and guest house bookings" ShowBack="false" />
 
 <!-- ═══ Header Row ═══ -->
 <div class="hdr-row">
 
   <div class="wlc-tile">
-    <img class="wlc-avatar-img" src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" alt="@_dealer.DealerName" onerror="this.src='https://ui-avatars.com/api/?name=@(System.Net.WebUtility.UrlEncode(_dealer.DealerName?.Length >= 2 ? _dealer.DealerName.Substring(0, 2) : "DL") )&background=c7d2fe&color=3730a3&size=64&rounded=true'" />
+    <img class="wlc-avatar-img" src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" alt="@_dealer.DealerName" onerror="this.onerror=null;this.src='_content/SPIC.MauiBlazorApp.Shared/Images/Schemes/img_ellipse_249.png'" />
     <div class="wlc-text-content">
       <div class="wlc-name">
         <span class="wlc-greeting">WELCOME BACK,</span>
@@ -336,18 +336,19 @@
 
     @if (_isLoadingApps)
     {
-        <div class="appl-empty">Loading your applications…</div>
+        <Skeleton Variant="card" Rows="2" LoadingText="Loading your applications" />
     }
     else if (_appsLoadError != null)
     {
-        <div class="appl-empty">
-            @_appsLoadError
-            <div style="margin-top:10px;"><button class="dark-view-btn" @onclick="LoadApplications">Retry</button></div>
-        </div>
+        <EmptyState Icon="bi-exclamation-circle" Title="Could not load applications" Message="@_appsLoadError" Compact="true">
+            <button class="dark-view-btn" @onclick="LoadApplications">Retry</button>
+        </EmptyState>
     }
     else if (_recentApps.Count == 0)
     {
-        <div class="appl-empty">No applications yet. Tap Apply Welfare to submit your first application.</div>
+        <EmptyState Icon="bi-file-earmark-text" Title="No applications yet" Message="Apply for a welfare scheme to see its progress here." Compact="true">
+            <button class="dark-view-btn" @onclick="CheckEligibilityAndNavigate" disabled="@_isCheckingEligibility">@(_isCheckingEligibility ? "Checking..." : "Apply Welfare")</button>
+        </EmptyState>
     }
     else
     {
@@ -402,21 +403,19 @@
 
       @if (_isLoadingBooking)
       {
-          <div class="appl-empty">Loading your booking…</div>
+          <Skeleton Variant="card" Rows="1" LoadingText="Loading your booking" />
       }
       else if (_bookingLoadError != null)
       {
-          <div class="appl-empty">
-              @_bookingLoadError
-              <div style="margin-top:10px;"><button class="dark-view-btn" @onclick="LoadDashboardBooking">Retry</button></div>
-          </div>
+          <EmptyState Icon="bi-exclamation-circle" Title="Could not load booking" Message="@_bookingLoadError" Compact="true">
+              <button class="dark-view-btn" @onclick="LoadDashboardBooking">Retry</button>
+          </EmptyState>
       }
       else if (_dashBooking == null)
       {
-          <div class="appl-empty">No upcoming guest house booking</div>
-          <div class="ghb-btn-row" style="margin-top: 14px;">
-            <button class="ghb-fill-btn" @onclick="NavigateToBookRoom">Book a Room</button>
-          </div>
+          <EmptyState Icon="bi-house-door" Title="No upcoming booking" Message="Book a guest house room for your next visit." Compact="true">
+              <button class="ghb-fill-btn" @onclick="NavigateToBookRoom">Book a Room</button>
+          </EmptyState>
       }
       else
       {
@@ -466,11 +465,11 @@
       <div class="ntf-list">
         @if (_isLoadingApps)
         {
-            <div class="appl-empty">Loading…</div>
+            <Skeleton Variant="text" Rows="3" LoadingText="Loading notifications" />
         }
         else if (_notifItems.Count == 0)
         {
-            <div class="appl-empty">No notifications yet.</div>
+            <EmptyState Icon="bi-bell" Title="No notifications yet" Compact="true" />
         }
         @foreach (var n in _notifItems)
         {
@@ -499,11 +498,11 @@
 
     @if (_isLoadingApps)
     {
-        <div class="appl-empty">Loading…</div>
+        <Skeleton Variant="text" Rows="3" LoadingText="Loading activity" />
     }
     else if (_activityItems.Count == 0)
     {
-        <div class="appl-empty">No activity yet.</div>
+        <EmptyState Icon="bi-activity" Title="No activity yet" Compact="true" />
     }
     @foreach (var a in _activityItems)
     {
