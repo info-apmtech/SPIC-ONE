@@ -184,16 +184,58 @@
         background: #eef1f5;
         opacity: 1;
     }
+
+    /* native: phone */
+    /* Submit button renders through ActionBar. Tablet/desktop: keep the old inline row spacing
+       (mt-4 mb-4 px-2, no extra padding) so nothing moves above 768px. */
+    @@media (min-width: 768px) {
+        .fb-actionbar.sdr-submit-bar {
+            margin: 1.5rem 0;
+            padding: 0 0.5rem;
+        }
+    }
+
+    /* Phone-only (max-width 767.98px), scoped to this page. */
+    @@media (max-width: 767.98px) {
+        .sdr-page .form-control-custom,
+        .sdr-page .form-select-custom {
+            width: 100%;
+            min-height: var(--tap-min, 44px);
+            font-size: 16px !important; /* prevents iOS zoom-on-focus */
+        }
+
+        .sdr-page .status-btn-group .btn,
+        .sdr-page .btn-group-toggle .btn,
+        .sdr-page .yes-no-group .btn-yes,
+        .sdr-page .yes-no-group .btn-no {
+            min-height: var(--tap-min, 44px);
+        }
+
+        .sdr-page .upload-area,
+        .sdr-page .file-upload-box {
+            min-height: var(--tap-min, 44px);
+        }
+
+        .subdealer-import-backdrop {
+            align-items: flex-end;
+            padding: 0;
+        }
+
+        .subdealer-import-modal {
+            width: 100%;
+            max-height: 92vh;
+            border-radius: 16px 16px 0 0;
+            padding-bottom: var(--safe-bottom, 0px);
+        }
+    }
 </style>
 
-<div class="container-fluid py-4 px-0">
+<div class="container-fluid py-4 px-0 sdr-page">
 
     @* No FormLoader: Sub Dealer is a single-page direct-save form. *@
 
-    <div class="subdealer-page-header">
-        <h5 class="fw-bold m-0 reg-page-heading">Sub Dealer Creation</h5>
-
-        <div class="d-flex align-items-center gap-2 flex-wrap">
+    <PageHeader Title="Sub Dealer Creation">
+        <Actions>
             @* Available for all roles. Opens the separate Sub Dealer list page. *@
             <button type="button"
                     class="btn btn-outline-success btn-sm px-3 py-2 fw-semibold"
@@ -211,8 +253,8 @@
                     Import Sub Dealers
                 </button>
             } *@
-        </div>
-    </div>
+        </Actions>
+    </PageHeader>
 
     <fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 
@@ -1050,7 +1092,7 @@
 
     @if (!IsViewOnly)
     {
-        <div class="d-flex justify-content-end align-items-center gap-2 mt-4 mb-4 px-2">
+        <ActionBar CssClass="sdr-submit-bar" AriaLabel="Sub Dealer form actions">
             <button type="button"
                     class="btn btn-success px-4 py-2 fw-semibold rounded-2"
                     @onclick="HandleSubmit"
@@ -1068,7 +1110,7 @@
                     <span>Submit</span>
                 }
             </button>
-        </div>
+        </ActionBar>
     }
 
     @if (_showImportModal && LoginState.IsAdmin)
