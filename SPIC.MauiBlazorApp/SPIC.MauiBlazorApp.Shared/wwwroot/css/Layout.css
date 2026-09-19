@@ -259,10 +259,10 @@ body {
     overflow: hidden;
 }
 
-.mobile-topbar {
+/* Brand shown inside .topbar on phone only (see phone block below).
+   display:none here keeps the desktop topbar pixel-identical. */
+.shell-topbar-lead {
     display: none;
-    margin-bottom: 0;
-    flex-shrink: 0;
 }
 
 .topbar {
@@ -361,68 +361,55 @@ body {
 }
 
 /* =====================================================================
-   RESPONSIVE – Tablet / small-laptop  (769 px … 1024 px)
-   Desktop sidebar stays visible; tighten width & spacing only.
+   RESPONSIVE SHELL - breakpoint contract (see css/tokens.css)
+       phone    <= 767.98px
+       tablet   768px .. 1199.98px
+       desktop  >= 1200px   (NO rules below apply: desktop is unchanged)
    ===================================================================== */
-@media (min-width: 769px) and (max-width: 1024px) {
+
+/* =====================================================================
+   TABLET  (768 px … 1199.98 px)
+   Desktop sidebar is replaced by the 72px NavRail (Components/Shell/NavRail).
+   The full menu stays reachable through the #mobileSidebar offcanvas
+   (opened by the rail's menu button). Topbar and scrolling main-content
+   keep their desktop behaviour.
+   ===================================================================== */
+@media (min-width: 768px) and (max-width: 1199.98px) {
 
     .sidebar {
-        width: 185px !important;
-        padding: 8px 8px 16px;
+        display: none !important;
     }
 
-    .nav-section .nav-link {
-        gap: 8px;
-        padding: 8px 8px;
-        font-size: 12px;
-        min-height: 42px;
+    .topbar {
+        padding: 0 16px;
     }
 
-    .submenu-list {
-        margin: 0 0 12px 20px;
-    }
-
-    .submenu-link {
-        padding: 8px 0 8px 14px;
-        font-size: 0.78rem;
-        min-height: 38px;
-    }
-
-    .brand {
-        font-size: 1.3rem;
+    .main-content {
+        padding: 16px 16px 24px;
     }
 }
 
 /* =====================================================================
-   RESPONSIVE – Mobile  (≤ 768 px)
-   Desktop sidebar hidden; nav uses Bootstrap offcanvas (#mobileSidebar).
+   PHONE  (≤ 767.98 px)
+   - body scrolls (app-shell/content-wrap lose their 100vh + overflow)
+   - sidebar hidden; navigation = BottomTabBar + More sheet + offcanvas
+   - .topbar becomes the compact sticky bar: brand | notification | avatar
+   - .main-content gets bottom padding = tab bar height + safe area so no
+     content is ever hidden behind the fixed tab bar.
    ===================================================================== */
-@media (max-width: 768px) {
+@media (max-width: 767.98px) {
 
     .app-shell {
         display: flex;
         flex-direction: column;
         height: auto;
         min-height: 100vh;
+        min-height: 100dvh;
         overflow: visible;
     }
 
     .sidebar {
         display: none !important;
-    }
-
-    .mobile-topbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 12px 14px;
-        background: var(--header-bg);
-        border-bottom: 1px solid #dfe3e8;
-        position: sticky;
-        top: 0;
-        z-index: 100;
-        flex-shrink: 0;
     }
 
     .content-wrap {
@@ -431,22 +418,73 @@ body {
         overflow: visible;
     }
 
+    /* Compact top bar */
     .topbar {
-        padding: 10px 14px;
+        position: sticky;
+        top: 0;
+        z-index: var(--z-topbar, 1020);
         height: auto;
+        min-height: calc(var(--shell-topbar-h, 56px) + var(--safe-top, 0px));
+        padding: var(--safe-top, 0px) calc(8px + var(--safe-right, 0px)) 0 calc(12px + var(--safe-left, 0px));
+        gap: 8px;
         align-items: center;
         flex-shrink: 0;
+        border-bottom: 1px solid #dfe3e8;
+        box-shadow: none;
+    }
+
+    .shell-topbar-lead {
+        display: flex;
+        align-items: center;
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: var(--tap-min, 44px);
+    }
+
+    .shell-topbar-brand {
+        font-size: 1.5rem;
+        text-decoration: none;
+        color: #212529;
+        padding: 0 4px;
+    }
+
+    /* Global search lives in the desktop bar only; phones use in-page search. */
+    .topbar .search-box {
+        display: none;
     }
 
     .top-actions {
         justify-content: flex-end;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    /* Notification button grows to a 44px tap target; the glyph stays 24px. */
+    .top-actions .icon-btn {
+        width: var(--tap-min, 44px);
+        height: var(--tap-min, 44px);
+    }
+
+    .top-actions .icon-btn .iconimg {
+        width: 24px;
+        height: 24px;
     }
 
     .main-content {
         flex: none;
         overflow: visible;
-        padding: 12px;
+        padding: 12px 12px calc(var(--shell-tabbar-h, 60px) + var(--safe-bottom, 0px) + 16px);
     }
+
+    /* The page-level error card should not sit under the tab bar either. */
+    .page-error {
+        margin: 24px auto;
+    }
+}
+
+/* Body scroll lock while the phone "More" sheet is open (MoreSheet.razor.js). */
+body.shell-sheet-open {
+    overflow: hidden;
 }
 
 /* =====================================================================
@@ -572,14 +610,6 @@ body {
     height: auto !important;
     background-size: auto !important;
     background-image: none !important;
-}
-
-/* Exception: the hamburger .bi-list icon in the mobile topbar must keep its style */
-.mobile-topbar .bi {
-    margin-right: 0 !important;
-    position: static !important;
-    width: auto !important;
-    height: auto !important;
 }
 
 /* ── Settings-menu-wrapper inside offcanvas ──────────────────────────── */

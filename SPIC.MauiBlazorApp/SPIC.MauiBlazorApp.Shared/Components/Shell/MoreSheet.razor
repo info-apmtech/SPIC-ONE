@@ -1,0 +1,241 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+@implements IAsyncDisposable
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+@*
+    Full-screen "More" sheet opened from the phone BottomTabBar. Lists every accessible
+    destination not already in the tab bar (grouped), plus Profile, Full menu (opens the
+    existing #mobileSidebar offcanvas) and Log out.
+
+    Browser/hardware back closes the sheet: on open we push a history entry (same URL) and
+    listen for popstate (MoreSheet.razor.js). Selecting an item navigates with replace:true
+    so that pushed entry is consumed and Back from the destination returns to the page the
+    sheet was opened from, not to a phantom entry.
+*@
+@if (Open)
+{
+    <div class="shell-sheet-backdrop" @onclick="CloseAsync" aria-hidden="true"></div>
+
+    <section id="shellMoreSheet"
+             class="shell-sheet"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="shellMoreSheetTitle"
+             tabindex="-1"
+             @ref="_sheetRef"
+             @onkeydown="OnKeyDown">
+
+        <header class="shell-sheet-header">
+            <h2 id="shellMoreSheetTitle" class="shell-sheet-title">Menu</h2>
+            <button type="button"
+                    class="shell-sheet-close shell-focusable"
+                    aria-label="Close menu"
+                    @onclick="CloseAsync">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </header>
+
+        <div class="shell-sheet-body">
+            @if (_groups.Count == 0)
+            {
+                <p class="shell-sheet-empty">Everything you can open is already in the tab bar.</p>
+            }
+
+            @foreach (var (group, items) in _groups)
+            {
+                @if (group is not null)
+                {
+                    <h3 class="shell-sheet-group">@group</h3>
+                }
+                <div class="shell-sheet-grid" role="list">
+                    @foreach (var item in items)
+                    {
+                        <a class="shell-sheet-tile shell-focusable"
+                           role="listitem"
+                           href="@item.Href"
+                           title="@item.Label"
+                           @onclick="() => SelectAsync(item.Href)"
+                           @onclick:preventDefault="true">
+                            <i class="bi @item.Icon shell-sheet-tile-icon" aria-hidden="true"></i>
+                            <span class="shell-sheet-tile-label">@item.Label</span>
+                        </a>
+                    }
+                </div>
+            }
+        </div>
+
+        <footer class="shell-sheet-footer">
+            @if (LoginState.CanAccess(nameof(SPIC.Core.Entities.PagePermission.Profile)))
+            {
+                <a class="shell-sheet-action shell-focusable"
+                   href="@ProfileHref"
+                   @onclick="SelectProfileAsync"
+                   @onclick:preventDefault="true">
+                    <i class="bi bi-person-circle" aria-hidden="true"></i>
+                    <span>Profile</span>
+                </a>
+            }
+
+            @* Bootstrap's data-api opens the existing offcanvas; we just close the sheet first. *@
+            <button type="button"
+                    class="shell-sheet-action shell-focusable"
+                    data-bs-toggle="offcanvas"
+                    data-bs-target="#mobileSidebar"
+                    aria-controls="mobileSidebar"
+                    @onclick="CloseAsync">
+                <i class="bi bi-list" aria-hidden="true"></i>
+                <span>Full menu</span>
+            </button>
+
+            <button type="button"
+                    class="shell-sheet-action shell-sheet-action--danger shell-focusable"
+                    @onclick="LogoutAsync">
+                <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                <span>Log out</span>
+            </button>
+        </footer>
+    </section>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    /// <summary>Raised when the user taps "Log out". MainLayout owns the actual logout flow.</summary>
+    [Parameter] public EventCallback OnLogout { get; set; }
+
+    private IReadOnlyList<(string? Group, IReadOnlyList<SPIC.MauiBlazorApp.Shared.Services.ShellTab> Items)> _groups
+        = Array.Empty<(string?, IReadOnlyList<SPIC.MauiBlazorApp.Shared.Services.ShellTab>)>();
+
+    private ElementReference _sheetRef;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<MoreSheet>? _selfRef;
+    private bool _wasOpen;
+    private bool _historyPushed;
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _groups = SPIC.MauiBlazorApp.Shared.Services.ShellNavigation.MoreItemsGrouped(LoginState);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Open && !_wasOpen)
+        {
+            _wasOpen = true;
+            await AttachHistoryAsync();
+        }
+        else if (!Open && _wasOpen)
+        {
+            _wasOpen = false;
+            await DetachHistoryAsync(popHistory: false);
+        }
+    }
+
+    // ---- history / focus integration (best effort; the sheet works without JS) ----
+
+    private async Task AttachHistoryAsync()
+    {
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/SPIC.MauiBlazorApp.Shared/Components/Shell/MoreSheet.razor.js");
+            _selfRef ??= DotNetObjectReference.Create(this);
+            _historyPushed = await _module.InvokeAsync<bool>("open", _selfRef, _sheetRef);
+        }
+        catch
+        {
+            _historyPushed = false;
+        }
+    }
+
+    private async Task DetachHistoryAsync(bool popHistory)
+    {
+        var pushed = _historyPushed;
+        _historyPushed = false;
+        if (_module is null) return;
+        try
+        {
+            await _module.InvokeVoidAsync("close", popHistory && pushed);
+        }
+        catch
+        {
+            // ignore JS teardown errors
+        }
+    }
+
+    /// <summary>Called from MoreSheet.razor.js when the user presses the browser / hardware back button.</summary>
+    [JSInvokable]
+    public async Task CloseFromHistory()
+    {
+        _historyPushed = false; // the entry has already been popped
+        await SetOpenAsync(false);
+    }
+
+    // ---- user actions ----
+
+    private async Task CloseAsync()
+    {
+        if (!Open) return;
+        // Consume the history entry we pushed so Back afterwards behaves normally.
+        _wasOpen = false;
+        await DetachHistoryAsync(popHistory: true);
+        await SetOpenAsync(false);
+    }
+
+    private const string ProfileHref = "/Profile"; // same target as MainLayout.GoToProfile()
+
+    private Task SelectProfileAsync() => SelectAsync(ProfileHref);
+
+    private async Task SelectAsync(string href)
+    {
+        var pushed = _historyPushed;
+        _wasOpen = false;
+        await DetachHistoryAsync(popHistory: false);
+        await SetOpenAsync(false);
+        // replace:true swaps our pushed entry for the destination (see header comment).
+        Nav.NavigateTo(href, replace: pushed);
+    }
+
+    private async Task LogoutAsync()
+    {
+        _wasOpen = false;
+        await DetachHistoryAsync(popHistory: false);
+        await SetOpenAsync(false);
+        if (OnLogout.HasDelegate) await OnLogout.InvokeAsync();
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") await CloseAsync();
+    }
+
+    private async Task SetOpenAsync(bool value)
+    {
+        if (Open == value) return;
+        Open = value;
+        await OpenChanged.InvokeAsync(value);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("dispose");
+                await _module.DisposeAsync();
+            }
+        }
+        catch
+        {
+            // circuit may already be gone
+        }
+        _selfRef?.Dispose();
+    }
+}

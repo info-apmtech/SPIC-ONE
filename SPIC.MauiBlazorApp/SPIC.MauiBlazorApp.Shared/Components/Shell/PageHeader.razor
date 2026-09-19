@@ -1,0 +1,113 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+@implements IAsyncDisposable
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+@*
+    Page title row every page can adopt.
+
+        <PageHeader Title="Guest House" Subtitle="Book a room">
+            <Actions><button class="btn btn-success btn-sm">New</button></Actions>
+        </PageHeader>
+
+    Desktop: plain title row (h1 + optional subtitle + actions), no back button unless
+    ShowBack="true". Phone (<= 767.98px): a 44px back button appears by default
+    (ShowBack null). ShowBack="false" never shows it. Back goes to BackHref when given,
+    otherwise history.back() with LoginState.LandingPage as the fallback when there is no
+    history to go back to. Also sets <PageTitle> (rendered by HeadOutlet on web).
+*@
+<PageTitle>@DocumentTitle</PageTitle>
+
+<header class="shell-page-header @CssClass">
+    @if (ShowBack != false)
+    {
+        <button type="button"
+                class="shell-back shell-focusable @(ShowBack == true ? "" : "shell-back--phone")"
+                aria-label="@BackLabel"
+                title="@BackLabel"
+                @onclick="GoBackAsync">
+            <i class="bi bi-arrow-left" aria-hidden="true"></i>
+        </button>
+    }
+
+    <div class="shell-page-titles">
+        <h1 class="shell-page-title" tabindex="-1">@Title</h1>
+        @if (!string.IsNullOrWhiteSpace(Subtitle))
+        {
+            <p class="shell-page-subtitle">@Subtitle</p>
+        }
+    </div>
+
+    @if (Actions is not null)
+    {
+        <div class="shell-page-actions">@Actions</div>
+    }
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+
+    /// <summary>null (default) = back button on phone only; true = always; false = never.</summary>
+    [Parameter] public bool? ShowBack { get; set; }
+
+    /// <summary>Explicit destination for the back button. Default: browser history, then LandingPage.</summary>
+    [Parameter] public string? BackHref { get; set; }
+
+    [Parameter] public string BackLabel { get; set; } = "Back";
+
+    /// <summary>Right-aligned action buttons.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    /// <summary>Extra CSS classes for the header element.</summary>
+    [Parameter] public string? CssClass { get; set; }
+
+    /// <summary>Suffix appended to the document title. Set to empty to use Title alone.</summary>
+    [Parameter] public string TitleSuffix { get; set; } = "SPIC ONE";
+
+    private IJSObjectReference? _module;
+
+    private string DocumentTitle =>
+        string.IsNullOrWhiteSpace(Title) ? (string.IsNullOrWhiteSpace(TitleSuffix) ? "SPIC ONE" : TitleSuffix)
+        : string.IsNullOrWhiteSpace(TitleSuffix) ? Title
+        : $"{Title} · {TitleSuffix}";
+
+    private async Task GoBackAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(BackHref))
+        {
+            Nav.NavigateTo(BackHref);
+            return;
+        }
+
+        var wentBack = false;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/SPIC.MauiBlazorApp.Shared/Components/Shell/PageHeader.razor.js");
+            wentBack = await _module.InvokeAsync<bool>("goBack");
+        }
+        catch
+        {
+            wentBack = false;
+        }
+
+        if (!wentBack)
+        {
+            Nav.NavigateTo(LoginState.LandingPage);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch
+        {
+            // circuit may already be gone
+        }
+    }
+}
