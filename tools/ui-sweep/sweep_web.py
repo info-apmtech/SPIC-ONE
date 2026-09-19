@@ -214,6 +214,7 @@ def sweep_width(args, exe: str, width: int, height: int, routes: list[str], cred
         try:
             cdp.send("Page.enable")
             cdp.send("Runtime.enable")
+            cdp.send("Page.enable")
             cdp.send("Log.enable")
             cdp.send("Network.enable")
             if not open_app(cdp, args.base_url, args.login_timeout):

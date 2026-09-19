@@ -129,6 +129,9 @@ class EventLog:
                 str(a.get("value", a.get("description", ""))) for a in params.get("args", [])
             )
             self.console_errors.append(_truncate(text))
+        elif method == "Page.javascriptDialogOpening":
+            # Native dialogs are a UX defect on phones (and block automation): flag them.
+            self.console_errors.append(_truncate(f"DIALOG {params.get('type','')}: {params.get('message','')}"))
         elif method == "Log.entryAdded":
             entry = params.get("entry", {})
             if entry.get("level") == "error":
@@ -180,6 +183,14 @@ class CDP:
 
     def _dispatch(self, msg: dict) -> None:
         if "method" in msg:
+            # A blocking alert()/confirm() would freeze every later CDP call, so accept it
+            # immediately (fire-and-forget; the reply is an unmatched id and is ignored).
+            if msg["method"] == "Page.javascriptDialogOpening":
+                self._id += 1
+                try:
+                    self.ws.send(json.dumps({"id": self._id, "method": "Page.handleJavaScriptDialog", "params": {"accept": True}}))
+                except Exception:
+                    pass
             try:
                 self.on_event(msg)
             except Exception:

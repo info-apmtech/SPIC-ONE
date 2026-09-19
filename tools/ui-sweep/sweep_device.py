@@ -142,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     rows: list[dict] = []
     try:
         cdp.send("Runtime.enable")
+        cdp.send("Page.enable")
         try:
             cdp.send("Log.enable")
         except Exception:
