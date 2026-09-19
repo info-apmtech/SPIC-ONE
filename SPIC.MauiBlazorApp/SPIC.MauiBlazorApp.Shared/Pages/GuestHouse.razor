@@ -4,14 +4,25 @@
 @inject HttpClient Http
 @inject LoginState LoginState
 @inject NavigationManager Navigation
+@inject ToastService Toast
 
 <div class="container-fluid py-4 px-0">
     <div class="gh-wrapper">
         
         <div class="gh-header-text">
-            <h1>Choose Your Guest House</h1>
-            <p>Select a location for your comfortable stay</p>
+            <PageHeader Title="Choose Your Guest House" Subtitle="Select a location for your comfortable stay" BackHref="/SDWADashboard" />
         </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="card" Rows="2" LoadingText="Loading guest houses" />
+        }
+        else if (_houses.Count == 0)
+        {
+            <EmptyState Icon="bi-house-door" Title="No guest houses available" Message="@(_loadError ?? "Please check back later or contact the SDWA office.")">
+                <button class="gh-btn-select gh-btn-retry" @onclick="LoadHousesAsync">Retry</button>
+            </EmptyState>
+        }
 
         <div class="gh-cards-grid">
             
@@ -19,7 +30,7 @@
             {
                 <div class="gh-card">
                     <div class="gh-card-img-wrap">
-                        <img src="@(string.IsNullOrEmpty(house.ImagePath) ? FallbackImage : GetImageUrl(house.ImagePath))" alt="@house.Name" onerror="this.style.backgroundColor='#e2e8f0';" />
+                        <img src="@(string.IsNullOrEmpty(house.ImagePath) ? FallbackImage : GetImageUrl(house.ImagePath))" alt="@house.Name" loading="lazy" onerror="this.style.backgroundColor='#e2e8f0';" />
                     </div>
                     <div class="gh-card-content">
                         <h2 class="gh-card-title">@house.Name</h2>
@@ -56,8 +67,15 @@
     private static readonly string FallbackImage =
         "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image20.jpg";
 
-    protected override async Task OnInitializedAsync()
+    private bool _loading = true;
+    private string? _loadError;
+
+    protected override Task OnInitializedAsync() => LoadHousesAsync();
+
+    private async Task LoadHousesAsync()
     {
+        _loading = true;
+        _loadError = null;
         try
         {
             var houses = await Http.GetFromJsonAsync<List<GuestHouseDto>>("api/GuestHouseBooking/houses") ?? new();
@@ -66,6 +84,12 @@
         catch
         {
             _houses = new();
+            _loadError = "Unable to load guest houses right now. Please try again.";
+            Toast.Error(_loadError);
+        }
+        finally
+        {
+            _loading = false;
         }
     }
 
