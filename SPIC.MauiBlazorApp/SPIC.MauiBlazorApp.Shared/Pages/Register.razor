@@ -12,6 +12,7 @@
 @inject LoadingService Loading
 @inject LoginState LoginState
 @inject LookupCacheService LookupCache
+@inject ToastService Toast
 <style>
     fieldset:disabled .file-remove-x {
         display: none !important;
@@ -90,14 +91,12 @@
             color: #059669;
         }
 </style>
-<div class="container-fluid py-4 px-0">
+<div class="container-fluid py-4 px-0 reg-page">
     <FormLoader IsSingleStep="IsRestrictedNavFlow || IsDepartmentSelected" IsRestrictedFlow="IsInactiveToBeTerminated" />
 
-   
+    <PageHeader Title="Dealer Registration" />
+
     <fieldset disabled="@IsViewOnly" style="@(IsViewOnly ? "border:0;padding:0;margin:0;" : "border:0;padding:0;margin:0;")">
-
-
-        <h5 class="fw-bold mb-4 reg-page-heading">Dealer Registration</h5>
 
         @if (!string.IsNullOrEmpty(_message))
         {
@@ -1360,7 +1359,7 @@
 
 @if (_showDeleteModal)
 {
-    <div class="del-modal-backdrop" @onclick="CancelDelete">
+    <div class="del-modal-backdrop reg-del-modal" @onclick="CancelDelete">
         <div class="del-modal" @onclick:stopPropagation="true">
             <div class="del-modal-icon">
                 <i class="bi bi-exclamation-triangle-fill"></i>
@@ -3134,8 +3133,12 @@ if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
             {
                 return await response.Content.ReadFromJsonAsync<FileUploadResponse>();
             }
+            Toast.Error($"Could not upload {file.Name}.");
         }
-        catch { }
+        catch
+        {
+            Toast.Error($"Could not upload {file.Name}.");
+        }
         return null;
     }
 

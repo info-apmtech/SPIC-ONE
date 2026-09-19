@@ -16,6 +16,7 @@
 @inject IJSRuntime JS
 @inject LoginState LoginState
 @inject LookupCacheService LookupCache
+@inject ToastService Toast
 
 <style>
     .sd-list-page {
@@ -632,24 +633,194 @@
         margin-top: 12px;
         font-size: .82rem;
     }
+
+    .sd-loading--skeleton {
+        display: block;
+        min-height: 0;
+        padding: 16px;
+    }
+
+    /* native: phone */
+    /* Phone-only (max-width 767.98px). Tablet keeps the inner horizontal scroll; desktop is untouched. */
+    @@media (max-width: 767.98px) {
+        .sd-list-page {
+            padding: 8px 0 24px;
+        }
+
+        /* Header actions live inside PageHeader now: they drop under the title as two compact
+           columns. PageHeader's .shell-page-actions never shrinks, so let the header wrap. */
+        .sd-list-page .shell-page-header {
+            flex-wrap: wrap;
+        }
+
+        .sd-list-page .shell-page-actions {
+            flex: 1 1 100%;
+            min-width: 0;
+        }
+
+        .sd-header-actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+            width: 100%;
+        }
+
+        .sd-btn {
+            height: auto;
+            min-height: var(--tap-min, 44px);
+            padding: 8px 10px;
+            font-size: .8rem;
+            white-space: normal;
+        }
+
+        .sd-summary-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .sd-summary-card {
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 10px;
+        }
+
+        .sd-summary-value {
+            font-size: 1.1rem;
+        }
+
+        .sd-input,
+        .sd-select {
+            height: var(--tap-min, 44px);
+            font-size: 16px; /* prevents iOS zoom-on-focus */
+        }
+
+        /* Main list: each row becomes a card, cells show their column label. */
+        .sd-main-table {
+            min-width: 0;
+        }
+
+            .sd-main-table thead {
+                display: none;
+            }
+
+            .sd-main-table tbody,
+            .sd-main-table tr,
+            .sd-main-table td {
+                display: block;
+            }
+
+            .sd-main-table tr {
+                padding: 8px 12px;
+                border-bottom: 8px solid #f1f5f3;
+            }
+
+            .sd-main-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: flex-start;
+                gap: 12px;
+                padding: 7px 0;
+                border-bottom: 1px solid #f1f5f3;
+                text-align: right;
+                font-size: .85rem;
+            }
+
+                .sd-main-table td::before {
+                    content: attr(data-label);
+                    flex: 0 0 38%;
+                    text-align: left;
+                    font-size: .72rem;
+                    font-weight: 700;
+                    color: #64748b;
+                    text-transform: uppercase;
+                    letter-spacing: .02em;
+                }
+
+                .sd-main-table td.sd-cell-no {
+                    display: none;
+                }
+
+                .sd-main-table td.sd-cell-actions {
+                    border-bottom: 0;
+                    padding-top: 10px;
+                }
+
+        .sd-action-wrap {
+            gap: 10px;
+        }
+
+        .sd-action-btn {
+            width: var(--tap-min, 44px);
+            height: var(--tap-min, 44px);
+            font-size: 1.1rem;
+        }
+
+        /* State summary keeps the table; narrower minimum so it scrolls less. */
+        .sd-state-summary-table {
+            min-width: 560px;
+        }
+
+        .sd-page-button {
+            min-width: 40px;
+            height: 40px;
+        }
+
+        .sd-page-size select,
+        .sd-state-page-size select {
+            min-height: 40px;
+        }
+
+        /* Import modal and delete modal slide up as bottom sheets. */
+        .subdealer-import-backdrop {
+            align-items: flex-end;
+            padding: 0;
+        }
+
+        .subdealer-import-modal {
+            width: 100%;
+            max-height: 92vh;
+            max-height: 92dvh;
+            border-radius: 16px 16px 0 0;
+            padding-bottom: var(--safe-bottom, 0px);
+        }
+
+        .subdealer-import-modal-footer {
+            flex-direction: column-reverse;
+        }
+
+            .subdealer-import-modal-footer .btn {
+                width: 100%;
+                min-height: var(--tap-min, 44px);
+            }
+
+        .sd-modal .modal-dialog {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            margin: 0;
+            max-width: none;
+            width: 100%;
+            align-items: flex-end;
+            min-height: 0;
+        }
+
+        .sd-modal .modal-content {
+            border-radius: 16px 16px 0 0;
+            padding-bottom: var(--safe-bottom, 0px);
+        }
+
+        .sd-modal .modal-footer .btn {
+            min-height: var(--tap-min, 44px);
+        }
+    }
 </style>
 
 <div class="container-fluid sd-list-page">
 
-    <div class="sd-page-header">
-        <div class="sd-page-title-wrap">
-            <div class="sd-page-icon">
-                <i class="bi bi-people"></i>
-            </div>
-
-            <div>
-                <h4 class="sd-page-title">Sub Dealer Master</h4>
-                <div class="sd-page-subtitle">
-                    View Sub Dealers saved or updated through the Sub Dealer form in your assigned geography.
-                </div>
-            </div>
-        </div>
-
+    <PageHeader Title="Sub Dealer Master"
+                Subtitle="View Sub Dealers saved or updated through the Sub Dealer form in your assigned geography.">
+        <Actions>
         <div class="sd-header-actions">
             <button type="button"
                     class="sd-btn"
@@ -697,7 +868,8 @@
                 </button>
             }
         </div>
-    </div>
+        </Actions>
+    </PageHeader>
 
     @if (!string.IsNullOrWhiteSpace(_pageMessage))
     {
@@ -836,25 +1008,20 @@
 
         @if (_isLoading)
         {
-            <div class="sd-loading">
-                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
-                <div>Loading Sub Dealers...</div>
+            <div class="sd-loading sd-loading--skeleton">
+                <Skeleton Variant="table" Rows="6" LoadingText="Loading Sub Dealers..." />
             </div>
         }
         else if (_response.Items.Count == 0)
         {
-            <div class="sd-empty">
-                <i class="bi bi-inbox"></i>
-                <div class="fw-semibold">No saved Sub Dealers found</div>
-                <div class="small">
-                    Untouched bulk-upload master rows are not shown here.
-                </div>
-            </div>
+            <EmptyState Icon="bi-inbox"
+                        Title="No saved Sub Dealers found"
+                        Message="Untouched bulk-upload master rows are not shown here." />
         }
         else
         {
             <div class="sd-table-scroll">
-                <table class="sd-table">
+                <table class="sd-table sd-main-table">
                     <thead>
                         <tr>
                             <th style="width:55px;">#</th>
@@ -876,11 +1043,11 @@
                         @foreach (var item in _response.Items)
                         {
                             <tr @key="item.Id">
-                                <td>
+                                <td class="sd-cell-no" data-label="#">
                                     @((_response.Page - 1) * _response.PageSize + rowIndex + 1)
                                 </td>
 
-                                <td>
+                                <td data-label="Sub Dealer Code">
                                     <span class="sd-code">
                                         @(string.IsNullOrWhiteSpace(item.SubDealerCode)
                                             ? "-"
@@ -888,7 +1055,7 @@
                                     </span>
                                 </td>
 
-                                <td>
+                                <td data-label="Sub Dealer Name">
                                     <div class="sd-name">
                                         @(string.IsNullOrWhiteSpace(item.FirmName)
                                             ? "-"
@@ -896,11 +1063,11 @@
                                     </div>
                                 </td>
 
-                                <td>@StateName(item.StateId)</td>
-                                <td>@RegionName(item.RegionId)</td>
-                                <td>@HqName(item.HQId)</td>
+                                <td data-label="State">@StateName(item.StateId)</td>
+                                <td data-label="Region">@RegionName(item.RegionId)</td>
+                                <td data-label="HQ">@HqName(item.HQId)</td>
 
-                                <td>
+                                <td data-label="GST / PAN">
                                     <div>
                                         @(string.IsNullOrWhiteSpace(item.GSTNumber)
                                             ? "-"
@@ -914,7 +1081,7 @@
                                     </div>
                                 </td>
 
-                                <td>
+                                <td data-label="Contact">
                                     <div>
                                         @(string.IsNullOrWhiteSpace(item.OfficialContactNumber)
                                             ? "-"
@@ -928,7 +1095,7 @@
                                     }
                                 </td>
 
-                                <td>
+                                <td data-label="Status">
                                     @if (item.Status == SubDealerStatus.Active)
                                     {
                                         <span class="sd-status active">
@@ -945,7 +1112,7 @@
                                     }
                                 </td>
 
-                                <td>
+                                <td class="sd-cell-actions" data-label="Action">
                                     <div class="sd-action-wrap">
                                         <button type="button"
                                                 class="sd-action-btn"
@@ -1067,9 +1234,8 @@
 
         @if (_isStateSummaryLoading)
         {
-            <div class="sd-loading">
-                <div class="spinner-border spinner-border-sm text-success" role="status"></div>
-                <div>Loading state-wise summary...</div>
+            <div class="sd-loading sd-loading--skeleton">
+                <Skeleton Variant="table" Rows="4" LoadingText="Loading state-wise summary..." />
             </div>
         }
         else if (!string.IsNullOrWhiteSpace(_stateSummaryError))
@@ -1080,10 +1246,7 @@
         }
         else if (_stateWiseSummary.Count == 0)
         {
-            <div class="sd-empty">
-                <i class="bi bi-bar-chart"></i>
-                <div class="fw-semibold">No state-wise Sub Dealer data found</div>
-            </div>
+            <EmptyState Icon="bi-bar-chart" Title="No state-wise Sub Dealer data found" />
         }
         else
         {
@@ -1332,7 +1495,7 @@
 @if (_showDeleteConfirm)
 {
     <div class="modal-backdrop fade show"></div>
-    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block sd-modal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
                 <div class="modal-header">
@@ -1777,6 +1940,7 @@
                 return;
 
             Console.WriteLine($"Sub Dealer list load failed: {ex.Message}");
+            Toast.Error("Could not load the Sub Dealer list. Please try again.");
 
             _response = new SubDealerPagedListResponse
             {

@@ -1,7 +1,7 @@
 @page "/ExcelFormatFileUpload"
 @inject HttpClient Http
 @inject IJSRuntime JS
-<PageTitle>Excel Format File Upload</PageTitle>
+@inject ToastService Toast
 
 <style>
     /* Mimicking the existing template styling */
@@ -165,12 +165,7 @@
 
 <div class="container-fluid py-4 px-0 fu-container">
     
-    <div class="fu-header-container">
-        <div class="fu-header-text">
-            <h1>Excel Format File Upload</h1>
-            <p>Select a category and upload the corresponding Excel report securely</p>
-        </div>
-    </div>
+    <PageHeader Title="Excel Format File Upload" Subtitle="Select a category and upload the corresponding Excel report securely" />
 
     <!-- Cards Grid -->
     <div class="fu-grid">
@@ -246,18 +241,16 @@
             !string.Equals(extension, ".csv", StringComparison.OrdinalIgnoreCase))
         {
             selectedFiles.Remove(categoryId);
-            await JS.InvokeVoidAsync("alert", "Only .xlsx and .csv files are supported.");
+            Toast.Warning("Only .xlsx and .csv files are supported.");
             return;
         }
 
         if (file.Size == 0 || file.Size > MaxUploadBytes)
         {
             selectedFiles.Remove(categoryId);
-            await JS.InvokeVoidAsync(
-                "alert",
-                file.Size == 0
-                    ? "The selected file is empty."
-                    : "The selected file exceeds the 100 MB upload limit.");
+            Toast.Warning(file.Size == 0
+                ? "The selected file is empty."
+                : "The selected file exceeds the 100 MB upload limit.");
             return;
         }
 
@@ -268,20 +261,20 @@
     {
         if (!selectedFiles.TryGetValue(categoryId, out var file))
         {
-            await JS.InvokeVoidAsync("alert", "Please select a file first.");
+            Toast.Warning("Please select a file first.");
             return;
         }
 
         var category = uploadTypes.FirstOrDefault(x => x.Id == categoryId);
         if (category is null)
         {
-            await JS.InvokeVoidAsync("alert", "Invalid upload category.");
+            Toast.Error("Invalid upload category.");
             return;
         }
 
         if (category.RequiresReportDate && !category.ReportDate.HasValue)
         {
-            await JS.InvokeVoidAsync("alert", "Please select the Report Date.");
+            Toast.Warning("Please select the Report Date.");
             return;
         }
 
@@ -292,9 +285,7 @@
             file.Size > MaxUploadBytes)
         {
             selectedFiles.Remove(categoryId);
-            await JS.InvokeVoidAsync(
-                "alert",
-                "The selected file is invalid. Choose a non-empty .xlsx or .csv file up to 100 MB.");
+            Toast.Warning("The selected file is invalid. Choose a non-empty .xlsx or .csv file up to 100 MB.");
             return;
         }
 
@@ -349,9 +340,7 @@
 
             if (!response.IsSuccessStatusCode || parsed?.Success != true)
             {
-                await JS.InvokeVoidAsync(
-                    "alert",
-                    $"Upload Failed:\n{parsed?.Message ?? "The server rejected the upload. Please try again or contact support."}");
+                Toast.Error(parsed?.Message ?? "The server rejected the upload. Please try again or contact support.", "Upload Failed", durationMs: 0);
                 return;
             }
 
@@ -390,15 +379,11 @@
         }
         catch (System.Threading.Tasks.TaskCanceledException)
         {
-            await JS.InvokeVoidAsync(
-                "alert",
-                "Upload was cancelled or timed out. Please check the network and try again.");
+            Toast.Error("Upload was cancelled or timed out. Please check the network and try again.");
         }
         catch (Exception)
         {
-            await JS.InvokeVoidAsync(
-                "alert",
-                "The upload could not be completed. Please verify the file and try again.");
+            Toast.Error("The upload could not be completed. Please verify the file and try again.");
         }
         finally
         {
