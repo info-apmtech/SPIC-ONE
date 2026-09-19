@@ -7,8 +7,8 @@
 @inject NavigationManager Navigation
 
 
-<div class="container-fluid py-4 px-0">
-    
+<div class="container-fluid py-4 px-0 dsh-page">
+
     @if (!string.IsNullOrEmpty(_error))
     {
         <div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 14px;border-radius:8px;font-size:0.85rem;margin-bottom:16px;">
@@ -16,7 +16,7 @@
         </div>
     }
 
-    <h1 class="dsh-page-title">Dashboard</h1>
+    <PageHeader Title="Dashboard" CssClass="dsh-page-title" />
 
     <div class="dsh-welcome-banner">
          <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Schemes/HumanIcon.jpg" alt="Admin" class="dsh-welcome-avatar">
@@ -175,9 +175,20 @@
                 <tbody>
                     @if (_approval.Applications.Count == 0)
                     {
-                        <tr>
+                        <tr class="dsh-state-row">
                             <td colspan="9" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;">
-                                @(_loading ? "Loading pending applications..." : _approvalOk ? "No applications are currently pending your action." : "Pending applications could not be loaded.")
+                                @if (_loading)
+                                {
+                                    <Skeleton Variant="table" Rows="4" />
+                                }
+                                else if (_approvalOk)
+                                {
+                                    <EmptyState Icon="bi-check2-circle" Title="Nothing pending" Message="No applications are currently pending your action." Compact="true" />
+                                }
+                                else
+                                {
+                                    <EmptyState Icon="bi-exclamation-circle" Title="Could not load" Message="Pending applications could not be loaded." Compact="true" />
+                                }
                             </td>
                         </tr>
                     }
@@ -187,23 +198,23 @@
                         {
                             var days = PendingDays(app.ApplicationDate);
                             <tr>
-                                <td>@app.ApplicationNumber</td>
-                                <td>@app.DealerCode</td>
-                                <td>
+                                <td data-label="Application ID">@app.ApplicationNumber</td>
+                                <td data-label="Dealer Code">@app.DealerCode</td>
+                                <td data-label="Dealer Name">
                                     <div class="dsh-avatar-cell">
                                         @app.DealerName
                                     </div>
                                 </td>
-                                <td style="color: var(--dsh-green);">@app.SchemeName</td>
-                                <td><span class="dsh-pill pill-orange">@app.StatusDisplay</span></td>
-                                <td>
+                                <td data-label="Welfare Scheme" style="color: var(--dsh-green);">@app.SchemeName</td>
+                                <td data-label="Current Stage"><span class="dsh-pill pill-orange">@app.StatusDisplay</span></td>
+                                <td data-label="Recommended By">
                                     <div class="dsh-avatar-cell">
                                         @RecommendedByText(app)
                                     </div>
                                 </td>
-                                <td>@PendingSinceText(app.ApplicationDate)</td>
-                                <td><span style="color:@PriorityColorFor(days); font-weight:700;">@PriorityFor(days)</span></td>
-                                <td>
+                                <td data-label="Pending Since">@PendingSinceText(app.ApplicationDate)</td>
+                                <td data-label="Priority"><span style="color:@PriorityColorFor(days); font-weight:700;">@PriorityFor(days)</span></td>
+                                <td data-label="Action">
                                     <div class="dsh-action-icons">
                                         <i class="bi bi-eye icon-view"></i>
                                         <i class="bi bi-check-circle icon-approve"></i>
@@ -337,23 +348,29 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @if (!_approvalOk)
+                    @if (_loading)
                     {
-                        <tr>
-                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;">Regional application data could not be loaded.</td>
+                        <tr class="dsh-state-row">
+                            <td colspan="6" style="padding:16px;"><Skeleton Variant="table" Rows="3" /></td>
+                        </tr>
+                    }
+                    else if (!_approvalOk)
+                    {
+                        <tr class="dsh-state-row">
+                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;"><EmptyState Icon="bi-exclamation-circle" Title="Could not load" Message="Regional application data could not be loaded." Compact="true" /></td>
                         </tr>
                     }
                     else if (RegionalRows.Count == 0)
                     {
-                        <tr>
-                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;">No regional application data available.</td>
+                        <tr class="dsh-state-row">
+                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;"><EmptyState Title="No regional data" Message="No regional application data available." Compact="true" /></td>
                         </tr>
                     }
                     else
                     {
                         @foreach (var row in RegionalRows)
                         {
-                            <tr><td>@row.Region</td><td>—</td><td>@row.Applications</td><td style="color:var(--dsh-green); font-weight:700;">@row.Approved</td><td style="color:var(--dsh-red);">@row.Rejected</td><td>—</td></tr>
+                            <tr><td data-label="Region">@row.Region</td><td data-label="Total Dealers">—</td><td data-label="Applications">@row.Applications</td><td data-label="Approved" style="color:var(--dsh-green); font-weight:700;">@row.Approved</td><td data-label="Rejected" style="color:var(--dsh-red);">@row.Rejected</td><td data-label="Benefit Released">—</td></tr>
                         }
                     }
                 </tbody>
@@ -422,8 +439,8 @@
                         <tr><th>Application ID</th><th>Dealer Name</th><th>Welfare Scheme</th><th>Amount</th><th>Status</th><th>Date</th></tr>
                     </thead>
                     <tbody>
-                        <tr>
-                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;">No payment release records available</td>
+                        <tr class="dsh-state-row">
+                            <td colspan="6" style="text-align:center; color:var(--dsh-text-muted); padding:24px 16px;"><EmptyState Icon="bi-cash-stack" Title="No payment releases" Message="No payment release records available." Compact="true" /></td>
                         </tr>
                     </tbody>
                 </table>
