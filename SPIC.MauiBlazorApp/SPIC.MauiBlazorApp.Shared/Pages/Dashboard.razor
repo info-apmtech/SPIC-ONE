@@ -9,6 +9,7 @@
 @inject NavigationManager NavManager
 @inject LoginState LoginState
 @inject IJSRuntime JSRuntime
+@inject ToastService Toast
 
 <style>
     /* Dealer card status badge colors — visual only, no logic change */
@@ -149,16 +150,12 @@
     }
 </style>
 
-<div class="container-fluid py-4 px-0">
+<div class="container-fluid py-4 px-0 dash-page">
    <div class="dealer-page-header mb-4">
 
-    <div class="dealer-heading">
-        <h1 class="page-title">Dealer Registrations</h1>
-
-        <p class="page-subtitle">
-            Manage all draft, in-progress, submitted, and approved dealer applications
-        </p>
-    </div>
+    <PageHeader Title="Dealer Registrations"
+                Subtitle="Manage all draft, in-progress, submitted, and approved dealer applications"
+                CssClass="mb-0" />
 
     <div class="dealer-header-actions">
 
@@ -378,17 +375,11 @@
 
     @if (_isLoading)
     {
-        <div class="text-center py-5">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="text-muted mt-2">Loading dealers...</p>
-        </div>
+        <Skeleton Variant="card" Rows="3" LoadingText="Loading dealers..." />
     }
     else if (!_filteredDealers.Any())
     {
-        <div class="text-center py-5">
-            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
-            <p class="text-muted mt-2">No dealer registrations found.</p>
-        </div>
+        <EmptyState Icon="bi-inbox" Title="No dealer registrations found." Message="Try a different search or filter." />
     }
     else
     {
@@ -624,7 +615,7 @@
 @if (_showManualModal)
 {
     <div class="modal-backdrop fade show"></div>
-    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block dash-modal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
                 <div class="modal-header">
@@ -686,7 +677,7 @@
 @if (_showImportModal)
 {
     <div class="modal-backdrop fade show"></div>
-    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block dash-modal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
                 <div class="modal-header">
@@ -749,7 +740,7 @@
 @if (_showDeleteConfirm)
 {
     <div class="modal-backdrop fade show"></div>
-    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block dash-modal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
                 <div class="modal-body text-center p-4">
@@ -901,7 +892,7 @@
         }
         catch (Exception ex)
         {
-            // ignore or show message
+            Toast.Error($"Export failed: {ex.Message}");
         }
         finally
         {
@@ -1188,7 +1179,10 @@
             ApplyRoleFilter();
             ApplyFilters();
         }
-        catch { }
+        catch
+        {
+            Toast.Error("Could not load dealer registrations. Please try again.");
+        }
         finally
         {
             _isLoading = false;
@@ -1695,9 +1689,17 @@ private string GetStatusName(int status) => status switch
             {
                 _allDealers.Remove(_dealerToDelete);
                 ApplyFilters();
+                Toast.Success("Dealer registration deleted.");
+            }
+            else
+            {
+                Toast.Error("Could not delete the dealer registration.");
             }
         }
-        catch { }
+        catch
+        {
+            Toast.Error("Could not delete the dealer registration.");
+        }
         finally
         {
             _isDeleting = false;
@@ -1784,7 +1786,7 @@ private string GetStatusName(int status) => status switch
         }
         catch (Exception ex)
         {
-            // Log or handle error if necessary
+            Toast.Error($"Export failed: {ex.Message}");
         }
         finally
         {
