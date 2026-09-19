@@ -206,3 +206,11 @@ Biometric unlock, camera capture, QR scanner, push notifications, Windows contex
 
 ### Release rule
 Each merged workstream goes to staging, then to a **zero-traffic revision** of the live web app (Container Apps traffic split), is smoke-tested at the revision URL, and only then receives full traffic. The mobile app follows through the internal testing tracks. Rollback is a traffic switch back to the previous revision.
+
+## 4. Status log
+
+### 2026-09-20 (overnight run)
+- Phase 1 foundation merged: app shell (bottom tab bar + More sheet on phone, nav rail on tablet, PageHeader, tokens.css), data display (SpicDataTable card mode, Skeleton, EmptyState, StatCard), feedback (BottomSheet, ActionBar, Toast/Confirm, OfflineBanner, SessionExpiryDialog), `tools/ui-sweep` harness. Android hardware back walks the WebView history.
+- Phase 2 merged for all five workstreams (A 31 pages, B 17, C 38, D 17, E 15): PageHeader everywhere, ActionBar on forms and wizards, card mode or `data-label` cards for tables on phone, drawers as bottom sheets, `alert`/`confirm` replaced by toasts and confirm dialogs, loading skeletons and empty states, 44 px targets, third-party placeholder images replaced by local assets. All layout rules are under phone/tablet media queries; desktop is pinned to the previous look.
+- Verified so far (checks 1 and 2, read-only, no data created): every route renders on the Xiaomi test phone with no horizontal overflow, in both portrait (392 px) and landscape/tablet (832 px) layouts; Web, Windows and Android Release builds pass. Checks 3 to 11 need the staging environment and one login per role group.
+- Known follow-ups: IFMS Auto Import API returns a non-JSON error body (now shown as a toast; root cause on the API/IFMS DB side); RMDValidationQueue still calls a hard-coded Supabase project (business decision); `RMDValidationQueueDrawer`, `MOSubmissionValidationDrawer`, `ApprovalPopup`, `EducationAssistance`, `SchemeApprovalDrawer` are unreferenced files; two CSR-1 mock-ups still coexist; role mapping for the bottom tabs awaits the product owner's correction in `Services/ShellNavigation.cs`.
