@@ -3,6 +3,7 @@
 @using System.Text.Json.Serialization
 @using System.Globalization
 @inject HttpClient Http
+@inject IJSRuntime JS
 
     <style>
     
@@ -639,15 +640,252 @@
             .filter-content.open ~ .filter-header .chevron {
               transform: rotate(180deg);
             }
+
+            /* PageHeader adoption: keep the desktop title row as the old .header looked */
+            .rmd-page .shell-page-header.header {
+              align-items: flex-start;
+              margin: 0 0 24px;
+            }
+
+            .rmd-page .shell-page-header.header .shell-page-title {
+              font-size: 24px;
+              font-weight: 700;
+              letter-spacing: -0.5px;
+              line-height: 1.2;
+              color: var(--text-primary);
+              margin: 0 0 8px;
+            }
+
+            .rmd-page .shell-page-header.header .shell-page-subtitle {
+              font-size: 14px;
+              color: var(--text-muted);
+              margin: 0;
+            }
+
+            .rmd-page .shell-page-header.header .shell-page-actions {
+              gap: 8px;
+            }
+
+            .rmd-page .empty-state .spic-empty {
+              width: 100%;
+            }
+
+            /* native: phone */
+            @@media (max-width: 767.98px) {
+              .rmd-page.container {
+                padding: 12px 16px calc(16px + var(--safe-bottom, 0px));
+              }
+
+              .rmd-page .shell-page-header.header {
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 16px;
+              }
+
+              .rmd-page .shell-page-header.header .shell-page-title {
+                font-size: 1.15rem;
+                margin: 0;
+              }
+
+              .rmd-page .shell-page-header.header .shell-page-subtitle {
+                font-size: 0.8rem;
+              }
+
+              .rmd-page .shell-page-header.header .shell-page-actions {
+                flex-basis: 100%;
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+              }
+
+              .rmd-page .btn {
+                min-height: var(--tap-min, 44px);
+                width: 100%;
+                justify-content: center;
+              }
+
+              .rmd-page .tabs {
+                margin-bottom: 12px;
+              }
+
+              .rmd-page .tab-group {
+                width: 100%;
+              }
+
+              .rmd-page .tab-button {
+                flex: 1;
+                justify-content: center;
+                min-height: var(--tap-min, 44px);
+                padding: 8px 10px;
+              }
+
+              /* Filters trigger (opens the BottomSheet) */
+              .rmd-page .filter-trigger {
+                width: 100%;
+                min-height: var(--tap-min, 44px);
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 8px;
+                padding: 10px 16px;
+                margin-bottom: 16px;
+                background: var(--bg-white);
+                border: 1px solid var(--border-light);
+                border-radius: 12px;
+                color: var(--text-secondary);
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                text-align: left;
+                box-shadow: var(--shadow-sm);
+              }
+
+              .rmd-page .filter-trigger .filter-header-left {
+                gap: 8px;
+              }
+
+              .rmd-page .filter-count {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                min-width: 22px;
+                height: 22px;
+                padding: 0 7px;
+                border-radius: 999px;
+                background: var(--primary-blue);
+                color: #fff;
+                font-size: 12px;
+                font-weight: 600;
+              }
+
+              .rmd-page .filter-sheet .filter-grid {
+                grid-template-columns: 1fr;
+                margin-bottom: 0;
+              }
+
+              .rmd-page .filter-sheet select,
+              .rmd-page .filter-sheet .date-range-inputs input {
+                min-height: var(--tap-min, 44px);
+                font-size: 16px;
+              }
+
+              .rmd-page .filter-sheet .date-range-inputs {
+                flex-direction: column;
+                align-items: stretch;
+              }
+
+              .rmd-page .filter-sheet .date-range-sep {
+                display: none;
+              }
+
+              .rmd-page .btn-clear,
+              .rmd-page .btn-apply {
+                min-height: var(--tap-min, 44px);
+                justify-content: center;
+              }
+
+              /* Table: one card per row, labels from data-label */
+              .rmd-page .table-header {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 12px;
+                padding: 16px;
+              }
+
+              .rmd-page .search-container {
+                width: 100%;
+              }
+
+              .rmd-page .search-container input {
+                min-height: var(--tap-min, 44px);
+                font-size: 16px;
+              }
+
+              .rmd-page .table-scroll {
+                overflow-x: hidden !important;
+              }
+
+              .rmd-page table thead {
+                display: none;
+              }
+
+              .rmd-page table,
+              .rmd-page table tbody,
+              .rmd-page table tr,
+              .rmd-page table td {
+                display: block;
+                width: 100%;
+              }
+
+              .rmd-page table tr {
+                padding: 6px 16px;
+                border-bottom: 8px solid var(--border-lighter);
+              }
+
+              .rmd-page table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                padding: 8px 0;
+                border-bottom: 1px solid var(--border-lighter);
+                text-align: right !important;
+              }
+
+              .rmd-page table td::before {
+                content: attr(data-label);
+                flex: 0 0 42%;
+                color: var(--text-secondary);
+                font-weight: 500;
+                text-align: left;
+              }
+
+              .rmd-page table td:last-child {
+                border-bottom: 0;
+              }
+
+              .rmd-page table tr.state-row td {
+                display: block;
+                padding: 0;
+              }
+
+              .rmd-page table tr.state-row td::before {
+                content: none;
+              }
+
+              .rmd-page .action-btn {
+                width: var(--tap-min, 44px);
+                height: var(--tap-min, 44px);
+              }
+
+              .rmd-page input[type="checkbox"] {
+                width: 22px;
+                height: 22px;
+              }
+
+              .rmd-page .pagination-section {
+                flex-direction: column;
+                gap: 12px;
+                align-items: center;
+                padding: 12px 16px;
+              }
+
+              .rmd-page .pagination-buttons {
+                flex-wrap: wrap;
+                justify-content: center;
+              }
+
+              .rmd-page .pagination-btn {
+                min-width: 40px;
+                height: 40px;
+              }
+            }
     </style>
-    <div class="container">
+    <div class="container rmd-page">
         <!-- Header -->
-        <div class="header">
-            <div class="header-left">
-                <h1>RMD Validation Queue</h1>
-                <p>Review CSR-1 and CSR-2 submissions received from Market Officers.</p>
-            </div>
-            <div class="header-right">
+        <PageHeader Title="RMD Validation Queue" Subtitle="Review CSR-1 and CSR-2 submissions received from Market Officers." CssClass="header">
+            <Actions>
                 <button class="btn" @onclick="RefreshData">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="23 4 23 10 17 10"></polyline>
@@ -682,8 +920,8 @@
                     </svg>
                     Send Mail
                 </button>
-            </div>
-        </div>
+            </Actions>
+        </PageHeader>
 
         <!-- Tabs -->
         <div class="tabs">
@@ -700,76 +938,80 @@
         </div>
 
         <!-- Filter Card -->
-        <div class="filter-card">
-            <div class="filter-header" @onclick="ToggleFilter">
+        @if (_isPhone)
+        {
+            @* native: phone - the same filter controls (FilterFields) open in a bottom sheet. *@
+            <button type="button" class="filter-trigger" @onclick="() => _filterSheetOpen = true">
                 <span class="filter-header-left">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                     </svg>
                     Filters
+                    @if (ActiveFilterCount > 0)
+                    {
+                        <span class="filter-count">@ActiveFilterCount</span>
+                    }
                 </span>
-                <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
                 </svg>
-            </div>
-            <div class='filter-content @(filterOpen ? "open" : "")'>
-                <div class="filter-grid">
-                    <div class="filter-group">
-                        <label>Date Range</label>
-                        <div class="date-range-inputs">
-                            <input type="date" value="@filterDateFrom" @onchange="OnDateFromChanged">
-                            <span class="date-range-sep">-</span>
-                            <input type="date" value="@filterDateTo" @onchange="OnDateToChanged">
-                        </div>
-                    </div>
-                    <div class="filter-group">
-                        <label>Program Type</label>
-                        <select @bind="filterProgramType">
-                            <option value="">All Program Type</option>
-                            <option value="Farmer">Farmer</option>
-                            <option value="Dealer">Dealer</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>Head Quarters</label>
-                        <select @bind="filterHQ">
-                            <option value="">All Head quarters</option>
-                            <option value="Chennai">Chennai</option>
-                            <option value="Coimbatore">Coimbatore</option>
-                            <option value="Madurai">Madurai</option>
-                            <option value="Salem">Salem</option>
-                            <option value="Trichy">Trichy</option>
-                            <option value="Vellore">Vellore</option>
-                        </select>
-                    </div>
-                    <div class="filter-group">
-                        <label>Status</label>
-                        <select @bind="filterStatus">
-                            <option value="">All District</option>
-                            <option value="Pending">Pending</option>
-                            <option value="Resubmitted">Resubmitted</option>
-                            <option value="Approved">Approved</option>
-                            <option value="Rejected">Rejected</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="filter-actions">
-                    <button class="btn-clear" @onclick="ClearFilters">
+            </button>
+
+            <BottomSheet @bind-IsOpen="_filterSheetOpen" Title="Filters" Size="BottomSheet.SheetSize.Full" CssClass="filter-sheet">
+                <ChildContent>
+                    @FilterFields
+                </ChildContent>
+                <Footer>
+                    <button type="button" class="btn-clear" @onclick="ClearFilters">
                         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="6" x2="6" y2="18"></line>
                             <line x1="6" y1="6" x2="18" y2="18"></line>
                         </svg>
                         Clear All
                     </button>
-                    <button class="btn-apply" @onclick="ApplyFilters">
+                    <button type="button" class="btn-apply" @onclick="ApplyFiltersFromSheet">
                         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                         </svg>
                         Apply Filters
                     </button>
+                </Footer>
+            </BottomSheet>
+        }
+        else
+        {
+            <div class="filter-card">
+                <div class="filter-header" @onclick="ToggleFilter">
+                    <span class="filter-header-left">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        </svg>
+                        Filters
+                    </span>
+                    <svg class="icon chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </div>
+                <div class='filter-content @(filterOpen ? "open" : "")'>
+                    @FilterFields
+                    <div class="filter-actions">
+                        <button class="btn-clear" @onclick="ClearFilters">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                            Clear All
+                        </button>
+                        <button class="btn-apply" @onclick="ApplyFilters">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                            Apply Filters
+                        </button>
+                    </div>
                 </div>
             </div>
-        </div>
+        }
 
         <!-- Table Card -->
         <div class="table-card">
@@ -784,12 +1026,12 @@
                 </div>
             </div>
 
-            <div style="overflow-x: auto;">
+            <div class="table-scroll" style="overflow-x: auto;">
                 <table>
                     <thead>
                         <tr>
                             <th style="width: 40px;">
-                                <input type="checkbox" @onchange="ToggleSelectAll">
+                                <input type="checkbox" @onchange="ToggleSelectAll" aria-label="Select all">
                             </th>
                             <th>Program Type</th>
                             <th>MO Name</th>
@@ -805,30 +1047,32 @@
                     <tbody>
                         @if (isLoading)
                         {
-                            <tr>
+                            <tr class="state-row">
                                 <td colspan="10">
-                                    <div style="text-align:center;padding:64px 20px;color:var(--text-muted);font-size:13px;">
-                                        Loading data...
+                                    <div style="padding:16px 20px;">
+                                        <Skeleton Variant="table" Rows="5" />
                                     </div>
                                 </td>
                             </tr>
                         }
                         else if (hasError)
                         {
-                            <tr>
+                            <tr class="state-row">
                                 <td colspan="10">
-                                    <div style="text-align:center;padding:64px 20px;color:var(--text-muted);font-size:13px;">
-                                        Failed to load data
+                                    <div class="empty-state">
+                                        <EmptyState Icon="bi-exclamation-circle" Title="Failed to load data" Message="The submissions could not be loaded. Check your connection and try again.">
+                                            <button type="button" class="btn" @onclick="RefreshData">Try Again</button>
+                                        </EmptyState>
                                     </div>
                                 </td>
                             </tr>
                         }
                         else if (FilteredData.Count == 0)
                         {
-                            <tr>
+                            <tr class="state-row">
                                 <td colspan="10">
-                                    <div style="text-align:center;padding:64px 20px;color:var(--text-muted);font-size:13px;">
-                                        No submissions found matching your criteria.
+                                    <div class="empty-state">
+                                        <EmptyState Title="No submissions found" Message="No submissions match your criteria. Try clearing the filters." />
                                     </div>
                                 </td>
                             </tr>
@@ -838,23 +1082,23 @@
                             @foreach (var row in PageData)
                             {
                                 <tr @key="row.Id" class='@(selectedRows.Contains(row.Id) ? "selected" : null)'>
-                                    <td>
-                                        <input type="checkbox" checked="@selectedRows.Contains(row.Id)" @onchange="() => ToggleRow(row.Id)" />
+                                    <td data-label="Select">
+                                        <input type="checkbox" checked="@selectedRows.Contains(row.Id)" @onchange="() => ToggleRow(row.Id)" aria-label="Select @row.ProgramName" />
                                     </td>
-                                    <td>@row.ProgramType</td>
-                                    <td><strong>@row.MoName</strong></td>
-                                    <td>@row.ProgramName</td>
-                                    <td>@row.HeadQuarters</td>
-                                    <td style="text-align: right; font-weight: 500; font-variant-numeric: tabular-nums;">
+                                    <td data-label="Program Type">@row.ProgramType</td>
+                                    <td data-label="MO Name"><strong>@row.MoName</strong></td>
+                                    <td data-label="Program Name">@row.ProgramName</td>
+                                    <td data-label="Head Quarters">@row.HeadQuarters</td>
+                                    <td data-label="Total Budget" style="text-align: right; font-weight: 500; font-variant-numeric: tabular-nums;">
                                         ₹@row.TotalBudget.ToString("N0", CultureInfo.GetCultureInfo("en-IN"))
                                     </td>
-                                    <td>@FormatDate(row.SubmittedDate)</td>
-                                    <td>@FormatDate(row.ValidationDue)</td>
-                                    <td>
+                                    <td data-label="Submitted Date">@FormatDate(row.SubmittedDate)</td>
+                                    <td data-label="Validation Due">@FormatDate(row.ValidationDue)</td>
+                                    <td data-label="Status">
                                         <span class="status-badge status-@(row.Status.ToLower().Replace(' ', '-'))">@row.Status</span>
                                     </td>
-                                    <td style="text-align: center;">
-                                        <button class="action-btn" title="View">
+                                    <td data-label="Action" style="text-align: center;">
+                                        <button class="action-btn" title="View" aria-label="View">
                                             <svg style="width: 16px; height: 16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                                 <circle cx="12" cy="12" r="3"></circle>
@@ -929,6 +1173,89 @@
     private int csr2Count => allData.Count(s => s.SubmissionType == "CSR-2");
     private string tableTitle => $"{currentTab} Pending Validation List";
     private int TotalPages => Math.Max(1, (int)Math.Ceiling((double)FilteredData.Count / itemsPerPage));
+
+    // ---------- native: phone ----------
+    // Measured once from window.innerWidth (phone <= 767px). On phone the filter
+    // controls open in a BottomSheet instead of the collapsible card.
+    private bool _isPhone;
+    private bool _viewportChecked;
+    private bool _filterSheetOpen;
+
+    private int ActiveFilterCount =>
+        (string.IsNullOrWhiteSpace(filterProgramType) ? 0 : 1) +
+        (string.IsNullOrWhiteSpace(filterHQ) ? 0 : 1) +
+        (string.IsNullOrWhiteSpace(filterStatus) ? 0 : 1) +
+        (string.IsNullOrWhiteSpace(filterDateFrom) ? 0 : 1) +
+        (string.IsNullOrWhiteSpace(filterDateTo) ? 0 : 1);
+
+    private void ApplyFiltersFromSheet()
+    {
+        _filterSheetOpen = false;
+        ApplyFilters();
+    }
+
+    // The filter controls, rendered once: inside the collapsible card (tablet/desktop)
+    // or inside the phone BottomSheet. Only one host is in the DOM at a time.
+    private RenderFragment FilterFields => @<div class="filter-grid">
+        <div class="filter-group">
+            <label>Date Range</label>
+            <div class="date-range-inputs">
+                <input type="date" value="@filterDateFrom" @onchange="OnDateFromChanged" aria-label="Date from">
+                <span class="date-range-sep">-</span>
+                <input type="date" value="@filterDateTo" @onchange="OnDateToChanged" aria-label="Date to">
+            </div>
+        </div>
+        <div class="filter-group">
+            <label for="rmd-program-type">Program Type</label>
+            <select id="rmd-program-type" @bind="filterProgramType">
+                <option value="">All Program Type</option>
+                <option value="Farmer">Farmer</option>
+                <option value="Dealer">Dealer</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="rmd-hq">Head Quarters</label>
+            <select id="rmd-hq" @bind="filterHQ">
+                <option value="">All Head quarters</option>
+                <option value="Chennai">Chennai</option>
+                <option value="Coimbatore">Coimbatore</option>
+                <option value="Madurai">Madurai</option>
+                <option value="Salem">Salem</option>
+                <option value="Trichy">Trichy</option>
+                <option value="Vellore">Vellore</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label for="rmd-status">Status</label>
+            <select id="rmd-status" @bind="filterStatus">
+                <option value="">All District</option>
+                <option value="Pending">Pending</option>
+                <option value="Resubmitted">Resubmitted</option>
+                <option value="Approved">Approved</option>
+                <option value="Rejected">Rejected</option>
+            </select>
+        </div>
+    </div>;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_viewportChecked) return;
+        _viewportChecked = true;
+
+        try
+        {
+            var width = await JS.InvokeAsync<int>("eval", "window.innerWidth");
+            if (width > 0 && width < 768)
+            {
+                _isPhone = true;
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // JS unavailable (prerender): keep the desktop/tablet layout.
+        }
+    }
 
     private List<Submission> FilteredData
     {
