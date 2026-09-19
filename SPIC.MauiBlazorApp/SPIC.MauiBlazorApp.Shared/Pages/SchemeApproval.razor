@@ -119,12 +119,8 @@
 <div class="container-fluid py-4 px-0">
 
     <!-- HEADER -->
-    <div class="ap-header-row">
-        <div class="ap-header-text">
-            <h1>Approval</h1>
-            <p>Manage and approve welfare applications efficiently</p>
-        </div>
-        <div class="ap-header-actions">
+    <PageHeader Title="Approval" Subtitle="@HeaderSubtitle" CssClass="ap-page-header">
+        <Actions>
             <button class="ap-btn-outline">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -149,14 +145,17 @@
                 </svg>
                 Print
             </button>
-        </div>
-    </div>
+        </Actions>
+    </PageHeader>
 
     @if (_loading)
     {
-        <div class="ap-loading-state">
+        <div class="ap-loading-state tablet-up">
             <div class="spinner-border text-success" role="status"></div>
             <span>Loading approval queue…</span>
+        </div>
+        <div class="phone-only">
+            <Skeleton Variant="card" Rows="4" LoadingText="Loading approval queue…" />
         </div>
     }
     else if (_error != null)
@@ -327,34 +326,7 @@
                             <td>
                                 @* Role-wise flow from data already in the list response
                                    (Status + Approvals) — no extra request per row. *@
-                                @{ var flowSteps = BuildFlowSteps(app); }
-                                <div class="ap-flow" title="@GetFlowSummary(app)">
-                                    @for (var i = 0; i < flowSteps.Count; i++)
-                                    {
-                                        var step = flowSteps[i];
-                                        <div class="ap-flow-step">
-                                            <div class="@GetFlowNodeClass(step.State)">
-                                                @if (step.State == FlowState.Done)
-                                                {
-                                                    <span class="ap-flow-check"></span>
-                                                }
-                                                else if (step.State == FlowState.Rejected)
-                                                {
-                                                    <span class="ap-flow-cross"></span>
-                                                }
-                                                else
-                                                {
-                                                    @step.Code
-                                                }
-                                            </div>
-                                            <div class="ap-flow-label">@step.Code</div>
-                                        </div>
-                                        @if (i < flowSteps.Count - 1)
-                                        {
-                                            <div class="@(step.State == FlowState.Done ? "ap-flow-link ap-flow-link-done" : "ap-flow-link")"></div>
-                                        }
-                                    }
-                                </div>
+                                @RenderFlow(app)
                             </td>
                             <td>
                                 <div class="ap-row-actions">
@@ -373,6 +345,42 @@
                     }
                 </tbody>
             </table>
+        </div>
+
+        @* native: phone card list (<= 767px). Same rows, same OpenDetail call as the table. *@
+        <div class="ap-cards phone-only">
+            @if (FilteredApplications().Count == 0)
+            {
+                <EmptyState Icon="bi-inbox" Title="Nothing waiting for your approval" Message="No applications found for this view." />
+            }
+            else
+            {
+                @foreach (var app in PagedApplications())
+                {
+                    <article class="ap-card">
+                        <header class="ap-card-head">
+                            <div class="ap-card-titles">
+                                <h4 class="ap-card-title">@(app.DealerName ?? "-")</h4>
+                                <div class="ap-card-sub">@(app.DealerCode ?? "-") · @(app.ApplicationNumber ?? "-")</div>
+                            </div>
+                            <span class="@GetStatusClass(app)">@app.StatusDisplay</span>
+                        </header>
+                        <dl class="ap-card-rows">
+                            <div class="ap-card-row"><dt>Scheme</dt><dd class="ap-td-teal">@app.SchemeName</dd></div>
+                            <div class="ap-card-row"><dt>Beneficiary</dt><dd>@(app.BeneficiaryName ?? "-")</dd></div>
+                            <div class="ap-card-row"><dt>Submitted</dt><dd>@app.ApplicationDate.ToString("yyyy-MM-dd")</dd></div>
+                        </dl>
+                        <div class="ap-card-flow">
+                            @RenderFlow(app)
+                        </div>
+                        <div class="ap-card-actions">
+                            <button type="button" class="ap-btn-outline ap-card-btn" @onclick="() => OpenDetail(app)">
+                                <i class="bi bi-eye" aria-hidden="true"></i> View &amp; approve
+                            </button>
+                        </div>
+                    </article>
+                }
+            }
         </div>
         <div class="ap-pagination">
             <div class="ap-page-size">
@@ -417,6 +425,45 @@
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
     [SupplyParameterFromQuery] public string? Tab { get; set; }
+
+    // Header subtitle: adds the already-loaded "pending at my stage" count once the page DTO is in.
+    private string HeaderSubtitle =>
+        _page == null || _loading
+            ? "Manage and approve welfare applications efficiently"
+            : $"Manage and approve welfare applications efficiently · {_page.Stats.PendingMyStage} pending {StageLabel}".TrimEnd();
+
+    // Role-wise flow indicator, shared by the desktop table cell and the phone card.
+    private RenderFragment RenderFlow(WelfareApprovalApplicationDto app) => __builder =>
+    {
+        var flowSteps = BuildFlowSteps(app);
+        <div class="ap-flow" title="@GetFlowSummary(app)">
+            @for (var i = 0; i < flowSteps.Count; i++)
+            {
+                var step = flowSteps[i];
+                <div class="ap-flow-step">
+                    <div class="@GetFlowNodeClass(step.State)">
+                        @if (step.State == FlowState.Done)
+                        {
+                            <span class="ap-flow-check"></span>
+                        }
+                        else if (step.State == FlowState.Rejected)
+                        {
+                            <span class="ap-flow-cross"></span>
+                        }
+                        else
+                        {
+                            @step.Code
+                        }
+                    </div>
+                    <div class="ap-flow-label">@step.Code</div>
+                </div>
+                @if (i < flowSteps.Count - 1)
+                {
+                    <div class="@(step.State == FlowState.Done ? "ap-flow-link ap-flow-link-done" : "ap-flow-link")"></div>
+                }
+            }
+        </div>
+    };
 
     // Stage label for the stat card, e.g. MO / RM / SM / SDWA / SDWA Admin.
     // SDWA / SDWA Admin are resolved from the user's EXISTING RoleAccess permissions
