@@ -14,7 +14,7 @@
 
     <PageHeader Title="All Content" Subtitle="@($"{Filtered.Count} items total")" BackHref="/DigitalLibrary">
         <Actions>
-            <button type="button" class="dlc-add" @onclick='() => Nav.NavigateTo("/DigitalLibrary/add")'>
+            <button type="button" class="dlc-add" @onclick="() => _createOpen = true">
                 <i class="bi bi-plus-square"></i> Add Content
             </button>
         </Actions>
@@ -90,9 +90,15 @@
             </div>
         }
     }
+
+    <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
+    <DigitalLibraryUnpublishDialog Item="_unpublishTarget" OnConfirm="ConfirmUnpublish" OnCancel="() => _unpublishTarget = null" />
 </div>
 
 @code {
+    private bool _createOpen;
+    private DigitalLibraryItem? _unpublishTarget;
+
     private const int PageSize = 9;
     private int _visible = PageSize;
 
@@ -161,7 +167,20 @@
 
     private void TogglePublish(DigitalLibraryItem item)
     {
-        item.Published = !item.Published;
-        Toast.Success(item.Published ? "Content published." : "Content unpublished.");
+        if (item.Published)
+        {
+            _unpublishTarget = item; // confirmed in the dialog
+            return;
+        }
+
+        item.Published = true;
+        Toast.Success("Content published.");
+    }
+
+    private void ConfirmUnpublish(DigitalLibraryItem item)
+    {
+        item.Published = false;
+        _unpublishTarget = null;
+        Toast.Success("Content moved to Drafts.");
     }
 }

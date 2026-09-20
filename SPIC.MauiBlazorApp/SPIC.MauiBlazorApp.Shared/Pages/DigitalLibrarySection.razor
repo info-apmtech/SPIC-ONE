@@ -1,4 +1,5 @@
 @page "/DigitalLibrary/{Section}"
+@page "/DigitalLibrary/add/{AddType}"
 @inject NavigationManager Nav
 
 @*
@@ -17,11 +18,14 @@
 
 @code {
     [Parameter] public string Section { get; set; } = "";
+    [Parameter] public string? AddType { get; set; }
 
     [SupplyParameterFromQuery(Name = "q")] public string? Query { get; set; }
     [SupplyParameterFromQuery(Name = "id")] public string? Id { get; set; }
 
-    private string Title => Section.ToLowerInvariant() switch
+    private string Title => AddType is not null
+        ? AddType.ToLowerInvariant() switch { "videos" => "New AI Video", "products" => "New Product Information", "brochures" => "New Product Brochure", _ => "Add Content" }
+        : Section.ToLowerInvariant() switch
     {
         "videos" => "AI Videos",
         "products" => "Product Information",
@@ -31,7 +35,7 @@
         _ => "Digital Library"
     };
 
-    private string Icon => Section.ToLowerInvariant() switch
+    private string Icon => (AddType is not null ? "add" : Section.ToLowerInvariant()) switch
     {
         "videos" => "bi-camera-video",
         "products" => "bi-clipboard2-data",

@@ -26,7 +26,7 @@
             <button type="button" class="dl-btn dl-btn-light" @onclick='() => Nav.NavigateTo("/DigitalLibrary/chat")'>
                 <i class="bi bi-stars"></i> Start Chat
             </button>
-            <button type="button" class="dl-btn dl-btn-outline" @onclick='() => Nav.NavigateTo("/DigitalLibrary/add")'>
+            <button type="button" class="dl-btn dl-btn-outline" @onclick="() => _createOpen = true">
                 <i class="bi bi-plus-square"></i> Add Content
             </button>
         </div>
@@ -101,9 +101,15 @@
 
         <a class="dl-viewall dl-viewall-end" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
     </section>
+
+    <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
+    <DigitalLibraryUnpublishDialog Item="_unpublishTarget" OnConfirm="ConfirmUnpublish" OnCancel="() => _unpublishTarget = null" />
 </div>
 
 @code {
+    private bool _createOpen;
+    private DigitalLibraryItem? _unpublishTarget;
+
     private string _query = "";
 
     private static readonly string[] Suggestions =
@@ -161,7 +167,20 @@
 
     private void TogglePublish(DigitalLibraryItem item)
     {
-        item.Published = !item.Published;
-        Toast.Success(item.Published ? "Content published." : "Content unpublished.");
+        if (item.Published)
+        {
+            _unpublishTarget = item; // confirmed in the dialog
+            return;
+        }
+
+        item.Published = true;
+        Toast.Success("Content published.");
+    }
+
+    private void ConfirmUnpublish(DigitalLibraryItem item)
+    {
+        item.Published = false;
+        _unpublishTarget = null;
+        Toast.Success("Content moved to Drafts.");
     }
 }
