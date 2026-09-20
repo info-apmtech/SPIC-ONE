@@ -135,8 +135,13 @@ body {
     box-sizing: border-box;
 }
 
-    /* Chevron <i> inside nav-link – always pinned right, never squished */
-    .nav-section .nav-link i,
+    /* Chevron <i> inside nav-link – always pinned right, never squished.
+       :not(.SideBariconimg) is essential: some entries (Digital Library, Sample
+       Collection, Consignment History) use a Bootstrap-Icon <i> as their LEADING
+       icon instead of an <img>. Without the exclusion those leading icons also
+       picked up margin-left:auto and were pushed toward the middle of the row,
+       so those rows looked indented compared with their <img> neighbours. */
+    .nav-section .nav-link i:not(.SideBariconimg),
     .nav-section .nav-link .chevron-icon {
         font-size: 14px;
         flex-shrink: 0;
@@ -214,7 +219,18 @@ body {
     list-style: none;
     padding: 0;
     margin: 0 0 16px 28px; /* 28px aligns vertical line with icon center */
-    width: 100%;
+    /* NO width:100% – it is added to the 28px left margin, so the list used to
+       stick 28px past the sidebar and the longest labels ("Top Ranking
+       Wholesaler") were clipped by the sidebar's overflow. As a block element
+       the <ul> already fills the width left over after the margin. */
+}
+
+/* css/SettingTreeLayout.css loads after this file and re-declares
+   `.submenu-list { width: 100% }`. These two selectors are more specific, so the
+   list stays inside the sidebar / offcanvas whichever order the files load in. */
+.sidebar .submenu-list,
+.offcanvas-body .submenu-list {
+    width: auto;
 }
 
 .submenu-item {
@@ -538,6 +554,17 @@ body.shell-sheet-open {
     overflow: hidden;
 }
 
+/* Bootstrap's dismiss glyph on alerts is ~32x40 – below the 44px tap minimum on
+   phones. Phone-only, so the live desktop alerts are untouched. */
+@media (max-width: 767.98px) {
+    .alert-dismissible .btn-close {
+        box-sizing: border-box;
+        width: var(--tap-min, 44px);
+        height: var(--tap-min, 44px);
+        background-position: center;
+    }
+}
+
 /* =====================================================================
    OFFCANVAS MOBILE SIDEBAR
    Applied when nav renders inside Bootstrap's .offcanvas (#mobileSidebar).
@@ -561,6 +588,17 @@ body.shell-sheet-open {
     border-bottom: 1px solid var(--border);
     align-items: center;
 }
+
+    /* Bootstrap's close glyph is 40px; the full menu's only close control gets a
+       full 44px thumb target on phones. The glyph itself is unchanged. */
+    @media (max-width: 767.98px) {
+        .offcanvas-header .btn-close {
+            box-sizing: border-box; /* Bootstrap uses content-box here */
+            width: var(--tap-min, 44px);
+            height: var(--tap-min, 44px);
+            background-position: center;
+        }
+    }
 
 /* Scrollable body */
 .offcanvas-body {
@@ -646,8 +684,10 @@ body.shell-sheet-open {
     display: block;
 }
 
-/* ── Chevron inside offcanvas nav-link ───────────────────────────────── */
-.offcanvas-body .nav-link i,
+/* ── Chevron inside offcanvas nav-link ─────────────────────────────────
+   :not(.SideBariconimg) keeps Bootstrap-Icon LEADING icons out of this rule –
+   margin-left:auto would otherwise shove them to the middle of the row. */
+.offcanvas-body .nav-link i:not(.SideBariconimg),
 .offcanvas-body .nav-link .chevron-icon {
     /* Pin to right edge */
     margin-left: auto !important;
@@ -674,7 +714,8 @@ body.shell-sheet-open {
     list-style: none;
     padding: 0;
     margin: 0 0 10px 22px;
-    width: 100%;
+    /* width:100% + a 22px left margin overflowed the offcanvas and clipped the
+       longest submenu labels – the <ul> fills the remaining width on its own. */
 }
 
 .offcanvas-body .submenu-item {
