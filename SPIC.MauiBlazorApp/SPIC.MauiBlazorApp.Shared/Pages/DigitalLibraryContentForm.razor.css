@@ -53,6 +53,11 @@
     font-size: 0.85rem;
 }
 
+/* long / short button labels: the phone's sticky ActionBar is one nowrap row */
+.pf-label-short {
+    display: none;
+}
+
 .pf-icon-btn {
     width: 36px;
     height: 36px;
@@ -286,7 +291,10 @@
         border-color: var(--pf-green);
     }
 
-    .pf-upload input[type="file"] {
+    /* ::deep: <InputFile> renders its own <input>, which does not carry this page's
+       scope attribute - without it the native "Choose File / No file chosen" control
+       showed inside the designed drop zone. */
+    .pf-upload ::deep input[type="file"] {
         display: none;
     }
 
@@ -523,7 +531,11 @@
     align-items: center;
 }
 
-.pf-page {
+/* Pager page-number button. NOT ".pf-page": that is the wizard's root wrapper, and a
+   second ".pf-page" rule collapsed the whole wizard to 36px, so the shell's bottom
+   padding ended up above the content and the last controls (Add Section) sat under the
+   fixed ActionBar on phones. */
+.pf-pagebtn {
     min-width: 36px;
     height: 36px;
     border: 1px solid var(--pf-border);
@@ -533,7 +545,7 @@
     cursor: pointer;
 }
 
-    .pf-page.active {
+    .pf-pagebtn.active {
         border-color: var(--pf-green);
         color: var(--pf-green);
         font-weight: 700;
@@ -873,6 +885,17 @@
         padding: 0 12px;
     }
 
+        /* All three steps must fit at 392px: the full row scrolled sideways and left the
+           active step off-screen on step 3, so the wizard looked like it had no current
+           step. Inactive steps keep their (44px) number badge only. */
+        .pf-step:not(.active) {
+            padding: 0 10px;
+        }
+
+            .pf-step:not(.active) .pf-step-name {
+                display: none;
+            }
+
     .pf-card {
         padding: 16px;
     }
@@ -923,5 +946,28 @@
     .pf-btn {
         flex: 1 1 auto;
         justify-content: center;
+    }
+
+    .pf-label-long {
+        display: none;
+    }
+
+    .pf-label-short {
+        display: inline;
+    }
+
+    .pf-pagebtn {
+        min-width: var(--tap-min, 44px);
+        height: var(--tap-min, 44px);
+    }
+
+    .pf-mini-field select {
+        min-height: var(--tap-min, 44px);
+    }
+
+    /* "Back to List" and "Next" are already the sticky ActionBar at the bottom of the
+       phone; the header copy only pushed the wizard down and gave two of every button. */
+    .pf-page ::deep .shell-page-actions {
+        display: none;
     }
 }
