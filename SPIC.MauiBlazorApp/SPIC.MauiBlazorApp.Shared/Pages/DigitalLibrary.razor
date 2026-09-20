@@ -1,0 +1,211 @@
+@page "/DigitalLibrary"
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+<PageTitle>Digital Library - SPIC ONE</PageTitle>
+
+@*
+    Digital Library landing page (design: Figma "SPIC" > Digital Library, screenshot supplied
+    2026-09-20). Static sample content for now; the content service comes in the next step.
+    Layout: hero + search + three category cards, featured strip, content grid.
+    Phone: everything stacks; tablet: 2 columns; desktop: 3 columns as designed.
+*@
+
+<div class="dl-page">
+
+    <section class="dl-hero">
+        <h1 class="dl-hero-title">Digital Library Assistant</h1>
+        <p class="dl-hero-sub">
+            Get instant answers and discover relevant knowledge from the digital library.
+            Ask about products, usage guides, or find related content.
+        </p>
+
+        <div class="dl-hero-actions">
+            <button type="button" class="dl-btn dl-btn-light" @onclick='() => Go("chat")'>
+                <i class="bi bi-stars"></i> Start Chat
+            </button>
+            <button type="button" class="dl-btn dl-btn-outline" @onclick='() => Go("add")'>
+                <i class="bi bi-plus-square"></i> Add Content
+            </button>
+        </div>
+
+        <form class="dl-search" @onsubmit="Search" @onsubmit:preventDefault>
+            <i class="bi bi-search dl-search-icon" aria-hidden="true"></i>
+            <input class="dl-search-input"
+                   type="search"
+                   placeholder="Search products, videos, brochures or ask a question"
+                   aria-label="Search the digital library"
+                   @bind="_query" @bind:event="oninput" />
+            <button type="submit" class="dl-search-go" aria-label="Search"><i class="bi bi-arrow-right"></i></button>
+        </form>
+
+        <div class="dl-chips" role="list">
+            @foreach (var s in Suggestions)
+            {
+                <button type="button" class="dl-chip" role="listitem" @onclick="() => UseSuggestion(s)">@s</button>
+            }
+        </div>
+
+        <h2 class="dl-hero-heading">Digital Library</h2>
+
+        <div class="dl-categories">
+            @foreach (var c in Categories)
+            {
+                <article class="dl-cat">
+                    <div class="dl-cat-body">
+                        <h3 class="dl-cat-title">@c.Title</h3>
+                        <p class="dl-cat-desc">@c.Description</p>
+                    </div>
+                    <div class="dl-cat-art" aria-hidden="true">
+                        <i class="bi @c.Icon"></i>
+                    </div>
+                    <a class="dl-cat-footer" href="@($"DigitalLibrary/{c.Section}")">
+                        <span class="dl-cat-count"><i class="bi @c.CountIcon"></i> @c.Count @c.Unit</span>
+                        <span class="dl-cat-link">@c.LinkText <i class="bi bi-chevron-right"></i></span>
+                    </a>
+                </article>
+            }
+        </div>
+    </section>
+
+    <section class="dl-section">
+        <h2 class="dl-section-title">Featured Content</h2>
+
+        <div class="dl-featured">
+            @foreach (var f in Featured)
+            {
+                <article class="dl-feat">
+                    <img class="dl-feat-img" src="@f.Image" alt="" loading="lazy" />
+                    <div class="dl-feat-body">
+                        <h3 class="dl-feat-title">@f.Title</h3>
+                        <p class="dl-feat-desc">@f.Description</p>
+                        <a class="dl-more" href="@($"DigitalLibrary/videos?id={f.Id}")">Explore Videos <i class="bi bi-chevron-right"></i></a>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <a class="dl-viewall" href="DigitalLibrary/videos">View All Content <i class="bi bi-chevron-right"></i></a>
+
+        <div class="dl-grid">
+            @foreach (var item in Items)
+            {
+                <article class="dl-card">
+                    <img class="dl-card-img" src="@item.Image" alt="" loading="lazy" />
+                    <div class="dl-card-body">
+                        <div class="dl-card-meta">
+                            <span class="dl-tag dl-tag-type">@item.Type</span>
+                            <span class="dl-tag @(item.Published ? "dl-tag-pub" : "dl-tag-draft")">@(item.Published ? "Published" : "Draft")</span>
+                            <span class="dl-card-actions">
+                                <button type="button" class="dl-icon-btn" title="Edit" aria-label="Edit" @onclick="() => Edit(item)"><i class="bi bi-pencil"></i></button>
+                                <button type="button" class="dl-icon-btn dl-icon-danger" title="Delete" aria-label="Delete" @onclick="() => Delete(item)"><i class="bi bi-trash"></i></button>
+                                <button type="button" class="dl-icon-btn dl-icon-archive" title="Archive" aria-label="Archive" @onclick="() => Archive(item)"><i class="bi bi-archive"></i></button>
+                            </span>
+                        </div>
+                        <h3 class="dl-card-title">@item.Title</h3>
+                        <p class="dl-card-desc">@item.Description</p>
+                        <div class="dl-card-foot">
+                            <span class="dl-card-author">@item.Author <small>@item.Date.ToString("dd MMM yyyy")</small></span>
+                            <button type="button" class="dl-btn dl-btn-primary dl-btn-sm" @onclick="() => TogglePublish(item)">
+                                @(item.Published ? "Unpublish" : "Publish")
+                            </button>
+                        </div>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <a class="dl-viewall dl-viewall-end" href="DigitalLibrary/videos">View All Content <i class="bi bi-chevron-right"></i></a>
+    </section>
+</div>
+
+@code {
+    private string _query = "";
+
+    private static readonly string[] Suggestions =
+    {
+        "Find Product Information", "Show latest brochures", "Explain a product", "Find a related video"
+    };
+
+    private sealed record Category(string Title, string Description, string Icon, string CountIcon, int Count, string Unit, string LinkText, string Section);
+
+    private static readonly Category[] Categories =
+    {
+        new("AI Videos", "Watch smart, AI-powered videos that explain products, solutions and technologies.",
+            "bi-camera-video-fill", "bi-play-btn", 124, "Videos", "Explore Videos", "videos"),
+        new("Product Information", "Explore detailed product information, specifications and technical resources.",
+            "bi-clipboard2-data-fill", "bi-box-seam", 86, "Products", "Explore Products", "products"),
+        new("Product Brochures", "Access official brochures, datasheets and catalogues in one place.",
+            "bi-journal-bookmark-fill", "bi-file-earmark-pdf", 42, "Brochures", "Explore Brochures", "brochures"),
+    };
+
+    private sealed record FeaturedItem(int Id, string Title, string Description, string Image);
+
+    private const string Img = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/";
+
+    private static readonly FeaturedItem[] Featured =
+    {
+        new(1, "DAP Fertilizer Application Guide for Rabi Crops",
+            "A comprehensive guide to applying DAP fertilizer effectively across different soil types for optimal Rabi crop yields.", Img + "image20.jpg"),
+        new(2, "NPK Complexes 20-20: Maximum yield in cotton farming",
+            "Expert insights on using SPIC NPK Complex fertilizers to boost cotton crop.", Img + "image21.jpg"),
+        new(3, "Urea: Best practices for paddy cultivation",
+            "Learn how to apply SPIC Urea fertilizer at the right growth stages to achieve maximum nitrogen utilization in paddy fields.", Img + "image7.jpg"),
+    };
+
+    private sealed class ContentItem
+    {
+        public int Id { get; init; }
+        public string Type { get; init; } = "AI Video";
+        public bool Published { get; set; } = true;
+        public string Title { get; init; } = "";
+        public string Description { get; init; } = "";
+        public string Author { get; init; } = "SPIC Agri Team";
+        public DateTime Date { get; init; } = new(2026, 1, 15);
+        public string Image { get; init; } = "";
+    }
+
+    // Sample content until the library API exists (design placeholder, as in the Figma frame).
+    private readonly List<ContentItem> Items = Enumerable.Range(1, 9).Select(i => new ContentItem
+    {
+        Id = i,
+        Title = "DAP Fertilizer Application Guide for Rabi Crops",
+        Description = "A comprehensive guide to applying DAP fertilizer effectively across different soil types for optimal Rabi crop yields.",
+        Image = Img + $"image{(i % 9) + 1}.jpg",
+    }).ToList();
+
+    private void Go(string section) => Nav.NavigateTo($"/DigitalLibrary/{section}");
+
+    private void Search()
+    {
+        if (string.IsNullOrWhiteSpace(_query)) return;
+        Nav.NavigateTo($"/DigitalLibrary/chat?q={Uri.EscapeDataString(_query.Trim())}");
+    }
+
+    private void UseSuggestion(string s)
+    {
+        _query = s;
+        Search();
+    }
+
+    private void Edit(ContentItem item) => Nav.NavigateTo($"/DigitalLibrary/add?id={item.Id}");
+
+    private async Task Delete(ContentItem item)
+    {
+        if (!await Toast.ConfirmAsync("Delete content", $"Delete \"{item.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
+        Items.Remove(item);
+        Toast.Success("Content deleted.");
+    }
+
+    private void Archive(ContentItem item)
+    {
+        Items.Remove(item);
+        Toast.Info("Content archived.");
+    }
+
+    private void TogglePublish(ContentItem item)
+    {
+        item.Published = !item.Published;
+        Toast.Success(item.Published ? "Content published." : "Content unpublished.");
+    }
+}

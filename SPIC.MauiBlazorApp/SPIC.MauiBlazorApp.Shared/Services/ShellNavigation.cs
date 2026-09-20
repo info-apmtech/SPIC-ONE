@@ -78,6 +78,12 @@ public static class ShellNavigation
         {
             ShortLabel = "Dealers"
         },
+        new("DigitalLibrary", "Digital Library", "bi-collection-play", "/DigitalLibrary", "DigitalLibrary")
+        {
+            ShortLabel = "Library",
+            // New module without a PagePermission key yet: admins only (mirrors NavMenu).
+            Rule = s => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+        },
 
         // ---- role-specific quick destinations (pages reachable today but not listed in NavMenu) ----
         new("SDWADashboard", "Dealer Dashboard", "bi-house-door-fill", "/SDWADashboard", nameof(PagePermission.SDWADashboard))
