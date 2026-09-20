@@ -1,0 +1,301 @@
+@page "/DigitalLibrary/chat"
+@page "/DigitalLibrary/chat/{ConversationId:int}"
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Ask SPIC AI - Digital Library - SPIC ONE</PageTitle>
+
+@*
+    SPIC AI assistant (Figma frame supplied 2026-09-20): conversation list on the left,
+    welcome screen with suggestion cards or the conversation thread on the right, composer
+    with source, attach, voice and send. Replies are simulated until the assistant API exists.
+    Phone: the list opens as a sheet from the "Chats" button; the composer sits above the tab bar.
+*@
+
+<div class="ch-page">
+
+    <aside class="ch-side @(_listOpen ? "open" : "")">
+        <div class="ch-side-head">
+            <h2>Chat</h2>
+            <button type="button" class="ch-icon-btn" aria-label="Search conversations" @onclick="() => _searchOpen = !_searchOpen"><i class="bi bi-search"></i></button>
+            <button type="button" class="ch-icon-btn ch-side-close" aria-label="Close" @onclick="() => _listOpen = false"><i class="bi bi-x-lg"></i></button>
+        </div>
+        @if (_searchOpen)
+        {
+            <input class="ch-side-search" type="search" placeholder="Search conversations" @bind="_search" @bind:event="oninput" />
+        }
+        <button type="button" class="ch-new" @onclick="NewChat"><i class="bi bi-plus-lg"></i> New Chat</button>
+
+        <div class="ch-group">
+            <button type="button" class="ch-group-head" @onclick="() => _menuOpen = !_menuOpen">Menu <i class="bi @(_menuOpen ? "bi-chevron-up" : "bi-chevron-down")"></i></button>
+            @if (_menuOpen)
+            {
+                <a class="ch-menu-item active" href="DigitalLibrary/chat"><i class="bi bi-robot"></i> Ask SPIC AI</a>
+                <a class="ch-menu-item" href="DigitalLibrary/content?type=videos"><i class="bi bi-camera-video"></i> AI Videos</a>
+                <a class="ch-menu-item" href="DigitalLibrary/content?type=products"><i class="bi bi-clipboard2-data"></i> Product Information</a>
+                <a class="ch-menu-item" href="DigitalLibrary/content?type=brochures"><i class="bi bi-journal-bookmark"></i> Product Brochures</a>
+            }
+        </div>
+
+        @foreach (var group in Conversations.Where(c => _search == "" || c.Title.Contains(_search, StringComparison.OrdinalIgnoreCase)).GroupBy(c => c.Group))
+        {
+            <div class="ch-group">
+                <div class="ch-group-head">@group.Key <i class="bi bi-chevron-down"></i></div>
+                @foreach (var c in group)
+                {
+                    <a class="ch-conv @(c.Id == ConversationId ? "active" : "")" href="@($"DigitalLibrary/chat/{c.Id}")" @onclick="() => _listOpen = false">@c.Title</a>
+                }
+            </div>
+        }
+
+        <button type="button" class="ch-viewall" @onclick='() => Toast.Info("Conversation history arrives with the assistant API.")'>View all Conversation <i class="bi bi-chat-left-text"></i></button>
+    </aside>
+
+    <section class="ch-main">
+        <header class="ch-head">
+            <button type="button" class="ch-icon-btn ch-list-toggle" aria-label="Open chats" @onclick="() => _listOpen = true"><i class="bi bi-list"></i></button>
+            <h1 class="ch-title">Ask SPIC AI</h1>
+            <span class="ch-badge">SPIC AI Assistant</span>
+            <span class="ch-head-spacer"></span>
+            <button type="button" class="ch-btn ch-btn-outline" @onclick="Share"><i class="bi bi-box-arrow-up"></i> Share</button>
+            <button type="button" class="ch-btn ch-btn-primary" @onclick="NewChat"><i class="bi bi-stars"></i> Start Chat</button>
+        </header>
+
+        <div class="ch-body" @ref="_body">
+            @if (Current is null)
+            {
+                <div class="ch-welcome">
+                    <span class="ch-orb" aria-hidden="true"></span>
+                    <h2>Hi there! <span aria-hidden="true">👋</span></h2>
+                    <p>I'm SPIC AI, your intelligent assistant.<br />Ask me anything about our products, videos, brochures and more.</p>
+                    <div class="ch-suggestions">
+                        @foreach (var s in Suggestions)
+                        {
+                            <button type="button" class="ch-suggest" @onclick="() => Ask(s.Prompt)">
+                                <span class="ch-suggest-icon"><i class="bi @s.Icon"></i></span>
+                                <strong>@s.Title</strong>
+                                <span>@s.Description</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="ch-thread" aria-live="polite">
+                    @foreach (var m in Current.Messages)
+                    {
+                        <div class="ch-msg @(m.FromUser ? "user" : "ai")">
+                            @if (!m.FromUser) { <span class="ch-avatar" aria-hidden="true"><i class="bi bi-stars"></i></span> }
+                            <div class="ch-bubble">
+                                <p>@m.Text</p>
+                                @if (m.Sources.Count > 0)
+                                {
+                                    <div class="ch-sources">
+                                        @foreach (var src in m.Sources)
+                                        {
+                                            <a class="ch-source" href="@($"DigitalLibrary/view/{src.Id}")"><i class="bi @(src.Type == DigitalLibraryType.Videos ? "bi-camera-video" : src.Type == DigitalLibraryType.Brochures ? "bi-file-earmark-pdf" : "bi-box-seam")"></i> @src.Title</a>
+                                        }
+                                    </div>
+                                }
+                                <span class="ch-time">@m.Time.ToString("HH:mm")</span>
+                            </div>
+                        </div>
+                    }
+                    @if (_thinking)
+                    {
+                        <div class="ch-msg ai">
+                            <span class="ch-avatar" aria-hidden="true"><i class="bi bi-stars"></i></span>
+                            <div class="ch-bubble ch-typing"><span></span><span></span><span></span></div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <form class="ch-composer" @onsubmit="Send" @onsubmit:preventDefault>
+            <div class="ch-input-row">
+                <i class="bi bi-stars ch-input-icon" aria-hidden="true"></i>
+                <input type="text" class="ch-input" placeholder="Ask anything about SPIC products, videos, brochures" aria-label="Message" @bind="_input" @bind:event="oninput" />
+            </div>
+            <div class="ch-tools">
+                <select class="ch-source-select" aria-label="Source" @bind="_source">
+                    <option value="">Select Source</option>
+                    <option>All content</option><option>AI Videos</option><option>Product Information</option><option>Product Brochures</option>
+                </select>
+                <span class="ch-tools-spacer"></span>
+                <button type="button" class="ch-btn ch-btn-outline" @onclick='() => Toast.Info("Attachments arrive with the assistant API.")'><i class="bi bi-paperclip"></i> <span>Attach</span></button>
+                <button type="button" class="ch-btn ch-btn-outline" @onclick='() => Toast.Info("Voice input arrives with the assistant API.")'><i class="bi bi-mic"></i> <span>Voice</span></button>
+                <button type="submit" class="ch-btn ch-btn-primary" disabled="@(string.IsNullOrWhiteSpace(_input) || _thinking)"><i class="bi bi-send"></i> Send</button>
+            </div>
+        </form>
+        <p class="ch-disclaimer">SPIC AI may display inaccurate info, so please check the response. <a href="DigitalLibrary/chat">Learn more</a></p>
+    </section>
+
+    @if (_listOpen)
+    {
+        <div class="ch-backdrop" @onclick="() => _listOpen = false"></div>
+    }
+</div>
+
+@code {
+    [Parameter] public int? ConversationId { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? InitialQuestion { get; set; }
+    [SupplyParameterFromQuery(Name = "about")] public int? AboutId { get; set; }
+
+    private sealed record Suggestion(string Icon, string Title, string Description, string Prompt);
+    private static readonly Suggestion[] Suggestions =
+    {
+        new("bi-robot", "Tell me about a SPIC product", "Get detailed information about our products and benefits", "Tell me about SPIC DAP fertilizer"),
+        new("bi-journal-richtext", "Show latest brochures", "Find and view our latest product brochures", "Show me the latest brochures"),
+        new("bi-play-btn", "Recommend videos", "Find relevant product videos and tutorials", "Recommend videos about soil health"),
+        new("bi-box-seam", "Explain product usage", "Understand how our products work and are used", "How do I apply NPK 20-20 in cotton?"),
+    };
+
+    private sealed class Message
+    {
+        public bool FromUser { get; init; }
+        public string Text { get; init; } = "";
+        public DateTime Time { get; init; } = DateTime.Now;
+        public List<DigitalLibraryItem> Sources { get; init; } = new();
+    }
+
+    private sealed class Conversation
+    {
+        public int Id { get; init; }
+        public string Title { get; set; } = "";
+        public string Group { get; init; } = "Today";
+        public List<Message> Messages { get; } = new();
+    }
+
+    private static readonly List<DigitalLibraryItem> Library = DigitalLibrarySampleData.Create(30);
+    private static int _nextId = 100;
+
+    // Sample history until the assistant API exists (shared across visits in this session).
+    private static readonly List<Conversation> Conversations = new()
+    {
+        Seed(1, "Tell me about DAP", "Today"),
+        Seed(2, "Benefits of Balanced Nutrition", "Today"),
+        Seed(3, "Find SPIC Brochure", "Today"),
+        Seed(4, "NPK fertilizer information", "Yesterday"),
+        Seed(5, "Product usage guide", "Yesterday"),
+        Seed(6, "SPIC Video on crop health", "Yesterday"),
+    };
+
+    private static Conversation Seed(int id, string title, string group)
+    {
+        var c = new Conversation { Id = id, Title = title, Group = group };
+        c.Messages.Add(new Message { FromUser = true, Text = title, Time = DateTime.Now.AddHours(-3) });
+        c.Messages.Add(new Message { FromUser = false, Text = Answer(title), Time = DateTime.Now.AddHours(-3).AddSeconds(4), Sources = Library.Take(2).ToList() });
+        return c;
+    }
+
+    private Conversation? Current => ConversationId is int id ? Conversations.FirstOrDefault(c => c.Id == id) : null;
+
+    private ElementReference _body;
+    private string _input = "";
+    private string _source = "";
+    private string _search = "";
+    private bool _listOpen;
+    private bool _searchOpen;
+    private bool _menuOpen = true;
+    private bool _thinking;
+    private CancellationTokenSource? _cts;
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrWhiteSpace(InitialQuestion) && ConversationId is null)
+        {
+            var q = InitialQuestion;
+            InitialQuestion = null;
+            _ = Ask(q);
+        }
+        else if (AboutId is int about && ConversationId is null)
+        {
+            var item = Library.FirstOrDefault(i => i.Id == about);
+            AboutId = null;
+            if (item is not null) _ = Ask($"Tell me about \"{item.Title}\"");
+        }
+    }
+
+    private void NewChat()
+    {
+        _listOpen = false;
+        Nav.NavigateTo("/DigitalLibrary/chat");
+    }
+
+    private void Share() => Toast.Info(Current is null ? "Start a conversation to share it." : "Share link copied (available with the assistant API).");
+
+    private Task Send()
+    {
+        var text = _input.Trim();
+        if (text.Length == 0 || _thinking) return Task.CompletedTask;
+        _input = "";
+        return Ask(text);
+    }
+
+    private async Task Ask(string question)
+    {
+        var conv = Current;
+        if (conv is null)
+        {
+            conv = new Conversation { Id = _nextId++, Title = question.Length > 40 ? question[..40] + "…" : question, Group = "Today" };
+            Conversations.Insert(0, conv);
+            conv.Messages.Add(new Message { FromUser = true, Text = question });
+            Nav.NavigateTo($"/DigitalLibrary/chat/{conv.Id}");
+        }
+        else
+        {
+            conv.Messages.Add(new Message { FromUser = true, Text = question });
+        }
+
+        _thinking = true;
+        StateHasChanged();
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(900, _cts.Token);
+            conv.Messages.Add(new Message { FromUser = false, Text = Answer(question), Sources = Related(question) });
+        }
+        catch (TaskCanceledException) { }
+        finally
+        {
+            _thinking = false;
+        }
+    }
+
+    // Placeholder answers until the assistant API exists.
+    private static string Answer(string q) => q.ToLowerInvariant() switch
+    {
+        var s when s.Contains("dap") => "DAP (Di-ammonium Phosphate) is SPIC's most trusted phosphatic fertilizer, containing 18% nitrogen and 46% P2O5. It is ideal for basal application across all crops and gives strong root development in the early growth stages.",
+        var s when s.Contains("brochure") => "Here are the latest brochures in the library. Each one opens in the viewer with a download option.",
+        var s when s.Contains("video") => "These AI videos match your question. They explain the product, its benefits and the recommended application method.",
+        var s when s.Contains("npk") || s.Contains("cotton") => "For cotton, apply SPIC NPK 20-20 as a basal dose of 100 to 125 kg per acre, followed by split top-dressing at squaring and flowering. Avoid application during waterlogging.",
+        _ => "I found related content in the Digital Library. Open any source below for the full details, or ask a follow-up question."
+    };
+
+    private static List<DigitalLibraryItem> Related(string q)
+    {
+        var s = q.ToLowerInvariant();
+        var type = s.Contains("brochure") ? DigitalLibraryType.Brochures : s.Contains("video") ? DigitalLibraryType.Videos : DigitalLibraryType.Products;
+        return Library.Where(i => i.Type == type).Take(3).ToList();
+    }
+
+    private int _renderedCount;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Keep the newest message in view when the thread grows.
+        var count = Current?.Messages.Count ?? 0;
+        if (count != _renderedCount || _thinking)
+        {
+            _renderedCount = count;
+            try { await JS.InvokeVoidAsync("eval", "var b=document.querySelector('.ch-body'); if(b) b.scrollTop = b.scrollHeight;"); } catch { }
+        }
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}
