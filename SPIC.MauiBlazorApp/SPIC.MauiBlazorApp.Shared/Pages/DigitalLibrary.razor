@@ -8,6 +8,8 @@
     Digital Library landing page (design: Figma "SPIC" > Digital Library, screenshot supplied
     2026-09-20). Static sample content for now; the content service comes in the next step.
     Layout: hero + search + three category cards, featured strip, content grid.
+    Category cards, their headings and "View All Content" open the All Content list
+    (/DigitalLibrary/content) pre-filtered by type.
     Phone: everything stacks; tablet: 2 columns; desktop: 3 columns as designed.
 *@
 
@@ -21,10 +23,10 @@
         </p>
 
         <div class="dl-hero-actions">
-            <button type="button" class="dl-btn dl-btn-light" @onclick='() => Go("chat")'>
+            <button type="button" class="dl-btn dl-btn-light" @onclick='() => Nav.NavigateTo("/DigitalLibrary/chat")'>
                 <i class="bi bi-stars"></i> Start Chat
             </button>
-            <button type="button" class="dl-btn dl-btn-outline" @onclick='() => Go("add")'>
+            <button type="button" class="dl-btn dl-btn-outline" @onclick='() => Nav.NavigateTo("/DigitalLibrary/add")'>
                 <i class="bi bi-plus-square"></i> Add Content
             </button>
         </div>
@@ -51,16 +53,16 @@
         <div class="dl-categories">
             @foreach (var c in Categories)
             {
-                <article class="dl-cat">
+                <article class="dl-cat" @onclick="() => OpenType(c.Type)">
                     <div class="dl-cat-body">
-                        <h3 class="dl-cat-title">@c.Title</h3>
+                        <h3 class="dl-cat-title"><a href="@ListHref(c.Type)" @onclick:stopPropagation>@c.Title</a></h3>
                         <p class="dl-cat-desc">@c.Description</p>
                     </div>
                     <div class="dl-cat-art" aria-hidden="true">
                         <i class="bi @c.Icon"></i>
                     </div>
-                    <a class="dl-cat-footer" href="@($"DigitalLibrary/{c.Section}")">
-                        <span class="dl-cat-count"><i class="bi @c.CountIcon"></i> @c.Count @c.Unit</span>
+                    <a class="dl-cat-footer" href="@ListHref(c.Type)" @onclick:stopPropagation>
+                        <span class="dl-cat-count"><i class="bi @c.CountIcon"></i> @Count(c.Type) @c.Unit</span>
                         <span class="dl-cat-link">@c.LinkText <i class="bi bi-chevron-right"></i></span>
                     </a>
                 </article>
@@ -72,50 +74,32 @@
         <h2 class="dl-section-title">Featured Content</h2>
 
         <div class="dl-featured">
-            @foreach (var f in Featured)
+            @foreach (var f in Items.Where(i => i.Published).Take(3))
             {
                 <article class="dl-feat">
                     <img class="dl-feat-img" src="@f.Image" alt="" loading="lazy" />
                     <div class="dl-feat-body">
                         <h3 class="dl-feat-title">@f.Title</h3>
                         <p class="dl-feat-desc">@f.Description</p>
-                        <a class="dl-more" href="@($"DigitalLibrary/videos?id={f.Id}")">Explore Videos <i class="bi bi-chevron-right"></i></a>
+                        <a class="dl-more" href="@($"DigitalLibrary/{f.Type.ToString().ToLowerInvariant()}?id={f.Id}")">
+                            @(f.Type == DigitalLibraryType.Videos ? "Explore Videos" : "Open") <i class="bi bi-chevron-right"></i>
+                        </a>
                     </div>
                 </article>
             }
         </div>
 
-        <a class="dl-viewall" href="DigitalLibrary/videos">View All Content <i class="bi bi-chevron-right"></i></a>
+        <a class="dl-viewall" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
 
         <div class="dl-grid">
-            @foreach (var item in Items)
+            @foreach (var item in Items.Take(9))
             {
-                <article class="dl-card">
-                    <img class="dl-card-img" src="@item.Image" alt="" loading="lazy" />
-                    <div class="dl-card-body">
-                        <div class="dl-card-meta">
-                            <span class="dl-tag dl-tag-type">@item.Type</span>
-                            <span class="dl-tag @(item.Published ? "dl-tag-pub" : "dl-tag-draft")">@(item.Published ? "Published" : "Draft")</span>
-                            <span class="dl-card-actions">
-                                <button type="button" class="dl-icon-btn" title="Edit" aria-label="Edit" @onclick="() => Edit(item)"><i class="bi bi-pencil"></i></button>
-                                <button type="button" class="dl-icon-btn dl-icon-danger" title="Delete" aria-label="Delete" @onclick="() => Delete(item)"><i class="bi bi-trash"></i></button>
-                                <button type="button" class="dl-icon-btn dl-icon-archive" title="Archive" aria-label="Archive" @onclick="() => Archive(item)"><i class="bi bi-archive"></i></button>
-                            </span>
-                        </div>
-                        <h3 class="dl-card-title">@item.Title</h3>
-                        <p class="dl-card-desc">@item.Description</p>
-                        <div class="dl-card-foot">
-                            <span class="dl-card-author">@item.Author <small>@item.Date.ToString("dd MMM yyyy")</small></span>
-                            <button type="button" class="dl-btn dl-btn-primary dl-btn-sm" @onclick="() => TogglePublish(item)">
-                                @(item.Published ? "Unpublish" : "Publish")
-                            </button>
-                        </div>
-                    </div>
-                </article>
+                <DigitalLibraryCard @key="item.Id" Item="item"
+                                    OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
             }
         </div>
 
-        <a class="dl-viewall dl-viewall-end" href="DigitalLibrary/videos">View All Content <i class="bi bi-chevron-right"></i></a>
+        <a class="dl-viewall dl-viewall-end" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
     </section>
 </div>
 
@@ -127,54 +111,26 @@
         "Find Product Information", "Show latest brochures", "Explain a product", "Find a related video"
     };
 
-    private sealed record Category(string Title, string Description, string Icon, string CountIcon, int Count, string Unit, string LinkText, string Section);
+    private sealed record Category(DigitalLibraryType Type, string Title, string Description, string Icon, string CountIcon, string Unit, string LinkText);
 
     private static readonly Category[] Categories =
     {
-        new("AI Videos", "Watch smart, AI-powered videos that explain products, solutions and technologies.",
-            "bi-camera-video-fill", "bi-play-btn", 124, "Videos", "Explore Videos", "videos"),
-        new("Product Information", "Explore detailed product information, specifications and technical resources.",
-            "bi-clipboard2-data-fill", "bi-box-seam", 86, "Products", "Explore Products", "products"),
-        new("Product Brochures", "Access official brochures, datasheets and catalogues in one place.",
-            "bi-journal-bookmark-fill", "bi-file-earmark-pdf", 42, "Brochures", "Explore Brochures", "brochures"),
+        new(DigitalLibraryType.Videos, "AI Videos", "Watch smart, AI-powered videos that explain products, solutions and technologies.",
+            "bi-camera-video-fill", "bi-play-btn", "Videos", "Explore Videos"),
+        new(DigitalLibraryType.Products, "Product Information", "Explore detailed product information, specifications and technical resources.",
+            "bi-clipboard2-data-fill", "bi-box-seam", "Products", "Explore Products"),
+        new(DigitalLibraryType.Brochures, "Product Brochures", "Access official brochures, datasheets and catalogues in one place.",
+            "bi-journal-bookmark-fill", "bi-file-earmark-pdf", "Brochures", "Explore Brochures"),
     };
 
-    private sealed record FeaturedItem(int Id, string Title, string Description, string Image);
+    // Sample content until the library API exists (shared with the All Content list).
+    private readonly List<DigitalLibraryItem> Items = DigitalLibrarySampleData.Create(16);
 
-    private const string Img = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/";
+    private int Count(DigitalLibraryType t) => Items.Count(i => i.Type == t);
 
-    private static readonly FeaturedItem[] Featured =
-    {
-        new(1, "DAP Fertilizer Application Guide for Rabi Crops",
-            "A comprehensive guide to applying DAP fertilizer effectively across different soil types for optimal Rabi crop yields.", Img + "image20.jpg"),
-        new(2, "NPK Complexes 20-20: Maximum yield in cotton farming",
-            "Expert insights on using SPIC NPK Complex fertilizers to boost cotton crop.", Img + "image21.jpg"),
-        new(3, "Urea: Best practices for paddy cultivation",
-            "Learn how to apply SPIC Urea fertilizer at the right growth stages to achieve maximum nitrogen utilization in paddy fields.", Img + "image7.jpg"),
-    };
+    private static string ListHref(DigitalLibraryType t) => $"DigitalLibrary/content?type={t.ToString().ToLowerInvariant()}";
 
-    private sealed class ContentItem
-    {
-        public int Id { get; init; }
-        public string Type { get; init; } = "AI Video";
-        public bool Published { get; set; } = true;
-        public string Title { get; init; } = "";
-        public string Description { get; init; } = "";
-        public string Author { get; init; } = "SPIC Agri Team";
-        public DateTime Date { get; init; } = new(2026, 1, 15);
-        public string Image { get; init; } = "";
-    }
-
-    // Sample content until the library API exists (design placeholder, as in the Figma frame).
-    private readonly List<ContentItem> Items = Enumerable.Range(1, 9).Select(i => new ContentItem
-    {
-        Id = i,
-        Title = "DAP Fertilizer Application Guide for Rabi Crops",
-        Description = "A comprehensive guide to applying DAP fertilizer effectively across different soil types for optimal Rabi crop yields.",
-        Image = Img + $"image{(i % 9) + 1}.jpg",
-    }).ToList();
-
-    private void Go(string section) => Nav.NavigateTo($"/DigitalLibrary/{section}");
+    private void OpenType(DigitalLibraryType t) => Nav.NavigateTo("/" + ListHref(t));
 
     private void Search()
     {
@@ -188,22 +144,22 @@
         Search();
     }
 
-    private void Edit(ContentItem item) => Nav.NavigateTo($"/DigitalLibrary/add?id={item.Id}");
+    private void Edit(DigitalLibraryItem item) => Nav.NavigateTo($"/DigitalLibrary/add?id={item.Id}");
 
-    private async Task Delete(ContentItem item)
+    private async Task Delete(DigitalLibraryItem item)
     {
         if (!await Toast.ConfirmAsync("Delete content", $"Delete \"{item.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
         Items.Remove(item);
         Toast.Success("Content deleted.");
     }
 
-    private void Archive(ContentItem item)
+    private void Archive(DigitalLibraryItem item)
     {
         Items.Remove(item);
         Toast.Info("Content archived.");
     }
 
-    private void TogglePublish(ContentItem item)
+    private void TogglePublish(DigitalLibraryItem item)
     {
         item.Published = !item.Published;
         Toast.Success(item.Published ? "Content published." : "Content unpublished.");

@@ -1,0 +1,167 @@
+@page "/DigitalLibrary/content"
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+<PageTitle>All Content - Digital Library - SPIC ONE</PageTitle>
+
+@*
+    Digital Library "All Content" list (Figma frame supplied 2026-09-20). Reached from the
+    landing page's category cards / headings / "View All Content" with ?type=videos|products|
+    brochures, which pre-selects the type tab. Sample data until the content API exists.
+*@
+
+<div class="dlc-page">
+
+    <PageHeader Title="All Content" Subtitle="@($"{Filtered.Count} items total")" BackHref="/DigitalLibrary">
+        <Actions>
+            <button type="button" class="dlc-add" @onclick='() => Nav.NavigateTo("/DigitalLibrary/add")'>
+                <i class="bi bi-plus-square"></i> Add Content
+            </button>
+        </Actions>
+    </PageHeader>
+
+    <div class="dlc-stats">
+        <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Products ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Products)">
+            <span class="dlc-stat-label">Product Information</span>
+            <span class="dlc-stat-value">@Count(DigitalLibraryType.Products)</span>
+            <span class="dlc-stat-hint">@Count(DigitalLibraryType.Products, true) published &middot; @Count(DigitalLibraryType.Products, false) drafts</span>
+            <span class="dlc-stat-icon dlc-ic-blue"><i class="bi bi-clipboard2-data"></i></span>
+        </button>
+        <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Videos ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Videos)">
+            <span class="dlc-stat-label">AI Videos</span>
+            <span class="dlc-stat-value">@Count(DigitalLibraryType.Videos)</span>
+            <span class="dlc-stat-hint">@Count(DigitalLibraryType.Videos, true) published &middot; @Count(DigitalLibraryType.Videos, false) drafts</span>
+            <span class="dlc-stat-icon dlc-ic-purple"><i class="bi bi-camera-video"></i></span>
+        </button>
+        <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Brochures ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Brochures)">
+            <span class="dlc-stat-label">Product Brochures</span>
+            <span class="dlc-stat-value">@Count(DigitalLibraryType.Brochures)</span>
+            <span class="dlc-stat-hint">@Count(DigitalLibraryType.Brochures, true) published &middot; @Count(DigitalLibraryType.Brochures, false) drafts</span>
+            <span class="dlc-stat-icon dlc-ic-pink"><i class="bi bi-journal-bookmark"></i></span>
+        </button>
+        <button type="button" class="dlc-stat @(Status == "draft" ? "active" : "")" @onclick='() => SetStatus("draft")'>
+            <span class="dlc-stat-label">Draft Content</span>
+            <span class="dlc-stat-value">@Items.Count(i => !i.Published)</span>
+            <span class="dlc-stat-hint">Pending content</span>
+            <span class="dlc-stat-icon dlc-ic-yellow"><i class="bi bi-pencil-square"></i></span>
+        </button>
+    </div>
+
+    <div class="dlc-filters">
+        <div class="dlc-tabs" role="tablist" aria-label="Content type">
+            <button type="button" role="tab" class="dlc-tab @(Type is null ? "active" : "")" aria-selected="@(Type is null)" @onclick="() => SetType(null)">All Types</button>
+            <button type="button" role="tab" class="dlc-tab @(Type == DigitalLibraryType.Videos ? "active" : "")" aria-selected="@(Type == DigitalLibraryType.Videos)" @onclick="() => SetType(DigitalLibraryType.Videos)">AI Videos</button>
+            <button type="button" role="tab" class="dlc-tab @(Type == DigitalLibraryType.Products ? "active" : "")" aria-selected="@(Type == DigitalLibraryType.Products)" @onclick="() => SetType(DigitalLibraryType.Products)">Products</button>
+            <button type="button" role="tab" class="dlc-tab @(Type == DigitalLibraryType.Brochures ? "active" : "")" aria-selected="@(Type == DigitalLibraryType.Brochures)" @onclick="() => SetType(DigitalLibraryType.Brochures)">Brochures</button>
+        </div>
+        <div class="dlc-filter-right">
+            <select class="dlc-select" aria-label="Status" value="@Status" @onchange="e => SetStatus(e.Value?.ToString())">
+                <option value="">All Status</option>
+                <option value="published">Published</option>
+                <option value="draft">Draft</option>
+            </select>
+            <div class="dlc-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" placeholder="Search content..." aria-label="Search content" value="@Query" @oninput="e => SetQuery(e.Value?.ToString())" />
+            </div>
+        </div>
+    </div>
+
+    @if (Filtered.Count == 0)
+    {
+        <EmptyState Icon="bi-collection" Title="No content found" Message="Try another type, status or search term.">
+            <button type="button" class="btn btn-outline-success" @onclick="ClearFilters">Clear filters</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="dlc-grid">
+            @foreach (var item in Filtered.Take(_visible))
+            {
+                <DigitalLibraryCard @key="item.Id" Item="item"
+                                    OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
+            }
+        </div>
+
+        @if (Filtered.Count > _visible)
+        {
+            <div class="dlc-more">
+                <button type="button" class="dlc-more-btn" @onclick="() => _visible += PageSize">Load More</button>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private const int PageSize = 9;
+    private int _visible = PageSize;
+
+    [SupplyParameterFromQuery(Name = "type")] public string? TypeQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+
+    private DigitalLibraryType? Type { get; set; }
+    private string Status { get; set; } = "";
+    private string Query { get; set; } = "";
+
+    private readonly List<DigitalLibraryItem> Items = DigitalLibrarySampleData.Create(16);
+
+    protected override void OnParametersSet()
+    {
+        Type = TypeQuery?.ToLowerInvariant() switch
+        {
+            "videos" or "video" => DigitalLibraryType.Videos,
+            "products" or "product" => DigitalLibraryType.Products,
+            "brochures" or "brochure" => DigitalLibraryType.Brochures,
+            _ => null
+        };
+        Status = StatusQuery?.ToLowerInvariant() ?? "";
+        Query = SearchQuery ?? "";
+        _visible = PageSize;
+    }
+
+    private List<DigitalLibraryItem> Filtered => Items
+        .Where(i => Type is null || i.Type == Type)
+        .Where(i => Status == "" || (Status == "published" && i.Published) || (Status == "draft" && !i.Published))
+        .Where(i => Query == "" || i.Title.Contains(Query, StringComparison.OrdinalIgnoreCase) || i.Description.Contains(Query, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    private int Count(DigitalLibraryType t, bool? published = null)
+        => Items.Count(i => i.Type == t && (published is null || i.Published == published));
+
+    // Filters live in the URL so the landing page links, the back button and refresh all agree.
+    private void SetType(DigitalLibraryType? t) => Apply(t, Status, Query);
+    private void SetStatus(string? s) => Apply(Type, s ?? "", Query);
+    private void SetQuery(string? q) => Apply(Type, Status, q ?? "");
+    private void ClearFilters() => Apply(null, "", "");
+
+    private void Apply(DigitalLibraryType? t, string status, string query)
+    {
+        var parts = new List<string>();
+        if (t is not null) parts.Add("type=" + t.ToString()!.ToLowerInvariant());
+        if (!string.IsNullOrEmpty(status)) parts.Add("status=" + status);
+        if (!string.IsNullOrWhiteSpace(query)) parts.Add("q=" + Uri.EscapeDataString(query));
+        Nav.NavigateTo("/DigitalLibrary/content" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
+    }
+
+    private void Edit(DigitalLibraryItem item) => Nav.NavigateTo($"/DigitalLibrary/add?id={item.Id}");
+
+    private async Task Delete(DigitalLibraryItem item)
+    {
+        if (!await Toast.ConfirmAsync("Delete content", $"Delete \"{item.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
+        Items.Remove(item);
+        Toast.Success("Content deleted.");
+    }
+
+    private void Archive(DigitalLibraryItem item)
+    {
+        Items.Remove(item);
+        Toast.Info("Content archived.");
+    }
+
+    private void TogglePublish(DigitalLibraryItem item)
+    {
+        item.Published = !item.Published;
+        Toast.Success(item.Published ? "Content published." : "Content unpublished.");
+    }
+}
