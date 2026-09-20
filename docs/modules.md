@@ -74,3 +74,14 @@ Dealer enrolment and credit limits, logistics, settings.
 Not yet in the app: Digital Library (4 features), SAS (8 features), Specialty Products,
 Service Portal, Sales Portal, Farmer Portal, Publicity, Compliance, Imports, Industrial
 Products, the cross-module dashboards.
+
+## Digital Library implementation log
+
+- 2026-09-20: landing page `/DigitalLibrary` built from the Figma frame (hero with assistant
+  search and suggestion chips, AI Videos / Product Information / Product Brochures cards,
+  featured strip, content grid with publish/edit/delete/archive). Sample data only; the
+  content API comes next. Sub-sections (`/DigitalLibrary/videos|products|brochures|chat|add`)
+  are placeholder screens until their frames are implemented. Menu entry is admin-only until
+  `PagePermission` gains a `DigitalLibrary` key (API + permission catalogue change).
+- Figma automation: the file loads in the browser pane but frames render as low-resolution
+  tiles, so designs are taken from full-size screenshots supplied by the product owner.
