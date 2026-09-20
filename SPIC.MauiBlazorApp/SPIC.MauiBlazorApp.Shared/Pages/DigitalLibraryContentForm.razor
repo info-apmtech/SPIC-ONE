@@ -1,0 +1,653 @@
+@page "/DigitalLibrary/add/{KindRoute}"
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+<PageTitle>@Heading - Digital Library - SPIC ONE</PageTitle>
+
+@*
+    Add / edit Digital Library content: one three-step wizard for all three kinds
+    (products, videos, brochures) from the Figma frames supplied 2026-09-20.
+    Step 1 changes with the kind (product fields / video media / brochure document);
+    steps 2 (related content) and 3 (detail-page section order) are shared.
+    Sample related content until the content API exists.
+*@
+
+<div class="pf-page">
+
+    <PageHeader Title="@Heading" Subtitle="@SubHeading" BackHref="@ListUrl">
+        <Actions>
+            <button type="button" class="pf-btn pf-btn-outline" @onclick="BackToList"><i class="bi bi-arrow-left"></i> Back to List</button>
+            <button type="button" class="pf-btn pf-btn-primary" @onclick="Next">@NextLabel <i class="bi bi-arrow-right"></i></button>
+        </Actions>
+    </PageHeader>
+
+    <nav class="pf-steps" aria-label="Steps">
+        @for (var s = 1; s <= 3; s++)
+        {
+            var step = s;
+            <button type="button" class="pf-step @(step == _step ? "active" : "") @(step < _step ? "done" : "")" @onclick="() => Go(step)" aria-current="@(step == _step ? "step" : null)">
+                <span class="pf-step-no">@step</span> @StepNames[step - 1]
+            </button>
+        }
+    </nav>
+
+    @if (_step == 1)
+    {
+        @* ---------- Basic information (varies by kind) ---------- *@
+        <section class="pf-card">
+            <h2 class="pf-card-title">Basic Information</h2>
+            @if (Kind == DigitalLibraryType.Products)
+            {
+                <div class="pf-grid2">
+                    <label class="pf-field">
+                        <span>Main Category / Type</span>
+                        <select @bind="Draft.Category">
+                            <option value="">Select Category Type..</option>
+                            @foreach (var c in Categories) { <option value="@c">@c</option> }
+                        </select>
+                    </label>
+                    <label class="pf-field">
+                        <span>Associated Program / Sub-Category</span>
+                        <select @bind="Draft.SubCategory" disabled="@(Draft.Category == "")">
+                            <option value="">@(Draft.Category == "" ? "Select Category first.." : "Select Sub-Category..")</option>
+                            @foreach (var c in SubCategories) { <option value="@c">@c</option> }
+                        </select>
+                    </label>
+                    <label class="pf-field">
+                        <span>Resource Content Format</span>
+                        <select @bind="Draft.Format">
+                            <option value="">Select Format</option>
+                            <option>Product page</option><option>Manual</option><option>Leaflet</option><option>Datasheet</option>
+                        </select>
+                    </label>
+                    <label class="pf-field">
+                        <span>Visibility / Enable To</span>
+                        <select @bind="Draft.Visibility">
+                            <option value="">Select Audience Access..</option>
+                            <option>Everyone</option><option>Dealers</option><option>Employees</option><option>Farmers</option>
+                        </select>
+                    </label>
+                </div>
+            }
+            else
+            {
+                <div class="pf-grid2">
+                    <label class="pf-field">
+                        <span>@KindNoun Title</span>
+                        <input type="text" placeholder="@($"Enter a descriptive {KindNoun.ToLowerInvariant()} title...")" @bind="Draft.Title" @bind:event="oninput" />
+                    </label>
+                    <label class="pf-field">
+                        <span>@KindNoun Category</span>
+                        <select @bind="Draft.Category">
+                            <option value="">Select Category</option>
+                            @foreach (var c in Categories) { <option value="@c">@c</option> }
+                        </select>
+                    </label>
+                </div>
+                <div class="pf-field">
+                    <span>Tags</span>
+                    @TagsEditor
+                </div>
+                <label class="pf-field">
+                    <span>Short Description</span>
+                    <textarea rows="4" placeholder="@($"Brief description of the {KindNoun.ToLowerInvariant()} content...")" @bind="Draft.ShortDescription"></textarea>
+                </label>
+            }
+        </section>
+
+        @if (Kind == DigitalLibraryType.Products)
+        {
+            <section class="pf-card">
+                <h2 class="pf-card-title">Product Information</h2>
+                <div class="pf-grid2">
+                    <label class="pf-field">
+                        <span>Product Title</span>
+                        <input type="text" placeholder="Enter a descriptive product title..." @bind="Draft.Title" @bind:event="oninput" />
+                    </label>
+                    <label class="pf-field">
+                        <span>Keywords (Comma Separated)</span>
+                        <input type="text" placeholder="agri, fertilizer, yield, manual" @bind="Draft.Keywords" />
+                    </label>
+                </div>
+                <div class="pf-field">
+                    <span>Tags</span>
+                    @TagsEditor
+                </div>
+                <label class="pf-field">
+                    <span>Short Description</span>
+                    <textarea rows="4" placeholder="Brief description of the product content..." @bind="Draft.ShortDescription"></textarea>
+                </label>
+            </section>
+
+            <section class="pf-card">
+                <h2 class="pf-card-title">Product Image</h2>
+                @ImageUpload("Click to upload thumbnail")
+            </section>
+        }
+        else if (Kind == DigitalLibraryType.Videos)
+        {
+            <section class="pf-card">
+                <h2 class="pf-card-title">Video Media</h2>
+                <span class="pf-label">Video File (Upload)</span>
+                <div class="pf-grid2 pf-grid2-media">
+                    <label class="pf-upload">
+                        <InputFile OnChange="OnVideoFile" accept="video/mp4,video/webm,video/quicktime" />
+                        <i class="bi bi-cloud-arrow-up pf-upload-icon" aria-hidden="true"></i>
+                        <span class="pf-upload-title">Click to upload video</span>
+                        <span class="pf-upload-hint">MP4, WebM or MOV up to 500 MB</span>
+                        <span class="pf-btn pf-btn-outline pf-btn-sm">Browse Files</span>
+                    </label>
+                    <div class="pf-preview-box">
+                        <span class="pf-preview-title">Uploaded Video</span>
+                        @if (Draft.VideoFileName is not null || Draft.VideoUrl != "")
+                        {
+                            <i class="bi bi-camera-video pf-preview-icon" aria-hidden="true"></i>
+                            <span class="pf-preview-name">@(Draft.VideoFileName ?? Draft.VideoUrl)</span>
+                            <button type="button" class="pf-btn pf-btn-ghost pf-btn-sm" @onclick="ClearVideo"><i class="bi bi-x-lg"></i> Remove</button>
+                        }
+                        else
+                        {
+                            <i class="bi bi-camera-video-off pf-preview-icon" aria-hidden="true"></i>
+                            <span class="pf-preview-name">No video uploaded yet</span>
+                            <span class="pf-upload-hint">Upload a video file or provide a video URL</span>
+                        }
+                    </div>
+                </div>
+                <div class="pf-grid2 pf-grid2-media">
+                    <label class="pf-field">
+                        <span>Video URL</span>
+                        <input type="url" placeholder="https://youtube.com/watch?v=..." @bind="Draft.VideoUrl" />
+                        <small>Supports YouTube, Vimeo or a direct video link</small>
+                    </label>
+                    <label class="pf-field">
+                        <span>Duration</span>
+                        <input type="text" value="@Draft.Duration" readonly />
+                        <small>Duration is detected automatically after upload</small>
+                    </label>
+                </div>
+                <span class="pf-label">Video Thumbnail</span>
+                @ImageUpload("Click to upload thumbnail")
+            </section>
+        }
+        else
+        {
+            <section class="pf-card">
+                <h2 class="pf-card-title">Brochure Media</h2>
+                <span class="pf-label">Brochure File &amp; Cover</span>
+                <div class="pf-grid2 pf-grid2-media">
+                    @ImageUpload("Click to upload cover image")
+                    <div class="pf-preview-box">
+                        <span class="pf-preview-title">Cover Preview</span>
+                        @if (Draft.ImageDataUrl is not null)
+                        {
+                            <img src="@Draft.ImageDataUrl" alt="" class="pf-preview-img" />
+                        }
+                        else
+                        {
+                            <i class="bi bi-image pf-preview-icon" aria-hidden="true"></i>
+                            <span class="pf-preview-name">No cover image uploaded yet</span>
+                        }
+                    </div>
+                </div>
+                <span class="pf-label">Brochure PDF</span>
+                <label class="pf-upload">
+                    <InputFile OnChange="OnDocument" accept="application/pdf" />
+                    @if (Draft.DocumentName is not null)
+                    {
+                        <i class="bi bi-file-earmark-pdf-fill pf-upload-icon" aria-hidden="true"></i>
+                        <span class="pf-upload-title">@Draft.DocumentName</span>
+                        <span class="pf-upload-hint">@((Draft.DocumentSize / 1024.0 / 1024.0).ToString("0.0")) MB</span>
+                        <span class="pf-btn pf-btn-outline pf-btn-sm">Change file</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-cloud-arrow-up pf-upload-icon" aria-hidden="true"></i>
+                        <span class="pf-upload-title">Click to upload PDF file</span>
+                        <span class="pf-upload-hint">PDF up to 25 MB</span>
+                        <span class="pf-btn pf-btn-outline pf-btn-sm">Browse Files</span>
+                    }
+                </label>
+            </section>
+        }
+
+        @if (Kind != DigitalLibraryType.Brochures)
+        {
+        <section class="pf-card">
+            <h2 class="pf-card-title">@KindNoun Content</h2>
+            <label class="pf-field">
+                <span>Detailed @(Kind == DigitalLibraryType.Products ? "Product" : KindNoun) Overview</span>
+                <textarea rows="5" placeholder="Full description, background, technical specification" @bind="Draft.Overview"></textarea>
+            </label>
+            <label class="pf-field">
+                <span>Key Features / Benefits</span>
+                <textarea rows="5" placeholder="Bullet-point features or paragraph" @bind="Draft.Features"></textarea>
+            </label>
+            <label class="pf-field">
+                <span>Usage / Application</span>
+                <textarea rows="5" placeholder="Application rates, timing, method.." @bind="Draft.Usage"></textarea>
+            </label>
+        </section>
+        }
+
+        <h2 class="pf-section-heading">Additional Section</h2>
+        @foreach (var sec in Draft.AdditionalSections)
+        {
+            <section class="pf-card pf-card-custom">
+                <div class="pf-custom-head">
+                    <input type="text" class="pf-custom-title" placeholder="Section title" @bind="sec.Title" />
+                    <button type="button" class="pf-icon-btn pf-icon-danger" aria-label="Remove section" @onclick="() => Draft.AdditionalSections.Remove(sec)"><i class="bi bi-trash"></i></button>
+                </div>
+                <textarea rows="4" placeholder="Section content..." @bind="sec.Body"></textarea>
+            </section>
+        }
+        <button type="button" class="pf-add-section" @onclick="() => Draft.AdditionalSections.Add(new CustomSection())"><i class="bi bi-plus-lg"></i> Add Section</button>
+    }
+    else if (_step == 2)
+    {
+        @RelatedPicker("Related Video", "Select AI Videos to display on the detail page.", "Search content...", VideoPool, Draft.Videos, "AI Video", "pf-pill-video", true)
+        @RelatedPicker("Related Brochures", "Select brochures to display on the detail page.", "Search brochures to display on the detail page...", BrochurePool, Draft.Brochures, "Brochure", "pf-pill-brochure", false)
+    }
+    else
+    {
+        <h2 class="pf-section-heading">Detail Page Layout Configuration</h2>
+        <p class="pf-card-sub">Choose which sections appear on the detail page, arrange their order and customise how each one appears.</p>
+
+        <section class="pf-card">
+            <h2 class="pf-card-title">Page Structure &amp; Order</h2>
+            <p class="pf-card-sub">Arrange sections in the order you want them to appear.</p>
+
+            <div class="pf-layout">
+                @foreach (var (sec, index) in Draft.Layout.Select((s, i) => (s, i)))
+                {
+                    <div class="pf-layout-row @(sec.Enabled ? "" : "disabled") @(_dragIndex == index ? "dragging" : "")"
+                         draggable="true"
+                         @ondragstart="() => _dragIndex = index"
+                         @ondragover:preventDefault
+                         @ondrop="() => DropOn(index)"
+                         @ondragend="() => _dragIndex = null">
+                        <span class="pf-layout-handle" aria-hidden="true"><i class="bi bi-grip-vertical"></i></span>
+                        <div class="pf-layout-text">
+                            @if (_editing == sec)
+                            {
+                                <input type="text" class="pf-layout-edit" @bind="sec.Title" @onblur="() => _editing = null" />
+                            }
+                            else
+                            {
+                                <span class="pf-layout-title">@sec.Title</span>
+                            }
+                            <span class="pf-layout-desc">@sec.Description</span>
+                        </div>
+                        <div class="pf-layout-actions">
+                            <button type="button" class="pf-icon-btn" aria-label="Move up" disabled="@(index == 0)" @onclick="() => MoveLayout(index, -1)"><i class="bi bi-chevron-up"></i></button>
+                            <button type="button" class="pf-icon-btn" aria-label="Move down" disabled="@(index == Draft.Layout.Count - 1)" @onclick="() => MoveLayout(index, 1)"><i class="bi bi-chevron-down"></i></button>
+                            <label class="pf-switch" title="@(sec.Enabled ? "Shown" : "Hidden")">
+                                <input type="checkbox" checked="@sec.Enabled" @onchange="e => sec.Enabled = (bool)e.Value!" />
+                                <span></span>
+                            </label>
+                            <button type="button" class="pf-icon-btn pf-icon-danger" aria-label="Remove section" @onclick="() => RemoveLayout(sec)"><i class="bi bi-trash"></i></button>
+                            <button type="button" class="pf-icon-btn pf-icon-edit" aria-label="Rename section" @onclick="() => _editing = sec"><i class="bi bi-pencil"></i></button>
+                            <button type="button" class="pf-icon-btn" aria-label="@(sec.Expanded ? "Collapse" : "Expand")" @onclick="() => sec.Expanded = !sec.Expanded"><i class="bi @(sec.Expanded ? "bi-chevron-down" : "bi-chevron-right")"></i></button>
+                        </div>
+
+                        @if (sec.Expanded)
+                        {
+                            <div class="pf-layout-preview">
+                                @switch (sec.Key)
+                                {
+                                    case "videos":
+                                        @if (Draft.Videos.Ids.Count == 0) { <p class="pf-selected-empty">No videos selected in step 2.</p> }
+                                        <div class="pf-preview-strip">
+                                            @foreach (var v in Draft.Videos.Ids.Take(Draft.Videos.MaxItems).Select(id => VideoPool.First(x => x.Id == id)))
+                                            {
+                                                <div class="pf-preview-card"><img src="@v.Image" alt="" /><span>@v.Title</span><small>@v.Date.ToString("dd MMM yyyy") <span class="pf-pill pf-pill-video">AI Video</span></small></div>
+                                            }
+                                        </div>
+                                        break;
+                                    case "brochures":
+                                        @if (Draft.Brochures.Ids.Count == 0) { <p class="pf-selected-empty">No brochures selected in step 2.</p> }
+                                        <div class="pf-preview-strip">
+                                            @foreach (var b in Draft.Brochures.Ids.Take(Draft.Brochures.MaxItems).Select(id => BrochurePool.First(x => x.Id == id)))
+                                            {
+                                                <div class="pf-preview-card"><img src="@b.Image" alt="" /><span>@b.Title</span><small>@b.Date.ToString("dd MMM yyyy") <span class="pf-pill pf-pill-brochure">Brochure</span></small></div>
+                                            }
+                                        </div>
+                                        break;
+                                    case "hero":
+                                        <div class="pf-preview-hero">
+                                            @if (Draft.ImageDataUrl is not null) { <img src="@Draft.ImageDataUrl" alt="" /> }
+                                            <div><strong>@(string.IsNullOrWhiteSpace(Draft.Title) ? $"{KindNoun} title" : Draft.Title)</strong><p>@(string.IsNullOrWhiteSpace(Draft.ShortDescription) ? "Short description from step 1" : Draft.ShortDescription)</p></div>
+                                        </div>
+                                        break;
+                                    case "player": <p class="pf-preview-text">@(string.IsNullOrWhiteSpace(Draft.Overview) ? "Overview text with the video player." : Draft.Overview)</p> break;
+                                    case "overview": <p class="pf-preview-text">@(string.IsNullOrWhiteSpace(Draft.Overview) ? "Overview text from step 1 appears here." : Draft.Overview)</p> break;
+                                    case "features": <p class="pf-preview-text">@(string.IsNullOrWhiteSpace(Draft.Features) ? "Key features from step 1 appear here." : Draft.Features)</p> break;
+                                    case "usage": <p class="pf-preview-text">@(string.IsNullOrWhiteSpace(Draft.Usage) ? "Usage and application from step 1 appear here." : Draft.Usage)</p> break;
+                                    default: <p class="pf-preview-text">@sec.Description</p> break;
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <button type="button" class="pf-add-section" @onclick="AddLayoutSection"><i class="bi bi-plus-lg"></i> Add Section</button>
+            <p class="pf-note pf-note-tip"><i class="bi bi-info-circle"></i> <strong>TIP</strong> drag and drop sections to reorder, or use the arrows on phones.</p>
+        </section>
+    }
+
+    <ActionBar>
+        <Secondary>
+            <button type="button" class="pf-btn pf-btn-ghost" @onclick="BackToList">Cancel</button>
+            <button type="button" class="pf-btn pf-btn-outline" @onclick="SaveDraft"><i class="bi bi-save"></i> Save as Draft</button>
+        </Secondary>
+        <ChildContent>
+            @if (_step > 1)
+            {
+                <button type="button" class="pf-btn pf-btn-outline" @onclick="() => Go(_step - 1)"><i class="bi bi-arrow-left"></i> Back</button>
+            }
+            <button type="button" class="pf-btn pf-btn-primary" @onclick="Next">@NextLabel <i class="bi bi-arrow-right"></i></button>
+        </ChildContent>
+    </ActionBar>
+</div>
+
+@code {
+    private static readonly string[] StepNames = { "Content & Details", "Related Content", "Page Layout" };
+    private static readonly string[] Categories = { "Fertilizers", "Micronutrients", "Water-soluble fertilizers", "Bio products", "Speciality products" };
+    private static readonly string[] SubCategories = { "Urea", "DAP", "NPK Complexes", "Potash", "Organic", "Others" };
+    private const int PickPageSize = 6;
+
+    [Parameter] public string KindRoute { get; set; } = "products";
+    [SupplyParameterFromQuery(Name = "id")] public int? Id { get; set; }
+
+    private ContentDraft Draft { get; } = new();
+    private DigitalLibraryType Kind => Draft.Kind;
+    private bool IsEdit => Id is not null;
+
+    private string KindNoun => Kind switch { DigitalLibraryType.Videos => "Video", DigitalLibraryType.Brochures => "Brochure", _ => "Product" };
+    private string Heading => (IsEdit ? "Edit " : "Add ") + Kind switch { DigitalLibraryType.Videos => "AI Video Information", DigitalLibraryType.Brochures => "Product Brochure", _ => "Product Information" };
+    private string SubHeading => Kind switch
+    {
+        DigitalLibraryType.Videos => "Create comprehensive AI video information and configure how it appears on the detail page",
+        DigitalLibraryType.Brochures => "Upload a brochure and configure how it appears on the detail page",
+        _ => "Create comprehensive product information and configure how it appears on the detail page"
+    };
+    private string ListUrl => $"/DigitalLibrary/content?type={Kind.ToString().ToLowerInvariant()}";
+
+    private int _step = 1;
+    private string _tagInput = "";
+    private readonly Dictionary<string, string> _queries = new();
+    private readonly Dictionary<string, int> _pages = new();
+    private int? _dragIndex;
+    private LayoutSection? _editing;
+
+    private static readonly List<DigitalLibraryItem> Pool = DigitalLibrarySampleData.Create(30);
+    private static List<DigitalLibraryItem> VideoPool => Pool.Where(i => i.Type == DigitalLibraryType.Videos).ToList();
+    private static List<DigitalLibraryItem> BrochurePool => Pool.Where(i => i.Type == DigitalLibraryType.Brochures).ToList();
+
+    private string NextLabel => _step switch { 1 => "Next: Related Content", 2 => "Next: Page Layout", _ => (IsEdit ? "Save Changes" : "Save & Publish") };
+
+    protected override void OnParametersSet()
+    {
+        var kind = KindRoute.ToLowerInvariant() switch
+        {
+            "videos" or "video" => DigitalLibraryType.Videos,
+            "brochures" or "brochure" => DigitalLibraryType.Brochures,
+            _ => DigitalLibraryType.Products
+        };
+        Draft.SetKind(kind);
+
+        if (Id is int id && Draft.Id != id)
+        {
+            // Sample edit payload until the API exists.
+            var item = Pool.FirstOrDefault(p => p.Id == id) ?? DigitalLibrarySampleData.Create(1)[0];
+            Draft.Id = id;
+            Draft.Title = item.Title;
+            Draft.ShortDescription = item.Description;
+            Draft.Category = Categories[0];
+            Draft.Tags.Clear();
+            Draft.Tags.AddRange(new[] { "DAP", "Fertilizer" });
+            Draft.IsDraft = !item.Published;
+        }
+    }
+
+    // ---------- shared fragments ----------
+    private RenderFragment TagsEditor => __builder =>
+    {
+        <div class="pf-tags">
+            @foreach (var t in Draft.Tags)
+            {
+                <span class="pf-tag">@t <button type="button" aria-label="Remove @t" @onclick="() => Draft.Tags.Remove(t)"><i class="bi bi-x"></i></button></span>
+            }
+            <input type="text" placeholder="@(Draft.Tags.Count == 0 ? "Type a tag and press Enter" : "")" @bind="_tagInput" @bind:event="oninput" @onkeydown="OnTagKey" />
+        </div>
+    };
+
+    private RenderFragment ImageUpload(string title) => __builder =>
+    {
+        <label class="pf-upload">
+            <InputFile OnChange="OnImage" accept="image/png,image/jpeg" />
+            @if (Draft.ImageDataUrl is not null)
+            {
+                <img src="@Draft.ImageDataUrl" alt="" class="pf-upload-preview" />
+                <span class="pf-upload-name">@Draft.ImageName</span>
+                <span class="pf-btn pf-btn-outline pf-btn-sm">Change image</span>
+            }
+            else
+            {
+                <i class="bi bi-cloud-arrow-up pf-upload-icon" aria-hidden="true"></i>
+                <span class="pf-upload-title">@title</span>
+                <span class="pf-upload-hint">PNG, JPG up to 5 MB. Recommended: 1280 x 720 px</span>
+                <span class="pf-btn pf-btn-outline pf-btn-sm">Browse Files</span>
+            }
+        </label>
+    };
+
+    private RenderFragment RelatedPicker(string title, string subtitle, string placeholder, List<DigitalLibraryItem> pool, RelatedSelection sel, string pillText, string pillClass, bool isVideo) => __builder =>
+    {
+        var key = pillText;
+        var query = _queries.GetValueOrDefault(key, "");
+        var page = _pages.GetValueOrDefault(key, 1);
+        var pageCount = PageCount(pool, query);
+
+        <section class="pf-card">
+            <h2 class="pf-card-title">@title</h2>
+            <p class="pf-card-sub">@subtitle</p>
+            <div class="pf-related">
+                <div class="pf-picker">
+                    <div class="pf-search"><i class="bi bi-search"></i><input type="search" placeholder="@placeholder" value="@query" @oninput="e => { _queries[key] = e.Value?.ToString() ?? string.Empty; _pages[key] = 1; }" /></div>
+                    <div class="pf-pick-grid">
+                        @foreach (var v in Page(pool, query, page))
+                        {
+                            var picked = sel.Ids.Contains(v.Id);
+                            <label class="pf-pick @(picked ? "picked" : "")">
+                                <input type="checkbox" checked="@picked" @onchange="e => TogglePick(sel, v.Id, (bool)e.Value!)" />
+                                <img src="@v.Image" alt="" loading="lazy" />
+                                <span class="pf-pick-title">@v.Title</span>
+                                <span class="pf-pick-meta">@v.Date.ToString("dd MMM yyyy") <span class="pf-pill @pillClass">@pillText</span></span>
+                            </label>
+                        }
+                    </div>
+                    <div class="pf-pager">
+                        <span>Items per page <strong>@PickPageSize</strong></span>
+                        <div class="pf-pager-btns">
+                            <button type="button" class="pf-icon-btn" aria-label="Previous" disabled="@(page <= 1)" @onclick="() => _pages[key] = page - 1"><i class="bi bi-chevron-left"></i></button>
+                            @for (var p = 1; p <= pageCount; p++)
+                            {
+                                var pg = p;
+                                <button type="button" class="pf-page @(pg == page ? "active" : "")" @onclick="() => _pages[key] = pg">@pg</button>
+                            }
+                            <button type="button" class="pf-icon-btn" aria-label="Next" disabled="@(page >= pageCount)" @onclick="() => _pages[key] = page + 1"><i class="bi bi-chevron-right"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <aside class="pf-selected">
+                    <div class="pf-selected-head">
+                        <div>
+                            <h3>Selected @(isVideo ? "Video" : "Brochures")</h3>
+                            <span class="pf-pill pf-pill-count">Selected @sel.Ids.Count</span>
+                        </div>
+                        <label class="pf-mini-field"><span>Card View</span><select @bind="sel.ViewMode"><option>Card View</option><option>List View</option></select></label>
+                        <label class="pf-mini-field"><span>Max Item</span><select @bind="sel.MaxItems"><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></label>
+                    </div>
+                    <div class="pf-selected-list">
+                        @if (sel.Ids.Count == 0)
+                        {
+                            <p class="pf-selected-empty">Tick items on the left to add them here.</p>
+                        }
+                        @foreach (var (id, index) in sel.Ids.Select((v, i) => (v, i)))
+                        {
+                            var v = pool.First(x => x.Id == id);
+                            <div class="pf-selected-item">
+                                <img src="@v.Image" alt="" />
+                                <div class="pf-selected-text"><span class="pf-selected-title">@v.Title</span><span class="pf-pill @pillClass">@pillText</span></div>
+                                <div class="pf-selected-actions">
+                                    <button type="button" class="pf-icon-btn" aria-label="Move up" disabled="@(index == 0)" @onclick="() => Move(sel, index, -1)"><i class="bi bi-chevron-up"></i></button>
+                                    <button type="button" class="pf-icon-btn" aria-label="Move down" disabled="@(index == sel.Ids.Count - 1)" @onclick="() => Move(sel, index, 1)"><i class="bi bi-chevron-down"></i></button>
+                                    <button type="button" class="pf-icon-btn pf-icon-danger" aria-label="Remove" @onclick="() => sel.Ids.Remove(id)"><i class="bi bi-x-lg"></i></button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    <p class="pf-note"><i class="bi bi-info-circle"></i> These items will appear on the detail page in the order shown above.</p>
+                </aside>
+            </div>
+        </section>
+    };
+
+    // ---------- navigation ----------
+    private void Go(int step) => _step = Math.Clamp(step, 1, 3);
+
+    private void Next()
+    {
+        if (_step == 1 && string.IsNullOrWhiteSpace(Draft.Title))
+        {
+            Toast.Warning($"Enter a {KindNoun.ToLowerInvariant()} title before continuing.");
+            return;
+        }
+        if (_step < 3) { _step++; return; }
+
+        Draft.IsDraft = false;
+        Toast.Success(IsEdit ? $"{KindNoun} updated." : $"{KindNoun} published.");
+        Nav.NavigateTo(ListUrl);
+    }
+
+    private void SaveDraft()
+    {
+        Draft.IsDraft = true;
+        Toast.Success("Saved as draft.");
+        Nav.NavigateTo(ListUrl + "&status=draft");
+    }
+
+    private void BackToList() => Nav.NavigateTo(ListUrl);
+
+    // ---------- step 1 helpers ----------
+    private void OnTagKey(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "," or "Tab")
+        {
+            var tag = _tagInput.Trim().TrimEnd(',');
+            if (tag.Length > 0 && !Draft.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) Draft.Tags.Add(tag);
+            _tagInput = "";
+        }
+        else if (e.Key == "Backspace" && _tagInput == "" && Draft.Tags.Count > 0)
+        {
+            Draft.Tags.RemoveAt(Draft.Tags.Count - 1);
+        }
+    }
+
+    private async Task OnImage(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file.Size > 5 * 1024 * 1024) { Toast.Error("Image must be 5 MB or smaller."); return; }
+        try
+        {
+            var resized = await file.RequestImageFileAsync("image/jpeg", 1280, 720);
+            using var stream = resized.OpenReadStream(5 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            Draft.ImageDataUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(ms.ToArray())}";
+            Draft.ImageName = file.Name;
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Could not read the image: {ex.Message}");
+        }
+    }
+
+    private void OnVideoFile(InputFileChangeEventArgs e)
+    {
+        // The file is uploaded to the API in the next step of the implementation; for now only the name is kept.
+        if (e.File.Size > 500L * 1024 * 1024) { Toast.Error("Video must be 500 MB or smaller."); return; }
+        Draft.VideoFileName = e.File.Name;
+        Draft.VideoUrl = "";
+        Draft.Duration = "00:00:00";
+        Toast.Info("Video selected. Duration is detected after upload.");
+    }
+
+    private void ClearVideo()
+    {
+        Draft.VideoFileName = null;
+        Draft.VideoUrl = "";
+        Draft.Duration = "00:00:00";
+    }
+
+    private void OnDocument(InputFileChangeEventArgs e)
+    {
+        if (e.File.Size > 25L * 1024 * 1024) { Toast.Error("Brochure must be 25 MB or smaller."); return; }
+        Draft.DocumentName = e.File.Name;
+        Draft.DocumentSize = e.File.Size;
+    }
+
+    // ---------- step 2 helpers ----------
+    private static IEnumerable<DigitalLibraryItem> Filter(List<DigitalLibraryItem> pool, string q)
+        => string.IsNullOrWhiteSpace(q) ? pool : pool.Where(i => i.Title.Contains(q, StringComparison.OrdinalIgnoreCase));
+
+    private static IEnumerable<DigitalLibraryItem> Page(List<DigitalLibraryItem> pool, string q, int page)
+        => Filter(pool, q).Skip((page - 1) * PickPageSize).Take(PickPageSize);
+
+    private static int PageCount(List<DigitalLibraryItem> pool, string q)
+        => Math.Max(1, (int)Math.Ceiling(Filter(pool, q).Count() / (double)PickPageSize));
+
+    private static void TogglePick(RelatedSelection sel, int id, bool on)
+    {
+        if (on) { if (!sel.Ids.Contains(id)) sel.Ids.Add(id); }
+        else sel.Ids.Remove(id);
+    }
+
+    private static void Move(RelatedSelection sel, int index, int delta)
+    {
+        var target = index + delta;
+        if (target < 0 || target >= sel.Ids.Count) return;
+        (sel.Ids[index], sel.Ids[target]) = (sel.Ids[target], sel.Ids[index]);
+    }
+
+    // ---------- step 3 helpers ----------
+    private void MoveLayout(int index, int delta)
+    {
+        var target = index + delta;
+        if (target < 0 || target >= Draft.Layout.Count) return;
+        (Draft.Layout[index], Draft.Layout[target]) = (Draft.Layout[target], Draft.Layout[index]);
+    }
+
+    private void DropOn(int index)
+    {
+        if (_dragIndex is not int from || from == index) return;
+        var item = Draft.Layout[from];
+        Draft.Layout.RemoveAt(from);
+        Draft.Layout.Insert(index, item);
+        _dragIndex = null;
+    }
+
+    private async Task RemoveLayout(LayoutSection sec)
+    {
+        if (!await Toast.ConfirmAsync("Remove section", $"Remove \"{sec.Title}\" from the detail page?", "Remove", danger: true)) return;
+        Draft.Layout.Remove(sec);
+    }
+
+    private void AddLayoutSection()
+    {
+        var sec = new LayoutSection { Key = $"custom-{Guid.NewGuid():N}", Title = "New section", Description = "Custom section", IsCustom = true };
+        Draft.Layout.Add(sec);
+        _editing = sec;
+    }
+}
