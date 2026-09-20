@@ -245,12 +245,33 @@ def sweep_width(args, exe: str, width: int, height: int, routes: list[str], cred
                 row["width"], row["height"] = width, height
                 if not args.no_screenshots:
                     params = {"format": "png"}
+                    grew = False
                     if args.full_page:
-                        h = int(row["metrics"].get("scrollH") or height)
+                        # The app scrolls inside .app-shell / .content-wrap, not the document, so the
+                        # document height is just the viewport. Measure the tallest scroller and grow
+                        # the emulated viewport to it: the inner scroller then shows everything and
+                        # fixed bars sit at the true bottom.
+                        try:
+                            h = int(cdp.evaluate(
+                                "Math.max(...[document.scrollingElement, document.body, document.documentElement,"
+                                " document.querySelector('.app-shell'), document.querySelector('.content-wrap'),"
+                                " document.querySelector('.main-content')].filter(Boolean).map(e => e.scrollHeight))"))
+                        except Exception:
+                            h = int(row["metrics"].get("scrollH") or height)
+                        h = max(height, min(h, 16000))
+                        if h > height:
+                            cdp.send("Emulation.setDeviceMetricsOverride", {
+                                "width": width, "height": h, "deviceScaleFactor": 1, "mobile": width < 768})
+                            cdp.drain(0.6)
+                            grew = True
                         params.update({"captureBeyondViewport": True,
-                                       "clip": {"x": 0, "y": 0, "width": width, "height": min(h, 16000), "scale": 1}})
+                                       "clip": {"x": 0, "y": 0, "width": width, "height": h, "scale": 1}})
                     try:
                         data = cdp.send("Page.captureScreenshot", params)["data"]
+                        if grew:
+                            cdp.send("Emulation.setDeviceMetricsOverride", {
+                                "width": width, "height": height, "deviceScaleFactor": 1, "mobile": width < 768})
+                            cdp.drain(0.3)
                         shot = os.path.join("shots", label, f"{i:03d}_{core.slug(route)}.png")
                         with open(os.path.join(args.out, shot), "wb") as f:
                             f.write(base64.b64decode(data))
