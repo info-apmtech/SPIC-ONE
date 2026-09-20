@@ -85,3 +85,26 @@ Products, the cross-module dashboards.
   `PagePermission` gains a `DigitalLibrary` key (API + permission catalogue change).
 - Figma automation: the file loads in the browser pane but frames render as low-resolution
   tiles, so designs are taken from full-size screenshots supplied by the product owner.
+
+## Phone bottom menu (approved 2026-09-20)
+
+Five positions: Home | three role destinations | More. "Ask SPIC AI" (`/DigitalLibrary/chat`)
+and "Alerts" (`/Alerts`) sit in the phone/tablet top bar for every role (sparkle and bell) and
+in the More sheet, so they take no bottom slot. Source of truth: `Services/ShellNavigation.cs`.
+
+| Role | Home | Slot 2 | Slot 3 | Slot 4 |
+|---|---|---|---|---|
+| Dealer | Dealer Dashboard | Welfare Schemes | Guest House | My Bookings |
+| MO / MDO / JMDO | Dashboard | My Activities (`/Activities`) | Dealers (Sub Dealer Master) | Farmers (`/Farmers`) |
+| RM / RMD | Dashboard | Dealers | RMD Validation Queue | Guest House |
+| SMD / SMM | Dashboard | SMM Approvals | Dealers | Guest House |
+| Admin / CorporateAdmin | Dashboard | AVP Approvals | Guest House | Digital Library |
+| Director / AVP | Dashboard | AVP Approvals | Guest House | next accessible page |
+| SpecialAdmin | Logistics | Logistics Master | Logistics Report | User Profile |
+
+Hub pages (`/Activities`, `/Farmers`, `/Alerts`) only link to pages the user can already open
+(every tile is filtered by `LoginState.CanAccess`), so `PageGuard` opens them to every signed-in
+user with a designation. My Activities holds the SAS field-work placeholder, the approval queues,
+guest house booking and reports; Farmers holds the Farmer Portal placeholder plus Ask SPIC AI and
+the library content; Alerts lists every approval queue and booking page until push notifications
+arrive with the store release. The desktop sidebar (live) is unchanged.

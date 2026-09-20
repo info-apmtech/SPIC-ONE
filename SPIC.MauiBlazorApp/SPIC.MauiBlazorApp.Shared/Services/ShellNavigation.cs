@@ -61,6 +61,9 @@ public static class ShellNavigation
     // Convenience so the rules read like NavMenu.razor.
     private static bool IsAdminOrCorporate(LoginState s) => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
 
+    // Field staff: their phone bar is built around activities, dealer work and farmer work (product owner, 2026-09-20).
+    private static bool IsFieldStaff(LoginState s) => s.UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
+
     // ---------------------------------------------------------------------------------------------
     // CANDIDATE LIST (ordered). Order matters twice:
     //   1. It is the fall-through order used by GetPhoneTabs when a role-priority item is not
@@ -83,6 +86,28 @@ public static class ShellNavigation
             ShortLabel = "Library",
             // New module without a PagePermission key yet: admins only (mirrors NavMenu).
             Rule = s => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+        },
+
+        // ---- shell hubs (phone destinations; PageGuard opens them to every signed-in user with a
+        //      designation because each hub only LINKS to pages the user can already open) ----
+        new("Activities", "My Activities", "bi-clipboard2-pulse-fill", "/Activities", "Activities")
+        {
+            ShortLabel = "Activities", Rule = IsFieldStaff
+        },
+        new("Farmers", "Farmers", "bi-flower2", "/Farmers", "Farmers")
+        {
+            Rule = IsFieldStaff
+        },
+        new("Alerts", "Alerts", "bi-bell-fill", "/Alerts", "Alerts")
+        {
+            // Also reachable from the bell in the phone/tablet top bar.
+            Rule = s => s.IsLoggedIn
+        },
+        new("AskAI", "Ask SPIC AI", "bi-stars", "/DigitalLibrary/chat", "DigitalLibrary")
+        {
+            // Also reachable from the sparkle icon in the phone/tablet top bar. The chat is open to
+            // every role; the rest of the Digital Library stays behind CanAccess("DigitalLibrary").
+            ShortLabel = "Ask AI", Rule = s => s.IsLoggedIn
         },
 
         // ---- role-specific quick destinations (pages reachable today but not listed in NavMenu) ----
@@ -227,20 +252,25 @@ public static class ShellNavigation
     // ---------------------------------------------------------------------------------------------
     // PER-ROLE PRIORITY for the phone tab bar. Keys reference Candidates[].Key. Missing / inaccessible
     // entries fall through to the next accessible Candidate, so there are always up to 4 tabs.
-    // (Default mapping - the product owner will refine it later; edit ONLY this table to do so.)
+    //
+    // Approved by the product owner on 2026-09-20: the bar is Home | three role destinations | More.
+    // "Ask SPIC AI" and "Alerts" live in the phone/tablet TOP bar (sparkle + bell) for every role, so
+    // they do not take a bottom slot; they are also listed in the More sheet. Field staff get
+    // Activities (SAS field work + approvals + guest house), Dealers and Farmers; every other staff
+    // role keeps Guest House (room booking) on the bar. Edit ONLY this table to change the bar.
     // ---------------------------------------------------------------------------------------------
     private static readonly string[] DealerPriority = { "SDWADashboard", "WelfareSchemes", "GuestHouse", "MyBookings" };
-    private static readonly string[] HqPriority = { "Dashboard", "SubDealerList", "SchemeApproval", "ReportsCenter" };          // MO / MDO / JMDO
-    private static readonly string[] RegionPriority = { "Dashboard", "SubDealerList", "RMDValidationQueue", "ReportsCenter" };  // RM / RMD
-    private static readonly string[] StatePriority = { "Dashboard", "SMMApprovals", "SubDealerList", "ReportsCenter" };         // SMD / SMM
-    private static readonly string[] AdminPriority = { "Dashboard", "AVPApprovals", "ReportsCenter", "Designation" };            // Admin / CorporateAdmin / Director / AVP
+    private static readonly string[] FieldStaffPriority = { "Dashboard", "Activities", "SubDealerList", "Farmers" };            // MO / MDO / JMDO
+    private static readonly string[] RegionPriority = { "Dashboard", "SubDealerList", "RMDValidationQueue", "GuestHouse" };    // RM / RMD
+    private static readonly string[] StatePriority = { "Dashboard", "SMMApprovals", "SubDealerList", "GuestHouse" };           // SMD / SMM
+    private static readonly string[] AdminPriority = { "Dashboard", "AVPApprovals", "GuestHouse", "DigitalLibrary" };          // Admin / CorporateAdmin / Director / AVP (Library falls through for Director / AVP)
     private static readonly string[] SpecialAdminPriority = { "Logistics", "LogisticsMaster", "LogisticsReport", "UserProfile" };
-    private static readonly string[] DefaultPriority = HqPriority;
+    private static readonly string[] DefaultPriority = FieldStaffPriority;
 
     public static IReadOnlyList<string> GetRolePriority(AppRole? role) => role switch
     {
         AppRole.Dealer => DealerPriority,
-        AppRole.MO or AppRole.MDO or AppRole.JMDO => HqPriority,
+        AppRole.MO or AppRole.MDO or AppRole.JMDO => FieldStaffPriority,
         AppRole.RM or AppRole.RMD => RegionPriority,
         AppRole.SMD or AppRole.SMM => StatePriority,
         AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP => AdminPriority,

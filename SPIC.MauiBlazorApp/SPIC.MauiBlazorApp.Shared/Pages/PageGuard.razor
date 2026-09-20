@@ -18,6 +18,17 @@
         "Welcome"
     };
 
+    // Shell hub pages (phone tab bar / top bar destinations). Each hub only LINKS to pages the
+    // user can already open (every link is filtered by LoginState.CanAccess), so they are open to
+    // every signed-in user who has a designation. "/DigitalLibrary/chat" (Ask SPIC AI) is opened
+    // the same way below; the rest of the Digital Library stays behind CanAccess("DigitalLibrary").
+    private static readonly HashSet<string> _shellHubs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Activities",
+        "Farmers",
+        "Alerts"
+    };
+
     // Generic identity rule: a dynamically registered page's ApplicationPage.Key
     // must equal its URL's FIRST path segment (e.g. page "/TestReport" has Key
     // "TestReport"). The same generic check used by every legacy page therefore
@@ -70,9 +81,9 @@
             .TrimEnd('/');
 
         // Match on the FIRST path segment only, so routes WITH parameters
-        var firstSegment = path
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault() ?? "";
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var firstSegment = segments.FirstOrDefault() ?? "";
+        var secondSegment = segments.Skip(1).FirstOrDefault() ?? "";
 
         // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
         // but must NEVER reach the SchemeApproval page.
@@ -126,6 +137,12 @@
         }
 
         if (_alwaysOpen.Contains(firstSegment)) return;
+        if (_shellHubs.Contains(firstSegment)) return;
+        if (firstSegment.Equals("DigitalLibrary", StringComparison.OrdinalIgnoreCase)
+            && secondSegment.Equals("chat", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
 
         // ApprovalDetail (and its legacy MOApproval alias) is a dedicated
         // full-page route for approval details shared by all roles;

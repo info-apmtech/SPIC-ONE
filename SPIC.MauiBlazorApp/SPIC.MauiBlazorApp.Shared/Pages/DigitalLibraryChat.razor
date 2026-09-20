@@ -33,10 +33,15 @@
             <button type="button" class="ch-group-head" @onclick="() => _menuOpen = !_menuOpen">Menu <i class="bi @(_menuOpen ? "bi-chevron-up" : "bi-chevron-down")"></i></button>
             @if (_menuOpen)
             {
+                @* Ask SPIC AI is open to every signed-in user; the rest of the library
+                   stays gated by the DigitalLibrary permission. *@
                 <a class="ch-menu-item active" href="DigitalLibrary/chat"><i class="bi bi-robot"></i> Ask SPIC AI</a>
-                <a class="ch-menu-item" href="DigitalLibrary/content?type=videos"><i class="bi bi-camera-video"></i> AI Videos</a>
-                <a class="ch-menu-item" href="DigitalLibrary/content?type=products"><i class="bi bi-clipboard2-data"></i> Product Information</a>
-                <a class="ch-menu-item" href="DigitalLibrary/content?type=brochures"><i class="bi bi-journal-bookmark"></i> Product Brochures</a>
+                @if (CanBrowseLibrary)
+                {
+                    <a class="ch-menu-item" href="DigitalLibrary/content?type=videos"><i class="bi bi-camera-video"></i> AI Videos</a>
+                    <a class="ch-menu-item" href="DigitalLibrary/content?type=products"><i class="bi bi-clipboard2-data"></i> Product Information</a>
+                    <a class="ch-menu-item" href="DigitalLibrary/content?type=brochures"><i class="bi bi-journal-bookmark"></i> Product Brochures</a>
+                }
             }
         </div>
 
@@ -97,7 +102,15 @@
                                         <div class="ch-sources">
                                             @foreach (var src in m.Sources)
                                             {
-                                                <a class="ch-source" href="@($"DigitalLibrary/view/{src.Id}")"><i class="bi @(src.Type == DigitalLibraryType.Videos ? "bi-camera-video" : src.Type == DigitalLibraryType.Brochures ? "bi-file-earmark-pdf" : "bi-box-seam")"></i> @src.Title</a>
+                                                @* Only library users can open the item page; everyone else sees the title as plain text. *@
+                                                @if (CanBrowseLibrary)
+                                                {
+                                                    <a class="ch-source" href="@($"DigitalLibrary/view/{src.Id}")"><i class="bi @SourceIcon(src)"></i> @src.Title</a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="ch-source ch-source-static"><i class="bi @SourceIcon(src)"></i> @src.Title</span>
+                                                }
                                             }
                                         </div>
                                     }
@@ -149,6 +162,16 @@
     [Parameter] public int? ConversationId { get; set; }
     [SupplyParameterFromQuery(Name = "q")] public string? InitialQuestion { get; set; }
     [SupplyParameterFromQuery(Name = "about")] public int? AboutId { get; set; }
+
+    // "Ask SPIC AI" is reachable by every signed-in user, so this page must not offer
+    // links into the rest of the Digital Library (list, content, item pages) unless the
+    // user can actually open them. Admin/CorporateAdmin bypass CanAccess.
+    private bool CanBrowseLibrary => LoginState.CanAccess("DigitalLibrary");
+
+    private static string SourceIcon(DigitalLibraryItem src) =>
+        src.Type == DigitalLibraryType.Videos ? "bi-camera-video"
+        : src.Type == DigitalLibraryType.Brochures ? "bi-file-earmark-pdf"
+        : "bi-box-seam";
 
     private sealed record Suggestion(string Icon, string Title, string Description, string Prompt);
     private static readonly Suggestion[] Suggestions =

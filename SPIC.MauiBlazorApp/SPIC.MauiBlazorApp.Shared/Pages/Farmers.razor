@@ -1,0 +1,77 @@
+@page "/Farmers"
+@using SPIC.Core.Entities
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+@*
+    "Farmers" hub - a phone tab destination for farmer-facing work. Today it points at
+    the Digital Library (the product knowledge a field officer needs in front of a
+    farmer); the Farmer Portal itself is announced by the notice at the top.
+    Pure navigation: no API calls, no writes. Tiles are filtered through LoginState.
+*@
+
+<div class="hub-page">
+
+    <PageHeader Title="Farmers"
+                Subtitle="Farmer-facing work and product knowledge"
+                ShowBack="false" />
+
+    <HubNotice Icon="bi-people"
+               Title="Farmer Portal is on its way"
+               Message="Everything you do with a farmer will be handled here, from the first visit to the scheme they join."
+               Points="@FarmerPortalPoints"
+               CssClass="hub-page-notice" />
+
+    @{
+        var helpNow = Visible(HelpTiles);
+    }
+
+    @if (helpNow.Count > 0)
+    {
+        <HubSection Title="Help a farmer now">
+            @foreach (var tile in helpNow)
+            {
+                <HubTile @key="tile.Key" Icon="@tile.Icon" Label="@tile.Label" Hint="@tile.Hint" Href="@tile.Href" />
+            }
+        </HubSection>
+    }
+
+</div>
+
+@code {
+    private sealed record HubLink(
+        string Key,
+        string Label,
+        string Hint,
+        string Icon,
+        string Href,
+        Func<LoginState, bool> Rule);
+
+    private static readonly string[] FarmerPortalPoints =
+    {
+        "Farmer registration", "Crop advisory", "Scheme enrolment", "Meeting records"
+    };
+
+    private static readonly HubLink[] HelpTiles =
+    {
+        new("AskSpicAi", "Ask SPIC AI", "Answers about products, dosage and usage",
+            "bi-stars", "/DigitalLibrary/chat",
+            s => s.IsLoggedIn),
+
+        new("Products", "Product Information", "Specifications and technical details",
+            "bi-clipboard2-data", "/DigitalLibrary/content?type=products",
+            s => s.CanAccess("DigitalLibrary")),
+
+        new("Brochures", "Product Brochures", "Official brochures, datasheets and catalogues",
+            "bi-journal-bookmark", "/DigitalLibrary/content?type=brochures",
+            s => s.CanAccess("DigitalLibrary")),
+
+        new("Videos", "AI Videos", "Short videos explaining products and practices",
+            "bi-camera-video", "/DigitalLibrary/content?type=videos",
+            s => s.CanAccess("DigitalLibrary")),
+    };
+
+    private List<HubLink> Visible(HubLink[] tiles) =>
+        LoginState.IsLoggedIn
+            ? tiles.Where(t => t.Rule(LoginState)).ToList()
+            : new List<HubLink>();
+}
