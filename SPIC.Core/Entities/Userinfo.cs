@@ -62,7 +62,9 @@ namespace SPIC.Core.Entities
         Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration, SubDealerList , SchemeApproval,
         SubDealerEmployeeMaster,SDWA,SDWAAdmin,GuestHouse,GuestHouseBooking,Rooms,RoomDetails,GuestDetails,Payment, MyBookings,BookingPreview,BookingDetails,FrontOffice,GenerateBill,BillList,LogisticsReport, DealerStateSummary,
         // Appended at the END on purpose: ApplicationPage seed ids are enum-index based (see AppDbContext).
-        [PageModule("Digital Library")] DigitalLibrary
+        [PageModule("Digital Library")] DigitalLibrary,
+        [PageModule("SAS")] SampleCollection,
+        [PageModule("SAS")] ConsignmentHistory
 
     }
 }

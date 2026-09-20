@@ -41,6 +41,7 @@ namespace SPIC.MauiBlazorApp
 			builder.Services.AddScoped<GuestHouseBookingState>();
 			builder.Services.AddScoped<DigitalLibraryApi>();
 			builder.Services.AddScoped<CommunityApi>();
+			builder.Services.AddScoped<SasApi>();
 
 			// ADD THIS
 			builder.Services.AddSingleton(new PlatformService

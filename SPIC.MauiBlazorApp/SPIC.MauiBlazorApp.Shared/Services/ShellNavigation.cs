@@ -97,6 +97,16 @@ public static class ShellNavigation
             Rule = s => s.IsLoggedIn
         },
 
+        // ---- SAS portal (page-permission gated; write actions are checked inside the pages) ----
+        new("SampleCollection", "Sample Collection", "bi-droplet-half", "/SampleCollection", nameof(PagePermission.SampleCollection))
+        {
+            ShortLabel = "Samples", Group = "SAS Portal"
+        },
+        new("ConsignmentHistory", "Consignment History", "bi-box-seam", "/ConsignmentHistory", nameof(PagePermission.ConsignmentHistory))
+        {
+            ShortLabel = "Consignments", Group = "SAS Portal"
+        },
+
         // ---- shell hubs (phone destinations; PageGuard opens them to every signed-in user with a
         //      designation because each hub only LINKS to pages the user can already open) ----
         new("Activities", "My Activities", "bi-clipboard2-pulse-fill", "/Activities", "Activities")

@@ -163,7 +163,8 @@ builder.Services.AddAuthentication(options =>
                  path.StartsWithSegments("/api/WelfareSchemeApproval/document") ||
                  path.StartsWithSegments("/api/GuestHouseBooking/image") ||
                  path.StartsWithSegments("/api/Library/file") ||
-                 path.StartsWithSegments("/api/Community/file")))
+                 path.StartsWithSegments("/api/Community/file") ||
+                 path.StartsWithSegments("/api/Sas/file")))
             {
                 context.Token = accessToken;
             }

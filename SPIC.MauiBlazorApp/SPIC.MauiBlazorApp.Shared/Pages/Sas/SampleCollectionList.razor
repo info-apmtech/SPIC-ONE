@@ -1,0 +1,668 @@
+@page "/SampleCollection"
+@using System.Text
+@using ClosedXML.Excel
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject NavigationManager Nav
+@inject SasApi Api
+@inject ToastService Toast
+@inject FileDownloadService Downloads
+@inject IJSRuntime JS
+@implements IDisposable
+
+@*
+    Sample Collection list (Figma frame 6). Five stat cards, a collapsible filter card, five
+    status quick-filter tiles and the collection table.
+
+    Every control that changes what the list shows writes to the URL query with replace:true
+    (status, paymentType, paymentStatus, location, from, to, q, page, size) exactly like
+    CommunityDiscussions.razor, so back / refresh / share all agree. Filtering, sorting and
+    paging are done by the API: the query object goes straight to GET api/Sas/collections.
+
+    Phone (<= 767.98px): the table becomes cards, the filter card starts collapsed and the
+    status tiles scroll sideways.
+*@
+
+<div class="sas-page">
+
+    <PageHeader Title="Sample Collection" Subtitle="Manage and track all your samples">
+        <Actions>
+            <button type="button" class="sas-btn sas-btn-outline" @onclick="RefreshAsync">
+                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
+                <span class="sas-btn-text">Refresh Data</span>
+            </button>
+            <button type="button" class="sas-btn sas-btn-outline" @onclick="ExportExcelAsync" disabled="@(Items.Count == 0)">
+                <i class="bi bi-file-earmark-excel" aria-hidden="true"></i>
+                <span class="sas-btn-text">Excel</span>
+            </button>
+            <button type="button" class="sas-btn sas-btn-outline" @onclick="ExportPdfAsync" disabled="@(Items.Count == 0)">
+                <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
+                <span class="sas-btn-text">PDF</span>
+            </button>
+            @if (Api.CanWrite)
+            {
+                <a class="sas-btn sas-btn-primary" href="/SampleCollection/new">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> New Sample Collection
+                </a>
+            }
+        </Actions>
+    </PageHeader>
+
+    <!-- ---------- stat cards ---------- -->
+    <div class="sas-stats">
+        <div class="sas-stat">
+            <span class="sas-stat-label">Total Samples</span>
+            <span class="sas-stat-value">@Stat(_stats?.Total)</span>
+            <span class="sas-stat-hint">Total Number of samples collected</span>
+            <span class="sas-stat-icon sas-ic-green"><i class="bi bi-eyedropper" aria-hidden="true"></i></span>
+        </div>
+        <div class="sas-stat">
+            <span class="sas-stat-label">Free Samples</span>
+            <span class="sas-stat-value">@Stat(_stats?.Free)</span>
+            <span class="sas-stat-hint">Count of Free Samples</span>
+            <span class="sas-stat-icon sas-ic-green"><i class="bi bi-gift" aria-hidden="true"></i></span>
+        </div>
+        <div class="sas-stat">
+            <span class="sas-stat-label">Paid Samples</span>
+            <span class="sas-stat-value">@Stat(_stats?.Paid)</span>
+            <span class="sas-stat-hint">Count of Paid Samples</span>
+            <span class="sas-stat-icon sas-ic-blue"><i class="bi bi-receipt" aria-hidden="true"></i></span>
+        </div>
+        <div class="sas-stat">
+            <span class="sas-stat-label">Lab Level</span>
+            <span class="sas-stat-value">@Stat(_stats?.LabLevel)</span>
+            <span class="sas-stat-hint">No of Samples Selected for lab level</span>
+            <span class="sas-stat-icon sas-ic-violet"><i class="bi bi-thermometer-half" aria-hidden="true"></i></span>
+        </div>
+        <div class="sas-stat">
+            <span class="sas-stat-label">Ready to Submit</span>
+            <span class="sas-stat-value">@Stat(_stats?.ReadyToSubmit)</span>
+            <span class="sas-stat-hint">Samples ready to submit</span>
+            <span class="sas-stat-icon sas-ic-amber"><i class="bi bi-clock-history" aria-hidden="true"></i></span>
+        </div>
+    </div>
+
+    <!-- ---------- filters ---------- -->
+    <section class="sas-filters @(_filtersToggled ? "is-toggled" : "")">
+        <button type="button" class="sas-filters-head"
+                aria-controls="sas-filter-body" aria-expanded="@(!_filtersToggled)"
+                @onclick="() => _filtersToggled = !_filtersToggled">
+            <span class="sas-filters-title"><i class="bi bi-funnel" aria-hidden="true"></i> Filters</span>
+            <i class="bi bi-chevron-down sas-filters-chevron" aria-hidden="true"></i>
+        </button>
+
+        <div class="sas-filter-body" id="sas-filter-body">
+            <div class="sas-field sas-field--dates">
+                <label class="sas-label" for="sas-from">Date Range</label>
+                <div class="sas-dates">
+                    <input id="sas-from" class="sas-input" type="date" aria-label="From date"
+                           value="@_from" @onchange="e => _from = e.Value?.ToString() ?? string.Empty" />
+                    <span class="sas-dates-sep">to</span>
+                    <input class="sas-input" type="date" aria-label="To date"
+                           value="@_to" @onchange="e => _to = e.Value?.ToString() ?? string.Empty" />
+                </div>
+            </div>
+
+            <div class="sas-field">
+                <label class="sas-label" for="sas-location">Location</label>
+                <select id="sas-location" class="sas-input" @bind="_location">
+                    <option value="">All Locations</option>
+                    @foreach (var name in LocationOptions)
+                    {
+                        <option value="@name">@name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="sas-field">
+                <label class="sas-label" for="sas-paytype">Payment Type</label>
+                <select id="sas-paytype" class="sas-input" @bind="_paymentType">
+                    <option value="">All Types</option>
+                    <option value="@((int)SamplePaymentType.Free)">Free</option>
+                    <option value="@((int)SamplePaymentType.Paid)">Paid</option>
+                </select>
+            </div>
+
+            <div class="sas-field">
+                <label class="sas-label" for="sas-paystatus">Payment Status</label>
+                <select id="sas-paystatus" class="sas-input" @bind="_paymentStatus">
+                    <option value="">All Status</option>
+                    @foreach (var (value, label) in SasLabels.PaymentStatusOptions)
+                    {
+                        <option value="@((int)value)">@label</option>
+                    }
+                </select>
+            </div>
+
+            <div class="sas-field">
+                <label class="sas-label" for="sas-priority">Priority Type</label>
+                @* No priority field exists in the SAS contract yet; shown disabled so the
+                   Figma layout stays intact without promising a filter that cannot work. *@
+                <select id="sas-priority" class="sas-input" disabled
+                        title="Coming soon" aria-describedby="sas-priority-note">
+                    <option>All priority</option>
+                </select>
+                <span class="sas-field-note" id="sas-priority-note">Coming soon</span>
+            </div>
+
+            <div class="sas-field">
+                <label class="sas-label" for="sas-status">Status</label>
+                <select id="sas-status" class="sas-input" @bind="_status">
+                    <option value="">All Status</option>
+                    @foreach (var (value, label) in SasLabels.StatusOptions)
+                    {
+                        <option value="@((int)value)">@label</option>
+                    }
+                </select>
+            </div>
+
+            <div class="sas-filter-actions">
+                <button type="button" class="sas-btn sas-btn-outline" @onclick="ClearFilters">
+                    <span aria-hidden="true">&times;</span> Clear All
+                </button>
+                <button type="button" class="sas-btn sas-btn-blue" @onclick="ApplyFilters">
+                    <i class="bi bi-funnel" aria-hidden="true"></i> Apply Filters
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ---------- status tiles (quick filters) ---------- -->
+    <div class="sas-tiles" role="group" aria-label="Filter by status">
+        @foreach (var tile in Tiles)
+        {
+            <button type="button"
+                    class="sas-tile sas-tile--@tile.Tone @(_aStatus == (int)tile.Status ? "is-active" : "")"
+                    aria-pressed="@(_aStatus == (int)tile.Status)"
+                    @onclick="() => ToggleStatus(tile.Status)">
+                <span class="sas-tile-label">@tile.Label</span>
+                <span class="sas-tile-value">@Stat(tile.Count(_stats))</span>
+                <span class="sas-tile-hint">@tile.Hint</span>
+                <span class="sas-tile-icon"><i class="bi @tile.Icon" aria-hidden="true"></i></span>
+            </button>
+        }
+    </div>
+
+    <!-- ---------- list ---------- -->
+    <section class="sas-list-card">
+        <div class="sas-list-head">
+            <h2 class="sas-list-title">Sample Collection List</h2>
+            <div class="sas-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" placeholder="Search collections..." aria-label="Search collections"
+                       value="@Query" @onchange="e => SetQuery(e.Value?.ToString())" />
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="table" Rows="6" />
+        }
+        else if (_page is null)
+        {
+            <EmptyState Icon="bi-wifi-off" Title="Collections could not be loaded"
+                        Message="The sample service did not answer. Please try again.">
+                <button type="button" class="sas-btn sas-btn-outline" @onclick="RefreshAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (Items.Count == 0)
+        {
+            <EmptyState Icon="bi-eyedropper" Title="No sample collections found"
+                        Message="Clear the filters or start a new collection.">
+                <button type="button" class="sas-btn sas-btn-outline" @onclick="ClearFilters">Clear filters</button>
+            </EmptyState>
+        }
+        else
+        {
+            <!-- desktop / tablet table -->
+            <div class="sas-table-wrap">
+                <table class="sas-table">
+                    <thead>
+                        <tr>
+                            <th>Collection ID</th>
+                            <th>Farmer Name</th>
+                            <th>Payment Type</th>
+                            <th>Farmer Location</th>
+                            <th>Sample Type</th>
+                            <th>Amount's</th>
+                            <th>Collection Date &amp; Time</th>
+                            <th>Status</th>
+                            <th class="sas-th-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Items)
+                        {
+                            <tr @key="row.Id">
+                                <td class="sas-td-code">@row.Code</td>
+                                <td>@FarmerText(row)</td>
+                                <td><span class="@SasLabels.PaymentTypePillClass(row.PaymentType)">@SasLabels.PaymentTypeName(row.PaymentType)</span></td>
+                                <td>@LocationText(row)</td>
+                                <td>@SampleTypeText(row)</td>
+                                <td>
+                                    @if (row.PaymentType == SamplePaymentType.Free)
+                                    {
+                                        <div class="sas-amount">N/A</div>
+                                        <div class="sas-subline">No Payment Require</div>
+                                    }
+                                    else
+                                    {
+                                        <div><span class="@SasLabels.PaymentStatusPillClass(row.PaymentStatus)">@PaymentStatusText(row)</span></div>
+                                        <div class="sas-subline">@AmountSubLine(row)</div>
+                                    }
+                                </td>
+                                <td>
+                                    <div>@SasLabels.DateOnly(row.CollectionDate)</div>
+                                    <div class="sas-subline">@SasLabels.TimeOnly(row.CollectionDate)</div>
+                                </td>
+                                <td>
+                                    <div><span class="@SasLabels.StatusPillClass(row.Status)">@SasLabels.Status(row.Status)</span></div>
+                                    <div class="sas-subline">@SasLabels.StatusHint(row.Status)</div>
+                                </td>
+                                <td class="sas-td-action">
+                                    <a class="sas-eye" href="@($"/SampleCollection/view/{row.Id}")"
+                                       aria-label="@($"View {row.Code}")" title="View">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- phone cards -->
+            <div class="sas-cards">
+                @foreach (var row in Items)
+                {
+                    <a class="sas-card" @key="row.Id" href="@($"/SampleCollection/view/{row.Id}")">
+                        <div class="sas-card-top">
+                            <span class="sas-card-code">@row.Code</span>
+                            <span class="@SasLabels.StatusPillClass(row.Status)">@SasLabels.Status(row.Status)</span>
+                        </div>
+                        <div class="sas-card-line">
+                            <i class="bi bi-person" aria-hidden="true"></i> @FarmerText(row)
+                            <span class="sas-card-dot">&middot;</span> @LocationText(row)
+                        </div>
+                        <div class="sas-card-line">
+                            <span class="@SasLabels.PaymentTypePillClass(row.PaymentType)">@SasLabels.PaymentTypeName(row.PaymentType)</span>
+                            <span class="sas-card-type">@SampleTypeText(row)</span>
+                            <span class="sas-card-amount">
+                                @(row.PaymentType == SamplePaymentType.Free ? "N/A" : SasLabels.Money(row.TotalAmount))
+                            </span>
+                        </div>
+                        <div class="sas-card-foot">@SasLabels.DateTimeText(row.CollectionDate)</div>
+                    </a>
+                }
+            </div>
+
+            <div class="sas-foot">
+                <label class="sas-perpage">
+                    <span>Items Per Page</span>
+                    <select class="sas-input" aria-label="Items per page" value="@PageSize" @onchange="e => SetSize(e.Value?.ToString())">
+                        <option value="16">16</option>
+                        <option value="32">32</option>
+                        <option value="64">64</option>
+                    </select>
+                </label>
+
+                <nav class="sas-pager sas-desk-only" aria-label="Pagination">
+                    <button type="button" class="sas-page-btn" aria-label="Previous page"
+                            disabled="@(Page <= 1)" @onclick="() => GoToPage(Page - 1)">&lsaquo;</button>
+
+                    @foreach (var n in PageNumbers)
+                    {
+                        if (n == 0)
+                        {
+                            <span class="sas-page-gap" aria-hidden="true">..</span>
+                        }
+                        else
+                        {
+                            <button type="button" class="sas-page-btn @(n == Page ? "active" : "")"
+                                    aria-current="@(n == Page ? "page" : null)"
+                                    @onclick="() => GoToPage(n)">@n</button>
+                        }
+                    }
+
+                    <button type="button" class="sas-page-btn" aria-label="Next page"
+                            disabled="@(Page >= TotalPages)" @onclick="() => GoToPage(Page + 1)">&rsaquo;</button>
+                </nav>
+
+                <nav class="sas-pager-phone" aria-label="Pagination">
+                    <button type="button" class="sas-page-btn" aria-label="Previous page"
+                            disabled="@(Page <= 1)" @onclick="() => GoToPage(Page - 1)">&lsaquo;</button>
+                    <span class="sas-page-of">Page @Page of @TotalPages</span>
+                    <button type="button" class="sas-page-btn" aria-label="Next page"
+                            disabled="@(Page >= TotalPages)" @onclick="() => GoToPage(Page + 1)">&rsaquo;</button>
+                </nav>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    // ---- status tiles ----
+    private sealed record Tile(SampleCollectionStatus Status, string Label, string Hint, string Icon,
+        string Tone, Func<SampleCollectionStatsDto?, int?> Count);
+
+    private static readonly Tile[] Tiles =
+    {
+        new(SampleCollectionStatus.Completed, "Completed", "Completed Sample Collection", "bi-patch-check", "green", s => s?.Completed),
+        new(SampleCollectionStatus.PendingPayment, "Pending Payment", "Awaiting Payment", "bi-cash-coin", "peach", s => s?.PendingPayment),
+        new(SampleCollectionStatus.PendingApproval, "Pending Approval", "Awaiting Approval", "bi-hourglass-split", "amber", s => s?.PendingApproval),
+        new(SampleCollectionStatus.ReadyForConsignment, "Approval Payment", "Ready for Consignment", "bi-box-seam", "blue", s => s?.ApprovedPayment),
+        new(SampleCollectionStatus.Draft, "Draft", "Pending Validation", "bi-file-earmark-text", "grey", s => s?.Draft),
+    };
+
+    // ---- query state ----
+    [SupplyParameterFromQuery(Name = "status")] public int? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "paymentType")] public int? PaymentTypeQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "paymentStatus")] public int? PaymentStatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "location")] public string? LocationQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "from")] public string? FromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "to")] public string? ToQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "size")] public int? SizeQuery { get; set; }
+
+    private string Query = "";
+    private int Page = 1;
+    private int PageSize = 16;
+
+    // applied filters (mirrors of the URL); the select boxes bind to strings so "" means "all".
+    private int? _aStatus, _aPaymentType, _aPaymentStatus;
+    private string _aLocation = "", _aFrom = "", _aTo = "";
+
+    // pending filters (what the filter card shows until "Apply Filters")
+    private string _status = "", _paymentType = "", _paymentStatus = "", _location = "", _from = "", _to = "";
+
+    private bool _filtersToggled;
+
+    // ---- API state ----
+    private SampleCollectionStatsDto? _stats;
+    private PageResult<SampleCollectionSummaryDto>? _page;
+    private bool _loading = true;
+    private string _loadedSignature = "";
+    private CancellationTokenSource? _cts;
+
+    private List<SampleCollectionSummaryDto> Items => _page?.Items ?? new List<SampleCollectionSummaryDto>();
+
+    private int Total => _page?.Total ?? 0;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Total / (double)PageSize));
+
+    /// <summary>Locations seen on this page, plus whatever the URL already asks for.</summary>
+    private List<string> LocationOptions =>
+        Items.Select(i => i.LocationName)
+             .Concat(new[] { string.IsNullOrWhiteSpace(_aLocation) ? null : _aLocation })
+             .Where(l => !string.IsNullOrWhiteSpace(l))
+             .Select(l => l!.Trim())
+             .Distinct(StringComparer.OrdinalIgnoreCase)
+             .OrderBy(l => l, StringComparer.OrdinalIgnoreCase)
+             .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Api.GetLookupsAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Query = SearchQuery ?? "";
+        PageSize = SizeQuery is 16 or 32 or 64 ? SizeQuery.Value : 16;
+        Page = PageQuery is > 0 ? PageQuery.Value : 1;
+
+        _aStatus = Valid<SampleCollectionStatus>(StatusQuery);
+        _aPaymentType = Valid<SamplePaymentType>(PaymentTypeQuery);
+        _aPaymentStatus = Valid<SamplePaymentStatus>(PaymentStatusQuery);
+        _aLocation = LocationQuery ?? "";
+        _aFrom = FromQuery ?? "";
+        _aTo = ToQuery ?? "";
+
+        _status = _aStatus?.ToString() ?? "";
+        _paymentType = _aPaymentType?.ToString() ?? "";
+        _paymentStatus = _aPaymentStatus?.ToString() ?? "";
+        _location = _aLocation;
+        _from = _aFrom;
+        _to = _aTo;
+
+        var signature = string.Join('|', _aStatus, _aPaymentType, _aPaymentStatus, _aLocation,
+            _aFrom, _aTo, Query, Page, PageSize);
+
+        if (signature == _loadedSignature) return;
+
+        _loadedSignature = signature;
+        await LoadAsync();
+    }
+
+    private static int? Valid<TEnum>(int? value) where TEnum : struct, Enum =>
+        value is { } v && Enum.IsDefined(typeof(TEnum), v) ? v : null;
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+
+        var statsTask = _stats is null ? Api.GetStatsAsync(ct) : Task.FromResult<SampleCollectionStatsDto?>(_stats);
+
+        var listTask = Api.GetCollectionsAsync(new SasCollectionQuery
+        {
+            Status = (SampleCollectionStatus?)_aStatus,
+            PaymentType = (SamplePaymentType?)_aPaymentType,
+            PaymentStatus = (SamplePaymentStatus?)_aPaymentStatus,
+            Location = _aLocation,
+            From = _aFrom,
+            To = _aTo,
+            Search = Query,
+            Page = Page,
+            PageSize = PageSize
+        }, ct);
+
+        await Task.WhenAll(statsTask, listTask);
+
+        if (ct.IsCancellationRequested) return;
+
+        _stats = statsTask.Result ?? _stats;
+        _page = listTask.Result;
+        _loading = false;
+    }
+
+    /// <summary>"Refresh Data" and the "Try again" button: statistics and the list both come back.</summary>
+    private async Task RefreshAsync()
+    {
+        _stats = null;
+        await LoadAsync();
+    }
+
+    // ---- navigation (filters live in the URL; OnParametersSetAsync reloads from the API) ----
+    private void SetQuery(string? query) => Apply(query: query ?? "", page: 1);
+
+    private void SetSize(string? size) => Apply(size: int.TryParse(size, out var s) ? s : 16, page: 1);
+
+    private void GoToPage(int page) => Apply(page: Math.Min(Math.Max(page, 1), TotalPages));
+
+    /// <summary>Status tile: switches the status filter on, or off when it is already on.</summary>
+    private void ToggleStatus(SampleCollectionStatus status)
+    {
+        _aStatus = _aStatus == (int)status ? null : (int)status;
+        Apply(page: 1);
+    }
+
+    private void ApplyFilters()
+    {
+        _aStatus = ParseInt(_status);
+        _aPaymentType = ParseInt(_paymentType);
+        _aPaymentStatus = ParseInt(_paymentStatus);
+        _aLocation = _location;
+        _aFrom = _from;
+        _aTo = _to;
+        Apply(page: 1);
+    }
+
+    private void ClearFilters()
+    {
+        _status = _paymentType = _paymentStatus = _location = _from = _to = "";
+        _aStatus = _aPaymentType = _aPaymentStatus = null;
+        _aLocation = _aFrom = _aTo = "";
+        Apply(page: 1, query: "");
+    }
+
+    private static int? ParseInt(string? value) => int.TryParse(value, out var n) ? n : null;
+
+    private void Apply(string? query = null, int? page = null, int? size = null)
+    {
+        Query = query ?? Query;
+        Page = page ?? Page;
+        PageSize = size ?? PageSize;
+
+        var parts = new List<string>();
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) parts.Add($"{key}={Uri.EscapeDataString(value)}");
+        }
+
+        Add("status", _aStatus?.ToString());
+        Add("paymentType", _aPaymentType?.ToString());
+        Add("paymentStatus", _aPaymentStatus?.ToString());
+        Add("location", _aLocation);
+        Add("from", _aFrom);
+        Add("to", _aTo);
+        Add("q", Query);
+        if (Page > 1) Add("page", Page.ToString());
+        if (PageSize != 16) Add("size", PageSize.ToString());
+
+        Nav.NavigateTo("/SampleCollection" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
+    }
+
+    /// <summary>Page buttons; 0 renders the ".." gap.</summary>
+    private List<int> PageNumbers
+    {
+        get
+        {
+            var total = TotalPages;
+            var current = Math.Min(Math.Max(Page, 1), total);
+            var pages = new List<int>();
+
+            if (total <= 7)
+            {
+                for (var i = 1; i <= total; i++) pages.Add(i);
+                return pages;
+            }
+
+            var window = new SortedSet<int> { 1, 2, 3, total - 2, total - 1, total, current };
+            if (current > 1) window.Add(current - 1);
+            if (current < total) window.Add(current + 1);
+
+            var last = 0;
+            foreach (var n in window.Where(n => n >= 1 && n <= total))
+            {
+                if (last != 0 && n - last > 1) pages.Add(0);
+                pages.Add(n);
+                last = n;
+            }
+            return pages;
+        }
+    }
+
+    // ---- cell text ----
+    private static string FarmerText(SampleCollectionSummaryDto row) =>
+        string.IsNullOrWhiteSpace(row.FarmerName) ? "-"
+        : row.SampleCount > 1 ? $"{row.FarmerName} +{row.SampleCount - 1}"
+        : row.FarmerName;
+
+    private static string LocationText(SampleCollectionSummaryDto row) =>
+        string.IsNullOrWhiteSpace(row.LocationName) ? "-" : row.LocationName!;
+
+    private static string SampleTypeText(SampleCollectionSummaryDto row) =>
+        string.IsNullOrWhiteSpace(row.SampleTypes) ? "-" : row.SampleTypes;
+
+    private static string PaymentStatusText(SampleCollectionSummaryDto row) =>
+        row.PaymentStatus is null ? "Payment Pending" : SasLabels.PaymentStatusName(row.PaymentStatus);
+
+    private static string AmountSubLine(SampleCollectionSummaryDto row) =>
+        row.PaymentReviewedAt is { } at
+            ? $"on {SasLabels.LongDate(at)} - {SasLabels.Money(row.TotalAmount)}"
+            : SasLabels.Money(row.TotalAmount);
+
+    private static string Stat(int? value) => value is int n ? n.ToString("N0") : "-";
+
+    // ---- exports (the page currently shown) ----
+    private static readonly (string Header, Func<SampleCollectionSummaryDto, string> Value)[] ExportCols =
+    {
+        ("Collection ID", r => r.Code),
+        ("Farmer Name", r => FarmerText(r)),
+        ("Payment Type", r => SasLabels.PaymentTypeName(r.PaymentType)),
+        ("Farmer Location", r => LocationText(r)),
+        ("Sample Type", r => SampleTypeText(r)),
+        ("Amount", r => r.PaymentType == SamplePaymentType.Free ? "N/A" : r.TotalAmount.ToString("N2")),
+        ("Payment Status", r => r.PaymentType == SamplePaymentType.Free ? "No Payment Require" : PaymentStatusText(r)),
+        ("Collection Date & Time", r => SasLabels.DateTimeText(r.CollectionDate)),
+        ("Status", r => SasLabels.Status(r.Status)),
+    };
+
+    /// <summary>
+    /// Excel is built in the browser with ClosedXML, the same library SpicDataTable uses, and
+    /// handed to the host through FileDownloadService (an &lt;a download&gt; is ignored by the
+    /// MAUI WebView). No server endpoint is needed.
+    /// </summary>
+    private async Task ExportExcelAsync()
+    {
+        var data = Items;
+        if (data.Count == 0) return;
+
+        try
+        {
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Sample Collection");
+
+            for (var c = 0; c < ExportCols.Length; c++) sheet.Cell(1, c + 1).Value = ExportCols[c].Header;
+            for (var r = 0; r < data.Count; r++)
+                for (var c = 0; c < ExportCols.Length; c++)
+                    sheet.Cell(r + 2, c + 1).Value = ExportCols[c].Value(data[r]);
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+
+            await Downloads.SaveAsync($"SampleCollection_{DateTime.Now:yyyyMMdd}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", stream.ToArray());
+        }
+        catch (Exception)
+        {
+            Toast.Error("We could not build the Excel file. Please try again.");
+        }
+    }
+
+    /// <summary>PDF is rendered by api/Export/table-pdf (QuestPDF cannot ship inside Android).</summary>
+    private async Task ExportPdfAsync()
+    {
+        var data = Items;
+        if (data.Count == 0) return;
+
+        var request = new
+        {
+            Title = "Sample Collection",
+            Headers = ExportCols.Select(c => c.Header).ToList(),
+            Rows = data.Select(row => ExportCols.Select(c => c.Value(row)).ToList()).ToList()
+        };
+
+        try
+        {
+            await Downloads.PostAsync("api/Export/table-pdf", request, $"SampleCollection_{DateTime.Now:yyyyMMdd}.pdf");
+        }
+        catch (Exception)
+        {
+            Toast.Error("We could not build the PDF. Please try again.");
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

@@ -16,18 +16,23 @@
                 Subtitle="Field work, approvals and bookings in one place"
                 ShowBack="false" />
 
-    <HubSection Title="Field activities">
-        <HubNotice Icon="bi-stars"
-                   Title="Sales Activity System is on its way"
-                   Message="Your day in the field will be recorded right here, with nothing to key in twice."
-                   Points="@FieldActivityPoints" />
-    </HubSection>
-
     @{
+        var field = Visible(FieldTiles);
         var pending = Visible(PendingTiles);
         var guestHouse = Visible(GuestHouseTiles);
         var reports = Visible(ReportTiles);
     }
+
+    <HubSection Title="Field activities">
+        @foreach (var tile in field)
+        {
+            <HubTile @key="tile.Key" Icon="@tile.Icon" Label="@tile.Label" Hint="@tile.Hint" Href="@tile.Href" />
+        }
+        <HubNotice Icon="bi-stars"
+                   Title="More of the Sales Activity System is on its way"
+                   Message="Budgeting, van tracking, field programmes and farm activities will be recorded right here."
+                   Points="@FieldActivityPoints" />
+    </HubSection>
 
     @if (pending.Count > 0)
     {
@@ -73,6 +78,17 @@
     private static readonly string[] FieldActivityPoints =
     {
         "Daily activity log", "Dealer visits", "Farmer meetings", "Tour plans"
+    };
+
+    private static readonly HubLink[] FieldTiles =
+    {
+        new("SampleCollection", "Sample Collection", "Collect soil and water samples, take payment, send to the lab",
+            "bi-droplet-half", "/SampleCollection",
+            s => s.CanAccess("SampleCollection")),
+
+        new("ConsignmentHistory", "Consignment History", "Track every consignment and its lab results",
+            "bi-box-seam", "/ConsignmentHistory",
+            s => s.CanAccess("ConsignmentHistory")),
     };
 
     private static readonly HubLink[] PendingTiles =

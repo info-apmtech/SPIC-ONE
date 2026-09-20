@@ -1,0 +1,364 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Sas
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+
+@*
+    "Result Comparison" table from the Sample Collection Details design.
+
+    Read mode  : Test Parameter | Normal Range | Entered Value | Unit | Result | Status | Recommendation Hint
+                 (phone: one card per parameter).
+    Edit mode  : an input per cell, "Add parameter", Save / Cancel. Only shown when CanEdit is true
+                 (review roles: Admin / CorporateAdmin; the API enforces the same rule).
+    No results : the AwaitingNote line, plus "Enter results" for review roles, which seeds the form
+                 from the lookup parameters (pH, EC, ...).
+
+        <LabResultsTable Results="item.Results" CanEdit="detail.CanReview"
+                         Parameters="_lookups?.LabParameters" OnSave="SaveResults" />
+*@
+
+<div class="lr">
+
+    @if (!_editing)
+    {
+        @if (Rows.Count == 0)
+        {
+            <div class="lr-awaiting">
+                <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                <div>
+                    <div class="lr-awaiting-title">@AwaitingTitle</div>
+                    @if (!string.IsNullOrWhiteSpace(AwaitingNote))
+                    {
+                        <p class="lr-awaiting-note">@AwaitingNote</p>
+                    }
+                </div>
+                @if (CanEdit)
+                {
+                    <button type="button" class="lr-btn lr-btn-primary" @onclick="StartEdit">
+                        <i class="bi bi-pencil-square" aria-hidden="true"></i> Enter results
+                    </button>
+                }
+            </div>
+        }
+        else
+        {
+            @if (CanEdit)
+            {
+                <div class="lr-toolbar">
+                    <button type="button" class="lr-btn lr-btn-outline" @onclick="StartEdit">
+                        <i class="bi bi-pencil" aria-hidden="true"></i> Edit results
+                    </button>
+                </div>
+            }
+
+            @* ---------------- desktop / tablet: table ---------------- *@
+            <div class="lr-table-wrap tablet-up">
+                <table class="lr-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Test Parameter</th>
+                            <th scope="col">Normal Range</th>
+                            <th scope="col">Entered Value</th>
+                            <th scope="col">Unit</th>
+                            <th scope="col">Result</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Recommendation Hint</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Rows)
+                        {
+                            <tr>
+                                <th scope="row">@r.Parameter</th>
+                                <td>@Dash(r.NormalRange)</td>
+                                <td class="lr-value">@Dash(r.EnteredValue)</td>
+                                <td>@Dash(r.Unit)</td>
+                                <td class="lr-result lr-result--@Slug(r.Status)">@Dash(r.ResultLabel)</td>
+                                <td><span class="lr-pill lr-pill--@Slug(r.Status)">@StatusLabel(r.Status)</span></td>
+                                <td class="lr-hint">@Dash(r.Hint)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @* ---------------- phone: one card per parameter ---------------- *@
+            <div class="lr-cards phone-only">
+                @foreach (var r in Rows)
+                {
+                    <div class="lr-card">
+                        <div class="lr-card-head">
+                            <span class="lr-card-param">@r.Parameter</span>
+                            <span class="lr-pill lr-pill--@Slug(r.Status)">@StatusLabel(r.Status)</span>
+                        </div>
+                        <dl class="lr-card-grid">
+                            <div><dt>Entered Value</dt><dd class="lr-value">@Dash(r.EnteredValue) @r.Unit</dd></div>
+                            <div><dt>Normal Range</dt><dd>@Dash(r.NormalRange)</dd></div>
+                            <div><dt>Result</dt><dd class="lr-result lr-result--@Slug(r.Status)">@Dash(r.ResultLabel)</dd></div>
+                        </dl>
+                        @if (!string.IsNullOrWhiteSpace(r.Hint))
+                        {
+                            <p class="lr-card-hint"><i class="bi bi-lightbulb" aria-hidden="true"></i> @r.Hint</p>
+                        }
+                    </div>
+                }
+            </div>
+
+            @if (EnteredBy is not null)
+            {
+                <p class="lr-meta">Entered by @EnteredBy.Value.Name on @EnteredBy.Value.At.ToString("dd MMM yyyy hh:mm tt")</p>
+            }
+        }
+    }
+    else
+    {
+        @* ---------------- edit mode ---------------- *@
+        <div class="lr-edit">
+            <div class="lr-edit-rows">
+                @for (var i = 0; i < _draft.Count; i++)
+                {
+                    var index = i;
+                    var row = _draft[index];
+                    <div class="lr-edit-row">
+                        <div class="lr-f lr-f-param">
+                            <label for="@($"lr-p-{index}")">Test Parameter</label>
+                            <input id="@($"lr-p-{index}")" class="lr-input" type="text" placeholder="pH"
+                                   value="@row.Parameter" @onchange="e => row.Parameter = Text(e)" />
+                        </div>
+                        <div class="lr-f">
+                            <label for="@($"lr-n-{index}")">Normal Range</label>
+                            <input id="@($"lr-n-{index}")" class="lr-input" type="text" placeholder="6.5 - 7.5"
+                                   value="@row.NormalRange" @onchange="e => row.NormalRange = Text(e)" />
+                        </div>
+                        <div class="lr-f">
+                            <label for="@($"lr-v-{index}")">Entered Value</label>
+                            <input id="@($"lr-v-{index}")" class="lr-input" type="text" inputmode="decimal" placeholder="7.2"
+                                   value="@row.EnteredValue" @onchange="e => row.EnteredValue = Text(e)" />
+                        </div>
+                        <div class="lr-f lr-f-sm">
+                            <label for="@($"lr-u-{index}")">Unit</label>
+                            <input id="@($"lr-u-{index}")" class="lr-input" type="text" placeholder="kg/ha"
+                                   value="@row.Unit" @onchange="e => row.Unit = Text(e)" />
+                        </div>
+                        <div class="lr-f lr-f-sm">
+                            <label for="@($"lr-r-{index}")">Result</label>
+                            <input id="@($"lr-r-{index}")" class="lr-input" type="text" placeholder="Low"
+                                   value="@row.ResultLabel" @onchange="e => row.ResultLabel = Text(e)" />
+                        </div>
+                        <div class="lr-f lr-f-sm">
+                            <label for="@($"lr-s-{index}")">Status</label>
+                            <select id="@($"lr-s-{index}")" class="lr-input" value="@((int)row.Status)"
+                                    @onchange="e => row.Status = ToStatus(e)">
+                                @foreach (var s in AllStatuses)
+                                {
+                                    <option value="@((int)s)">@StatusLabel(s)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="lr-f lr-f-hint">
+                            <label for="@($"lr-h-{index}")">Recommendation Hint</label>
+                            <input id="@($"lr-h-{index}")" class="lr-input" type="text" placeholder="Apply nitrogen fertilizer"
+                                   value="@row.Hint" @onchange="e => row.Hint = Text(e)" />
+                        </div>
+                        <button type="button" class="lr-remove" title="Remove @row.Parameter"
+                                aria-label="Remove @row.Parameter" @onclick="() => RemoveRow(index)">
+                            <i class="bi bi-trash" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                }
+            </div>
+
+            @if (_error is not null)
+            {
+                <p class="lr-error" role="alert">@_error</p>
+            }
+
+            <div class="lr-edit-actions">
+                <button type="button" class="lr-btn lr-btn-outline" @onclick="AddRow">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add parameter
+                </button>
+                <span class="lr-spacer"></span>
+                <button type="button" class="lr-btn lr-btn-ghost" @onclick="CancelEdit" disabled="@_saving">Cancel</button>
+                <button type="button" class="lr-btn lr-btn-primary" @onclick="SaveAsync" disabled="@_saving">
+                    @(_saving ? "Saving..." : "Save results")
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Saved results for the selected sample.</summary>
+    [Parameter] public List<LabResultDto>? Results { get; set; }
+
+    /// <summary>Review roles only (SampleCollectionDetailDto.CanReview).</summary>
+    [Parameter] public bool CanEdit { get; set; }
+
+    /// <summary>Default parameters for a blank form (SasLookupsDto.LabParameters).</summary>
+    [Parameter] public List<LabParameterDto>? Parameters { get; set; }
+
+    /// <summary>Called with the rows to PUT to api/Sas/samples/{itemId}/results. Return before the table leaves edit mode.</summary>
+    [Parameter] public EventCallback<List<LabResultUpsertDto>> OnSave { get; set; }
+
+    /// <summary>Heading of the empty state.</summary>
+    [Parameter] public string AwaitingTitle { get; set; } = "Awaiting lab results";
+
+    /// <summary>Line under it, e.g. the current status ("The sample is In Transit.").</summary>
+    [Parameter] public string? AwaitingNote { get; set; }
+
+    /// <summary>Resets the form when the page switches to another sample.</summary>
+    [Parameter] public object? ResetKey { get; set; }
+
+    private readonly List<LabResultUpsertDto> _draft = new();
+    private bool _editing;
+    private bool _saving;
+    private string? _error;
+    private object? _lastKey;
+
+    private static readonly LabResultStatus[] AllStatuses =
+    {
+        LabResultStatus.Normal, LabResultStatus.Deficient, LabResultStatus.Moderate, LabResultStatus.Excess
+    };
+
+    private List<LabResultDto> Rows =>
+        (Results ?? new List<LabResultDto>()).OrderBy(r => r.SortOrder).ThenBy(r => r.Id).ToList();
+
+    private (string Name, DateTime At)? EnteredBy
+    {
+        get
+        {
+            var last = Rows.Where(r => !string.IsNullOrWhiteSpace(r.EnteredByName)).OrderByDescending(r => r.EnteredAt).FirstOrDefault();
+            return last is null ? null : (last.EnteredByName!, last.EnteredAt);
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!Equals(_lastKey, ResetKey))
+        {
+            _lastKey = ResetKey;
+            _editing = false;
+            _saving = false;
+            _error = null;
+            _draft.Clear();
+        }
+    }
+
+    // ------------------------------------------------------------------ editing
+
+    private void StartEdit()
+    {
+        _error = null;
+        _draft.Clear();
+
+        if (Rows.Count > 0)
+        {
+            foreach (var r in Rows)
+            {
+                _draft.Add(new LabResultUpsertDto
+                {
+                    Parameter = r.Parameter,
+                    NormalRange = r.NormalRange,
+                    EnteredValue = r.EnteredValue,
+                    Unit = r.Unit,
+                    ResultLabel = r.ResultLabel,
+                    Status = r.Status,
+                    Hint = r.Hint,
+                    SortOrder = r.SortOrder
+                });
+            }
+        }
+        else if (Parameters is { Count: > 0 })
+        {
+            var order = 0;
+            foreach (var p in Parameters)
+            {
+                _draft.Add(new LabResultUpsertDto
+                {
+                    Parameter = p.Parameter,
+                    NormalRange = p.NormalRange,
+                    Unit = p.Unit,
+                    Status = LabResultStatus.Normal,
+                    SortOrder = order++
+                });
+            }
+        }
+
+        if (_draft.Count == 0) AddRow();
+        _editing = true;
+    }
+
+    private void CancelEdit()
+    {
+        _editing = false;
+        _error = null;
+        _draft.Clear();
+    }
+
+    private void AddRow() =>
+        _draft.Add(new LabResultUpsertDto { Status = LabResultStatus.Normal, SortOrder = _draft.Count });
+
+    private void RemoveRow(int index)
+    {
+        if (index >= 0 && index < _draft.Count) _draft.RemoveAt(index);
+        if (_draft.Count == 0) AddRow();
+    }
+
+    private async Task SaveAsync()
+    {
+        var rows = _draft.Where(r => !string.IsNullOrWhiteSpace(r.Parameter)).ToList();
+        if (rows.Count == 0)
+        {
+            _error = "Add at least one parameter with a name.";
+            return;
+        }
+        if (rows.Any(r => string.IsNullOrWhiteSpace(r.EnteredValue)))
+        {
+            _error = "Every parameter needs an entered value.";
+            return;
+        }
+
+        for (var i = 0; i < rows.Count; i++) rows[i].SortOrder = i;
+
+        _error = null;
+        _saving = true;
+        try
+        {
+            if (OnSave.HasDelegate) await OnSave.InvokeAsync(rows);
+            _editing = false;
+            _draft.Clear();
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>Lets the page force the table back into read mode after a failed save is retried.</summary>
+    public void Close()
+    {
+        _editing = false;
+        _draft.Clear();
+        StateHasChanged();
+    }
+
+    // ------------------------------------------------------------------ helpers
+
+    private static string Text(ChangeEventArgs e) => e.Value?.ToString() ?? string.Empty;
+
+    private static LabResultStatus ToStatus(ChangeEventArgs e) =>
+        int.TryParse(e.Value?.ToString(), out var v) && Enum.IsDefined(typeof(LabResultStatus), v)
+            ? (LabResultStatus)v
+            : LabResultStatus.Normal;
+
+    private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string Slug(LabResultStatus status) => status.ToString().ToLowerInvariant();
+
+    private static string StatusLabel(LabResultStatus status) => status switch
+    {
+        LabResultStatus.Deficient => "Deficient",
+        LabResultStatus.Moderate => "Moderate",
+        LabResultStatus.Excess => "Excess",
+        _ => "Normal"
+    };
+}

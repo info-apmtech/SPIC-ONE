@@ -23,7 +23,7 @@ heavy for browser automation; page designs come as screenshots from the product 
 | Digital Library | AI Videos | Completed | Completed |
 | Digital Library | Product Information | Completed | Completed |
 | Digital Library | Product Brochure | Completed | Completed |
-| SAS | Soil Sample Collection and Analysis | Completed | Completed |
+| SAS | Soil Sample Collection and Analysis | Completed | Completed (built 2026-09-21, see docs/sas-sample-collection-plan.md) |
 | SAS | Budgeting Activities | In progress | |
 | SAS | MSTL Van Tracking | In progress | |
 | SAS | Field Programs Tracking | In progress | |
@@ -85,6 +85,24 @@ Products, the cross-module dashboards.
   `PagePermission` gains a `DigitalLibrary` key (API + permission catalogue change).
 - Figma automation: the file loads in the browser pane but frames render as low-resolution
   tiles, so designs are taken from full-size screenshots supplied by the product owner.
+
+## SAS Portal implementation log
+
+- 2026-09-21: Soil / Water Sample Collection built from the ten Figma screens: `/SampleCollection`
+  list with stats, filters and exports; `/SampleCollection/new` (free or paid; free hides the
+  Farmer/NGO category and skips payment; inline new farmer with state/district masters and
+  geolocation; multi-sample preview with prices from the `SasSampleCharges` master); summary
+  drawer; `/SampleCollection/payment/{id}` (UPI QR generated on the device, transaction details,
+  proof upload); `/SampleCollection/consignment/{id}` (courier, AWB, photos by kind, bundling of
+  other ready collections); `/SampleCollection/submitted/{id}`; `/ConsignmentHistory` with
+  expandable sample lines; `/ConsignmentHistory/view/{id}`; `/SampleCollection/view/{id}` (one
+  details page for every role: timeline, collection and consignment info, amount, Result
+  Comparison once the lab results are entered; admins approve/reject payments and enter results
+  there). Roles: MDO and JMDO collect, pay and consign; Admin/CorporateAdmin review; Dealer and
+  Farmer read status and results (a Farmer sees only collections linked to their login). API
+  `api/Sas/...`, migration `V5n_SasSampleCollection`, page keys `SampleCollection` and
+  `ConsignmentHistory`. Not yet built from the SAS list: budgeting, van tracking, field programmes,
+  farm activities, SPC renewals, reports and the 6-language report.
 
 ## Phone bottom menu (approved 2026-09-20)
 

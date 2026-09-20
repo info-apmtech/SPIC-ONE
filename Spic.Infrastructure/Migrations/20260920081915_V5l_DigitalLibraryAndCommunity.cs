@@ -213,10 +213,16 @@ namespace Spic.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
-            migrationBuilder.InsertData(
-                table: "Pages",
-                columns: new[] { "Id", "CreatedAt", "CreatedBy", "HasActions", "IsActive", "Key", "Module", "Name", "SortOrder", "UpdatedAt", "UpdatedBy" },
-                values: new object[] { 71, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "DigitalLibrary", "Digital Library", "Digital Library", 70, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" });
+            // Idempotent catalogue rows (live-site safety, see docs/sas-sample-collection-plan.md).
+            migrationBuilder.Sql(@"
+-- DigitalLibrary: fixed id when free, otherwise a generated id (a page registered through Page Management on
+-- the live site may already hold that id); never fails, never touches existing rows.
+INSERT INTO ""Pages"" (""Id"",""CreatedAt"",""CreatedBy"",""HasActions"",""IsActive"",""Key"",""Module"",""Name"",""SortOrder"",""UpdatedAt"",""UpdatedBy"") VALUES (71, TIMESTAMP '2024-01-01 00:00:00', 'System', TRUE, TRUE, 'DigitalLibrary', 'Digital Library', 'Digital Library', 70, TIMESTAMP '2024-01-01 00:00:00', 'System') ON CONFLICT (""Id"") DO NOTHING;
+INSERT INTO ""Pages"" (""CreatedAt"",""CreatedBy"",""HasActions"",""IsActive"",""Key"",""Module"",""Name"",""SortOrder"",""UpdatedAt"",""UpdatedBy"")
+SELECT TIMESTAMP '2024-01-01 00:00:00', 'System', TRUE, TRUE, 'DigitalLibrary', 'Digital Library', 'Digital Library', 70, TIMESTAMP '2024-01-01 00:00:00', 'System'
+WHERE NOT EXISTS (SELECT 1 FROM ""Pages"" WHERE ""Key"" = 'DigitalLibrary');
+SELECT setval(pg_get_serial_sequence('""Pages""', 'Id'), GREATEST((SELECT COALESCE(MAX(""Id""), 0) FROM ""Pages"") + 1, nextval(pg_get_serial_sequence('""Pages""', 'Id'))), false);
+");
 
             migrationBuilder.CreateIndex(
                 name: "IX_CommunityPostAttachments_PostId",

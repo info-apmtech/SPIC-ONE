@@ -156,6 +156,117 @@ namespace Spic.Infrastructure.Data
             entity.HasIndex(x => x.ConversationId);
         });
 
+        // ---------------------------------------------------------------- SAS sample collection
+        builder.Entity<SasFarmer>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Mobile);
+            entity.HasIndex(x => x.Name);
+            entity.HasIndex(x => x.UserId);
+        });
+
+        builder.Entity<SampleCollection>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.CollectedByUserId);
+            entity.HasIndex(x => x.CollectionDate);
+            entity.Property(x => x.TotalAmount).HasColumnType("numeric(12,2)");
+            entity.HasOne(x => x.Consignment)
+                .WithMany(c => c.Collections)
+                .HasForeignKey(x => x.ConsignmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(x => x.Items)
+                .WithOne(i => i.Collection)
+                .HasForeignKey(i => i.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Payments)
+                .WithOne(p => p.Collection)
+                .HasForeignKey(p => p.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SampleItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CollectionId);
+            entity.HasIndex(x => x.FarmerId);
+            entity.Property(x => x.Amount).HasColumnType("numeric(12,2)");
+            entity.HasOne(x => x.Farmer)
+                .WithMany()
+                .HasForeignKey(x => x.FarmerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(x => x.Results)
+                .WithOne(r => r.SampleItem)
+                .HasForeignKey(r => r.SampleItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SamplePayment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CollectionId);
+            entity.HasIndex(x => x.Status);
+            entity.Property(x => x.Amount).HasColumnType("numeric(12,2)");
+        });
+
+        builder.Entity<SampleConsignment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.DispatchedAt);
+            entity.Property(x => x.PackageWeightKg).HasColumnType("numeric(8,2)");
+            entity.HasMany(x => x.Photos)
+                .WithOne(p => p.Consignment)
+                .HasForeignKey(p => p.ConsignmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ConsignmentPhoto>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.ConsignmentId);
+        });
+
+        builder.Entity<SasStatusEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CollectionId);
+            entity.HasIndex(x => x.ConsignmentId);
+        });
+
+        builder.Entity<SampleLabResult>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.SampleItemId);
+        });
+
+        builder.Entity<SasSampleCharge>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.SampleType, x.Category }).IsUnique();
+            entity.Property(x => x.AmountPerSample).HasColumnType("numeric(12,2)");
+            entity.HasData(
+                new SasSampleCharge { Id = 1, SampleType = SampleType.Soil, Category = SamplePaidCategory.Farmer, AmountPerSample = 100m, NoOfTests = 1, IsActive = true },
+                new SasSampleCharge { Id = 2, SampleType = SampleType.Water, Category = SamplePaidCategory.Farmer, AmountPerSample = 100m, NoOfTests = 1, IsActive = true },
+                new SasSampleCharge { Id = 3, SampleType = SampleType.SoilAndWater, Category = SamplePaidCategory.Farmer, AmountPerSample = 150m, NoOfTests = 2, IsActive = true },
+                new SasSampleCharge { Id = 4, SampleType = SampleType.Soil, Category = SamplePaidCategory.Ngo, AmountPerSample = 150m, NoOfTests = 1, IsActive = true },
+                new SasSampleCharge { Id = 5, SampleType = SampleType.Water, Category = SamplePaidCategory.Ngo, AmountPerSample = 150m, NoOfTests = 1, IsActive = true },
+                new SasSampleCharge { Id = 6, SampleType = SampleType.SoilAndWater, Category = SamplePaidCategory.Ngo, AmountPerSample = 200m, NoOfTests = 2, IsActive = true });
+        });
+
+        builder.Entity<SasCourier>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasData(
+                new SasCourier { Id = 1, Name = "Professional Courier", TrackingUrlTemplate = "https://www.tpcindia.com/Tracking2014.aspx?id={0}", IsActive = true },
+                new SasCourier { Id = 2, Name = "Blue Dart Express", TrackingUrlTemplate = "https://www.bluedart.com/tracking?awb={0}", IsActive = true },
+                new SasCourier { Id = 3, Name = "DTDC", TrackingUrlTemplate = "https://www.dtdc.in/tracking.asp?awb={0}", IsActive = true },
+                new SasCourier { Id = 4, Name = "India Post", TrackingUrlTemplate = "https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx", IsActive = true });
+        });
+
         // ---------------------------------------------------------------- Knowledge Community
         builder.Entity<CommunityPost>(entity =>
         {
@@ -349,6 +460,18 @@ namespace Spic.Infrastructure.Data
 		public DbSet<LibraryContent> LibraryContents { get; set; }
 		public DbSet<LibraryConversation> LibraryConversations { get; set; }
 		public DbSet<LibraryMessage> LibraryMessages { get; set; }
+
+		//// SAS: sample collection
+		public DbSet<SasFarmer> SasFarmers { get; set; }
+		public DbSet<SampleCollection> SampleCollections { get; set; }
+		public DbSet<SampleItem> SampleItems { get; set; }
+		public DbSet<SamplePayment> SamplePayments { get; set; }
+		public DbSet<SampleConsignment> SampleConsignments { get; set; }
+		public DbSet<ConsignmentPhoto> ConsignmentPhotos { get; set; }
+		public DbSet<SasStatusEvent> SasStatusEvents { get; set; }
+		public DbSet<SampleLabResult> SampleLabResults { get; set; }
+		public DbSet<SasSampleCharge> SasSampleCharges { get; set; }
+		public DbSet<SasCourier> SasCouriers { get; set; }
 
 		//// Knowledge Community
 		public DbSet<CommunityPost> CommunityPosts { get; set; }

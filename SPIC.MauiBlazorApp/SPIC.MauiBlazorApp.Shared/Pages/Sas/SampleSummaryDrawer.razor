@@ -1,0 +1,197 @@
+@using SPIC.Core.Entities
+
+@*
+    Sample Summary (Figma frame 9): the review step between the New Sample Collection form and
+    the payment / consignment step. BottomSheet renders it as a right-side panel on desktop and
+    a bottom sheet on phones.
+
+    ReadOnly="true" (the payment page's "View Sample Summary" link) hides the Continue button and
+    leaves only Close, because at that point the collection has already been submitted.
+*@
+
+<BottomSheet IsOpen="IsOpen" IsOpenChanged="IsOpenChanged"
+             Title="Sample Summary" Subtitle="Review the Samples added in the collection"
+             Size="BottomSheet.SheetSize.Full" CssClass="ssd">
+    <ChildContent>
+        @if (Summary is null)
+        {
+            <Skeleton Variant="table" Rows="4" />
+        }
+        else
+        {
+            <div class="ssd-body">
+                <!-- ---------- stat cards ---------- -->
+                <div class="ssd-stats">
+                    <div class="ssd-stat ssd-stat--green">
+                        <span class="ssd-stat-label">Total Sample</span>
+                        <span class="ssd-stat-value">@Summary.TotalSamples</span>
+                    </div>
+                    <div class="ssd-stat ssd-stat--blue">
+                        <span class="ssd-stat-label">Sample Types</span>
+                        <span class="ssd-stat-value">@Summary.SampleTypeCount</span>
+                    </div>
+                    <div class="ssd-stat ssd-stat--amber">
+                        <span class="ssd-stat-label">Total Amount</span>
+                        <span class="ssd-stat-value">@AmountText</span>
+                    </div>
+                    <div class="ssd-stat ssd-stat--red">
+                        <span class="ssd-stat-label">Collection Date</span>
+                        <span class="ssd-stat-value ssd-stat-value--sm">@SasLabels.DateOnly(Summary.CollectionDate)</span>
+                    </div>
+                </div>
+
+                <!-- ---------- preview table ---------- -->
+                <h3 class="ssd-heading">Sample Added (Preview)</h3>
+
+                @if (Summary.Rows.Count == 0)
+                {
+                    <EmptyState Icon="bi-eyedropper" Compact="true" Title="No samples added yet"
+                                Message="Add at least one sample before continuing." />
+                }
+                else
+                {
+                    <div class="ssd-table-wrap">
+                        <table class="ssd-table">
+                            <thead>
+                                <tr>
+                                    <th>Collection ID</th>
+                                    <th>Farmer</th>
+                                    <th>Sample Type</th>
+                                    <th>Payment Type</th>
+                                    <th>Crop</th>
+                                    <th>Collection Date &amp; Time</th>
+                                    <th>From Location</th>
+                                    <th>To Location</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var (row, index) in Summary.Rows.Select((r, i) => (r, i)))
+                                {
+                                    <tr @key="index">
+                                        <td class="ssd-code">@RowCode(index)</td>
+                                        <td>@row.Farmer.Name</td>
+                                        <td>@SasLabels.SampleTypeName(row.SampleType)</td>
+                                        <td><span class="@SasLabels.PaymentTypePillClass(Summary.PaymentType)">@SasLabels.PaymentTypeName(Summary.PaymentType)</span></td>
+                                        <td>@(string.IsNullOrWhiteSpace(row.CropText) ? "-" : row.CropText)</td>
+                                        <td>@SasLabels.DateTimeText(Summary.CollectionDate)</td>
+                                        <td>@Summary.FromLocation(row)</td>
+                                        <td>District Lab</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="ssd-cards">
+                        @foreach (var (row, index) in Summary.Rows.Select((r, i) => (r, i)))
+                        {
+                            <div class="ssd-card" @key="index">
+                                <div class="ssd-card-top">
+                                    <span class="ssd-code">@RowCode(index)</span>
+                                    <span class="@SasLabels.PaymentTypePillClass(Summary.PaymentType)">@SasLabels.PaymentTypeName(Summary.PaymentType)</span>
+                                </div>
+                                <div class="ssd-card-line"><strong>@row.Farmer.Name</strong> &middot; @SasLabels.SampleTypeName(row.SampleType)</div>
+                                <div class="ssd-card-line">@(string.IsNullOrWhiteSpace(row.CropText) ? "No crop" : row.CropText)</div>
+                                <div class="ssd-card-foot">@Summary.FromLocation(row) &rarr; District Lab</div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- ---------- collection information ---------- -->
+                <section class="ssd-panel">
+                    <h3 class="ssd-panel-title">Collection Information</h3>
+                    <div class="ssd-facts">
+                        <div class="ssd-fact">
+                            <span class="ssd-fact-label">Collection ID</span>
+                            <span class="ssd-fact-value">@(string.IsNullOrWhiteSpace(Summary.Code) ? "Auto Generated" : Summary.Code)</span>
+                        </div>
+                        <div class="ssd-fact">
+                            <span class="ssd-fact-label">Collection Date</span>
+                            <span class="ssd-fact-value">@SasLabels.LongDate(Summary.CollectionDate)</span>
+                        </div>
+                        <div class="ssd-fact">
+                            <span class="ssd-fact-label">Collected By</span>
+                            <span class="ssd-fact-value">@Summary.CollectedByName</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ---------- farmer information ---------- -->
+                <section class="ssd-panel">
+                    <h3 class="ssd-panel-title">Farmer Information</h3>
+                    <div class="ssd-facts ssd-facts--4">
+                        <div class="ssd-fact">
+                            <span class="ssd-fact-label">Total Farmers</span>
+                            <span class="ssd-fact-value">@Summary.TotalFarmers</span>
+                        </div>
+                        <div class="ssd-fact">
+                            <span class="ssd-fact-label">Villages Covered</span>
+                            <span class="ssd-fact-value">@Summary.VillagesCovered</span>
+                        </div>
+                        <div class="ssd-fact">
+                            <span class="ssd-fact-label">District</span>
+                            <span class="ssd-fact-value">@Summary.Districts</span>
+                        </div>
+                        <div class="ssd-fact">
+                            <span class="ssd-fact-label">State</span>
+                            <span class="ssd-fact-value">@Summary.States</span>
+                        </div>
+                    </div>
+                </section>
+
+                <p class="ssd-warn">
+                    <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                    @(ReadOnly
+                        ? "These samples have already been submitted."
+                        : "Please verify the sample details before proceeding.")
+                </p>
+            </div>
+        }
+    </ChildContent>
+
+    <Footer>
+        <button type="button" class="ssd-btn ssd-btn-outline" @onclick="CloseAsync" disabled="@Busy">Close</button>
+        @if (!ReadOnly)
+        {
+            <button type="button" class="ssd-btn ssd-btn-blue" @onclick="ContinueAsync"
+                    disabled="@(Busy || Summary is null || Summary.Rows.Count == 0)">
+                @(Busy ? "Please wait..." : ContinueText)
+            </button>
+        }
+    </Footer>
+</BottomSheet>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    /// <summary>What to show. Null renders the skeleton (the collection is still saving).</summary>
+    [Parameter] public SasSummary? Summary { get; set; }
+
+    /// <summary>Opened from the payment page: Close only, and the warning line changes.</summary>
+    [Parameter] public bool ReadOnly { get; set; }
+
+    /// <summary>Disables both buttons while the caller submits.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>Raised by the primary button; the caller submits and navigates.</summary>
+    [Parameter] public EventCallback OnContinue { get; set; }
+
+    /// <summary>Paid collections continue to the payment page, free ones to the consignment.</summary>
+    private string ContinueText =>
+        Summary?.PaymentType == SamplePaymentType.Paid ? "Continue to payment" : "Continue to consignment";
+
+    private string AmountText =>
+        Summary is null ? "-"
+        : Summary.PaymentType == SamplePaymentType.Free ? "Free"
+        : SasLabels.Money(Summary.TotalAmount);
+
+    /// <summary>Saved collections number their samples "{code}-{n}"; unsaved ones show the position.</summary>
+    private string RowCode(int index) =>
+        string.IsNullOrWhiteSpace(Summary?.Code) ? $"Sample {index + 1}" : $"{Summary!.Code}-{index + 1}";
+
+    private Task CloseAsync() => IsOpenChanged.InvokeAsync(false);
+
+    private Task ContinueAsync() => OnContinue.InvokeAsync();
+}

@@ -177,6 +177,14 @@ Counts are occurrences in the page source: Table = `<table>` or `SpicDataTable`,
 | CommunityDiscussion | /Community/discussion/{id} | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | via Community | [ ] | [ ] | [ ] | [ ] |
 | CommunityNew | /Community/new | new | 0 | 1 | 1 | 0 | 2 | 0 | 0 | via Community | [ ] | [ ] | [ ] | [ ] |
 | CommunityPosted | /Community/posted/{id} | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | via Community | [ ] | [ ] | [ ] | [ ] |
+| SampleCollectionList | /SampleCollection | new | 1 | 0 | 0 | 2 | 0 | 0 | 1 | sidebar + Activities hub | [ ] | [ ] | [ ] | [ ] |
+| SampleCollectionNew | /SampleCollection/new | new | 1 | 1 | 0 | 0 | 2 | 0 | 0 | via list (MDO/JMDO) | [ ] | [ ] | [ ] | [ ] |
+| SamplePayment | /SampleCollection/payment/{id} | new | 0 | 1 | 1 | 0 | 1 | 0 | 0 | via summary (paid only) | [ ] | [ ] | [ ] | [ ] |
+| ConsignmentUpload | /SampleCollection/consignment/{id} | new | 0 | 1 | 3 | 0 | 0 | 0 | 0 | via summary / payment | [ ] | [ ] | [ ] | [ ] |
+| ConsignmentSubmitted | /SampleCollection/submitted/{id} | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | via upload | [ ] | [ ] | [ ] | [ ] |
+| SampleCollectionDetails | /SampleCollection/view/{id} | new | 3 | 1 | 0 | 2 | 1 | 1 | 0 | via list | [ ] | [ ] | [ ] | [ ] |
+| ConsignmentHistory | /ConsignmentHistory | new | 2 | 0 | 0 | 2 | 0 | 0 | 1 | sidebar + Activities hub | [ ] | [ ] | [ ] | [ ] |
+| ConsignmentDetails | /ConsignmentHistory/view/{id} | new | 3 | 0 | 0 | 2 | 1 | 1 | 0 | via history | [ ] | [ ] | [ ] | [ ] |
 
 ### Workstream sizes
 
@@ -186,7 +194,7 @@ Counts are occurrences in the page source: Table = `<table>` or `SpicDataTable`,
 | B  Reports and stock | 17 |
 | C  Guest house, welfare and SDWA | 38 |
 | D  Approvals, schemes, CSR and budget | 17 |
-| E  Settings, masters, logistics and profile | 23 |
+| E  Settings, masters, logistics and profile | 31 |
 
 
 ## 3. Programme plan

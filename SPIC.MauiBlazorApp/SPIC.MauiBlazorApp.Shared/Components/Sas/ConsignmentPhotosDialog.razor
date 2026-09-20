@@ -1,0 +1,208 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Sas
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject FileDownloadService Downloads
+@inject ToastService Toast
+
+@*
+    "Consignment Photos" modal (Figma frame supplied 2026-09-21), opened from the Consignment
+    Details page.
+
+        <ConsignmentPhotosDialog @bind-IsOpen="_photosOpen"
+                                 Code="@_c.Code" DispatchedAt="_c.DispatchedAt"
+                                 CourierService="@_c.CourierService"
+                                 Photos="_c.Photos" FileUrl="Api.FileUrl" />
+
+    Left: the numbered list with title / date / uploader. Right: the large preview with
+    previous / next. "Download All" saves every picture in turn through FileDownloadService
+    (bearer token attached, native viewer on MAUI).
+
+    Centred modal on tablet and desktop, full-height sheet on phone, where the list sits under
+    the preview.
+*@
+
+@if (IsOpen)
+{
+    <div class="cpd-backdrop" @onclick="CloseAsync"></div>
+
+    <div class="cpd" role="dialog" aria-modal="true" aria-labelledby="cpd-title" tabindex="-1"
+         @ref="_dialog" @onkeydown="OnKeyDown">
+
+        <header class="cpd-head">
+            <h2 id="cpd-title" class="cpd-title">Consignment Photos</h2>
+            <button type="button" class="cpd-close" aria-label="Close" @onclick="CloseAsync">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </header>
+
+        <div class="cpd-meta">
+            <span class="cpd-meta-item"><span class="cpd-meta-key">Consignment ID</span><span class="cpd-meta-val cpd-meta-val--green">@Code</span></span>
+            <span class="cpd-meta-item"><span class="cpd-meta-key">Dispatched Date</span><span class="cpd-meta-val">@(DispatchedAt?.ToString("dd MMM yyyy hh:mm tt") ?? "-")</span></span>
+            <span class="cpd-meta-item"><span class="cpd-meta-key">Courier Partner</span><span class="cpd-meta-val">@(string.IsNullOrWhiteSpace(CourierService) ? "-" : CourierService)</span></span>
+        </div>
+
+        @if (Items.Count == 0)
+        {
+            <div class="cpd-body">
+                <EmptyState Icon="bi-images" Title="No photos yet"
+                            Message="Nothing was attached to this consignment." Compact="true" />
+            </div>
+        }
+        else
+        {
+            <div class="cpd-body">
+                <ul class="cpd-list" aria-label="Photos in this consignment">
+                    @for (var i = 0; i < Items.Count; i++)
+                    {
+                        var index = i;
+                        var photo = Items[i];
+                        <li>
+                            <button type="button"
+                                    class="cpd-item @(index == _index ? "is-active" : "")"
+                                    aria-current="@(index == _index ? "true" : null)"
+                                    @onclick="() => _index = index">
+                                <img class="cpd-thumb" src="@Src(photo)" alt="" loading="lazy" />
+                                <span class="cpd-no">@(index + 1)</span>
+                                <span class="cpd-item-main">
+                                    <span class="cpd-item-title">@TitleOf(photo)</span>
+                                    <span class="cpd-item-when">@photo.CreatedAt.ToString("dd MMM yyyy hh:mm tt")</span>
+                                    <span class="cpd-item-by">@(string.IsNullOrWhiteSpace(photo.UploadedByName) ? "-" : photo.UploadedByName)</span>
+                                </span>
+                            </button>
+                        </li>
+                    }
+                </ul>
+
+                <div class="cpd-preview">
+                    <img class="cpd-preview-img" src="@Src(Items[SafeIndex])" alt="@TitleOf(Items[SafeIndex])" />
+
+                    @if (Items.Count > 1)
+                    {
+                        <button type="button" class="cpd-nav cpd-nav--prev" aria-label="Previous photo" @onclick="Prev">
+                            <i class="bi bi-arrow-left" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="cpd-nav cpd-nav--next" aria-label="Next photo" @onclick="Next">
+                            <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <footer class="cpd-foot">
+                <button type="button" class="cpd-download" disabled="@_downloading" @onclick="DownloadAllAsync">
+                    @if (_downloading)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Downloading...</span>
+                    }
+                    else
+                    {
+                        <span>Download All</span>
+                        <i class="bi bi-download" aria-hidden="true"></i>
+                    }
+                </button>
+            </footer>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    /// <summary>Consignment code shown in the header strip (CONS-2026-000001).</summary>
+    [Parameter] public string? Code { get; set; }
+    [Parameter] public DateTime? DispatchedAt { get; set; }
+    [Parameter] public string? CourierService { get; set; }
+
+    [Parameter] public List<ConsignmentPhotoDto> Photos { get; set; } = new();
+
+    /// <summary>Builds the absolute, token-bearing URL for a stored path (SasApi.FileUrl).</summary>
+    [Parameter] public Func<string, string>? FileUrl { get; set; }
+
+    private ElementReference _dialog;
+    private int _index;
+    private bool _downloading;
+    private bool _focused;
+
+    private List<ConsignmentPhotoDto> Items => Photos ?? new();
+    private int SafeIndex => Items.Count == 0 ? 0 : Math.Clamp(_index, 0, Items.Count - 1);
+
+    protected override void OnParametersSet()
+    {
+        if (!IsOpen) { _focused = false; return; }
+        if (_index >= Items.Count) _index = 0;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!IsOpen || _focused) return;
+        _focused = true;
+        try { await _dialog.FocusAsync(); } catch (Exception) { /* nothing to focus yet */ }
+    }
+
+    private string Src(ConsignmentPhotoDto p) => FileUrl?.Invoke(p.Path) ?? p.Path;
+
+    private static string TitleOf(ConsignmentPhotoDto p) =>
+        !string.IsNullOrWhiteSpace(p.Title) ? p.Title!
+        : p.Kind switch
+        {
+            ConsignmentPhotoKind.ShippingLabel => "Shipping Label / Waybill",
+            ConsignmentPhotoKind.Package => "Package Photo",
+            _ => string.IsNullOrWhiteSpace(p.FileName) ? "Document" : p.FileName
+        };
+
+    private void Prev() => _index = Items.Count == 0 ? 0 : (SafeIndex - 1 + Items.Count) % Items.Count;
+    private void Next() => _index = Items.Count == 0 ? 0 : (SafeIndex + 1) % Items.Count;
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape": await CloseAsync(); break;
+            case "ArrowLeft": Prev(); break;
+            case "ArrowRight": Next(); break;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        IsOpen = false;
+        _focused = false;
+        if (IsOpenChanged.HasDelegate) await IsOpenChanged.InvokeAsync(false);
+    }
+
+    /// <summary>
+    /// Saves the pictures one after another: the hosts' download bridge takes one file at a
+    /// time, and a mobile WebView drops a burst of parallel saves.
+    /// </summary>
+    private async Task DownloadAllAsync()
+    {
+        if (_downloading || Items.Count == 0) return;
+
+        _downloading = true;
+        var saved = 0;
+
+        foreach (var photo in Items)
+        {
+            try
+            {
+                var relative = Uri.EscapeDataString(photo.Path).Replace("%2F", "/").TrimStart('/');
+                var name = string.IsNullOrWhiteSpace(photo.FileName) ? $"{Code}_{saved + 1}.jpg" : photo.FileName;
+                await Downloads.GetAsync($"api/Sas/file/{relative}", name);
+                saved++;
+            }
+            catch (Exception)
+            {
+                // keep going: one broken file should not stop the rest
+            }
+        }
+
+        _downloading = false;
+
+        if (saved == Items.Count) Toast.Success($"{saved} photo{(saved == 1 ? "" : "s")} downloaded.");
+        else if (saved > 0) Toast.Warning($"{saved} of {Items.Count} photos downloaded.");
+        else Toast.Error("The photos could not be downloaded. Please check your connection and try again.");
+    }
+}
