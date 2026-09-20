@@ -27,15 +27,20 @@
 
     <PageHeader Title="Sample Collection" Subtitle="Manage and track all your samples">
         <Actions>
-            <button type="button" class="sas-btn sas-btn-outline" @onclick="RefreshAsync">
+            @* the .sas-btn-text label is hidden on phones, so each button carries
+               its own aria-label and title to stay identifiable as an icon. *@
+            <button type="button" class="sas-btn sas-btn-outline" @onclick="RefreshAsync"
+                    aria-label="Refresh data" title="Refresh data">
                 <i class="bi bi-arrow-clockwise" aria-hidden="true"></i>
                 <span class="sas-btn-text">Refresh Data</span>
             </button>
-            <button type="button" class="sas-btn sas-btn-outline" @onclick="ExportExcelAsync" disabled="@(Items.Count == 0)">
+            <button type="button" class="sas-btn sas-btn-outline" @onclick="ExportExcelAsync" disabled="@(Items.Count == 0)"
+                    aria-label="Export to Excel" title="Export to Excel">
                 <i class="bi bi-file-earmark-excel" aria-hidden="true"></i>
                 <span class="sas-btn-text">Excel</span>
             </button>
-            <button type="button" class="sas-btn sas-btn-outline" @onclick="ExportPdfAsync" disabled="@(Items.Count == 0)">
+            <button type="button" class="sas-btn sas-btn-outline" @onclick="ExportPdfAsync" disabled="@(Items.Count == 0)"
+                    aria-label="Export to PDF" title="Export to PDF">
                 <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
                 <span class="sas-btn-text">PDF</span>
             </button>
@@ -94,12 +99,21 @@
         <div class="sas-filter-body" id="sas-filter-body">
             <div class="sas-field sas-field--dates">
                 <label class="sas-label" for="sas-from">Date Range</label>
+                @* An empty date input paints nothing at all in the Android
+                   WebView, so on phones it reads as a broken blank box. The
+                   overlays below name each field until a date is picked. *@
                 <div class="sas-dates">
-                    <input id="sas-from" class="sas-input" type="date" aria-label="From date"
-                           value="@_from" @onchange="e => _from = e.Value?.ToString() ?? string.Empty" />
+                    <div class="sas-datefield @(string.IsNullOrWhiteSpace(_from) ? "is-empty" : null)">
+                        <input id="sas-from" class="sas-input" type="date" aria-label="From date"
+                               value="@_from" @onchange="e => _from = e.Value?.ToString() ?? string.Empty" />
+                        <span class="sas-datefield-ph" aria-hidden="true">From date</span>
+                    </div>
                     <span class="sas-dates-sep">to</span>
-                    <input class="sas-input" type="date" aria-label="To date"
-                           value="@_to" @onchange="e => _to = e.Value?.ToString() ?? string.Empty" />
+                    <div class="sas-datefield @(string.IsNullOrWhiteSpace(_to) ? "is-empty" : null)">
+                        <input class="sas-input" type="date" aria-label="To date"
+                               value="@_to" @onchange="e => _to = e.Value?.ToString() ?? string.Empty" />
+                        <span class="sas-datefield-ph" aria-hidden="true">To date</span>
+                    </div>
                 </div>
             </div>
 
