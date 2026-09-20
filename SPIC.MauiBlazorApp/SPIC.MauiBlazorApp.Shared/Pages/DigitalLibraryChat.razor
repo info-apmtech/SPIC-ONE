@@ -3,6 +3,7 @@
 @inject NavigationManager Nav
 @inject ToastService Toast
 @inject IJSRuntime JS
+@inject LoginState LoginState
 @implements IDisposable
 
 <PageTitle>Ask SPIC AI - Digital Library - SPIC ONE</PageTitle>
@@ -56,8 +57,8 @@
     <section class="ch-main">
         <header class="ch-head">
             <button type="button" class="ch-icon-btn ch-list-toggle" aria-label="Open chats" @onclick="() => _listOpen = true"><i class="bi bi-list"></i></button>
-            <h1 class="ch-title">Ask SPIC AI</h1>
-            <span class="ch-badge">SPIC AI Assistant</span>
+            <h1 class="ch-title">Digital Library Assistant</h1>
+            <span class="ch-badge">AI Assistant</span>
             <span class="ch-head-spacer"></span>
             <button type="button" class="ch-btn ch-btn-outline" @onclick="Share"><i class="bi bi-box-arrow-up"></i> <span>Share</span></button>
             <button type="button" class="ch-btn ch-btn-primary" @onclick="NewChat"><i class="bi bi-stars"></i> <span>Start Chat</span></button>
@@ -88,27 +89,31 @@
                     @foreach (var m in Current.Messages)
                     {
                         <div class="ch-msg @(m.FromUser ? "user" : "ai")">
-                            @if (!m.FromUser) { <span class="ch-avatar" aria-hidden="true"><i class="bi bi-stars"></i></span> }
-                            <div class="ch-bubble">
-                                <p>@m.Text</p>
-                                @if (m.Sources.Count > 0)
-                                {
-                                    <div class="ch-sources">
-                                        @foreach (var src in m.Sources)
-                                        {
-                                            <a class="ch-source" href="@($"DigitalLibrary/view/{src.Id}")"><i class="bi @(src.Type == DigitalLibraryType.Videos ? "bi-camera-video" : src.Type == DigitalLibraryType.Brochures ? "bi-file-earmark-pdf" : "bi-box-seam")"></i> @src.Title</a>
-                                        }
-                                    </div>
-                                }
-                                <span class="ch-time">@m.Time.ToString("HH:mm")</span>
+                            <div class="ch-msg-col">
+                                <div class="ch-bubble">
+                                    <p>@m.Text</p>
+                                    @if (m.Sources.Count > 0)
+                                    {
+                                        <div class="ch-sources">
+                                            @foreach (var src in m.Sources)
+                                            {
+                                                <a class="ch-source" href="@($"DigitalLibrary/view/{src.Id}")"><i class="bi @(src.Type == DigitalLibraryType.Videos ? "bi-camera-video" : src.Type == DigitalLibraryType.Brochures ? "bi-file-earmark-pdf" : "bi-box-seam")"></i> @src.Title</a>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                <span class="ch-time">@m.Time.ToString("H:mm") <i class="bi bi-check2-all"></i></span>
                             </div>
+                            <span class="ch-avatar @(m.FromUser ? "ch-avatar-user" : "")" aria-hidden="true">
+                                @if (m.FromUser) { <text>@UserInitial</text> } else { <i class="bi bi-robot"></i> }
+                            </span>
                         </div>
                     }
                     @if (_thinking)
                     {
                         <div class="ch-msg ai">
-                            <span class="ch-avatar" aria-hidden="true"><i class="bi bi-stars"></i></span>
-                            <div class="ch-bubble ch-typing"><span></span><span></span><span></span></div>
+                            <div class="ch-msg-col"><div class="ch-bubble ch-typing"><span></span><span></span><span></span></div></div>
+                            <span class="ch-avatar" aria-hidden="true"><i class="bi bi-robot"></i></span>
                         </div>
                     }
                 </div>
@@ -195,6 +200,29 @@
     private Conversation? Current => ConversationId is int id ? Conversations.FirstOrDefault(c => c.Id == id) : null;
 
     private ElementReference _body;
+    private string UserInitial
+    {
+        get
+        {
+            // First letter of the signed-in user's name from the JWT (same claims MainLayout reads).
+            try
+            {
+                var parts = LoginState.Token?.Split('.');
+                if (parts is { Length: >= 2 })
+                {
+                    var payload = parts[1].Replace('-', '+').Replace('_', '/');
+                    payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+                    using var doc = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(payload));
+                    foreach (var key in new[] { "name", "unique_name", "sub" })
+                    {
+                        if (doc.RootElement.TryGetProperty(key, out var v) && v.GetString() is { Length: > 0 } n) return n[..1].ToUpperInvariant();
+                    }
+                }
+            }
+            catch { }
+            return "U";
+        }
+    }
     private string _input = "";
     private string _source = "";
     private string _search = "";
