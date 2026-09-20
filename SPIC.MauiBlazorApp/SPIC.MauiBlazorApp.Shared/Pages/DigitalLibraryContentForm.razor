@@ -45,7 +45,7 @@ else
         {
             var step = s;
             <button type="button" class="pf-step @(step == _step ? "active" : "") @(step < _step ? "done" : "")" @onclick="() => Go(step)" aria-current="@(step == _step ? "step" : null)">
-                <span class="pf-step-no">@step</span> @StepNames[step - 1]
+                <span class="pf-step-no">@step</span><span class="pf-step-name">@StepNames[step - 1]</span>
             </button>
         }
     </nav>
@@ -368,14 +368,18 @@ else
     <ActionBar>
         <Secondary>
             <button type="button" class="pf-btn pf-btn-ghost" @onclick="BackToList">Cancel</button>
-            <button type="button" class="pf-btn pf-btn-outline" disabled="@_busy" @onclick="SaveDraft"><i class="bi bi-save"></i> Save as Draft</button>
+            <button type="button" class="pf-btn pf-btn-outline" disabled="@_busy" @onclick="SaveDraft">
+                <i class="bi bi-save"></i> <span class="pf-label-long">Save as Draft</span><span class="pf-label-short">Draft</span>
+            </button>
         </Secondary>
         <ChildContent>
             @if (_step > 1)
             {
                 <button type="button" class="pf-btn pf-btn-outline" @onclick="() => Go(_step - 1)"><i class="bi bi-arrow-left"></i> Back</button>
             }
-            <button type="button" class="pf-btn pf-btn-primary" disabled="@_busy" @onclick="Next">@NextLabel <i class="bi bi-arrow-right"></i></button>
+            <button type="button" class="pf-btn pf-btn-primary" disabled="@_busy" @onclick="Next">
+                <span class="pf-label-long">@NextLabel</span><span class="pf-label-short">@ShortNextLabel</span> <i class="bi bi-arrow-right"></i>
+            </button>
         </ChildContent>
     </ActionBar>
 </div>
@@ -429,6 +433,9 @@ else
     private List<string> Visibilities { get; set; } = new();
 
     private string NextLabel => _step switch { 1 => "Next: Related Content", 2 => "Next: Page Layout", _ => (IsEdit ? "Save Changes" : "Save & Publish") };
+
+    /// <summary>Phone label for the same button: the sticky bar has no room for the full text.</summary>
+    private string ShortNextLabel => _step switch { 1 or 2 => "Next", _ => (IsEdit ? "Save" : "Publish") };
 
     // ---------- related-content pickers (server paged) ----------
     private sealed class Picker
@@ -601,7 +608,7 @@ else
                             @for (var p = 1; p <= picker.PageCount; p++)
                             {
                                 var pg = p;
-                                <button type="button" class="pf-page @(pg == picker.Page ? "active" : "")" @onclick="() => GoPicker(picker, pg)">@pg</button>
+                                <button type="button" class="pf-pagebtn @(pg == picker.Page ? "active" : "")" @onclick="() => GoPicker(picker, pg)">@pg</button>
                             }
                             <button type="button" class="pf-icon-btn" aria-label="Next" disabled="@(picker.Page >= picker.PageCount)" @onclick="() => GoPicker(picker, picker.Page + 1)"><i class="bi bi-chevron-right"></i></button>
                         </div>
