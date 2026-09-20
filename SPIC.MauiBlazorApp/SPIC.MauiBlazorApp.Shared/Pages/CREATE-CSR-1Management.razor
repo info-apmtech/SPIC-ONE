@@ -156,15 +156,15 @@
                     @foreach (var program in GetFilteredPrograms())
                     {
                         <tr>
-                            <td style="text-align: center; padding-left: 24px;">
+                            <td class="csr-cell-select" style="text-align: center; padding-left: 24px;" data-label="">
                                 <input type="checkbox" checked="@program.IsSelected" @onchange="(e) => ToggleProgramSelection(program, e)" />
                             </td>
-                            <td>@program.ProgramType</td>
-                            <td>@program.ProgramName</td>
-                            <td>@program.ApprovedPrograms</td>
-                            <td>@program.Beneficiaries</td>
-                            <td>@program.ApprovedBudget.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
-                            <td style="text-align: right; padding-right: 24px;">
+                            <td data-label="Program Type">@program.ProgramType</td>
+                            <td data-label="Program Name">@program.ProgramName</td>
+                            <td data-label="Approved Budget">@program.ApprovedPrograms</td>
+                            <td data-label="Beneficiaries">@program.Beneficiaries</td>
+                            <td data-label="Approved Budget">@program.ApprovedBudget.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
+                            <td style="text-align: right; padding-right: 24px;" data-label="Action">
                                 <button class="csr-apply-btn" @onclick="() => PopulateFormFromProgram(program)">Apply CSR 1</button>
                             </td>
                         </tr>
@@ -488,6 +488,7 @@
         display: flex;
         flex-direction: column;
         gap: 4px;
+        min-width: 0;
     }
     .csr-alloc-label {
         font-size: 13px;
@@ -937,16 +938,90 @@
             justify-content: center;
             min-height: 44px;
         }
+        /* minmax(0,…) so a long "₹ 50,00,000" cannot push the tile (and the
+           page) wider than the 392px viewport. */
         .csr-stats-grid-4 {
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
         }
-        /* Program table keeps its columns but scrolls inside its card, never the page. */
-        .csr-table-container {
-            -webkit-overflow-scrolling: touch;
+        .csr-alloc-card {
+            padding: 14px;
+            gap: 8px;
         }
-        .csr-table {
-            min-width: 760px;
+        .csr-alloc-value {
+            font-size: 16px;
+            white-space: nowrap;
+        }
+        .csr-alloc-icon {
+            flex-shrink: 0;
+        }
+        /* Banner wraps instead of pushing its calendar mark off the screen. */
+        .csr-info-banner {
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 14px 16px;
+        }
+        .csr-banner-left {
+            gap: 12px;
+            min-width: 0;
+        }
+        .csr-banner-icon-info {
+            flex-shrink: 0;
+        }
+        .csr-banner-right {
+            display: none; /* decorative only */
+        }
+        /* Program table becomes one card per program so "Apply CSR 1" and the
+           budget columns are on screen instead of off the right edge. */
+        .csr-table-container {
+            overflow: visible;
+            padding: 0 12px 4px;
+        }
+        .csr-table thead {
+            display: none;
+        }
+        .csr-table,
+        .csr-table tbody,
+        .csr-table tr,
+        .csr-table td {
+            display: block;
+            width: 100%;
+        }
+        .csr-table tbody tr {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 6px 12px;
+            margin-bottom: 10px;
+        }
+        .csr-table td {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            text-align: right !important;
+            padding: 8px 0 !important;
+            border-bottom: 1px solid #f1f5f9;
+            white-space: normal;
+        }
+        .csr-table td::before {
+            content: attr(data-label);
+            flex: 0 0 42%;
+            text-align: left;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .csr-table td:last-child {
+            border-bottom: 0;
+        }
+        .csr-table td.csr-cell-select {
+            justify-content: flex-start;
+            border-bottom: 0;
+            padding-bottom: 0 !important;
+        }
+        .csr-table td.csr-cell-select::before {
+            display: none;
         }
         .csr-apply-btn,
         .csr-pag-btn {
@@ -954,6 +1029,17 @@
         }
         .csr-pag-btn {
             width: 44px;
+        }
+        /* Pagination stays inside the card and wraps. */
+        .csr-table-footer {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+            padding: 12px;
+        }
+        .csr-pagination {
+            flex-wrap: wrap;
+            justify-content: center;
         }
         .csr-search-input,
         .csr-form-control,

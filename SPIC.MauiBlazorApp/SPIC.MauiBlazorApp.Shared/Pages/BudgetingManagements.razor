@@ -94,8 +94,8 @@
                     @foreach (var hq in hqPlans)
                     {
                         <tr>
-                            <td class="bm-hq-name" style="padding-left: 24px;">@hq.HqName</td>
-                            <td style="padding-right: 24px;">
+                            <td class="bm-hq-name" data-label="HQ" style="padding-left: 24px;">@hq.HqName</td>
+                            <td data-label="Budget" style="padding-right: 24px;">
                                 <input type="number" class="bm-budget-input" @bind="hq.Budget" placeholder="0" min="0" />
                             </td>
                         </tr>
@@ -109,13 +109,13 @@
             <!-- Left Info Badges -->
             <div class="bm-info-badges">
                 <!-- Total Allocated -->
-                <div class="bm-info-badge badge-green">
+                <div class="bm-info-badge bm-badge-green">
                     <span class="bm-badge-label">TOTAL ALLOCATED</span>
                     <span class="bm-badge-value">$@TotalAllocatedFormatted</span>
                 </div>
 
                 <!-- Monthly Avg -->
-                <div class="bm-info-badge badge-orange">
+                <div class="bm-info-badge bm-badge-orange">
                     <span class="bm-badge-label">MONTHLY AVG</span>
                     <span class="bm-badge-value">$@MonthlyAvgFormatted</span>
                 </div>
@@ -187,10 +187,19 @@
         background-color: #ffffff;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
+    /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
+       watermarks (::before/::after) that leak onto these tiles and sit on top
+       of the label text. Neutralise them for this page only. */
+    .bm-stat-card::before,
+    .bm-stat-card::after {
+        content: none !important;
+    }
+
     .bm-stat-content {
         display: flex;
         flex-direction: column;
         gap: 4px;
+        min-width: 0;
     }
     .bm-stat-value {
         font-size: 24px;
@@ -360,12 +369,12 @@
         border: 1px solid transparent;
         font-family: inherit;
     }
-    .badge-green {
+    .bm-badge-green {
         background-color: #e6fcf1;
         border-color: #d1fae5;
         color: #047857;
     }
-    .badge-orange {
+    .bm-badge-orange {
         background-color: #fff7ed;
         border-color: #ffedd5;
         color: #c2410c;
@@ -486,13 +495,57 @@
             grid-template-columns: repeat(2, 1fr);
             gap: 10px;
         }
-        /* Budget table keeps its columns but scrolls inside its card, never the page. */
-        .bm-table-card {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
+        .bm-stat-card {
+            padding: 14px;
         }
-        .bm-table {
-            min-width: 720px;
+        /* Keep "₹ 4.85 Cr" on one line inside the narrow tile. */
+        .bm-stat-value {
+            font-size: 18px;
+            white-space: nowrap;
+        }
+        .bm-stat-icon {
+            width: 36px;
+            height: 36px;
+        }
+        /* Budget table becomes one card per HQ so the Budget input is always
+           on screen (it used to sit off the right edge of a 720px table). */
+        .bm-table-card {
+            overflow: visible;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+        .bm-table thead {
+            display: none;
+        }
+        .bm-table,
+        .bm-table tbody,
+        .bm-table tr,
+        .bm-table td {
+            display: block;
+            width: 100%;
+        }
+        .bm-table tbody tr {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+        .bm-table td {
+            padding: 4px 0 !important;
+            border-bottom: 0;
+        }
+        .bm-table td::before {
+            content: attr(data-label);
+            display: block;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .bm-table td.bm-hq-name::before {
+            display: none;
         }
         .bm-table input,
         .bm-table select,
