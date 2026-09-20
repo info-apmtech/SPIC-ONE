@@ -37,8 +37,19 @@ namespace SpicAPI.Controllers
 		private const long MaxAttachmentBytes = 10L * 1024 * 1024;
 		private const int TrendingWindowDays = 30;
 
+		private const int MaxAttachmentsPerReply = 3;
+		private const long MaxReplyAttachmentBytes = 5L * 1024 * 1024;
+		private const long MaxAvatarBytes = 2L * 1024 * 1024;
+		private const long MaxProductImageBytes = 3L * 1024 * 1024;
+
+		private const string AvatarsFolder = "avatars";
+		private const string ProductsFolder = "products";
+
 		private static readonly string[] AllowedExtensions =
 			{ ".jpg", ".jpeg", ".png", ".webp", ".pdf", ".doc", ".docx" };
+
+		private static readonly string[] AllowedImageExtensions =
+			{ ".jpg", ".jpeg", ".png", ".webp" };
 
 		private static readonly string[] DefaultCategories =
 		{
@@ -573,7 +584,7 @@ namespace SpicAPI.Controllers
 			if (files == null || files.Count == 0)
 				return BadRequest(new { Success = false, Message = "No files uploaded." });
 
-			var existingCount = await _db.CommunityPostAttachments.CountAsync(a => a.PostId == id);
+			var existingCount = await _db.CommunityPostAttachments.CountAsync(a => a.PostId == id && a.ReplyId == null);
 			if (existingCount + files.Count > MaxAttachmentsPerPost)
 				return BadRequest(new { Success = false, Message = $"A discussion can have at most {MaxAttachmentsPerPost} attachments." });
 
@@ -632,6 +643,80 @@ namespace SpicAPI.Controllers
 			return Ok(saved.Select(MapAttachment).ToList());
 		}
 
+		// POST /api/Community/replies/{id}/attachments   (multipart, field name "files"; images only, max 3)
+		[HttpPost("replies/{id:int}/attachments")]
+		[RequestSizeLimit(32 * 1024 * 1024)]
+		public async Task<IActionResult> UploadReplyAttachments(int id, [FromForm] List<IFormFile> files)
+		{
+			var reply = await _db.CommunityPostReplies.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+			if (reply == null)
+				return NotFound(new { Success = false, Message = "Reply not found." });
+
+			if (!CanModify(reply.AuthorUserId))
+				return StatusCode(403, new { Success = false, Message = "You can only attach images to your own reply." });
+
+			if (files == null || files.Count == 0)
+				return BadRequest(new { Success = false, Message = "No files uploaded." });
+
+			var existingCount = await _db.CommunityPostAttachments.CountAsync(a => a.ReplyId == id);
+			if (existingCount + files.Count > MaxAttachmentsPerReply)
+				return BadRequest(new { Success = false, Message = $"A reply can have at most {MaxAttachmentsPerReply} images." });
+
+			foreach (var file in files)
+			{
+				if (file.Length == 0)
+					return BadRequest(new { Success = false, Message = $"\"{file.FileName}\" is empty." });
+				if (file.Length > MaxReplyAttachmentBytes)
+					return BadRequest(new { Success = false, Message = $"\"{file.FileName}\" is larger than 5 MB." });
+
+				var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+				if (!AllowedImageExtensions.Contains(ext))
+					return BadRequest(new { Success = false, Message = "Only JPG, PNG and WEBP images can be attached to a reply." });
+			}
+
+			var folder = Path.Combine(GetUploadsRoot(), "Community", reply.PostId.ToString());
+			Directory.CreateDirectory(folder);
+
+			var saved = new List<CommunityPostAttachment>();
+
+			try
+			{
+				foreach (var file in files)
+				{
+					var safeName = MakeSafeFileName(file.FileName);
+					var storedName = $"r{id}_{DateTime.Now:yyyyMMddHHmmssfff}_{safeName}";
+					var physicalPath = Path.Combine(folder, storedName);
+
+					await using (var stream = new FileStream(physicalPath, FileMode.Create))
+					{
+						await file.CopyToAsync(stream);
+					}
+
+					var attachment = new CommunityPostAttachment
+					{
+						PostId = reply.PostId,
+						ReplyId = id,
+						FileName = Path.GetFileName(file.FileName),
+						StoredPath = $"Community/{reply.PostId}/{storedName}",
+						ContentType = ResolveContentType(Path.GetExtension(storedName).ToLowerInvariant()),
+						Size = file.Length,
+						CreatedAt = DateTime.Now
+					};
+
+					_db.CommunityPostAttachments.Add(attachment);
+					saved.Add(attachment);
+				}
+
+				await _db.SaveChangesAsync();
+			}
+			catch (Exception)
+			{
+				return StatusCode(500, new { Success = false, Message = "The files could not be uploaded. Please try again." });
+			}
+
+			return Ok(saved.Select(MapAttachment).ToList());
+		}
+
 		// DELETE /api/Community/attachments/{id}
 		[HttpDelete("attachments/{id:int}")]
 		public async Task<IActionResult> DeleteAttachment(int id)
@@ -640,9 +725,24 @@ namespace SpicAPI.Controllers
 			if (attachment == null)
 				return NotFound(new { Success = false, Message = "Attachment not found." });
 
-			var post = await _db.CommunityPosts.FirstOrDefaultAsync(p => p.Id == attachment.PostId);
-			if (post == null || !CanModify(post.AuthorUserId))
-				return StatusCode(403, new { Success = false, Message = "You can only remove attachments from your own discussion." });
+			// A reply attachment belongs to the reply's author; a post attachment to the post's.
+			CommunityPost? post = null;
+			if (attachment.ReplyId.HasValue)
+			{
+				var owner = await _db.CommunityPostReplies.AsNoTracking()
+					.Where(r => r.Id == attachment.ReplyId.Value)
+					.Select(r => r.AuthorUserId)
+					.FirstOrDefaultAsync();
+
+				if (owner == null || !CanModify(owner))
+					return StatusCode(403, new { Success = false, Message = "You can only remove images from your own reply." });
+			}
+			else
+			{
+				post = await _db.CommunityPosts.FirstOrDefaultAsync(p => p.Id == attachment.PostId);
+				if (post == null || !CanModify(post.AuthorUserId))
+					return StatusCode(403, new { Success = false, Message = "You can only remove attachments from your own discussion." });
+			}
 
 			var root = GetUploadsRoot();
 			var normalized = attachment.StoredPath.TrimStart('\\', '/').Replace('/', Path.DirectorySeparatorChar);
@@ -655,7 +755,7 @@ namespace SpicAPI.Controllers
 			}
 
 			_db.CommunityPostAttachments.Remove(attachment);
-			post.UpdatedAt = DateTime.Now;
+			if (post != null) post.UpdatedAt = DateTime.Now;
 			await _db.SaveChangesAsync();
 
 			return Ok(new { Success = true, Message = "Attachment removed." });
@@ -683,6 +783,78 @@ namespace SpicAPI.Controllers
 			return PhysicalFile(fullPath, ResolveContentType(Path.GetExtension(fullPath).ToLowerInvariant()));
 		}
 
+		// ---------------------------------------------------------------- me / avatar
+
+		// GET /api/Community/me
+		[HttpGet("me")]
+		public async Task<IActionResult> GetMe()
+		{
+			var author = await ResolveAuthorAsync();
+			return Ok(Member(author.UserId, author.Name, author.Role, author.Location));
+		}
+
+		// POST /api/Community/me/avatar   (multipart, field name "file")
+		[HttpPost("me/avatar")]
+		[RequestSizeLimit(8 * 1024 * 1024)]
+		public async Task<IActionResult> UploadAvatar(IFormFile? file)
+		{
+			var userId = CurrentUserId();
+			if (string.IsNullOrWhiteSpace(userId))
+				return StatusCode(403, new { Success = false, Message = "Sign in again to change your photo." });
+
+			if (file == null || file.Length == 0)
+				return BadRequest(new { Success = false, Message = "No file uploaded." });
+			if (file.Length > MaxAvatarBytes)
+				return BadRequest(new { Success = false, Message = "The photo must be 2 MB or smaller." });
+
+			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+			if (!AllowedImageExtensions.Contains(ext))
+				return BadRequest(new { Success = false, Message = "Only JPG, PNG and WEBP images are allowed." });
+
+			var folder = Path.Combine(GetUploadsRoot(), "Community", AvatarsFolder);
+			Directory.CreateDirectory(folder);
+
+			var safeUserId = MakeSafeFileName(userId);
+			if (string.IsNullOrWhiteSpace(safeUserId))
+				return BadRequest(new { Success = false, Message = "Your account cannot store a photo." });
+
+			try
+			{
+				// One avatar per user: any previously stored extension goes first.
+				DeleteFilesNamed(folder, safeUserId);
+
+				var physicalPath = Path.Combine(folder, safeUserId + ext);
+				await using (var stream = new FileStream(physicalPath, FileMode.Create))
+				{
+					await file.CopyToAsync(stream);
+				}
+			}
+			catch (Exception)
+			{
+				return StatusCode(500, new { Success = false, Message = "The photo could not be saved. Please try again." });
+			}
+
+			_avatarIndex = null;
+
+			var author = await ResolveAuthorAsync();
+			return Ok(Member(author.UserId, author.Name, author.Role, author.Location));
+		}
+
+		// DELETE /api/Community/me/avatar
+		[HttpDelete("me/avatar")]
+		public IActionResult DeleteAvatar()
+		{
+			var userId = CurrentUserId();
+			if (string.IsNullOrWhiteSpace(userId))
+				return StatusCode(403, new { Success = false, Message = "Sign in again to change your photo." });
+
+			var folder = Path.Combine(GetUploadsRoot(), "Community", AvatarsFolder);
+			DeleteFilesNamed(folder, MakeSafeFileName(userId));
+			_avatarIndex = null;
+
+			return Ok(new { Success = true, Message = "Photo removed." });
+		}
+
 		// ---------------------------------------------------------------- products and lookups
 
 		// GET /api/Community/products
@@ -707,15 +879,81 @@ namespace SpicAPI.Controllers
 				.Select(m => m.ProductName)
 				.ToListAsync();
 
+			var images = ProductImageIndex();
+
 			var items = DefaultProducts.Select(name => new CommunityProductDto
 			{
 				Name = name,
 				DiscussionCount = counts.FirstOrDefault(c => c.Name == name)?.Count ?? 0,
 				MemberCount = memberCounts.FirstOrDefault(c => c.Name == name)?.Count ?? 0,
-				Joined = mine.Contains(name, StringComparer.OrdinalIgnoreCase)
+				Joined = mine.Contains(name, StringComparer.OrdinalIgnoreCase),
+				ImagePath = images.TryGetValue(Slug(name), out var path) ? path : null
 			}).ToList();
 
 			return Ok(items);
+		}
+
+		// POST /api/Community/products/{name}/image   (multipart, field name "file")
+		[HttpPost("products/{name}/image")]
+		[RequestSizeLimit(16 * 1024 * 1024)]
+		public async Task<IActionResult> UploadProductImage(string name, IFormFile? file)
+		{
+			if (string.IsNullOrWhiteSpace(name))
+				return BadRequest(new { Success = false, Message = "Product is required." });
+
+			if (!await CanManageLibraryAsync())
+				return StatusCode(403, new { Success = false, Message = "You are not authorized to change product images." });
+
+			if (file == null || file.Length == 0)
+				return BadRequest(new { Success = false, Message = "No file uploaded." });
+			if (file.Length > MaxProductImageBytes)
+				return BadRequest(new { Success = false, Message = "The image must be 3 MB or smaller." });
+
+			var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+			if (!AllowedImageExtensions.Contains(ext))
+				return BadRequest(new { Success = false, Message = "Only JPG, PNG and WEBP images are allowed." });
+
+			name = name.Trim();
+			var slug = Slug(name);
+			if (string.IsNullOrWhiteSpace(slug))
+				return BadRequest(new { Success = false, Message = "Product is required." });
+
+			var folder = Path.Combine(GetUploadsRoot(), "Community", ProductsFolder);
+			Directory.CreateDirectory(folder);
+
+			try
+			{
+				// One image per product, whatever extension it was stored with before.
+				DeleteFilesNamed(folder, slug);
+
+				var physicalPath = Path.Combine(folder, slug + ext);
+				await using (var stream = new FileStream(physicalPath, FileMode.Create))
+				{
+					await file.CopyToAsync(stream);
+				}
+			}
+			catch (Exception)
+			{
+				return StatusCode(500, new { Success = false, Message = "The image could not be saved. Please try again." });
+			}
+
+			var userId = CurrentUserId();
+
+			var discussionCount = await _db.CommunityPosts.AsNoTracking()
+				.CountAsync(p => !p.IsDeleted && p.Product == name);
+			var memberCount = await _db.CommunityProductMembers.AsNoTracking()
+				.CountAsync(m => m.ProductName == name);
+			var joined = await _db.CommunityProductMembers.AsNoTracking()
+				.AnyAsync(m => m.ProductName == name && m.UserId == userId);
+
+			return Ok(new CommunityProductDto
+			{
+				Name = name,
+				DiscussionCount = discussionCount,
+				MemberCount = memberCount,
+				Joined = joined,
+				ImagePath = $"Community/{ProductsFolder}/{slug}{ext}"
+			});
 		}
 
 		// POST /api/Community/products/{name}/join   (toggle)
@@ -812,7 +1050,7 @@ namespace SpicAPI.Controllers
 				.ToListAsync();
 
 			var attachments = await _db.CommunityPostAttachments.AsNoTracking()
-				.Where(a => ids.Contains(a.PostId))
+				.Where(a => ids.Contains(a.PostId) && a.ReplyId == null)
 				.OrderBy(a => a.Id)
 				.Select(a => new { a.PostId, a.StoredPath, a.ContentType })
 				.ToListAsync();
@@ -827,13 +1065,7 @@ namespace SpicAPI.Controllers
 					.Where(r => r.PostId == post.Id)
 					.GroupBy(r => r.AuthorUserId)
 					.Take(3)
-					.Select(g => new CommunityMemberDto
-					{
-						UserId = g.Key,
-						Name = g.First().AuthorName,
-						Role = g.First().AuthorRole,
-						Location = g.First().AuthorLocation ?? ""
-					})
+					.Select(g => Member(g.Key, g.First().AuthorName, g.First().AuthorRole, g.First().AuthorLocation))
 					.ToList();
 
 				var cover = attachments
@@ -849,13 +1081,7 @@ namespace SpicAPI.Controllers
 					Crop = post.Crop,
 					Tags = SplitCsv(post.Tags),
 					Status = post.Status,
-					Author = new CommunityMemberDto
-					{
-						UserId = post.AuthorUserId,
-						Name = post.AuthorName,
-						Role = post.AuthorRole,
-						Location = post.AuthorLocation ?? ""
-					},
+					Author = Member(post.AuthorUserId, post.AuthorName, post.AuthorRole, post.AuthorLocation),
 					CreatedAt = post.CreatedAt,
 					LastActivityAt = post.LastActivityAt,
 					Views = post.Views,
@@ -895,10 +1121,16 @@ namespace SpicAPI.Controllers
 				.Select(r => r.TargetId)
 				.ToListAsync();
 
-			var attachments = await _db.CommunityPostAttachments.AsNoTracking()
+			var allAttachments = await _db.CommunityPostAttachments.AsNoTracking()
 				.Where(a => a.PostId == post.Id)
 				.OrderBy(a => a.Id)
 				.ToListAsync();
+
+			var attachments = allAttachments.Where(a => a.ReplyId == null).ToList();
+			var replyAttachments = allAttachments
+				.Where(a => a.ReplyId != null)
+				.GroupBy(a => a.ReplyId!.Value)
+				.ToDictionary(g => g.Key, g => g.Select(MapAttachment).ToList());
 
 			var detail = new DiscussionDetailDto
 			{
@@ -929,31 +1161,32 @@ namespace SpicAPI.Controllers
 					.Select(r => MapReply(
 						r,
 						replies.Count(child => child.ParentReplyId == r.Id),
-						likedReplyIds.Contains(r.Id)))
+						likedReplyIds.Contains(r.Id),
+						replyAttachments.TryGetValue(r.Id, out var files) ? files : null))
 					.ToList()
 			};
 
 			return detail;
 		}
 
-		private static ReplyDto MapReply(CommunityPostReply reply, int childCount, bool isLiked) => new()
+		private ReplyDto MapReply(
+			CommunityPostReply reply,
+			int childCount,
+			bool isLiked,
+			List<AttachmentDto>? attachments = null) => new()
 		{
 			Id = reply.Id,
 			DiscussionId = reply.PostId,
 			ParentReplyId = reply.ParentReplyId,
-			Author = new CommunityMemberDto
-			{
-				UserId = reply.AuthorUserId,
-				Name = reply.AuthorName,
-				Role = reply.AuthorRole,
-				Location = reply.AuthorLocation ?? ""
-			},
+			Author = Member(reply.AuthorUserId, reply.AuthorName, reply.AuthorRole, reply.AuthorLocation),
 			MentionName = reply.MentionName,
 			Body = reply.Body,
 			CreatedAt = reply.CreatedAt,
 			LikeCount = reply.LikeCount,
 			IsLiked = isLiked,
-			ReplyCount = childCount
+			ReplyCount = childCount,
+			IsMine = string.Equals(reply.AuthorUserId, CurrentUserId(), StringComparison.OrdinalIgnoreCase),
+			Attachments = attachments ?? new List<AttachmentDto>()
 		};
 
 		private static AttachmentDto MapAttachment(CommunityPostAttachment a) => new()
@@ -1079,6 +1312,122 @@ namespace SpicAPI.Controllers
 
 		private bool CanModify(string authorUserId) =>
 			IsAdmin() || string.Equals(authorUserId, CurrentUserId(), StringComparison.OrdinalIgnoreCase);
+
+		/// <summary>Admin/CorporateAdmin, or a designation that grants the DigitalLibrary page
+		/// (same check LibraryController.CanManageAsync makes).</summary>
+		private async Task<bool> CanManageLibraryAsync()
+		{
+			if (IsAdmin()) return true;
+
+			var userId = CurrentUserId();
+			if (string.IsNullOrWhiteSpace(userId)) return false;
+
+			var designationId = await _db.Users.AsNoTracking()
+				.Where(u => u.Id == userId)
+				.Select(u => u.DesignationId)
+				.FirstOrDefaultAsync();
+
+			if (!designationId.HasValue || designationId.Value <= 0) return false;
+
+			var roleAccess = await _db.Designations.AsNoTracking()
+				.Where(d => d.Id == designationId.Value && d.IsActive)
+				.Select(d => d.RoleAccess)
+				.FirstOrDefaultAsync();
+
+			return RoleAccessPermissions.HasPage(roleAccess, PagePermission.DigitalLibrary);
+		}
+
+		// ---------------------------------------------------------------- avatars and images
+
+		// Avatars and product images have no table: the file's existence IS the record.
+		// Both directories are listed at most once per request.
+		private Dictionary<string, string>? _avatarIndex;
+		private Dictionary<string, string>? _productImageIndex;
+
+		private Dictionary<string, string> AvatarIndex() =>
+			_avatarIndex ??= ListImageFolder(AvatarsFolder);
+
+		private Dictionary<string, string> ProductImageIndex() =>
+			_productImageIndex ??= ListImageFolder(ProductsFolder);
+
+		// key (file name without extension) -> relative path under Uploads.
+		private Dictionary<string, string> ListImageFolder(string folderName)
+		{
+			var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			var folder = Path.Combine(GetUploadsRoot(), "Community", folderName);
+
+			if (!Directory.Exists(folder))
+				return map;
+
+			try
+			{
+				foreach (var file in Directory.EnumerateFiles(folder))
+				{
+					var key = Path.GetFileNameWithoutExtension(file);
+					if (string.IsNullOrWhiteSpace(key)) continue;
+					map[key] = $"Community/{folderName}/{Path.GetFileName(file)}";
+				}
+			}
+			catch (Exception)
+			{
+				// An unreadable folder simply means "no images".
+			}
+
+			return map;
+		}
+
+		private string? AvatarPathFor(string? userId)
+		{
+			if (string.IsNullOrWhiteSpace(userId)) return null;
+			return AvatarIndex().TryGetValue(MakeSafeFileName(userId), out var path) ? path : null;
+		}
+
+		/// <summary>Every CommunityMemberDto the controller returns goes through here so the
+		/// avatar is resolved exactly once per user from the cached directory listing.</summary>
+		private CommunityMemberDto Member(string userId, string name, string role, string? location) => new()
+		{
+			UserId = userId ?? "",
+			Name = name ?? "",
+			Role = string.IsNullOrWhiteSpace(role) ? "Farmer" : role,
+			Location = location ?? "",
+			AvatarPath = AvatarPathFor(userId)
+		};
+
+		// Removes every file called "{baseName}.*" in the folder (the previous avatar /
+		// product image, whatever extension it was stored with).
+		private static void DeleteFilesNamed(string folder, string baseName)
+		{
+			if (string.IsNullOrWhiteSpace(baseName) || !Directory.Exists(folder)) return;
+
+			try
+			{
+				foreach (var existing in Directory.EnumerateFiles(folder, baseName + ".*").ToList())
+				{
+					if (!string.Equals(Path.GetFileNameWithoutExtension(existing), baseName, StringComparison.OrdinalIgnoreCase))
+						continue;
+					try { System.IO.File.Delete(existing); } catch (Exception) { /* best effort */ }
+				}
+			}
+			catch (Exception)
+			{
+				// best effort
+			}
+		}
+
+		// "SPIC Posh" -> "spic-posh"
+		private static string Slug(string name)
+		{
+			if (string.IsNullOrWhiteSpace(name)) return "";
+
+			var sb = new StringBuilder();
+			foreach (var ch in name.Trim())
+			{
+				if (char.IsLetterOrDigit(ch)) sb.Append(char.ToLowerInvariant(ch));
+				else if (sb.Length > 0 && sb[^1] != '-') sb.Append('-');
+			}
+
+			return sb.ToString().Trim('-');
+		}
 
 		// ---------------------------------------------------------------- small helpers
 

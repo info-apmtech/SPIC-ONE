@@ -2,6 +2,7 @@
 @inject NavigationManager Nav
 @inject ToastService Toast
 @inject DigitalLibraryApi Api
+@inject LoginState LoginState
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 @implements IDisposable
@@ -17,15 +18,22 @@
 
 <div class="dlc-page">
 
-    <PageHeader Title="All Content" Subtitle="@Subtitle" BackHref="/DigitalLibrary">
-        <Actions>
-            <button type="button" class="dlc-add" @onclick="() => _createOpen = true">
-                <i class="bi bi-plus-square"></i> Add Content
-            </button>
-        </Actions>
-    </PageHeader>
+    @if (CanAdd)
+    {
+        <PageHeader Title="All Content" Subtitle="@Subtitle" BackHref="/DigitalLibrary">
+            <Actions>
+                <button type="button" class="dlc-add" @onclick="() => _createOpen = true">
+                    <i class="bi bi-plus-square"></i> Add Content
+                </button>
+            </Actions>
+        </PageHeader>
+    }
+    else
+    {
+        <PageHeader Title="All Content" Subtitle="@Subtitle" BackHref="/DigitalLibrary" />
+    }
 
-    <div class="dlc-stats">
+    <div class="dlc-stats @(CanEdit ? "" : "dlc-stats-3")">
         <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Products ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Products)">
             <span class="dlc-stat-label">Product Information</span>
             <span class="dlc-stat-value">@(_stats?.Products ?? 0)</span>
@@ -44,12 +52,15 @@
             <span class="dlc-stat-hint">Brochures, datasheets, catalogues</span>
             <span class="dlc-stat-icon dlc-ic-pink"><i class="bi bi-journal-bookmark"></i></span>
         </button>
-        <button type="button" class="dlc-stat @(Status == "draft" ? "active" : "")" @onclick='() => SetStatus("draft")'>
-            <span class="dlc-stat-label">Draft Content</span>
-            <span class="dlc-stat-value">@(_stats?.Drafts ?? 0)</span>
-            <span class="dlc-stat-hint">Pending content</span>
-            <span class="dlc-stat-icon dlc-ic-yellow"><i class="bi bi-pencil-square"></i></span>
-        </button>
+        @if (CanEdit)
+        {
+            <button type="button" class="dlc-stat @(Status == "draft" ? "active" : "")" @onclick='() => SetStatus("draft")'>
+                <span class="dlc-stat-label">Draft Content</span>
+                <span class="dlc-stat-value">@(_stats?.Drafts ?? 0)</span>
+                <span class="dlc-stat-hint">Pending content</span>
+                <span class="dlc-stat-icon dlc-ic-yellow"><i class="bi bi-pencil-square"></i></span>
+            </button>
+        }
     </div>
 
     <div class="dlc-filters">
@@ -60,11 +71,14 @@
             <button type="button" role="tab" class="dlc-tab @(Type == DigitalLibraryType.Brochures ? "active" : "")" aria-selected="@(Type == DigitalLibraryType.Brochures)" @onclick="() => SetType(DigitalLibraryType.Brochures)">Brochures</button>
         </div>
         <div class="dlc-filter-right">
-            <select class="dlc-select" aria-label="Status" value="@Status" @onchange="e => SetStatus(e.Value?.ToString())">
-                <option value="">All Status</option>
-                <option value="published">Published</option>
-                <option value="draft">Draft</option>
-            </select>
+            @if (CanEdit)
+            {
+                <select class="dlc-select" aria-label="Status" value="@Status" @onchange="e => SetStatus(e.Value?.ToString())">
+                    <option value="">All Status</option>
+                    <option value="published">Published</option>
+                    <option value="draft">Draft</option>
+                </select>
+            }
             <div class="dlc-search">
                 <i class="bi bi-search" aria-hidden="true"></i>
                 <input type="search" placeholder="Search content..." aria-label="Search content" value="@Query" @oninput="e => SetQuery(e.Value?.ToString())" />
@@ -94,6 +108,7 @@
             @foreach (var item in Items)
             {
                 <DigitalLibraryCard @key="item.Id" Item="item"
+                                    ShowActions="CanEdit" CanUpdate="CanUpdate" CanDelete="CanDelete"
                                     OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
             }
         </div>
@@ -112,11 +127,21 @@
         }
     }
 
-    <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
+    @if (CanAdd)
+    {
+        <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
+    }
     <DigitalLibraryUnpublishDialog Item="_unpublishTarget" OnConfirm="ConfirmUnpublish" OnCancel="() => _unpublishTarget = null" />
 </div>
 
 @code {
+    // Content is readable by every signed-in user; adding and editing needs the DigitalLibrary
+    // page in the designation (Admin / CorporateAdmin bypass). The API enforces the same rule.
+    private bool CanEdit => LoginState.CanAccess("DigitalLibrary");
+    private bool CanAdd => CanEdit && LoginState.Can("DigitalLibrary", "Entry");
+    private bool CanUpdate => CanEdit && LoginState.Can("DigitalLibrary", "Update");
+    private bool CanDelete => CanEdit && LoginState.Can("DigitalLibrary", "Delete");
+
     private bool _createOpen;
     private DigitalLibraryItem? _unpublishTarget;
 
@@ -148,7 +173,9 @@
     protected override async Task OnParametersSetAsync()
     {
         Type = DigitalLibraryItem.ParseType(TypeQuery);
-        Status = StatusQuery?.ToLowerInvariant() ?? "";
+        // A reader has no status filter at all, so a hand-typed ?status=draft is ignored here
+        // as well as server side.
+        Status = CanEdit ? (StatusQuery?.ToLowerInvariant() ?? "") : "";
         Query = SearchQuery ?? "";
 
         // Only refetch when the filters actually changed (OnParametersSet also runs on re-render).
@@ -159,12 +186,14 @@
         await Load(reset: true);
     }
 
-    private LibraryContentStatus? StatusFilter => Status switch
-    {
-        "published" => LibraryContentStatus.Published,
-        "draft" => LibraryContentStatus.Draft,
-        _ => null
-    };
+    private LibraryContentStatus? StatusFilter => CanEdit
+        ? Status switch
+        {
+            "published" => LibraryContentStatus.Published,
+            "draft" => LibraryContentStatus.Draft,
+            _ => null
+        }
+        : LibraryContentStatus.Published;
 
     private async Task Load(bool reset)
     {

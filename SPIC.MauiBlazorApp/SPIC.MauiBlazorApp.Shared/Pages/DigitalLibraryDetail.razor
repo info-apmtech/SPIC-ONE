@@ -3,6 +3,7 @@
 @inject ToastService Toast
 @inject DigitalLibraryApi Api
 @inject FileDownloadService Files
+@inject LoginState LoginState
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 
@@ -42,7 +43,10 @@ else
                 <div class="dv-hero-shade"></div>
                 <div class="dv-hero-top">
                     <button type="button" class="dv-hero-btn" @onclick="Back"><i class="bi bi-arrow-left"></i> Back</button>
-                    <button type="button" class="dv-hero-btn" @onclick="Edit"><i class="bi bi-pencil"></i> Edit Content</button>
+                    @if (CanUpdate)
+                    {
+                        <button type="button" class="dv-hero-btn" @onclick="Edit"><i class="bi bi-pencil"></i> Edit Content</button>
+                    }
                 </div>
                 <div class="dv-hero-body">
                     <div class="dv-tags">
@@ -91,14 +95,17 @@ else
                             <div><dt>Tag</dt><dd class="dv-chips">@foreach (var t in item.Tags) { <span class="dv-chip dv-chip-green">@t</span> }</dd></div>
                         }
                     </dl>
-                    <button type="button" class="dv-side-btn dv-side-edit" @onclick="Edit">Edit Details</button>
-                    @if (IsPublished)
+                    @if (CanUpdate)
                     {
-                        <button type="button" class="dv-side-btn dv-side-unpub" @onclick="() => _unpublishTarget = AsItem()">Unpublish @KindWordCap</button>
-                    }
-                    else
-                    {
-                        <button type="button" class="dv-side-btn dv-side-pub" @onclick="Publish">Publish @KindWordCap</button>
+                        <button type="button" class="dv-side-btn dv-side-edit" @onclick="Edit">Edit Details</button>
+                        @if (IsPublished)
+                        {
+                            <button type="button" class="dv-side-btn dv-side-unpub" @onclick="() => _unpublishTarget = AsItem()">Unpublish @KindWordCap</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="dv-side-btn dv-side-pub" @onclick="Publish">Publish @KindWordCap</button>
+                        }
                     }
                 </section>
             </aside>
@@ -110,6 +117,11 @@ else
 
 @code {
     [Parameter] public int Id { get; set; }
+
+    // Every signed-in user may read a published item; editing needs the DigitalLibrary page
+    // in the designation (Admin / CorporateAdmin bypass). The API enforces the same rule.
+    private bool CanEdit => LoginState.CanAccess("DigitalLibrary");
+    private bool CanUpdate => CanEdit && LoginState.Can("DigitalLibrary", "Update");
 
     private LibraryContentDetailDto? Detail { get; set; }
     private DigitalLibraryItem? _unpublishTarget;

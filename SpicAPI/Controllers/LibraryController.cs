@@ -110,9 +110,12 @@ namespace SpicAPI.Controllers
         [HttpGet("stats")]
         public async Task<IActionResult> GetStats()
         {
+            // Readers (no DigitalLibrary page in their designation) only ever see published content,
+            // so their counts exclude drafts and archived items.
+            var canManage = await CanManageAsync();
             var rows = await _db.LibraryContents
                 .AsNoTracking()
-                .Where(c => !c.IsDeleted)
+                .Where(c => !c.IsDeleted && (canManage || c.Status == LibraryContentStatus.Published))
                 .Select(c => new { c.Kind, c.Status, c.Views })
                 .ToListAsync();
 

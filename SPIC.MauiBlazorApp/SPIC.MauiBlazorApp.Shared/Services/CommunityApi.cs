@@ -26,6 +26,16 @@ public sealed class CommunityApi
     /// <summary>Largest file the drop zone accepts (also enforced server side).</summary>
     public const long MaxFileBytes = 10L * 1024 * 1024;
 
+    /// <summary>Largest image a reply may carry, and how many (also enforced server side).</summary>
+    public const long MaxReplyImageBytes = 5L * 1024 * 1024;
+    public const int MaxReplyImages = 3;
+
+    /// <summary>Largest profile photo (also enforced server side).</summary>
+    public const long MaxAvatarBytes = 2L * 1024 * 1024;
+
+    /// <summary>Largest Popular Product picture (also enforced server side).</summary>
+    public const long MaxProductImageBytes = 3L * 1024 * 1024;
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
@@ -45,6 +55,15 @@ public sealed class CommunityApi
 
     /// <summary>Identity id of the signed-in user, used only to decide which rows offer Delete.</summary>
     public string? CurrentUserId => _login.UserId;
+
+    /// <summary>
+    /// Community moderator: may resolve / reopen any discussion and delete any reply. The API
+    /// enforces the same rule; this only decides whether the control is worth showing.
+    /// </summary>
+    public bool IsModerator => _login.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
+
+    /// <summary>Who may replace a Popular Product picture (same designation as the Digital Library).</summary>
+    public bool CanEditProducts => _login.CanAccess("DigitalLibrary");
 
     /// <summary>
     /// Display-only stand-in for the signed-in user: the avatar beside a composer, nothing else.
@@ -351,6 +370,51 @@ public sealed class CommunityApi
         SendAsync(HttpMethod.Delete, $"{Root}/attachments/{attachmentId}", null, "remove this attachment", ct);
 
     /// <summary>
+    /// Images posted with a reply (multipart "files", at most <see cref="MaxReplyImages"/>).
+    /// Called after <see cref="AddReplyAsync"/> succeeded, so a failure here only costs the
+    /// pictures: the reply itself is already in the thread.
+    /// </summary>
+    public async Task<List<CommunityAttachment>?> UploadReplyImagesAsync(int replyId,
+        IReadOnlyList<IBrowserFile> files, CancellationToken ct = default)
+    {
+        if (files.Count == 0) return new List<CommunityAttachment>();
+
+        var dtos = await UploadAsync<List<AttachmentDto>>($"{Root}/replies/{replyId}/attachments",
+            "files", files.Take(MaxReplyImages).ToList(), MaxReplyImageBytes, "attach the images", ct);
+
+        return dtos?.Select(a => CommunityAttachment.FromDto(a, FileUrl)).ToList();
+    }
+
+    // ------------------------------------------------------------------ profile photo
+
+    /// <summary>The caller's own community profile (name, role, location, avatar).</summary>
+    public Task<CommunityMember?> GetMeAsync(CancellationToken ct = default) =>
+        GetAsync($"{Root}/me", (CommunityMemberDto d) => CommunityMember.FromDto(d, FileUrl), "your profile", ct);
+
+    /// <summary>Replaces the caller's profile photo; returns the refreshed member or null on failure.</summary>
+    public async Task<CommunityMember?> UploadAvatarAsync(IBrowserFile file, CancellationToken ct = default)
+    {
+        var dto = await UploadAsync<CommunityMemberDto>($"{Root}/me/avatar", "file",
+            new[] { file }, MaxAvatarBytes, "update your photo", ct);
+
+        return dto is null ? null : CommunityMember.FromDto(dto, FileUrl);
+    }
+
+    public Task<bool> RemoveAvatarAsync(CancellationToken ct = default) =>
+        SendAsync(HttpMethod.Delete, $"{Root}/me/avatar", null, "remove your photo", ct);
+
+    /// <summary>Product artwork for the Popular Product cards (Admin / DigitalLibrary designation).</summary>
+    public async Task<CommunityProduct?> UploadProductImageAsync(string productName, IBrowserFile file,
+        CancellationToken ct = default)
+    {
+        var dto = await UploadAsync<CommunityProductDto>(
+            $"{Root}/products/{Uri.EscapeDataString(productName)}/image", "file",
+            new[] { file }, MaxProductImageBytes, "update the product picture", ct);
+
+        return dto is null ? null : CommunityProduct.FromDto(dto, FileUrl);
+    }
+
+    /// <summary>
     /// Absolute URL for a stored file. The community file endpoint is on the <c>access_token</c>
     /// allowlist, so &lt;img&gt; / target="_blank" work without the Authorization header
     /// (same pattern as the guest-house image URLs in BookingDetails.razor).
@@ -406,6 +470,54 @@ public sealed class CommunityApi
         {
             ToastOffline($"load {what}");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// One multipart POST with <paramref name="field"/> repeated for every file, returning the
+    /// deserialised answer or null after a toast. Every stream is disposed, whatever happens.
+    /// </summary>
+    private async Task<TDto?> UploadAsync<TDto>(string url, string field, IReadOnlyList<IBrowserFile> files,
+        long maxBytes, string what, CancellationToken ct)
+        where TDto : class
+    {
+        using var content = new MultipartFormDataContent();
+        var streams = new List<Stream>();
+
+        try
+        {
+            foreach (var file in files)
+            {
+                var stream = file.OpenReadStream(maxBytes, ct);
+                streams.Add(stream);
+
+                var part = new StreamContent(stream);
+                if (!string.IsNullOrWhiteSpace(file.ContentType) &&
+                    MediaTypeHeaderValue.TryParse(file.ContentType, out var mediaType))
+                {
+                    part.Headers.ContentType = mediaType;
+                }
+
+                content.Add(part, field, file.Name);
+            }
+
+            var response = await _http.PostAsync(url, content, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                await ToastFailureAsync(response, what);
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<TDto>(Json, ct);
+        }
+        catch (Exception)
+        {
+            ToastOffline(what);
+            return null;
+        }
+        finally
+        {
+            foreach (var stream in streams) stream.Dispose();
         }
     }
 

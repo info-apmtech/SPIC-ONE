@@ -28,7 +28,22 @@
         </div>
 
         <p class="cm-reply-body">@if (!string.IsNullOrWhiteSpace(Reply.MentionName))
-            {<span class="cm-reply-mention">@("@" + Reply.MentionName)</span>@(" ")}@Reply.Body</p>
+            {<span class="cm-reply-mention">@("@" + Reply.MentionName)</span>@(" ")}@CommunityText.Linkify(Reply.Body)</p>
+
+        @if (ReplyImages.Count > 0)
+        {
+            <div class="cm-reply-imgs">
+                @for (var i = 0; i < ReplyImages.Count; i++)
+                {
+                    var index = i;
+                    <button type="button" class="cm-reply-img"
+                            aria-label="@($"Open image {index + 1} of {ReplyImages.Count}")"
+                            @onclick="() => OpenImageAsync(index)">
+                        <img src="@ReplyImages[index].Url" alt="" loading="lazy" />
+                    </button>
+                }
+            </div>
+        }
 
         <div class="cm-reply-actions">
             <button type="button"
@@ -45,29 +60,31 @@
                 <i class="bi bi-reply" aria-hidden="true"></i>
                 <span>@Reply.ReplyCount reply</span>
             </button>
+
+            @if (CanDelete)
+            {
+                <button type="button"
+                        class="cm-reply-act cm-reply-del"
+                        title="Delete this reply"
+                        aria-label="Delete this reply"
+                        disabled="@_deleting"
+                        @onclick="DeleteAsync">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                </button>
+            }
         </div>
 
         @if (_boxOpen)
         {
-            <div class="cm-reply-box">
-                <MemberAvatar Member="Api.ComposerIdentity" Size="32" />
-                <div class="cm-reply-box-main">
-                    <textarea class="cm-reply-input"
-                              rows="2"
-                              placeholder="Write a reply..."
-                              aria-label="@($"Reply to {Reply.Author.Name}")"
-                              @bind="_draft"
-                              @bind:event="oninput"></textarea>
-                    <div class="cm-reply-box-actions">
-                        <button type="button" class="cm-reply-cancel" @onclick="CloseBox">Cancel</button>
-                        <button type="button" class="cm-reply-post"
-                                disabled="@(_posting || string.IsNullOrWhiteSpace(_draft))"
-                                @onclick="PostAsync">
-                            @(_posting ? "Posting…" : "Reply")
-                        </button>
-                    </div>
-                </div>
-            </div>
+            <ReplyComposer Inline="true"
+                           DiscussionId="DiscussionId"
+                           ParentReplyId="@(PostUnderId ?? Reply.Id)"
+                           MentionName="@Reply.Author.Name"
+                           Me="Me"
+                           Placeholder="@($"Reply to {Reply.Author.Name}...")"
+                           OnPosted="OnComposerPostedAsync"
+                           OnCancel="CloseBox"
+                           OnAvatarClick="OnAvatarClick" />
         }
 
         @if (!Nested && Children.Count > 0)
@@ -80,7 +97,11 @@
                                DiscussionId="DiscussionId"
                                Nested="true"
                                PostUnderId="Reply.Id"
-                               OnPosted="OnPosted" />
+                               Me="Me"
+                               OnPosted="OnPosted"
+                               OnDeleted="OnDeleted"
+                               OnOpenImage="OnOpenImage"
+                               OnAvatarClick="OnAvatarClick" />
                 }
             </div>
         }
@@ -105,11 +126,27 @@
     /// <summary>Raised with the reply the server created, so the page can add it to the thread.</summary>
     [Parameter] public EventCallback<CommunityReply> OnPosted { get; set; }
 
+    /// <summary>Raised with the reply the server deleted, so the page can drop it and its children.</summary>
+    [Parameter] public EventCallback<CommunityReply> OnDeleted { get; set; }
+
+    /// <summary>Asks the page to open its lightbox on this reply's images.</summary>
+    [Parameter] public EventCallback<CommunityImageOpen> OnOpenImage { get; set; }
+
+    /// <summary>The signed-in user, for the inline composer's avatar.</summary>
+    [Parameter] public CommunityMember? Me { get; set; }
+
+    /// <summary>The user tapped their own avatar in the inline composer.</summary>
+    [Parameter] public EventCallback OnAvatarClick { get; set; }
+
     private bool _boxOpen;
-    private bool _posting;
-    private string _draft = "";
+    private bool _deleting;
 
     private string DomId => $"cm-reply-{DiscussionId}-{Reply.Id}";
+
+    /// <summary>The author may remove their own reply; Admin / CorporateAdmin may remove any.</summary>
+    private bool CanDelete => Reply.IsMine || Api.IsModerator;
+
+    private List<CommunityAttachment> ReplyImages => Reply.Images.ToList();
 
     /// <summary>"Farmer · Thanjavur · Sep 3, 2026 · 9:12 AM" (town only, without the state).</summary>
     private string Meta
@@ -147,53 +184,39 @@
         StateHasChanged();
     }
 
-    private void ToggleBox()
+    private void ToggleBox() => _boxOpen = !_boxOpen;
+
+    private void CloseBox() => _boxOpen = false;
+
+    /// <summary>The composer posted; the page owns the thread, so it does the bookkeeping.</summary>
+    private async Task OnComposerPostedAsync(CommunityReply posted)
     {
-        _boxOpen = !_boxOpen;
-        if (_boxOpen && string.IsNullOrWhiteSpace(_draft))
-        {
-            _draft = $"@{Reply.Author.Name} ";
-        }
-    }
-
-    private void CloseBox()
-    {
-        _boxOpen = false;
-        _draft = "";
-    }
-
-    private async Task PostAsync()
-    {
-        var text = (_draft ?? "").Trim();
-        if (text.Length == 0 || _posting) return;
-
-        // "@Name " typed by the reply button is sent as the mention, not as body text.
-        var mention = Reply.Author.Name;
-        if (!string.IsNullOrEmpty(mention) && text.StartsWith("@" + mention, StringComparison.OrdinalIgnoreCase))
-        {
-            text = text[(mention.Length + 1)..].TrimStart();
-        }
-        else
-        {
-            mention = null;
-        }
-
-        if (text.Length == 0)
-        {
-            Toast.Info("Please write your reply.");
-            return;
-        }
-
-        _posting = true;
-        var posted = await Api.AddReplyAsync(DiscussionId, text, PostUnderId ?? Reply.Id, mention);
-        _posting = false;
-
-        if (posted is null) return;   // CommunityApi already explained why
-
-        // The page owns the thread, so it is the one that bumps the parent's reply count.
         CloseBox();
-        Toast.Success("Reply posted.");
-
         if (OnPosted.HasDelegate) await OnPosted.InvokeAsync(posted);
+    }
+
+    private Task OpenImageAsync(int index) =>
+        OnOpenImage.HasDelegate
+            ? OnOpenImage.InvokeAsync(new CommunityImageOpen(ReplyImages, index))
+            : Task.CompletedTask;
+
+    private async Task DeleteAsync()
+    {
+        if (_deleting) return;
+
+        var ok = await Toast.ConfirmAsync("Delete reply",
+            "This reply will be removed from the discussion.",
+            "Delete", danger: true);
+
+        if (!ok) return;
+
+        _deleting = true;
+        var removed = await Api.DeleteReplyAsync(Reply.Id);
+        _deleting = false;
+
+        if (!removed) return;         // CommunityApi already explained why
+
+        Toast.Info("Reply deleted.");
+        if (OnDeleted.HasDelegate) await OnDeleted.InvokeAsync(Reply);
     }
 }

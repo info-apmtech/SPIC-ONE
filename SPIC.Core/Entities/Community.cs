@@ -77,6 +77,8 @@ public class CommunityPostAttachment
     public int Id { get; set; }
     public int PostId { get; set; }
     public CommunityPost? Post { get; set; }
+    /// <summary>Null = attached to the post itself; otherwise the reply it belongs to (images only).</summary>
+    public int? ReplyId { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string StoredPath { get; set; } = string.Empty; // Community/{postId}/....
     public string ContentType { get; set; } = string.Empty;

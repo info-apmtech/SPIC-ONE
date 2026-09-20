@@ -20,13 +20,16 @@
 
     // Shell hub pages (phone tab bar / top bar destinations). Each hub only LINKS to pages the
     // user can already open (every link is filtered by LoginState.CanAccess), so they are open to
-    // every signed-in user who has a designation. "/DigitalLibrary/chat" (Ask SPIC AI) is opened
-    // the same way below; the rest of the Digital Library stays behind CanAccess("DigitalLibrary").
+    // every signed-in user who has a designation.
+    // Product decision 2026-09-20: the Knowledge Community is usable by everyone, and Digital
+    // Library CONTENT is viewable by everyone; only adding/editing content (/DigitalLibrary/add/...)
+    // needs the DigitalLibrary page in the user's designation (the API enforces the same rule).
     private static readonly HashSet<string> _shellHubs = new(StringComparer.OrdinalIgnoreCase)
     {
         "Activities",
         "Farmers",
-        "Alerts"
+        "Alerts",
+        "Community"
     };
 
     // Generic identity rule: a dynamically registered page's ApplicationPage.Key
@@ -139,7 +142,7 @@
         if (_alwaysOpen.Contains(firstSegment)) return;
         if (_shellHubs.Contains(firstSegment)) return;
         if (firstSegment.Equals("DigitalLibrary", StringComparison.OrdinalIgnoreCase)
-            && secondSegment.Equals("chat", StringComparison.OrdinalIgnoreCase))
+            && !secondSegment.Equals("add", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }

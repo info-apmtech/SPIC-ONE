@@ -64,6 +64,12 @@ end-to-end pass on the web host (phone and desktop widths) with the coordinator'
 community post flow (unique and similar paths, view counting) and the assistant (source filter,
 stored provider). Phase 3 (production) is with the product owner.
 
+Round 2 (same day): reply images, avatars, product images, resolve/reopen, reply delete, chat
+attach and voice, and the open-access model (community for all, library content for all, content
+addition by designation). Verified with one QA login per AppRole (`qa.<role>` in the local
+database, designation "QA All Pages") through the ui-sweep harness at phone width on the web and
+on the phone against the local API.
+
 ## 4. Acceptance
 
 - `dotnet build SpicOne.sln` clean; migration applies to an empty database and to a copy of the

@@ -14,12 +14,21 @@
         <div class="dlc-card-meta">
             <span class="dlc-tag dlc-tag-type">@Item.TypeLabel</span>
             <span class="dlc-tag @(Item.Published ? "dlc-tag-pub" : "dlc-tag-draft")">@(Item.Published ? "Published" : "Draft")</span>
-            @if (ShowActions)
+            @if (ShowUpdate || ShowDelete)
             {
                 <span class="dlc-card-actions">
-                    <button type="button" class="dlc-icon-btn" title="Edit" aria-label="Edit" @onclick="() => OnEdit.InvokeAsync(Item)"><i class="bi bi-pencil"></i></button>
-                    <button type="button" class="dlc-icon-btn dlc-icon-danger" title="Delete" aria-label="Delete" @onclick="() => OnDelete.InvokeAsync(Item)"><i class="bi bi-trash"></i></button>
-                    <button type="button" class="dlc-icon-btn dlc-icon-archive" title="Archive" aria-label="Archive" @onclick="() => OnArchive.InvokeAsync(Item)"><i class="bi bi-archive"></i></button>
+                    @if (ShowUpdate)
+                    {
+                        <button type="button" class="dlc-icon-btn" title="Edit" aria-label="Edit" @onclick="() => OnEdit.InvokeAsync(Item)"><i class="bi bi-pencil"></i></button>
+                    }
+                    @if (ShowDelete)
+                    {
+                        <button type="button" class="dlc-icon-btn dlc-icon-danger" title="Delete" aria-label="Delete" @onclick="() => OnDelete.InvokeAsync(Item)"><i class="bi bi-trash"></i></button>
+                    }
+                    @if (ShowUpdate)
+                    {
+                        <button type="button" class="dlc-icon-btn dlc-icon-archive" title="Archive" aria-label="Archive" @onclick="() => OnArchive.InvokeAsync(Item)"><i class="bi bi-archive"></i></button>
+                    }
                 </span>
             }
         </div>
@@ -27,7 +36,7 @@
         <p class="dlc-card-desc">@Item.Description</p>
         <div class="dlc-card-foot">
             <span class="dlc-card-author">@Item.Author <small>@Item.Date.ToString("dd MMM yyyy")</small></span>
-            @if (ShowActions)
+            @if (ShowUpdate)
             {
                 <button type="button" class="@(Item.Published ? "dlc-btn-unpublish" : "dlc-btn-publish")" @onclick="() => OnTogglePublish.InvokeAsync(Item)">
                     @(Item.Published ? "Unpublish" : "Publish")
@@ -39,11 +48,19 @@
 
 @code {
     [Parameter, EditorRequired] public DigitalLibraryItem Item { get; set; } = default!;
+    /// <summary>Master switch: false hides every edit control (a reader who cannot edit the library).</summary>
     [Parameter] public bool ShowActions { get; set; } = true;
+    /// <summary>Edit / Archive / Publish / Unpublish (DigitalLibrary.Update).</summary>
+    [Parameter] public bool CanUpdate { get; set; } = true;
+    /// <summary>Delete (DigitalLibrary.Delete).</summary>
+    [Parameter] public bool CanDelete { get; set; } = true;
     [Parameter] public EventCallback<DigitalLibraryItem> OnEdit { get; set; }
     [Parameter] public EventCallback<DigitalLibraryItem> OnDelete { get; set; }
     [Parameter] public EventCallback<DigitalLibraryItem> OnArchive { get; set; }
     [Parameter] public EventCallback<DigitalLibraryItem> OnTogglePublish { get; set; }
+
+    private bool ShowUpdate => ShowActions && CanUpdate;
+    private bool ShowDelete => ShowActions && CanDelete;
 
     private string ViewHref => $"DigitalLibrary/view/{Item.Id}";
     private string Fallback => DigitalLibraryItem.PlaceholderImage(Item.Id);

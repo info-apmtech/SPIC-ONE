@@ -2,6 +2,7 @@
 @inject NavigationManager Nav
 @inject ToastService Toast
 @inject DigitalLibraryApi Api
+@inject LoginState LoginState
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 
@@ -29,9 +30,12 @@
             <button type="button" class="dl-btn dl-btn-light" @onclick='() => Nav.NavigateTo("/DigitalLibrary/chat")'>
                 <i class="bi bi-stars"></i> Start Chat
             </button>
-            <button type="button" class="dl-btn dl-btn-outline" @onclick="() => _createOpen = true">
-                <i class="bi bi-plus-square"></i> Add Content
-            </button>
+            @if (CanAdd)
+            {
+                <button type="button" class="dl-btn dl-btn-outline" @onclick="() => _createOpen = true">
+                    <i class="bi bi-plus-square"></i> Add Content
+                </button>
+            }
         </div>
 
         <form class="dl-search" @onsubmit="Search" @onsubmit:preventDefault>
@@ -88,8 +92,12 @@
         }
         else if (Items.Count == 0)
         {
-            <EmptyState Icon="bi-collection" Title="Nothing in the library yet" Message="Add a product, an AI video or a brochure to get started.">
-                <button type="button" class="btn btn-success" @onclick="() => _createOpen = true">Add Content</button>
+            <EmptyState Icon="bi-collection" Title="Nothing in the library yet"
+                        Message="@(CanAdd ? "Add a product, an AI video or a brochure to get started." : "There is no published content in the library yet.")">
+                @if (CanAdd)
+                {
+                    <button type="button" class="btn btn-success" @onclick="() => _createOpen = true">Add Content</button>
+                }
             </EmptyState>
         }
         else
@@ -116,6 +124,7 @@
                 @foreach (var item in Items.Take(9))
                 {
                     <DigitalLibraryCard @key="item.Id" Item="item"
+                                        ShowActions="CanEdit" CanUpdate="CanUpdate" CanDelete="CanDelete"
                                         OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
                 }
             </div>
@@ -124,11 +133,21 @@
         }
     </section>
 
-    <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
+    @if (CanAdd)
+    {
+        <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
+    }
     <DigitalLibraryUnpublishDialog Item="_unpublishTarget" OnConfirm="ConfirmUnpublish" OnCancel="() => _unpublishTarget = null" />
 </div>
 
 @code {
+    // Content is readable by every signed-in user; adding and editing needs the DigitalLibrary
+    // page in the designation (Admin / CorporateAdmin bypass). The API enforces the same rule.
+    private bool CanEdit => LoginState.CanAccess("DigitalLibrary");
+    private bool CanAdd => CanEdit && LoginState.Can("DigitalLibrary", "Entry");
+    private bool CanUpdate => CanEdit && LoginState.Can("DigitalLibrary", "Update");
+    private bool CanDelete => CanEdit && LoginState.Can("DigitalLibrary", "Delete");
+
     private bool _createOpen;
     private DigitalLibraryItem? _unpublishTarget;
 
@@ -173,7 +192,8 @@
             _error = Api.LastError;
         }
 
-        var page = await Api.ListAsync(page: 1, pageSize: 12);
+        // Readers never ask for drafts: the API refuses a non-published status for them.
+        var page = await Api.ListAsync(status: CanEdit ? null : LibraryContentStatus.Published, page: 1, pageSize: 12);
         if (Api.LastError is not null)
         {
             _failed = true;

@@ -1,3 +1,6 @@
+using System.Text;
+using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
@@ -31,6 +34,16 @@ public sealed class CommunityMember
     public string? Avatar { get; init; }
     public string Initial => string.IsNullOrEmpty(Name) ? "?" : Name[..1].ToUpperInvariant();
     public bool IsExpert => Role == "SPIC Expert";
+
+    /// <summary>The same member with another picture (the properties are init-only).</summary>
+    public CommunityMember WithAvatar(string? avatar) => new()
+    {
+        UserId = UserId,
+        Name = Name,
+        Role = Role,
+        Location = Location,
+        Avatar = avatar
+    };
 
     public static CommunityMember FromDto(CommunityMemberDto? dto, Func<string, string>? fileUrl = null) =>
         dto is null
@@ -72,7 +85,8 @@ public sealed class CommunityDiscussion
     public int Id { get; init; }
     public string Title { get; set; } = "";
     public string Body { get; set; } = "";
-    public CommunityMember Author { get; init; } = new();
+    /// <summary>Settable so a page can refresh the avatar after the user changes their photo.</summary>
+    public CommunityMember Author { get; set; } = new();
     public string Category { get; set; } = "";
     public string Product { get; set; } = "";
     public string Crop { get; set; } = "";
@@ -173,6 +187,12 @@ public sealed class CommunityReply
     public int Likes { get; set; }
     public bool IsLiked { get; set; }
     public int ReplyCount { get; set; }
+    /// <summary>True when the signed-in user wrote it (the server decides): shows Delete.</summary>
+    public bool IsMine { get; set; }
+    /// <summary>Images posted with the reply (up to 3), already resolved for the browser.</summary>
+    public List<CommunityAttachment> Attachments { get; set; } = new();
+
+    public IEnumerable<CommunityAttachment> Images => Attachments.Where(a => a.IsImage);
 
     public static CommunityReply FromDto(ReplyDto dto, Func<string, string>? fileUrl = null) => new()
     {
@@ -185,14 +205,70 @@ public sealed class CommunityReply
         CreatedAt = dto.CreatedAt,
         Likes = dto.LikeCount,
         IsLiked = dto.IsLiked,
-        ReplyCount = dto.ReplyCount
+        ReplyCount = dto.ReplyCount,
+        IsMine = dto.IsMine,
+        Attachments = (dto.Attachments ?? new List<AttachmentDto>())
+            .Select(a => CommunityAttachment.FromDto(a, fileUrl ?? (p => p))).ToList()
     };
+}
+
+/// <summary>
+/// "Open these pictures in the lightbox, starting at this one." Raised by a reply and handled
+/// by the discussion page, which owns the one lightbox on the screen.
+/// </summary>
+/// <param name="Images">The set the lightbox pages through.</param>
+/// <param name="Index">Which one opens first.</param>
+public sealed record CommunityImageOpen(IReadOnlyList<CommunityAttachment> Images, int Index);
+
+/// <summary>
+/// Turns the plain text people type into safe markup: everything is HTML-escaped, then
+/// <c>http(s)://…</c> tokens become links that open in a new tab. Used for reply bodies, so a
+/// link pasted with the composer's link button is clickable without ever trusting user HTML.
+/// </summary>
+public static class CommunityText
+{
+    private static readonly Regex UrlPattern =
+        new(@"https?://[^\s<>""']+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    public static MarkupString Linkify(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return new MarkupString("");
+
+        var builder = new StringBuilder();
+        var last = 0;
+
+        foreach (Match match in UrlPattern.Matches(text))
+        {
+            builder.Append(Escape(text[last..match.Index]));
+
+            // trailing sentence punctuation is not part of the link
+            var url = match.Value.TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '"', '\'');
+            var tail = match.Value[url.Length..];
+            var safe = System.Net.WebUtility.HtmlEncode(url);
+
+            builder.Append("<a href=\"").Append(safe)
+                   .Append("\" target=\"_blank\" rel=\"noopener noreferrer\">")
+                   .Append(safe).Append("</a>");
+
+            builder.Append(Escape(tail));
+            last = match.Index + match.Length;
+        }
+
+        builder.Append(Escape(text[last..]));
+        return new MarkupString(builder.ToString());
+    }
+
+    private static string Escape(string value) =>
+        System.Net.WebUtility.HtmlEncode(value).Replace("\r\n", "\n").Replace("\n", "<br />");
 }
 
 public sealed class CommunityProduct
 {
     public string Name { get; init; } = "";
-    public string Image { get; init; } = "";
+    /// <summary>Resolved image URL; falls back to <see cref="FallbackImage"/> until one is uploaded.</summary>
+    public string Image { get; set; } = "";
+    /// <summary>True while <see cref="Image"/> is the placeholder artwork.</summary>
+    public bool HasImage => Image.Length > 0 && Image != FallbackImage;
     public int DiscussionCount { get; init; }
     public int MemberCount { get; init; }
     public bool Joined { get; set; }

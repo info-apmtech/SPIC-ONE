@@ -132,3 +132,13 @@ instead of the "SPIC" wordmark. The desktop sidebar (live) is unchanged.
   when `Assistant__AnthropicApiKey` is set. Menu rules now use `CanAccess("Community")` /
   `CanAccess("DigitalLibrary")`. Verified end to end against a local database (see
   docs/community-library-implementation-plan.md); production needs `migrate.ps1` then `deploy.ps1`.
+- 2026-09-20 (night): access model per the product owner: the Community is usable by every
+  signed-in user and Digital Library content is viewable by everyone; only adding/editing content
+  needs the DigitalLibrary page in the user's designation (menus, PageGuard, page controls and the
+  API all follow it; reader stats count published items only). Community additions: Mark as
+  Resolved / Reopen (author or admin), reply delete, reply images (up to 3) and pasted links,
+  profile photos (`POST/DELETE api/Community/me/avatar`), product images on Popular Product cards
+  (editors), migration `V5m_CommunityReplyAttachments`. Chat additions: Attach picks a library item
+  as context for the question; Voice uses the browser's speech recognition (en-IN) with a fallback
+  toast where unsupported. Android Debug builds may use plain HTTP to localhost only (network
+  security config) so the phone can be tested against a local API through `adb reverse`.

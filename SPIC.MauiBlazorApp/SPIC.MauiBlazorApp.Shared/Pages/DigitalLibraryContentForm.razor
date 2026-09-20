@@ -3,6 +3,7 @@
 @inject ToastService Toast
 @inject DigitalLibraryApi Api
 @inject LoadingService Loading
+@inject LoginState LoginState
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 
@@ -17,6 +18,19 @@
     newly chosen cover / video / document file is uploaded against its id.
 *@
 
+@if (!CanEdit)
+{
+    @* The route guard already turns readers away; this is the second line of defence for a
+       direct link, and the API refuses the write in any case. *@
+    <EmptyState Icon="bi-lock" Title="You do not have permission to add content"
+                Message="Adding and editing Digital Library content is limited to the team that maintains it. You can still read and search everything that is published.">
+        <button type="button" class="btn btn-success" @onclick="BackToList">
+            <i class="bi bi-arrow-left"></i> Back to the library
+        </button>
+    </EmptyState>
+}
+else
+{
 <div class="pf-page">
 
     <PageHeader Title="@Heading" Subtitle="@SubHeading" BackHref="@ListUrl">
@@ -365,8 +379,13 @@
         </ChildContent>
     </ActionBar>
 </div>
+}
 
 @code {
+    // Adding / editing library content needs the DigitalLibrary page in the user's designation
+    // (Admin / CorporateAdmin bypass). Everything below this line only runs for those users.
+    private bool CanEdit => LoginState.CanAccess("DigitalLibrary");
+
     private static readonly string[] StepNames = { "Content & Details", "Related Content", "Page Layout" };
     private const int PickPageSize = 6;
 
@@ -433,6 +452,9 @@
     {
         var kind = DigitalLibraryItem.ParseType(KindRoute) ?? DigitalLibraryType.Products;
         Draft.SetKind(kind);
+
+        // A reader sees the permission notice instead of the wizard; no lookups, no item fetch.
+        if (!CanEdit) { _loading = false; return; }
 
         if (_loadedId == (Id ?? 0) && !_loading) return;
         _loadedId = Id ?? 0;

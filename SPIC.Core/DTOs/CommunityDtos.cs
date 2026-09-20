@@ -21,7 +21,14 @@ namespace SPIC.Core.DTOs;
 ///   POST   api/Community/discussions/{id}/like|save|follow       -> ReactionResultDto (toggle)
 ///   POST   api/Community/replies/{id}/like                       -> ReactionResultDto (toggle)
 ///   POST   api/Community/discussions/{id}/attachments            (multipart "files") -> List&lt;AttachmentDto&gt;
+///   POST   api/Community/replies/{id}/attachments                (multipart "files", images only, max 3) -> List&lt;AttachmentDto&gt;
 ///   DELETE api/Community/attachments/{id}
+///   GET    api/Community/me                                      -> CommunityMemberDto (the caller)
+///   POST   api/Community/me/avatar                               (multipart "file", image <= 2 MB) -> CommunityMemberDto (caller)
+///   DELETE api/Community/me/avatar
+///   POST   api/Community/products/{name}/image                   (multipart "file"; Admin/CorporateAdmin or DigitalLibrary designation) -> CommunityProductDto
+///   Avatars live at Uploads/Community/avatars/{userId}.{ext}; product images at Uploads/Community/products/{slug}.{ext};
+///   AvatarPath / ImagePath are resolved from the file's existence (no table), served by GET api/Community/file/{path}.
 ///   GET    api/Community/file/{*path}                            (also accepts ?access_token=)
 ///   GET    api/Community/products                                -> List&lt;CommunityProductDto&gt;
 ///   POST   api/Community/products/{name}/join                    -> ReactionResultDto (toggle)
@@ -99,6 +106,10 @@ public class ReplyDto
     public bool IsLiked { get; set; }
     /// <summary>Number of nested replies under this one.</summary>
     public int ReplyCount { get; set; }
+    /// <summary>True when the caller wrote it (delete affordance).</summary>
+    public bool IsMine { get; set; }
+    /// <summary>Images attached to the reply (ReplyId set on the attachment row).</summary>
+    public List<AttachmentDto> Attachments { get; set; } = new();
 }
 
 public class DiscussionUpsertDto

@@ -186,6 +186,7 @@ namespace Spic.Infrastructure.Data
         {
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.PostId);
+            entity.HasIndex(x => x.ReplyId);
         });
 
         builder.Entity<CommunityReaction>(entity =>

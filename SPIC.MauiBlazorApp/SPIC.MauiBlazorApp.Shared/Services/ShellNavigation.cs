@@ -85,14 +85,16 @@ public static class ShellNavigation
         {
             ShortLabel = "Library",
             // Gated by the DigitalLibrary page permission (Admin / CorporateAdmin bypass CanAccess).
-            Rule = s => s.CanAccess("DigitalLibrary")
+            // Content is viewable by everyone; adding/editing needs the DigitalLibrary page (checked in the pages).
+            Rule = s => s.IsLoggedIn
         },
 
         new("Community", "Knowledge Community", "bi-people-fill", "/Community", "Community")
         {
             ShortLabel = "Community",
             // Live module: the PagePermission key exists, so the designation decides (mirrors NavMenu).
-            Rule = s => s.CanAccess("Community")
+            // Usable by every signed-in user (product decision 2026-09-20).
+            Rule = s => s.IsLoggedIn
         },
 
         // ---- shell hubs (phone destinations; PageGuard opens them to every signed-in user with a
