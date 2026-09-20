@@ -1,0 +1,457 @@
+@page "/Community/discussion/{Id:int}"
+@* Discussion Details: question card, attachments (beside the text on desktop, below it elsewhere), nested replies, composer. Sample data until the community API exists. *@
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject IJSRuntime JS
+
+@*
+    Knowledge Community - "Discussion Details" (Figma frames supplied 2026-09-20).
+
+    One responsive page covers both Figma attachment variants: on desktop a discussion with
+    1-4 images puts them in a 2x2 grid beside the question text ("side"); on tablet/phone -
+    and on desktop with more than four - they sit under the text as tiles ("down").
+
+    Sample content only: everything is read from CommunitySampleData and the "writes"
+    (views, likes, save, follow, replies) stay in memory for the session.
+*@
+
+@if (_d is null)
+{
+    <PageTitle>Discussion not found - Knowledge Community - SPIC ONE</PageTitle>
+
+    <EmptyState Icon="bi-chat-square-text"
+                Title="Discussion not found"
+                Message="This discussion is not in the community any more.">
+        <button type="button" class="cd-btn-solid" @onclick='() => Nav.NavigateTo("/Community/discussions")'>
+            Back to Discussions
+        </button>
+    </EmptyState>
+}
+else
+{
+    <div class="cd-page">
+
+        <PageHeader Title="Discussion Details"
+                    Subtitle="View the question, replies, and expert guidance"
+                    ShowBack="true"
+                    BackHref="/Community/discussions"
+                    CssClass="cd-head">
+            <Actions>
+                <a class="cd-btn-outline desktop-only" href="Community">
+                    <span aria-hidden="true">&#8592;</span> Back to Knowledge Community
+                </a>
+            </Actions>
+        </PageHeader>
+
+        @* rendered after PageHeader so this title is the one the head outlet keeps *@
+        <PageTitle>@_d.Title - Knowledge Community - SPIC ONE</PageTitle>
+
+        @* ------------------------------------------------ question *@
+        <section class="cd-card cd-q">
+
+            <div class="cd-q-top">
+                <MemberAvatar Member="_d.Author" Size="56" />
+
+                <div class="cd-q-who">
+                    <div class="cd-q-name-row">
+                        <span class="cd-q-name">@_d.Author.Name</span>
+                        <span class="cd-q-role @(_d.Author.IsExpert ? "is-expert" : "is-farmer")">@_d.Author.Role</span>
+                    </div>
+                    <div class="cd-q-meta">
+                        <i class="bi bi-geo-alt" aria-hidden="true"></i>
+                        @(string.IsNullOrWhiteSpace(_d.Author.Location) ? "" : _d.Author.Location + " · ")@_d.CreatedAt.ToString("MMM d, yyyy") · @_d.CreatedAt.ToString("h:mm tt")
+                    </div>
+                </div>
+
+                <div class="cd-q-tools">
+                    <span class="cd-q-kind"><span class="cd-dot" aria-hidden="true"></span> Discussion</span>
+
+                    <div class="cd-q-btns">
+                        <button type="button" class="cd-tool @(_saved ? "is-on" : "")" title="@(_saved ? "Saved" : "Save")" @onclick="ToggleSave">
+                            <i class="bi @(_saved ? "bi-bookmark-fill" : "bi-bookmark")" aria-hidden="true"></i>
+                            <span class="cd-tool-label">@(_saved ? "Saved" : "Save")</span>
+                        </button>
+                        <button type="button" class="cd-tool" title="Share" @onclick="ShareAsync">
+                            <i class="bi bi-share" aria-hidden="true"></i>
+                            <span class="cd-tool-label">Share</span>
+                        </button>
+                        <button type="button" class="cd-tool @(_following ? "is-on" : "")" title="@(_following ? "Following" : "Follow")" @onclick="ToggleFollow">
+                            <i class="bi @(_following ? "bi-check2" : "bi-plus-lg")" aria-hidden="true"></i>
+                            <span class="cd-tool-label">@(_following ? "Following" : "Follow")</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="cd-q-title">@_d.Title</h2>
+
+            <div class="cd-q-split @(HasImages && SideLayout ? "cd-q-split--side" : "")">
+                <div class="cd-q-text">
+                    <p class="cd-q-body">@_d.Body</p>
+                </div>
+
+                @if (HasImages)
+                {
+                    <div class="cd-q-imgs cd-q-imgs--@Images.Count">
+                        @for (var i = 0; i < Images.Count; i++)
+                        {
+                            var index = i;
+                            <button type="button" class="cd-q-img" @onclick="() => OpenLightbox(index)" aria-label="@($"Open image {index + 1} of {Images.Count}")">
+                                <img src="@Images[index]" alt="" loading="lazy" />
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="cd-q-foot">
+                <div class="cd-q-chips">
+                    @if (!string.IsNullOrWhiteSpace(_d.Product))
+                    {
+                        <TagChip Text="@($"⊞ {_d.Product}")" ShowHash="false" CssClass="cm-tag-green" />
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_d.Category))
+                    {
+                        <TagChip Text="@($"\U0001F3F7 {_d.Category}")" ShowHash="false" CssClass="cm-tag-green" />
+                    }
+                    @foreach (var tag in _d.Tags)
+                    {
+                        <TagChip Text="@tag" />
+                    }
+                </div>
+
+                <div class="cd-q-counts">
+                    <span class="cd-count"><i class="bi bi-eye" aria-hidden="true"></i> @_d.Views View</span>
+                    <span class="cd-count"><i class="bi bi-chat-dots" aria-hidden="true"></i> @Replies.Count reply</span>
+                    <button type="button"
+                            class="cd-count cd-count-btn @(_liked ? "is-on" : "")"
+                            aria-pressed="@(_liked ? "true" : "false")"
+                            @onclick="ToggleLike">
+                        <i class="bi @(_liked ? "bi-hand-thumbs-up-fill" : "bi-hand-thumbs-up")" aria-hidden="true"></i> @_d.Likes likes
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        @* ------------------------------------------------ replies *@
+        <section class="cd-card cd-replies">
+
+            <div class="cd-rep-head">
+                <h2 class="cd-rep-title">Replied (@Replies.Count)</h2>
+                <label class="cd-sort">
+                    <span>Short by:</span>
+                    <select class="cd-sort-select" @bind="_sort">
+                        <option value="latest">Latest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="liked">Most Liked</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="cd-rep-list">
+                @if (Replies.Count == 0)
+                {
+                    <EmptyState Icon="bi-chat-dots" Title="No replies yet" Message="Be the first to answer this question." Compact="true" />
+                }
+                else
+                {
+                    @foreach (var reply in TopLevel)
+                    {
+                        <ReplyItem @key="reply.Id"
+                                   Reply="reply"
+                                   DiscussionId="_d.Id"
+                                   Children="ChildrenOf(reply.Id)"
+                                   OnPosted="StateHasChanged" />
+                    }
+                }
+            </div>
+
+            <div class="cd-composer">
+                <MemberAvatar Member="Me" Size="40" />
+                <div class="cd-comp-box">
+                    <textarea class="cd-comp-input"
+                              rows="1"
+                              placeholder="Write a reply..."
+                              aria-label="Write a reply"
+                              value="@_draft"
+                              @oninput="OnComposerInput"
+                              @onkeydown="OnComposerKeyDown"></textarea>
+                    <div class="cd-comp-icons">
+                        <button type="button" class="cd-comp-icon" title="Add an image" aria-label="Add an image" @onclick="AttachmentSoon">
+                            <i class="bi bi-image" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="cd-comp-icon" title="Add a link" aria-label="Add a link" @onclick="AttachmentSoon">
+                            <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="cd-comp-icon cd-comp-send" title="Send reply" aria-label="Send reply" @onclick="SendAsync">
+                            <i class="bi bi-send-fill" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    @* ------------------------------------------------ lightbox *@
+    @if (_lightbox >= 0 && _lightbox < Images.Count)
+    {
+        <div class="cd-lb"
+             role="dialog"
+             aria-modal="true"
+             aria-label="Attachment"
+             tabindex="0"
+             @ref="_lbRef"
+             @onclick="CloseLightbox"
+             @onkeydown="LightboxKey">
+
+            <button type="button" class="cd-lb-btn cd-lb-close" title="Close" aria-label="Close"
+                    @onclick="CloseLightbox" @onclick:stopPropagation="true">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+
+            @if (Images.Count > 1)
+            {
+                <button type="button" class="cd-lb-btn cd-lb-prev" title="Previous" aria-label="Previous image"
+                        @onclick="PrevImage" @onclick:stopPropagation="true">
+                    <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                </button>
+            }
+
+            <img class="cd-lb-img" src="@Images[_lightbox]" alt="" @onclick="NoOp" @onclick:stopPropagation="true" />
+
+            @if (Images.Count > 1)
+            {
+                <button type="button" class="cd-lb-btn cd-lb-next" title="Next" aria-label="Next image"
+                        @onclick="NextImage" @onclick:stopPropagation="true">
+                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                </button>
+            }
+
+            @if (Images.Count > 1)
+            {
+                <div class="cd-lb-count">@(_lightbox + 1) / @Images.Count</div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    // Services.* prefix: inside this namespace the bare name would find the page class itself.
+    private CommunityDiscussion? _d;
+    private int _loadedId = -1;
+
+    private bool _saved;
+    private bool _following;
+    private bool _liked;
+
+    private string _sort = "latest";
+
+    private string _draft = "";
+    private bool _ignoreNextInput;
+
+    private int _lightbox = -1;
+    private ElementReference _lbRef;
+    private bool _focusLightbox;
+
+    private int? _scrollToReplyId;
+
+    // Phone is measured once from window.innerWidth (same pattern as the report pages):
+    // on phone Enter inserts a newline and the send button posts.
+    private bool _isPhone;
+    private bool _viewportChecked;
+
+    private static CommunityMember Me => CommunitySampleData.CurrentUser;
+
+    private IReadOnlyList<CommunityReply> Replies =>
+        _d is null ? Array.Empty<CommunityReply>() : CommunitySampleData.RepliesFor(_d.Id);
+
+    private List<string> Images => _d?.Attachments ?? new List<string>();
+
+    private bool HasImages => Images.Count > 0;
+
+    /// <summary>Figma "side" variant: 1-4 images beside the text (desktop only, via CSS).</summary>
+    private bool SideLayout => Images.Count is >= 1 and <= 4;
+
+    private IEnumerable<CommunityReply> TopLevel
+    {
+        get
+        {
+            var top = Replies.Where(r => r.ParentReplyId is null);
+            return _sort switch
+            {
+                "oldest" => top.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id),
+                "liked" => top.OrderByDescending(r => r.Likes).ThenByDescending(r => r.CreatedAt),
+                _ => top.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id)
+            };
+        }
+    }
+
+    private IReadOnlyList<CommunityReply> ChildrenOf(int parentId) =>
+        Replies.Where(r => r.ParentReplyId == parentId).OrderBy(r => r.CreatedAt).ThenBy(r => r.Id).ToList();
+
+    protected override void OnParametersSet()
+    {
+        if (_loadedId == Id) return;
+
+        _loadedId = Id;
+        _d = CommunitySampleData.Find(Id);
+        _lightbox = -1;
+        _draft = "";
+        _liked = false;
+
+        if (_d is not null)
+        {
+            _d.Views++;                 // one view per page visit (in memory)
+            _saved = _d.IsSaved;
+            _following = _d.IsFollowing;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_viewportChecked)
+        {
+            _viewportChecked = true;
+            try
+            {
+                var width = await JS.InvokeAsync<int>("eval", "window.innerWidth");
+                if (width > 0 && width < 768)
+                {
+                    _isPhone = true;
+                    StateHasChanged();
+                }
+            }
+            catch
+            {
+                // JS not available (prerender / MAUI start-up): keep the desktop behaviour.
+            }
+        }
+
+        if (_focusLightbox)
+        {
+            _focusLightbox = false;
+            try { await _lbRef.FocusAsync(); } catch { /* element already gone */ }
+        }
+
+        if (_scrollToReplyId is int replyId && _d is not null)
+        {
+            _scrollToReplyId = null;
+            try
+            {
+                await JS.InvokeVoidAsync("eval",
+                    $"var e=document.getElementById('cm-reply-{_d.Id}-{replyId}'); if(e) e.scrollIntoView({{behavior:'smooth',block:'center'}});");
+            }
+            catch
+            {
+                // scrolling is a nicety; never break the post because of it
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- question actions
+    private void ToggleSave()
+    {
+        _saved = !_saved;
+        if (_d is not null) _d.IsSaved = _saved;
+        Toast.Info(_saved ? "Saved to your list." : "Removed from your list.");
+    }
+
+    private void ToggleFollow()
+    {
+        _following = !_following;
+        if (_d is not null) _d.IsFollowing = _following;
+        Toast.Info(_following ? "You are following this discussion." : "You stopped following this discussion.");
+    }
+
+    private void ToggleLike()
+    {
+        if (_d is null) return;
+        _liked = !_liked;
+        _d.Likes += _liked ? 1 : -1;
+        if (_d.Likes < 0) _d.Likes = 0;
+    }
+
+    private async Task ShareAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Nav.Uri);
+        }
+        catch
+        {
+            // no clipboard permission / no JS: the toast still tells the user what happened
+        }
+        Toast.Info("Link copied");
+    }
+
+    private void AttachmentSoon() => Toast.Info("Attachments arrive with the community API.");
+
+    // ---------------------------------------------------------------- composer
+    private void OnComposerInput(ChangeEventArgs e)
+    {
+        // The newline the browser inserts for the "Enter posts" shortcut arrives after the
+        // key handler already cleared the box, so it is dropped here.
+        if (_ignoreNextInput)
+        {
+            _ignoreNextInput = false;
+            return;
+        }
+        _draft = e.Value?.ToString() ?? "";
+    }
+
+    private async Task OnComposerKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter" || e.ShiftKey || _isPhone) return;
+        _ignoreNextInput = true;
+        await SendAsync();
+    }
+
+    private Task SendAsync()
+    {
+        var text = (_draft ?? "").Trim();
+        if (_d is null || text.Length == 0) return Task.CompletedTask;
+
+        var added = CommunitySampleData.AddReply(_d.Id, text, Me, null);
+        _draft = "";
+        _sort = "latest";
+        _scrollToReplyId = added.Id;
+        Toast.Success("Reply posted.");
+        return Task.CompletedTask;
+    }
+
+    // ---------------------------------------------------------------- lightbox
+    private void OpenLightbox(int index)
+    {
+        _lightbox = index;
+        _focusLightbox = true;
+    }
+
+    private void CloseLightbox() => _lightbox = -1;
+
+    private void NextImage()
+    {
+        if (Images.Count == 0) return;
+        _lightbox = (_lightbox + 1) % Images.Count;
+    }
+
+    private void PrevImage()
+    {
+        if (Images.Count == 0) return;
+        _lightbox = (_lightbox - 1 + Images.Count) % Images.Count;
+    }
+
+    private void LightboxKey(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape": CloseLightbox(); break;
+            case "ArrowRight": NextImage(); break;
+            case "ArrowLeft": PrevImage(); break;
+        }
+    }
+
+    private void NoOp() { }
+}

@@ -96,10 +96,10 @@ in the More sheet, so they take no bottom slot. Source of truth: `Services/Shell
 |---|---|---|---|---|
 | Dealer | Dealer Dashboard | Welfare Schemes | Guest House | My Bookings |
 | MO / MDO / JMDO | Dashboard | My Activities (`/Activities`) | Dealers (Sub Dealer Master) | Farmers (`/Farmers`) |
-| RM / RMD | Dashboard | Dealers | RMD Validation Queue | Guest House |
-| SMD / SMM | Dashboard | SMM Approvals | Dealers | Guest House |
-| Admin / CorporateAdmin | Dashboard | AVP Approvals | Guest House | Digital Library |
-| Director / AVP | Dashboard | AVP Approvals | Guest House | next accessible page |
+| RM / RMD | Dashboard | Dealers | RMD Validation Queue | Reports Center |
+| SMD / SMM | Dashboard | SMM Approvals | Dealers | Reports Center |
+| Admin / CorporateAdmin | Dashboard | AVP Approvals | Reports Center | Digital Library |
+| Director / AVP | Dashboard | AVP Approvals | Reports Center | next accessible page |
 | SpecialAdmin | Logistics | Logistics Master | Logistics Report | User Profile |
 
 Hub pages (`/Activities`, `/Farmers`, `/Alerts`) only link to pages the user can already open
@@ -107,4 +107,19 @@ Hub pages (`/Activities`, `/Farmers`, `/Alerts`) only link to pages the user can
 user with a designation. My Activities holds the SAS field-work placeholder, the approval queues,
 guest house booking and reports; Farmers holds the Farmer Portal placeholder plus Ask SPIC AI and
 the library content; Alerts lists every approval queue and booking page until push notifications
-arrive with the store release. The desktop sidebar (live) is unchanged.
+arrive with the store release. Guest House / My Bookings stay in the More sheet for staff (few
+employees book rooms); Dealers keep them on the bar. The phone top bar shows the app-icon logo
+instead of the "SPIC" wordmark. The desktop sidebar (live) is unchanged.
+
+## Knowledge Community (Community Connect) implementation log
+
+- 2026-09-20: built from the product owner's Figma screenshots, sample data only
+  (`Services/CommunityModels.cs`, `CommunitySampleData`): landing `/Community` (hero with
+  question search, stats strip, Recent Discussions with grid/list toggle, Popular Product,
+  New Here panel), `/Community/discussions` (stat tiles, tabs, filters in the URL, paged list),
+  `/Community/discussion/{id}` (question card with attachments beside the text on desktop and
+  below it on phone/tablet, nested replies, composer), `/Community/new` (form, similarity check:
+  "Your question looks unique" or "We found similar discussions", Post Anyway), and
+  `/Community/posted/{id}` (success summary, View Discussion / Back to Community). Admin-only in
+  the sidebar and More sheet until `PagePermission` gains a `Community` key; also linked from the
+  Farmers hub. Discussion API, uploads and the similarity service come next.

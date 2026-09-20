@@ -1,0 +1,63 @@
+@page "/Community/posted/{Id:int}"
+
+@*
+    Community Connect - "Your question has been posted" confirmation (Figma frame supplied
+    2026-09-20). Reached from CommunityNew after CommunitySampleData.Post().
+
+    Note: the Figma labels both footer buttons "Vew Request Details", which is a placeholder
+    typo; the real destinations are the discussion and the community hub.
+*@
+
+<PageTitle>Question posted &middot; SPIC ONE</PageTitle>
+
+<div class="cp-page">
+    @if (Discussion is null)
+    {
+        <EmptyState Icon="bi-question-circle"
+                    Title="Discussion not found"
+                    Message="This discussion is no longer available. It may have been removed, or the link is out of date.">
+            <a class="cp-btn cp-btn-primary" href="/Community">Back to Community</a>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="cp-hero">
+            <span class="cp-tick" aria-hidden="true"><i class="bi bi-patch-check"></i></span>
+            <h1 class="cp-title">Your question has been posted</h1>
+            <p class="cp-sub">Your discussion is now visible to other farmers and SPIC experts</p>
+        </div>
+
+        <section class="cp-summary" aria-label="Discussion summary">
+            <div class="cp-row-title">@Discussion.Title</div>
+
+            <div class="cp-key">Category</div>
+            <div class="cp-val cp-val-green">@(string.IsNullOrWhiteSpace(Discussion.Category) ? "-" : Discussion.Category)</div>
+
+            <div class="cp-key">Posted</div>
+            <div class="cp-val">@Discussion.CreatedAt.ToString("dd MMM yyyy, hh:mm tt")</div>
+
+            <div class="cp-key">Status</div>
+            <div class="cp-val cp-val-amber">Waiting for Answers</div>
+
+            <div class="cp-key">Views</div>
+            <div class="cp-val">@Discussion.Views</div>
+        </section>
+
+        <div class="cp-actions">
+            <a class="cp-btn cp-btn-primary" href="@($"/Community/discussion/{Id}")">
+                View Discussion <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+            <a class="cp-btn cp-btn-primary" href="/Community">
+                Back to Community <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    // Fully qualified: the page class CommunityDiscussion (the detail page) lives in this
+    // same namespace and would otherwise shadow the model of the same name.
+    private SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion? Discussion => CommunitySampleData.Find(Id);
+}

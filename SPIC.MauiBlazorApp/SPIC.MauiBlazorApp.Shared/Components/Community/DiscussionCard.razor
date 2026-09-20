@@ -1,0 +1,185 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Community
+@using SPIC.MauiBlazorApp.Shared.Services
+@* the detail page class Pages.CommunityDiscussion has the same name as the model *@
+@using CommunityDiscussion = SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion
+
+@*
+    One discussion, in the three shapes the Figma frames use:
+
+        Compact  two-column card on the Knowledge Community landing ("grid" layout)
+        Row      one-column wide row on the landing ("list" layout)
+        Full     the Discussions list row (body excerpt, Follow button, kebab for my own rows)
+
+    The whole card is a link to /Community/discussion/{Id}: the title is a real anchor whose
+    ::after covers the card, so screen readers get one sensible link and the Follow / kebab
+    buttons simply sit above it (z-index + stopPropagation) instead of navigating.
+*@
+
+<article class="cm-card cm-card--@VariantClass @CssClass">
+
+    <div class="cm-card-lead">
+        <MemberAvatar Member="Discussion.Author" Size="@AvatarSize" />
+
+        @if (ShowFollow)
+        {
+            <button type="button"
+                    class="cm-follow @(Discussion.IsFollowing ? "is-on" : "")"
+                    title="@(Discussion.IsFollowing ? "Stop following this discussion" : "Follow this discussion")"
+                    @onclick="ToggleFollowAsync" @onclick:stopPropagation @onclick:preventDefault>
+                <i class="bi @(Discussion.IsFollowing ? "bi-bell-fill" : "bi-bell")" aria-hidden="true"></i>
+                <span>@(Discussion.IsFollowing ? "Following" : "Follow")</span>
+            </button>
+        }
+    </div>
+
+    <div class="cm-card-main">
+
+        @if (Variant == CardVariant.Compact)
+        {
+            <p class="cm-card-author">@Discussion.Author.Name</p>
+            <h3 class="cm-card-title cm-card-title--green">
+                <a class="cm-card-link" href="@Href">@Discussion.Title</a>
+            </h3>
+        }
+        else
+        {
+            <h3 class="cm-card-title">
+                <a class="cm-card-link" href="@Href">@Discussion.Title</a>
+            </h3>
+
+            @if (Variant == CardVariant.Full && !string.IsNullOrWhiteSpace(Discussion.Body))
+            {
+                <p class="cm-card-excerpt">@Discussion.Body</p>
+            }
+
+            <p class="cm-card-byline">
+                <span class="cm-card-by">@Discussion.Author.Name</span>
+                @if (!string.IsNullOrWhiteSpace(Discussion.Product))
+                {
+                    <span class="cm-card-by-item"><i class="bi bi-grid-1x2" aria-hidden="true"></i> @Discussion.Product</span>
+                }
+                @if (!string.IsNullOrWhiteSpace(Discussion.Category))
+                {
+                    <span class="cm-card-by-item"><i class="bi bi-tag" aria-hidden="true"></i> @Discussion.Category</span>
+                }
+            </p>
+        }
+
+        @if (Discussion.Tags.Count > 0)
+        {
+            <div class="cm-card-tags">
+                @foreach (var tag in Discussion.Tags)
+                {
+                    <TagChip Text="@tag" />
+                }
+            </div>
+        }
+
+        @if (Variant == CardVariant.Compact)
+        {
+            <p class="cm-card-counts">
+                <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> @Discussion.ReplyCount reply</span>
+                <span><i class="bi bi-eye" aria-hidden="true"></i> @Discussion.Views View</span>
+            </p>
+        }
+    </div>
+
+    <div class="cm-card-side">
+
+        <div class="cm-card-side-top">
+            <StatusPill Status="Discussion.Status" />
+
+            @if (ShowMenu && Discussion.IsMine)
+            {
+                <span class="cm-kebab-wrap">
+                    <button type="button" class="cm-kebab"
+                            aria-label="More actions" aria-haspopup="menu" aria-expanded="@_menuOpen"
+                            @onclick="() => _menuOpen = !_menuOpen" @onclick:stopPropagation @onclick:preventDefault>
+                        <i class="bi bi-three-dots-vertical" aria-hidden="true"></i>
+                    </button>
+
+                    @if (_menuOpen)
+                    {
+                        <span class="cm-kebab-backdrop" @onclick="() => _menuOpen = false" @onclick:stopPropagation></span>
+                        <span class="cm-kebab-menu" role="menu">
+                            <button type="button" role="menuitem" @onclick="EditAsync" @onclick:stopPropagation @onclick:preventDefault>
+                                <i class="bi bi-pencil" aria-hidden="true"></i> Edit
+                            </button>
+                            <button type="button" role="menuitem" class="is-danger" @onclick="DeleteAsync" @onclick:stopPropagation @onclick:preventDefault>
+                                <i class="bi bi-trash" aria-hidden="true"></i> Delete
+                            </button>
+                        </span>
+                    }
+                </span>
+            }
+        </div>
+
+        <div class="cm-card-side-bottom">
+            @if (Variant != CardVariant.Compact)
+            {
+                <span class="cm-card-counts">
+                    <span><i class="bi bi-chat-left-text" aria-hidden="true"></i> @Discussion.ReplyCount reply</span>
+                    <span><i class="bi bi-eye" aria-hidden="true"></i> @Discussion.Views View</span>
+                </span>
+            }
+
+            @if (Discussion.Participants.Count > 0)
+            {
+                <span class="cm-faces" aria-label="@($"{Discussion.Participants.Count} participants")">
+                    @foreach (var p in Discussion.Participants.Take(3))
+                    {
+                        <MemberAvatar Member="p" Size="24" CssClass="cm-face" />
+                    }
+                </span>
+            }
+        </div>
+    </div>
+</article>
+
+@code {
+    /// <summary>Compact = landing grid card, Row = landing wide row, Full = Discussions list row.</summary>
+    public enum CardVariant { Compact, Row, Full }
+
+    [Parameter, EditorRequired] public CommunityDiscussion Discussion { get; set; } = new();
+
+    [Parameter] public CardVariant Variant { get; set; } = CardVariant.Compact;
+
+    /// <summary>Shows the Follow / Following pill under the avatar (Discussions list).</summary>
+    [Parameter] public bool ShowFollow { get; set; }
+
+    /// <summary>Shows the kebab menu (Edit / Delete) on rows the signed-in user owns.</summary>
+    [Parameter] public bool ShowMenu { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    [Parameter] public EventCallback<CommunityDiscussion> OnToggleFollow { get; set; }
+    [Parameter] public EventCallback<CommunityDiscussion> OnEdit { get; set; }
+    [Parameter] public EventCallback<CommunityDiscussion> OnDelete { get; set; }
+
+    private bool _menuOpen;
+
+    private string Href => $"/Community/discussion/{Discussion.Id}";
+
+    private string VariantClass => Variant.ToString().ToLowerInvariant();
+
+    private int AvatarSize => Variant == CardVariant.Row ? 48 : 56;
+
+    private Task ToggleFollowAsync()
+    {
+        if (OnToggleFollow.HasDelegate) return OnToggleFollow.InvokeAsync(Discussion);
+        Discussion.IsFollowing = !Discussion.IsFollowing;
+        return Task.CompletedTask;
+    }
+
+    private async Task EditAsync()
+    {
+        _menuOpen = false;
+        await OnEdit.InvokeAsync(Discussion);
+    }
+
+    private async Task DeleteAsync()
+    {
+        _menuOpen = false;
+        await OnDelete.InvokeAsync(Discussion);
+    }
+}

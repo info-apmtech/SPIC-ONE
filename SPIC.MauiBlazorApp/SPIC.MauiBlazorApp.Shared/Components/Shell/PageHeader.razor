@@ -13,14 +13,15 @@
 
     Desktop: plain title row (h1 + optional subtitle + actions), no back button unless
     ShowBack="true". Phone (<= 767.98px): a 44px back button appears by default
-    (ShowBack null). ShowBack="false" never shows it. Back goes to BackHref when given,
+    (ShowBack null) except on a bottom-tab root page (nothing to go back to there).
+    ShowBack="false" never shows it. Back goes to BackHref when given,
     otherwise history.back() with LoginState.LandingPage as the fallback when there is no
     history to go back to. Also sets <PageTitle> (rendered by HeadOutlet on web).
 *@
 <PageTitle>@DocumentTitle</PageTitle>
 
 <header class="shell-page-header @CssClass">
-    @if (ShowBack != false)
+    @if (ShowBackButton)
     {
         <button type="button"
                 class="shell-back shell-focusable @(ShowBack == true ? "" : "shell-back--phone")"
@@ -67,6 +68,24 @@
     [Parameter] public string TitleSuffix { get; set; } = "SPIC ONE";
 
     private IJSObjectReference? _module;
+
+    /// <summary>
+    /// ShowBack null = automatic: hidden when the current path IS one of the user's phone tab
+    /// destinations (e.g. /Dashboard for staff, /SDWADashboard for dealers); child routes such as
+    /// /DigitalLibrary/content keep the back button.
+    /// </summary>
+    private bool ShowBackButton => ShowBack ?? !IsTabRoot;
+
+    private bool IsTabRoot
+    {
+        get
+        {
+            var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/');
+            if (path.Length == 0) return true;
+            return SPIC.MauiBlazorApp.Shared.Services.ShellNavigation.GetPhoneTabs(LoginState)
+                .Any(t => string.Equals(t.Href.Trim('/'), path, StringComparison.OrdinalIgnoreCase));
+        }
+    }
 
     private string DocumentTitle =>
         string.IsNullOrWhiteSpace(Title) ? (string.IsNullOrWhiteSpace(TitleSuffix) ? "SPIC ONE" : TitleSuffix)

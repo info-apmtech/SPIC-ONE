@@ -88,6 +88,13 @@ public static class ShellNavigation
             Rule = s => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin
         },
 
+        new("Community", "Knowledge Community", "bi-people-fill", "/Community", "Community")
+        {
+            ShortLabel = "Community",
+            // New module without a PagePermission key yet: admins only (mirrors NavMenu).
+            Rule = s => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+        },
+
         // ---- shell hubs (phone destinations; PageGuard opens them to every signed-in user with a
         //      designation because each hub only LINKS to pages the user can already open) ----
         new("Activities", "My Activities", "bi-clipboard2-pulse-fill", "/Activities", "Activities")
@@ -256,14 +263,15 @@ public static class ShellNavigation
     // Approved by the product owner on 2026-09-20: the bar is Home | three role destinations | More.
     // "Ask SPIC AI" and "Alerts" live in the phone/tablet TOP bar (sparkle + bell) for every role, so
     // they do not take a bottom slot; they are also listed in the More sheet. Field staff get
-    // Activities (SAS field work + approvals + guest house), Dealers and Farmers; every other staff
-    // role keeps Guest House (room booking) on the bar. Edit ONLY this table to change the bar.
+    // Activities (SAS field work + approvals + guest house), Dealers and Farmers. Guest House stays
+    // OUT of the staff bars (More sheet only): few employees book rooms (product owner, 2026-09-20).
+    // Edit ONLY this table to change the bar.
     // ---------------------------------------------------------------------------------------------
     private static readonly string[] DealerPriority = { "SDWADashboard", "WelfareSchemes", "GuestHouse", "MyBookings" };
     private static readonly string[] FieldStaffPriority = { "Dashboard", "Activities", "SubDealerList", "Farmers" };            // MO / MDO / JMDO
-    private static readonly string[] RegionPriority = { "Dashboard", "SubDealerList", "RMDValidationQueue", "GuestHouse" };    // RM / RMD
-    private static readonly string[] StatePriority = { "Dashboard", "SMMApprovals", "SubDealerList", "GuestHouse" };           // SMD / SMM
-    private static readonly string[] AdminPriority = { "Dashboard", "AVPApprovals", "GuestHouse", "DigitalLibrary" };          // Admin / CorporateAdmin / Director / AVP (Library falls through for Director / AVP)
+    private static readonly string[] RegionPriority = { "Dashboard", "SubDealerList", "RMDValidationQueue", "ReportsCenter" };  // RM / RMD
+    private static readonly string[] StatePriority = { "Dashboard", "SMMApprovals", "SubDealerList", "ReportsCenter" };         // SMD / SMM
+    private static readonly string[] AdminPriority = { "Dashboard", "AVPApprovals", "ReportsCenter", "DigitalLibrary" };        // Admin / CorporateAdmin / Director / AVP (Library falls through for Director / AVP)
     private static readonly string[] SpecialAdminPriority = { "Logistics", "LogisticsMaster", "LogisticsReport", "UserProfile" };
     private static readonly string[] DefaultPriority = FieldStaffPriority;
 

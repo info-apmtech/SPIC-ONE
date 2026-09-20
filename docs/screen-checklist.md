@@ -172,6 +172,11 @@ Counts are occurrences in the page source: Table = `<table>` or `SpicDataTable`,
 | Activities (hub) | /Activities | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | tab bar (MO/MDO/JMDO) | [ ] | [ ] | [ ] | [ ] |
 | Farmers (hub) | /Farmers | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | tab bar (MO/MDO/JMDO) | [ ] | [ ] | [ ] | [ ] |
 | Alerts (hub) | /Alerts | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | top bar bell + More | [ ] | [ ] | [ ] | [ ] |
+| Community | /Community | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | admin (sidebar + More) | [ ] | [ ] | [ ] | [ ] |
+| CommunityDiscussions | /Community/discussions | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | via Community | [ ] | [ ] | [ ] | [ ] |
+| CommunityDiscussion | /Community/discussion/{id} | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | via Community | [ ] | [ ] | [ ] | [ ] |
+| CommunityNew | /Community/new | new | 0 | 1 | 1 | 0 | 2 | 0 | 0 | via Community | [ ] | [ ] | [ ] | [ ] |
+| CommunityPosted | /Community/posted/{id} | new | 0 | 0 | 0 | 0 | 0 | 0 | 0 | via Community | [ ] | [ ] | [ ] | [ ] |
 
 ### Workstream sizes
 
@@ -181,7 +186,7 @@ Counts are occurrences in the page source: Table = `<table>` or `SpicDataTable`,
 | B  Reports and stock | 17 |
 | C  Guest house, welfare and SDWA | 38 |
 | D  Approvals, schemes, CSR and budget | 17 |
-| E  Settings, masters, logistics and profile | 18 |
+| E  Settings, masters, logistics and profile | 23 |
 
 
 ## 3. Programme plan

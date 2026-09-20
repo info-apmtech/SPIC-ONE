@@ -1,0 +1,500 @@
+@page "/Community/discussions"
+@* Pages.CommunityDiscussion (the detail page class) shares its name with the model. *@
+@using CommunityDiscussion = SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+@*
+    Discussions list (Figma frame supplied 2026-09-20). Stat tiles, tab bar, collapsible
+    filter card, sortable/searchable list and pagination. Every control that changes what
+    the list shows writes to the URL query (replace:true) exactly like the Digital Library
+    "All Content" page, so back/refresh/share all agree. Sample data only.
+*@
+
+<div class="cmd-page">
+
+    <PageHeader Title="Discussions"
+                Subtitle="Ask questions, Share Experiences and learn from fellow farmers"
+                ShowBack="true" BackHref="/Community">
+        <Actions>
+            <a class="cmd-btn cmd-btn-outline cmd-desk-only" href="/Community">
+                <span aria-hidden="true">&larr;</span> Back to Knowledge Community
+            </a>
+            <a class="cmd-btn cmd-btn-primary" href="/Community/new">
+                <i class="bi bi-send" aria-hidden="true"></i> Start a Discussion
+            </a>
+        </Actions>
+    </PageHeader>
+
+    <!-- ---------- stat tiles ---------- -->
+    <div class="cmd-stats">
+        <div class="cmd-stat">
+            <span class="cmd-stat-label">Total Discussions</span>
+            <span class="cmd-stat-value">@All.Count.ToString("N0")</span>
+            <span class="cmd-stat-hint">All discussions</span>
+            <span class="cmd-stat-icon cmd-ic-green"><i class="bi bi-chat-left-text" aria-hidden="true"></i></span>
+        </div>
+        <div class="cmd-stat">
+            <span class="cmd-stat-label">Active Members</span>
+            <span class="cmd-stat-value">@ActiveMembers.ToString("N0")</span>
+            <span class="cmd-stat-hint">Members active recently</span>
+            <span class="cmd-stat-icon cmd-ic-purple"><i class="bi bi-people" aria-hidden="true"></i></span>
+        </div>
+        <div class="cmd-stat">
+            <span class="cmd-stat-label">Expert Answers</span>
+            <span class="cmd-stat-value">@ExpertAnswers.ToString("N0")</span>
+            <span class="cmd-stat-hint">Answers from SPIC experts</span>
+            <span class="cmd-stat-icon cmd-ic-amber"><i class="bi bi-patch-check" aria-hidden="true"></i></span>
+        </div>
+        <div class="cmd-stat">
+            <span class="cmd-stat-label">New This Month</span>
+            <span class="cmd-stat-value">@NewThisMonth.ToString("N0")</span>
+            <span class="cmd-stat-hint">New discussions this month</span>
+            <span class="cmd-stat-icon cmd-ic-violet"><i class="bi bi-calendar-plus" aria-hidden="true"></i></span>
+        </div>
+    </div>
+
+    <!-- ---------- tabs ---------- -->
+    <div class="cmd-tabs" role="tablist" aria-label="Discussion filters">
+        @foreach (var (key, label) in Tabs)
+        {
+            <button type="button" role="tab"
+                    class="cmd-tab @(Tab == key ? "active" : "")"
+                    aria-selected="@(Tab == key)"
+                    @onclick="() => SetTab(key)">
+                @label
+            </button>
+        }
+    </div>
+
+    <!-- ---------- filters ---------- -->
+    <section class="cmd-filters @(_filtersToggled ? "is-toggled" : "")">
+        <button type="button" class="cmd-filters-head"
+                aria-controls="cmd-filter-body" aria-expanded="@(!_filtersToggled)"
+                @onclick="() => _filtersToggled = !_filtersToggled">
+            <span class="cmd-filters-title"><i class="bi bi-funnel" aria-hidden="true"></i> Filters</span>
+            <i class="bi bi-chevron-down cmd-filters-chevron" aria-hidden="true"></i>
+        </button>
+
+        <div class="cmd-filter-body" id="cmd-filter-body">
+            <div class="cmd-field cmd-field--dates">
+                <label class="cmd-label" for="cmd-from">Date Range</label>
+                <div class="cmd-dates">
+                    @* kept as strings (the query carries them verbatim), so bind by hand *@
+                    <input id="cmd-from" class="cmd-input" type="date" aria-label="From date"
+                           value="@_from" @onchange="e => _from = e.Value?.ToString() ?? string.Empty" />
+                    <span class="cmd-dates-sep">to</span>
+                    <input class="cmd-input" type="date" aria-label="To date"
+                           value="@_to" @onchange="e => _to = e.Value?.ToString() ?? string.Empty" />
+                </div>
+            </div>
+
+            <div class="cmd-field">
+                <label class="cmd-label" for="cmd-category">Category</label>
+                <select id="cmd-category" class="cmd-input" @bind="_category">
+                    <option value="">All Categories</option>
+                    @foreach (var c in CommunitySampleData.Categories)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </div>
+
+            <div class="cmd-field">
+                <label class="cmd-label" for="cmd-product">Product</label>
+                <select id="cmd-product" class="cmd-input" @bind="_product">
+                    <option value="">All Products</option>
+                    @foreach (var p in CommunitySampleData.ProductNames)
+                    {
+                        <option value="@p">@p</option>
+                    }
+                </select>
+            </div>
+
+            <div class="cmd-field">
+                <label class="cmd-label" for="cmd-crop">Crop</label>
+                <select id="cmd-crop" class="cmd-input" @bind="_crop">
+                    <option value="">All Crops</option>
+                    @foreach (var c in CommunitySampleData.Crops)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </div>
+
+            <div class="cmd-field">
+                <label class="cmd-label" for="cmd-status">Status</label>
+                <select id="cmd-status" class="cmd-input" @bind="_status">
+                    <option value="">All Status</option>
+                    @foreach (var s in CommunitySampleData.Statuses)
+                    {
+                        <option value="@s">@s</option>
+                    }
+                </select>
+            </div>
+
+            <div class="cmd-field cmd-field--tags">
+                <label class="cmd-label" for="cmd-tags">Tags</label>
+                <div class="cmd-tagbox">
+                    @foreach (var t in _tags)
+                    {
+                        <TagChip Text="@t" CssClass="cm-tag-green" OnRemove="RemoveTag" />
+                    }
+                    <input id="cmd-tags" class="cmd-tagbox-input" type="text"
+                           placeholder="@(_tags.Count == 0 ? "Type a tag and press Enter" : "Add another…")"
+                           aria-label="Add a tag"
+                           @bind="_tagInput" @bind:event="oninput" @onkeydown="TagKeyDown" />
+                </div>
+            </div>
+
+            <div class="cmd-filter-actions">
+                <button type="button" class="cmd-btn cmd-btn-outline" @onclick="ClearFilters">
+                    <span aria-hidden="true">&times;</span> Clear All
+                </button>
+                <button type="button" class="cmd-btn cmd-btn-blue" @onclick="ApplyFilters">Apply Filters</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ---------- list ---------- -->
+    <section class="cmd-list-card">
+        <div class="cmd-list-head">
+            <p class="cmd-showing">
+                Showing <strong>@FirstShown</strong> - <strong>@LastShown</strong> of <strong>@Filtered.Count.ToString("N0")</strong> discussions
+            </p>
+
+            <div class="cmd-list-tools">
+                <label class="cmd-sort">
+                    <span class="cmd-sort-label">Short by:</span>
+                    <select class="cmd-input" aria-label="Sort discussions" value="@Sort" @onchange="e => SetSort(e.Value?.ToString())">
+                        <option value="latest">Latest Activity</option>
+                        <option value="replies">Most Replies</option>
+                        <option value="views">Most Views</option>
+                        <option value="oldest">Oldest</option>
+                    </select>
+                </label>
+
+                <div class="cmd-search">
+                    <i class="bi bi-search" aria-hidden="true"></i>
+                    <input type="search" placeholder="Search discussions..." aria-label="Search discussions"
+                           value="@Query" @onchange="e => SetQuery(e.Value?.ToString())" />
+                </div>
+            </div>
+        </div>
+
+        @if (Filtered.Count == 0)
+        {
+            <EmptyState Icon="bi-chat-square-dots" Title="No discussions found"
+                        Message="Try another tab, clear the filters or search for something else.">
+                <button type="button" class="cmd-btn cmd-btn-outline" @onclick="ClearFilters">Clear filters</button>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="cmd-rows">
+                @foreach (var d in Paged)
+                {
+                    <DiscussionCard @key="d.Id" Discussion="d"
+                                    Variant="DiscussionCard.CardVariant.Full"
+                                    ShowFollow="true" ShowMenu="true"
+                                    OnToggleFollow="ToggleFollow"
+                                    OnEdit="EditDiscussion"
+                                    OnDelete="DeleteDiscussion" />
+                }
+            </div>
+
+            <div class="cmd-foot">
+                <label class="cmd-perpage">
+                    <span>Items Per Page</span>
+                    <select class="cmd-input" aria-label="Items per page" value="@PageSize" @onchange="e => SetSize(e.Value?.ToString())">
+                        <option value="10">10</option>
+                        <option value="20">20</option>
+                        <option value="50">50</option>
+                    </select>
+                </label>
+
+                <nav class="cmd-pager cmd-desk-only" aria-label="Pagination">
+                    <button type="button" class="cmd-page-btn" aria-label="Previous page"
+                            disabled="@(Page <= 1)" @onclick="() => GoToPage(Page - 1)">&lsaquo;</button>
+
+                    @foreach (var n in PageNumbers)
+                    {
+                        if (n == 0)
+                        {
+                            <span class="cmd-page-gap" aria-hidden="true">…</span>
+                        }
+                        else
+                        {
+                            <button type="button" class="cmd-page-btn @(n == Page ? "active" : "")"
+                                    aria-current="@(n == Page ? "page" : null)"
+                                    @onclick="() => GoToPage(n)">@n</button>
+                        }
+                    }
+
+                    <button type="button" class="cmd-page-btn" aria-label="Next page"
+                            disabled="@(Page >= TotalPages)" @onclick="() => GoToPage(Page + 1)">&rsaquo;</button>
+                </nav>
+
+                <nav class="cmd-pager-phone" aria-label="Pagination">
+                    <button type="button" class="cmd-page-btn" aria-label="Previous page"
+                            disabled="@(Page <= 1)" @onclick="() => GoToPage(Page - 1)">&lsaquo;</button>
+                    <span class="cmd-page-of">Page @Page of @TotalPages</span>
+                    <button type="button" class="cmd-page-btn" aria-label="Next page"
+                            disabled="@(Page >= TotalPages)" @onclick="() => GoToPage(Page + 1)">&rsaquo;</button>
+                </nav>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private static readonly (string Key, string Label)[] Tabs =
+    {
+        ("all", "All Discussion"),
+        ("mine", "My Discussions"),
+        ("trending", "Trending"),
+        ("unanswered", "Unanswered"),
+        ("following", "Following"),
+        ("expert", "Expert Answers"),
+    };
+
+    // ---- query state ----
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "category")] public string? CategoryQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "product")] public string? ProductQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "crop")] public string? CropQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "tags")] public string? TagsQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "from")] public string? FromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "to")] public string? ToQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "sort")] public string? SortQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "size")] public int? SizeQuery { get; set; }
+
+    private string Tab = "all";
+    private string Sort = "latest";
+    private string Query = "";
+    private int Page = 1;
+    private int PageSize = 10;
+
+    // applied filters (mirrors of the URL)
+    private string _aCategory = "", _aProduct = "", _aCrop = "", _aStatus = "", _aFrom = "", _aTo = "";
+    private List<string> _aTags = new();
+
+    // pending filters (what the filter card shows until "Apply Filters")
+    private string _category = "", _product = "", _crop = "", _status = "", _from = "", _to = "";
+    private List<string> _tags = new();
+    private string _tagInput = "";
+
+    private bool _filtersToggled;
+
+    private static List<CommunityDiscussion> All => CommunitySampleData.Discussions;
+
+    protected override void OnParametersSet()
+    {
+        Tab = Tabs.Any(t => t.Key == TabQuery) ? TabQuery! : "all";
+        Sort = SortQuery is "replies" or "views" or "oldest" ? SortQuery : "latest";
+        Query = SearchQuery ?? "";
+        PageSize = SizeQuery is 10 or 20 or 50 ? SizeQuery.Value : 10;
+        Page = PageQuery is > 0 ? PageQuery.Value : 1;
+
+        _aCategory = _category = CategoryQuery ?? "";
+        _aProduct = _product = ProductQuery ?? "";
+        _aCrop = _crop = CropQuery ?? "";
+        _aStatus = _status = StatusQuery ?? "";
+        _aFrom = _from = FromQuery ?? "";
+        _aTo = _to = ToQuery ?? "";
+        _aTags = SplitTags(TagsQuery);
+        _tags = _aTags.ToList();
+        _tagInput = "";
+    }
+
+    // ---- tiles ----
+    private int ActiveMembers => All.Select(d => d.Author.Id)
+        .Concat(All.SelectMany(d => d.Participants).Select(m => m.Id))
+        .Distinct().Count();
+
+    private int ExpertAnswers => All.Count(d => d.Status == DiscussionStatus.ExpertAnswer);
+
+    private int NewThisMonth => All.Count(d => d.CreatedAt >= DateTime.Now.AddDays(-30));
+
+    // ---- filtering ----
+    private List<CommunityDiscussion> Filtered
+    {
+        get
+        {
+            IEnumerable<CommunityDiscussion> q = All;
+
+            q = Tab switch
+            {
+                "mine" => q.Where(d => d.IsMine),
+                "trending" => q.Where(d => d.IsTrending),
+                "unanswered" => q.Where(d => d.ReplyCount == 0 || d.Status is DiscussionStatus.Open or DiscussionStatus.WaitingForReply),
+                "following" => q.Where(d => d.IsFollowing),
+                "expert" => q.Where(d => d.Status == DiscussionStatus.ExpertAnswer),
+                _ => q
+            };
+
+            if (_aCategory.Length > 0) q = q.Where(d => d.Category == _aCategory);
+            if (_aProduct.Length > 0) q = q.Where(d => d.Product == _aProduct);
+            if (_aCrop.Length > 0) q = q.Where(d => d.Crop == _aCrop);
+            if (_aStatus.Length > 0) q = q.Where(d => d.StatusLabel == _aStatus);
+
+            if (_aTags.Count > 0)
+            {
+                q = q.Where(d => d.Tags.Any(t => _aTags.Contains(t, StringComparer.OrdinalIgnoreCase)));
+            }
+
+            if (DateTime.TryParse(_aFrom, out var from)) q = q.Where(d => d.CreatedAt.Date >= from.Date);
+            if (DateTime.TryParse(_aTo, out var to)) q = q.Where(d => d.CreatedAt.Date <= to.Date);
+
+            if (Query.Length > 0)
+            {
+                q = q.Where(d => d.Title.Contains(Query, StringComparison.OrdinalIgnoreCase)
+                              || d.Body.Contains(Query, StringComparison.OrdinalIgnoreCase));
+            }
+
+            q = Sort switch
+            {
+                "replies" => q.OrderByDescending(d => d.ReplyCount).ThenByDescending(d => d.CreatedAt),
+                "views" => q.OrderByDescending(d => d.Views).ThenByDescending(d => d.CreatedAt),
+                "oldest" => q.OrderBy(d => d.CreatedAt),
+                _ => q.OrderByDescending(d => d.CreatedAt)
+            };
+
+            return q.ToList();
+        }
+    }
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Filtered.Count / (double)PageSize));
+
+    private int CurrentPage => Math.Min(Math.Max(Page, 1), TotalPages);
+
+    private List<CommunityDiscussion> Paged => Filtered.Skip((CurrentPage - 1) * PageSize).Take(PageSize).ToList();
+
+    private int FirstShown => Filtered.Count == 0 ? 0 : ((CurrentPage - 1) * PageSize) + 1;
+
+    private int LastShown => Math.Min(CurrentPage * PageSize, Filtered.Count);
+
+    /// <summary>Page buttons; 0 renders the "…" gap.</summary>
+    private List<int> PageNumbers
+    {
+        get
+        {
+            var total = TotalPages;
+            var current = CurrentPage;
+            var pages = new List<int>();
+
+            if (total <= 7)
+            {
+                for (var i = 1; i <= total; i++) pages.Add(i);
+                return pages;
+            }
+
+            var window = new SortedSet<int> { 1, 2, 3, total - 2, total - 1, total, current };
+            if (current > 1) window.Add(current - 1);
+            if (current < total) window.Add(current + 1);
+
+            var last = 0;
+            foreach (var n in window.Where(n => n >= 1 && n <= total))
+            {
+                if (last != 0 && n - last > 1) pages.Add(0);
+                pages.Add(n);
+                last = n;
+            }
+            return pages;
+        }
+    }
+
+    // ---- tag input ----
+    private void TagKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is not ("Enter" or ",")) return;
+
+        var tag = _tagInput.Trim().Trim(',', '#');
+        _tagInput = "";
+        if (tag.Length == 0) return;
+        if (!_tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) _tags.Add(tag);
+    }
+
+    private void RemoveTag(string tag) => _tags.RemoveAll(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase));
+
+    private static List<string> SplitTags(string? csv) =>
+        (csv ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    // ---- navigation (filters live in the URL) ----
+    private void SetTab(string key) => Apply(tab: key, page: 1);
+
+    private void SetSort(string? sort) => Apply(sort: sort ?? "latest", page: 1);
+
+    private void SetQuery(string? query) => Apply(query: query ?? "", page: 1);
+
+    private void SetSize(string? size) => Apply(size: int.TryParse(size, out var s) ? s : 10, page: 1);
+
+    private void GoToPage(int page) => Apply(page: Math.Min(Math.Max(page, 1), TotalPages));
+
+    private void ApplyFilters()
+    {
+        _aCategory = _category;
+        _aProduct = _product;
+        _aCrop = _crop;
+        _aStatus = _status;
+        _aFrom = _from;
+        _aTo = _to;
+        _aTags = _tags.ToList();
+        Apply(page: 1);
+    }
+
+    private void ClearFilters()
+    {
+        _category = _product = _crop = _status = _from = _to = "";
+        _tags = new List<string>();
+        _tagInput = "";
+        _aCategory = _aProduct = _aCrop = _aStatus = _aFrom = _aTo = "";
+        _aTags = new List<string>();
+        Apply(page: 1, query: "");
+    }
+
+    private void Apply(string? tab = null, string? sort = null, string? query = null, int? page = null, int? size = null)
+    {
+        Tab = tab ?? Tab;
+        Sort = sort ?? Sort;
+        Query = query ?? Query;
+        Page = page ?? Page;
+        PageSize = size ?? PageSize;
+
+        var parts = new List<string>();
+        void Add(string key, string value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) parts.Add($"{key}={Uri.EscapeDataString(value)}");
+        }
+
+        if (Tab != "all") Add("tab", Tab);
+        Add("category", _aCategory);
+        Add("product", _aProduct);
+        Add("crop", _aCrop);
+        Add("status", _aStatus);
+        if (_aTags.Count > 0) Add("tags", string.Join(",", _aTags));
+        Add("from", _aFrom);
+        Add("to", _aTo);
+        if (Sort != "latest") Add("sort", Sort);
+        Add("q", Query);
+        if (Page > 1) Add("page", Page.ToString());
+        if (PageSize != 10) Add("size", PageSize.ToString());
+
+        Nav.NavigateTo("/Community/discussions" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
+    }
+
+    // ---- row actions (in memory until the discussion API exists) ----
+    private void ToggleFollow(CommunityDiscussion d)
+    {
+        d.IsFollowing = !d.IsFollowing;
+        if (d.IsFollowing) Toast.Success("You are following this discussion.");
+        else Toast.Info("You stopped following this discussion.");
+    }
+
+    private void EditDiscussion(CommunityDiscussion d) => Nav.NavigateTo($"/Community/new?edit={d.Id}");
+
+    private void DeleteDiscussion(CommunityDiscussion d) => Toast.Info("Delete arrives with the API");
+}

@@ -1,0 +1,479 @@
+@page "/Community/new"
+@inject NavigationManager Nav
+@inject ToastService Toast
+
+@*
+    Community Connect - "Create a Discussion" (Figma frame supplied 2026-09-20).
+    Shared by the Blazor Server web host and the MAUI BlazorWebView.
+
+    There is no discussion API yet, so the form posts into CommunitySampleData and the
+    attachments are only remembered by name/size (nothing is uploaded).
+
+        ?title=...    pre-fills the title (from the "Ask the community" box on the hub)
+        ?edit={id}    loads that discussion into the form; the primary button then reads
+                      "Save Changes" and the similar-discussions check is skipped.
+*@
+
+<div class="cn-page">
+
+    <PageHeader Title="Create a Discussion"
+                Subtitle="Ask a question, share your experience or get advice from SPIC experts and fellow farmers."
+                ShowBack="true"
+                BackHref="/Community/discussions">
+        <Actions>
+            <button type="button" class="cn-btn cn-btn-outline desktop-only" @onclick="CancelAsync">
+                <i class="bi bi-arrow-left" aria-hidden="true"></i> Back to Discussions
+            </button>
+        </Actions>
+    </PageHeader>
+
+    @* ---------------------------------------------------------- details *@
+    <section class="cn-card">
+        <h2 class="cn-card-title">Discussion Details</h2>
+
+        <div class="cn-field @(TitleError is null ? "" : "cn-field--bad")">
+            <label for="cn-title">Discussion Title <span class="cn-req" aria-hidden="true">*</span></label>
+            <input id="cn-title"
+                   type="text"
+                   placeholder="Enter your question or topic..."
+                   maxlength="160"
+                   @ref="_titleRef"
+                   @bind="Draft.Title"
+                   @bind:event="oninput"
+                   aria-invalid="@(TitleError is not null ? "true" : null)"
+                   aria-describedby="@(TitleError is null ? null : "cn-title-err")" />
+            @if (TitleError is not null)
+            {
+                <p class="cn-err" id="cn-title-err">@TitleError</p>
+            }
+        </div>
+
+        <div class="cn-grid3">
+            <div class="cn-field @(CategoryError is null ? "" : "cn-field--bad")">
+                <label for="cn-category">Category <span class="cn-req" aria-hidden="true">*</span></label>
+                <select id="cn-category"
+                        @ref="_categoryRef"
+                        @bind="Draft.Category"
+                        aria-invalid="@(CategoryError is not null ? "true" : null)"
+                        aria-describedby="@(CategoryError is null ? null : "cn-category-err")">
+                    <option value="">Select Category</option>
+                    @foreach (var c in CommunitySampleData.Categories)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+                @if (CategoryError is not null)
+                {
+                    <p class="cn-err" id="cn-category-err">@CategoryError</p>
+                }
+            </div>
+
+            <div class="cn-field">
+                <label for="cn-product">Related Product</label>
+                <select id="cn-product" @bind="Draft.Product">
+                    <option value="">Select Product</option>
+                    @foreach (var p in CommunitySampleData.ProductNames)
+                    {
+                        <option value="@p">@p</option>
+                    }
+                </select>
+            </div>
+
+            <div class="cn-field">
+                <label for="cn-crop">Crop</label>
+                <select id="cn-crop" @bind="Draft.Crop">
+                    <option value="">e.g Paddy, wheat, Tomato..</option>
+                    @foreach (var c in CommunitySampleData.Crops)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="cn-field">
+            <label for="cn-tags">Tags</label>
+            <div class="cn-tags">
+                <input id="cn-tags"
+                       type="text"
+                       class="cn-tag-input"
+                       placeholder="@TagPlaceholder"
+                       @ref="_tagRef"
+                       @bind="_tagInput"
+                       @bind:event="oninput"
+                       @onkeydown="OnTagKeyDown" />
+                @if (Draft.Tags.Count > 0)
+                {
+                    <span class="cn-tag-list">
+                        @foreach (var tag in Draft.Tags)
+                        {
+                            <TagChip Text="@tag" ShowHash="false" CssClass="cm-tag-green" OnRemove="RemoveTag" />
+                        }
+                    </span>
+                }
+            </div>
+            <p class="cn-hint">Press Enter or comma to add a tag. Up to @MaxTags tags.</p>
+        </div>
+
+        <div class="cn-field @(DescriptionError is null ? "" : "cn-field--bad")">
+            <label for="cn-desc">Description <span class="cn-req" aria-hidden="true">*</span></label>
+            <textarea id="cn-desc"
+                      rows="6"
+                      placeholder="Describe your question, what you tried and what you observed..."
+                      @ref="_descRef"
+                      @bind="Draft.Description"
+                      @bind:event="oninput"
+                      aria-invalid="@(DescriptionError is not null ? "true" : null)"
+                      aria-describedby="@(DescriptionError is null ? null : "cn-desc-err")"></textarea>
+            @if (DescriptionError is not null)
+            {
+                <p class="cn-err" id="cn-desc-err">@DescriptionError</p>
+            }
+        </div>
+    </section>
+
+    @* ------------------------------------------------------ attachments *@
+    <section class="cn-card">
+        <h2 class="cn-card-title">Attachments</h2>
+
+        <label class="cn-drop">
+            <InputFile OnChange="OnFilesChosen" multiple
+                       accept="image/png,image/jpeg,image/webp,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            <i class="bi bi-cloud-arrow-up cn-drop-icon" aria-hidden="true"></i>
+            <span class="cn-drop-title">Drop files here or click to upload</span>
+            <span class="cn-drop-hint">Supports: Images, PDF, Word documents &middot; Max 10MB each</span>
+            <span class="cn-btn cn-btn-outline cn-btn-sm">Browse Files</span>
+        </label>
+
+        @if (Draft.Files.Count > 0)
+        {
+            <ul class="cn-files">
+                @for (var i = 0; i < Draft.Files.Count; i++)
+                {
+                    var index = i;
+                    var file = Draft.Files[i];
+                    <li class="cn-file">
+                        <i class="bi @FileIcon(file.Name) cn-file-icon" aria-hidden="true"></i>
+                        <span class="cn-file-name" title="@file.Name">@file.Name</span>
+                        <span class="cn-file-size">@SizeLabel(file.Size)</span>
+                        <button type="button" class="cn-file-remove" aria-label="@($"Remove {file.Name}")" @onclick="() => RemoveFile(index)">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <ActionBar>
+        <Secondary>
+            <button type="button" class="cn-btn cn-btn-outline" @onclick="CancelAsync">Cancel</button>
+        </Secondary>
+        <ChildContent>
+            <button type="button" class="cn-btn cn-btn-primary" @onclick="SubmitAsync">
+                @PrimaryLabel <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </button>
+        </ChildContent>
+    </ActionBar>
+</div>
+
+<SimilarDiscussionsDialog @bind-IsOpen="_similarOpen"
+                          Items="_similar"
+                          OnPostAnyway="PostAsync"
+                          OnBackToEdit="BackToEditAsync" />
+
+<UniqueQuestionDialog @bind-IsOpen="_uniqueOpen"
+                      OnPost="PostAsync"
+                      OnBackToEdit="BackToEditAsync" />
+
+@code {
+    private const int MaxTags = 6;
+    private const long MaxFileBytes = 10L * 1024 * 1024;
+    private const int MinTitle = 10;
+    private const int MinDescription = 20;
+
+    /// <summary>Pre-fills the title, e.g. from the "Ask the community" box on the hub.</summary>
+    [SupplyParameterFromQuery(Name = "title")] public string? TitleQuery { get; set; }
+
+    /// <summary>Id of the discussion being edited; absent = create.</summary>
+    [SupplyParameterFromQuery(Name = "edit")] public int? EditId { get; set; }
+
+    private DiscussionDraft Draft { get; } = new();
+
+    // Fully qualified: the page class CommunityDiscussion (the detail page) lives in this
+    // same namespace and would otherwise shadow the model of the same name.
+    private SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion? _editing;
+    private int? _loadedEditId;
+    private string? _loadedTitleQuery;
+
+    private string _tagInput = "";
+    private bool _submitted;
+    private string _clean = "";
+
+    private bool _similarOpen;
+    private bool _uniqueOpen;
+    private IReadOnlyList<SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion> _similar =
+        Array.Empty<SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion>();
+
+    private ElementReference _titleRef;
+    private ElementReference _categoryRef;
+    private ElementReference _descRef;
+    private ElementReference _tagRef;
+    private ElementReference? _focusTarget;
+
+    private bool IsEdit => _editing is not null;
+    private string PrimaryLabel => IsEdit ? "Save Changes" : "Post Discussion";
+    private bool TagsFull => Draft.Tags.Count >= MaxTags;
+    // The input stays enabled when the limit is reached so Backspace can still remove a tag.
+    private string TagPlaceholder => TagsFull ? $"{MaxTags} tags added"
+        : Draft.Tags.Count == 0 ? "Add a tag and press Enter" : "";
+
+    private bool IsDirty => Snapshot() != _clean;
+
+    // ---------------------------------------------------------- lifecycle
+
+    protected override void OnParametersSet()
+    {
+        if (EditId is int id && _loadedEditId != id)
+        {
+            _loadedEditId = id;
+            _editing = CommunitySampleData.Find(id);
+
+            if (_editing is not null)
+            {
+                Draft.Title = _editing.Title;
+                Draft.Description = _editing.Body;
+                Draft.Category = _editing.Category;
+                Draft.Product = _editing.Product;
+                Draft.Crop = _editing.Crop;
+                Draft.Tags = _editing.Tags.Take(MaxTags).ToList();
+                Draft.Files.Clear();
+                _submitted = false;
+            }
+            else
+            {
+                Toast.Error("That discussion could not be found, so a blank form was opened.");
+            }
+
+            _clean = Snapshot();
+            return;
+        }
+
+        if (EditId is null && !string.IsNullOrWhiteSpace(TitleQuery) && _loadedTitleQuery != TitleQuery)
+        {
+            _loadedTitleQuery = TitleQuery;
+            Draft.Title = TitleQuery!.Trim();
+            _clean = Snapshot();
+            return;
+        }
+
+        if (_clean.Length == 0) _clean = Snapshot();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusTarget is ElementReference target)
+        {
+            _focusTarget = null;
+            try { await target.FocusAsync(); } catch { /* element gone or no interop yet */ }
+        }
+    }
+
+    // --------------------------------------------------------- validation
+
+    private string? TitleError => !_submitted ? null
+        : Draft.Title.Trim().Length == 0 ? "Please enter a discussion title."
+        : Draft.Title.Trim().Length < MinTitle ? $"The title needs at least {MinTitle} characters."
+        : null;
+
+    private string? CategoryError => !_submitted ? null
+        : string.IsNullOrWhiteSpace(Draft.Category) ? "Please choose a category."
+        : null;
+
+    private string? DescriptionError => !_submitted ? null
+        : Draft.Description.Trim().Length == 0 ? "Please describe your question."
+        : Draft.Description.Trim().Length < MinDescription ? $"Please add a little more detail (at least {MinDescription} characters)."
+        : null;
+
+    private bool IsValid => Draft.Title.Trim().Length >= MinTitle
+        && !string.IsNullOrWhiteSpace(Draft.Category)
+        && Draft.Description.Trim().Length >= MinDescription;
+
+    // -------------------------------------------------------------- tags
+
+    private void OnTagKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or ",")
+        {
+            AddTag();
+        }
+        else if (e.Key == "Backspace" && _tagInput.Length == 0 && Draft.Tags.Count > 0)
+        {
+            Draft.Tags.RemoveAt(Draft.Tags.Count - 1);
+        }
+    }
+
+    private void AddTag()
+    {
+        var tag = _tagInput.Trim().Trim(',').Trim();
+        _tagInput = "";
+
+        if (tag.Length == 0) return;
+
+        if (TagsFull)
+        {
+            Toast.Info($"You can add up to {MaxTags} tags.");
+            return;
+        }
+
+        if (Draft.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) return;
+
+        Draft.Tags.Add(tag);
+    }
+
+    private void RemoveTag(string tag)
+    {
+        var match = Draft.Tags.FirstOrDefault(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase));
+        if (match is not null) Draft.Tags.Remove(match);
+        _focusTarget = _tagRef;
+    }
+
+    // ------------------------------------------------------- attachments
+
+    private void OnFilesChosen(InputFileChangeEventArgs e)
+    {
+        // Nothing is uploaded yet: only the name and size are kept on the draft.
+        var added = 0;
+        var rejected = 0;
+
+        foreach (var file in e.GetMultipleFiles(20))
+        {
+            if (file.Size > MaxFileBytes) { rejected++; continue; }
+            if (Draft.Files.Any(f => f.Name == file.Name && f.Size == file.Size)) continue;
+
+            Draft.Files.Add((file.Name, file.Size));
+            added++;
+        }
+
+        if (rejected > 0)
+        {
+            Toast.Error(rejected == 1
+                ? "That file is larger than 10 MB and was not attached."
+                : $"{rejected} files are larger than 10 MB and were not attached.");
+        }
+        else if (added > 0)
+        {
+            Toast.Success(added == 1 ? "File attached." : $"{added} files attached.");
+        }
+    }
+
+    private void RemoveFile(int index)
+    {
+        if (index >= 0 && index < Draft.Files.Count) Draft.Files.RemoveAt(index);
+    }
+
+    private static string FileIcon(string name)
+    {
+        var ext = System.IO.Path.GetExtension(name).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => "bi-file-earmark-pdf",
+            ".doc" or ".docx" => "bi-file-earmark-word",
+            ".png" or ".jpg" or ".jpeg" or ".webp" or ".gif" => "bi-file-earmark-image",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private static string SizeLabel(long bytes) => bytes >= 1024 * 1024
+        ? $"{bytes / 1024d / 1024d:0.0} MB"
+        : $"{Math.Max(1, bytes / 1024d):0} KB";
+
+    // ------------------------------------------------------------ submit
+
+    private async Task SubmitAsync()
+    {
+        AddTag();
+        _submitted = true;
+
+        if (!IsValid)
+        {
+            _focusTarget = Draft.Title.Trim().Length < MinTitle ? _titleRef
+                : string.IsNullOrWhiteSpace(Draft.Category) ? _categoryRef
+                : _descRef;
+            StateHasChanged();
+            return;
+        }
+
+        if (_editing is not null)
+        {
+            _editing.Title = Draft.Title.Trim();
+            _editing.Body = Draft.Description.Trim();
+            _editing.Category = Draft.Category;
+            _editing.Product = Draft.Product;
+            _editing.Crop = Draft.Crop;
+            _editing.Tags = Draft.Tags.ToList();
+
+            _clean = Snapshot();
+            Toast.Success("Your changes have been saved");
+            Nav.NavigateTo($"/Community/discussion/{_editing.Id}");
+            return;
+        }
+
+        _similar = CommunitySampleData.Similar(Draft.Title);
+
+        if (_similar.Count > 0) _similarOpen = true;
+        else _uniqueOpen = true;
+
+        await Task.CompletedTask;
+    }
+
+    private Task PostAsync()
+    {
+        _similarOpen = false;
+        _uniqueOpen = false;
+
+        var d = CommunitySampleData.Post(Draft, CommunitySampleData.CurrentUser);
+
+        _clean = Snapshot();
+        Toast.Success("Your question has been posted");
+        Nav.NavigateTo($"/Community/posted/{d.Id}");
+        return Task.CompletedTask;
+    }
+
+    private Task BackToEditAsync()
+    {
+        _similarOpen = false;
+        _uniqueOpen = false;
+        _focusTarget = _titleRef;
+        return Task.CompletedTask;
+    }
+
+    private async Task CancelAsync()
+    {
+        if (IsDirty)
+        {
+            var leave = await Toast.ConfirmAsync(
+                IsEdit ? "Discard your changes?" : "Discard this discussion?",
+                IsEdit
+                    ? "Your edits have not been saved. Leaving now will discard them."
+                    : "Your draft has not been posted. Leaving now will discard what you typed.",
+                confirmText: "Discard",
+                danger: true,
+                cancelText: "Keep editing");
+
+            if (!leave) return;
+        }
+
+        Nav.NavigateTo("/Community/discussions");
+    }
+
+    private string Snapshot() =>
+        string.Join('',
+            Draft.Title.Trim(),
+            Draft.Category,
+            Draft.Product,
+            Draft.Crop,
+            string.Join(',', Draft.Tags),
+            Draft.Description.Trim(),
+            string.Join(',', Draft.Files.Select(f => f.Name)));
+}
