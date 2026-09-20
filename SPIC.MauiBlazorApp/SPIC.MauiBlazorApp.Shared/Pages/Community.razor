@@ -3,16 +3,17 @@
 @using CommunityDiscussion = SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject CommunityApi Api
 @inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Knowledge Community - SPIC ONE</PageTitle>
 
 @*
     SPIC Knowledge Community landing (Figma frame supplied 2026-09-20).
     Hero + search, stats strip, Recent Discussions (grid / list toggle), Popular Products,
-    "New Here?" panel. Everything reads CommunitySampleData; the discussion API does not
-    exist yet, so "Join" and the layout preference only live for the session / the browser.
-    The hero is the page header on desktop (the frame shows no title row above it).
+    "New Here?" panel. Stats, recent discussions and products come from api/Community;
+    "Join" toggles through the API. Only the layout preference is local (localStorage).
 *@
 
 <div class="cmh-page">
@@ -51,21 +52,21 @@
         <div class="cmh-stat">
             <span class="cmh-stat-icon"><i class="bi bi-people-fill" aria-hidden="true"></i></span>
             <span class="cmh-stat-text">
-                <span class="cmh-stat-value">12,400+</span>
+                <span class="cmh-stat-value">@Count(_stats?.CommunityMembers)</span>
                 <span class="cmh-stat-label">Community Members</span>
             </span>
         </div>
         <div class="cmh-stat">
             <span class="cmh-stat-icon"><i class="bi bi-chat-left-text-fill" aria-hidden="true"></i></span>
             <span class="cmh-stat-text">
-                <span class="cmh-stat-value">4,280+</span>
+                <span class="cmh-stat-value">@Count(_stats?.TotalDiscussions)</span>
                 <span class="cmh-stat-label">Discussions</span>
             </span>
         </div>
         <div class="cmh-stat">
             <span class="cmh-stat-icon"><i class="bi bi-person-badge-fill" aria-hidden="true"></i></span>
             <span class="cmh-stat-text">
-                <span class="cmh-stat-value">890+</span>
+                <span class="cmh-stat-value">@Count(_stats?.ExpertAnswers)</span>
                 <span class="cmh-stat-label">Expert Answer</span>
             </span>
         </div>
@@ -101,13 +102,37 @@
             </button>
         </div>
 
-        <div class="cmh-recent @(IsGrid ? "cmh-recent--grid" : "cmh-recent--list")">
-            @foreach (var d in Recent)
-            {
-                <DiscussionCard @key="d.Id" Discussion="d"
-                                Variant="@(IsGrid ? DiscussionCard.CardVariant.Compact : DiscussionCard.CardVariant.Row)" />
-            }
-        </div>
+        @if (_loading)
+        {
+            <div class="cmh-recent @(IsGrid ? "cmh-recent--grid" : "cmh-recent--list")">
+                <Skeleton Variant="card" Rows="@(IsGrid ? 2 : 3)" />
+                <Skeleton Variant="card" Rows="@(IsGrid ? 2 : 3)" />
+            </div>
+        }
+        else if (_recent is null)
+        {
+            <EmptyState Icon="bi-wifi-off" Title="Discussions could not be loaded"
+                        Message="The community service did not answer. Please try again.">
+                <button type="button" class="cmh-btn cmh-btn-outline" @onclick="LoadAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (_recent.Count == 0)
+        {
+            <EmptyState Icon="bi-chat-square-dots" Title="No discussions yet"
+                        Message="Be the first to ask the community a question.">
+                <a class="cmh-btn cmh-btn-primary" href="/Community/new">Ask a Question</a>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="cmh-recent @(IsGrid ? "cmh-recent--grid" : "cmh-recent--list")">
+                @foreach (var d in _recent)
+                {
+                    <DiscussionCard @key="d.Id" Discussion="d"
+                                    Variant="@(IsGrid ? DiscussionCard.CardVariant.Compact : DiscussionCard.CardVariant.Row)" />
+                }
+            </div>
+        }
     </section>
 
     <!-- ---------- popular products ---------- -->
@@ -120,19 +145,33 @@
             <a class="cmh-btn cmh-btn-outline" href="/Community/discussions">View All Discussions <span aria-hidden="true">&rarr;</span></a>
         </div>
 
-        <div class="cmh-products">
-            @foreach (var p in Products)
-            {
-                <article class="cmh-product" @key="p.Name">
-                    <img class="cmh-product-img" src="@p.Image" alt="" loading="lazy" />
-                    <h3 class="cmh-product-name">@p.Name</h3>
-                    <p class="cmh-product-count">@Short(p.DiscussionCount) discussion</p>
-                    <button type="button" class="cmh-join @(p.Joined ? "is-on" : "")" @onclick="() => ToggleJoin(p)">
-                        @(p.Joined ? "Joined" : "Join")
-                    </button>
-                </article>
-            }
-        </div>
+        @if (_loading)
+        {
+            <Skeleton Variant="card" Rows="2" />
+        }
+        else if (_products is null || _products.Count == 0)
+        {
+            <EmptyState Icon="bi-box-seam" Title="No products yet"
+                        Message="Product groups appear once discussions mention a SPIC product." Compact="true" />
+        }
+        else
+        {
+            <div class="cmh-products">
+                @foreach (var p in _products)
+                {
+                    <article class="cmh-product" @key="p.Name">
+                        <img class="cmh-product-img" src="@p.Image" alt="" loading="lazy" />
+                        <h3 class="cmh-product-name">@p.Name</h3>
+                        <p class="cmh-product-count">@Short(p.DiscussionCount) discussion</p>
+                        <button type="button" class="cmh-join @(p.Joined ? "is-on" : "")"
+                                disabled="@(_joining == p.Name)"
+                                @onclick="() => ToggleJoinAsync(p)">
+                            @(p.Joined ? "Joined" : "Join")
+                        </button>
+                    </article>
+                }
+            </div>
+        }
     </section>
 
     <!-- ---------- new here ---------- -->
@@ -163,13 +202,15 @@
     private string _query = "";
     private string _layout = "grid";
 
+    private bool _loading = true;
+    private CommunityStats? _stats;
+    private List<CommunityDiscussion>? _recent;
+    private List<CommunityProduct>? _products;
+    private string? _joining;
+
+    private CancellationTokenSource? _cts;
+
     private bool IsGrid => _layout != "list";
-
-    // Sample content until the discussion API exists.
-    private static List<CommunityDiscussion> Recent =>
-        CommunitySampleData.Discussions.OrderByDescending(d => d.CreatedAt).Take(6).ToList();
-
-    private static IReadOnlyList<CommunityProduct> Products => CommunitySampleData.Products;
 
     private sealed record NewHereItem(string Icon, string Label);
 
@@ -180,6 +221,32 @@
         new("bi-hand-thumbs-up", "Help fellow farmers"),
         new("bi-people", "Build a better farming community"),
     };
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+
+        var stats = Api.GetStatsAsync(ct);
+        var recent = Api.GetRecentAsync(6, ct);
+        var products = Api.GetProductsAsync(ct);
+
+        await Task.WhenAll(stats, recent, products);
+
+        if (ct.IsCancellationRequested) return;
+
+        _stats = stats.Result;
+        _recent = recent.Result;
+        _products = products.Result;
+        _loading = false;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -222,14 +289,38 @@
         }
     }
 
-    private void ToggleJoin(CommunityProduct p)
+    private async Task ToggleJoinAsync(CommunityProduct p)
     {
-        p.Joined = !p.Joined;
+        if (_joining is not null) return;
+
+        _joining = p.Name;
+        var wasJoined = p.Joined;
+        p.Joined = !wasJoined;              // optimistic
+
+        var result = await Api.ToggleJoinAsync(p.Name);
+        _joining = null;
+
+        if (result is null)
+        {
+            p.Joined = wasJoined;           // rolled back; CommunityApi raised the toast
+            return;
+        }
+
+        p.Joined = result.Active;
         if (p.Joined) Toast.Success($"Joined {p.Name} discussions.");
         else Toast.Info($"Left {p.Name} discussions.");
     }
 
+    /// <summary>Stat tiles read "-" until the numbers arrive.</summary>
+    private string Count(int? value) => value is int n ? n.ToString("N0") : "-";
+
     /// <summary>12400 -> "12.4k" for the product cards.</summary>
     private static string Short(int n) =>
         n >= 1000 ? (n / 1000d).ToString("0.#") + "k" : n.ToString();
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
 }

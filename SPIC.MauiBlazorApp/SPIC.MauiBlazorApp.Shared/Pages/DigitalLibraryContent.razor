@@ -1,18 +1,23 @@
 @page "/DigitalLibrary/content"
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject DigitalLibraryApi Api
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@implements IDisposable
 
 <PageTitle>All Content - Digital Library - SPIC ONE</PageTitle>
 
 @*
     Digital Library "All Content" list (Figma frame supplied 2026-09-20). Reached from the
     landing page's category cards / headings / "View All Content" with ?type=videos|products|
-    brochures, which pre-selects the type tab. Sample data until the content API exists.
+    brochures, which pre-selects the type tab. The filters live in the URL and are sent to
+    api/Library; paging is server side and "Load More" appends the next page.
 *@
 
 <div class="dlc-page">
 
-    <PageHeader Title="All Content" Subtitle="@($"{Filtered.Count} items total")" BackHref="/DigitalLibrary">
+    <PageHeader Title="All Content" Subtitle="@Subtitle" BackHref="/DigitalLibrary">
         <Actions>
             <button type="button" class="dlc-add" @onclick="() => _createOpen = true">
                 <i class="bi bi-plus-square"></i> Add Content
@@ -23,25 +28,25 @@
     <div class="dlc-stats">
         <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Products ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Products)">
             <span class="dlc-stat-label">Product Information</span>
-            <span class="dlc-stat-value">@Count(DigitalLibraryType.Products)</span>
-            <span class="dlc-stat-hint">@Count(DigitalLibraryType.Products, true) published &middot; @Count(DigitalLibraryType.Products, false) drafts</span>
+            <span class="dlc-stat-value">@(_stats?.Products ?? 0)</span>
+            <span class="dlc-stat-hint">Product information pages</span>
             <span class="dlc-stat-icon dlc-ic-blue"><i class="bi bi-clipboard2-data"></i></span>
         </button>
         <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Videos ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Videos)">
             <span class="dlc-stat-label">AI Videos</span>
-            <span class="dlc-stat-value">@Count(DigitalLibraryType.Videos)</span>
-            <span class="dlc-stat-hint">@Count(DigitalLibraryType.Videos, true) published &middot; @Count(DigitalLibraryType.Videos, false) drafts</span>
+            <span class="dlc-stat-value">@(_stats?.Videos ?? 0)</span>
+            <span class="dlc-stat-hint">Explainer and product videos</span>
             <span class="dlc-stat-icon dlc-ic-purple"><i class="bi bi-camera-video"></i></span>
         </button>
         <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Brochures ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Brochures)">
             <span class="dlc-stat-label">Product Brochures</span>
-            <span class="dlc-stat-value">@Count(DigitalLibraryType.Brochures)</span>
-            <span class="dlc-stat-hint">@Count(DigitalLibraryType.Brochures, true) published &middot; @Count(DigitalLibraryType.Brochures, false) drafts</span>
+            <span class="dlc-stat-value">@(_stats?.Brochures ?? 0)</span>
+            <span class="dlc-stat-hint">Brochures, datasheets, catalogues</span>
             <span class="dlc-stat-icon dlc-ic-pink"><i class="bi bi-journal-bookmark"></i></span>
         </button>
         <button type="button" class="dlc-stat @(Status == "draft" ? "active" : "")" @onclick='() => SetStatus("draft")'>
             <span class="dlc-stat-label">Draft Content</span>
-            <span class="dlc-stat-value">@Items.Count(i => !i.Published)</span>
+            <span class="dlc-stat-value">@(_stats?.Drafts ?? 0)</span>
             <span class="dlc-stat-hint">Pending content</span>
             <span class="dlc-stat-icon dlc-ic-yellow"><i class="bi bi-pencil-square"></i></span>
         </button>
@@ -67,7 +72,17 @@
         </div>
     </div>
 
-    @if (Filtered.Count == 0)
+    @if (_loading)
+    {
+        <Skeleton Variant="card" Rows="6" />
+    }
+    else if (_failed)
+    {
+        <EmptyState Icon="bi-wifi-off" Title="The library is not available" Message="@_error">
+            <button type="button" class="btn btn-outline-success" @onclick="() => Load(reset: true)">Try again</button>
+        </EmptyState>
+    }
+    else if (Items.Count == 0)
     {
         <EmptyState Icon="bi-collection" Title="No content found" Message="Try another type, status or search term.">
             <button type="button" class="btn btn-outline-success" @onclick="ClearFilters">Clear filters</button>
@@ -76,17 +91,23 @@
     else
     {
         <div class="dlc-grid">
-            @foreach (var item in Filtered.Take(_visible))
+            @foreach (var item in Items)
             {
                 <DigitalLibraryCard @key="item.Id" Item="item"
                                     OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
             }
         </div>
 
-        @if (Filtered.Count > _visible)
+        @if (_hasMore)
         {
             <div class="dlc-more">
-                <button type="button" class="dlc-more-btn" @onclick="() => _visible += PageSize">Load More</button>
+                <button type="button" class="dlc-more-btn" disabled="@_loadingMore" @onclick="LoadMore">
+                    @if (_loadingMore)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    }
+                    Load More
+                </button>
             </div>
         }
     }
@@ -100,7 +121,6 @@
     private DigitalLibraryItem? _unpublishTarget;
 
     private const int PageSize = 9;
-    private int _visible = PageSize;
 
     [SupplyParameterFromQuery(Name = "type")] public string? TypeQuery { get; set; }
     [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
@@ -110,62 +130,149 @@
     private string Status { get; set; } = "";
     private string Query { get; set; } = "";
 
-    private readonly List<DigitalLibraryItem> Items = DigitalLibrarySampleData.Create(16);
+    private List<DigitalLibraryItem> Items { get; set; } = new();
+    private LibraryStatsDto? _stats;
+    private int _page = 1;
+    private int _total;
+    private bool _hasMore;
+    private bool _loading = true;
+    private bool _loadingMore;
+    private bool _failed;
+    private string? _error;
 
-    protected override void OnParametersSet()
+    private string _appliedKey = "";
+    private CancellationTokenSource? _search;
+
+    private string Subtitle => _loading ? "Loading..." : $"{_total} item{(_total == 1 ? "" : "s")} total";
+
+    protected override async Task OnParametersSetAsync()
     {
-        Type = TypeQuery?.ToLowerInvariant() switch
-        {
-            "videos" or "video" => DigitalLibraryType.Videos,
-            "products" or "product" => DigitalLibraryType.Products,
-            "brochures" or "brochure" => DigitalLibraryType.Brochures,
-            _ => null
-        };
+        Type = DigitalLibraryItem.ParseType(TypeQuery);
         Status = StatusQuery?.ToLowerInvariant() ?? "";
         Query = SearchQuery ?? "";
-        _visible = PageSize;
+
+        // Only refetch when the filters actually changed (OnParametersSet also runs on re-render).
+        var key = $"{Type}|{Status}|{Query}";
+        if (key == _appliedKey) return;
+        _appliedKey = key;
+
+        await Load(reset: true);
     }
 
-    private List<DigitalLibraryItem> Filtered => Items
-        .Where(i => Type is null || i.Type == Type)
-        .Where(i => Status == "" || (Status == "published" && i.Published) || (Status == "draft" && !i.Published))
-        .Where(i => Query == "" || i.Title.Contains(Query, StringComparison.OrdinalIgnoreCase) || i.Description.Contains(Query, StringComparison.OrdinalIgnoreCase))
-        .ToList();
+    private LibraryContentStatus? StatusFilter => Status switch
+    {
+        "published" => LibraryContentStatus.Published,
+        "draft" => LibraryContentStatus.Draft,
+        _ => null
+    };
 
-    private int Count(DigitalLibraryType t, bool? published = null)
-        => Items.Count(i => i.Type == t && (published is null || i.Published == published));
+    private async Task Load(bool reset)
+    {
+        if (reset)
+        {
+            _page = 1;
+            _loading = true;
+            _failed = false;
+            _error = null;
+            StateHasChanged();
+        }
+        else
+        {
+            _loadingMore = true;
+        }
+
+        var kind = Type is null ? (LibraryContentKind?)null : DigitalLibraryItem.ToKind(Type.Value);
+        var result = await Api.ListAsync(kind, StatusFilter, Query, _page, PageSize);
+
+        if (Api.LastError is not null)
+        {
+            _error = Api.LastError;
+            Toast.Error(_error);
+            if (reset) { _failed = true; Items = new(); }
+            _loading = false;
+            _loadingMore = false;
+            return;
+        }
+
+        var mapped = Api.ToItems(result.Items);
+        if (reset) Items = mapped;
+        else Items.AddRange(mapped);
+
+        _total = result.Total;
+        _hasMore = result.HasMore;
+        _loading = false;
+        _loadingMore = false;
+
+        // Stat tiles show the whole library, so they are fetched once and after every change.
+        _stats = await Api.GetStatsAsync() ?? _stats;
+    }
+
+    private async Task LoadMore()
+    {
+        if (_loadingMore || !_hasMore) return;
+        _page++;
+        await Load(reset: false);
+    }
 
     // Filters live in the URL so the landing page links, the back button and refresh all agree.
     private void SetType(DigitalLibraryType? t) => Apply(t, Status, Query);
     private void SetStatus(string? s) => Apply(Type, s ?? "", Query);
-    private void SetQuery(string? q) => Apply(Type, Status, q ?? "");
     private void ClearFilters() => Apply(null, "", "");
+
+    private void SetQuery(string? q)
+    {
+        // Typing hits the API, so wait for a pause before changing the URL.
+        Query = q ?? "";
+        _search?.Cancel();
+        _search = new CancellationTokenSource();
+        var token = _search.Token;
+        var text = Query;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(400, token);
+                await InvokeAsync(() => Apply(Type, Status, text));
+            }
+            catch (TaskCanceledException) { }
+        });
+    }
 
     private void Apply(DigitalLibraryType? t, string status, string query)
     {
         var parts = new List<string>();
-        if (t is not null) parts.Add("type=" + t.ToString()!.ToLowerInvariant());
+        if (t is not null) parts.Add("type=" + DigitalLibraryItem.RouteOf(t.Value));
         if (!string.IsNullOrEmpty(status)) parts.Add("status=" + status);
         if (!string.IsNullOrWhiteSpace(query)) parts.Add("q=" + Uri.EscapeDataString(query));
         Nav.NavigateTo("/DigitalLibrary/content" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
     }
 
-    private void Edit(DigitalLibraryItem item) => Nav.NavigateTo($"/DigitalLibrary/add/{item.Type.ToString().ToLowerInvariant()}?id={item.Id}");
+    private void Edit(DigitalLibraryItem item) => Nav.NavigateTo($"/DigitalLibrary/add/{DigitalLibraryItem.RouteOf(item.Type)}?id={item.Id}");
 
     private async Task Delete(DigitalLibraryItem item)
     {
         if (!await Toast.ConfirmAsync("Delete content", $"Delete \"{item.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
+        if (!await Api.DeleteAsync(item.Id)) { Toast.Error(Api.LastError ?? "The item could not be deleted."); return; }
         Items.Remove(item);
+        _total = Math.Max(0, _total - 1);
         Toast.Success("Content deleted.");
+        _stats = await Api.GetStatsAsync() ?? _stats;
     }
 
-    private void Archive(DigitalLibraryItem item)
+    private async Task Archive(DigitalLibraryItem item)
     {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Archived) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be archived.");
+            return;
+        }
         Items.Remove(item);
+        _total = Math.Max(0, _total - 1);
         Toast.Info("Content archived.");
+        _stats = await Api.GetStatsAsync() ?? _stats;
     }
 
-    private void TogglePublish(DigitalLibraryItem item)
+    private async Task TogglePublish(DigitalLibraryItem item)
     {
         if (item.Published)
         {
@@ -173,14 +280,32 @@
             return;
         }
 
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Published) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be published.");
+            return;
+        }
         item.Published = true;
+        item.Status = LibraryContentStatus.Published;
         Toast.Success("Content published.");
+        _stats = await Api.GetStatsAsync() ?? _stats;
+        if (StatusFilter == LibraryContentStatus.Draft) Items.Remove(item);
     }
 
-    private void ConfirmUnpublish(DigitalLibraryItem item)
+    private async Task ConfirmUnpublish(DigitalLibraryItem item)
     {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Draft) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be unpublished.");
+            return;
+        }
         item.Published = false;
+        item.Status = LibraryContentStatus.Draft;
         _unpublishTarget = null;
         Toast.Success("Content moved to Drafts.");
+        _stats = await Api.GetStatsAsync() ?? _stats;
+        if (StatusFilter == LibraryContentStatus.Published) Items.Remove(item);
     }
+
+    public void Dispose() => _search?.Cancel();
 }

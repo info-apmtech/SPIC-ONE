@@ -1,3 +1,6 @@
+using SPIC.Core.DTOs;
+using SPIC.Core.Entities;
+
 namespace SPIC.MauiBlazorApp.Shared.Services
 {
     public enum DigitalLibraryType
@@ -13,11 +16,19 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public int Id { get; init; }
         public DigitalLibraryType Type { get; init; } = DigitalLibraryType.Videos;
         public bool Published { get; set; } = true;
+        public LibraryContentStatus Status { get; set; } = LibraryContentStatus.Published;
         public string Title { get; init; } = "";
         public string Description { get; init; } = "";
         public string Author { get; init; } = "SPIC Agri Team";
-        public DateTime Date { get; init; } = new(2026, 1, 15);
-        public string Image { get; init; } = "";
+        public DateTime Date { get; init; } = DateTime.Today;
+        /// <summary>Ready-to-use cover URL (API file endpoint, or a gallery placeholder).</summary>
+        public string Image { get; set; } = "";
+        /// <summary>Stored cover path as the API returns it; null when the item has no cover.</summary>
+        public string? CoverImagePath { get; init; }
+        public string? Category { get; init; }
+        public int Views { get; init; }
+        public int? DurationSeconds { get; init; }
+        public List<string> Tags { get; init; } = new();
 
         public string TypeLabel => Type switch
         {
@@ -25,44 +36,68 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             DigitalLibraryType.Products => "Product",
             _ => "Brochure"
         };
-    }
 
-    /// <summary>
-    /// Sample library content used by the landing and list pages until the content API
-    /// exists. Kept in one place so both pages show the same items and counts.
-    /// </summary>
-    public static class DigitalLibrarySampleData
-    {
-        private const string Img = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/";
+        // ------------------------------------------------------------------ mapping
 
-        private static readonly (string Title, string Description)[] Texts =
+        public static DigitalLibraryType ToType(LibraryContentKind kind) => kind switch
         {
-            ("DAP Fertilizer Application Guide for Rabi Crops", "A comprehensive guide to applying DAP fertilizer effectively across different soil types for optimal Rabi crop yields."),
-            ("NPK Complexes 20-20: Maximum yield in cotton farming", "Expert insights on using SPIC NPK Complex fertilizers to boost cotton crop."),
-            ("Urea: Best practices for paddy cultivation", "Learn how to apply SPIC Urea fertilizer at the right growth stages to achieve maximum nitrogen utilization in paddy fields."),
-            ("Soil sampling done right", "Step-by-step field procedure for collecting representative soil samples before fertilizer planning."),
-            ("Micronutrient mixtures for groundnut", "When and how to apply SPIC micronutrient mixtures for higher pod fill in groundnut."),
-            ("Water-soluble fertilizers through drip", "Dosage schedules for fertigation in banana, sugarcane and vegetables."),
+            LibraryContentKind.Product => DigitalLibraryType.Products,
+            LibraryContentKind.Brochure => DigitalLibraryType.Brochures,
+            _ => DigitalLibraryType.Videos
         };
 
-        public static List<DigitalLibraryItem> Create(int count = 16)
+        public static LibraryContentKind ToKind(DigitalLibraryType type) => type switch
         {
-            var list = new List<DigitalLibraryItem>(count);
-            for (var i = 1; i <= count; i++)
+            DigitalLibraryType.Products => LibraryContentKind.Product,
+            DigitalLibraryType.Brochures => LibraryContentKind.Brochure,
+            _ => LibraryContentKind.Video
+        };
+
+        /// <summary>Route segment used by /DigitalLibrary/content?type= and /DigitalLibrary/add/{kind}.</summary>
+        public static string RouteOf(DigitalLibraryType type) => type.ToString().ToLowerInvariant();
+
+        public static DigitalLibraryType? ParseType(string? route) => route?.Trim().ToLowerInvariant() switch
+        {
+            "videos" or "video" => DigitalLibraryType.Videos,
+            "products" or "product" => DigitalLibraryType.Products,
+            "brochures" or "brochure" => DigitalLibraryType.Brochures,
+            _ => null
+        };
+
+        /// <summary>
+        /// Summary DTO from the API to the card view model. <paramref name="fileUrl"/> turns the
+        /// stored cover path into a URL the browser can load (see DigitalLibraryApi.FileUrl);
+        /// items without a cover fall back to a gallery image chosen from the id, so the grids
+        /// keep the design's look instead of showing a broken image.
+        /// </summary>
+        public static DigitalLibraryItem FromDto(LibraryContentSummaryDto dto, Func<string?, string>? fileUrl = null)
+        {
+            var cover = string.IsNullOrWhiteSpace(dto.CoverImagePath)
+                ? PlaceholderImage(dto.Id)
+                : (fileUrl?.Invoke(dto.CoverImagePath) ?? dto.CoverImagePath!);
+
+            return new DigitalLibraryItem
             {
-                var text = Texts[(i - 1) % Texts.Length];
-                list.Add(new DigitalLibraryItem
-                {
-                    Id = i,
-                    Type = (i % 5) switch { 0 => DigitalLibraryType.Brochures, 3 => DigitalLibraryType.Products, _ => DigitalLibraryType.Videos },
-                    Published = i % 4 != 0,
-                    Title = text.Title,
-                    Description = text.Description,
-                    Image = Img + $"image{((i - 1) % 21) + 1}.jpg",
-                    Date = new DateTime(2026, 1, 15).AddDays(-i * 3),
-                });
-            }
-            return list;
+                Id = dto.Id,
+                Type = ToType(dto.Kind),
+                Published = dto.Status == LibraryContentStatus.Published,
+                Status = dto.Status,
+                Title = dto.Title,
+                Description = dto.ShortDescription ?? "",
+                Author = string.IsNullOrWhiteSpace(dto.Author) ? "SPIC Agri Team" : dto.Author!,
+                Date = dto.PublishedAt ?? dto.CreatedAt,
+                Image = string.IsNullOrEmpty(cover) ? PlaceholderImage(dto.Id) : cover,
+                CoverImagePath = dto.CoverImagePath,
+                Category = dto.Category,
+                Views = dto.Views,
+                DurationSeconds = dto.DurationSeconds,
+                Tags = dto.Tags ?? new List<string>(),
+            };
         }
+
+        private const string GalleryRoot = "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/";
+
+        /// <summary>Stable stand-in cover for content that has no image yet.</summary>
+        public static string PlaceholderImage(int id) => GalleryRoot + $"image{(Math.Abs(id) % 21) + 1}.jpg";
     }
 }

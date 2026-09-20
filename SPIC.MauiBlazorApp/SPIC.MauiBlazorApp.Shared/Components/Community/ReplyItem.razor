@@ -1,15 +1,20 @@
 @namespace SPIC.MauiBlazorApp.Shared.Components.Community
 @using SPIC.MauiBlazorApp.Shared.Services
 @inject ToastService Toast
+@inject CommunityApi Api
 
 @*
     One reply in a discussion thread (Figma "Discussion Details").
 
-        <ReplyItem Reply="r" DiscussionId="12" Children="ChildrenOf(r.Id)" OnPosted="Refresh" />
+        <ReplyItem Reply="r" DiscussionId="12" Children="ChildrenOf(r.Id)" OnPosted="Added" />
 
     Used recursively ONE level deep: a top-level reply renders its nested replies through
     Children; a nested reply renders no list of its own, but its reply button still posts
     under the same top-level parent (PostUnderId).
+
+    Likes and posts go to api/Community; the like toggles optimistically and rolls back when
+    the call fails. OnPosted hands the reply the server created back to the page, which owns
+    the thread list.
 *@
 
 <article id="@DomId" class="cm-reply @(Nested ? "cm-reply--nested" : "")">
@@ -27,10 +32,10 @@
 
         <div class="cm-reply-actions">
             <button type="button"
-                    class="cm-reply-act @(_liked ? "is-on" : "")"
-                    aria-pressed="@(_liked ? "true" : "false")"
-                    @onclick="ToggleLike">
-                <i class="bi @(_liked ? "bi-hand-thumbs-up-fill" : "bi-hand-thumbs-up")" aria-hidden="true"></i>
+                    class="cm-reply-act @(Reply.IsLiked ? "is-on" : "")"
+                    aria-pressed="@(Reply.IsLiked ? "true" : "false")"
+                    @onclick="ToggleLikeAsync">
+                <i class="bi @(Reply.IsLiked ? "bi-hand-thumbs-up-fill" : "bi-hand-thumbs-up")" aria-hidden="true"></i>
                 <span>@Reply.Likes Likes</span>
             </button>
             <button type="button"
@@ -45,7 +50,7 @@
         @if (_boxOpen)
         {
             <div class="cm-reply-box">
-                <MemberAvatar Member="CommunitySampleData.CurrentUser" Size="32" />
+                <MemberAvatar Member="Api.ComposerIdentity" Size="32" />
                 <div class="cm-reply-box-main">
                     <textarea class="cm-reply-input"
                               rows="2"
@@ -55,7 +60,11 @@
                               @bind:event="oninput"></textarea>
                     <div class="cm-reply-box-actions">
                         <button type="button" class="cm-reply-cancel" @onclick="CloseBox">Cancel</button>
-                        <button type="button" class="cm-reply-post" disabled="@string.IsNullOrWhiteSpace(_draft)" @onclick="PostAsync">Reply</button>
+                        <button type="button" class="cm-reply-post"
+                                disabled="@(_posting || string.IsNullOrWhiteSpace(_draft))"
+                                @onclick="PostAsync">
+                            @(_posting ? "Posting…" : "Reply")
+                        </button>
                     </div>
                 </div>
             </div>
@@ -93,11 +102,11 @@
     /// <summary>Reply new posts are nested under. Null = this reply (top level).</summary>
     [Parameter] public int? PostUnderId { get; set; }
 
-    /// <summary>Raised after a nested reply was added, so the page can re-read the thread.</summary>
-    [Parameter] public EventCallback OnPosted { get; set; }
+    /// <summary>Raised with the reply the server created, so the page can add it to the thread.</summary>
+    [Parameter] public EventCallback<CommunityReply> OnPosted { get; set; }
 
-    private bool _liked;
     private bool _boxOpen;
+    private bool _posting;
     private string _draft = "";
 
     private string DomId => $"cm-reply-{DiscussionId}-{Reply.Id}";
@@ -113,11 +122,29 @@
         }
     }
 
-    private void ToggleLike()
+    private async Task ToggleLikeAsync()
     {
-        _liked = !_liked;
-        Reply.Likes += _liked ? 1 : -1;
-        if (Reply.Likes < 0) Reply.Likes = 0;
+        var wasLiked = Reply.IsLiked;
+        var wasCount = Reply.Likes;
+
+        // Optimistic, rolled back when the API refuses.
+        Reply.IsLiked = !wasLiked;
+        Reply.Likes = Math.Max(0, wasCount + (wasLiked ? -1 : 1));
+
+        var result = await Api.ToggleReplyLikeAsync(Reply.Id);
+
+        if (result is null)
+        {
+            Reply.IsLiked = wasLiked;
+            Reply.Likes = wasCount;
+        }
+        else
+        {
+            Reply.IsLiked = result.Active;
+            Reply.Likes = result.Count;
+        }
+
+        StateHasChanged();
     }
 
     private void ToggleBox()
@@ -138,13 +165,35 @@
     private async Task PostAsync()
     {
         var text = (_draft ?? "").Trim();
-        if (text.Length == 0) return;
+        if (text.Length == 0 || _posting) return;
 
-        CommunitySampleData.AddReply(DiscussionId, text, CommunitySampleData.CurrentUser, PostUnderId ?? Reply.Id);
-        Reply.ReplyCount++;
+        // "@Name " typed by the reply button is sent as the mention, not as body text.
+        var mention = Reply.Author.Name;
+        if (!string.IsNullOrEmpty(mention) && text.StartsWith("@" + mention, StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[(mention.Length + 1)..].TrimStart();
+        }
+        else
+        {
+            mention = null;
+        }
+
+        if (text.Length == 0)
+        {
+            Toast.Info("Please write your reply.");
+            return;
+        }
+
+        _posting = true;
+        var posted = await Api.AddReplyAsync(DiscussionId, text, PostUnderId ?? Reply.Id, mention);
+        _posting = false;
+
+        if (posted is null) return;   // CommunityApi already explained why
+
+        // The page owns the thread, so it is the one that bumps the parent's reply count.
         CloseBox();
         Toast.Success("Reply posted.");
 
-        if (OnPosted.HasDelegate) await OnPosted.InvokeAsync();
+        if (OnPosted.HasDelegate) await OnPosted.InvokeAsync(posted);
     }
 }

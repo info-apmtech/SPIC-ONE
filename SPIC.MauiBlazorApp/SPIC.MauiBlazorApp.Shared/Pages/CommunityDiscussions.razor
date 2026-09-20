@@ -3,12 +3,18 @@
 @using CommunityDiscussion = SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject CommunityApi Api
+@inject LoadingService Loading
+@implements IDisposable
 
 @*
     Discussions list (Figma frame supplied 2026-09-20). Stat tiles, tab bar, collapsible
     filter card, sortable/searchable list and pagination. Every control that changes what
     the list shows writes to the URL query (replace:true) exactly like the Digital Library
-    "All Content" page, so back/refresh/share all agree. Sample data only.
+    "All Content" page, so back/refresh/share all agree.
+
+    Filtering, sorting and paging are done by the API: the URL query is handed straight to
+    GET api/Community/discussions and the page renders the PageResult it gets back.
 *@
 
 <div class="cmd-page">
@@ -30,25 +36,25 @@
     <div class="cmd-stats">
         <div class="cmd-stat">
             <span class="cmd-stat-label">Total Discussions</span>
-            <span class="cmd-stat-value">@All.Count.ToString("N0")</span>
+            <span class="cmd-stat-value">@Stat(_stats?.TotalDiscussions)</span>
             <span class="cmd-stat-hint">All discussions</span>
             <span class="cmd-stat-icon cmd-ic-green"><i class="bi bi-chat-left-text" aria-hidden="true"></i></span>
         </div>
         <div class="cmd-stat">
             <span class="cmd-stat-label">Active Members</span>
-            <span class="cmd-stat-value">@ActiveMembers.ToString("N0")</span>
+            <span class="cmd-stat-value">@Stat(_stats?.ActiveMembers)</span>
             <span class="cmd-stat-hint">Members active recently</span>
             <span class="cmd-stat-icon cmd-ic-purple"><i class="bi bi-people" aria-hidden="true"></i></span>
         </div>
         <div class="cmd-stat">
             <span class="cmd-stat-label">Expert Answers</span>
-            <span class="cmd-stat-value">@ExpertAnswers.ToString("N0")</span>
+            <span class="cmd-stat-value">@Stat(_stats?.ExpertAnswers)</span>
             <span class="cmd-stat-hint">Answers from SPIC experts</span>
             <span class="cmd-stat-icon cmd-ic-amber"><i class="bi bi-patch-check" aria-hidden="true"></i></span>
         </div>
         <div class="cmd-stat">
             <span class="cmd-stat-label">New This Month</span>
-            <span class="cmd-stat-value">@NewThisMonth.ToString("N0")</span>
+            <span class="cmd-stat-value">@Stat(_stats?.NewThisMonth)</span>
             <span class="cmd-stat-hint">New discussions this month</span>
             <span class="cmd-stat-icon cmd-ic-violet"><i class="bi bi-calendar-plus" aria-hidden="true"></i></span>
         </div>
@@ -93,7 +99,7 @@
                 <label class="cmd-label" for="cmd-category">Category</label>
                 <select id="cmd-category" class="cmd-input" @bind="_category">
                     <option value="">All Categories</option>
-                    @foreach (var c in CommunitySampleData.Categories)
+                    @foreach (var c in Lookups.Categories)
                     {
                         <option value="@c">@c</option>
                     }
@@ -104,7 +110,7 @@
                 <label class="cmd-label" for="cmd-product">Product</label>
                 <select id="cmd-product" class="cmd-input" @bind="_product">
                     <option value="">All Products</option>
-                    @foreach (var p in CommunitySampleData.ProductNames)
+                    @foreach (var p in Lookups.Products)
                     {
                         <option value="@p">@p</option>
                     }
@@ -115,7 +121,7 @@
                 <label class="cmd-label" for="cmd-crop">Crop</label>
                 <select id="cmd-crop" class="cmd-input" @bind="_crop">
                     <option value="">All Crops</option>
-                    @foreach (var c in CommunitySampleData.Crops)
+                    @foreach (var c in Lookups.Crops)
                     {
                         <option value="@c">@c</option>
                     }
@@ -126,9 +132,9 @@
                 <label class="cmd-label" for="cmd-status">Status</label>
                 <select id="cmd-status" class="cmd-input" @bind="_status">
                     <option value="">All Status</option>
-                    @foreach (var s in CommunitySampleData.Statuses)
+                    @foreach (var (value, label) in CommunityLookups.Statuses)
                     {
-                        <option value="@s">@s</option>
+                        <option value="@value">@label</option>
                     }
                 </select>
             </div>
@@ -160,7 +166,7 @@
     <section class="cmd-list-card">
         <div class="cmd-list-head">
             <p class="cmd-showing">
-                Showing <strong>@FirstShown</strong> - <strong>@LastShown</strong> of <strong>@Filtered.Count.ToString("N0")</strong> discussions
+                Showing <strong>@FirstShown</strong> - <strong>@LastShown</strong> of <strong>@Total.ToString("N0")</strong> discussions
             </p>
 
             <div class="cmd-list-tools">
@@ -182,7 +188,20 @@
             </div>
         </div>
 
-        @if (Filtered.Count == 0)
+        @if (_loading)
+        {
+            <div class="cmd-rows">
+                <Skeleton Variant="card" Rows="3" />
+            </div>
+        }
+        else if (_page is null)
+        {
+            <EmptyState Icon="bi-wifi-off" Title="Discussions could not be loaded"
+                        Message="The community service did not answer. Please try again.">
+                <button type="button" class="cmd-btn cmd-btn-outline" @onclick="ReloadAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (Items.Count == 0)
         {
             <EmptyState Icon="bi-chat-square-dots" Title="No discussions found"
                         Message="Try another tab, clear the filters or search for something else.">
@@ -192,14 +211,14 @@
         else
         {
             <div class="cmd-rows">
-                @foreach (var d in Paged)
+                @foreach (var d in Items)
                 {
                     <DiscussionCard @key="d.Id" Discussion="d"
                                     Variant="DiscussionCard.CardVariant.Full"
                                     ShowFollow="true" ShowMenu="true"
-                                    OnToggleFollow="ToggleFollow"
+                                    OnToggleFollow="ToggleFollowAsync"
                                     OnEdit="EditDiscussion"
-                                    OnDelete="DeleteDiscussion" />
+                                    OnDelete="DeleteDiscussionAsync" />
                 }
             </div>
 
@@ -289,9 +308,36 @@
 
     private bool _filtersToggled;
 
-    private static List<CommunityDiscussion> All => CommunitySampleData.Discussions;
+    // ---- API state ----
+    private CommunityStats? _stats;
+    private CommunityLookups? _lookups;
+    private DiscussionPage? _page;
+    private bool _loading = true;
+    private string _loadedSignature = "";
+    private CancellationTokenSource? _cts;
 
-    protected override void OnParametersSet()
+    private CommunityLookups Lookups => _lookups ??= new CommunityLookups();
+
+    private List<CommunityDiscussion> Items => _page?.Items ?? new List<CommunityDiscussion>();
+
+    private int Total => _page?.Total ?? 0;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Total / (double)PageSize));
+
+    private int FirstShown => Total == 0 ? 0 : ((Page - 1) * PageSize) + 1;
+
+    private int LastShown => Math.Min(Page * PageSize, Total);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var stats = Api.GetStatsAsync();
+        var lookups = Api.GetLookupsAsync();
+        await Task.WhenAll(stats, lookups);
+        _stats = stats.Result;
+        _lookups = lookups.Result ?? new CommunityLookups();
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         Tab = Tabs.Any(t => t.Key == TabQuery) ? TabQuery! : "all";
         Sort = SortQuery is "replies" or "views" or "oldest" ? SortQuery : "latest";
@@ -308,103 +354,56 @@
         _aTags = SplitTags(TagsQuery);
         _tags = _aTags.ToList();
         _tagInput = "";
+
+        var signature = Signature();
+        if (signature == _loadedSignature) return;
+
+        _loadedSignature = signature;
+        await LoadAsync();
     }
 
-    // ---- tiles ----
-    private int ActiveMembers => All.Select(d => d.Author.Id)
-        .Concat(All.SelectMany(d => d.Participants).Select(m => m.Id))
-        .Distinct().Count();
+    private string Signature() =>
+        string.Join('', Tab, Sort, Query, Page, PageSize,
+            _aCategory, _aProduct, _aCrop, _aStatus, _aFrom, _aTo, string.Join(',', _aTags));
 
-    private int ExpertAnswers => All.Count(d => d.Status == DiscussionStatus.ExpertAnswer);
-
-    private int NewThisMonth => All.Count(d => d.CreatedAt >= DateTime.Now.AddDays(-30));
-
-    // ---- filtering ----
-    private List<CommunityDiscussion> Filtered
+    private async Task LoadAsync()
     {
-        get
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+
+        var result = await Api.GetDiscussionsAsync(new DiscussionQuery
         {
-            IEnumerable<CommunityDiscussion> q = All;
+            Tab = Tab,
+            Category = _aCategory,
+            Product = _aProduct,
+            Crop = _aCrop,
+            Status = _aStatus,
+            Tags = _aTags.ToList(),
+            From = _aFrom,
+            To = _aTo,
+            Search = Query,
+            Sort = Sort,
+            Page = Page,
+            PageSize = PageSize
+        }, ct);
 
-            q = Tab switch
-            {
-                "mine" => q.Where(d => d.IsMine),
-                "trending" => q.Where(d => d.IsTrending),
-                "unanswered" => q.Where(d => d.ReplyCount == 0 || d.Status is DiscussionStatus.Open or DiscussionStatus.WaitingForReply),
-                "following" => q.Where(d => d.IsFollowing),
-                "expert" => q.Where(d => d.Status == DiscussionStatus.ExpertAnswer),
-                _ => q
-            };
+        if (ct.IsCancellationRequested) return;
 
-            if (_aCategory.Length > 0) q = q.Where(d => d.Category == _aCategory);
-            if (_aProduct.Length > 0) q = q.Where(d => d.Product == _aProduct);
-            if (_aCrop.Length > 0) q = q.Where(d => d.Crop == _aCrop);
-            if (_aStatus.Length > 0) q = q.Where(d => d.StatusLabel == _aStatus);
-
-            if (_aTags.Count > 0)
-            {
-                q = q.Where(d => d.Tags.Any(t => _aTags.Contains(t, StringComparer.OrdinalIgnoreCase)));
-            }
-
-            if (DateTime.TryParse(_aFrom, out var from)) q = q.Where(d => d.CreatedAt.Date >= from.Date);
-            if (DateTime.TryParse(_aTo, out var to)) q = q.Where(d => d.CreatedAt.Date <= to.Date);
-
-            if (Query.Length > 0)
-            {
-                q = q.Where(d => d.Title.Contains(Query, StringComparison.OrdinalIgnoreCase)
-                              || d.Body.Contains(Query, StringComparison.OrdinalIgnoreCase));
-            }
-
-            q = Sort switch
-            {
-                "replies" => q.OrderByDescending(d => d.ReplyCount).ThenByDescending(d => d.CreatedAt),
-                "views" => q.OrderByDescending(d => d.Views).ThenByDescending(d => d.CreatedAt),
-                "oldest" => q.OrderBy(d => d.CreatedAt),
-                _ => q.OrderByDescending(d => d.CreatedAt)
-            };
-
-            return q.ToList();
-        }
+        _page = result;
+        _loading = false;
     }
 
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(Filtered.Count / (double)PageSize));
-
-    private int CurrentPage => Math.Min(Math.Max(Page, 1), TotalPages);
-
-    private List<CommunityDiscussion> Paged => Filtered.Skip((CurrentPage - 1) * PageSize).Take(PageSize).ToList();
-
-    private int FirstShown => Filtered.Count == 0 ? 0 : ((CurrentPage - 1) * PageSize) + 1;
-
-    private int LastShown => Math.Min(CurrentPage * PageSize, Filtered.Count);
-
-    /// <summary>Page buttons; 0 renders the "…" gap.</summary>
-    private List<int> PageNumbers
+    /// <summary>"Try again" after a failed load, and the refresh after a delete.</summary>
+    private async Task ReloadAsync()
     {
-        get
-        {
-            var total = TotalPages;
-            var current = CurrentPage;
-            var pages = new List<int>();
-
-            if (total <= 7)
-            {
-                for (var i = 1; i <= total; i++) pages.Add(i);
-                return pages;
-            }
-
-            var window = new SortedSet<int> { 1, 2, 3, total - 2, total - 1, total, current };
-            if (current > 1) window.Add(current - 1);
-            if (current < total) window.Add(current + 1);
-
-            var last = 0;
-            foreach (var n in window.Where(n => n >= 1 && n <= total))
-            {
-                if (last != 0 && n - last > 1) pages.Add(0);
-                pages.Add(n);
-                last = n;
-            }
-            return pages;
-        }
+        _stats ??= await Api.GetStatsAsync();
+        _lookups ??= await Api.GetLookupsAsync();
+        await LoadAsync();
     }
 
     // ---- tag input ----
@@ -423,7 +422,7 @@
     private static List<string> SplitTags(string? csv) =>
         (csv ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-    // ---- navigation (filters live in the URL) ----
+    // ---- navigation (filters live in the URL; OnParametersSetAsync reloads from the API) ----
     private void SetTab(string key) => Apply(tab: key, page: 1);
 
     private void SetSort(string? sort) => Apply(sort: sort ?? "latest", page: 1);
@@ -486,15 +485,85 @@
         Nav.NavigateTo("/Community/discussions" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
     }
 
-    // ---- row actions (in memory until the discussion API exists) ----
-    private void ToggleFollow(CommunityDiscussion d)
+    /// <summary>Page buttons; 0 renders the "…" gap.</summary>
+    private List<int> PageNumbers
     {
-        d.IsFollowing = !d.IsFollowing;
+        get
+        {
+            var total = TotalPages;
+            var current = Math.Min(Math.Max(Page, 1), total);
+            var pages = new List<int>();
+
+            if (total <= 7)
+            {
+                for (var i = 1; i <= total; i++) pages.Add(i);
+                return pages;
+            }
+
+            var window = new SortedSet<int> { 1, 2, 3, total - 2, total - 1, total, current };
+            if (current > 1) window.Add(current - 1);
+            if (current < total) window.Add(current + 1);
+
+            var last = 0;
+            foreach (var n in window.Where(n => n >= 1 && n <= total))
+            {
+                if (last != 0 && n - last > 1) pages.Add(0);
+                pages.Add(n);
+                last = n;
+            }
+            return pages;
+        }
+    }
+
+    // ---- row actions ----
+    private async Task ToggleFollowAsync(CommunityDiscussion d)
+    {
+        var wasFollowing = d.IsFollowing;
+        d.IsFollowing = !wasFollowing;       // optimistic
+        StateHasChanged();
+
+        var result = await Api.ToggleFollowAsync(d.Id);
+
+        if (result is null)
+        {
+            d.IsFollowing = wasFollowing;    // rolled back; CommunityApi raised the toast
+            StateHasChanged();
+            return;
+        }
+
+        d.IsFollowing = result.Active;
         if (d.IsFollowing) Toast.Success("You are following this discussion.");
         else Toast.Info("You stopped following this discussion.");
     }
 
     private void EditDiscussion(CommunityDiscussion d) => Nav.NavigateTo($"/Community/new?edit={d.Id}");
 
-    private void DeleteDiscussion(CommunityDiscussion d) => Toast.Info("Delete arrives with the API");
+    private async Task DeleteDiscussionAsync(CommunityDiscussion d)
+    {
+        var confirmed = await Toast.ConfirmAsync(
+            "Delete this discussion?",
+            $"\"{d.Title}\" and its replies will be removed from the community.",
+            confirmText: "Delete",
+            danger: true);
+
+        if (!confirmed) return;
+
+        Loading.Show();
+        var ok = await Api.DeleteAsync(d.Id);
+        Loading.Hide();
+
+        if (!ok) return;                     // CommunityApi already explained why
+
+        Toast.Success("Discussion deleted.");
+        _stats = await Api.GetStatsAsync();
+        await LoadAsync();
+    }
+
+    private static string Stat(int? value) => value is int n ? n.ToString("N0") : "-";
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
 }

@@ -54,6 +54,8 @@ builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();
 builder.Services.AddScoped<LookupCacheService>();
 builder.Services.AddScoped<GuestHouseBookingState>();
+builder.Services.AddScoped<DigitalLibraryApi>();
+builder.Services.AddScoped<CommunityApi>();
 
 // ADD THIS
 builder.Services.AddSingleton(new PlatformService

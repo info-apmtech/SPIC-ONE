@@ -1,9 +1,11 @@
 @page "/Community/discussion/{Id:int}"
-@* Discussion Details: question card, attachments (beside the text on desktop, below it elsewhere), nested replies, composer. Sample data until the community API exists. *@
+@* Discussion Details: question card, attachments (beside the text on desktop, below it elsewhere), nested replies, composer. *@
 @using SPIC.MauiBlazorApp.Shared.Services
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject CommunityApi Api
 @inject IJSRuntime JS
+@implements IDisposable
 
 @*
     Knowledge Community - "Discussion Details" (Figma frames supplied 2026-09-20).
@@ -11,19 +13,41 @@
     One responsive page covers both Figma attachment variants: on desktop a discussion with
     1-4 images puts them in a 2x2 grid beside the question text ("side"); on tablet/phone -
     and on desktop with more than four - they sit under the text as tiles ("down").
+    Files that are not images are listed under the images and open in a new tab.
 
-    Sample content only: everything is read from CommunitySampleData and the "writes"
-    (views, likes, save, follow, replies) stay in memory for the session.
+    Everything comes from api/Community: GET .../discussions/{id} counts the view server side
+    (never increment it here), like / save / follow toggle optimistically and roll back when
+    the call fails, and replies are posted through the API.
 *@
 
-@if (_d is null)
+@if (_loading)
+{
+    <PageTitle>Discussion - Knowledge Community - SPIC ONE</PageTitle>
+
+    <div class="cd-page">
+        <section class="cd-card cd-q">
+            <Skeleton Variant="card" Rows="1" />
+            <Skeleton Rows="4" />
+        </section>
+        <section class="cd-card cd-replies">
+            <Skeleton Variant="card" Rows="2" />
+        </section>
+    </div>
+}
+else if (_d is null)
 {
     <PageTitle>Discussion not found - Knowledge Community - SPIC ONE</PageTitle>
 
     <EmptyState Icon="bi-chat-square-text"
-                Title="Discussion not found"
-                Message="This discussion is not in the community any more.">
-        <button type="button" class="cd-btn-solid" @onclick='() => Nav.NavigateTo("/Community/discussions")'>
+                Title="@(_failed ? "Discussion could not be loaded" : "Discussion not found")"
+                Message="@(_failed
+                    ? "The community service did not answer. Please try again."
+                    : "This discussion is not in the community any more.")">
+        @if (_failed)
+        {
+            <button type="button" class="cd-btn-solid" @onclick="LoadAsync">Try again</button>
+        }
+        <button type="button" class="cd-btn-outline" @onclick='() => Nav.NavigateTo("/Community/discussions")'>
             Back to Discussions
         </button>
     </EmptyState>
@@ -68,17 +92,17 @@ else
                     <span class="cd-q-kind"><span class="cd-dot" aria-hidden="true"></span> Discussion</span>
 
                     <div class="cd-q-btns">
-                        <button type="button" class="cd-tool @(_saved ? "is-on" : "")" title="@(_saved ? "Saved" : "Save")" @onclick="ToggleSave">
-                            <i class="bi @(_saved ? "bi-bookmark-fill" : "bi-bookmark")" aria-hidden="true"></i>
-                            <span class="cd-tool-label">@(_saved ? "Saved" : "Save")</span>
+                        <button type="button" class="cd-tool @(_d.IsSaved ? "is-on" : "")" title="@(_d.IsSaved ? "Saved" : "Save")" @onclick="ToggleSaveAsync">
+                            <i class="bi @(_d.IsSaved ? "bi-bookmark-fill" : "bi-bookmark")" aria-hidden="true"></i>
+                            <span class="cd-tool-label">@(_d.IsSaved ? "Saved" : "Save")</span>
                         </button>
                         <button type="button" class="cd-tool" title="Share" @onclick="ShareAsync">
                             <i class="bi bi-share" aria-hidden="true"></i>
                             <span class="cd-tool-label">Share</span>
                         </button>
-                        <button type="button" class="cd-tool @(_following ? "is-on" : "")" title="@(_following ? "Following" : "Follow")" @onclick="ToggleFollow">
-                            <i class="bi @(_following ? "bi-check2" : "bi-plus-lg")" aria-hidden="true"></i>
-                            <span class="cd-tool-label">@(_following ? "Following" : "Follow")</span>
+                        <button type="button" class="cd-tool @(_d.IsFollowing ? "is-on" : "")" title="@(_d.IsFollowing ? "Following" : "Follow")" @onclick="ToggleFollowAsync">
+                            <i class="bi @(_d.IsFollowing ? "bi-check2" : "bi-plus-lg")" aria-hidden="true"></i>
+                            <span class="cd-tool-label">@(_d.IsFollowing ? "Following" : "Follow")</span>
                         </button>
                     </div>
                 </div>
@@ -98,12 +122,29 @@ else
                         {
                             var index = i;
                             <button type="button" class="cd-q-img" @onclick="() => OpenLightbox(index)" aria-label="@($"Open image {index + 1} of {Images.Count}")">
-                                <img src="@Images[index]" alt="" loading="lazy" />
+                                <img src="@Images[index].Url" alt="" loading="lazy" />
                             </button>
                         }
                     </div>
                 }
             </div>
+
+            @if (Files.Count > 0)
+            {
+                <ul class="cd-q-files">
+                    @foreach (var file in Files)
+                    {
+                        <li class="cd-q-file" @key="file.Id">
+                            <a href="@file.Url" target="_blank" rel="noopener">
+                                <i class="bi @FileIcon(file.FileName) cd-q-file-icon" aria-hidden="true"></i>
+                                <span class="cd-q-file-name">@file.FileName</span>
+                                <span class="cd-q-file-size">@SizeLabel(file.Size)</span>
+                                <i class="bi bi-box-arrow-up-right cd-q-file-open" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            }
 
             <div class="cd-q-foot">
                 <div class="cd-q-chips">
@@ -125,10 +166,10 @@ else
                     <span class="cd-count"><i class="bi bi-eye" aria-hidden="true"></i> @_d.Views View</span>
                     <span class="cd-count"><i class="bi bi-chat-dots" aria-hidden="true"></i> @Replies.Count reply</span>
                     <button type="button"
-                            class="cd-count cd-count-btn @(_liked ? "is-on" : "")"
-                            aria-pressed="@(_liked ? "true" : "false")"
-                            @onclick="ToggleLike">
-                        <i class="bi @(_liked ? "bi-hand-thumbs-up-fill" : "bi-hand-thumbs-up")" aria-hidden="true"></i> @_d.Likes likes
+                            class="cd-count cd-count-btn @(_d.IsLiked ? "is-on" : "")"
+                            aria-pressed="@(_d.IsLiked ? "true" : "false")"
+                            @onclick="ToggleLikeAsync">
+                        <i class="bi @(_d.IsLiked ? "bi-hand-thumbs-up-fill" : "bi-hand-thumbs-up")" aria-hidden="true"></i> @_d.Likes likes
                     </button>
                 </div>
             </div>
@@ -162,13 +203,13 @@ else
                                    Reply="reply"
                                    DiscussionId="_d.Id"
                                    Children="ChildrenOf(reply.Id)"
-                                   OnPosted="StateHasChanged" />
+                                   OnPosted="OnReplyPosted" />
                     }
                 }
             </div>
 
             <div class="cd-composer">
-                <MemberAvatar Member="Me" Size="40" />
+                <MemberAvatar Member="Api.ComposerIdentity" Size="40" />
                 <div class="cd-comp-box">
                     <textarea class="cd-comp-input"
                               rows="1"
@@ -178,13 +219,14 @@ else
                               @oninput="OnComposerInput"
                               @onkeydown="OnComposerKeyDown"></textarea>
                     <div class="cd-comp-icons">
-                        <button type="button" class="cd-comp-icon" title="Add an image" aria-label="Add an image" @onclick="AttachmentSoon">
+                        <button type="button" class="cd-comp-icon" title="Add an image" aria-label="Add an image" @onclick="AttachmentNotSupported">
                             <i class="bi bi-image" aria-hidden="true"></i>
                         </button>
-                        <button type="button" class="cd-comp-icon" title="Add a link" aria-label="Add a link" @onclick="AttachmentSoon">
+                        <button type="button" class="cd-comp-icon" title="Add a link" aria-label="Add a link" @onclick="AttachmentNotSupported">
                             <i class="bi bi-link-45deg" aria-hidden="true"></i>
                         </button>
-                        <button type="button" class="cd-comp-icon cd-comp-send" title="Send reply" aria-label="Send reply" @onclick="SendAsync">
+                        <button type="button" class="cd-comp-icon cd-comp-send" title="Send reply" aria-label="Send reply"
+                                disabled="@_sending" @onclick="SendAsync">
                             <i class="bi bi-send-fill" aria-hidden="true"></i>
                         </button>
                     </div>
@@ -218,7 +260,7 @@ else
                 </button>
             }
 
-            <img class="cd-lb-img" src="@Images[_lightbox]" alt="" @onclick="NoOp" @onclick:stopPropagation="true" />
+            <img class="cd-lb-img" src="@Images[_lightbox].Url" alt="" @onclick="NoOp" @onclick:stopPropagation="true" />
 
             @if (Images.Count > 1)
             {
@@ -242,15 +284,14 @@ else
     // Services.* prefix: inside this namespace the bare name would find the page class itself.
     private CommunityDiscussion? _d;
     private int _loadedId = -1;
-
-    private bool _saved;
-    private bool _following;
-    private bool _liked;
+    private bool _loading = true;
+    private bool _failed;
 
     private string _sort = "latest";
 
     private string _draft = "";
     private bool _ignoreNextInput;
+    private bool _sending;
 
     private int _lightbox = -1;
     private ElementReference _lbRef;
@@ -258,17 +299,18 @@ else
 
     private int? _scrollToReplyId;
 
+    private CancellationTokenSource? _cts;
+
     // Phone is measured once from window.innerWidth (same pattern as the report pages):
     // on phone Enter inserts a newline and the send button posts.
     private bool _isPhone;
     private bool _viewportChecked;
 
-    private static CommunityMember Me => CommunitySampleData.CurrentUser;
+    private List<CommunityReply> Replies => _d?.Replies ?? new List<CommunityReply>();
 
-    private IReadOnlyList<CommunityReply> Replies =>
-        _d is null ? Array.Empty<CommunityReply>() : CommunitySampleData.RepliesFor(_d.Id);
+    private List<CommunityAttachment> Images => _d?.Images.ToList() ?? new List<CommunityAttachment>();
 
-    private List<string> Images => _d?.Attachments ?? new List<string>();
+    private List<CommunityAttachment> Files => _d?.Files.ToList() ?? new List<CommunityAttachment>();
 
     private bool HasImages => Images.Count > 0;
 
@@ -292,22 +334,35 @@ else
     private IReadOnlyList<CommunityReply> ChildrenOf(int parentId) =>
         Replies.Where(r => r.ParentReplyId == parentId).OrderBy(r => r.CreatedAt).ThenBy(r => r.Id).ToList();
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         if (_loadedId == Id) return;
 
         _loadedId = Id;
-        _d = CommunitySampleData.Find(Id);
         _lightbox = -1;
         _draft = "";
-        _liked = false;
+        await LoadAsync();
+    }
 
-        if (_d is not null)
-        {
-            _d.Views++;                 // one view per page visit (in memory)
-            _saved = _d.IsSaved;
-            _following = _d.IsFollowing;
-        }
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        _failed = false;
+        StateHasChanged();
+
+        // The server counts the view inside this call; nothing is incremented client side.
+        var (item, notFound) = await Api.GetDiscussionAsync(Id, ct);
+
+        if (ct.IsCancellationRequested) return;
+
+        _d = item;
+        _failed = item is null && !notFound;
+        _loading = false;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -352,26 +407,65 @@ else
     }
 
     // ---------------------------------------------------------------- question actions
-    private void ToggleSave()
-    {
-        _saved = !_saved;
-        if (_d is not null) _d.IsSaved = _saved;
-        Toast.Info(_saved ? "Saved to your list." : "Removed from your list.");
-    }
-
-    private void ToggleFollow()
-    {
-        _following = !_following;
-        if (_d is not null) _d.IsFollowing = _following;
-        Toast.Info(_following ? "You are following this discussion." : "You stopped following this discussion.");
-    }
-
-    private void ToggleLike()
+    private async Task ToggleSaveAsync()
     {
         if (_d is null) return;
-        _liked = !_liked;
-        _d.Likes += _liked ? 1 : -1;
-        if (_d.Likes < 0) _d.Likes = 0;
+
+        var was = _d.IsSaved;
+        _d.IsSaved = !was;                      // optimistic
+
+        var result = await Api.ToggleSaveAsync(_d.Id);
+
+        if (result is null)
+        {
+            _d.IsSaved = was;                   // rolled back; CommunityApi raised the toast
+            return;
+        }
+
+        _d.IsSaved = result.Active;
+        Toast.Info(_d.IsSaved ? "Saved to your list." : "Removed from your list.");
+    }
+
+    private async Task ToggleFollowAsync()
+    {
+        if (_d is null) return;
+
+        var was = _d.IsFollowing;
+        _d.IsFollowing = !was;
+
+        var result = await Api.ToggleFollowAsync(_d.Id);
+
+        if (result is null)
+        {
+            _d.IsFollowing = was;
+            return;
+        }
+
+        _d.IsFollowing = result.Active;
+        Toast.Info(_d.IsFollowing ? "You are following this discussion." : "You stopped following this discussion.");
+    }
+
+    private async Task ToggleLikeAsync()
+    {
+        if (_d is null) return;
+
+        var wasLiked = _d.IsLiked;
+        var wasCount = _d.Likes;
+
+        _d.IsLiked = !wasLiked;
+        _d.Likes = Math.Max(0, wasCount + (wasLiked ? -1 : 1));
+
+        var result = await Api.ToggleLikeAsync(_d.Id);
+
+        if (result is null)
+        {
+            _d.IsLiked = wasLiked;
+            _d.Likes = wasCount;
+            return;
+        }
+
+        _d.IsLiked = result.Active;
+        _d.Likes = result.Count;
     }
 
     private async Task ShareAsync()
@@ -387,7 +481,8 @@ else
         Toast.Info("Link copied");
     }
 
-    private void AttachmentSoon() => Toast.Info("Attachments arrive with the community API.");
+    private void AttachmentNotSupported() =>
+        Toast.Info("Files are attached when the question is posted; replies are text only.");
 
     // ---------------------------------------------------------------- composer
     private void OnComposerInput(ChangeEventArgs e)
@@ -409,18 +504,66 @@ else
         await SendAsync();
     }
 
-    private Task SendAsync()
+    private async Task SendAsync()
     {
         var text = (_draft ?? "").Trim();
-        if (_d is null || text.Length == 0) return Task.CompletedTask;
+        if (_d is null || text.Length == 0 || _sending) return;
 
-        var added = CommunitySampleData.AddReply(_d.Id, text, Me, null);
+        _sending = true;
+        var posted = await Api.AddReplyAsync(_d.Id, text);
+        _sending = false;
+
+        if (posted is null) return;             // CommunityApi already explained why
+
         _draft = "";
         _sort = "latest";
-        _scrollToReplyId = added.Id;
         Toast.Success("Reply posted.");
+        await OnReplyPosted(posted);
+    }
+
+    /// <summary>
+    /// Adds the reply the server created to the thread and mirrors the server's status rule
+    /// (a reply from SPIC staff makes the discussion an Expert Answer; anyone else answering
+    /// a question that was waiting moves it to Open).
+    /// </summary>
+    private Task OnReplyPosted(CommunityReply reply)
+    {
+        if (_d is null) return Task.CompletedTask;
+
+        _d.Replies.Add(reply);
+        _d.ReplyCount = _d.Replies.Count;
+        _d.LastActivityAt = reply.CreatedAt;
+
+        if (reply.ParentReplyId is int parentId)
+        {
+            var parent = _d.Replies.FirstOrDefault(r => r.Id == parentId);
+            if (parent is not null) parent.ReplyCount++;
+        }
+
+        if (reply.Author.IsExpert) _d.Status = DiscussionStatus.ExpertAnswer;
+        else if (_d.Status == DiscussionStatus.WaitingForReply) _d.Status = DiscussionStatus.Open;
+
+        _scrollToReplyId = reply.Id;
+        StateHasChanged();
         return Task.CompletedTask;
     }
+
+    // ---------------------------------------------------------------- attachments
+    private static string FileIcon(string name)
+    {
+        var ext = System.IO.Path.GetExtension(name).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => "bi-file-earmark-pdf",
+            ".doc" or ".docx" => "bi-file-earmark-word",
+            ".xls" or ".xlsx" or ".csv" => "bi-file-earmark-spreadsheet",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private static string SizeLabel(long bytes) => bytes >= 1024 * 1024
+        ? $"{bytes / 1024d / 1024d:0.0} MB"
+        : $"{Math.Max(1, bytes / 1024d):0} KB";
 
     // ---------------------------------------------------------------- lightbox
     private void OpenLightbox(int index)
@@ -454,4 +597,10 @@ else
     }
 
     private void NoOp() { }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
 }

@@ -1,13 +1,16 @@
 @page "/Community/new"
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject CommunityApi Api
+@inject LoadingService Loading
 
 @*
     Community Connect - "Create a Discussion" (Figma frame supplied 2026-09-20).
     Shared by the Blazor Server web host and the MAUI BlazorWebView.
 
-    There is no discussion API yet, so the form posts into CommunitySampleData and the
-    attachments are only remembered by name/size (nothing is uploaded).
+    The selects are filled from GET api/Community/lookups, the similar-discussions check runs
+    through POST api/Community/discussions/similar, and posting creates the discussion and then
+    uploads the chosen files to it. The author is whoever the JWT says; nothing is sent from here.
 
         ?title=...    pre-fills the title (from the "Ask the community" box on the hub)
         ?edit={id}    loads that discussion into the form; the primary button then reads
@@ -57,7 +60,7 @@
                         aria-invalid="@(CategoryError is not null ? "true" : null)"
                         aria-describedby="@(CategoryError is null ? null : "cn-category-err")">
                     <option value="">Select Category</option>
-                    @foreach (var c in CommunitySampleData.Categories)
+                    @foreach (var c in Lookups.Categories)
                     {
                         <option value="@c">@c</option>
                     }
@@ -72,7 +75,7 @@
                 <label for="cn-product">Related Product</label>
                 <select id="cn-product" @bind="Draft.Product">
                     <option value="">Select Product</option>
-                    @foreach (var p in CommunitySampleData.ProductNames)
+                    @foreach (var p in Lookups.Products)
                     {
                         <option value="@p">@p</option>
                     }
@@ -83,7 +86,7 @@
                 <label for="cn-crop">Crop</label>
                 <select id="cn-crop" @bind="Draft.Crop">
                     <option value="">e.g Paddy, wheat, Tomato..</option>
-                    @foreach (var c in CommunitySampleData.Crops)
+                    @foreach (var c in Lookups.Crops)
                     {
                         <option value="@c">@c</option>
                     }
@@ -170,7 +173,7 @@
             <button type="button" class="cn-btn cn-btn-outline" @onclick="CancelAsync">Cancel</button>
         </Secondary>
         <ChildContent>
-            <button type="button" class="cn-btn cn-btn-primary" @onclick="SubmitAsync">
+            <button type="button" class="cn-btn cn-btn-primary" disabled="@_busy" @onclick="SubmitAsync">
                 @PrimaryLabel <i class="bi bi-arrow-right" aria-hidden="true"></i>
             </button>
         </ChildContent>
@@ -206,8 +209,12 @@
     private int? _loadedEditId;
     private string? _loadedTitleQuery;
 
+    private CommunityLookups? _lookups;
+    private CommunityLookups Lookups => _lookups ??= new CommunityLookups();
+
     private string _tagInput = "";
     private bool _submitted;
+    private bool _busy;
     private string _clean = "";
 
     private bool _similarOpen;
@@ -232,12 +239,17 @@
 
     // ---------------------------------------------------------- lifecycle
 
-    protected override void OnParametersSet()
+    protected override async Task OnInitializedAsync()
+    {
+        _lookups = await Api.GetLookupsAsync() ?? new CommunityLookups();
+    }
+
+    protected override async Task OnParametersSetAsync()
     {
         if (EditId is int id && _loadedEditId != id)
         {
             _loadedEditId = id;
-            _editing = CommunitySampleData.Find(id);
+            _editing = (await Api.GetDiscussionAsync(id, countView: false)).Item;
 
             if (_editing is not null)
             {
@@ -342,7 +354,7 @@
 
     private void OnFilesChosen(InputFileChangeEventArgs e)
     {
-        // Nothing is uploaded yet: only the name and size are kept on the draft.
+        // The files are kept on the draft and uploaded once the discussion exists.
         var added = 0;
         var rejected = 0;
 
@@ -351,7 +363,7 @@
             if (file.Size > MaxFileBytes) { rejected++; continue; }
             if (Draft.Files.Any(f => f.Name == file.Name && f.Size == file.Size)) continue;
 
-            Draft.Files.Add((file.Name, file.Size));
+            Draft.Files.Add(file);
             added++;
         }
 
@@ -392,6 +404,8 @@
 
     private async Task SubmitAsync()
     {
+        if (_busy) return;
+
         AddTag();
         _submitted = true;
 
@@ -406,12 +420,13 @@
 
         if (_editing is not null)
         {
-            _editing.Title = Draft.Title.Trim();
-            _editing.Body = Draft.Description.Trim();
-            _editing.Category = Draft.Category;
-            _editing.Product = Draft.Product;
-            _editing.Crop = Draft.Crop;
-            _editing.Tags = Draft.Tags.ToList();
+            _busy = true;
+            Loading.Show();
+            var saved = await Api.UpdateAsync(_editing.Id, Draft);
+            Loading.Hide();
+            _busy = false;
+
+            if (!saved) return;                 // CommunityApi already explained why
 
             _clean = Snapshot();
             Toast.Success("Your changes have been saved");
@@ -419,25 +434,54 @@
             return;
         }
 
-        _similar = CommunitySampleData.Similar(Draft.Title);
+        _busy = true;
+        Loading.Show();
+        _similar = await Api.GetSimilarAsync(Draft.Title, Draft.Description);
+        Loading.Hide();
+        _busy = false;
 
         if (_similar.Count > 0) _similarOpen = true;
         else _uniqueOpen = true;
-
-        await Task.CompletedTask;
     }
 
-    private Task PostAsync()
+    private async Task PostAsync()
     {
         _similarOpen = false;
         _uniqueOpen = false;
 
-        var d = CommunitySampleData.Post(Draft, CommunitySampleData.CurrentUser);
+        if (_busy) return;
+        _busy = true;
+        Loading.Show();
+
+        var posted = await Api.CreateAsync(Draft);
+
+        if (posted is null)
+        {
+            Loading.Hide();
+            _busy = false;
+            return;                             // CommunityApi already explained why
+        }
+
+        // The discussion exists now; attachments follow. A failed upload must not lose the post.
+        var uploaded = Draft.Files.Count == 0
+            ? new List<CommunityAttachment>()
+            : await Api.UploadAttachmentsAsync(posted.Id, Draft.Files);
+
+        Loading.Hide();
+        _busy = false;
 
         _clean = Snapshot();
-        Toast.Success("Your question has been posted");
-        Nav.NavigateTo($"/Community/posted/{d.Id}");
-        return Task.CompletedTask;
+
+        if (uploaded is null)
+        {
+            Toast.Warning("Your question was posted, but the attachments could not be uploaded.");
+        }
+        else
+        {
+            Toast.Success("Your question has been posted");
+        }
+
+        Nav.NavigateTo($"/Community/posted/{posted.Id}");
     }
 
     private Task BackToEditAsync()

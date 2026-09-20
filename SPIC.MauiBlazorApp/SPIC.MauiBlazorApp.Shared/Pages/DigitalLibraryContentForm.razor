@@ -1,6 +1,10 @@
 @page "/DigitalLibrary/add/{KindRoute}"
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject DigitalLibraryApi Api
+@inject LoadingService Loading
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 
 <PageTitle>@Heading - Digital Library - SPIC ONE</PageTitle>
 
@@ -9,7 +13,8 @@
     (products, videos, brochures) from the Figma frames supplied 2026-09-20.
     Step 1 changes with the kind (product fields / video media / brochure document);
     steps 2 (related content) and 3 (detail-page section order) are shared.
-    Sample related content until the content API exists.
+    Everything is saved through api/Library: the item is created or updated first, then any
+    newly chosen cover / video / document file is uploaded against its id.
 *@
 
 <div class="pf-page">
@@ -17,7 +22,7 @@
     <PageHeader Title="@Heading" Subtitle="@SubHeading" BackHref="@ListUrl">
         <Actions>
             <button type="button" class="pf-btn pf-btn-outline" @onclick="BackToList"><i class="bi bi-arrow-left"></i> Back to List</button>
-            <button type="button" class="pf-btn pf-btn-primary" @onclick="Next">@NextLabel <i class="bi bi-arrow-right"></i></button>
+            <button type="button" class="pf-btn pf-btn-primary" disabled="@_busy" @onclick="Next">@NextLabel <i class="bi bi-arrow-right"></i></button>
         </Actions>
     </PageHeader>
 
@@ -31,8 +36,17 @@
         }
     </nav>
 
-    @if (_step == 1)
+    @if (_loading)
     {
+        <section class="pf-card"><Skeleton Variant="text" Rows="6" /></section>
+    }
+    else
+    {
+    @* Step 1 stays in the DOM while the user is on step 2 or 3: an <InputFile> that is
+       removed loses the browser's handle on the chosen video / brochure, and the upload
+       at save time would then have nothing to send. display:contents keeps the layout
+       exactly as if this wrapper were not here. *@
+    <div style="@(_step == 1 ? "display:contents" : "display:none")">
         @* ---------- Basic information (varies by kind) ---------- *@
         <section class="pf-card">
             <h2 class="pf-card-title">Basic Information</h2>
@@ -57,14 +71,14 @@
                         <span>Resource Content Format</span>
                         <select @bind="Draft.Format">
                             <option value="">Select Format</option>
-                            <option>Product page</option><option>Manual</option><option>Leaflet</option><option>Datasheet</option>
+                            @foreach (var f in Formats) { <option value="@f">@f</option> }
                         </select>
                     </label>
                     <label class="pf-field">
                         <span>Visibility / Enable To</span>
                         <select @bind="Draft.Visibility">
                             <option value="">Select Audience Access..</option>
-                            <option>Everyone</option><option>Dealers</option><option>Employees</option><option>Farmers</option>
+                            @foreach (var v in Visibilities) { <option value="@v">@v</option> }
                         </select>
                     </label>
                 </div>
@@ -134,7 +148,7 @@
                         <InputFile OnChange="OnVideoFile" accept="video/mp4,video/webm,video/quicktime" />
                         <i class="bi bi-cloud-arrow-up pf-upload-icon" aria-hidden="true"></i>
                         <span class="pf-upload-title">Click to upload video</span>
-                        <span class="pf-upload-hint">MP4, WebM or MOV up to 500 MB</span>
+                        <span class="pf-upload-hint">MP4, WebM or MOV up to 200 MB</span>
                         <span class="pf-btn pf-btn-outline pf-btn-sm">Browse Files</span>
                     </label>
                     <div class="pf-preview-box">
@@ -161,8 +175,8 @@
                     </label>
                     <label class="pf-field">
                         <span>Duration</span>
-                        <input type="text" value="@Draft.Duration" readonly />
-                        <small>Duration is detected automatically after upload</small>
+                        <input type="text" placeholder="00:00:00" @bind="Draft.Duration" />
+                        <small>Optional, as hh:mm:ss - shown on the detail page</small>
                     </label>
                 </div>
                 <span class="pf-label">Video Thumbnail</span>
@@ -241,13 +255,14 @@
             </section>
         }
         <button type="button" class="pf-add-section" @onclick="() => Draft.AdditionalSections.Add(new CustomSection())"><i class="bi bi-plus-lg"></i> Add Section</button>
-    }
-    else if (_step == 2)
+    </div>
+
+    @if (_step == 2)
     {
-        @RelatedPicker("Related Video", "Select AI Videos to display on the detail page.", "Search content...", VideoPool, Draft.Videos, "AI Video", "pf-pill-video", true)
-        @RelatedPicker("Related Brochures", "Select brochures to display on the detail page.", "Search brochures to display on the detail page...", BrochurePool, Draft.Brochures, "Brochure", "pf-pill-brochure", false)
+        @RelatedPicker("Related Video", "Select AI Videos to display on the detail page.", "Search content...", _videoPicker, Draft.Videos, "AI Video", "pf-pill-video", true)
+        @RelatedPicker("Related Brochures", "Select brochures to display on the detail page.", "Search brochures to display on the detail page...", _brochurePicker, Draft.Brochures, "Brochure", "pf-pill-brochure", false)
     }
-    else
+    else if (_step == 3)
     {
         <h2 class="pf-section-heading">Detail Page Layout Configuration</h2>
         <p class="pf-card-sub">Choose which sections appear on the detail page, arrange their order and customise how each one appears.</p>
@@ -297,7 +312,7 @@
                                     case "videos":
                                         @if (Draft.Videos.Ids.Count == 0) { <p class="pf-selected-empty">No videos selected in step 2.</p> }
                                         <div class="pf-preview-strip">
-                                            @foreach (var v in Draft.Videos.Ids.Take(Draft.Videos.MaxItems).Select(id => VideoPool.First(x => x.Id == id)))
+                                            @foreach (var v in Selected(Draft.Videos))
                                             {
                                                 <div class="pf-preview-card"><img src="@v.Image" alt="" /><span>@v.Title</span><small>@v.Date.ToString("dd MMM yyyy") <span class="pf-pill pf-pill-video">AI Video</span></small></div>
                                             }
@@ -306,7 +321,7 @@
                                     case "brochures":
                                         @if (Draft.Brochures.Ids.Count == 0) { <p class="pf-selected-empty">No brochures selected in step 2.</p> }
                                         <div class="pf-preview-strip">
-                                            @foreach (var b in Draft.Brochures.Ids.Take(Draft.Brochures.MaxItems).Select(id => BrochurePool.First(x => x.Id == id)))
+                                            @foreach (var b in Selected(Draft.Brochures))
                                             {
                                                 <div class="pf-preview-card"><img src="@b.Image" alt="" /><span>@b.Title</span><small>@b.Date.ToString("dd MMM yyyy") <span class="pf-pill pf-pill-brochure">Brochure</span></small></div>
                                             }
@@ -334,26 +349,25 @@
             <p class="pf-note pf-note-tip"><i class="bi bi-info-circle"></i> <strong>TIP</strong> drag and drop sections to reorder, or use the arrows on phones.</p>
         </section>
     }
+    }
 
     <ActionBar>
         <Secondary>
             <button type="button" class="pf-btn pf-btn-ghost" @onclick="BackToList">Cancel</button>
-            <button type="button" class="pf-btn pf-btn-outline" @onclick="SaveDraft"><i class="bi bi-save"></i> Save as Draft</button>
+            <button type="button" class="pf-btn pf-btn-outline" disabled="@_busy" @onclick="SaveDraft"><i class="bi bi-save"></i> Save as Draft</button>
         </Secondary>
         <ChildContent>
             @if (_step > 1)
             {
                 <button type="button" class="pf-btn pf-btn-outline" @onclick="() => Go(_step - 1)"><i class="bi bi-arrow-left"></i> Back</button>
             }
-            <button type="button" class="pf-btn pf-btn-primary" @onclick="Next">@NextLabel <i class="bi bi-arrow-right"></i></button>
+            <button type="button" class="pf-btn pf-btn-primary" disabled="@_busy" @onclick="Next">@NextLabel <i class="bi bi-arrow-right"></i></button>
         </ChildContent>
     </ActionBar>
 </div>
 
 @code {
     private static readonly string[] StepNames = { "Content & Details", "Related Content", "Page Layout" };
-    private static readonly string[] Categories = { "Fertilizers", "Micronutrients", "Water-soluble fertilizers", "Bio products", "Speciality products" };
-    private static readonly string[] SubCategories = { "Urea", "DAP", "NPK Complexes", "Potash", "Organic", "Others" };
     private const int PickPageSize = 6;
 
     [Parameter] public string KindRoute { get; set; } = "products";
@@ -371,44 +385,129 @@
         DigitalLibraryType.Brochures => "Upload a brochure and configure how it appears on the detail page",
         _ => "Create comprehensive product information and configure how it appears on the detail page"
     };
-    private string ListUrl => $"/DigitalLibrary/content?type={Kind.ToString().ToLowerInvariant()}";
+    private string ListUrl => $"/DigitalLibrary/content?type={DigitalLibraryItem.RouteOf(Kind)}";
 
     private int _step = 1;
     private string _tagInput = "";
-    private readonly Dictionary<string, string> _queries = new();
-    private readonly Dictionary<string, int> _pages = new();
     private int? _dragIndex;
     private LayoutSection? _editing;
+    private bool _loading = true;
+    private bool _busy;
+    private int _loadedId;
 
-    private static readonly List<DigitalLibraryItem> Pool = DigitalLibrarySampleData.Create(30);
-    private static List<DigitalLibraryItem> VideoPool => Pool.Where(i => i.Type == DigitalLibraryType.Videos).ToList();
-    private static List<DigitalLibraryItem> BrochurePool => Pool.Where(i => i.Type == DigitalLibraryType.Brochures).ToList();
+    // Files chosen in this session; they are uploaded after the item has an id. The cover is
+    // kept as bytes because its stream is already consumed to build the preview (an
+    // IBrowserFile stream can only be read once).
+    private byte[]? _coverBytes;
+    private string _coverName = "cover.jpg";
+    private IBrowserFile? _videoFile;
+    private IBrowserFile? _documentFile;
+
+    // Lookups
+    private List<string> Categories { get; set; } = new();
+    private List<string> SubCategories { get; set; } = new();
+    private List<string> Formats { get; set; } = new();
+    private List<string> Visibilities { get; set; } = new();
 
     private string NextLabel => _step switch { 1 => "Next: Related Content", 2 => "Next: Page Layout", _ => (IsEdit ? "Save Changes" : "Save & Publish") };
 
-    protected override void OnParametersSet()
+    // ---------- related-content pickers (server paged) ----------
+    private sealed class Picker
     {
-        var kind = KindRoute.ToLowerInvariant() switch
-        {
-            "videos" or "video" => DigitalLibraryType.Videos,
-            "brochures" or "brochure" => DigitalLibraryType.Brochures,
-            _ => DigitalLibraryType.Products
-        };
+        public LibraryContentKind Kind { get; init; }
+        public string Query { get; set; } = "";
+        public int Page { get; set; } = 1;
+        public int Total { get; set; }
+        public bool Loading { get; set; }
+        public List<DigitalLibraryItem> Items { get; } = new();
+        public int PageCount => Math.Max(1, (int)Math.Ceiling(Total / (double)PickPageSize));
+    }
+
+    private readonly Picker _videoPicker = new() { Kind = LibraryContentKind.Video };
+    private readonly Picker _brochurePicker = new() { Kind = LibraryContentKind.Brochure };
+
+    // Every item seen so far, so the "Selected" panel can name ids that are not on the page.
+    private readonly Dictionary<int, DigitalLibraryItem> _known = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var kind = DigitalLibraryItem.ParseType(KindRoute) ?? DigitalLibraryType.Products;
         Draft.SetKind(kind);
 
-        if (Id is int id && Draft.Id != id)
+        if (_loadedId == (Id ?? 0) && !_loading) return;
+        _loadedId = Id ?? 0;
+
+        _loading = true;
+        StateHasChanged();
+
+        var lookups = await Api.GetLookupsAsync();
+        if (lookups is not null)
         {
-            // Sample edit payload until the API exists.
-            var item = Pool.FirstOrDefault(p => p.Id == id) ?? DigitalLibrarySampleData.Create(1)[0];
-            Draft.Id = id;
-            Draft.Title = item.Title;
-            Draft.ShortDescription = item.Description;
-            Draft.Category = Categories[0];
-            Draft.Tags.Clear();
-            Draft.Tags.AddRange(new[] { "DAP", "Fertilizer" });
-            Draft.IsDraft = !item.Published;
+            Categories = lookups.Categories;
+            SubCategories = lookups.SubCategories;
+            Formats = lookups.Formats;
+            Visibilities = lookups.Visibilities;
         }
+        else
+        {
+            Toast.Warning(Api.LastError ?? "Category lists could not be loaded.");
+        }
+
+        if (Id is int id)
+        {
+            var detail = await Api.GetAsync(id);
+            if (detail is null)
+            {
+                Toast.Error(Api.LastError ?? "This item could not be opened.");
+                Nav.NavigateTo(ListUrl);
+                return;
+            }
+
+            Draft.FromDto(detail, Api.FileUrl);
+            Remember(detail.RelatedVideoItems);
+            Remember(detail.RelatedBrochureItems);
+        }
+
+        _loading = false;
+        await LoadPicker(_videoPicker);
+        await LoadPicker(_brochurePicker);
     }
+
+    private void Remember(IEnumerable<LibraryContentSummaryDto> dtos)
+    {
+        foreach (var dto in dtos) _known[dto.Id] = Api.ToItem(dto);
+    }
+
+    private async Task LoadPicker(Picker picker)
+    {
+        picker.Loading = true;
+        var result = await Api.ListAsync(picker.Kind, LibraryContentStatus.Published, picker.Query, picker.Page, PickPageSize);
+        if (Api.LastError is not null)
+        {
+            Toast.Error(Api.LastError);
+            picker.Loading = false;
+            return;
+        }
+
+        picker.Items.Clear();
+        foreach (var dto in result.Items)
+        {
+            var mapped = Api.ToItem(dto);
+            picker.Items.Add(mapped);
+            _known[mapped.Id] = mapped;
+        }
+        picker.Total = result.Total;
+        picker.Loading = false;
+        StateHasChanged();
+    }
+
+    private IEnumerable<DigitalLibraryItem> Selected(RelatedSelection sel)
+        => sel.Ids.Take(Math.Max(1, sel.MaxItems)).Select(Resolve);
+
+    private DigitalLibraryItem Resolve(int id)
+        => _known.TryGetValue(id, out var item)
+            ? item
+            : new DigitalLibraryItem { Id = id, Title = $"Item #{id}", Image = DigitalLibraryItem.PlaceholderImage(id) };
 
     // ---------- shared fragments ----------
     private RenderFragment TagsEditor => __builder =>
@@ -425,7 +524,7 @@
     private RenderFragment ImageUpload(string title) => __builder =>
     {
         <label class="pf-upload">
-            <InputFile OnChange="OnImage" accept="image/png,image/jpeg" />
+            <InputFile OnChange="OnImage" accept="image/png,image/jpeg,image/webp" />
             @if (Draft.ImageDataUrl is not null)
             {
                 <img src="@Draft.ImageDataUrl" alt="" class="pf-upload-preview" />
@@ -442,41 +541,47 @@
         </label>
     };
 
-    private RenderFragment RelatedPicker(string title, string subtitle, string placeholder, List<DigitalLibraryItem> pool, RelatedSelection sel, string pillText, string pillClass, bool isVideo) => __builder =>
+    private RenderFragment RelatedPicker(string title, string subtitle, string placeholder, Picker picker, RelatedSelection sel, string pillText, string pillClass, bool isVideo) => __builder =>
     {
-        var key = pillText;
-        var query = _queries.GetValueOrDefault(key, "");
-        var page = _pages.GetValueOrDefault(key, 1);
-        var pageCount = PageCount(pool, query);
-
         <section class="pf-card">
             <h2 class="pf-card-title">@title</h2>
             <p class="pf-card-sub">@subtitle</p>
             <div class="pf-related">
                 <div class="pf-picker">
-                    <div class="pf-search"><i class="bi bi-search"></i><input type="search" placeholder="@placeholder" value="@query" @oninput="e => { _queries[key] = e.Value?.ToString() ?? string.Empty; _pages[key] = 1; }" /></div>
-                    <div class="pf-pick-grid">
-                        @foreach (var v in Page(pool, query, page))
-                        {
-                            var picked = sel.Ids.Contains(v.Id);
-                            <label class="pf-pick @(picked ? "picked" : "")">
-                                <input type="checkbox" checked="@picked" @onchange="e => TogglePick(sel, v.Id, (bool)e.Value!)" />
-                                <img src="@v.Image" alt="" loading="lazy" />
-                                <span class="pf-pick-title">@v.Title</span>
-                                <span class="pf-pick-meta">@v.Date.ToString("dd MMM yyyy") <span class="pf-pill @pillClass">@pillText</span></span>
-                            </label>
-                        }
-                    </div>
+                    <div class="pf-search"><i class="bi bi-search"></i><input type="search" placeholder="@placeholder" value="@picker.Query" @oninput="e => SearchPicker(picker, e.Value?.ToString())" /></div>
+                    @if (picker.Loading)
+                    {
+                        <Skeleton Variant="card" Rows="2" />
+                    }
+                    else if (picker.Items.Count == 0)
+                    {
+                        <EmptyState Compact="true" Icon="bi-collection" Title="@($"No published {(isVideo ? "videos" : "brochures")} found")" Message="Publish content of this type first, or change the search." />
+                    }
+                    else
+                    {
+                        <div class="pf-pick-grid">
+                            @foreach (var v in picker.Items)
+                            {
+                                var picked = sel.Ids.Contains(v.Id);
+                                <label class="pf-pick @(picked ? "picked" : "")">
+                                    <input type="checkbox" checked="@picked" @onchange="e => TogglePick(sel, v.Id, (bool)e.Value!)" />
+                                    <img src="@v.Image" alt="" loading="lazy" onerror="this.onerror=null;this.src='@DigitalLibraryItem.PlaceholderImage(v.Id)'" />
+                                    <span class="pf-pick-title">@v.Title</span>
+                                    <span class="pf-pick-meta">@v.Date.ToString("dd MMM yyyy") <span class="pf-pill @pillClass">@pillText</span></span>
+                                </label>
+                            }
+                        </div>
+                    }
                     <div class="pf-pager">
                         <span>Items per page <strong>@PickPageSize</strong></span>
                         <div class="pf-pager-btns">
-                            <button type="button" class="pf-icon-btn" aria-label="Previous" disabled="@(page <= 1)" @onclick="() => _pages[key] = page - 1"><i class="bi bi-chevron-left"></i></button>
-                            @for (var p = 1; p <= pageCount; p++)
+                            <button type="button" class="pf-icon-btn" aria-label="Previous" disabled="@(picker.Page <= 1)" @onclick="() => GoPicker(picker, picker.Page - 1)"><i class="bi bi-chevron-left"></i></button>
+                            @for (var p = 1; p <= picker.PageCount; p++)
                             {
                                 var pg = p;
-                                <button type="button" class="pf-page @(pg == page ? "active" : "")" @onclick="() => _pages[key] = pg">@pg</button>
+                                <button type="button" class="pf-page @(pg == picker.Page ? "active" : "")" @onclick="() => GoPicker(picker, pg)">@pg</button>
                             }
-                            <button type="button" class="pf-icon-btn" aria-label="Next" disabled="@(page >= pageCount)" @onclick="() => _pages[key] = page + 1"><i class="bi bi-chevron-right"></i></button>
+                            <button type="button" class="pf-icon-btn" aria-label="Next" disabled="@(picker.Page >= picker.PageCount)" @onclick="() => GoPicker(picker, picker.Page + 1)"><i class="bi bi-chevron-right"></i></button>
                         </div>
                     </div>
                 </div>
@@ -496,9 +601,9 @@
                         }
                         @foreach (var (id, index) in sel.Ids.Select((v, i) => (v, i)))
                         {
-                            var v = pool.First(x => x.Id == id);
+                            var v = Resolve(id);
                             <div class="pf-selected-item">
-                                <img src="@v.Image" alt="" />
+                                <img src="@v.Image" alt="" onerror="this.onerror=null;this.src='@DigitalLibraryItem.PlaceholderImage(v.Id)'" />
                                 <div class="pf-selected-text"><span class="pf-selected-title">@v.Title</span><span class="pf-pill @pillClass">@pillText</span></div>
                                 <div class="pf-selected-actions">
                                     <button type="button" class="pf-icon-btn" aria-label="Move up" disabled="@(index == 0)" @onclick="() => Move(sel, index, -1)"><i class="bi bi-chevron-up"></i></button>
@@ -517,7 +622,7 @@
     // ---------- navigation ----------
     private void Go(int step) => _step = Math.Clamp(step, 1, 3);
 
-    private void Next()
+    private async Task Next()
     {
         if (_step == 1 && string.IsNullOrWhiteSpace(Draft.Title))
         {
@@ -526,16 +631,87 @@
         }
         if (_step < 3) { _step++; return; }
 
-        Draft.IsDraft = false;
-        Toast.Success(IsEdit ? $"{KindNoun} updated." : $"{KindNoun} published.");
-        Nav.NavigateTo(ListUrl);
+        // "Save Changes" keeps an existing draft a draft; a new item is published.
+        await Save(publish: IsEdit ? !Draft.IsDraft : true);
     }
 
-    private void SaveDraft()
+    private Task SaveDraft() => Save(publish: false);
+
+    private async Task Save(bool publish)
     {
-        Draft.IsDraft = true;
-        Toast.Success("Saved as draft.");
-        Nav.NavigateTo(ListUrl + "&status=draft");
+        if (_busy) return;
+
+        if (string.IsNullOrWhiteSpace(Draft.Title))
+        {
+            Toast.Warning($"Enter a {KindNoun.ToLowerInvariant()} title before saving.");
+            _step = 1;
+            return;
+        }
+
+        _busy = true;
+        Loading.Show();
+        try
+        {
+            var body = Draft.ToUpsertDto(publish);
+            var saved = Draft.Id is int existing
+                ? await Api.UpdateAsync(existing, body)
+                : await Api.CreateAsync(body);
+
+            if (saved is null)
+            {
+                Toast.Error(Api.LastError ?? $"The {KindNoun.ToLowerInvariant()} could not be saved.");
+                return;
+            }
+
+            Draft.Id = saved.Id;
+            Draft.IsDraft = !publish;
+
+            if (!await UploadPending(saved.Id)) return;
+
+            Toast.Success(publish
+                ? (IsEdit ? $"{KindNoun} updated." : $"{KindNoun} published.")
+                : "Saved as draft.");
+
+            Nav.NavigateTo(publish ? ListUrl : ListUrl + "&status=draft");
+        }
+        finally
+        {
+            Loading.Hide();
+            _busy = false;
+        }
+    }
+
+    /// <summary>Uploads whatever the user picked in this session, one file at a time with a toast.</summary>
+    private async Task<bool> UploadPending(int id)
+    {
+        if (_coverBytes is not null)
+        {
+            Toast.Info("Uploading the cover image...");
+            var file = await Api.UploadCoverAsync(id, _coverBytes, _coverName, "image/jpeg");
+            if (file is null) { Toast.Error((Api.LastError ?? "The cover image could not be uploaded.") + " The item itself was saved."); return false; }
+            _coverBytes = null;
+            Toast.Success("Cover image uploaded.");
+        }
+
+        if (_videoFile is not null)
+        {
+            Toast.Info("Uploading the video, this can take a moment...");
+            var file = await Api.UploadVideoAsync(id, _videoFile);
+            if (file is null) { Toast.Error((Api.LastError ?? "The video could not be uploaded.") + " The item itself was saved."); return false; }
+            _videoFile = null;
+            Toast.Success("Video uploaded.");
+        }
+
+        if (_documentFile is not null)
+        {
+            Toast.Info("Uploading the brochure...");
+            var file = await Api.UploadDocumentAsync(id, _documentFile);
+            if (file is null) { Toast.Error((Api.LastError ?? "The brochure could not be uploaded.") + " The item itself was saved."); return false; }
+            _documentFile = null;
+            Toast.Success("Brochure uploaded.");
+        }
+
+        return true;
     }
 
     private void BackToList() => Nav.NavigateTo(ListUrl);
@@ -558,14 +734,17 @@
     private async Task OnImage(InputFileChangeEventArgs e)
     {
         var file = e.File;
-        if (file.Size > 5 * 1024 * 1024) { Toast.Error("Image must be 5 MB or smaller."); return; }
+        if (file.Size > DigitalLibraryApi.MaxCoverBytes) { Toast.Error("Image must be 5 MB or smaller."); return; }
         try
         {
+            // Resized to the design's 1280x720 so the preview and the stored cover match.
             var resized = await file.RequestImageFileAsync("image/jpeg", 1280, 720);
-            using var stream = resized.OpenReadStream(5 * 1024 * 1024);
+            using var stream = resized.OpenReadStream(DigitalLibraryApi.MaxCoverBytes);
             using var ms = new MemoryStream();
             await stream.CopyToAsync(ms);
-            Draft.ImageDataUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(ms.ToArray())}";
+            _coverBytes = ms.ToArray();
+            _coverName = Path.ChangeExtension(file.Name, ".jpg");
+            Draft.ImageDataUrl = $"data:image/jpeg;base64,{Convert.ToBase64String(_coverBytes)}";
             Draft.ImageName = file.Name;
         }
         catch (Exception ex)
@@ -576,16 +755,16 @@
 
     private void OnVideoFile(InputFileChangeEventArgs e)
     {
-        // The file is uploaded to the API in the next step of the implementation; for now only the name is kept.
-        if (e.File.Size > 500L * 1024 * 1024) { Toast.Error("Video must be 500 MB or smaller."); return; }
+        if (e.File.Size > DigitalLibraryApi.MaxVideoBytes) { Toast.Error("Video must be 200 MB or smaller."); return; }
+        _videoFile = e.File;
         Draft.VideoFileName = e.File.Name;
         Draft.VideoUrl = "";
-        Draft.Duration = "00:00:00";
-        Toast.Info("Video selected. Duration is detected after upload.");
+        Toast.Info("Video selected. It is uploaded when you save.");
     }
 
     private void ClearVideo()
     {
+        _videoFile = null;
         Draft.VideoFileName = null;
         Draft.VideoUrl = "";
         Draft.Duration = "00:00:00";
@@ -593,20 +772,38 @@
 
     private void OnDocument(InputFileChangeEventArgs e)
     {
-        if (e.File.Size > 25L * 1024 * 1024) { Toast.Error("Brochure must be 25 MB or smaller."); return; }
+        if (e.File.Size > DigitalLibraryApi.MaxDocumentBytes) { Toast.Error("Brochure must be 25 MB or smaller."); return; }
+        _documentFile = e.File;
         Draft.DocumentName = e.File.Name;
         Draft.DocumentSize = e.File.Size;
     }
 
     // ---------- step 2 helpers ----------
-    private static IEnumerable<DigitalLibraryItem> Filter(List<DigitalLibraryItem> pool, string q)
-        => string.IsNullOrWhiteSpace(q) ? pool : pool.Where(i => i.Title.Contains(q, StringComparison.OrdinalIgnoreCase));
+    private CancellationTokenSource? _pickerSearch;
 
-    private static IEnumerable<DigitalLibraryItem> Page(List<DigitalLibraryItem> pool, string q, int page)
-        => Filter(pool, q).Skip((page - 1) * PickPageSize).Take(PickPageSize);
+    private void SearchPicker(Picker picker, string? q)
+    {
+        picker.Query = q ?? "";
+        picker.Page = 1;
+        _pickerSearch?.Cancel();
+        _pickerSearch = new CancellationTokenSource();
+        var token = _pickerSearch.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(400, token);
+                await InvokeAsync(() => LoadPicker(picker));
+            }
+            catch (TaskCanceledException) { }
+        });
+    }
 
-    private static int PageCount(List<DigitalLibraryItem> pool, string q)
-        => Math.Max(1, (int)Math.Ceiling(Filter(pool, q).Count() / (double)PickPageSize));
+    private async Task GoPicker(Picker picker, int page)
+    {
+        picker.Page = Math.Clamp(page, 1, picker.PageCount);
+        await LoadPicker(picker);
+    }
 
     private static void TogglePick(RelatedSelection sel, int id, bool on)
     {

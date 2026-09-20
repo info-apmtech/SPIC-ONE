@@ -132,6 +132,75 @@ namespace Spic.Infrastructure.Data
                 })
                 .ToArray());
 
+        // ---------------------------------------------------------------- Digital Library
+        builder.Entity<LibraryContent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Kind, x.Status });
+            entity.HasIndex(x => x.PublishedAt);
+        });
+
+        builder.Entity<LibraryConversation>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.UpdatedAt });
+            entity.HasMany(x => x.Messages)
+                .WithOne(m => m.Conversation)
+                .HasForeignKey(m => m.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<LibraryMessage>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.ConversationId);
+        });
+
+        // ---------------------------------------------------------------- Knowledge Community
+        builder.Entity<CommunityPost>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CreatedAt);
+            entity.HasIndex(x => x.LastActivityAt);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.AuthorUserId);
+            entity.HasIndex(x => x.Product);
+            entity.HasMany(x => x.Replies)
+                .WithOne(r => r.Post)
+                .HasForeignKey(r => r.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Attachments)
+                .WithOne(a => a.Post)
+                .HasForeignKey(a => a.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<CommunityPostReply>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PostId, x.CreatedAt });
+            entity.HasIndex(x => x.ParentReplyId);
+        });
+
+        builder.Entity<CommunityPostAttachment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.PostId);
+        });
+
+        builder.Entity<CommunityReaction>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.TargetType, x.TargetId, x.Kind }).IsUnique();
+            entity.HasIndex(x => new { x.TargetType, x.TargetId, x.Kind });
+        });
+
+        builder.Entity<CommunityProductMember>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.ProductName }).IsUnique();
+        });
+
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
         }
@@ -274,6 +343,18 @@ namespace Spic.Infrastructure.Data
 
 		//// Contact Us
 		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }
+
+		//// Digital Library
+		public DbSet<LibraryContent> LibraryContents { get; set; }
+		public DbSet<LibraryConversation> LibraryConversations { get; set; }
+		public DbSet<LibraryMessage> LibraryMessages { get; set; }
+
+		//// Knowledge Community
+		public DbSet<CommunityPost> CommunityPosts { get; set; }
+		public DbSet<CommunityPostReply> CommunityPostReplies { get; set; }
+		public DbSet<CommunityPostAttachment> CommunityPostAttachments { get; set; }
+		public DbSet<CommunityReaction> CommunityReactions { get; set; }
+		public DbSet<CommunityProductMember> CommunityProductMembers { get; set; }
 
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.

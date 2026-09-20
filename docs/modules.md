@@ -123,3 +123,12 @@ instead of the "SPIC" wordmark. The desktop sidebar (live) is unchanged.
   `/Community/posted/{id}` (success summary, View Discussion / Back to Community). Admin-only in
   the sidebar and More sheet until `PagePermission` gains a `Community` key; also linked from the
   Farmers hub. Discussion API, uploads and the similarity service come next.
+- 2026-09-20 (evening): both modules are API-backed. `CommunityController` (discussions, replies,
+  like/save/follow, attachments, similar search with stop-words removed, stats, products, lookups)
+  and `LibraryController` + `LibraryAssistantController` (content CRUD, status, cover/video/PDF
+  uploads with range requests, lookups, stats, conversations, ask) on PostgreSQL via migration
+  `V5l_DigitalLibraryAndCommunity`; client services `CommunityApi` / `DigitalLibraryApi`; sample
+  data removed. SPIC AI answers from published content (keyword provider) and switches to Claude
+  when `Assistant__AnthropicApiKey` is set. Menu rules now use `CanAccess("Community")` /
+  `CanAccess("DigitalLibrary")`. Verified end to end against a local database (see
+  docs/community-library-implementation-plan.md); production needs `migrate.ps1` then `deploy.ps1`.

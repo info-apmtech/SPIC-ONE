@@ -1,11 +1,14 @@
 @*
     One content card of the Digital Library (AI video, product information or brochure),
     shared by the landing page and the All Content list. Design: Figma "Digital Library".
+    The cover is the URL DigitalLibraryApi.FileUrl built for the stored image; a cover that
+    cannot be loaded falls back to the same gallery placeholder as an item with no cover.
 *@
 
 <article class="dlc-card">
     <a class="dlc-card-imglink" href="@ViewHref" aria-label="@Item.Title">
-        <img class="dlc-card-img" src="@Item.Image" alt="" loading="lazy" />
+        <img class="dlc-card-img" src="@Item.Image" alt="" loading="lazy"
+             onerror="this.onerror=null;this.src='@Fallback'" />
     </a>
     <div class="dlc-card-body">
         <div class="dlc-card-meta">
@@ -43,4 +46,5 @@
     [Parameter] public EventCallback<DigitalLibraryItem> OnTogglePublish { get; set; }
 
     private string ViewHref => $"DigitalLibrary/view/{Item.Id}";
+    private string Fallback => DigitalLibraryItem.PlaceholderImage(Item.Id);
 }

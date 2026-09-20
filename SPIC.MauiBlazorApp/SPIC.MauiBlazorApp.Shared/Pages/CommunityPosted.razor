@@ -1,8 +1,11 @@
 @page "/Community/posted/{Id:int}"
+@inject CommunityApi Api
+@implements IDisposable
 
 @*
     Community Connect - "Your question has been posted" confirmation (Figma frame supplied
-    2026-09-20). Reached from CommunityNew after CommunitySampleData.Post().
+    2026-09-20). Reached from CommunityNew after the API created the discussion; the summary
+    is read back with GET api/Community/discussions/{id}.
 
     Note: the Figma labels both footer buttons "Vew Request Details", which is a placeholder
     typo; the real destinations are the discussion and the community hub.
@@ -11,7 +14,16 @@
 <PageTitle>Question posted &middot; SPIC ONE</PageTitle>
 
 <div class="cp-page">
-    @if (Discussion is null)
+    @if (_loading)
+    {
+        <div class="cp-hero">
+            <Skeleton Rows="2" Height="18px" />
+        </div>
+        <section class="cp-summary" aria-label="Discussion summary">
+            <Skeleton Rows="4" />
+        </section>
+    }
+    else if (_d is null)
     {
         <EmptyState Icon="bi-question-circle"
                     Title="Discussion not found"
@@ -28,19 +40,19 @@
         </div>
 
         <section class="cp-summary" aria-label="Discussion summary">
-            <div class="cp-row-title">@Discussion.Title</div>
+            <div class="cp-row-title">@_d.Title</div>
 
             <div class="cp-key">Category</div>
-            <div class="cp-val cp-val-green">@(string.IsNullOrWhiteSpace(Discussion.Category) ? "-" : Discussion.Category)</div>
+            <div class="cp-val cp-val-green">@(string.IsNullOrWhiteSpace(_d.Category) ? "-" : _d.Category)</div>
 
             <div class="cp-key">Posted</div>
-            <div class="cp-val">@Discussion.CreatedAt.ToString("dd MMM yyyy, hh:mm tt")</div>
+            <div class="cp-val">@_d.CreatedAt.ToString("dd MMM yyyy, hh:mm tt")</div>
 
             <div class="cp-key">Status</div>
-            <div class="cp-val cp-val-amber">Waiting for Answers</div>
+            <div class="cp-val cp-val-amber">@StatusLabel</div>
 
             <div class="cp-key">Views</div>
-            <div class="cp-val">@Discussion.Views</div>
+            <div class="cp-val">@_d.Views</div>
         </section>
 
         <div class="cp-actions">
@@ -59,5 +71,39 @@
 
     // Fully qualified: the page class CommunityDiscussion (the detail page) lives in this
     // same namespace and would otherwise shadow the model of the same name.
-    private SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion? Discussion => CommunitySampleData.Find(Id);
+    private SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion? _d;
+    private int _loadedId = -1;
+    private bool _loading = true;
+    private CancellationTokenSource? _cts;
+
+    /// <summary>The Figma copy for a brand-new question; any other status is spelled out.</summary>
+    private string StatusLabel => _d?.Status switch
+    {
+        DiscussionStatus.WaitingForReply => "Waiting for Answers",
+        null => "Waiting for Answers",
+        _ => _d!.StatusLabel
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id) return;
+        _loadedId = Id;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        _d = (await Api.GetDiscussionAsync(Id, ct, countView: false)).Item;
+
+        if (ct.IsCancellationRequested) return;
+        _loading = false;
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
 }

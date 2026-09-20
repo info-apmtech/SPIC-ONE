@@ -1,12 +1,15 @@
 @page "/DigitalLibrary"
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject DigitalLibraryApi Api
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 
 <PageTitle>Digital Library - SPIC ONE</PageTitle>
 
 @*
     Digital Library landing page (design: Figma "SPIC" > Digital Library, screenshot supplied
-    2026-09-20). Static sample content for now; the content service comes in the next step.
+    2026-09-20). Stats, category counts and content all come from api/Library.
     Layout: hero + search + three category cards, featured strip, content grid.
     Category cards, their headings and "View All Content" open the All Content list
     (/DigitalLibrary/content) pre-filtered by type.
@@ -73,33 +76,52 @@
     <section class="dl-section">
         <h2 class="dl-section-title">Featured Content</h2>
 
-        <div class="dl-featured">
-            @foreach (var f in Items.Where(i => i.Published).Take(3))
-            {
-                <article class="dl-feat">
-                    <img class="dl-feat-img" src="@f.Image" alt="" loading="lazy" />
-                    <div class="dl-feat-body">
-                        <h3 class="dl-feat-title">@f.Title</h3>
-                        <p class="dl-feat-desc">@f.Description</p>
-                        <a class="dl-more" href="@($"DigitalLibrary/view/{f.Id}")">
-                            @(f.Type == DigitalLibraryType.Videos ? "Explore Videos" : "Open") <i class="bi bi-chevron-right"></i>
-                        </a>
-                    </div>
-                </article>
-            }
-        </div>
+        @if (_loading)
+        {
+            <Skeleton Variant="card" Rows="3" />
+        }
+        else if (_failed)
+        {
+            <EmptyState Icon="bi-wifi-off" Title="The library is not available" Message="@_error">
+                <button type="button" class="btn btn-outline-success" @onclick="Reload">Try again</button>
+            </EmptyState>
+        }
+        else if (Items.Count == 0)
+        {
+            <EmptyState Icon="bi-collection" Title="Nothing in the library yet" Message="Add a product, an AI video or a brochure to get started.">
+                <button type="button" class="btn btn-success" @onclick="() => _createOpen = true">Add Content</button>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="dl-featured">
+                @foreach (var f in Items.Where(i => i.Published).Take(3))
+                {
+                    <article class="dl-feat">
+                        <img class="dl-feat-img" src="@f.Image" alt="" loading="lazy" />
+                        <div class="dl-feat-body">
+                            <h3 class="dl-feat-title">@f.Title</h3>
+                            <p class="dl-feat-desc">@f.Description</p>
+                            <a class="dl-more" href="@($"DigitalLibrary/view/{f.Id}")">
+                                @(f.Type == DigitalLibraryType.Videos ? "Explore Videos" : "Open") <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </div>
+                    </article>
+                }
+            </div>
 
-        <a class="dl-viewall" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
+            <a class="dl-viewall" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
 
-        <div class="dl-grid">
-            @foreach (var item in Items.Take(9))
-            {
-                <DigitalLibraryCard @key="item.Id" Item="item"
-                                    OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
-            }
-        </div>
+            <div class="dl-grid">
+                @foreach (var item in Items.Take(9))
+                {
+                    <DigitalLibraryCard @key="item.Id" Item="item"
+                                        OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
+                }
+            </div>
 
-        <a class="dl-viewall dl-viewall-end" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
+            <a class="dl-viewall dl-viewall-end" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
+        }
     </section>
 
     <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
@@ -111,6 +133,10 @@
     private DigitalLibraryItem? _unpublishTarget;
 
     private string _query = "";
+
+    private bool _loading = true;
+    private bool _failed;
+    private string? _error;
 
     private static readonly string[] Suggestions =
     {
@@ -129,12 +155,48 @@
             "bi-journal-bookmark-fill", "bi-file-earmark-pdf", "Brochures", "Explore Brochures"),
     };
 
-    // Sample content until the library API exists (shared with the All Content list).
-    private readonly List<DigitalLibraryItem> Items = DigitalLibrarySampleData.Create(16);
+    private List<DigitalLibraryItem> Items { get; set; } = new();
+    private LibraryStatsDto? _stats;
 
-    private int Count(DigitalLibraryType t) => Items.Count(i => i.Type == t);
+    protected override Task OnInitializedAsync() => Reload();
 
-    private static string ListHref(DigitalLibraryType t) => $"DigitalLibrary/content?type={t.ToString().ToLowerInvariant()}";
+    private async Task Reload()
+    {
+        _loading = true;
+        _failed = false;
+        _error = null;
+        StateHasChanged();
+
+        _stats = await Api.GetStatsAsync();
+        if (_stats is null)
+        {
+            _error = Api.LastError;
+        }
+
+        var page = await Api.ListAsync(page: 1, pageSize: 12);
+        if (Api.LastError is not null)
+        {
+            _failed = true;
+            _error ??= Api.LastError;
+            Toast.Error(_error ?? "The library could not be loaded.");
+        }
+        else
+        {
+            Items = Api.ToItems(page.Items);
+        }
+
+        _loading = false;
+    }
+
+    // Counts come from the stats endpoint so the cards show the whole library, not one page.
+    private int Count(DigitalLibraryType t) => t switch
+    {
+        DigitalLibraryType.Videos => _stats?.Videos ?? 0,
+        DigitalLibraryType.Products => _stats?.Products ?? 0,
+        _ => _stats?.Brochures ?? 0
+    };
+
+    private static string ListHref(DigitalLibraryType t) => $"DigitalLibrary/content?type={DigitalLibraryItem.RouteOf(t)}";
 
     private void OpenType(DigitalLibraryType t) => Nav.NavigateTo("/" + ListHref(t));
 
@@ -150,22 +212,30 @@
         Search();
     }
 
-    private void Edit(DigitalLibraryItem item) => Nav.NavigateTo($"/DigitalLibrary/add/{item.Type.ToString().ToLowerInvariant()}?id={item.Id}");
+    private void Edit(DigitalLibraryItem item) => Nav.NavigateTo($"/DigitalLibrary/add/{DigitalLibraryItem.RouteOf(item.Type)}?id={item.Id}");
 
     private async Task Delete(DigitalLibraryItem item)
     {
         if (!await Toast.ConfirmAsync("Delete content", $"Delete \"{item.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
+        if (!await Api.DeleteAsync(item.Id)) { Toast.Error(Api.LastError ?? "The item could not be deleted."); return; }
         Items.Remove(item);
         Toast.Success("Content deleted.");
+        await Reload();
     }
 
-    private void Archive(DigitalLibraryItem item)
+    private async Task Archive(DigitalLibraryItem item)
     {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Archived) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be archived.");
+            return;
+        }
         Items.Remove(item);
         Toast.Info("Content archived.");
+        await Reload();
     }
 
-    private void TogglePublish(DigitalLibraryItem item)
+    private async Task TogglePublish(DigitalLibraryItem item)
     {
         if (item.Published)
         {
@@ -173,14 +243,28 @@
             return;
         }
 
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Published) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be published.");
+            return;
+        }
         item.Published = true;
+        item.Status = LibraryContentStatus.Published;
         Toast.Success("Content published.");
+        await Reload();
     }
 
-    private void ConfirmUnpublish(DigitalLibraryItem item)
+    private async Task ConfirmUnpublish(DigitalLibraryItem item)
     {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Draft) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be unpublished.");
+            return;
+        }
         item.Published = false;
+        item.Status = LibraryContentStatus.Draft;
         _unpublishTarget = null;
         Toast.Success("Content moved to Drafts.");
+        await Reload();
     }
 }

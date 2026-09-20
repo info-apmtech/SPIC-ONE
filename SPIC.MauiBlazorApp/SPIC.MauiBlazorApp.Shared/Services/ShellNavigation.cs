@@ -84,15 +84,15 @@ public static class ShellNavigation
         new("DigitalLibrary", "Digital Library", "bi-collection-play", "/DigitalLibrary", "DigitalLibrary")
         {
             ShortLabel = "Library",
-            // New module without a PagePermission key yet: admins only (mirrors NavMenu).
-            Rule = s => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+            // Gated by the DigitalLibrary page permission (Admin / CorporateAdmin bypass CanAccess).
+            Rule = s => s.CanAccess("DigitalLibrary")
         },
 
         new("Community", "Knowledge Community", "bi-people-fill", "/Community", "Community")
         {
             ShortLabel = "Community",
-            // New module without a PagePermission key yet: admins only (mirrors NavMenu).
-            Rule = s => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+            // Live module: the PagePermission key exists, so the designation decides (mirrors NavMenu).
+            Rule = s => s.CanAccess("Community")
         },
 
         // ---- shell hubs (phone destinations; PageGuard opens them to every signed-in user with a

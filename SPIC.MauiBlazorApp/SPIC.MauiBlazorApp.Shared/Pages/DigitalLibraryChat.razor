@@ -4,6 +4,9 @@
 @inject ToastService Toast
 @inject IJSRuntime JS
 @inject LoginState LoginState
+@inject DigitalLibraryApi Api
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 @implements IDisposable
 
 <PageTitle>Ask SPIC AI - Digital Library - SPIC ONE</PageTitle>
@@ -11,7 +14,8 @@
 @*
     SPIC AI assistant (Figma frame supplied 2026-09-20): conversation list on the left,
     welcome screen with suggestion cards or the conversation thread on the right, composer
-    with source, attach, voice and send. Replies are simulated until the assistant API exists.
+    with source, attach, voice and send. Conversations, messages and answers come from
+    api/Library/assistant; ?q= and ?about= start a conversation straight away.
     Phone: the list opens as a sheet from the "Chats" button; the composer sits above the tab bar.
 *@
 
@@ -45,18 +49,36 @@
             }
         </div>
 
-        @foreach (var group in Conversations.Where(c => _search == "" || c.Title.Contains(_search, StringComparison.OrdinalIgnoreCase)).GroupBy(c => c.Group))
+        @if (_listLoading)
         {
-            <div class="ch-group">
-                <div class="ch-group-head">@group.Key <i class="bi bi-chevron-down"></i></div>
-                @foreach (var c in group)
-                {
-                    <a class="ch-conv @(c.Id == ConversationId ? "active" : "")" href="@($"DigitalLibrary/chat/{c.Id}")" @onclick="() => _listOpen = false">@c.Title</a>
-                }
-            </div>
+            <div class="ch-group"><Skeleton Variant="text" Rows="4" /></div>
+        }
+        else
+        {
+            foreach (var group in GroupedConversations)
+            {
+                <div class="ch-group">
+                    <div class="ch-group-head">@group.Key <i class="bi bi-chevron-down"></i></div>
+                    @foreach (var c in group)
+                    {
+                        <div class="ch-conv-row">
+                            <a class="ch-conv @(c.Id == ConversationId ? "active" : "")" href="@($"DigitalLibrary/chat/{c.Id}")" @onclick="() => _listOpen = false">@c.Title</a>
+                            <button type="button" class="ch-icon-btn ch-conv-del" aria-label="@($"Delete {c.Title}")" title="Delete conversation" @onclick="() => DeleteConversation(c)"><i class="bi bi-trash"></i></button>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (FilteredConversations.Count == 0)
+            {
+                <p class="ch-side-empty">No conversations yet. Ask a question to start one.</p>
+            }
         }
 
-        <button type="button" class="ch-viewall" @onclick='() => Toast.Info("Conversation history arrives with the assistant API.")'>View all Conversation <i class="bi bi-chat-left-text"></i></button>
+        @if (!_showAll && FilteredConversations.Count > VisibleConversations)
+        {
+            <button type="button" class="ch-viewall" @onclick="() => _showAll = true">View all Conversation <i class="bi bi-chat-left-text"></i></button>
+        }
     </aside>
 
     <section class="ch-main">
@@ -70,7 +92,11 @@
         </header>
 
         <div class="ch-body" @ref="_body">
-            @if (Current is null)
+            @if (_threadLoading)
+            {
+                <div class="ch-thread"><Skeleton Variant="text" Rows="5" /></div>
+            }
+            else if (Current is null)
             {
                 <div class="ch-welcome">
                     <span class="ch-orb" aria-hidden="true"></span>
@@ -93,7 +119,8 @@
                 <div class="ch-thread" aria-live="polite">
                     @foreach (var m in Current.Messages)
                     {
-                        <div class="ch-msg @(m.FromUser ? "user" : "ai")">
+                        var fromUser = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase);
+                        <div class="ch-msg @(fromUser ? "user" : "ai")">
                             <div class="ch-msg-col">
                                 <div class="ch-bubble">
                                     <p>@m.Text</p>
@@ -105,29 +132,56 @@
                                                 @* Only library users can open the item page; everyone else sees the title as plain text. *@
                                                 @if (CanBrowseLibrary)
                                                 {
-                                                    <a class="ch-source" href="@($"DigitalLibrary/view/{src.Id}")"><i class="bi @SourceIcon(src)"></i> @src.Title</a>
+                                                    <a class="ch-source" href="@($"DigitalLibrary/view/{src.ContentId}")"><i class="bi @SourceIcon(src.Kind)"></i> @src.Title</a>
                                                 }
                                                 else
                                                 {
-                                                    <span class="ch-source ch-source-static"><i class="bi @SourceIcon(src)"></i> @src.Title</span>
+                                                    <span class="ch-source ch-source-static"><i class="bi @SourceIcon(src.Kind)"></i> @src.Title</span>
                                                 }
                                             }
                                         </div>
                                     }
                                 </div>
-                                <span class="ch-time">@m.Time.ToString("H:mm") <i class="bi bi-check2-all"></i></span>
+                                <span class="ch-time">@m.CreatedAt.ToString("H:mm") <i class="bi bi-check2-all"></i></span>
                             </div>
-                            <span class="ch-avatar @(m.FromUser ? "ch-avatar-user" : "")" aria-hidden="true">
-                                @if (m.FromUser) { <text>@UserInitial</text> } else { <i class="bi bi-robot"></i> }
+                            <span class="ch-avatar @(fromUser ? "ch-avatar-user" : "")" aria-hidden="true">
+                                @if (fromUser) { <text>@UserInitial</text> } else { <i class="bi bi-robot"></i> }
                             </span>
                         </div>
                     }
+
+                    @if (_pending is not null)
+                    {
+                        <div class="ch-msg user">
+                            <div class="ch-msg-col">
+                                <div class="ch-bubble"><p>@_pending</p></div>
+                                <span class="ch-time">@DateTime.Now.ToString("H:mm")</span>
+                            </div>
+                            <span class="ch-avatar ch-avatar-user" aria-hidden="true">@UserInitial</span>
+                        </div>
+                    }
+
                     @if (_thinking)
                     {
                         <div class="ch-msg ai">
                             <div class="ch-msg-col"><div class="ch-bubble ch-typing"><span></span><span></span><span></span></div></div>
                             <span class="ch-avatar" aria-hidden="true"><i class="bi bi-robot"></i></span>
                         </div>
+                    }
+
+                    @if (!_thinking && FollowUps.Count > 0)
+                    {
+                        <div class="ch-followups">
+                            @foreach (var s in FollowUps)
+                            {
+                                <button type="button" class="ch-followup" @onclick="() => Ask(s)">@s</button>
+                            }
+                        </div>
+                    }
+
+                    @if (_provider == "keyword")
+                    {
+                        <p class="ch-provider-note"><i class="bi bi-info-circle"></i> Answers from library content</p>
                     }
                 </div>
             }
@@ -144,8 +198,8 @@
                     <option>All content</option><option>AI Videos</option><option>Product Information</option><option>Product Brochures</option>
                 </select>
                 <span class="ch-tools-spacer"></span>
-                <button type="button" class="ch-btn ch-btn-outline" @onclick='() => Toast.Info("Attachments arrive with the assistant API.")'><i class="bi bi-paperclip"></i> <span>Attach</span></button>
-                <button type="button" class="ch-btn ch-btn-outline" @onclick='() => Toast.Info("Voice input arrives with the assistant API.")'><i class="bi bi-mic"></i> <span>Voice</span></button>
+                <button type="button" class="ch-btn ch-btn-outline" @onclick='() => Toast.Info("Attachments are not part of the assistant yet.")'><i class="bi bi-paperclip"></i> <span>Attach</span></button>
+                <button type="button" class="ch-btn ch-btn-outline" @onclick='() => Toast.Info("Voice input is not part of the assistant yet.")'><i class="bi bi-mic"></i> <span>Voice</span></button>
                 <button type="submit" class="ch-btn ch-btn-primary" disabled="@(string.IsNullOrWhiteSpace(_input) || _thinking)"><i class="bi bi-send"></i> Send</button>
             </div>
         </form>
@@ -163,15 +217,19 @@
     [SupplyParameterFromQuery(Name = "q")] public string? InitialQuestion { get; set; }
     [SupplyParameterFromQuery(Name = "about")] public int? AboutId { get; set; }
 
+    private const int VisibleConversations = 8;
+
     // "Ask SPIC AI" is reachable by every signed-in user, so this page must not offer
     // links into the rest of the Digital Library (list, content, item pages) unless the
     // user can actually open them. Admin/CorporateAdmin bypass CanAccess.
     private bool CanBrowseLibrary => LoginState.CanAccess("DigitalLibrary");
 
-    private static string SourceIcon(DigitalLibraryItem src) =>
-        src.Type == DigitalLibraryType.Videos ? "bi-camera-video"
-        : src.Type == DigitalLibraryType.Brochures ? "bi-file-earmark-pdf"
-        : "bi-box-seam";
+    private static string SourceIcon(LibraryContentKind kind) => kind switch
+    {
+        LibraryContentKind.Video => "bi-camera-video",
+        LibraryContentKind.Brochure => "bi-file-earmark-pdf",
+        _ => "bi-box-seam"
+    };
 
     private sealed record Suggestion(string Icon, string Title, string Description, string Prompt);
     private static readonly Suggestion[] Suggestions =
@@ -182,47 +240,30 @@
         new("bi-box-seam", "Explain product usage", "Understand how our products work and are used", "How do I apply NPK 20-20 in cotton?"),
     };
 
-    private sealed class Message
+    private List<AssistantConversationDto> _conversations = new();
+    private AssistantConversationDetailDto? Current { get; set; }
+
+    private List<AssistantConversationDto> FilteredConversations =>
+        _conversations.Where(c => _search == "" || c.Title.Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private IEnumerable<IGrouping<string, AssistantConversationDto>> GroupedConversations =>
+        (_showAll ? FilteredConversations : FilteredConversations.Take(VisibleConversations))
+            .GroupBy(GroupOf);
+
+    private static string GroupOf(AssistantConversationDto c)
     {
-        public bool FromUser { get; init; }
-        public string Text { get; init; } = "";
-        public DateTime Time { get; init; } = DateTime.Now;
-        public List<DigitalLibraryItem> Sources { get; init; } = new();
+        var day = c.UpdatedAt.Date;
+        if (day == DateTime.Today) return "Today";
+        if (day == DateTime.Today.AddDays(-1)) return "Yesterday";
+        return "Earlier";
     }
 
-    private sealed class Conversation
-    {
-        public int Id { get; init; }
-        public string Title { get; set; } = "";
-        public string Group { get; init; } = "Today";
-        public List<Message> Messages { get; } = new();
-    }
-
-    private static readonly List<DigitalLibraryItem> Library = DigitalLibrarySampleData.Create(30);
-    private static int _nextId = 100;
-
-    // Sample history until the assistant API exists (shared across visits in this session).
-    private static readonly List<Conversation> Conversations = new()
-    {
-        Seed(1, "Tell me about DAP", "Today"),
-        Seed(2, "Benefits of Balanced Nutrition", "Today"),
-        Seed(3, "Find SPIC Brochure", "Today"),
-        Seed(4, "NPK fertilizer information", "Yesterday"),
-        Seed(5, "Product usage guide", "Yesterday"),
-        Seed(6, "SPIC Video on crop health", "Yesterday"),
-    };
-
-    private static Conversation Seed(int id, string title, string group)
-    {
-        var c = new Conversation { Id = id, Title = title, Group = group };
-        c.Messages.Add(new Message { FromUser = true, Text = title, Time = DateTime.Now.AddHours(-3) });
-        c.Messages.Add(new Message { FromUser = false, Text = Answer(title), Time = DateTime.Now.AddHours(-3).AddSeconds(4), Sources = Library.Take(2).ToList() });
-        return c;
-    }
-
-    private Conversation? Current => ConversationId is int id ? Conversations.FirstOrDefault(c => c.Id == id) : null;
+    private List<string> FollowUps =>
+        Current?.Messages.LastOrDefault(m => !string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))?.Suggestions
+        ?? new List<string>();
 
     private ElementReference _body;
+
     private string UserInitial
     {
         get
@@ -246,38 +287,94 @@
             return "U";
         }
     }
+
     private string _input = "";
     private string _source = "";
     private string _search = "";
     private bool _listOpen;
     private bool _searchOpen;
     private bool _menuOpen = true;
+    private bool _showAll;
     private bool _thinking;
+    private bool _listLoading = true;
+    private bool _threadLoading;
+    private string? _pending;
+    private string? _provider;
+    private int? _loadedId;
+    private bool _started;
     private CancellationTokenSource? _cts;
 
-    protected override void OnParametersSet()
+    protected override async Task OnInitializedAsync()
     {
-        if (!string.IsNullOrWhiteSpace(InitialQuestion) && ConversationId is null)
+        await LoadConversations();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId != ConversationId)
         {
-            var q = InitialQuestion;
-            InitialQuestion = null;
-            _ = Ask(q);
+            _loadedId = ConversationId;
+            _provider = null;
+            await LoadThread();
         }
-        else if (AboutId is int about && ConversationId is null)
+
+        // ?q= / ?about= start one conversation, once.
+        if (!_started && ConversationId is null)
         {
-            var item = Library.FirstOrDefault(i => i.Id == about);
-            AboutId = null;
-            if (item is not null) _ = Ask($"Tell me about \"{item.Title}\"");
+            if (!string.IsNullOrWhiteSpace(InitialQuestion))
+            {
+                _started = true;
+                await Ask(InitialQuestion!);
+            }
+            else if (AboutId is int about)
+            {
+                _started = true;
+                // Name the item in the question when the user may read it; otherwise the
+                // server resolves it from AboutContentId.
+                var detail = CanBrowseLibrary ? await Api.GetAsync(about) : null;
+                await Ask(detail is null ? "Tell me about this library item" : $"Tell me about \"{detail.Title}\"", about);
+            }
         }
+    }
+
+    private async Task LoadConversations()
+    {
+        _listLoading = true;
+        _conversations = await Api.GetConversationsAsync();
+        if (Api.LastError is not null) Toast.Error(Api.LastError);
+        _listLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadThread()
+    {
+        if (ConversationId is not int id)
+        {
+            Current = null;
+            return;
+        }
+
+        _threadLoading = true;
+        StateHasChanged();
+
+        Current = await Api.GetConversationAsync(id);
+        if (Current is null && Api.LastError is not null)
+        {
+            Toast.Error(Api.LastError);
+        }
+
+        _threadLoading = false;
     }
 
     private void NewChat()
     {
         _listOpen = false;
+        _pending = null;
+        _provider = null;
         Nav.NavigateTo("/DigitalLibrary/chat");
     }
 
-    private void Share() => Toast.Info(Current is null ? "Start a conversation to share it." : "Share link copied (available with the assistant API).");
+    private void Share() => Toast.Info(Current is null ? "Start a conversation to share it." : "Sharing a conversation is not part of the assistant yet.");
 
     private Task Send()
     {
@@ -287,52 +384,89 @@
         return Ask(text);
     }
 
-    private async Task Ask(string question)
+    private async Task Ask(string question, int? aboutContentId = null)
     {
-        var conv = Current;
-        if (conv is null)
+        if (_thinking || string.IsNullOrWhiteSpace(question)) return;
+
+        // "Select Source" narrows the assistant's retrieval to one content kind.
+        var text = question.Trim();
+        LibraryContentKind? kind = _source switch
         {
-            conv = new Conversation { Id = _nextId++, Title = question.Length > 40 ? question[..40] + "…" : question, Group = "Today" };
-            Conversations.Insert(0, conv);
-            conv.Messages.Add(new Message { FromUser = true, Text = question });
-            Nav.NavigateTo($"/DigitalLibrary/chat/{conv.Id}");
+            "AI Videos" => LibraryContentKind.Video,
+            "Product Information" => LibraryContentKind.Product,
+            "Product Brochures" => LibraryContentKind.Brochure,
+            _ => null
+        };
+
+        _pending = text;
+        _thinking = true;
+        StateHasChanged();
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+
+        var response = await Api.AskAsync(new AssistantAskRequest
+        {
+            ConversationId = ConversationId,
+            Question = text,
+            AboutContentId = aboutContentId,
+            Kind = kind
+        }, _cts.Token);
+
+        _thinking = false;
+        _pending = null;
+
+        if (response is null)
+        {
+            Toast.Error(Api.LastError ?? "SPIC AI could not answer just now.");
+            return;
+        }
+
+        _provider = response.Provider;
+
+        if (Current is null || Current.Id != response.ConversationId)
+        {
+            Current = new AssistantConversationDetailDto
+            {
+                Id = response.ConversationId,
+                Title = response.ConversationTitle,
+                CreatedAt = response.UserMessage.CreatedAt,
+                UpdatedAt = response.Reply.CreatedAt,
+                Messages = new List<AssistantMessageDto> { response.UserMessage, response.Reply }
+            };
+            // The thread is already in hand, so the URL change must not trigger a reload.
+            _loadedId = response.ConversationId;
+            Nav.NavigateTo($"/DigitalLibrary/chat/{response.ConversationId}");
         }
         else
         {
-            conv.Messages.Add(new Message { FromUser = true, Text = question });
+            Current.Messages.Add(response.UserMessage);
+            Current.Messages.Add(response.Reply);
+            Current.UpdatedAt = response.Reply.CreatedAt;
         }
 
-        _thinking = true;
-        StateHasChanged();
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        try
-        {
-            await Task.Delay(900, _cts.Token);
-            conv.Messages.Add(new Message { FromUser = false, Text = Answer(question), Sources = Related(question) });
-        }
-        catch (TaskCanceledException) { }
-        finally
-        {
-            _thinking = false;
-        }
+        await LoadConversations();
     }
 
-    // Placeholder answers until the assistant API exists.
-    private static string Answer(string q) => q.ToLowerInvariant() switch
+    private async Task DeleteConversation(AssistantConversationDto conversation)
     {
-        var s when s.Contains("dap") => "DAP (Di-ammonium Phosphate) is SPIC's most trusted phosphatic fertilizer, containing 18% nitrogen and 46% P2O5. It is ideal for basal application across all crops and gives strong root development in the early growth stages.",
-        var s when s.Contains("brochure") => "Here are the latest brochures in the library. Each one opens in the viewer with a download option.",
-        var s when s.Contains("video") => "These AI videos match your question. They explain the product, its benefits and the recommended application method.",
-        var s when s.Contains("npk") || s.Contains("cotton") => "For cotton, apply SPIC NPK 20-20 as a basal dose of 100 to 125 kg per acre, followed by split top-dressing at squaring and flowering. Avoid application during waterlogging.",
-        _ => "I found related content in the Digital Library. Open any source below for the full details, or ask a follow-up question."
-    };
+        if (!await Toast.ConfirmAsync("Delete conversation", $"Delete \"{conversation.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
 
-    private static List<DigitalLibraryItem> Related(string q)
-    {
-        var s = q.ToLowerInvariant();
-        var type = s.Contains("brochure") ? DigitalLibraryType.Brochures : s.Contains("video") ? DigitalLibraryType.Videos : DigitalLibraryType.Products;
-        return Library.Where(i => i.Type == type).Take(3).ToList();
+        if (!await Api.DeleteConversationAsync(conversation.Id))
+        {
+            Toast.Error(Api.LastError ?? "The conversation could not be deleted.");
+            return;
+        }
+
+        _conversations.Remove(conversation);
+        Toast.Success("Conversation deleted.");
+
+        if (ConversationId == conversation.Id)
+        {
+            Current = null;
+            _loadedId = null;
+            Nav.NavigateTo("/DigitalLibrary/chat");
+        }
     }
 
     private int _renderedCount;
