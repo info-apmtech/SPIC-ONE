@@ -235,3 +235,30 @@ Each merged workstream goes to staging, then to a **zero-traffic revision** of t
 - All-pages, all-roles sweep (2026-09-20 night, local API + local database, QA designation "QA All Pages" holding every route key): web at 375 px for Admin, MO, RM, SMM, Director, Dealer, SpecialAdmin and Farmer, Admin also at 1280 px; phone (Xiaomi, portrait 392 px, Debug build through `adb reverse`) for Admin. 128 routes each. No blank page, no horizontal overflow, no script error for any role. The only flags are the intended rules: AVPApprovals / SMMApprovals bounce non-AVP/SMM roles, GuestHouseMaster is admin-only, CreditLimitForGreenStar / GuestDetails / GuestHouseBooking / Rooms are wizard entry points, Dealer is kept off SchemeApproval, `/not-found` goes to the role's landing page, LogisticsMaster shows a "no records found" text the harness flags, and two Digital Library test items point at cover files that were uploaded by another API instance (404 image). Reports: `tools/ui-sweep/out/web-role-*` and `device-admin-final`.
 - 2026-09-21 (SAS v1): web sweep re-run after the SAS pages landed: 131 routes for MDO, Admin, Dealer, Farmer, JMDO, MO, RM and SMM at 375 px and Admin at 1280 px; only the same intended flags as before (reports `tools/ui-sweep/out/sas-web-*`). Phone sweep pending USB re-authorisation of the test phone.
 - Visual review of every page (2026-09-21): scroll-through phone screenshots of all 131 routes (MDO, plus admin-only pages as admin) and true full-page desktop screenshots at 1366 px were reviewed by seven agents by workstream, who fixed misalignment, clipped or off-screen controls, broken placeholder images and sub-44 px targets in their own page files; the coordinator fixed the shell (header actions fill their row, 44 px brand link and sheet close buttons, sidebar icon indent, submenu clipping) and Consignment Details. Notable root causes: the Digital Library add wizard's root class was redefined as a pager button (`.pf-page`, 36 px tall) which pushed "Add Section" under the footer; Sample Collection status tiles sat in a hidden scroller; many report/budget/CSR tables now become cards on phones so their row actions are reachable; About Us and several SDWA pages used a decorative ellipse asset as images; two unprefixed global classes (`.theme-green`, `.badge-green`) leak watermarks/dots onto other pages and are neutralised per page (prefixing them in `ProprietorDetails.css` / `Schemes.css` is a follow-up). Product decisions left open: editable data grids (Annual Sales, Credit Limit, Sales Planning) and the Payment Management tables still scroll sideways on phones; wide desktop tables on CSR-1 / RM Approval / Final Report CSR keep their action column beyond 1366 px.
+
+### 2026-09-21 (phone performance)
+
+Cause of "the phone app becomes slow while accessing the menu", measured on the device with the WebView
+inspector (Debug build, admin account, `/Dashboard`): the page held about 48,000 DOM nodes because the
+dashboard rendered every submitted dealer registration as a card (about 1,200). Opening the More sheet
+took 0.2 to 0.4 s, closing it 1.1 to 2.8 s and the full menu 1.2 s, all spent diffing and laying out the
+page underneath the menu. Fixes, all on Satham:
+
+- Dashboard: cards render 30 at a time with a "Show more" row and dictionary lookups (2319efa), then the
+  filtering, sorting, counting and paging moved to the server (`GET api/DealerRegistration/dashboard/page`
+  and `/summary`; `tools/dashboard-paging-check/compare_dashboard_paging.py` proves the numbers and the
+  order equal the old client pipeline for admin, RM, SMM and MDO across six filter sets).
+- Admin list pages: BillList, AVPApprovals, SMMApprovals, ReportDashboard, Financial (Bank tab) render in
+  batches of 30 to 50; Agriculture, LocationMaster, LogisticsMaster, PVTMaster, ReportDashboard and
+  EmployeeManagementList lost their per-row list scans. Most other list pages already page through
+  `SpicDataTable` or the server.
+- Sweep tool: `dom=` per route and a `HEAVY` flag above 6,000 nodes (`tools/ui-sweep/README.md`).
+- Release builds can be inspected when launched from adb with `--ez webdebug true` (MainActivity); every
+  phone install before this date was a Debug build, which runs .NET under the interpreter.
+- Also fixed: the launcher icon (the Android manifest had no `android:icon`), the login page reloading on
+  a wrong password (the auth handler treated the sign-in call's 401 as an expired session), and the API
+  failing to start in Development without `SpicAPI/wwwroot`.
+
+Admin sweep at 375 px after the merges: 131 routes, only the intended redirects and the library test-image
+404s flagged, largest page 2,605 nodes on the local data. Still open: Release-build timings on the phone
+(needs a signed-in session), and the step-4 splits of MainLayout and SavedDealerReview.
