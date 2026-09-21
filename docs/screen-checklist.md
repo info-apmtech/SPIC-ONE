@@ -260,5 +260,13 @@ page underneath the menu. Fixes, all on Satham:
   failing to start in Development without `SpicAPI/wwwroot`.
 
 Admin sweep at 375 px after the merges: 131 routes, only the intended redirects and the library test-image
-404s flagged, largest page 2,605 nodes on the local data. Still open: Release-build timings on the phone
-(needs a signed-in session), and the step-4 splits of MainLayout and SavedDealerReview.
+404s flagged, largest page 2,605 nodes on the local data. Release build on the phone with the batched dashboard: More sheet open/close 0.07 to 0.10 s, full menu
+0.31 s (was 0.2 to 0.4 s / 1.1 to 2.8 s / 1.2 s on the Debug build), dashboard 1,640 nodes for 1,233 rows.
+
+Step 4 (split giant components), merged the same day: MainLayout 2,767 to 553 lines
+(`Components/Shell/MobileSidebar`, `TopbarUserMenu`, `TopbarSearch`, `Services/ShellSession`; menu DOM
+byte-identical for admin, MDO and dealer; logout goes through ShellSession instead of EventCallback
+parameters) and SavedDealerReview 4,076 to 1,707 lines (16 components under `Pages/DealerReview/`,
+`DealerReviewSectionBase` skips renders whose parameters did not change; 34 DOM snapshots identical
+across five roles; a 300-toggle burst renders about 31 percent faster). Final sweeps on the merged
+build: admin at 375 and 1280 px (262 checks) and MDO at 375 px, only the intended flags.
