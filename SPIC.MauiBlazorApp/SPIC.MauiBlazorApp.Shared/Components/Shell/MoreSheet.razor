@@ -3,6 +3,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject SPIC.MauiBlazorApp.Shared.Services.ShellSession Shell
 
 @*
     Full-screen "More" sheet opened from the phone BottomTabBar. Lists every accessible
@@ -102,8 +103,6 @@
 @code {
     [Parameter] public bool Open { get; set; }
     [Parameter] public EventCallback<bool> OpenChanged { get; set; }
-    /// <summary>Raised when the user taps "Log out". MainLayout owns the actual logout flow.</summary>
-    [Parameter] public EventCallback OnLogout { get; set; }
 
     private IReadOnlyList<(string? Group, IReadOnlyList<SPIC.MauiBlazorApp.Shared.Services.ShellTab> Items)> _groups
         = Array.Empty<(string?, IReadOnlyList<SPIC.MauiBlazorApp.Shared.Services.ShellTab>)>();
@@ -206,7 +205,9 @@
         _wasOpen = false;
         await DetachHistoryAsync(popHistory: false);
         await SetOpenAsync(false);
-        if (OnLogout.HasDelegate) await OnLogout.InvokeAsync();
+        // MainLayout owns the logout flow and registers it on ShellSession; no EventCallback
+        // parameter, so a parent render never forces this sheet to re-render.
+        await Shell.LogoutAsync();
     }
 
     private async Task OnKeyDown(KeyboardEventArgs e)
