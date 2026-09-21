@@ -50,6 +50,8 @@ builder.Services.AddScoped<FileDownloadService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<ConnectivityState>();
 builder.Services.AddScoped<LoginState>();
+// Shell state shared by MainLayout and the parameterless Components/Shell components.
+builder.Services.AddScoped<ShellSession>();
 builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();
 builder.Services.AddScoped<LookupCacheService>();

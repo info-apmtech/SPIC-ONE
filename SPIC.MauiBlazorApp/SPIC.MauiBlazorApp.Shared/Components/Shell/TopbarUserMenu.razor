@@ -1,0 +1,791 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+@implements IDisposable
+
+@using SPIC.Core.Entities
+
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject SPIC.MauiBlazorApp.Shared.Services.ShellSession Shell
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+@*
+    Topbar avatar button + the profile / notification / log-out card, lifted out of
+    MainLayout unchanged (same ids, classes and order, so app-interop.js
+    spic.reparentUserMenu and Layout.css keep working).
+
+    Like MobileSidebar this component takes NO parameters, so MainLayout re-rendering
+    never re-renders it - and, the other way round, opening or closing this card no
+    longer re-renders MainLayout (and therefore no longer diffs the full menu, the
+    topbar or the page body). The user's name / role / photo and the logout action are
+    read from the scoped ShellSession service instead of being passed down: an
+    EventCallback parameter would force a re-render on every parent render.
+*@
+
+<div class="user-profile-wrapper">
+
+    <button class="user-menu-toggle @(_showUserMenu ? "open" : "")"
+            type="button"
+            title="@Shell.UserName"
+            aria-label="Account menu"
+            aria-expanded="@_showUserMenu"
+            @onclick="ToggleUserMenu">
+
+        <div class="topbar-avatar-only">
+            @GetUserInitial()
+        </div>
+
+        <i class="bi bi-chevron-down topbar-user-chevron"></i>
+
+    </button>
+
+
+    @if (_showUserMenu)
+    {
+        <div class="user-menu-backdrop"
+             @onclick="CloseUserMenu">
+        </div>
+
+        <div id="userProfileMenu" class="user-profile-menu">
+
+            @* ===== Reference-style green profile header ===== *@
+            <div class="reference-profile-header">
+
+                <div class="reference-header-wave"></div>
+
+                @* Tree Pattern *@
+                   <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/logouttreeimg.svg" class="reference-leaf-pattern-img" alt="logout" />
+
+
+                <div class="reference-profile-user">
+
+                    <div class="reference-avatar-wrap">
+
+                        <div class="reference-avatar">
+                            @if (!string.IsNullOrWhiteSpace(Shell.ProfileImageUrl))
+                            {
+                                <img src="@Shell.ProfileImageUrl"
+                                     alt="@Shell.UserName"
+                                     class="reference-avatar-image" />
+                            }
+                            else
+                            {
+                                <span>@GetUserInitial()</span>
+                            }
+                        </div>
+
+                        @if (LoginState.CanAccess(PagePermission.Profile))
+                        {
+                            <button type="button"
+                                    class="reference-edit-button"
+                                    title="Profile"
+                                    @onclick="GoToProfile">
+                                
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+
+                            </button>
+                        }
+
+                    </div>
+
+
+                    <div class="reference-user-info">
+
+                        <div class="reference-user-name">
+                            @Shell.UserName
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(Shell.UserRole))
+                        {
+                            <div class="reference-user-role">
+                                @Shell.UserRole
+                            </div>
+                        }
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            @* ===== Reference-style action area ===== *@
+            <div class="reference-profile-body">
+
+                @if (LoginState.CanAccess(PagePermission.Notifications))
+                {
+                    <button type="button"
+                            class="reference-menu-action reference-notification"
+                            @onclick="GoToNotifications">
+
+                        <span class="reference-action-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                            </svg>
+                        </span>
+
+                        <span class="reference-action-label">
+                            Notification
+                        </span>
+
+                    </button>
+                }
+
+
+                <button type="button"
+                        class="reference-menu-action reference-logout"
+                        @onclick="Logout">
+
+                    <span class="reference-action-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                    </span>
+
+                    <span class="reference-action-label">
+                        Log Out
+                    </span>
+
+                </button>
+
+            </div>
+
+        </div>
+    }
+
+</div>
+
+<style>
+
+/* ================= ACCOUNT MENU TRIGGER ================= */
+
+.user-profile-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    background: transparent;
+}
+
+.user-menu-toggle {
+    position: relative;
+    z-index: 1103;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.topbar-avatar-only {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #168a57;
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 700;
+    text-transform: uppercase;
+    user-select: none;
+    transition: transform 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+.topbar-user-chevron {
+    color: #8a94a3;
+    font-size: 11px;
+    line-height: 1;
+    transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.user-menu-toggle:hover .topbar-user-chevron,
+.user-menu-toggle:focus .topbar-user-chevron {
+    color: #08794a;
+}
+
+.user-menu-toggle.open .topbar-user-chevron {
+    color: #08794a;
+    transform: rotate(180deg);
+}
+
+.user-menu-toggle:hover,
+.user-menu-toggle:focus {
+    outline: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+    .user-menu-toggle:hover .topbar-avatar-only,
+    .user-menu-toggle:focus .topbar-avatar-only {
+        background: #0f7c4c;
+        box-shadow: 0 4px 12px rgba(15, 124, 76, 0.20);
+        transform: translateY(-1px);
+    }
+
+.user-menu-toggle.open .topbar-avatar-only {
+    background: #0d7145;
+    box-shadow: 0 0 0 3px rgba(13, 113, 69, 0.12);
+}
+
+.user-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1099;
+    background: transparent;
+    cursor: default;
+}
+
+
+/* ================= PROFESSIONAL PROFILE CARD ================= */
+
+.user-profile-menu {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    z-index: 1102;
+    width: 350px; /* Widened slightly to match figma proportions */
+    padding: 0;
+    border: none;
+    border-radius: 20px; /* Softer rounded corners */
+    background: #ffffff;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    animation: userMenuIn 0.16s ease-out;
+}
+
+@@keyframes userMenuIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+
+/* Green header */
+.reference-profile-header {
+    position: relative;
+    min-height: 145px;
+    overflow: hidden;
+    background: #0B7542; /* Updated to exact Figma tone */
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+}
+
+/* Large overlay circle on the left */
+.reference-header-wave {
+    position: absolute;
+    left: -50px;
+    top: -60px;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: #148351;
+    pointer-events: none;
+}
+
+/* Tree pattern styling */
+.reference-leaf-pattern {
+    position: absolute;
+    right: -10px;
+    top: 0px;
+    width: 170px;
+    height: 145px;
+    color: rgba(255, 255, 255, 0.12);
+    pointer-events: none;
+}
+
+
+/* Header user info positioning */
+.reference-profile-user {
+    position: relative;
+    z-index: 2;
+    min-height: 145px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 28px 24px;
+}
+
+.reference-avatar-wrap {
+    position: relative;
+    flex: 0 0 auto;
+}
+
+/* Circular avatar */
+.reference-avatar {
+    width: 76px;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 4px solid #ffffff; 
+    border-radius: 50%;
+    background: #ffffff;
+    color: #0d7042;
+    font-size: 26px;
+    font-weight: 700;
+    text-transform: uppercase;
+    user-select: none;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+
+.reference-avatar-image {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+}
+
+/* Small overlapping edit button */
+.reference-edit-button {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-radius: 8px; 
+    background: #ffffff;
+    color: #0b7542;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+}
+
+    .reference-edit-button:hover,
+    .reference-edit-button:focus {
+        outline: none;
+        background: #f0fdf4;
+    }
+
+    .reference-edit-button svg {
+        width: 15px;
+        height: 15px;
+        stroke-width: 2.2;
+    }
+
+.reference-user-info {
+    min-width: 0;
+    flex: 1;
+}
+
+/* Text styling */
+.reference-user-name {
+    max-width: 200px;
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.2;
+    margin-bottom: 4px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow-wrap: anywhere;
+    letter-spacing: 0.3px;
+}
+
+.reference-user-role {
+    max-width: 200px;
+    color: #E2F2EA;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+
+/* White action body with buttons */
+.reference-profile-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 24px;
+    background: #ffffff;
+    border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
+}
+
+/* Base button styling */
+.reference-menu-action {
+    width: 100%;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 20px;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+    .reference-menu-action:hover,
+    .reference-menu-action:focus {
+        outline: none;
+        transform: scale(0.99);
+        filter: brightness(0.97);
+    }
+
+.reference-action-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.reference-action-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+.reference-action-label {
+    font-size: 17px;
+    font-weight: 500;
+    line-height: 1;
+}
+
+/* Notification Button Colors */
+.reference-notification {
+    background: #ECFCF3;
+    color: #107445;
+}
+
+/* Log Out Button Card Design - Full Override */
+.reference-logout {
+    height: auto !important;
+    padding: 20px !important;
+    gap: 16px !important;
+    background: #FEEFEA !important;
+    color: #D84C4B !important;
+    border-radius: 16px !important;
+    border: none !important;
+    display: flex !important;
+    align-items: center !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+}
+
+.reference-logout:hover,
+.reference-logout:focus {
+    outline: none;
+    background: #FCDCDA !important;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(216, 76, 75, 0.15);
+}
+
+.reference-logout:active {
+    transform: translateY(0);
+}
+
+.reference-logout .reference-action-label {
+    font-size: 18px;
+    font-weight: 500;
+}
+
+.reference-logout .reference-action-icon {
+    flex: 0 0 auto;
+    display: inline-flex;
+}
+
+.reference-logout .reference-action-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+
+/* ================================================================
+   RESPONSIVE – Mobile / Tablet  (≤ 768 px)
+
+   ROOT CAUSE OF OVERLAP:
+   On mobile the .user-profile-menu is position:absolute relative
+   to .user-profile-wrapper (at the far-right of the topbar).
+   With right:-2px and a card that is nearly as wide as the screen,
+   the card extends far to the LEFT, overlapping the SPIC brand,
+   hamburger button, and (when open) the mobile sidebar/offcanvas.
+
+   FIX:
+   On mobile we switch the card to position:FIXED so it breaks out
+   of every stacking context (sidebar, topbar, content-wrap) and
+   anchors itself to the viewport top-right corner.  This guarantees
+   the card is:
+     • Always fully visible inside the viewport.
+     • Never hidden behind / overlapping the sidebar.
+     • Correctly aligned regardless of which topbar is visible.
+     • Responsive from 320 px to any tablet width.
+   The backdrop (.user-menu-backdrop) is already position:fixed/inset:0
+   so it continues to work correctly.
+   The desktop behaviour (position:absolute, right:0) is UNCHANGED.
+   ================================================================ */
+@@media (max-width: 768px) {
+
+    /* Give the avatar toggle a full 44px touch target (tokens.css --tap-min) */
+    .user-menu-toggle {
+        min-height: var(--tap-min, 44px);
+        min-width: var(--tap-min, 44px);
+        padding: 2px 4px;
+/* Allow Bootstrap mobile offcanvas to stay above profile button */
+    z-index: auto;
+    }
+
+    .topbar-user-text {
+        max-width: 120px;
+    }
+
+    /*
+     * KEY FIX: Switch the profile card from position:absolute
+     * (relative to .user-profile-wrapper) to position:FIXED
+     * (relative to the viewport).
+     *
+     * Placement: anchored to the top-right corner of the viewport,
+     * just below the topbar area (~60 px from top) with 8 px inset
+     * from the right edge.  The width is clamped so it always fits
+     * within the viewport even on 320 px devices.
+     *
+     * z-index 1102 keeps it above the offcanvas sidebar (1045)
+     * and the backdrop (1099) and the mobile-topbar (100).
+     */
+    .user-profile-menu {
+        position: fixed !important;
+        top: 62px !important;              /* just below the header area */
+        right: 8px !important;
+        left: auto !important;
+        bottom: auto !important;
+        width: min(340px, calc(100vw - 16px)) !important;
+        max-width: calc(100vw - 16px) !important;
+        z-index: 1102;
+        /* Prevent the card from overflowing the bottom of the viewport */
+        max-height: calc(100vh - 72px);
+        overflow-y: auto;
+    }
+
+    /* Profile card header section – compact on mobile */
+    .reference-profile-header,
+    .reference-profile-user {
+        min-height: 120px;
+    }
+
+    .reference-profile-user {
+        gap: 14px;
+        padding: 18px 16px;
+    }
+
+    .reference-avatar {
+        width: 60px;
+        height: 60px;
+        font-size: 20px;
+    }
+
+    .reference-edit-button {
+        width: 24px;
+        height: 24px;
+    }
+
+    .reference-user-name {
+        max-width: 100%;
+        font-size: 16px;
+    }
+
+    .reference-user-role {
+        max-width: 100%;
+        font-size: 13px;
+    }
+
+    .reference-profile-body {
+        gap: 12px;
+        padding: 16px;
+    }
+
+    .reference-menu-action {
+        height: 48px;
+        gap: 12px;
+        padding: 0 16px;
+    }
+
+    .reference-logout {
+        height: auto !important;
+        padding: 16px !important;
+        gap: 12px !important;
+    }
+
+    .reference-logout .reference-action-label {
+        font-size: 15px;
+    }
+
+    .reference-logout .reference-action-icon svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .reference-action-icon svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .reference-action-label {
+        font-size: 15px;
+    }
+}
+
+/* Extra-small phones – 320 px … 390 px */
+@@media (max-width: 390px) {
+    .user-profile-menu {
+        top: 58px !important;
+        right: 6px !important;
+        width: calc(100vw - 12px) !important;
+        max-width: calc(100vw - 12px) !important;
+    }
+
+    .reference-profile-user {
+        gap: 12px;
+        padding: 14px 12px;
+    }
+
+    .reference-avatar {
+        width: 52px;
+        height: 52px;
+        font-size: 18px;
+    }
+
+    .reference-user-name {
+        font-size: 14px;
+    }
+
+    .reference-user-role {
+        font-size: 12px;
+    }
+
+    .reference-profile-body {
+        gap: 10px;
+        padding: 12px;
+    }
+
+    .reference-menu-action {
+        height: 44px;
+        gap: 10px;
+        padding: 0 12px;
+    }
+
+    .reference-logout {
+        padding: 12px !important;
+        gap: 10px !important;
+    }
+}
+.reference-leaf-pattern-img {
+position: absolute;
+
+right: -10px;
+top: 0;
+
+width: 170px;
+height: 145px;
+
+@*  opacity: 0.12; *@
+
+z-index: 1;
+
+pointer-events: none;
+}
+</style>
+
+@code {
+    private bool _showUserMenu = false;
+
+
+    protected override void OnInitialized()
+    {
+        // Name / role / photo are published by MainLayout when it parses the JWT, and
+        // LoginState drives the two permission checks in the card.
+        Shell.OnChange += OnShellChanged;
+        LoginState.OnChange += OnShellChanged;
+    }
+
+
+    private void OnShellChanged() => InvokeAsync(StateHasChanged);
+
+
+    private string GetUserInitial() => Shell.UserInitial;
+
+
+    private async Task ToggleUserMenu()
+    {
+        _showUserMenu = !_showUserMenu;
+
+        try
+        {
+            await JS.InvokeVoidAsync("spic.reparentUserMenu", "userProfileMenu", _showUserMenu);
+        }
+        catch
+        {
+            // ignore JS errors - fallback to CSS-only behavior
+        }
+    }
+
+
+    private async Task CloseUserMenu()
+    {
+        _showUserMenu = false;
+
+        try
+        {
+            await JS.InvokeVoidAsync("spic.reparentUserMenu", "userProfileMenu", false);
+        }
+        catch
+        {
+            // ignore JS errors
+        }
+    }
+
+
+    private void GoToNotifications()
+    {
+        _showUserMenu = false;
+        Navigation.NavigateTo("/Notifications");
+    }
+
+
+    private void GoToProfile()
+    {
+        _showUserMenu = false;
+        Navigation.NavigateTo("/Profile");
+    }
+
+
+    // MainLayout still owns the logout flow (it has to hide the whole authenticated
+    // shell as one state); ShellSession is the bridge, so no EventCallback parameter.
+    private async Task Logout()
+    {
+        _showUserMenu = false;
+
+        await Shell.LogoutAsync();
+    }
+
+
+    public void Dispose()
+    {
+        Shell.OnChange -= OnShellChanged;
+        LoginState.OnChange -= OnShellChanged;
+    }
+}
