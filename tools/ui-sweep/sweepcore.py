@@ -76,6 +76,7 @@ METRICS_JS = r"""(() => {
     offenders: off.slice(0, 5),
     offenderCount: off.length,
     textLen: txt.length,
+    domNodes: all.length,
     textHead: txt.slice(0, 120).replace(/\s+/g, ' '),
     notFound: /not found|does not exist|sorry, there's nothing/i.test(head),
     unauthorized: /unauthori[sz]ed|access denied|no permission|forbidden/i.test(head),
@@ -272,10 +273,18 @@ def normalize_path(p: str) -> str:
     return p.lower()
 
 
+# A page above this many DOM nodes is slow to diff and lay out on a phone WebView; every
+# layout re-render (opening a menu, a toast) then costs a second or more. The admin
+# dashboard hit 48,000 before its cards were batched (docs/screen-checklist.md).
+HEAVY_DOM_NODES = 6000
+
+
 def compute_flags(route: str, metrics: dict, events: dict, authed: bool, blank_chars: int = 40) -> list[str]:
     flags: list[str] = []
     if metrics.get("overflowX"):
         flags.append("OVERFLOW")
+    if metrics.get("domNodes", 0) > HEAVY_DOM_NODES:
+        flags.append("HEAVY")
     actual = normalize_path(metrics.get("path", ""))
     expected = normalize_path(route)
     if actual != expected and not (authed and route in EXPECTED_REDIRECT_WHEN_AUTHED):
@@ -456,7 +465,7 @@ def print_row(index: int, row: dict) -> None:
     label = row.get("label", "")
     print(
         f"{index:03d} {label:>10s} {row['route']:38s} -> {str(m.get('path', '?')):30s} "
-        f"sw={m.get('scrollW', '?')}/{m.get('iw', '?')} txt={m.get('textLen', '?'):>5} {flags}",
+        f"sw={m.get('scrollW', '?')}/{m.get('iw', '?')} txt={m.get('textLen', '?'):>5} dom={m.get('domNodes', '?'):>5} {flags}",
         flush=True,
     )
 

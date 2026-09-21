@@ -97,6 +97,7 @@ still empty, then evaluates the metrics script:
 | Flag | Rule | Usual cause |
 |---|---|---|
 | `OVERFLOW` | `document.documentElement.scrollWidth > innerWidth + 1`. Offending elements (top five by right edge, excluding fixed elements and anything inside a horizontally scrolling or clipping container) are listed. | Wide tables without a scroll wrapper, fixed-width cards, long unbreakable text, `min-width` on forms. |
+| `HEAVY` | More than 6,000 DOM nodes on the page (`domNodes`, printed as `dom=` on every row). A page that size is slow to diff and lay out in the phone WebView: every layout re-render, such as opening the More sheet, then costs a second or more. | A list page that renders every row at once; fix by rendering in batches (the dashboard pattern: `Take(_visibleCount)` + a Show more row) or paging on the server. |
 | `REDIRECT` | `location.pathname` after navigation differs from the route. `/` and `/login` are exempt when logged in (they bounce to the landing page by design). | Role guard (`PageGuard`) sent the user elsewhere; page navigates away in `OnInitialized`; login lost. |
 | `BLANK` | Fewer than 40 characters of visible body text. | Unhandled exception during render, endless loading state, page waiting for data that never comes. |
 | `NOTFOUND` | Body text starts with "not found" / "does not exist" / the router's not-found text. | Route not registered, typo in `@page`, route removed. |

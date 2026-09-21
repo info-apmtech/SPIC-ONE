@@ -1,4 +1,4 @@
-using Android.App;
+﻿using Android.App;
 using Android.Content.PM;
 using Android.OS;
 using Microsoft.AspNetCore.Components.WebView.Maui;
@@ -8,6 +8,21 @@ namespace SPIC.MauiBlazorApp
     [Activity(Theme = "@style/Maui.SplashTheme", MainLauncher = true, ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
     public class MainActivity : MauiAppCompatActivity
     {
+        /// <summary>
+        /// WebView inspection is off in Release. Launching from adb with
+        /// <c>am start ... --ez webdebug true</c> turns it on for that run only, so a store
+        /// build can be profiled with Chrome DevTools without shipping a debuggable app.
+        /// </summary>
+        protected override void OnResume()
+        {
+            base.OnResume();
+            // After OnCreate: the BlazorWebView handler resets the flag while creating the view.
+            if (Intent?.GetBooleanExtra("webdebug", false) == true)
+            {
+                Android.Webkit.WebView.SetWebContentsDebuggingEnabled(true);
+            }
+        }
+
         /// <summary>
         /// Hardware / gesture back: step back through the Blazor page history (which also
         /// closes an open BottomSheet or More sheet, since they push a history entry) and
