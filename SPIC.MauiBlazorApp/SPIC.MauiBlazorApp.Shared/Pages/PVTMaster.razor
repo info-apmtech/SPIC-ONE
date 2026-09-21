@@ -828,6 +828,10 @@
     private BulkUploadResponse? _lastUploadResult;
 
     private List<StateDto> _states = new();
+
+    // Name index for the table rows: GetStateName runs twice per rendered row.
+    private Dictionary<int, string> _stateNameById = new();
+
     private bool _showMapStateModal;
     private bool _isMapStateSaving;
     private bool _mapIsRakePoint;
@@ -878,6 +882,8 @@
         try
         {
             _states = await Http.GetFromJsonAsync<List<StateDto>>("api/State/all") ?? new();
+            _stateNameById = _states.GroupBy(s => s.Id)
+                .ToDictionary(g => g.Key, g => g.First().StateName ?? "");
         }
         catch (Exception ex)
         {
@@ -886,9 +892,7 @@
     }
 
     private string GetStateName(int? stateId) =>
-        stateId.HasValue
-            ? _states.FirstOrDefault(s => s.Id == stateId.Value)?.StateName ?? ""
-            : "";
+        stateId.HasValue && _stateNameById.TryGetValue(stateId.Value, out var name) ? name : "";
 
     private void OpenMapStateModal(PVTMasterDto item)
     {

@@ -751,6 +751,25 @@
 	private List<LocationItemDto> _headquartersAll = new();
 	private List<LocationItemDto> _filteredItems = new();
 
+	// Name indexes for the table rows. The Sub-Districts tab can hold thousands of rows and
+	// the district master is several hundred, so a per-row scan was quadratic on every render.
+	private Dictionary<int, string> _zoneNameById = new();
+	private Dictionary<int, string> _stateNameById = new();
+	private Dictionary<int, string> _districtNameById = new();
+	private Dictionary<int, string> _regionNameById = new();
+
+	private static Dictionary<int, string> NameIndex(
+		List<LocationItemDto> items, Func<LocationItemDto, string?> name) =>
+		items.GroupBy(i => i.Id).ToDictionary(g => g.Key, g => name(g.First()) ?? "");
+
+	private void BuildNameIndexes()
+	{
+		_zoneNameById = NameIndex(_zonesAll, i => i.ZoneName);
+		_stateNameById = NameIndex(_statesAll, i => i.StateName);
+		_districtNameById = NameIndex(_districtsAll, i => i.DistrictName);
+		_regionNameById = NameIndex(_regionsAll, i => i.RegionName);
+	}
+
 	private List<LocationItemDto> CurrentAllItems => ActiveTab switch
 	{
 		"Zones" => _zonesAll,
@@ -844,6 +863,7 @@
 			_subDistrictsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/SubDistrict/all") ?? new();
 			_regionsAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Region/all") ?? new();
 			_headquartersAll = await Http.GetFromJsonAsync<List<LocationItemDto>>("api/Headquarter/all") ?? new();
+			BuildNameIndexes();
 		}
 		catch (Exception ex)
 		{
@@ -868,6 +888,7 @@
 				case "Headquarters": _headquartersAll = items; break;
 			}
 
+			BuildNameIndexes();
 			ApplyFilter();
 		}
 		catch (Exception ex)
@@ -1330,16 +1351,16 @@
 	}
 
 	private string GetZoneName(int zoneId) =>
-		_zonesAll.FirstOrDefault(z => z.Id == zoneId)?.ZoneName ?? "";
+		_zoneNameById.TryGetValue(zoneId, out var name) ? name : "";
 
 	private string GetStateName(int stateId) =>
-		_statesAll.FirstOrDefault(s => s.Id == stateId)?.StateName ?? "";
+		_stateNameById.TryGetValue(stateId, out var name) ? name : "";
 
 	private string GetDistrictName(int districtId) =>
-		_districtsAll.FirstOrDefault(d => d.Id == districtId)?.DistrictName ?? "";
+		_districtNameById.TryGetValue(districtId, out var name) ? name : "";
 
 	private string GetRegionName(int regionId) =>
-		_regionsAll.FirstOrDefault(r => r.Id == regionId)?.RegionName ?? "";
+		_regionNameById.TryGetValue(regionId, out var name) ? name : "";
 
 	private string GetSingularName(string pluralName) => pluralName switch
 	{

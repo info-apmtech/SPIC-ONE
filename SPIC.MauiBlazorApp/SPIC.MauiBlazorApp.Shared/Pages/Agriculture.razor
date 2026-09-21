@@ -486,6 +486,22 @@
 	// Lookup data
 	private List<AgriItemDto> _unitsAll = new();
 
+	// Name indexes for the table rows: a row must not scan a whole master list
+	// (see Dashboard.razor - every re-render diffs every rendered row).
+	private Dictionary<int, string> _unitNameById = new();
+	private Dictionary<int, string> _categoryNameById = new();
+	private Dictionary<int, string> _productGroupNameById = new();
+
+	private static Dictionary<int, string> NameIndex(List<AgriItemDto> items) =>
+		items.GroupBy(i => i.Id).ToDictionary(g => g.Key, g => g.First().Name ?? "");
+
+	private void BuildNameIndexes()
+	{
+		_unitNameById = NameIndex(_unitsAll);
+		_categoryNameById = NameIndex(_categoriesAll);
+		_productGroupNameById = NameIndex(_productGroupsAll);
+	}
+
 	private List<AgriItemDto> CurrentAllItems => ActiveTab switch
 	{
 		"Crops" => _cropsAll,
@@ -565,6 +581,7 @@
 			_categoriesAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Category/all") ?? new();
 			_productGroupsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/ProductGroup/all") ?? new();
 			_productsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Product/all") ?? new();
+			BuildNameIndexes();
 		}
 		catch (Exception ex)
 		{
@@ -590,6 +607,7 @@
 				case "Products": _productsAll = items; break;
 			}
 
+			BuildNameIndexes();
 			ApplyFilter();
 		}
 		catch (Exception ex)
@@ -914,13 +932,13 @@
 	}
 
 	private string GetUnitName(int unitId) =>
-		_unitsAll.FirstOrDefault(u => u.Id == unitId)?.Name ?? "";
+		_unitNameById.TryGetValue(unitId, out var name) ? name : "";
 
 	private string GetCategoryName(int categoryId) =>
-		_categoriesAll.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "";
+		_categoryNameById.TryGetValue(categoryId, out var name) ? name : "";
 
 	private string GetProductGroupName(int? productGroupId) =>
-		productGroupId.HasValue ? _productGroupsAll.FirstOrDefault(pg => pg.Id == productGroupId.Value)?.Name ?? "" : "";
+		productGroupId.HasValue && _productGroupNameById.TryGetValue(productGroupId.Value, out var name) ? name : "";
 
 	private string GetSingularName(string pluralName) => pluralName switch
 	{

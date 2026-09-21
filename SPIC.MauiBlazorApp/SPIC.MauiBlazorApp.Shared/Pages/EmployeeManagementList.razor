@@ -198,6 +198,11 @@
     private Dictionary<int, string> headquarterNameById = new();
     private Dictionary<int, string> designationNameById = new();
 
+    // ApplyFilter runs on every keystroke in the search box and flattens employees x logins.
+    // Both sides are indexed so the flatten is linear instead of quadratic.
+    private ILookup<int, Employeelogin> loginsByEmployeeId = Enumerable.Empty<Employeelogin>().ToLookup(l => 0);
+    private Dictionary<int, EmployeeInformation> employeeById = new();
+
     private bool _isLoading = true;
     private string _searchText = string.Empty;
     private string _roleFilter = "All";
@@ -241,6 +246,9 @@
             .Where(d => d.IsActive)
             .ToDictionary(d => d.Id, d => string.IsNullOrWhiteSpace(d.Name) ? "-" : d.Name);
 
+        loginsByEmployeeId = logins.ToLookup(l => l.EmployeeInformationID);
+        employeeById = employees.GroupBy(e => e.Id).ToDictionary(g => g.Key, g => g.First());
+
         ApplyFilter();
         _isLoading = false;
     }
@@ -266,8 +274,7 @@
         {
             if (!string.IsNullOrWhiteSpace(user.Password)) return user.Password;
         }
-        var emp = employees.FirstOrDefault(e => e.Id == empId);
-        return emp?.PersonalPhoneNumber ?? "-";
+        return employeeById.TryGetValue(empId, out var emp) ? emp.PersonalPhoneNumber ?? "-" : "-";
     }
 
     private string GetStateName(int? stateId)
@@ -363,7 +370,7 @@
         // 1. Flatten the Data: One row per login
         foreach (var emp in employees)
         {
-            var empLogins = logins.Where(l => l.EmployeeInformationID == emp.Id).ToList();
+            var empLogins = loginsByEmployeeId[emp.Id];
 
             if (empLogins.Any())
             {

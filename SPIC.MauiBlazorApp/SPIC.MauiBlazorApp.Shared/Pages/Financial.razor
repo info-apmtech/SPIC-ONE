@@ -181,7 +181,7 @@
 						else
 						{
 							<div class="bank-card-grid">
-								@foreach (var item in _filteredItems)
+								@foreach (var item in _filteredItems.Take(_visibleCount))
 								{
 									<div class="bank-card total-value-card-bgimg">
 										@if (!string.IsNullOrEmpty(item.Icon))
@@ -230,6 +230,14 @@
 									</div>
 								}
 							</div>
+							@if (_filteredItems.Count > _visibleCount)
+							{
+								@* Cards are added in batches, like the Financial Year tab's pager. *@
+								<div class="dash-show-more">
+									<span class="text-muted small">Showing @Math.Min(_visibleCount, _filteredItems.Count) of @_filteredItems.Count</span>
+									<button type="button" class="btn btn-outline-success" @onclick="ShowMore">Show more</button>
+								</div>
+							}
 						}
 					}
 					else if (ActiveTab == "Financial Year")
@@ -384,6 +392,12 @@
 	private List<FinancialItemDto> _fyAll = new();
 	private List<FinancialItemDto> _filteredItems = new();
 
+	// Bank cards rendered so far. The Financial Year tab has its own pager; the Bank tab
+	// rendered every card at once.
+	private const int CardBatch = 30;
+	private int _visibleCount = CardBatch;
+	private void ShowMore() => _visibleCount += CardBatch;
+
 	private List<FinancialItemDto> CurrentAllItems => ActiveTab switch
 	{
 		"Bank" => _banksAll,
@@ -510,6 +524,8 @@
 			})
 			.OrderByDescending(x => x.CreatedAt)
 			.ToList();
+
+		_visibleCount = CardBatch;
 
 		if (_currentPage > TotalPages) _currentPage = 1;
 	}
