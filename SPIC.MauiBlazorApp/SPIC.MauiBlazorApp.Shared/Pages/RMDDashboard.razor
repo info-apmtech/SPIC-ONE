@@ -167,7 +167,7 @@
                     <div class="rmd-alert-desc">Remaining Budget is at 16.0% which is below the 20% threshold. Plan your programs accordingly and request addition funds if required</div>
                 </div>
             </div>
-            <button class="rmd-alert-btn">Request Additional Budget</button>
+            <button class="rmd-alert-btn" @onclick="OpenAdditionalBudgetPopup">Request Additional Budget</button>
         </div>
 
         <!-- CSR Workflow Summary -->
@@ -702,7 +702,136 @@
     </div>
 </div>
 
+<!-- ===== REQUEST ADDITIONAL BUDGET POPUP (UI DESIGN ONLY) ===== -->
+@if (showAdditionalBudgetPopup)
+{
+    <div class="rmd-modal-overlay" @onclick="CloseAdditionalBudgetPopup">
+        <div class="rmd-modal-container" @onclick:stopPropagation="true">
+
+            <div class="rmd-modal-header">
+                <h1 class="rmd-modal-title">Request Additional Budget</h1>
+                <button type="button" class="rmd-modal-close" @onclick="CloseAdditionalBudgetPopup" aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="rmd-modal-body">
+                <div class="rmd-budget-form">
+
+                    <!-- Row 1: Request Amount + Required by Date -->
+                    <div class="rmd-form-row">
+                        <div class="rmd-form-group">
+                            <label class="rmd-form-label" for="rmd-request-amount">Request Amount</label>
+                            <div class="rmd-input-wrap">
+                                <input type="text" id="rmd-request-amount" class="rmd-input" value="e.g ₹ 20,000" />
+                                <span class="rmd-input-icon">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="20">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 7h8M8 11h5M8 15h3M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M16 7v4M16 15v2"/>
+                                    </svg>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="rmd-form-group">
+                            <label class="rmd-form-label" for="rmd-required-date">Required by Date</label>
+                            <div class="rmd-input-wrap">
+                                <input type="text" id="rmd-required-date" class="rmd-input" value="25 - 05 - 2026" />
+                                <span class="rmd-input-icon">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <line x1="16" y1="2" x2="16" y2="6" stroke-linecap="round"/>
+                                        <line x1="8" y1="2" x2="8" y2="6" stroke-linecap="round"/>
+                                        <line x1="3" y1="10" x2="21" y2="10" stroke-linecap="round"/>
+                                    </svg>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Priority + Select for Request -->
+                    <div class="rmd-form-row">
+                        <div class="rmd-form-group">
+                            <label class="rmd-form-label" for="rmd-priority">Priority</label>
+                            <div class="rmd-select-wrap">
+                                <select id="rmd-priority">
+                                    <option value="" disabled selected>Select the status</option>
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="rmd-form-group">
+                            <label class="rmd-form-label" for="rmd-request-reason">Select for Request</label>
+                            <div class="rmd-select-wrap">
+                                <select id="rmd-request-reason">
+                                    <option value="" disabled selected>Select Reason</option>
+                                    <option value="project">New Project</option>
+                                    <option value="emergency">Emergency</option>
+                                    <option value="equipment">Equipment</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Row 3: Explanation + Supporting Documents -->
+                    <div class="rmd-form-row">
+                        <div class="rmd-form-group">
+                            <label class="rmd-form-label" for="rmd-explanation">Explanation</label>
+                            <textarea id="rmd-explanation" placeholder="Describe why additional budget is needed...."></textarea>
+                        </div>
+                        <div class="rmd-form-group">
+                            <label class="rmd-form-label">Supporting Documents</label>
+                            <div class="rmd-dropzone" role="button" tabindex="0" aria-label="Drag and drop files here or browse">
+                                <div class="rmd-dropzone-inner">
+                                    <p class="rmd-dropzone-title">Drag &amp; drop files here</p>
+                                    <p class="rmd-dropzone-or">or</p>
+                                    <p class="rmd-dropzone-sub">browse file - PDF.XLSX,JPG uup to 10MB</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Helpful Tips -->
+                    <div class="rmd-tips-box">
+                        <h2>Helpful Tips</h2>
+                        <p>Include cost estimation details for faster approval, Upload supporting proof like invoices or proposals. Approval typically takes 2–3 working days</p>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="rmd-form-actions">
+                        <div class="rmd-actions-group">
+                            <button type="button" class="rmd-btn rmd-btn-draft">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                Save Draft
+                            </button>
+                            <button type="button" class="rmd-btn rmd-btn-submit">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                </svg>
+                                Submit Request
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+}
+
 @code {
+    private bool showAdditionalBudgetPopup;
+
+    private void OpenAdditionalBudgetPopup() => showAdditionalBudgetPopup = true;
+
+    private void CloseAdditionalBudgetPopup() => showAdditionalBudgetPopup = false;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
