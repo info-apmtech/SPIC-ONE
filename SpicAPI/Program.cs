@@ -10,6 +10,7 @@ using Spic.Infrastructure.Services;
 using Spic.Infrastructure.Services.Assistant;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 using System.Security.Claims;
 using System.Text;
 

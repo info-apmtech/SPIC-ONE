@@ -36,6 +36,7 @@ namespace SpicAPI.Controllers
 						x.Id,
 						x.Code,
 						x.Name,
+						x.StateId,
 						x.CreatedAt,
 						x.UpdatedAt
 					})
@@ -81,6 +82,7 @@ namespace SpicAPI.Controllers
 						x.Id,
 						x.Code,
 						x.Name,
+						x.StateId,
 						x.CreatedAt,
 						x.UpdatedAt
 					})
@@ -161,6 +163,72 @@ namespace SpicAPI.Controllers
 				{
 					message = "PVT Master saved successfully.",
 					id = pvtMaster.Id
+				});
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new
+				{
+					message = $"Save failed: {ex.Message}"
+				});
+			}
+		}
+
+		// ============================================================
+		// MAP STATE TO A PVT MASTER RECORD
+		// Only the State mapping is editable. The SAP Code is never changed.
+		// ============================================================
+
+		[HttpPost("map-state")]
+		public async Task<IActionResult> MapState([FromBody] PVTMapStateDto dto)
+		{
+			if (dto == null || dto.Id <= 0)
+			{
+				return BadRequest(new
+				{
+					message = "Invalid request"
+				});
+			}
+
+			try
+			{
+				var record = await _context.PVTMasters
+					.FirstOrDefaultAsync(x => x.Id == dto.Id && x.IsActive);
+
+				if (record == null)
+				{
+					return NotFound(new
+					{
+						message = "SAP Code record not found."
+					});
+				}
+
+				if (dto.StateId.HasValue &&
+					dto.StateId.Value > 0 &&
+					!(await _context.States.AnyAsync(s => s.Id == dto.StateId.Value)))
+				{
+					return BadRequest(new
+					{
+						message = "Selected State does not exist."
+					});
+				}
+
+				var now = DateTime.Now;
+				var userName = User?.Identity?.Name ?? "System";
+
+				record.StateId = dto.StateId.HasValue && dto.StateId.Value > 0
+					? dto.StateId.Value
+					: (int?)null;
+				record.UpdatedAt = now;
+				record.UpdatedBy = userName;
+
+				await _context.SaveChangesAsync();
+
+				return Ok(new
+				{
+					message = "State mapping saved successfully.",
+					id = record.Id,
+					stateId = record.StateId
 				});
 			}
 			catch (Exception ex)
@@ -634,5 +702,16 @@ namespace SpicAPI.Controllers
 		public string Code { get; set; } = string.Empty;
 
 		public string Name { get; set; } = string.Empty;
+	}
+
+	// ================================================================
+	// MAP STATE DTO
+	// ================================================================
+
+	public class PVTMapStateDto
+	{
+		public int Id { get; set; }
+
+		public int? StateId { get; set; }
 	}
 }

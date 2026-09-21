@@ -4182,8 +4182,23 @@ else
     private List<SapCodeOptionDto> _pvtMasterAll = new();
     private List<SapCodeOptionDto> _rakePointMasterAll = new();
 
-    private List<SapCodeOptionDto> CurrentSapCodeOptions =>
-        IsRakePointTab ? _rakePointMasterAll : _pvtMasterAll;
+    private List<SapCodeOptionDto> CurrentSapCodeOptions
+    {
+        get
+        {
+            var source = IsRakePointTab ? _rakePointMasterAll : _pvtMasterAll;
+
+            // The SAP Code dropdown is driven purely by the selected State: only
+            // codes mapped to that State are offered. With no State selected the
+            // full master list is shown so the existing flow is unchanged.
+            if (_form.BasicStateId <= 0)
+                return source;
+
+            return source
+                .Where(o => o.StateId.HasValue && o.StateId.Value == _form.BasicStateId)
+                .ToList();
+        }
+    }
 
     // Same pincode lookup behaviour used by Register.
     private bool _isPincodeLookup;
@@ -4336,7 +4351,7 @@ else
         {
             var data = await Http.GetFromJsonAsync<List<RakePointMasterItemDto>>("api/RakePointMaster/all") ?? new();
             _rakePointMasterAll = data
-                .Select(x => new SapCodeOptionDto { Id = x.Id, Code = x.RakePointCode, Name = x.Name })
+                .Select(x => new SapCodeOptionDto { Id = x.Id, Code = x.RakePointCode, Name = x.Name, StateId = x.StateId })
                 .ToList();
         }
         catch (Exception ex)
@@ -4508,6 +4523,26 @@ else
         _form.HeadquarterId = 0;
         _filteredRegions = _regions.Where(x => x.StateId == _form.BasicStateId).ToList();
         _filteredHeadquarters = new();
+
+        // The SAP Code dropdown only offers codes mapped to the selected State,
+        // so a code that no longer belongs to this State must be cleared.
+        if (!string.IsNullOrWhiteSpace(_form.SapCode) &&
+            !CurrentSapCodeOptions.Any(o => string.Equals(o.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase)))
+        {
+            var fullSource = IsRakePointTab ? _rakePointMasterAll : _pvtMasterAll;
+            var previous = fullSource.FirstOrDefault(o =>
+                string.Equals(o.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase));
+
+            // Only clear the auto-filled Name; keep a manually entered one.
+            if (previous != null &&
+                string.Equals(_form.Name, previous.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                _form.Name = "";
+            }
+
+            _form.SapCode = "";
+            _errors.Remove("SapCode");
+        }
     }
 
     private void OnRegionChanged()
@@ -7054,6 +7089,7 @@ else
         public int Id { get; set; }
         public string Code { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public int? StateId { get; set; }
     }
 
     public class RakePointMasterItemDto
@@ -7061,6 +7097,7 @@ else
         public int Id { get; set; }
         public string RakePointCode { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public int? StateId { get; set; }
     }
 
     public class UserInfoLookupDto

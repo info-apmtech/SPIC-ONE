@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
 
@@ -31,16 +32,17 @@ namespace SpicAPI.Controllers
 		[HttpGet("all")]
 		public IActionResult GetAll()
 		{
-			var records = _context.RakePointMasters
-				.Where(x => x.IsActive)
-				.Select(x => new
-				{
-					x.Id,
-					x.RakePointCode,
-					x.Name
-				})
-				.OrderBy(x => x.Name)
-				.ToList();
+var records = _context.RakePointMasters
+			.Where(x => x.IsActive)
+			.Select(x => new
+			{
+				x.Id,
+				x.RakePointCode,
+				x.Name,
+				x.StateId
+			})
+			.OrderBy(x => x.Name)
+			.ToList();
 
 			return Ok(records);
 		}
@@ -61,7 +63,8 @@ namespace SpicAPI.Controllers
 				{
 					x.Id,
 					x.RakePointCode,
-					x.Name
+					x.Name,
+					x.StateId
 				})
 				.OrderBy(x => x.Name)
 				.Take(20)
@@ -104,6 +107,51 @@ namespace SpicAPI.Controllers
 			catch (Exception ex)
 			{
 				return BadRequest(new { message = $"Save failed: {ex.Message}" });
+			}
+		}
+
+		// POST /api/RakePointMaster/map-state
+		// Only the State mapping is editable. The SAP Code is never changed.
+		[HttpPost("map-state")]
+		public async Task<IActionResult> MapState([FromBody] RakePointMapStateDto dto)
+		{
+			if (dto == null || dto.Id <= 0)
+				return BadRequest(new { message = "Invalid request" });
+
+			try
+			{
+				var record = await _context.RakePointMasters
+					.FirstOrDefaultAsync(x => x.Id == dto.Id && x.IsActive);
+
+				if (record == null)
+					return NotFound(new { message = "SAP Code record not found." });
+
+				if (dto.StateId.HasValue &&
+					dto.StateId.Value > 0 &&
+					!(await _context.States.AnyAsync(s => s.Id == dto.StateId.Value)))
+					return BadRequest(new { message = "Selected State does not exist." });
+
+				var now = DateTime.Now;
+				var userName = User?.Identity?.Name ?? "System";
+
+				record.StateId = dto.StateId.HasValue && dto.StateId.Value > 0
+					? dto.StateId.Value
+					: (int?)null;
+				record.UpdatedAt = now;
+				record.UpdatedBy = userName;
+
+				await _context.SaveChangesAsync();
+
+				return Ok(new
+				{
+					message = "State mapping saved successfully.",
+					id = record.Id,
+					stateId = record.StateId
+				});
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new { message = $"Save failed: {ex.Message}" });
 			}
 		}
 
@@ -306,5 +354,11 @@ namespace SpicAPI.Controllers
 	{
 		public string RakePointCode { get; set; } = string.Empty;
 		public string Name { get; set; } = string.Empty;
+	}
+
+	public class RakePointMapStateDto
+	{
+		public int Id { get; set; }
+		public int? StateId { get; set; }
 	}
 }
