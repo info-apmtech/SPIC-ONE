@@ -5,6 +5,7 @@
 @inject NavigationManager Nav
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <style>
     .page-title {
@@ -310,6 +311,46 @@
         .search-input:focus {
             border-color: #059669;
         }
+
+    .pvt-map-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.4rem;
+        min-height: 32px;
+        padding: 0.375rem 0.75rem;
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #2563eb;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        font-weight: 600;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+    }
+
+        .pvt-map-btn:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+        }
+
+    .pvt-state-badge {
+        display: inline-block;
+        padding: 0.225rem 0.625rem;
+        border-radius: 999px;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #15803d;
+        font-size: 0.78rem;
+        white-space: nowrap;
+    }
+
+        .pvt-state-badge.empty {
+            background: #f3f4f6;
+            border-color: #e5e7eb;
+            color: #9ca3af;
+        }
 </style>
 
 <div class="container-fluid">
@@ -478,13 +519,39 @@
             <TableHeader>
                 <th>Code</th>
                 <th>Name</th>
+                <th>State</th>
                 <th>Created At</th>
+                @if (CanManageStateMapping)
+                {
+                    <th>Action</th>
+                }
             </TableHeader>
 
             <TableRow Context="item">
                 <td>@item.Code</td>
                 <td>@item.Name</td>
+                <td>
+                    @if (item.StateId.HasValue && !string.IsNullOrEmpty(GetStateName(item.StateId)))
+                    {
+                        <span class="pvt-state-badge">@GetStateName(item.StateId)</span>
+                    }
+                    else
+                    {
+                        <span class="pvt-state-badge empty">Not Mapped</span>
+                    }
+                </td>
                 <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+                @if (CanManageStateMapping)
+                {
+                    <td>
+                        <button type="button"
+                                class="pvt-map-btn"
+                                title="Edit State mapping"
+                                @onclick="() => OpenMapStateModal(item)">
+                            <i class="bi bi-pencil-square"></i> State
+                        </button>
+                    </td>
+                }
             </TableRow>
         </SpicDataTable>
     }
@@ -616,17 +683,101 @@
             <TableHeader>
                 <th>Rake Point Code</th>
                 <th>Name</th>
+                <th>State</th>
                 <th>Created At</th>
+                @if (CanManageStateMapping)
+                {
+                    <th>Action</th>
+                }
             </TableHeader>
 
             <TableRow Context="item">
                 <td>@item.RakePointCode</td>
                 <td>@item.Name</td>
+                <td>
+                    @if (item.StateId.HasValue && !string.IsNullOrEmpty(GetStateName(item.StateId)))
+                    {
+                        <span class="pvt-state-badge">@GetStateName(item.StateId)</span>
+                    }
+                    else
+                    {
+                        <span class="pvt-state-badge empty">Not Mapped</span>
+                    }
+                </td>
                 <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+                @if (CanManageStateMapping)
+                {
+                    <td>
+                        <button type="button"
+                                class="pvt-map-btn"
+                                title="Edit State mapping"
+                                @onclick="() => OpenRakePointMapStateModal(item)">
+                            <i class="bi bi-pencil-square"></i> State
+                        </button>
+                    </td>
+                }
             </TableRow>
         </SpicDataTable>
     }
 </div>
+
+@if (_showMapStateModal)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Map State - SAP Code</h5>
+                    <button type="button" class="btn-close" aria-label="Close"
+                            disabled="@_isMapStateSaving" @onclick="CloseMapStateModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label"><strong>SAP Code</strong></label>
+                            <input type="text"
+                                   class="form-control"
+                                   value="@_mapCode"
+                                   readonly
+                                   disabled />
+                            <small class="text-muted">The SAP Code cannot be edited.</small>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label"><strong>Name</strong></label>
+                            <input type="text"
+                                   class="form-control"
+                                   value="@_mapName"
+                                   readonly
+                                   disabled />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label"><strong>State</strong></label>
+                            <select class="form-select" @bind="_editStateId">
+                                <option value="">-- Not Mapped --</option>
+                                @foreach (var state in _states)
+                                {
+                                    <option value="@state.Id">@state.StateName</option>
+                                }
+                            </select>
+                            <small class="text-muted">Select the State this SAP Code belongs to.</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary"
+                            disabled="@_isMapStateSaving" @onclick="CloseMapStateModal">
+                        Cancel
+                    </button>
+                    <button type="button" class="btn btn-success"
+                            disabled="@_isMapStateSaving" @onclick="SaveStateMapping">
+                        @(_isMapStateSaving ? "Saving..." : "Save State Mapping")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     private const long MaxFileSize = 10 * 1024 * 1024;
@@ -644,6 +795,15 @@
     private List<PVTMasterDto> _allData = new();
     private BulkUploadResponse? _lastUploadResult;
 
+    private List<StateDto> _states = new();
+    private bool _showMapStateModal;
+    private bool _isMapStateSaving;
+    private bool _mapIsRakePoint;
+    private int _mapRecordId;
+    private string _mapCode = "";
+    private string _mapName = "";
+    private int? _editStateId;
+
     private bool _isRakePointUploading = false;
     private string _rakePointSearchText = "";
     private int _rakePointTotalRecords = 0;
@@ -653,6 +813,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadStates();
         await LoadData();
         await LoadRakePointData();
     }
@@ -673,6 +834,100 @@
     private void GoBackToLogistics()
     {
         Nav.NavigateTo("/Logistics");
+    }
+
+    // State mapping is limited to the same admin roles that can open the SAP Code master.
+    private bool CanManageStateMapping =>
+        LoginState.UserRole == SPIC.Core.Entities.AppRole.Admin ||
+        LoginState.UserRole == SPIC.Core.Entities.AppRole.CorporateAdmin;
+
+    private async Task LoadStates()
+    {
+        try
+        {
+            _states = await Http.GetFromJsonAsync<List<StateDto>>("api/State/all") ?? new();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load State master data: {ex.Message}", true);
+        }
+    }
+
+    private string GetStateName(int? stateId) =>
+        stateId.HasValue
+            ? _states.FirstOrDefault(s => s.Id == stateId.Value)?.StateName ?? ""
+            : "";
+
+    private void OpenMapStateModal(PVTMasterDto item)
+    {
+        _mapIsRakePoint = false;
+        _mapRecordId = item.Id;
+        _mapCode = item.Code ?? "";
+        _mapName = item.Name ?? "";
+        _editStateId = item.StateId;
+        _showMapStateModal = true;
+    }
+
+    private void OpenRakePointMapStateModal(RakePointMasterDto item)
+    {
+        _mapIsRakePoint = true;
+        _mapRecordId = item.Id;
+        _mapCode = item.RakePointCode ?? "";
+        _mapName = item.Name ?? "";
+        _editStateId = item.StateId;
+        _showMapStateModal = true;
+    }
+
+    private void CloseMapStateModal()
+    {
+        if (_isMapStateSaving)
+            return;
+
+        _showMapStateModal = false;
+    }
+
+    private async Task SaveStateMapping()
+    {
+        if (_mapRecordId <= 0 || _isMapStateSaving)
+            return;
+
+        _isMapStateSaving = true;
+
+        try
+        {
+            var url = _mapIsRakePoint
+                ? "api/RakePointMaster/map-state"
+                : "api/PVTMaster/map-state";
+
+            var response = await Http.PostAsJsonAsync(url, new
+            {
+                id = _mapRecordId,
+                stateId = _editStateId
+            });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ShowMessage("Failed to save the State mapping. Please try again.", true);
+                return;
+            }
+
+            _showMapStateModal = false;
+
+            if (_mapIsRakePoint)
+                await LoadRakePointData();
+            else
+                await LoadData();
+
+            ShowMessage("State mapping saved successfully.", false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to save the State mapping: {ex.Message}", true);
+        }
+        finally
+        {
+            _isMapStateSaving = false;
+        }
     }
 
     private async Task LoadData()
@@ -876,6 +1131,7 @@
         {
             new() { Header = "Code", ValueSelector = item => item.Code ?? "" },
             new() { Header = "Name", ValueSelector = item => item.Name ?? "" },
+            new() { Header = "State", ValueSelector = item => GetStateName(item.StateId) },
             new() { Header = "Created At", ValueSelector = item => item.CreatedAt?.ToString("yyyy-MM-dd") ?? "" }
         };
     }
@@ -886,6 +1142,7 @@
         {
             new() { Header = "Rake Point Code", ValueSelector = item => item.RakePointCode ?? "" },
             new() { Header = "Name", ValueSelector = item => item.Name ?? "" },
+            new() { Header = "State", ValueSelector = item => GetStateName(item.StateId) },
             new() { Header = "Created At", ValueSelector = item => item.CreatedAt?.ToString("yyyy-MM-dd") ?? "" }
         };
     }
@@ -896,6 +1153,7 @@
         public string Code { get; set; } = string.Empty;
 
         public string Name { get; set; } = string.Empty;
+        public int? StateId { get; set; }
         public DateTime? CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }
@@ -905,7 +1163,14 @@
         public int Id { get; set; }
         public string RakePointCode { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public int? StateId { get; set; }
         public DateTime? CreatedAt { get; set; }
+    }
+
+    public class StateDto
+    {
+        public int Id { get; set; }
+        public string StateName { get; set; } = string.Empty;
     }
 
     public class BulkUploadResponse
