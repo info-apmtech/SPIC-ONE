@@ -170,6 +170,27 @@
             <button class="rmd-alert-btn" @onclick="OpenAdditionalBudgetPopup">Request Additional Budget</button>
         </div>
 
+        <!-- Additional Budget Request Pending Banner -->
+        <div class="rmd-alert rmd-alert-pending">
+            <div class="rmd-alert-content">
+                <div class="rmd-alert-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </div>
+                <div class="rmd-alert-text">
+                    <div class="rmd-alert-title">Additional Budget Request Pending</div>
+                    <div class="rmd-alert-desc">You have requested ₹ 50,000 on May 12, 2026. Your request is under review.</div>
+                </div>
+            </div>
+            <div class="rmd-alert-actions">
+                <span class="rmd-pill rmd-pill-amber">Pending Approval</span>
+                <button type="button" class="rmd-alert-btn rmd-alert-btn-outline" @onclick="OpenBudgetStatusPanel">View Status</button>
+            </div>
+        </div>
+
         <!-- CSR Workflow Summary -->
         <div class="rmd-csr-section">
             <h2 class="rmd-csr-title">CSR Workflow Summary</h2>
@@ -825,12 +846,103 @@
     </div>
 }
 
+<!-- ===== BUDGET REQUEST STATUS SIDE PANEL (UI DESIGN ONLY) ===== -->
+@if (showBudgetStatusPanel)
+{
+    <div class="rmd-status-overlay" @onclick="CloseBudgetStatusPanel">
+        <div class="rmd-status-panel" @onclick:stopPropagation="true">
+
+            <div class="rmd-status-header">
+                <h2 class="rmd-status-title">Budget Request Status</h2>
+                <button type="button" class="rmd-status-close" @onclick="CloseBudgetStatusPanel" aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="rmd-status-body">
+
+                <h3 class="rmd-status-section-title">Details</h3>
+                <div class="rmd-status-card">
+                    <div class="rmd-status-row">
+                        <span class="rmd-status-label">Request ID</span>
+                        <span class="rmd-status-value">BR - 2026 - 003</span>
+                    </div>
+                    <div class="rmd-status-row">
+                        <span class="rmd-status-label">Amount</span>
+                        <span class="rmd-status-value">₹ 50,000</span>
+                    </div>
+                    <div class="rmd-status-row">
+                        <span class="rmd-status-label">Requested On</span>
+                        <span class="rmd-status-value">May 12,2026</span>
+                    </div>
+                    <div class="rmd-status-row">
+                        <span class="rmd-status-label">Required By</span>
+                        <span class="rmd-status-value">May 25, 2026</span>
+                    </div>
+                    <div class="rmd-status-row">
+                        <span class="rmd-status-label">Priority</span>
+                        <span class="rmd-status-value">Medium</span>
+                    </div>
+                    <div class="rmd-status-row">
+                        <span class="rmd-status-label">Reason</span>
+                        <span class="rmd-status-value">Program Expansion</span>
+                    </div>
+                    <div class="rmd-status-row rmd-status-row-last">
+                        <span class="rmd-status-label">Document</span>
+                        <a href="#" class="rmd-status-link" @onclick:preventDefault="true">budget_estimate_pdf</a>
+                    </div>
+                </div>
+
+                <h3 class="rmd-status-section-title">Approval Timeline</h3>
+                <div class="rmd-status-timeline-card">
+                    <ul class="rmd-timeline">
+                        <li class="rmd-timeline-item">
+                            <span class="rmd-timeline-dot rmd-timeline-dot-green"></span>
+                            <div class="rmd-timeline-body">
+                                <div class="rmd-timeline-title">Request Submitted</div>
+                                <div class="rmd-timeline-time">May 12 2026 <span>10:32AM</span></div>
+                            </div>
+                        </li>
+                        <li class="rmd-timeline-item">
+                            <span class="rmd-timeline-dot rmd-timeline-dot-amber"></span>
+                            <div class="rmd-timeline-body">
+                                <div class="rmd-timeline-title">Under Review</div>
+                                <div class="rmd-timeline-time">May 12 2026 <span>10:32AM</span></div>
+                            </div>
+                        </li>
+                        <li class="rmd-timeline-item rmd-timeline-item-last">
+                            <span class="rmd-timeline-dot rmd-timeline-dot-gray"></span>
+                            <div class="rmd-timeline-body">
+                                <div class="rmd-timeline-title">Approved / Rejected</div>
+                                <div class="rmd-timeline-time">May 12 2026 <span>10:32AM</span></div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <div class="rmd-status-footer">
+                <button type="button" class="rmd-status-close-btn" @onclick="CloseBudgetStatusPanel">Close</button>
+            </div>
+
+        </div>
+    </div>
+}
+
 @code {
     private bool showAdditionalBudgetPopup;
+    private bool showBudgetStatusPanel;
 
     private void OpenAdditionalBudgetPopup() => showAdditionalBudgetPopup = true;
 
     private void CloseAdditionalBudgetPopup() => showAdditionalBudgetPopup = false;
+
+    private void OpenBudgetStatusPanel() => showBudgetStatusPanel = true;
+
+    private void CloseBudgetStatusPanel() => showBudgetStatusPanel = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
