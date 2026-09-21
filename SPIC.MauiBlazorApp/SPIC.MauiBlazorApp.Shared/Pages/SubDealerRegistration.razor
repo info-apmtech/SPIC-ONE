@@ -1096,8 +1096,15 @@
             <button type="button"
                     class="btn btn-success px-4 py-2 fw-semibold rounded-2"
                     @onclick="HandleSubmit"
-                    disabled="@_isSaving">
-                @if (_isSaving)
+                    disabled="@(_isSaving || _isLoadingSelected)">
+                @if (_isLoadingSelected)
+                {
+                    <span class="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"></span>
+                    <span>Loading...</span>
+                }
+                else if (_isSaving)
                 {
                     <span class="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -1227,6 +1234,7 @@
 
     private bool _isEditMode;
     private bool _isSaving;
+    private bool _isLoadingSelected;
     private string status = "Active";
 
     private readonly Dictionary<string, string> _errors = new();
@@ -1246,6 +1254,8 @@
     private int _basicInfoRegionId;
     private int _basicInfoHqId;
     private int _subDealerId;
+    private int _intendedSubDealerId;
+    private int _subDealerLoadSeq;
 
     private bool _isStateLocked;
     private bool _isRegionLocked;
@@ -1317,6 +1327,11 @@
 
             if (SubDealerIdFromQuery.HasValue && SubDealerIdFromQuery.Value > 0)
             {
+                // Record the edit intent before the async load starts so a
+                // pending or failed load can never fall through to an
+                // accidental POST that inserts a duplicate record.
+                _intendedSubDealerId = SubDealerIdFromQuery.Value;
+                _subDealerId = SubDealerIdFromQuery.Value;
                 await LoadSubDealer(SubDealerIdFromQuery.Value);
             }
         }
@@ -1440,54 +1455,89 @@
 
     private async Task LoadSubDealer(int id)
     {
-        var model = await Http.GetFromJsonAsync<SubDealerFormModel>(
-            $"api/SubDealerRegistration/{id}");
-
-        if (model == null)
-            return;
-
-        // Keep the saved Sub Dealer values. Do not overwrite saved State/Region/HQ
-        // with the currently logged-in employee location after loading.
-        _model = model;
-        _model.FirmName ??= string.Empty;
-
-        _subDealerId = model.Id;
-        _isEditMode = true;
-
-        _basicInfoStateId = model.StateId;
-        _basicInfoRegionId = model.Region;
-        _basicInfoHqId = model.HQ;
-
-        status = model.Status == SubDealerStatus.InActive
-            ? "Inactive"
-            : "Active";
-
-        // Rebuild the dependent dropdown lists from the SAVED values.
-        _filteredRegions = _regionsAll
-            .Where(x => x.StateId == _basicInfoStateId)
-            .ToList();
-
-        _filteredHeadquarters = _headquartersAll
-            .Where(x => x.RegionId == _basicInfoRegionId)
-            .ToList();
-
-        ApplySubDealerClientFilter();
-
-        // Same behavior as Dealer selection: selected code loads the firm name.
-        _subDealerSearchText =
-            $"{model.SubDealerCode} - {model.FirmName}";
-
-        InitializeLocationSearchTexts();
-        SyncLatitudeLongitudeText();
-
-        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
-        {
-            await TriggerMapUpdate(
-                _model.Latitude.Value,
-                _model.Longitude.Value);
-        }
-
+        // Each load gets a new sequence so a late response from an older
+        // selection cannot overwrite a newer selection or a reset to New Entry.
+        var loadSequence = ++_subDealerLoadSeq;
+        _isLoadingSelected = true;
+        _isEditMode = false;
         await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var model = await Http.GetFromJsonAsync<SubDealerFormModel>(
+                $"api/SubDealerRegistration/{id}");
+
+            if (loadSequence != _subDealerLoadSeq)
+                return;
+
+            if (model == null || model.Id != id)
+            {
+                // Keep the intended edit id: a failed or mismatched load must
+                // stay blocked from being saved as a new record.
+                ShowMessage(
+                    $"The selected Sub Dealer (Id {id}) could not be loaded. Please reload and select again.",
+                    true);
+                return;
+            }
+
+            // Keep the saved Sub Dealer values. Do not overwrite saved State/Region/HQ
+            // with the currently logged-in employee location after loading.
+            _model = model;
+            _model.FirmName ??= string.Empty;
+
+            _subDealerId = model.Id;
+            _intendedSubDealerId = model.Id;
+            _isEditMode = true;
+
+            _basicInfoStateId = model.StateId;
+            _basicInfoRegionId = model.Region;
+            _basicInfoHqId = model.HQ;
+
+            status = model.Status == SubDealerStatus.InActive
+                ? "Inactive"
+                : "Active";
+
+            // Rebuild the dependent dropdown lists from the SAVED values.
+            _filteredRegions = _regionsAll
+                .Where(x => x.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredHeadquarters = _headquartersAll
+                .Where(x => x.RegionId == _basicInfoRegionId)
+                .ToList();
+
+            ApplySubDealerClientFilter();
+
+            // Same behavior as Dealer selection: selected code loads the firm name.
+            _subDealerSearchText =
+                $"{model.SubDealerCode} - {model.FirmName}";
+
+            InitializeLocationSearchTexts();
+            SyncLatitudeLongitudeText();
+
+            if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            {
+                await TriggerMapUpdate(
+                    _model.Latitude.Value,
+                    _model.Longitude.Value);
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            if (loadSequence != _subDealerLoadSeq)
+                return;
+
+            ShowMessage($"Failed to load Sub Dealer: {ex.Message}", true);
+        }
+        finally
+        {
+            if (loadSequence == _subDealerLoadSeq)
+                _isLoadingSelected = false;
+
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private void ApplyLockedEmployeeLocation()
@@ -1725,8 +1775,13 @@
 
     private async Task SelectSubDealer(int id, string displayText)
     {
+        // Do not allow re-selection while a save is in flight.
+        if (_isSaving)
+            return;
+
         _showSubDealerDropdown = false;
         _subDealerId = id;
+        _intendedSubDealerId = id;
         _subDealerSearchText = displayText;
         _errors.Clear();
         _message = null;
@@ -1755,6 +1810,12 @@
             Status = SubDealerStatus.Active
         };
 
+        // Invalidate any in-flight detail load so a late response cannot
+        // repopulate the form while a New Entry is being created.
+        _subDealerLoadSeq++;
+        _isLoadingSelected = false;
+
+        _intendedSubDealerId = 0;
         _subDealerId = 0;
         _isEditMode = false;
         _subDealerSearchText = "";
@@ -2692,33 +2753,48 @@
         if (IsViewOnly || _isSaving)
             return;
 
-        // The searchable text box is only a filter/display field. Typing an
-        // existing code or firm name does not select that database record.
-        // Without this guard the form falls through to POST and creates a new
-        // SDxxxxxx record instead of updating the imported Sub Dealer.
-        if (!_isEditMode &&
-            _subDealerId == 0 &&
-            !string.IsNullOrWhiteSpace(_subDealerSearchText))
+        // Existing-record intent (edit from the list or the dropdown). A save
+        // is allowed only when the load finished and the intended id, selected
+        // id and loaded model id all match. Any pending, failed or mismatched
+        // state blocks the save entirely and never falls through to POST.
+        if (_intendedSubDealerId > 0)
         {
-            ShowMessage(
-                "Please select the exact Sub Dealer Code from the dropdown. " +
-                "Typing the code or firm name alone does not load the imported record.",
-                true);
-            return;
-        }
+            if (_isLoadingSelected)
+            {
+                ShowMessage(
+                    "The selected Sub Dealer is still loading. Please wait and try again.",
+                    true);
+                return;
+            }
 
-        // Do not submit an edit when the selected lookup record and loaded
-        // form record are different.
-        if (_isEditMode &&
-            (_model.Id <= 0 ||
-             _subDealerId <= 0 ||
-             _subDealerId != _model.Id))
+            if (!_isEditMode ||
+                _model.Id <= 0 ||
+                _subDealerId <= 0 ||
+                _subDealerId != _model.Id ||
+                _intendedSubDealerId != _model.Id)
+            {
+                ShowMessage(
+                    "The selected Sub Dealer could not be loaded. Please reload and select the exact Sub Dealer Code.",
+                    true);
+                return;
+            }
+        }
+        else
         {
-            ShowMessage(
-                "Selected Sub Dealer does not match the loaded record. " +
-                "Please reload and select the exact Sub Dealer Code.",
-                true);
-            return;
+            // The searchable text box is only a filter/display field. Typing an
+            // existing code or firm name does not select that database record.
+            // Without this guard the form falls through to POST and creates a new
+            // SDxxxxxx record instead of updating the imported Sub Dealer.
+            if (!_isEditMode &&
+                _subDealerId == 0 &&
+                !string.IsNullOrWhiteSpace(_subDealerSearchText))
+            {
+                ShowMessage(
+                    "Please select the exact Sub Dealer Code from the dropdown. " +
+                    "Typing the code or firm name alone does not load the imported record.",
+                    true);
+                return;
+            }
         }
 
         if (!Validate())
@@ -2754,7 +2830,10 @@
 
             HttpResponseMessage response;
 
-            if (_isEditMode && _model.Id > 0)
+            // Existing-record saves that passed the guard above always go through PUT
+            // with the loaded record id. POST is reserved for a genuine New Entry
+            // with no pending or failed edit intent.
+            if (_intendedSubDealerId > 0)
             {
                 response = await Http.PutAsJsonAsync(
                     $"api/SubDealerRegistration/{_model.Id}",
@@ -2790,6 +2869,7 @@
 
             _model = savedModel;
             _subDealerId = savedModel.Id;
+            _intendedSubDealerId = savedModel.Id;
             _isEditMode = true;
 
             if (_gstFile != null)
