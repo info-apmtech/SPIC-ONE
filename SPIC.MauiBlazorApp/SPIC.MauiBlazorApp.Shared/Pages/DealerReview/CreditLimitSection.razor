@@ -1,0 +1,535 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@*
+    "Credit Limit Proposal" accordion — by far the biggest block on the page: the existing SPIC
+    and GreenStar limits, the fiscal years, both valuation score tables with their recommended
+    limit footers, and the sales performance table.
+
+    Every number comes from the shared DealerReviewFigures instance, so this section renders
+    only when the proposal / sales data is (re)loaded.
+*@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="OnToggle">
+            Credit Limit Proposal
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                @if (CreditProposal != null)
+                {
+<div class="col-md-6">
+                        <div class="detail-card h-100">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-credit-card"></i> Existing Credit Limit — SPIC</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Amount:</div><div class="data-value">₹@CreditProposal.SpicExistingCreditLimitAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">From:</div><div class="data-value">@(CreditProposal.SpicExistingCreditLimitFrom.Year > 1 ? CreditProposal.SpicExistingCreditLimitFrom.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">To:</div><div class="data-value">@(CreditProposal.SpicExistingCreditLimitTo.Year > 1 ? CreditProposal.SpicExistingCreditLimitTo.ToString("dd MMM yyyy") : "-")</div></div>
+                               @*  <div class="data-row"><div class="data-label">Additional Credit Limit:</div><div class="data-value">₹@CreditProposal.AdditionalCreditLimit.ToString("N2")</div></div> *@
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="detail-card h-100">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-credit-card"></i> Existing Credit Limit — GreenStar</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Amount:</div><div class="data-value">₹@CreditProposal.GSExistingCreditLimitAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">From:</div><div class="data-value">@(CreditProposal.GSExistingCreditLimitFrom.Year > 1 ? CreditProposal.GSExistingCreditLimitFrom.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">To:</div><div class="data-value">@(CreditProposal.GSExistingCreditLimitTo.Year > 1 ? CreditProposal.GSExistingCreditLimitTo.ToString("dd MMM yyyy") : "-")</div></div>
+                              @*   <div class="data-row"><div class="data-label">Greenstar Additional:</div><div class="data-value">₹@CreditProposal.GreenstarAdditionalCreditLimit.ToString("N2")</div></div> *@
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-calendar-week"></i> Fiscal Years </h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="row">
+                                    <div class="col-md-4"><div class="data-row"><div class="data-label">FY1:</div><div class="data-value">@DealerReviewFormat.FyName(FinancialYearNames, CreditProposal.FY1)</div></div></div>
+                                    <div class="col-md-4"><div class="data-row"><div class="data-label">FY2:</div><div class="data-value">@DealerReviewFormat.FyName(FinancialYearNames, CreditProposal.FY2)</div></div></div>
+                                    <div class="col-md-4"><div class="data-row"><div class="data-label">FY3:</div><div class="data-value">@DealerReviewFormat.FyName(FinancialYearNames, CreditProposal.FY3)</div></div></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+<div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-clipboard-data"></i> SPIC Valuation</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="rv-table">
+                                    <thead>
+                                        <tr>
+                                            <th rowspan="2" style="width:4%;">S.No</th>
+                                            <th rowspan="2">Critical Parameter</th>
+                                            <th rowspan="2" style="width:12%;">Measure</th>
+                                            <th rowspan="2" style="width:7%;">Weightage (%)</th>
+                                            <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                            <th colspan="5" class="text-center">Norms / Marks</th>
+                                            <th colspan="2" class="text-center">Dealer Score</th>
+                                        </tr>
+                                        <tr>
+                                            <th class="text-center">1</th><th class="text-center">2</th><th class="text-center">3</th><th class="text-center">4</th><th class="text-center">5</th>
+                                            <th class="text-center" style="width:9%;">Value</th>
+                                            <th class="text-center" style="width:7%;">Marks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">1</td>
+                                            <td rowspan="2" class="align-middle">Total Urea Sales Volume during last year</td>
+                                            <td rowspan="8" class="text-center align-middle rv-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">MT</td>
+                                            <td class="text-center">&gt;3000</td><td class="text-center">&gt;1500</td><td class="text-center">&gt;1000</td><td class="text-center">&gt;500</td><td class="text-center">&lt;500</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicAnnualUreaQty().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.Q1Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">2</td>
+                                            <td rowspan="2" class="align-middle">Urea Sales Volume with SPIC during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">MT</td>
+                                            <td class="text-center">&gt;500</td><td class="text-center">&gt;300</td><td class="text-center">&gt;200</td><td class="text-center">&gt;100</td><td class="text-center">&lt;100</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicPerfUreaQty().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.Q2Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">3</td>
+                                            <td rowspan="2" class="align-middle">Total Urea Sales Turnover during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;200</td><td class="text-center">&gt;100</td><td class="text-center">&gt;60</td><td class="text-center">&gt;30</td><td class="text-center">&lt;30</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicAnnualUreaTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.Q3Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">4</td>
+                                            <td rowspan="2" class="align-middle">Urea Sales Turnover with SPIC during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">20</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;15</td><td class="text-center">&gt;10</td><td class="text-center">&lt;10</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicPerfUreaTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.Q4Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">5</td>
+                                            <td rowspan="2" class="align-middle">Dealership tenure with SPIC</td>
+                                            <td rowspan="2" class="text-center align-middle rv-muted">Loyalty to SPIC</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Years</td>
+                                            <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&gt;1</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicTenureYears().ToString("N1")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.Q5Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">6</td>
+                                            <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">20</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&lt;1</td><td class="text-center">&lt;5</td><td class="text-center">&lt;10</td><td class="text-center">&lt;20</td><td class="text-center">&lt;30</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicOverduesDisplay()</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.Q6Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+
+                                        <tr>
+                                            <td class="text-center align-middle">7</td>
+                                            <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+                                            <td rowspan="3" class="text-center align-middle rv-muted">Financial Soundness</td>
+                                            <td rowspan="3" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td></td><td></td><td></td><td></td><td></td>
+                                            <td class="align-middle"><div class="rv-val-box">@Figures.SpicFixedAssets().ToString("N2")</div></td>
+                                            <td class="text-center align-middle rv-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">8</td>
+                                            <td rowspan="2" class="align-middle">Property Value as % of Sales Turnover with SPIC (7/4 x 100)</td>
+                                            <td class="text-center">%</td>
+                                            <td class="text-center">&gt;50</td><td class="text-center">&gt;40</td><td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;10</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicPropertyPercent().ToString("N2")%</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.Q8Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td class="text-center align-middle">9</td>
+                                            <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+                                            <td rowspan="3" class="text-center align-middle rv-muted">Credit Security</td>
+                                            <td rowspan="3" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td></td><td></td><td></td><td></td><td></td>
+                                            <td class="align-middle"><div class="rv-val-box">@Figures.SpicSecurityTotalValue().ToString("N2")</div></td>
+                                            <td class="text-center align-middle rv-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with SPIC (9/4 x 100)</td>
+                                            <td class="text-center">%</td>
+                                            <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&lt;4</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicSecurityPercent().ToString("N2")%</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.Q10Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+                                    </tbody>
+                                   <tfoot>
+                                        <tr>
+                                            <td colspan="11"><strong>Grand Total</strong></td>
+                                            <td class="text-center"><strong style="color:#059669;">@CreditProposal.Q11Mark / 100</strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div class="credit-footer">
+                                <h4 class="mb-1" style="font-size: 14px;">SPIC — Recommended Credit Limit</h4>
+                                <p class="credit-desc mb-3">Score: @CreditProposal.Q11Mark.ToString("N0")/100.</p>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <div class="credit-box">
+                                            <div class="credit-box-label">Proposed Limit</div>
+                                            <div class="credit-box-val">₹ @Figures.GetSpicProposedLimit().ToString("N2")</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="credit-box">
+                                            <div class="credit-box-label">Additional Credit Limit</div>
+                                            <div class="credit-box-val">₹ @CreditProposal.AdditionalCreditLimit.ToString("N2")</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="credit-box">
+                                            <div class="credit-box-label">MO Recommended Credit Limit</div>
+                                            <div class="credit-box-val">₹ @Figures.GetSpicMoRecommendedLimit().ToString("N2")</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-clipboard-data"></i> GreenStar Valuation</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="rv-table">
+                                    <thead>
+                                        <tr>
+                                            <th rowspan="2" style="width:4%;">S.No</th>
+                                            <th rowspan="2">Critical Parameter</th>
+                                            <th rowspan="2" style="width:12%;">Measure</th>
+                                            <th rowspan="2" style="width:7%;">Weightage (%)</th>
+                                            <th rowspan="2" style="width:7%;">Unit &amp; Marks</th>
+                                            <th colspan="5" class="text-center">Norms / Marks</th>
+                                            <th colspan="2" class="text-center">Dealer Score</th>
+                                        </tr>
+                                        <tr>
+                                            <th class="text-center">1</th><th class="text-center">2</th><th class="text-center">3</th><th class="text-center">4</th><th class="text-center">5</th>
+                                            <th class="text-center" style="width:9%;">Value</th>
+                                            <th class="text-center" style="width:7%;">Marks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">1</td>
+                                            <td rowspan="2" class="align-middle">Total Fertilizer Sales Volume during last year</td>
+                                            <td rowspan="8" class="text-center align-middle rv-muted" style="vertical-align:middle;">Fertilizer Business Involvement</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">MT</td>
+                                            <td class="text-center">&gt;3000</td><td class="text-center">&gt;1500</td><td class="text-center">&gt;1000</td><td class="text-center">&gt;500</td><td class="text-center">&lt;500</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.GsAnnualFertQty().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ1Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">2</td>
+                                            <td rowspan="2" class="align-middle">Fertilizer Sales Volume with GFL during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">MT</td>
+                                            <td class="text-center">&gt;500</td><td class="text-center">&gt;350</td><td class="text-center">&gt;250</td><td class="text-center">&gt;150</td><td class="text-center">&gt;75</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.GsPerfFertQty().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ2Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">3</td>
+                                            <td rowspan="2" class="align-middle">Total Fertilizer Sales Turnover during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;700</td><td class="text-center">&gt;350</td><td class="text-center">&gt;250</td><td class="text-center">&gt;125</td><td class="text-center">&lt;125</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.GsAnnualFertTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ3Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">4</td>
+                                            <td rowspan="2" class="align-middle">Fertilizer Sales Turnover with GFL during last year</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;125</td><td class="text-center">&gt;80</td><td class="text-center">&gt;60</td><td class="text-center">&gt;35</td><td class="text-center">&lt;15</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.GsPerfFertTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ4Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">5</td>
+                                            <td rowspan="2" class="align-middle">SP Turnover during last year</td>
+                                            <td rowspan="2" class="text-center align-middle rv-muted">Specialty products involvement</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&gt;100</td><td class="text-center">&gt;50</td><td class="text-center">&gt;25</td><td class="text-center">&gt;10</td><td class="text-center">&lt;10</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.GsSpTurnover().ToString("N2")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ5Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">6</td>
+                                            <td rowspan="2" class="align-middle">Dealership tenure with GFL</td>
+                                            <td rowspan="2" class="text-center align-middle rv-muted">Loyalty to GFL</td>
+                                            <td rowspan="2" class="text-center align-middle">10</td>
+                                            <td class="text-center">Years</td>
+                                            <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&gt;1</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.SpicTenureYears().ToString("N1")</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ6Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">7</td>
+                                            <td rowspan="2" class="align-middle">Monthly Average Net Overdues during last year</td>
+                                            <td rowspan="2" class="text-center align-middle rv-muted"></td>
+                                            <td rowspan="2" class="text-center align-middle">20</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td class="text-center">&lt;1</td><td class="text-center">&lt;5</td><td class="text-center">&lt;10</td><td class="text-center">&lt;20</td><td class="text-center">&lt;30</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.GsOverduesDisplay()</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ7Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">20</td><td class="text-center">16</td><td class="text-center">12</td><td class="text-center">8</td><td class="text-center">4</td></tr>
+
+                                        <tr>
+                                            <td class="text-center align-middle">8</td>
+                                            <td class="align-middle">Value of dealer's property - Fixed Assets</td>
+                                            <td rowspan="3" class="text-center align-middle rv-muted">Financial Soundness</td>
+                                            <td rowspan="3" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td></td><td></td><td></td><td></td><td></td>
+                                            <td class="align-middle"><div class="rv-val-box">@Figures.SpicFixedAssets().ToString("N2")</div></td>
+                                            <td class="text-center align-middle rv-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">9</td>
+                                            <td rowspan="2" class="align-middle">Property Value as % of Sales Turnover with GFL (8/(4+5) x 100)</td>
+                                            <td class="text-center">%</td>
+                                            <td class="text-center">&gt;50</td><td class="text-center">&gt;40</td><td class="text-center">&gt;30</td><td class="text-center">&gt;20</td><td class="text-center">&gt;10</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.GsPropertyPercent().ToString("N2")%</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ9Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+
+                                        <tr>
+                                            <td class="text-center align-middle">10</td>
+                                            <td class="align-middle">Available Security (SD / FD / BG / Collateral)</td>
+                                            <td rowspan="3" class="text-center align-middle rv-muted">Credit Security</td>
+                                            <td rowspan="3" class="text-center align-middle">10</td>
+                                            <td class="text-center">Rs. Lakhs</td>
+                                            <td></td><td></td><td></td><td></td><td></td>
+                                            <td class="align-middle"><div class="rv-val-box">@Figures.GsSecurityTotalValue().ToString("N2")</div></td>
+                                            <td class="text-center align-middle rv-muted">-</td>
+                                        </tr>
+                                        <tr>
+                                            <td rowspan="2" class="text-center align-middle">11</td>
+                                            <td rowspan="2" class="align-middle">Available Security as % of Sales Turnover with GFL (10/(4+5) x 100)</td>
+                                            <td class="text-center">%</td>
+                                            <td class="text-center">&gt;10</td><td class="text-center">&gt;8</td><td class="text-center">&gt;6</td><td class="text-center">&gt;4</td><td class="text-center">&lt;4</td>
+                                            <td rowspan="2" class="align-middle"><div class="rv-val-box">@Figures.GsSecurityPercent().ToString("N2")%</div></td>
+                                            <td rowspan="2" class="text-center align-middle"><div class="rv-mark-box">@CreditProposal.GQ11Mark</div></td>
+                                        </tr>
+                                        <tr><td class="text-center rv-muted">Marks</td><td class="text-center">10</td><td class="text-center">8</td><td class="text-center">6</td><td class="text-center">4</td><td class="text-center">2</td></tr>
+                                    </tbody>
+                                   <tfoot>
+                                        <tr>
+                                            <td colspan="11"><strong>Grand Total</strong></td>
+                                            <td class="text-center"><strong style="color:#059669;">@CreditProposal.GQ12Mark / 100</strong></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            <div class="credit-footer">
+                                <h4 class="mb-1" style="font-size: 14px;">Greenstar — Recommended Credit Limit</h4>
+                                <p class="credit-desc mb-3">Score: @CreditProposal.GQ12Mark.ToString("N0")/100.</p>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <div class="credit-box">
+                                            <div class="credit-box-label">Proposed Limit</div>
+                                            <div class="credit-box-val">₹ @Figures.GetGflProposedLimit().ToString("N2")</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="credit-box">
+                                            <div class="credit-box-label">Additional Credit Limit</div>
+                                            <div class="credit-box-val">₹ @CreditProposal.GreenstarAdditionalCreditLimit.ToString("N2")</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="credit-box">
+                                            <div class="credit-box-label">MO Recommended Credit Limit</div>
+                                            <div class="credit-box-val">₹ @Figures.GetGflMoRecommendedLimit().ToString("N2")</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                   @*  <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-bank2"></i> SPIC Securities</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">FD Number:</div><div class="data-value">@(CreditProposal.SpicFDNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">FD Details:</div><div class="data-value">@(CreditProposal.SpicFDOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">FD Amount:</div><div class="data-value">₹@CreditProposal.SpicFDAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">BG Number:</div><div class="data-value">@(CreditProposal.SpicBGNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">BG Details:</div><div class="data-value">@(CreditProposal.SpicBGOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">BG Amount:</div><div class="data-value">₹@CreditProposal.SpicBGAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Number:</div><div class="data-value">@(CreditProposal.SpicCollateralNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Details:</div><div class="data-value">@(CreditProposal.SpicCollateralOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Amount:</div><div class="data-value">₹@CreditProposal.SpicCollateralAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Number:</div><div class="data-value">@(CreditProposal.SpicTradeDepositNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Details:</div><div class="data-value">@(CreditProposal.SpicTradeDepositOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Amount:</div><div class="data-value">₹@CreditProposal.SpicTradeDepositAmount.ToString("N2")</div></div>
+                            </div>
+                        </div>
+                    </div> *@
+
+                  @*   <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-bank2"></i> Greenstar Securities</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">FD Number:</div><div class="data-value">@(CreditProposal.GreenstarFDNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">FD Details:</div><div class="data-value">@(CreditProposal.GreenstarFDOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">FD Amount:</div><div class="data-value">₹@CreditProposal.GreenstarFDAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">BG Number:</div><div class="data-value">@(CreditProposal.GreenstarBGNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">BG Details:</div><div class="data-value">@(CreditProposal.GreenstarBGOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">BG Amount:</div><div class="data-value">₹@CreditProposal.GreenstarBGAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Number:</div><div class="data-value">@(CreditProposal.GreenstarCollateralNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Details:</div><div class="data-value">@(CreditProposal.GreenstarCollateralOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Collateral Amount:</div><div class="data-value">₹@CreditProposal.GreenstarCollateralAmount.ToString("N2")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Number:</div><div class="data-value">@(CreditProposal.GreenstarTradeDepositNumber ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Details:</div><div class="data-value">@(CreditProposal.GreenstarTradeDepositOtherDetails ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Trade Deposit Amount:</div><div class="data-value">₹@CreditProposal.GreenstarTradeDepositAmount.ToString("N2")</div></div>
+                            </div>
+                        </div>
+                    </div> *@
+
+                    @if (Dealer?.Status != DR.DealerStatus.InActive && CreditSales != null && CreditSales.Any())
+                    {
+                        <div class="col-12">
+                            <div class="detail-card">
+                                <div class="detail-card-header">
+                                    <h4 class="detail-card-title"><i class="bi bi-graph-up"></i> Sales Performance</h4>
+                                    <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="sales-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Product</th>
+                                                <th>Category</th>
+                                                <th>FY1 Qty</th>
+                                                <th>FY1 Amount</th>
+                                                <th>FY2 Qty</th>
+                                                <th>FY2 Amount</th>
+                                                <th>FY3 Qty</th>
+                                                <th>FY3 Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var s in CreditSales)
+                                            {
+                                                var pName = ProductNames.ContainsKey(s.ProductId) ? ProductNames[s.ProductId] : s.ProductId.ToString();
+                                                var catName = Categories.FirstOrDefault(c => c.Id == s.CategoryId)?.Name ?? s.CategoryId.ToString();
+                                                <tr>
+                                                    <td>@pName</td>
+                                                    <td>@catName</td>
+                                                    <td>@s.FY1Qty.ToString("N2")</td>
+                                                    <td>₹@s.FY1Amount.ToString("N2")</td>
+                                                    <td>@s.FY2Qty.ToString("N2")</td>
+                                                    <td>₹@s.FY2Amount.ToString("N2")</td>
+                                                    <td>@s.FY3Qty.ToString("N2")</td>
+                                                    <td>₹@s.FY3Amount.ToString("N2")</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Credit Limit Proposal</div><div class="data-value">No proposal data available</div></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    [Parameter] public DR.DealerRegistration? Dealer { get; set; }
+    [Parameter] public DR.DealerCreditLimitProposal? CreditProposal { get; set; }
+    [Parameter] public List<DR.DealerCreditLimitSalesPerformance> CreditSales { get; set; } = new();
+    [Parameter] public List<DR.Category> Categories { get; set; } = new();
+    [Parameter] public Dictionary<int, string> ProductNames { get; set; } = new();
+    [Parameter] public Dictionary<int, string> FinancialYearNames { get; set; } = new();
+    [Parameter] public DealerReviewFigures Figures { get; set; } = default!;
+    [Parameter] public int DataVersion { get; set; }
+}
