@@ -100,6 +100,11 @@ builder.Services.AddScoped<IAssistantProvider>(sp =>
         ? sp.GetRequiredService<AnthropicAssistantProvider>()
         : sp.GetRequiredService<KeywordAssistantProvider>();
 });
+// Contact Us enquiry email. Options bind to the SAME "Alerts:Email" section that
+// SPIC.Ifms.Automation uses, so both apps share one SMTP configuration/pattern.
+builder.Services.Configure<ContactUsMailOptions>(
+    builder.Configuration.GetSection(ContactUsMailOptions.SectionName));
+builder.Services.AddScoped<IContactUsMailService, ContactUsMailService>();
 
 // Shares the IFMS portal-password encryption keys with the automation service.
 // The application name is part of the key derivation, so it must match the
