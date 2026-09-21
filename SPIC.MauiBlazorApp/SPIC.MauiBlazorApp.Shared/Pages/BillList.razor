@@ -155,7 +155,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var bill in _bills)
+                        @foreach (var bill in _bills.Take(_visibleCount))
                         {
                             var cls = bill.BillId == _highlightId ? "bl-row-highlight" : "";
                             <tr class="@cls">
@@ -183,6 +183,15 @@
                     </tbody>
                 </table>
             </div>
+            @if (_bills.Count > _visibleCount)
+            {
+                @* Rows are added in batches: this list grows with every invoice ever
+                   generated, and a phone WebView must not lay them all out at once. *@
+                <div class="dash-show-more">
+                    <span class="text-muted small">Showing @Math.Min(_visibleCount, _bills.Count) of @_bills.Count</span>
+                    <button type="button" class="btn btn-outline-success" @onclick="ShowMore">Show more</button>
+                </div>
+            }
         </div>
     }
 </div>
@@ -385,6 +394,11 @@
     private string? _error;
     private int _highlightId;
 
+    // Rows rendered so far. The bill list has no filter or pager and grows without bound.
+    private const int RowBatch = 50;
+    private int _visibleCount = RowBatch;
+    private void ShowMore() => _visibleCount += RowBatch;
+
     protected override async Task OnInitializedAsync()
     {
         var q = Navigation.ToAbsoluteUri(Navigation.Uri);
@@ -403,6 +417,7 @@
             if (response.IsSuccessStatusCode)
             {
                 _bills = await response.Content.ReadFromJsonAsync<List<BillListItemDto>>() ?? new();
+                _visibleCount = RowBatch;
             }
             else
             {

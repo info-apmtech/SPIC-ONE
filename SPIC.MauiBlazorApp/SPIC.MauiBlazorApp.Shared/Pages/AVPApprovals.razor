@@ -174,7 +174,7 @@
 					<div class="metric-header">
 						<h4 class="metric-title">Total Pending</h4>
 					</div>
-					<div class="metric-val">@FilteredItems.Count</div>
+					<div class="metric-val">@_filteredItems.Count</div>
 				</div>
 			</div>
 			<div class="col-6 col-md-3">
@@ -182,7 +182,7 @@
 					<div class="metric-header">
 						<h4 class="metric-title">Sub Dealers</h4>
 					</div>
-					<div class="metric-val">@FilteredItems.Count(x => x.Type == "Sub Dealer")</div>
+					<div class="metric-val">@_filteredItems.Count(x => x.Type == "Sub Dealer")</div>
 				</div>
 			</div>
 			<div class="col-6 col-md-3">
@@ -190,7 +190,7 @@
 					<div class="metric-header">
 						<h4 class="metric-title">Employees</h4>
 					</div>
-					<div class="metric-val">@FilteredItems.Count(x => x.Type == "Employee")</div>
+					<div class="metric-val">@_filteredItems.Count(x => x.Type == "Employee")</div>
 				</div>
 			</div>
 			<div class="col-6 col-md-3">
@@ -198,7 +198,7 @@
 					<div class="metric-header">
 						<h4 class="metric-title">Filter</h4>
 					</div>
-					<select class="form-control-custom w-100" @bind="_typeFilter">
+					<select class="form-control-custom w-100" @bind="_typeFilter" @bind:after="ApplyFilter">
 						<option value="All">All Types</option>
 						<option value="Sub Dealer">Sub Dealers Only</option>
 						<option value="Employee">Employees Only</option>
@@ -226,7 +226,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						@foreach (var item in FilteredItems)
+						@foreach (var item in _filteredItems.Take(_visibleCount))
 						{
 							<tr>
 								<td><span class="badge @(item.Type == "Sub Dealer" ? "bg-info" : "bg-warning")">@item.Type</span></td>
@@ -253,13 +253,13 @@
 
 			@* native: phone card list (<= 767px). Same rows and the same OpenApproveModal calls as the table. *@
 			<div class="sa-cards phone-only">
-				@if (FilteredItems.Count == 0)
+				@if (_filteredItems.Count == 0)
 				{
 					<EmptyState Icon="bi-inbox" Title="Nothing waiting for your approval" Message="No records match the selected filter." />
 				}
 				else
 				{
-					@foreach (var item in FilteredItems)
+					@foreach (var item in _filteredItems.Take(_visibleCount))
 					{
 						<article class="sa-card">
 							<header class="sa-card-head">
@@ -285,6 +285,17 @@
 					}
 				}
 			</div>
+
+			@if (_filteredItems.Count > _visibleCount)
+			{
+				@* Rows are added in batches: this queue is the fan-in point for every
+				   pending record, and a phone WebView must not lay them all out at once.
+				   Sits below both layouts - the table is hidden on phone, the cards above it. *@
+				<div class="dash-show-more">
+					<span class="text-muted small">Showing @Math.Min(_visibleCount, _filteredItems.Count) of @_filteredItems.Count</span>
+					<button type="button" class="btn btn-outline-success" @onclick="ShowMore">Show more</button>
+				</div>
+			}
 		</div>
 	}
 
@@ -334,8 +345,21 @@
 	private bool _actionIsApprove;
 	private string _actionRemarks = "";
 
-	private List<PendingApprovalItemDto> FilteredItems =>
-		_typeFilter == "All" ? _pendingItems : _pendingItems.Where(x => x.Type == _typeFilter).ToList();
+	private List<PendingApprovalItemDto> _filteredItems = new();
+
+	// Rows rendered so far. The filtered list was previously a computed property, so every
+	// render re-materialised it once per use (metrics, table, cards).
+	private const int RowBatch = 50;
+	private int _visibleCount = RowBatch;
+	private void ShowMore() => _visibleCount += RowBatch;
+
+	private void ApplyFilter()
+	{
+		_filteredItems = _typeFilter == "All"
+			? _pendingItems.ToList()
+			: _pendingItems.Where(x => x.Type == _typeFilter).ToList();
+		_visibleCount = RowBatch;
+	}
 
 	private string HeaderSubtitle =>
 		_isLoading ? "Sub Dealers & Employees" : $"Sub Dealers & Employees · {_pendingItems.Count} pending";
@@ -354,6 +378,7 @@
 	{
 		ActiveTab = tab;
 		_typeFilter = tab == "All" ? "All" : tab;
+		ApplyFilter();
 	}
 
 	private async Task LoadPendingItems()
@@ -362,6 +387,7 @@
 		try
 		{
 			_pendingItems = await Http.GetFromJsonAsync<List<PendingApprovalItemDto>>("api/subdealeremployee/pending-avp-approvals") ?? new();
+			ApplyFilter();
 		}
 		catch (Exception ex)
 		{

@@ -194,7 +194,7 @@
                     }
                     else
                     {
-                        @foreach (var app in _approval.Applications)
+                        @foreach (var app in _approval.Applications.Take(_visibleCount))
                         {
                             var days = PendingDays(app.ApplicationDate);
                             <tr>
@@ -228,6 +228,15 @@
                 </tbody>
             </table>
         </div>
+        @if (_approval.Applications.Count > _visibleCount)
+        {
+            @* Rows are added in batches: the pending queue covers every dealer, and a
+               phone WebView must not lay them all out at once. *@
+            <div class="dash-show-more">
+                <span class="text-muted small">Showing @Math.Min(_visibleCount, _approval.Applications.Count) of @_approval.Applications.Count</span>
+                <button type="button" class="btn btn-outline-success" @onclick="ShowMore">Show more</button>
+            </div>
+        }
     </div>
 
     <div class="dsh-grid-2">
@@ -551,6 +560,14 @@
     private List<BillListItemDto> _bills = new();
     private List<FrontOfficeHouseDto> _rooms = new();
 
+    // Rows rendered so far for the pending-applications table.
+    private const int RowBatch = 50;
+    private int _visibleCount = RowBatch;
+    private void ShowMore() => _visibleCount += RowBatch;
+
+    // Guest house names by id, so OccupancyByProperty does not scan _rooms per group.
+    private Dictionary<int, string> _guestHouseNameById = new();
+
     protected override async Task OnInitializedAsync()
     {
         var tApproval = SafeGetAsync<WelfareApprovalPageDto>("api/WelfareSchemeApproval/applications");
@@ -576,6 +593,10 @@
         _dealers = tDealers.Result.Value ?? new();
         _bills = tBills.Result.Value ?? new();
         _rooms = tRooms.Result.Value ?? new();
+
+        _guestHouseNameById = _rooms.GroupBy(h => h.GuestHouseId)
+            .ToDictionary(g => g.Key, g => g.First().GuestHouseName ?? "");
+        _visibleCount = RowBatch;
 
         // Welfare KPIs / donut / workflow / trend / regional / activities depend on ALL four
         // approval-tab calls succeeding. If any one is unavailable, the merged pipeline would
@@ -687,7 +708,7 @@
         .GroupBy(r => r.GuestHouseId)
         .Select(g => new GuestHouseOccupancyItem
         {
-            GuestHouseName = _rooms.FirstOrDefault(h => h.GuestHouseId == g.Key)?.GuestHouseName ?? "",
+            GuestHouseName = _guestHouseNameById.TryGetValue(g.Key, out var ghName) ? ghName : "",
             TotalRooms = g.Count(),
             OccupiedRooms = g.Count(r => r.CurrentBookingId.HasValue && (r.BookingStatus == 2 || r.BookingStatus == 5))
         })

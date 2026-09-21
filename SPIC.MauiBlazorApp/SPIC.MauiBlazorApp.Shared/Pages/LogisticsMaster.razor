@@ -1017,6 +1017,11 @@
     private List<HeadquarterDto> _filteredHeadquarters = new();
     private List<DistrictDto> _filteredDistricts = new();
 
+    // Name indexes for the table rows: the district master is several hundred rows, so a
+    // FirstOrDefault per rendered row scanned it on every re-render.
+    private Dictionary<int, string> _stateNameById = new();
+    private Dictionary<int, string> _districtNameById = new();
+
     private List<LogisticsItemDto> _pvtWarehouseAll = new();
     private List<LogisticsItemDto> _candFWarehouseAll = new();
     private List<LogisticsItemDto> _rakePointAll = new();
@@ -1121,6 +1126,11 @@
             _districts = districtsTask.Result ?? new();
             _regions = regionsTask.Result ?? new();
             _headquarters = hqTask.Result ?? new();
+
+            _stateNameById = _states.GroupBy(x => x.Id)
+                .ToDictionary(g => g.Key, g => g.First().StateName ?? "");
+            _districtNameById = _districts.GroupBy(x => x.Id)
+                .ToDictionary(g => g.Key, g => g.First().DistrictName ?? "");
         }
         catch (Exception ex)
         {
@@ -1808,8 +1818,8 @@
     private static int? ToNullableId(int value) => value > 0 ? value : null;
     private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private string GetStateName(int id) => _states.FirstOrDefault(x => x.Id == id)?.StateName ?? "";
-    private string GetDistrictName(int id) => _districts.FirstOrDefault(x => x.Id == id)?.DistrictName ?? "";
+    private string GetStateName(int id) => _stateNameById.TryGetValue(id, out var name) ? name : "";
+    private string GetDistrictName(int id) => _districtNameById.TryGetValue(id, out var name) ? name : "";
 
     private void ShowMessage(string message, bool isError)
     {
