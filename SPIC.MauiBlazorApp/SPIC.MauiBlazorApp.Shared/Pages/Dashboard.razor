@@ -384,12 +384,12 @@
     else
     {
         <div class="row g-4">
-            @foreach (var dealer in _filteredDealers)
+            @foreach (var dealer in _filteredDealers.Take(_visibleCount))
             {
                 var approvalStatus = GetApprovalStatus(dealer);
                 var statusName = GetStatusName(dealer.Status);
-                var regionName = _regionsAll.FirstOrDefault(r => r.Id == dealer.Region)?.RegionName ?? "-";
-                var hqName = _headquartersAll.FirstOrDefault(h => h.Id == dealer.HQ)?.HeadquarterName ?? "-";
+                var regionName = _regionNames.GetValueOrDefault(dealer.Region) ?? "-";
+                var hqName = _hqNames.GetValueOrDefault(dealer.HQ) ?? "-";
                 var isPendingForMe = IsPendingForMe(dealer);
 
                 <div class="col-12 col-sm-12 col-md-6 col-xl-4">
@@ -607,6 +607,14 @@
                 </div>
             }
         </div>
+        @if (_filteredDealers.Count > _visibleCount)
+        {
+            @* Cards are added in batches: a phone WebView must not lay out a thousand cards at once. *@
+            <div class="dash-show-more">
+                <span class="text-muted small">Showing @Math.Min(_visibleCount, _filteredDealers.Count) of @_filteredDealers.Count</span>
+                <button type="button" class="btn btn-outline-success" @onclick="ShowMore">Show more</button>
+            </div>
+        }
    }
 
 </div>
@@ -781,6 +789,13 @@
     private List<DealerDto> _filteredDealers = new();
     private List<RegionDto> _regionsAll = new();
     private List<HeadquarterDto> _headquartersAll = new();
+    private Dictionary<int, string> _regionNames = new();
+    private Dictionary<int, string> _hqNames = new();
+
+    // Cards rendered so far (the list can hold over a thousand registrations for an admin).
+    private const int CardBatch = 30;
+    private int _visibleCount = CardBatch;
+    private void ShowMore() => _visibleCount += CardBatch;
     private List<StateDto> _statesAll = new();
     private bool _isLoading = true;
 
@@ -1171,6 +1186,8 @@
             _allDealers          = await dealersTask;
             _regionsAll          = await regionsTask;
             _headquartersAll     = await hqTask;
+            _regionNames = _regionsAll.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First().RegionName ?? "-");
+            _hqNames = _headquartersAll.GroupBy(h => h.Id).ToDictionary(g => g.Key, g => g.First().HeadquarterName ?? "-");
             _statesAll           = await statesTask;
 
             _dealerStepCounts = await countsTask ?? new Dictionary<int, int>();
@@ -1398,6 +1415,7 @@
         };
 
         _filteredDealers = query.ToList();
+        _visibleCount = CardBatch;
     }
     private string GetEntityTypeName(int? entityType, string? fallbackName = null)
     {
