@@ -1148,7 +1148,31 @@
             var response = await Http.PostAsync("api/RakePointMaster/bulk-upload", content);
             if (!response.IsSuccessStatusCode)
             {
-                ShowMessage("Rake Point upload failed. Please check the file and try again.", true);
+                // Debug aid: surface the API's actual message instead of a generic
+                // one, so the real failure reason is visible. Falls back to generic
+                // text when the error body is empty or not JSON.
+                var detail = string.Empty;
+                try
+                {
+                    var body = await response.Content.ReadAsStringAsync();
+                    using var doc = System.Text.Json.JsonDocument.Parse(body);
+                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                        doc.RootElement.TryGetProperty("message", out var msg) &&
+                        msg.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        detail = msg.GetString() ?? string.Empty;
+                    }
+                }
+                catch
+                {
+                    // Non-JSON error body (gateway/proxy) — fall through to generic text.
+                }
+
+                ShowMessage(
+                    string.IsNullOrWhiteSpace(detail)
+                        ? "Rake Point upload failed. Please check the file and try again."
+                        : detail,
+                    true);
                 return;
             }
 
