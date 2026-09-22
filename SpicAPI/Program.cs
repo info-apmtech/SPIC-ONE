@@ -113,6 +113,12 @@ builder.Services.Configure<RazorpayOptions>(
     builder.Configuration.GetSection(RazorpayOptions.SectionName));
 builder.Services.AddScoped<IRazorpayService, RazorpayService>();
 
+// How long a PendingPayment Guest House booking still holds its room slot before the
+// hold lapses and the room becomes bookable by someone else again - see
+// GuestHouseBookingOptions.
+builder.Services.Configure<GuestHouseBookingOptions>(
+    builder.Configuration.GetSection(GuestHouseBookingOptions.SectionName));
+
 // Shares the IFMS portal-password encryption keys with the automation service.
 // The application name is part of the key derivation, so it must match the
 // automation exactly or neither can read what the other wrote.

@@ -634,8 +634,8 @@
             </Secondary>
             <ChildContent>
                 <button class="btn-primary-continue" @onclick="HandlePrimaryAction"
-                        disabled="@(!BookingState.IsInitialized || _isSubmitting)">
-                    @(_isSubmitting ? "Please wait..." : (_pendingBookingId.HasValue ? "Retry Payment" : "Complete Booking"))
+                        disabled="@(!BookingState.IsInitialized || _isSubmitting || _paymentFailed)">
+                    @(_isSubmitting ? "Please wait..." : (_paymentFailed ? "Payment Failed" : (_pendingBookingId.HasValue ? "Retry Payment" : "Complete Booking")))
                 </button>
             </ChildContent>
         </ActionBar>
@@ -766,6 +766,11 @@
     private string? _razorpayPaymentId;
     private DotNetObjectReference<Payment>? _dotNetRef;
 
+    // Set once Razorpay reports the Checkout was dismissed or a payment attempt failed.
+    // The booking itself is marked Failed/Cancelled server-side (MarkPaymentFailedAsync) -
+    // this just stops the page from ever offering Retry Payment for that dead attempt.
+    private bool _paymentFailed;
+
     protected override void OnInitialized()
     {
         if (!BookingState.IsInitialized)
@@ -786,8 +791,11 @@
         Navigation.NavigateTo("/BookingPreview");
     }
 
-    private Task HandlePrimaryAction() =>
-        _pendingBookingId.HasValue ? StartOnlinePayment(_pendingBookingId.Value) : SubmitBooking();
+    private Task HandlePrimaryAction()
+    {
+        if (_paymentFailed) return Task.CompletedTask; // defensive: button is already disabled for this
+        return _pendingBookingId.HasValue ? StartOnlinePayment(_pendingBookingId.Value) : SubmitBooking();
+    }
 
     private async Task SubmitBooking()
     {
@@ -936,7 +944,8 @@
         finally
         {
             // Not "done" - the Razorpay widget is now open and in control. This just
-            // re-enables the button so a dismiss/failure can offer "Retry Payment" again.
+            // re-enables the button (OnRazorpayDismiss/OnRazorpayFailed disable it again
+            // if the widget reports the attempt didn't go through).
             _isSubmitting = false;
         }
     }
@@ -949,24 +958,55 @@
         InvokeAsync(async () => await VerifyPaymentAsync(razorpayOrderId, razorpayPaymentId, razorpaySignature));
 
     [JSInvokable]
-    public Task OnRazorpayDismiss() => InvokeAsync(() =>
+    public Task OnRazorpayDismiss() => InvokeAsync(async () =>
     {
+        // A verified success may have already landed just before the modal closed - never
+        // let a dismiss signal override that.
+        if (isBookingConfirmed) return;
+
         _isSubmitting = false;
-        _submitError = "Payment was not completed. Your booking is saved — click Retry Payment when you're ready.";
+        _submitError = "Payment was not completed and this booking could not go through. Please start a new booking.";
         Toast.Warning(_submitError);
+        await MarkPaymentFailedAsync("dismissed");
         StateHasChanged();
     });
 
     [JSInvokable]
-    public Task OnRazorpayFailed(string? reason) => InvokeAsync(() =>
+    public Task OnRazorpayFailed(string? reason) => InvokeAsync(async () =>
     {
+        if (isBookingConfirmed) return;
+
         _isSubmitting = false;
         _submitError = string.IsNullOrWhiteSpace(reason)
-            ? "Payment failed. Your booking is saved — click Retry Payment to try again."
-            : $"Payment failed: {reason}. Your booking is saved — click Retry Payment to try again.";
+            ? "Payment failed and this booking could not go through. Please start a new booking."
+            : $"Payment failed: {reason}. This booking could not go through. Please start a new booking.";
         Toast.Error(_submitError);
+        await MarkPaymentFailedAsync(string.IsNullOrWhiteSpace(reason) ? "payment.failed" : reason);
         StateHasChanged();
     });
+
+    // Tells the server to record this attempt as Failed (existing GuestHousePaymentStatus.Failed)
+    // and release the room hold (existing GuestHouseBookingStatus.Cancelled), so My Bookings shows
+    // Failed instead of Pending Payment and this page never offers Retry Payment for it again.
+    // Best-effort: even if this call itself fails, Retry Payment is disabled client-side regardless -
+    // the booking still safely expires via its existing PendingPayment hold window either way.
+    private async Task MarkPaymentFailedAsync(string reason)
+    {
+        _paymentFailed = true;
+
+        if (!_pendingBookingId.HasValue) return;
+
+        try
+        {
+            await Http.PostAsJsonAsync(
+                $"api/GuestHouseBooking/bookings/{_pendingBookingId}/payment/failed",
+                new MarkPaymentFailedRequest { Reason = reason });
+        }
+        catch
+        {
+            // Best-effort audit call - the button is already disabled either way.
+        }
+    }
 
     private async Task VerifyPaymentAsync(string orderId, string paymentId, string signature)
     {
@@ -1107,6 +1147,11 @@
         public string? RazorpayOrderId { get; set; }
         public string? RazorpayPaymentId { get; set; }
         public string? RazorpaySignature { get; set; }
+    }
+
+    public class MarkPaymentFailedRequest
+    {
+        public string? Reason { get; set; }
     }
 
     public class ErrorResponse

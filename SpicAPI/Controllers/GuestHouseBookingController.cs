@@ -31,6 +31,7 @@ namespace SpicAPI.Controllers
 		private readonly IWebHostEnvironment _env;
 		private readonly IRazorpayService _razorpay;
 		private readonly RazorpayOptions _razorpayOptions;
+		private readonly GuestHouseBookingOptions _bookingOptions;
 		private readonly ILogger<GuestHouseBookingController> _logger;
 
 		public GuestHouseBookingController(
@@ -38,12 +39,14 @@ namespace SpicAPI.Controllers
 			IWebHostEnvironment env,
 			IRazorpayService razorpay,
 			IOptions<RazorpayOptions> razorpayOptions,
+			IOptions<GuestHouseBookingOptions> bookingOptions,
 			ILogger<GuestHouseBookingController> logger)
 		{
 			_db = db;
 			_env = env;
 			_razorpay = razorpay;
 			_razorpayOptions = razorpayOptions.Value;
+			_bookingOptions = bookingOptions.Value;
 			_logger = logger;
 		}
 
@@ -627,6 +630,9 @@ namespace SpicAPI.Controllers
             if (booking.PaymentStatus == GuestHousePaymentStatus.Paid)
                 return BadRequest(new { Success = false, Message = "This booking has already been paid for." });
 
+            if (booking.PaymentStatus == GuestHousePaymentStatus.Failed)
+                return BadRequest(new { Success = false, Message = "This booking's payment attempt has already failed. Please start a new booking." });
+
             var payment = booking.Payments.FirstOrDefault();
             if (payment == null)
                 return BadRequest(new { Success = false, Message = "No payment record exists for this booking." });
@@ -723,6 +729,42 @@ namespace SpicAPI.Controllers
                 });
             }
 
+            // The PendingPayment hold created at booking time only reserves the room for the
+            // configured window (GuestHouseBookingOptions.PendingPaymentHoldMinutes - see
+            // GetCommittedRoomsByRoomAsync). Re-check, inside the same kind of serializable
+            // transaction booking creation itself uses, that the room is still available FOR
+            // THIS BOOKING (excluding its own row from the committed count) before ever marking
+            // it Paid/Confirmed - otherwise a customer completing payment after the hold lapsed,
+            // once someone else has already taken the room, would double-book it.
+            await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+
+            int available;
+            try
+            {
+                available = booking.CheckInDate.HasValue && booking.CheckOutDate.HasValue
+                    ? await GetAvailableQuantityForPeriodAsync(
+                        booking.GuestHouseRoomId, booking.CheckInDate.Value.Date, booking.CheckOutDate.Value.Date,
+                        excludeBookingId: booking.Id)
+                    : 0;
+            }
+            catch (PostgresException ex) when (ex.SqlState == "40001")
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new { Success = false, Message = "Could not confirm this booking right now. Please try again." });
+            }
+
+            if (available < (booking.NumberOfRooms ?? 1))
+            {
+                await transaction.RollbackAsync();
+                _logger.LogWarning("Razorpay verify rejected for booking {BookingId}: the room hold expired and the room is no longer available.", booking.Id);
+                return Conflict(new
+                {
+                    Success = false,
+                    HoldExpired = true,
+                    Message = "Your room hold has expired and this room is no longer available for the selected dates. Your payment could not be completed for this booking; if an amount was debited it will be refunded automatically. Please start a new booking."
+                });
+            }
+
             var verified = _razorpay.VerifySignature(request.RazorpayOrderId, request.RazorpayPaymentId, request.RazorpaySignature);
             if (!verified)
             {
@@ -735,7 +777,14 @@ namespace SpicAPI.Controllers
                     paymentId = request.RazorpayPaymentId,
                     at = DateTime.Now
                 });
-                await _db.SaveChangesAsync();
+
+                try
+                {
+                    await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch (DbUpdateException) { await transaction.RollbackAsync(); }
+                catch (PostgresException) { await transaction.RollbackAsync(); }
 
                 return BadRequest(new { Success = false, Message = "Payment verification failed. If an amount was debited, it will be refunded automatically by Razorpay." });
             }
@@ -753,8 +802,103 @@ namespace SpicAPI.Controllers
             payment.UpdatedAt = DateTime.Now;
 
             booking.PaymentStatus = GuestHousePaymentStatus.Paid;
-            if (booking.BookingStatus == GuestHouseBookingStatus.Draft || booking.BookingStatus == GuestHouseBookingStatus.PendingPayment)
+            // Includes Cancelled: Razorpay Checkout can let a customer retry a different payment
+            // method after a payment.failed event without closing the modal, and we mark the
+            // booking Cancelled/Failed as soon as either that event or a dismiss fires (see
+            // MarkPaymentFailed). A server-verified success must always win regardless of what
+            // that interim signal set - the room-availability re-check above already guarantees
+            // this can't double-book (it fails first if someone else has since taken the room).
+            if (booking.BookingStatus == GuestHouseBookingStatus.Draft
+                || booking.BookingStatus == GuestHouseBookingStatus.PendingPayment
+                || booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
+            {
                 booking.BookingStatus = GuestHouseBookingStatus.Confirmed;
+            }
+            booking.UpdatedAt = DateTime.Now;
+            booking.UpdatedBy = userName ?? booking.UpdatedBy;
+
+            try
+            {
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "40001" })
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new { Success = false, Message = "Could not confirm this booking right now. Please try again." });
+            }
+            catch (PostgresException ex) when (ex.SqlState == "40001")
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new { Success = false, Message = "Could not confirm this booking right now. Please try again." });
+            }
+
+            return Ok(new
+            {
+                Success = true,
+                AlreadyProcessed = false,
+                BookingStatus = booking.BookingStatus,
+                PaymentStatus = booking.PaymentStatus
+            });
+        }
+
+        // POST /api/GuestHouseBooking/bookings/{id}/payment/failed
+        //
+        // Called when Razorpay Checkout is closed/dismissed without a completed payment, or
+        // reports an explicit payment.failed event (see OnRazorpayDismiss/OnRazorpayFailed in
+        // Payment.razor). Marks the attempt Failed using the EXISTING GuestHousePaymentStatus.Failed
+        // value (no new status/enum), and moves the booking to the EXISTING Cancelled status so it
+        // stops holding room inventory immediately via the availability query's existing Cancelled
+        // exclusion - no new room-allocation/availability mechanism is introduced.
+        //
+        // Safety: a booking that is already Paid is NEVER touched here, no matter what the client
+        // reports - a server-verified successful payment always takes precedence over a client-side
+        // dismiss/failure signal that may arrive out of order. Idempotent otherwise.
+        [HttpPost("bookings/{id:int}/payment/failed")]
+        public async Task<IActionResult> MarkPaymentFailed(int id, [FromBody] MarkPaymentFailedRequest? request)
+        {
+            var booking = await _db.GuestHouseBookings
+                .Include(b => b.Payments)
+                .FirstOrDefaultAsync(b => b.Id == id);
+
+            if (booking == null)
+                return NotFound(new { Success = false, Message = "Booking not found." });
+
+            var userName = User.Identity?.Name;
+            if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(booking.CreatedBy)
+                && !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid();
+            }
+
+            // A verified payment always wins - never overwrite an already-Paid booking.
+            if (booking.PaymentStatus == GuestHousePaymentStatus.Paid)
+            {
+                return Ok(new
+                {
+                    Success = true,
+                    AlreadyProcessed = true,
+                    BookingStatus = booking.BookingStatus,
+                    PaymentStatus = booking.PaymentStatus
+                });
+            }
+
+            var payment = booking.Payments.FirstOrDefault();
+            if (payment != null)
+            {
+                payment.PaymentStatus = GuestHousePaymentStatus.Failed;
+                payment.GatewayResponse = JsonSerializer.Serialize(new
+                {
+                    failed = true,
+                    reason = string.IsNullOrWhiteSpace(request?.Reason) ? "dismissed" : request!.Reason,
+                    at = DateTime.Now
+                });
+                payment.UpdatedAt = DateTime.Now;
+            }
+
+            booking.PaymentStatus = GuestHousePaymentStatus.Failed;
+            if (booking.BookingStatus == GuestHouseBookingStatus.Draft || booking.BookingStatus == GuestHouseBookingStatus.PendingPayment)
+                booking.BookingStatus = GuestHouseBookingStatus.Cancelled;
             booking.UpdatedAt = DateTime.Now;
             booking.UpdatedBy = userName ?? booking.UpdatedBy;
 
@@ -1042,7 +1186,10 @@ namespace SpicAPI.Controllers
         // Computes the minimum number of available rooms for this room type across every night
         // of the stay, reusing the same logic as the availability endpoint, and then subtracts
         // whatever is already committed by overlapping bookings so the check reflects real demand.
-        private async Task<int> GetAvailableQuantityForPeriodAsync(int roomId, DateTime checkInDate, DateTime checkOutDate)
+        //
+        // excludeBookingId: pass the booking's own id when re-checking availability FOR that
+        // same booking (e.g. at payment verification time) so it never counts against itself.
+        private async Task<int> GetAvailableQuantityForPeriodAsync(int roomId, DateTime checkInDate, DateTime checkOutDate, int? excludeBookingId = null)
         {
             var room = await _db.GuestHouseRooms.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roomId);
             if (room == null) return 0;
@@ -1079,34 +1226,50 @@ namespace SpicAPI.Controllers
 
             periodAvailability = periodAvailability > 0 ? periodAvailability : 0;
 
-            var committedByRoom = await GetCommittedRoomsByRoomAsync(new[] { roomId }, checkInDate, checkOutDate);
+            var committedByRoom = await GetCommittedRoomsByRoomAsync(new[] { roomId }, checkInDate, checkOutDate, excludeBookingId);
             var committed = committedByRoom.TryGetValue(roomId, out var committedCount) ? committedCount : 0;
 
             var remaining = periodAvailability - committed;
             return remaining > 0 ? remaining : 0;
         }
 
-        // Sum of NumberOfRooms already held (every status except Cancelled and Completed -
-        // i.e. Draft/PendingPayment/Confirmed/CheckedIn all still occupy inventory) by bookings
-        // of the given room(s) whose stay window overlaps [checkInDate, checkOutDate).
+        // Sum of NumberOfRooms already held by bookings of the given room(s) whose stay window
+        // overlaps [checkInDate, checkOutDate):
+        //   - Cancelled/Completed never hold inventory.
+        //   - Confirmed/CheckedIn (and any legacy Draft row) always hold inventory unconditionally.
+        //   - PendingPayment holds inventory ONLY within GuestHouseBookingOptions.PendingPaymentHoldMinutes
+        //     of its own CreatedAt - a customer who reaches the Payment page reserves the room for a
+        //     limited window while Razorpay Checkout is open; once that window lapses without a
+        //     verified payment, it stops counting here so the room becomes bookable again.
         //
         // This is the single, authoritative source of "how much of a room type's inventory is
         // currently spoken for" by real bookings. GuestHouseRoom.AvailableQuantity and
         // GuestHouseRoomAvailability remain exactly what they were: an admin-maintained capacity
         // ceiling. Neither is written here or anywhere in the booking lifecycle - only read.
-        private async Task<Dictionary<int, int>> GetCommittedRoomsByRoomAsync(IReadOnlyCollection<int> roomIds, DateTime checkInDate, DateTime checkOutDate)
+        //
+        // excludeBookingId: excludes that one booking's own row so it never counts against itself
+        // (used when re-validating availability FOR that same booking at payment verification time).
+        private async Task<Dictionary<int, int>> GetCommittedRoomsByRoomAsync(IReadOnlyCollection<int> roomIds, DateTime checkInDate, DateTime checkOutDate, int? excludeBookingId = null)
         {
             if (roomIds.Count == 0)
                 return new Dictionary<int, int>();
 
-            var rows = await _db.GuestHouseBookings
+            var pendingPaymentHoldCutoff = DateTime.Now.AddMinutes(-_bookingOptions.PendingPaymentHoldMinutes);
+
+            var query = _db.GuestHouseBookings
                 .AsNoTracking()
                 .Where(b => roomIds.Contains(b.GuestHouseRoomId)
                     && b.BookingStatus != GuestHouseBookingStatus.Cancelled
                     && b.BookingStatus != GuestHouseBookingStatus.Completed
+                    && (b.BookingStatus != GuestHouseBookingStatus.PendingPayment || b.CreatedAt >= pendingPaymentHoldCutoff)
                     && b.CheckInDate.HasValue && b.CheckOutDate.HasValue
                     && b.CheckInDate.Value.Date < checkOutDate.Date
-                    && b.CheckOutDate.Value.Date > checkInDate.Date)
+                    && b.CheckOutDate.Value.Date > checkInDate.Date);
+
+            if (excludeBookingId.HasValue)
+                query = query.Where(b => b.Id != excludeBookingId.Value);
+
+            var rows = await query
                 .Select(b => new { b.GuestHouseRoomId, b.NumberOfRooms })
                 .ToListAsync();
 
@@ -1293,6 +1456,11 @@ namespace SpicAPI.Controllers
 		public string? RazorpayOrderId { get; set; }
 		public string? RazorpayPaymentId { get; set; }
 		public string? RazorpaySignature { get; set; }
+	}
+
+	public class MarkPaymentFailedRequest
+	{
+		public string? Reason { get; set; }
 	}
 
 	public class CreateBookingRequest
