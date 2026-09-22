@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.Payments;
 using SpicAPI.Services;
 using SPIC.Core.Entities;
 using System.Data;
 using System.IO;
+using System.Text.Json;
 
 namespace SpicAPI.Controllers
 {
@@ -26,11 +29,22 @@ namespace SpicAPI.Controllers
 	{
 		private readonly AppDbContext _db;
 		private readonly IWebHostEnvironment _env;
+		private readonly IRazorpayService _razorpay;
+		private readonly RazorpayOptions _razorpayOptions;
+		private readonly ILogger<GuestHouseBookingController> _logger;
 
-		public GuestHouseBookingController(AppDbContext db, IWebHostEnvironment env)
+		public GuestHouseBookingController(
+			AppDbContext db,
+			IWebHostEnvironment env,
+			IRazorpayService razorpay,
+			IOptions<RazorpayOptions> razorpayOptions,
+			ILogger<GuestHouseBookingController> logger)
 		{
 			_db = db;
 			_env = env;
+			_razorpay = razorpay;
+			_razorpayOptions = razorpayOptions.Value;
+			_logger = logger;
 		}
 
 		// GET /api/GuestHouseBooking/houses
@@ -426,8 +440,13 @@ namespace SpicAPI.Controllers
             // Payment method & status.
             var paymentMethod = request.PaymentMethod;
             var isPayAfterStay = paymentMethod == GuestHousePaymentMethod.PayAfterStay;
-            var bookingStatus = isPayAfterStay ? GuestHouseBookingStatus.Confirmed : GuestHouseBookingStatus.Draft;
-            var paymentStatus = isPayAfterStay ? GuestHousePaymentStatus.Pending : GuestHousePaymentStatus.Pending;
+            // PayAfterStay is confirmed immediately (settled later at the Front Office).
+            // Every online method is PendingPayment until Razorpay verification succeeds
+            // (see POST bookings/{id}/payment/verify) - the room itself is already held
+            // from this point on, since GetCommittedRoomsByRoomAsync counts every status
+            // except Cancelled/Completed, so this does not change availability at all.
+            var bookingStatus = isPayAfterStay ? GuestHouseBookingStatus.Confirmed : GuestHouseBookingStatus.PendingPayment;
+            var paymentStatus = GuestHousePaymentStatus.Pending;
 
             // The availability re-check and the insert must happen atomically: without this,
             // two nearly-simultaneous requests for the same room/overlapping dates could both
@@ -513,7 +532,11 @@ namespace SpicAPI.Controllers
                         PaymentMethod = paymentMethod,
                         PaymentStatus = paymentStatus,
                         Amount = total,
-                        PaymentDate = isPayAfterStay ? null : DateTime.Now,
+                        // No payment has happened yet for ANY method at this point (PayAfterStay
+                        // is settled later at the Front Office; online payment is settled by
+                        // POST bookings/{id}/payment/verify). PaymentDate is only ever set when
+                        // a payment actually completes.
+                        PaymentDate = null,
                         CreatedAt = DateTime.Now,
                         UpdatedAt = DateTime.Now
                     }
@@ -575,6 +598,174 @@ namespace SpicAPI.Controllers
                 PaymentStatus = paymentStatus,
                 BookingStatus = bookingStatus,
                 DocumentWarning = documentWarning
+            });
+        }
+
+        // POST /api/GuestHouseBooking/bookings/{id}/payment/create-order
+        //
+        // Creates (or, if one is already pending, reuses) a Razorpay Order for an existing
+        // booking's own server-computed TotalAmount - the browser never supplies an amount.
+        // Idempotent by design: reopening the Payment page or retrying after a dropped
+        // connection returns the SAME order instead of creating a new one every time.
+        [HttpPost("bookings/{id:int}/payment/create-order")]
+        public async Task<IActionResult> CreatePaymentOrder(int id)
+        {
+            var booking = await _db.GuestHouseBookings
+                .Include(b => b.Payments)
+                .FirstOrDefaultAsync(b => b.Id == id);
+
+            if (booking == null)
+                return NotFound(new { Success = false, Message = "Booking not found." });
+
+            var userName = User.Identity?.Name;
+            if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(booking.CreatedBy)
+                && !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid();
+            }
+
+            if (booking.PaymentStatus == GuestHousePaymentStatus.Paid)
+                return BadRequest(new { Success = false, Message = "This booking has already been paid for." });
+
+            var payment = booking.Payments.FirstOrDefault();
+            if (payment == null)
+                return BadRequest(new { Success = false, Message = "No payment record exists for this booking." });
+
+            var amount = booking.TotalAmount ?? payment.Amount;
+            var amountInPaise = (long)Math.Round(amount * 100m, MidpointRounding.AwayFromZero);
+
+            // Reuse the existing order instead of asking Razorpay for a new one every time
+            // the customer reopens/retries the payment step for the same pending booking.
+            if (!string.IsNullOrWhiteSpace(payment.PaymentReference))
+            {
+                return Ok(new
+                {
+                    Success = true,
+                    OrderId = payment.PaymentReference,
+                    AmountInPaise = amountInPaise,
+                    Currency = "INR",
+                    KeyId = _razorpayOptions.KeyId
+                });
+            }
+
+            var order = await _razorpay.CreateOrderAsync(amountInPaise, booking.BookingReference ?? $"GHB-{booking.Id}");
+            if (!order.Success || string.IsNullOrWhiteSpace(order.OrderId))
+            {
+                _logger.LogWarning("Razorpay order creation failed for booking {BookingId}: {Error}", booking.Id, order.ErrorMessage);
+                return StatusCode(502, new { Success = false, Message = order.ErrorMessage ?? "Could not start the online payment. Please try again." });
+            }
+
+            payment.PaymentMethod = GuestHousePaymentMethod.Razorpay;
+            payment.PaymentReference = order.OrderId;
+            payment.GatewayResponse = order.RawResponse;
+            payment.UpdatedAt = DateTime.Now;
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Success = true,
+                OrderId = order.OrderId,
+                AmountInPaise = amountInPaise,
+                Currency = "INR",
+                KeyId = _razorpayOptions.KeyId
+            });
+        }
+
+        // POST /api/GuestHouseBooking/bookings/{id}/payment/verify
+        //
+        // Verifies the Razorpay Checkout callback signature server-side before ever marking
+        // a booking Paid - per Razorpay's documented Orders API approach:
+        //   signature == HMAC_SHA256(order_id + "|" + payment_id, key_secret)
+        // A booking is NEVER marked Paid from the client-side success callback alone.
+        //
+        // Idempotent: if Razorpay/the client calls this more than once for an already-paid
+        // booking (duplicate callback, retry, double-submit), it returns success without
+        // re-verifying or re-confirming anything - the same guard shape as the existing
+        // Front Office POST pay endpoint.
+        [HttpPost("bookings/{id:int}/payment/verify")]
+        public async Task<IActionResult> VerifyPayment(int id, [FromBody] VerifyPaymentRequest request)
+        {
+            if (request == null
+                || string.IsNullOrWhiteSpace(request.RazorpayOrderId)
+                || string.IsNullOrWhiteSpace(request.RazorpayPaymentId)
+                || string.IsNullOrWhiteSpace(request.RazorpaySignature))
+            {
+                return BadRequest(new { Success = false, Message = "Invalid payment verification request." });
+            }
+
+            var booking = await _db.GuestHouseBookings
+                .Include(b => b.Payments)
+                .FirstOrDefaultAsync(b => b.Id == id);
+
+            if (booking == null)
+                return NotFound(new { Success = false, Message = "Booking not found." });
+
+            var userName = User.Identity?.Name;
+            if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(booking.CreatedBy)
+                && !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid();
+            }
+
+            var payment = booking.Payments.FirstOrDefault();
+            if (payment == null || !string.Equals(payment.PaymentReference, request.RazorpayOrderId, StringComparison.Ordinal))
+                return BadRequest(new { Success = false, Message = "This payment does not match an order created for this booking." });
+
+            // Duplicate-callback guard: once Paid, never re-verify or re-confirm.
+            if (booking.PaymentStatus == GuestHousePaymentStatus.Paid)
+            {
+                return Ok(new
+                {
+                    Success = true,
+                    AlreadyProcessed = true,
+                    BookingStatus = booking.BookingStatus,
+                    PaymentStatus = booking.PaymentStatus
+                });
+            }
+
+            var verified = _razorpay.VerifySignature(request.RazorpayOrderId, request.RazorpayPaymentId, request.RazorpaySignature);
+            if (!verified)
+            {
+                _logger.LogWarning("Razorpay signature verification failed for booking {BookingId}, order {OrderId}.", booking.Id, request.RazorpayOrderId);
+
+                payment.GatewayResponse = JsonSerializer.Serialize(new
+                {
+                    verified = false,
+                    orderId = request.RazorpayOrderId,
+                    paymentId = request.RazorpayPaymentId,
+                    at = DateTime.Now
+                });
+                await _db.SaveChangesAsync();
+
+                return BadRequest(new { Success = false, Message = "Payment verification failed. If an amount was debited, it will be refunded automatically by Razorpay." });
+            }
+
+            payment.PaymentStatus = GuestHousePaymentStatus.Paid;
+            payment.TransactionId = request.RazorpayPaymentId;
+            payment.PaymentDate = DateTime.Now;
+            payment.GatewayResponse = JsonSerializer.Serialize(new
+            {
+                verified = true,
+                orderId = request.RazorpayOrderId,
+                paymentId = request.RazorpayPaymentId,
+                at = DateTime.Now
+            });
+            payment.UpdatedAt = DateTime.Now;
+
+            booking.PaymentStatus = GuestHousePaymentStatus.Paid;
+            if (booking.BookingStatus == GuestHouseBookingStatus.Draft || booking.BookingStatus == GuestHouseBookingStatus.PendingPayment)
+                booking.BookingStatus = GuestHouseBookingStatus.Confirmed;
+            booking.UpdatedAt = DateTime.Now;
+            booking.UpdatedBy = userName ?? booking.UpdatedBy;
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                Success = true,
+                AlreadyProcessed = false,
+                BookingStatus = booking.BookingStatus,
+                PaymentStatus = booking.PaymentStatus
             });
         }
 
@@ -1095,6 +1286,13 @@ namespace SpicAPI.Controllers
 		public decimal? ExtraCotPrice { get; set; }
 		public int? Capacity { get; set; }
 		public int? NumberOfAdults { get; set; }
+	}
+
+	public class VerifyPaymentRequest
+	{
+		public string? RazorpayOrderId { get; set; }
+		public string? RazorpayPaymentId { get; set; }
+		public string? RazorpaySignature { get; set; }
 	}
 
 	public class CreateBookingRequest
