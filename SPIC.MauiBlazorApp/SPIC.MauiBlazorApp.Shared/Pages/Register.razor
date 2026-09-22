@@ -3789,34 +3789,39 @@ public string? GSTConstitutionofBusiness { get; set; }
         // NOT be replaced with the current logged-in user's State/HQ/Region. Only
         // the locked flags are applied so the dropdowns stay disabled. New dealer
         // registration keeps assigning the registering employee's defaults.
-        if (!_isEditMode)
+        // A loaded record that has no State / Region / HQ yet (older dealers, imports) still
+        // takes the employee's values, otherwise the locked dropdowns would show "Select" with
+        // no way to fill them ("Create Existing Dealer" as MO: region and HQ went blank after
+        // the dealer code was picked). The API applies the same rule when saving.
+        var keepState = _isEditMode && _basicInfoStateId > 0;
+        var keepRegion = _isEditMode && _basicInfoRegionId > 0;
+        var keepHq = _isEditMode && _basicInfoHqId > 0;
+
+        if (!keepState && LoginState.StateId > 0)
         {
-            if (LoginState.StateId > 0)
-            {
-                _basicInfoStateId = LoginState.StateId;
+            _basicInfoStateId = LoginState.StateId;
 
-                _filteredRegions = _regionsAll
-                    .Where(r => r.StateId == _basicInfoStateId)
-                    .ToList();
+            _filteredRegions = _regionsAll
+                .Where(r => r.StateId == _basicInfoStateId)
+                .ToList();
 
-                _filteredDealers = _dealersAll
-                    .Where(d => d.StateId == _basicInfoStateId)
-                    .ToList();
-            }
+            _filteredDealers = _dealersAll
+                .Where(d => d.StateId == _basicInfoStateId)
+                .ToList();
+        }
 
-            if (LoginState.RegionId > 0)
-            {
-                _basicInfoRegionId = LoginState.RegionId;
+        if (!keepRegion && LoginState.RegionId > 0)
+        {
+            _basicInfoRegionId = LoginState.RegionId;
 
-                _filteredHeadquarters = _headquartersAll
-                    .Where(h => h.RegionId == _basicInfoRegionId)
-                    .ToList();
-            }
+            _filteredHeadquarters = _headquartersAll
+                .Where(h => h.RegionId == _basicInfoRegionId)
+                .ToList();
+        }
 
-            if (LoginState.HQId > 0)
-            {
-                _basicInfoHqId = LoginState.HQId;
-            }
+        if (!keepHq && LoginState.HQId > 0)
+        {
+            _basicInfoHqId = LoginState.HQId;
         }
 
         _isStateLocked = LoginState.StateId > 0;

@@ -412,9 +412,11 @@ namespace SpicAPI.Controllers
 			if (persisted == null)
 				return NotFound(new { message = "Dealer registration was not found." });
 
-			dealer.StateId = persisted.StateId;
-			dealer.Region = persisted.Region;
-			dealer.HQ = persisted.HQ;
+			// A record that never had a location (older dealers, imports) may be filled in once;
+			// a stored value is never replaced.
+			if (persisted.StateId > 0) dealer.StateId = persisted.StateId;
+			if (persisted.Region > 0) dealer.Region = persisted.Region;
+			if (persisted.HQ > 0) dealer.HQ = persisted.HQ;
 
 			if (string.IsNullOrEmpty(dealer.UserTableId) && !string.IsNullOrEmpty(dealer.DealerCode))
 			{
