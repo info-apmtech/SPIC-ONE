@@ -1,0 +1,808 @@
+@page "/SampleCollection/view/{Id:int}"
+@using System.Text
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Sas
+@inject SasApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject FileDownloadService Downloads
+@inject IJSRuntime JS
+
+@*
+    Sample Collection Details (Figma frame 14). One page for every role:
+
+      * everyone with the page sees the chips, the summary strip, Collection Information,
+        Sample Summary, Result Comparison, Consignment Details, Amount Details and the timeline;
+      * write roles get the contextual button for the status they are looking at
+        (Draft -> Edit, PendingPayment -> Record payment, ReadyForConsignment -> Upload consignment);
+      * review roles (CanReview: Admin / CorporateAdmin) approve or reject the payment here and
+        enter the lab results inline;
+      * Dealer and Farmer see exactly the same page with no buttons - the server decides,
+        through CanEdit / CanPay / CanConsign / CanReview on the DTO.
+
+    Before results exist the Result Comparison card reads "Awaiting lab results" plus the status.
+    A collection with several samples gets a selector above the result table.
+*@
+
+<PageHeader Title="Sample Collection Details" BackHref="/SampleCollection">
+    <Actions>
+        @if (Detail is not null)
+        {
+            @if (Detail.Status == SampleCollectionStatus.Draft && Detail.CanEdit)
+            {
+                <button type="button" class="scd-btn scd-btn-primary" @onclick="@(() => Nav.NavigateTo($"/SampleCollection/new?id={Detail!.Id}"))">
+                    <i class="bi bi-pencil" aria-hidden="true"></i> Edit
+                </button>
+            }
+            @if (Detail.Status == SampleCollectionStatus.PendingPayment && Detail.CanPay)
+            {
+                <button type="button" class="scd-btn scd-btn-primary" @onclick="@(() => Nav.NavigateTo($"/SampleCollection/payment/{Detail!.Id}"))">
+                    <i class="bi bi-credit-card" aria-hidden="true"></i> Record payment
+                </button>
+            }
+            @if (Detail.Status == SampleCollectionStatus.ReadyForConsignment && Detail.CanConsign)
+            {
+                <button type="button" class="scd-btn scd-btn-primary" @onclick="@(() => Nav.NavigateTo($"/SampleCollection/consignment/{Detail!.Id}"))">
+                    <i class="bi bi-box-seam" aria-hidden="true"></i> Upload consignment
+                </button>
+            }
+            <button type="button" class="scd-btn scd-btn-outline" @onclick="ExportPrint">
+                <i class="bi bi-printer" aria-hidden="true"></i> Export
+            </button>
+            <button type="button" class="scd-btn scd-btn-outline" @onclick="ExportPdf" disabled="@_exporting">
+                <i class="bi bi-download" aria-hidden="true"></i> Export
+            </button>
+        }
+    </Actions>
+</PageHeader>
+
+@if (_loading)
+{
+    <div class="scd-page">
+        <Skeleton Variant="card" Rows="3" />
+    </div>
+}
+else if (Detail is null)
+{
+    <EmptyState Icon="bi-droplet-half"
+                Title="@(_notFound ? "Collection not found" : "The collection could not be loaded")"
+                Message="@(_notFound ? "This sample collection is not available any more, or you do not have access to it." : "Check the connection and try again.")">
+        <button type="button" class="scd-btn scd-btn-outline" @onclick="LoadAsync">Try again</button>
+        <button type="button" class="scd-btn scd-btn-primary" @onclick="@(() => Nav.NavigateTo("/SampleCollection"))">Back to Sample Collection</button>
+    </EmptyState>
+}
+else
+{
+    var d = Detail;
+
+    <div class="scd-page">
+
+        @* --------------------------------------------------------- chips *@
+        <div class="scd-chips">
+            <span class="scd-chip scd-chip-code"># @d.Code</span>
+            <span class="scd-chip scd-chip-type">@(d.PaymentType == SamplePaymentType.Paid ? "Paid Sample" : "Free Sample")</span>
+            <span class="@SasLabels.StatusPillClass(d.Status)">@SasLabels.Status(d.Status)</span>
+            <span class="scd-chip-when">@HeadlineWhen</span>
+        </div>
+
+        @* --------------------------------------------------------- summary strip *@
+        <section class="scd-strip" aria-label="Collection summary">
+            <div class="scd-strip-cell">
+                <span class="scd-strip-label">Consignment ID</span>
+                @if (d.ConsignmentId is { } consignmentId && !string.IsNullOrWhiteSpace(d.ConsignmentCode))
+                {
+                    <a class="scd-strip-value scd-link" href="@($"/ConsignmentHistory/view/{consignmentId}")">@d.ConsignmentCode</a>
+                }
+                else
+                {
+                    <span class="scd-strip-value">-</span>
+                }
+            </div>
+            <div class="scd-strip-cell">
+                <span class="scd-strip-label">Transaction ID</span>
+                <span class="scd-strip-value">@Dash(d.Payment?.TransactionId)</span>
+            </div>
+            <div class="scd-strip-cell">
+                <span class="scd-strip-label">Courier Partner</span>
+                <span class="scd-strip-value">@Dash(d.Consignment?.CourierService)</span>
+            </div>
+            <div class="scd-strip-cell">
+                <span class="scd-strip-label">Samples</span>
+                <span class="scd-strip-value">@Dash(d.SampleTypes)</span>
+            </div>
+            <div class="scd-strip-cell">
+                <span class="scd-strip-label">No. of Tests</span>
+                <span class="scd-strip-value">@TotalTests</span>
+            </div>
+            <div class="scd-strip-cell">
+                <span class="scd-strip-label">Payment Status</span>
+                <span class="@PaymentPillClass">@PaymentPillText</span>
+                <span class="scd-strip-sub">@SasLabels.StatusHint(d.Status)</span>
+            </div>
+        </section>
+
+        @* --------------------------------------------------------- info + sample summary *@
+        <div class="scd-row">
+            <section class="scd-card scd-info">
+                <h2 class="scd-card-title">Collection Information</h2>
+                <div class="scd-defs">
+                    <dl>
+                        <div><dt>Packaging Type</dt><dd>@Dash(_consignment?.PackagingType)</dd></div>
+                        <div><dt>Courier Partner</dt><dd>@Dash(d.Consignment?.CourierService)</dd></div>
+                        <div>
+                            <dt>AWB / Tracking No</dt>
+                            <dd>
+                                @if (!string.IsNullOrWhiteSpace(d.Consignment?.TrackingNumber))
+                                {
+                                    @if (!string.IsNullOrWhiteSpace(d.Consignment.TrackingLink))
+                                    {
+                                        <a class="scd-link" href="@d.Consignment.TrackingLink" target="_blank" rel="noopener">@d.Consignment.TrackingNumber</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="scd-link-plain">@d.Consignment.TrackingNumber</span>
+                                    }
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
+                            </dd>
+                        </div>
+                        <div><dt>Collection Type</dt><dd>@CollectionTypeText</dd></div>
+                        <div>
+                            <dt>Collected By</dt>
+                            <dd>
+                                @Dash(d.CollectedByName)
+                                @if (!string.IsNullOrWhiteSpace(d.CollectedByRole))
+                                {
+                                    <span class="scd-sub">(@d.CollectedByRole)</span>
+                                }
+                            </dd>
+                        </div>
+                        <div><dt>Collection Notes</dt><dd>@Dash(_consignment?.Notes)</dd></div>
+                    </dl>
+                    <dl>
+                        <div><dt>Contact Person</dt><dd>@Dash(_consignment?.ContactPerson)</dd></div>
+                        <div>
+                            <dt>Mobile</dt>
+                            <dd>
+                                @if (!string.IsNullOrWhiteSpace(_consignment?.ContactMobile))
+                                {
+                                    <a class="scd-link" href="@($"tel:{_consignment!.ContactMobile}")">@_consignment!.ContactMobile</a>
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Email</dt>
+                            <dd>
+                                @if (!string.IsNullOrWhiteSpace(_consignment?.ContactEmail))
+                                {
+                                    <a class="scd-link" href="@($"mailto:{_consignment!.ContactEmail}")">@_consignment!.ContactEmail</a>
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
+                            </dd>
+                        </div>
+                        <div><dt>Dispatched By</dt><dd>@Dash(d.Consignment?.DispatchedByName)</dd></div>
+                        <div><dt>Expected Delivery Date</dt><dd>@Dash(_consignment?.ExpectedDeliveryDate is { } ed ? SasLabels.LongDate(ed) : null)</dd></div>
+                        <div><dt>Remarks</dt><dd>@Dash(d.Remarks)</dd></div>
+                    </dl>
+                </div>
+            </section>
+
+            <section class="scd-card scd-summary">
+                <h2 class="scd-card-title">Sample Summary</h2>
+
+                <div class="scd-table-wrap tablet-up">
+                    <table class="scd-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">S.NO</th>
+                                <th scope="col">Sample type</th>
+                                <th scope="col">No. of Samples</th>
+                                <th scope="col">No. of Tests</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{
+                                var n = 0;
+                            }
+                            @foreach (var g in SampleGroups)
+                            {
+                                n++;
+                                <tr>
+                                    <td>@n</td>
+                                    <th scope="row">@g.Label</th>
+                                    <td>@g.Samples</td>
+                                    <td>@g.Tests</td>
+                                </tr>
+                            }
+                            <tr class="scd-total-row">
+                                <td colspan="2">Total</td>
+                                <td>@SampleGroups.Sum(g => g.Samples)</td>
+                                <td>@SampleGroups.Sum(g => g.Tests)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="scd-mini-cards phone-only">
+                    @foreach (var g in SampleGroups)
+                    {
+                        <div class="scd-mini-card">
+                            <span class="scd-mini-title">@g.Label</span>
+                            <span class="scd-mini-line">@g.Samples sample@(g.Samples == 1 ? "" : "s") &middot; @g.Tests test@(g.Tests == 1 ? "" : "s")</span>
+                        </div>
+                    }
+                    <div class="scd-mini-card scd-mini-card--total">
+                        <span class="scd-mini-title">Total</span>
+                        <span class="scd-mini-line">@SampleGroups.Sum(g => g.Samples) samples &middot; @SampleGroups.Sum(g => g.Tests) tests</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        @* --------------------------------------------------------- payment review *@
+        @if (ShowPaymentReview)
+        {
+            var p = d.Payment!;
+            <section class="scd-card scd-review">
+                <h2 class="scd-card-title">Payment Approval</h2>
+                <p class="scd-review-note">This payment is waiting for your decision. Check the proof against the transaction details.</p>
+
+                <div class="scd-review-body">
+                    <dl class="scd-review-defs">
+                        <div><dt>Amount</dt><dd class="scd-strong">@SasLabels.Money(p.Amount)</dd></div>
+                        <div><dt>Paid By</dt><dd>@Dash(p.PaidByName)</dd></div>
+                        <div><dt>Transaction ID</dt><dd>@Dash(p.TransactionId)</dd></div>
+                        <div><dt>UTR Number</dt><dd>@Dash(p.UtrNumber)</dd></div>
+                        <div><dt>Bank / Gateway</dt><dd>@Dash(p.BankGateway)</dd></div>
+                        <div><dt>Contact</dt><dd>@Dash(p.ContactNumber)</dd></div>
+                        <div><dt>Email</dt><dd>@Dash(p.Email)</dd></div>
+                        <div><dt>Recorded</dt><dd>@SasLabels.DateTimeText(p.CreatedAt)</dd></div>
+                    </dl>
+
+                    @if (!string.IsNullOrWhiteSpace(p.ProofPath))
+                    {
+                        <button type="button" class="scd-proof" @onclick="OpenProof" aria-label="Open the payment proof">
+                            <img src="@Api.FileUrl(p.ProofPath)" alt="Payment proof" loading="lazy" />
+                            <span class="scd-proof-cap"><i class="bi bi-zoom-in" aria-hidden="true"></i> View proof</span>
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="scd-proof scd-proof--none"><i class="bi bi-image" aria-hidden="true"></i> No proof uploaded</div>
+                    }
+                </div>
+
+                @if (_rejecting)
+                {
+                    <div class="scd-reject">
+                        <label for="scd-reject-reason">Reason for rejection</label>
+                        <textarea id="scd-reject-reason" class="scd-textarea" rows="2"
+                                  placeholder="Tell the collector what to correct"
+                                  @bind="_rejectReason" @bind:event="oninput"></textarea>
+                        <div class="scd-review-actions">
+                            <button type="button" class="scd-btn scd-btn-ghost" @onclick="() => _rejecting = false" disabled="@_reviewing">Cancel</button>
+                            <button type="button" class="scd-btn scd-btn-danger" @onclick="RejectPaymentAsync" disabled="@_reviewing">
+                                @(_reviewing ? "Rejecting..." : "Reject payment")
+                            </button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="scd-review-actions">
+                        <button type="button" class="scd-btn scd-btn-ghost" @onclick="() => _rejecting = true" disabled="@_reviewing">Reject</button>
+                        <button type="button" class="scd-btn scd-btn-primary" @onclick="ApprovePaymentAsync" disabled="@_reviewing">
+                            @(_reviewing ? "Approving..." : "Approve payment")
+                        </button>
+                    </div>
+                }
+            </section>
+        }
+        else if (d.Payment is { Status: SamplePaymentStatus.Rejected } rejected && !string.IsNullOrWhiteSpace(rejected.RejectReason))
+        {
+            <section class="scd-card scd-rejected" role="status">
+                <h2 class="scd-card-title">Payment rejected</h2>
+                <p>@rejected.RejectReason</p>
+                <p class="scd-sub">
+                    @Dash(rejected.ReviewedByName)@(rejected.ReviewedAt is { } ra ? $" on {SasLabels.DateTimeText(ra)}" : "")
+                </p>
+            </section>
+        }
+
+        @* --------------------------------------------------------- result comparison *@
+        <section class="scd-card scd-results">
+            <h2 class="scd-card-title">Result Comparison</h2>
+
+            @if (d.Items.Count > 1)
+            {
+                <div class="scd-tabs" role="tablist" aria-label="Samples">
+                    @foreach (var item in d.Items)
+                    {
+                        var active = item.Id == SelectedItemId;
+                        <button type="button" role="tab" aria-selected="@active.ToString().ToLowerInvariant()"
+                                class="scd-tab @(active ? "is-active" : "")"
+                                @onclick="() => SelectItem(item.Id)">
+                            <span class="scd-tab-code">@item.Code</span>
+                            <span class="scd-tab-sub">@item.Farmer.Name &middot; @SasLabels.SampleTypeName(item.SampleType)</span>
+                            @if (item.Results.Count > 0 || item.HasResults)
+                            {
+                                <i class="bi bi-check-circle-fill scd-tab-ok" aria-label="Results entered"></i>
+                            }
+                        </button>
+                    }
+                </div>
+            }
+
+            @if (SelectedItem is null)
+            {
+                <EmptyState Icon="bi-clipboard-data" Title="No samples" Message="This collection has no sample rows." Compact="true" />
+            }
+            else
+            {
+                <LabResultsTable Results="SelectedItem.Results"
+                                 CanEdit="d.CanReview"
+                                 Parameters="_lookups?.LabParameters"
+                                 AwaitingNote="@AwaitingNote"
+                                 ResetKey="SelectedItemId"
+                                 OnSave="SaveResultsAsync" />
+            }
+        </section>
+
+        @* --------------------------------------------------------- consignment + amount *@
+        <div class="scd-row">
+            <section class="scd-card scd-consignment">
+                <h2 class="scd-card-title">Consignments Details</h2>
+                @if (d.Consignment is { } c)
+                {
+                    <div class="scd-defs">
+                        <dl>
+                            <div>
+                                <dt>Consignment ID</dt>
+                                <dd><a class="scd-link" href="@($"/ConsignmentHistory/view/{c.Id}")">@c.Code</a></dd>
+                            </div>
+                            <div><dt>Dispatched Date</dt><dd>@SasLabels.DateTimeText(c.DispatchedAt)</dd></div>
+                            <div><dt>Dispatched Through</dt><dd>@Dash(c.CourierService)</dd></div>
+                            <div><dt>AWB / Tracking No.</dt><dd><span class="scd-link-plain">@Dash(c.TrackingNumber)</span></dd></div>
+                        </dl>
+                        <dl>
+                            <div><dt>No. of Package</dt><dd>@c.PackageCount</dd></div>
+                            <div><dt>Package Weight</dt><dd>@(_consignment?.PackageWeightKg is { } w ? $"{w:0.##} Kg" : "-")</dd></div>
+                        </dl>
+                    </div>
+                    <div class="scd-photos">
+                        <span class="scd-photos-label">Consignment Photos</span>
+                        <button type="button" class="scd-photos-btn" @onclick="@(() => Nav.NavigateTo($"/ConsignmentHistory/view/{c.Id}"))">
+                            <i class="bi bi-images" aria-hidden="true"></i> Click and View Photos and Files
+                        </button>
+                    </div>
+                }
+                else
+                {
+                    <EmptyState Icon="bi-box-seam" Title="Not dispatched yet"
+                                Message="The consignment details appear once this collection is bundled and dispatched."
+                                Compact="true" />
+                }
+            </section>
+
+            <section class="scd-card scd-amount">
+                <h2 class="scd-card-title">Amount Details</h2>
+                <div class="scd-amount-body">
+                    <dl class="scd-amount-defs">
+                        <div>
+                            <dt>Sample Charge (@TotalTests Test@(TotalTests == 1 ? "" : "s"))</dt>
+                            <dd>@SasLabels.Money(d.TotalAmount)</dd>
+                        </div>
+                        <div class="scd-amount-total">
+                            <dt>Total Amount</dt>
+                            <dd>@SasLabels.Money(d.TotalAmount)</dd>
+                        </div>
+                    </dl>
+
+                    <div class="scd-paybox">
+                        <dl>
+                            <div><dt>Payment Mode</dt><dd>@(d.PaymentType == SamplePaymentType.Paid ? "Online" : "Free sample")</dd></div>
+                            <div><dt>Payment Date</dt><dd>@(d.Payment is { } pay ? SasLabels.DateTimeText(pay.CreatedAt) : "-")</dd></div>
+                            <div><dt>Transaction ID</dt><dd>@Dash(d.Payment?.TransactionId)</dd></div>
+                        </dl>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        @* --------------------------------------------------------- timeline *@
+        <section class="scd-card scd-timeline">
+            <h2 class="scd-card-title">History / Timeline</h2>
+            <StatusTimeline Events="d.Timeline" Current="d.Status" />
+        </section>
+    </div>
+
+    @* --------------------------------------------------------- proof lightbox *@
+    @if (_proofOpen && !string.IsNullOrWhiteSpace(Detail?.Payment?.ProofPath))
+    {
+        <div class="scd-lb" role="dialog" aria-modal="true" aria-label="Payment proof" @onclick="CloseProof">
+            <button type="button" class="scd-lb-close" aria-label="Close" @onclick="CloseProof" @onclick:stopPropagation="true">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+            <img class="scd-lb-img" src="@Api.FileUrl(Detail!.Payment!.ProofPath)" alt="Payment proof"
+                 @onclick:stopPropagation="true" />
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private SampleCollectionDetailDto? Detail { get; set; }
+    private SasLookupsDto? _lookups;
+
+    /// <summary>
+    /// SampleCollectionDetailDto.Consignment is only the SUMMARY, so packaging type, the contact
+    /// block, the collection notes, the expected delivery date and the package weight - all of
+    /// which the design prints in Collection Information - need the consignment detail as well.
+    /// Null while it is not dispatched, or when the caller may not read the consignment.
+    /// </summary>
+    private ConsignmentDetailDto? _consignment;
+
+    private bool _loading = true;
+    private bool _notFound;
+    private int _loadedId;
+
+    private int? _selectedItemId;
+    private bool _proofOpen;
+    private bool _rejecting;
+    private bool _reviewing;
+    private string _rejectReason = "";
+    private bool _exporting;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id && Detail is not null) return;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _notFound = false;
+        StateHasChanged();
+
+        var (item, notFound) = await Api.GetCollectionAsync(Id);
+        Detail = item;
+        _notFound = notFound;
+
+        if (item is not null)
+        {
+            _loadedId = Id;
+            if (_selectedItemId is null || item.Items.All(i => i.Id != _selectedItemId))
+                _selectedItemId = item.Items.FirstOrDefault()?.Id;
+
+            // Only review roles need the default parameter list for a blank result form.
+            if (_lookups is null && item.CanReview) _lookups = await Api.GetLookupsAsync();
+        }
+
+        _loading = false;
+        StateHasChanged();
+
+        // Second, optional call: the page is already usable without it.
+        await LoadConsignmentAsync();
+    }
+
+    private async Task LoadConsignmentAsync()
+    {
+        if (Detail?.ConsignmentId is not { } consignmentId)
+        {
+            _consignment = null;
+            return;
+        }
+
+        if (_consignment?.Id == consignmentId) return;
+
+        var (item, _) = await Api.GetConsignmentAsync(consignmentId);
+        _consignment = item;
+        StateHasChanged();
+    }
+
+    // ------------------------------------------------------------------ derived
+
+    private int TotalTests => Detail?.Items.Sum(i => i.NoOfTests) ?? 0;
+
+    private sealed record SampleGroup(string Label, int Samples, int Tests);
+
+    private List<SampleGroup> SampleGroups =>
+        (Detail?.Items ?? new List<SampleItemDto>())
+            .GroupBy(i => i.SampleType)
+            .OrderBy(g => g.Key)
+            .Select(g => new SampleGroup(SasLabels.SampleTypeName(g.Key), g.Count(), g.Sum(i => i.NoOfTests)))
+            .ToList();
+
+    private int? SelectedItemId => _selectedItemId ?? Detail?.Items.FirstOrDefault()?.Id;
+
+    private SampleItemDto? SelectedItem =>
+        Detail?.Items.FirstOrDefault(i => i.Id == SelectedItemId) ?? Detail?.Items.FirstOrDefault();
+
+    private void SelectItem(int itemId)
+    {
+        _selectedItemId = itemId;
+        _proofOpen = false;
+    }
+
+    private string CollectionTypeText
+    {
+        get
+        {
+            if (Detail is null) return "-";
+            var text = Detail.PaymentType == SamplePaymentType.Paid ? "Paid Sample" : "Free Sample";
+            var category = SasLabels.PaidCategoryName(Detail.PaidCategory);
+            return string.IsNullOrWhiteSpace(category) ? text : $"{text} ({category})";
+        }
+    }
+
+    /// <summary>The grey line beside the chips: the furthest milestone this collection reached.</summary>
+    private string HeadlineWhen
+    {
+        get
+        {
+            if (Detail is null) return "";
+            if (Detail.CompletedAt is { } completed) return $"Testing completed on {SasLabels.DateTimeText(completed)}";
+            if (Detail.SubmittedAt is { } submitted) return $"Collection completed on {SasLabels.DateTimeText(submitted)}";
+            return $"Collected on {SasLabels.DateTimeText(Detail.CollectionDate)}";
+        }
+    }
+
+    /// <summary>Free samples never carry a payment, so the strip says so instead of showing an empty pill.</summary>
+    private string PaymentPillClass =>
+        Detail is { PaymentType: SamplePaymentType.Free }
+            ? "sas-pill sas-pill--grey"
+            : SasLabels.PaymentStatusPillClass(Detail?.Payment?.Status ?? Detail?.PaymentStatus);
+
+    private string PaymentPillText
+    {
+        get
+        {
+            if (Detail is null) return "-";
+            if (Detail.PaymentType == SamplePaymentType.Free) return "Free Sample";
+            var status = Detail.Payment?.Status ?? Detail.PaymentStatus;
+            return status is null ? "Not Paid" : SasLabels.PaymentStatusName(status);
+        }
+    }
+
+    private bool ShowPaymentReview =>
+        Detail is { CanReview: true, Status: SampleCollectionStatus.PendingApproval, Payment: not null };
+
+    private string AwaitingNote =>
+        Detail is null
+            ? ""
+            : Detail.Status == SampleCollectionStatus.Completed
+                ? "No parameters were recorded for this sample."
+                : $"The lab has not published the results yet. Current status: {SasLabels.Status(Detail.Status)}.";
+
+    private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    // ------------------------------------------------------------------ payment review
+
+    private void OpenProof() => _proofOpen = true;
+
+    private void CloseProof() => _proofOpen = false;
+
+    private async Task ApprovePaymentAsync()
+    {
+        if (Detail?.Payment is not { } payment) return;
+        if (!await Toast.ConfirmAsync("Approve payment",
+                $"Approve {SasLabels.Money(payment.Amount)} against {Detail.Code}? The collection then becomes ready for consignment.",
+                "Approve")) return;
+
+        await ReviewAsync(payment.Id, SamplePaymentStatus.Approved, null, "Payment approved.");
+    }
+
+    private async Task RejectPaymentAsync()
+    {
+        if (Detail?.Payment is not { } payment) return;
+        if (string.IsNullOrWhiteSpace(_rejectReason))
+        {
+            Toast.Warning("Add a reason so the collector knows what to correct.");
+            return;
+        }
+
+        await ReviewAsync(payment.Id, SamplePaymentStatus.Rejected, _rejectReason.Trim(),
+            "Payment rejected and sent back.");
+    }
+
+    private async Task ReviewAsync(int paymentId, SamplePaymentStatus status, string? reason, string success)
+    {
+        _reviewing = true;
+        try
+        {
+            var refreshed = await Api.ReviewPaymentAsync(paymentId, Id, status, reason);
+            if (refreshed is null) return;   // SasApi already raised the toast
+
+            Detail = refreshed;
+            _rejecting = false;
+            _rejectReason = "";
+            Toast.Success(success);
+        }
+        finally
+        {
+            _reviewing = false;
+        }
+    }
+
+    // ------------------------------------------------------------------ lab results
+
+    private async Task SaveResultsAsync(List<LabResultUpsertDto> rows)
+    {
+        if (SelectedItem is not { } item) return;
+
+        var saved = await Api.SaveResultsAsync(item.Id, rows);
+        if (saved is null) return;           // SasApi already raised the toast
+
+        // The API may have moved the collection to TestInProgress or Completed, so re-read it:
+        // that refreshes the status pill, the timeline and every sample's results at once.
+        var (refreshed, _) = await Api.GetCollectionAsync(Id);
+        if (refreshed is not null) Detail = refreshed;
+        else item.Results = saved;
+
+        Toast.Success($"Results saved for {item.Code}.");
+    }
+
+    // ------------------------------------------------------------------ export
+
+    /// <summary>
+    /// "Export" (printer): hands a self-contained page to <c>openPrintableHtml</c>. On the Web
+    /// host that opens a print window; the MAUI host bridges the same JS name to the system
+    /// browser (a WebView cannot open a popup, so <c>window.print()</c> alone is not enough).
+    /// </summary>
+    private async Task ExportPrint()
+    {
+        if (Detail is not { } d) return;
+
+        var sb = new StringBuilder();
+        sb.Append("<html><head><meta charset=\"utf-8\"><title>").Append(Esc(d.Code)).Append("</title><style>")
+          .Append("body{font-family:Arial,Helvetica,sans-serif;color:#1f2937;margin:24px;}")
+          .Append("h1{font-size:20px;margin:0 0 4px;}h2{font-size:15px;margin:22px 0 8px;color:#0b6b3a;}")
+          .Append(".meta{color:#6b7684;font-size:12px;margin-bottom:16px;}")
+          .Append("table{border-collapse:collapse;width:100%;margin-bottom:12px;font-size:12px;}")
+          .Append("th,td{border:1px solid #d7dee7;padding:6px 8px;text-align:left;}")
+          .Append("th{background:#f6f8fa;}")
+          .Append("</style></head><body>");
+
+        sb.Append("<h1>Sample Collection Details</h1>")
+          .Append("<div class=\"meta\">").Append(Esc($"# {d.Code}")).Append(" &middot; ")
+          .Append(Esc(d.PaymentType == SamplePaymentType.Paid ? "Paid Sample" : "Free Sample")).Append(" &middot; ")
+          .Append(Esc(SasLabels.Status(d.Status))).Append(" &middot; ").Append(Esc(HeadlineWhen)).Append("</div>");
+
+        sb.Append("<h2>Collection Information</h2><table>");
+        AppendPair(sb, "Consignment ID", d.ConsignmentCode);
+        AppendPair(sb, "Transaction ID", d.Payment?.TransactionId);
+        AppendPair(sb, "Courier Partner", d.Consignment?.CourierService);
+        AppendPair(sb, "AWB / Tracking No", d.Consignment?.TrackingNumber);
+        AppendPair(sb, "Packaging Type", _consignment?.PackagingType);
+        AppendPair(sb, "Collection Type", CollectionTypeText);
+        AppendPair(sb, "Collected By", d.CollectedByName);
+        AppendPair(sb, "Samples", d.SampleTypes);
+        AppendPair(sb, "No. of Tests", TotalTests.ToString());
+        AppendPair(sb, "Total Amount", SasLabels.Money(d.TotalAmount));
+        AppendPair(sb, "Remarks", d.Remarks);
+        sb.Append("</table>");
+
+        sb.Append("<h2>Sample Summary</h2><table><tr><th>S.NO</th><th>Sample type</th><th>No. of Samples</th><th>No. of Tests</th></tr>");
+        var index = 0;
+        foreach (var g in SampleGroups)
+        {
+            index++;
+            sb.Append("<tr><td>").Append(index).Append("</td><td>").Append(Esc(g.Label))
+              .Append("</td><td>").Append(g.Samples).Append("</td><td>").Append(g.Tests).Append("</td></tr>");
+        }
+        sb.Append("<tr><th colspan=\"2\">Total</th><th>").Append(SampleGroups.Sum(g => g.Samples))
+          .Append("</th><th>").Append(SampleGroups.Sum(g => g.Tests)).Append("</th></tr></table>");
+
+        foreach (var item in d.Items)
+        {
+            sb.Append("<h2>Result Comparison - ").Append(Esc(item.Code)).Append(" (")
+              .Append(Esc(item.Farmer.Name)).Append(", ").Append(Esc(SasLabels.SampleTypeName(item.SampleType))).Append(")</h2>");
+
+            if (item.Results.Count == 0)
+            {
+                sb.Append("<p>Awaiting lab results.</p>");
+                continue;
+            }
+
+            sb.Append("<table><tr><th>Test Parameter</th><th>Normal Range</th><th>Entered Value</th><th>Unit</th><th>Result</th><th>Status</th><th>Recommendation Hint</th></tr>");
+            foreach (var r in item.Results.OrderBy(r => r.SortOrder))
+            {
+                sb.Append("<tr><td>").Append(Esc(r.Parameter))
+                  .Append("</td><td>").Append(Esc(r.NormalRange))
+                  .Append("</td><td>").Append(Esc(r.EnteredValue))
+                  .Append("</td><td>").Append(Esc(r.Unit))
+                  .Append("</td><td>").Append(Esc(r.ResultLabel))
+                  .Append("</td><td>").Append(Esc(r.Status.ToString()))
+                  .Append("</td><td>").Append(Esc(r.Hint))
+                  .Append("</td></tr>");
+            }
+            sb.Append("</table>");
+        }
+
+        sb.Append("<h2>History / Timeline</h2><table><tr><th>Status</th><th>Date</th><th>By</th></tr>");
+        foreach (var ev in d.Timeline.OrderBy(e => e.At))
+        {
+            sb.Append("<tr><td>").Append(Esc(ev.Status))
+              .Append("</td><td>").Append(Esc(SasLabels.DateTimeText(ev.At)))
+              .Append("</td><td>").Append(Esc(ev.ByName)).Append("</td></tr>");
+        }
+        sb.Append("</table></body></html>");
+
+        try
+        {
+            await JS.InvokeVoidAsync("openPrintableHtml", sb.ToString());
+        }
+        catch (Exception)
+        {
+            Toast.Error("The print view could not be opened on this device.");
+        }
+    }
+
+    /// <summary>
+    /// "Export" (download): the result table of the selected sample as a PDF, through the shared
+    /// api/Export/table-pdf endpoint (QuestPDF runs on the server; it cannot ship inside the
+    /// Android app). Falls back to a message when there is nothing to export yet.
+    /// </summary>
+    private async Task ExportPdf()
+    {
+        if (Detail is not { } d || SelectedItem is not { } item) return;
+
+        if (item.Results.Count == 0)
+        {
+            Toast.Info("There are no lab results to export yet. Use the print export for the collection summary.");
+            return;
+        }
+
+        var request = new
+        {
+            Title = $"Result Comparison - {item.Code}",
+            Headers = new List<string> { "Test Parameter", "Normal Range", "Entered Value", "Unit", "Result", "Status", "Recommendation Hint" },
+            Rows = item.Results.OrderBy(r => r.SortOrder).Select(r => new List<string>
+            {
+                r.Parameter,
+                r.NormalRange ?? "",
+                r.EnteredValue ?? "",
+                r.Unit ?? "",
+                r.ResultLabel ?? "",
+                r.Status.ToString(),
+                r.Hint ?? ""
+            }).ToList()
+        };
+
+        _exporting = true;
+        try
+        {
+            await Downloads.PostAsync("api/Export/table-pdf", request, $"{d.Code}_{item.Code}_{DateTime.Now:yyyyMMdd}.pdf");
+        }
+        catch (Exception)
+        {
+            Toast.Error("The PDF export failed. Try the print export instead.");
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    private static void AppendPair(StringBuilder sb, string label, string? value) =>
+        sb.Append("<tr><th>").Append(Esc(label)).Append("</th><td>")
+          .Append(string.IsNullOrWhiteSpace(value) ? "-" : Esc(value)).Append("</td></tr>");
+
+    private static string Esc(string? value) =>
+        string.IsNullOrEmpty(value)
+            ? ""
+            : value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+}

@@ -2,12 +2,13 @@
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components.Forms
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <div class="container-fluid">
 
-	<h2 class="page-title">Financial Master</h2>
+	<PageHeader Title="Financial Master" />
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -180,7 +181,7 @@
 						else
 						{
 							<div class="bank-card-grid">
-								@foreach (var item in _filteredItems)
+								@foreach (var item in _filteredItems.Take(_visibleCount))
 								{
 									<div class="bank-card total-value-card-bgimg">
 										@if (!string.IsNullOrEmpty(item.Icon))
@@ -229,6 +230,14 @@
 									</div>
 								}
 							</div>
+							@if (_filteredItems.Count > _visibleCount)
+							{
+								@* Cards are added in batches, like the Financial Year tab's pager. *@
+								<div class="dash-show-more">
+									<span class="text-muted small">Showing @Math.Min(_visibleCount, _filteredItems.Count) of @_filteredItems.Count</span>
+									<button type="button" class="btn btn-outline-success" @onclick="ShowMore">Show more</button>
+								</div>
+							}
 						}
 					}
 					else if (ActiveTab == "Financial Year")
@@ -342,7 +351,7 @@
 			@if (_showDeleteConfirm)
 			{
 				<div class="modal-backdrop fade show"></div>
-				<div class="modal fade show d-block" tabindex="-1" role="dialog">
+				<div class="modal fade show d-block wiz-modal" tabindex="-1" role="dialog">
 					<div class="modal-dialog modal-dialog-centered" role="document">
 						<div class="modal-content">
 							<div class="modal-header">
@@ -382,6 +391,12 @@
 	private List<FinancialItemDto> _banksAll = new();
 	private List<FinancialItemDto> _fyAll = new();
 	private List<FinancialItemDto> _filteredItems = new();
+
+	// Bank cards rendered so far. The Financial Year tab has its own pager; the Bank tab
+	// rendered every card at once.
+	private const int CardBatch = 30;
+	private int _visibleCount = CardBatch;
+	private void ShowMore() => _visibleCount += CardBatch;
 
 	private List<FinancialItemDto> CurrentAllItems => ActiveTab switch
 	{
@@ -433,7 +448,7 @@
 	{
 		try
 		{
-			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			var token = await SessionStore.GetAsync(SessionKeys.Token);
 			if (!string.IsNullOrEmpty(token))
 			{
 				_currentUserId = GetUserIdFromToken(token);
@@ -509,6 +524,8 @@
 			})
 			.OrderByDescending(x => x.CreatedAt)
 			.ToList();
+
+		_visibleCount = CardBatch;
 
 		if (_currentPage > TotalPages) _currentPage = 1;
 	}

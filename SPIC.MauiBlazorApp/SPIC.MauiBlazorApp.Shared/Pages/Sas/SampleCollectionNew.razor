@@ -1,0 +1,876 @@
+@page "/SampleCollection/new"
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject NavigationManager Nav
+@inject SasApi Api
+@inject ToastService Toast
+@implements IDisposable
+
+@*
+    New Sample Collection (Figma frame 7). Three cards - Collection / Farmer / Sample
+    Information - plus the "Sample Added (Preview)" table and the Save Draft / Save and
+    Continue footer.
+
+    ?id=<n> reloads an existing Draft for editing; anything that is no longer a Draft is
+    bounced to the details page, because the API refuses a PUT on a submitted collection.
+
+    Free vs Paid: the Farmer / NGO segment is hidden for a free collection and the preview
+    amounts are all 0. Paid amounts come from the charge master in api/Sas/lookups, so the
+    total shown here is the total the payment page will ask for.
+*@
+
+<div class="sas-new">
+
+    <PageHeader Title="New Sample Collection" Subtitle="Enter the details of the collected sample"
+                BackHref="/SampleCollection">
+        <Actions>
+            @if (Api.CanWrite)
+            {
+                <div class="sas-seg sas-seg--pay" role="group" aria-label="Payment type">
+                    <button type="button" class="sas-seg-btn @(IsFree ? "is-on" : "")"
+                            aria-pressed="@IsFree" @onclick="() => SetPaymentType(SamplePaymentType.Free)">
+                        <i class="bi @(IsFree ? "bi-record-circle" : "bi-circle")" aria-hidden="true"></i> Free Sample
+                    </button>
+                    <button type="button" class="sas-seg-btn @(IsFree ? "" : "is-on")"
+                            aria-pressed="@(!IsFree)" @onclick="() => SetPaymentType(SamplePaymentType.Paid)">
+                        <i class="bi @(IsFree ? "bi-circle" : "bi-record-circle")" aria-hidden="true"></i> Paid Sample
+                    </button>
+                </div>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (!Api.CanWrite)
+    {
+        <EmptyState Icon="bi-lock" Title="You cannot create sample collections"
+                    Message="Only MDO, JMDO and administrator accounts collect samples. You can still open any collection to follow its status.">
+            <a class="sas-btn sas-btn-outline" href="/SampleCollection">Back to the list</a>
+        </EmptyState>
+    }
+    else if (_loadingDraft)
+    {
+        <Skeleton Variant="card" Rows="3" />
+    }
+    else
+    {
+        <!-- ---------- collection information ---------- -->
+        <section class="sas-card">
+            <h2 class="sas-card-title">Collection Information</h2>
+            <div class="sas-grid3">
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-code">Collection ID</label>
+                    <input id="nc-code" class="sas-input" readonly
+                           value="@(string.IsNullOrWhiteSpace(_code) ? "Auto Generated" : _code)" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-date">Collection Date</label>
+                    <input id="nc-date" class="sas-input" type="date"
+                           value="@_collectionDate.ToString("yyyy-MM-dd")"
+                           @onchange="OnDateChanged" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-by">Collected By (@Api.CurrentUserRole)</label>
+                    <input id="nc-by" class="sas-input" readonly value="@Api.CurrentUserName" />
+                </div>
+            </div>
+        </section>
+
+        <!-- ---------- farmer information ---------- -->
+        <section class="sas-card">
+            <h2 class="sas-card-title">Farmer Information</h2>
+
+            <div class="sas-grid3">
+                <div class="sas-field sas-field--farmer">
+                    <label class="sas-label" for="nc-farmer">Farmer Name <span class="sas-req">*</span></label>
+                    <div class="sas-farmer-row">
+                        <div class="sas-combo">
+                            <input id="nc-farmer" class="sas-input @(_errors.Contains("farmer") ? "is-bad" : "")"
+                                   placeholder="Select farmer Name" autocomplete="off"
+                                   value="@_farmerSearch"
+                                   @oninput="OnFarmerSearchInput"
+                                   @onfocus="() => _suggestOpen = true" />
+                            @if (_farmer is not null)
+                            {
+                                <button type="button" class="sas-combo-clear" aria-label="Clear farmer" @onclick="ClearFarmer">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                </button>
+                            }
+
+                            @if (_suggestOpen && (_searching || _suggestions.Count > 0))
+                            {
+                                <ul class="sas-suggest" role="listbox" aria-label="Matching farmers">
+                                    @if (_searching)
+                                    {
+                                        <li class="sas-suggest-empty">Searching...</li>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var farmer in _suggestions)
+                                        {
+                                            <li>
+                                                <button type="button" class="sas-suggest-item" role="option"
+                                                        aria-selected="@(_farmer?.Id == farmer.Id)"
+                                                        @onclick="() => PickFarmer(farmer)">
+                                                    <span class="sas-suggest-name">@farmer.Name</span>
+                                                    <span class="sas-suggest-sub">@farmer.Mobile @(string.IsNullOrWhiteSpace(farmer.Location) ? "" : "- " + farmer.Location)</span>
+                                                </button>
+                                            </li>
+                                        }
+                                    }
+                                </ul>
+                            }
+                        </div>
+
+                        <button type="button" class="sas-btn sas-btn-primary sas-newfarmer" @onclick="OpenNewFarmer">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i> New Farmer
+                        </button>
+                    </div>
+                    @if (_errors.Contains("farmer"))
+                    {
+                        <span class="sas-error">Choose a farmer, or add a new one.</span>
+                    }
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-mobile">Mobile Number</label>
+                    <input id="nc-mobile" class="sas-input" placeholder="Enter Mobile Number"
+                           readonly="@FarmerLocked" value="@_fMobile" @oninput="e => _fMobile = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-a1">Address 1</label>
+                    <input id="nc-a1" class="sas-input" placeholder="Enter Address"
+                           readonly="@FarmerLocked" value="@_fAddress1" @oninput="e => _fAddress1 = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-a2">Address 2</label>
+                    <input id="nc-a2" class="sas-input" placeholder="Enter Address"
+                           readonly="@FarmerLocked" value="@_fAddress2" @oninput="e => _fAddress2 = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-village">Village / Area</label>
+                    <input id="nc-village" class="sas-input" placeholder="Enter Village / Area"
+                           readonly="@FarmerLocked" value="@_fVillage" @oninput="e => _fVillage = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-taluk">Taluk</label>
+                    <input id="nc-taluk" class="sas-input" placeholder="Enter Taluk"
+                           readonly="@FarmerLocked" value="@_fTaluk" @oninput="e => _fTaluk = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-district">District</label>
+                    <input id="nc-district" class="sas-input" readonly value="@Dash(_fDistrict)" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-state">State</label>
+                    <input id="nc-state" class="sas-input" readonly value="@Dash(_fState)" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-pin">Pin Code</label>
+                    <input id="nc-pin" class="sas-input" placeholder="Enter Pin Code"
+                           readonly="@FarmerLocked" value="@_fPinCode" @oninput="e => _fPinCode = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-lat">Latitude</label>
+                    <input id="nc-lat" class="sas-input" placeholder="Enter Latitude"
+                           readonly="@FarmerLocked" value="@_fLatitude" @oninput="e => _fLatitude = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-lng">Longitude</label>
+                    <input id="nc-lng" class="sas-input" placeholder="Longitude"
+                           readonly="@FarmerLocked" value="@_fLongitude" @oninput="e => _fLongitude = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-survey">Survey Number</label>
+                    <input id="nc-survey" class="sas-input" placeholder="Enter Survey Number"
+                           readonly="@FarmerLocked" value="@_fSurvey" @oninput="e => _fSurvey = e.Value?.ToString() ?? string.Empty" />
+                </div>
+            </div>
+
+            @if (_farmer is not null)
+            {
+                <div class="sas-farmer-actions">
+                    @if (FarmerLocked)
+                    {
+                        <button type="button" class="sas-link-btn" @onclick="() => _farmerEditing = true">
+                            <i class="bi bi-pencil" aria-hidden="true"></i> Edit farmer
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="sas-link-btn" @onclick="CancelFarmerEdit">Cancel</button>
+                        <button type="button" class="sas-btn sas-btn-outline" @onclick="SaveFarmerEditAsync" disabled="@_savingFarmer">
+                            @(_savingFarmer ? "Saving..." : "Save farmer details")
+                        </button>
+                    }
+                </div>
+            }
+        </section>
+
+        <!-- ---------- sample information ---------- -->
+        <section class="sas-card">
+            <h2 class="sas-card-title">Sample Information</h2>
+
+            <div class="sas-grid3">
+                @if (!IsFree)
+                {
+                    <div class="sas-field">
+                        <label class="sas-label">Paid Sample Category</label>
+                        <div class="sas-seg" role="group" aria-label="Paid sample category">
+                            <button type="button" class="sas-seg-btn @(_paidCategory == SamplePaidCategory.Farmer ? "is-on" : "")"
+                                    aria-pressed="@(_paidCategory == SamplePaidCategory.Farmer)"
+                                    @onclick="() => SetCategory(SamplePaidCategory.Farmer)">Farmer</button>
+                            <button type="button" class="sas-seg-btn @(_paidCategory == SamplePaidCategory.Ngo ? "is-on" : "")"
+                                    aria-pressed="@(_paidCategory == SamplePaidCategory.Ngo)"
+                                    @onclick="() => SetCategory(SamplePaidCategory.Ngo)">NGO</button>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="sas-field">
+                        <label class="sas-label">Payment</label>
+                        <p class="sas-freenote">
+                            <i class="bi bi-gift" aria-hidden="true"></i>
+                            Free sample - nothing is charged and the collection goes straight to the consignment.
+                        </p>
+                    </div>
+                }
+
+                <div class="sas-field">
+                    <label class="sas-label">Soil Sample</label>
+                    <div class="sas-seg" role="group" aria-label="Soil sample">
+                        <button type="button" class="sas-seg-btn @(_soil ? "is-on" : "")"
+                                aria-pressed="@_soil" @onclick="() => SetSoil(true)">
+                            <i class="bi @(_soil ? "bi-record-circle" : "bi-circle")" aria-hidden="true"></i> Yes
+                        </button>
+                        <button type="button" class="sas-seg-btn @(_soil ? "" : "is-on")"
+                                aria-pressed="@(!_soil)" @onclick="() => SetSoil(false)">
+                            <i class="bi @(_soil ? "bi-circle" : "bi-record-circle")" aria-hidden="true"></i> No
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label">Water Sample</label>
+                    <div class="sas-seg" role="group" aria-label="Water sample">
+                        <button type="button" class="sas-seg-btn @(_water ? "is-on" : "")"
+                                aria-pressed="@_water" @onclick="() => SetWater(true)">
+                            <i class="bi @(_water ? "bi-record-circle" : "bi-circle")" aria-hidden="true"></i> Yes
+                        </button>
+                        <button type="button" class="sas-seg-btn @(_water ? "" : "is-on")"
+                                aria-pressed="@(!_water)" @onclick="() => SetWater(false)">
+                            <i class="bi @(_water ? "bi-circle" : "bi-record-circle")" aria-hidden="true"></i> No
+                        </button>
+                    </div>
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-crop1">Crop 1</label>
+                    <input id="nc-crop1" class="sas-input" list="nc-crops" placeholder="Select or type a crop" @bind="_crop1" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-crop2">Crop 2</label>
+                    <input id="nc-crop2" class="sas-input" list="nc-crops" placeholder="Select or type a crop" @bind="_crop2" />
+                </div>
+
+                <div class="sas-field">
+                    <label class="sas-label" for="nc-remarks">Remarks</label>
+                    <input id="nc-remarks" class="sas-input" placeholder="Add Remarks" @bind="_remarks" />
+                </div>
+
+                <datalist id="nc-crops">
+                    @foreach (var crop in Crops)
+                    {
+                        <option value="@crop"></option>
+                    }
+                </datalist>
+            </div>
+
+            @if (_errors.Contains("type"))
+            {
+                <span class="sas-error">Choose at least one of Soil Sample or Water Sample.</span>
+            }
+
+            <div class="sas-card-actions">
+                @if (_editingIndex >= 0)
+                {
+                    <button type="button" class="sas-btn sas-btn-outline" @onclick="CancelRowEdit">Cancel edit</button>
+                }
+                <button type="button" class="sas-btn sas-btn-primary" @onclick="AddOrUpdateRow">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                    @(_editingIndex >= 0 ? "Update Sample" : "Add Another Sample")
+                </button>
+            </div>
+        </section>
+
+        <!-- ---------- preview ---------- -->
+        @if (_rows.Count > 0)
+        {
+            <section class="sas-card">
+                <div class="sas-card-head">
+                    <h2 class="sas-card-title">Sample Added (Preview)</h2>
+                    <span class="sas-count">@_rows.Count sample@(_rows.Count == 1 ? "" : "s")</span>
+                </div>
+
+                <div class="sas-table-wrap">
+                    <table class="sas-table">
+                        <thead>
+                            <tr>
+                                <th>Collection ID</th>
+                                <th>Farmer</th>
+                                <th>Sample Type</th>
+                                <th>Payment Type</th>
+                                <th>Crop 1</th>
+                                <th>Crop 2</th>
+                                <th>Date &amp; Time</th>
+                                <th>Farmer Location</th>
+                                <th>Remarks</th>
+                                <th>Amount (&#8377;)</th>
+                                <th class="sas-th-action">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (row, index) in _rows.Select((r, i) => (r, i)))
+                            {
+                                <tr @key="index" class="@(index == _editingIndex ? "is-editing" : "")">
+                                    <td class="sas-td-code">@RowCode(index)</td>
+                                    <td>@row.Farmer.Name</td>
+                                    <td>@SasLabels.SampleTypeName(row.SampleType)</td>
+                                    <td><span class="@SasLabels.PaymentTypePillClass(_paymentType)">@SasLabels.PaymentTypeName(_paymentType)</span></td>
+                                    <td>@Dash(row.Crop1)</td>
+                                    <td>@Dash(row.Crop2)</td>
+                                    <td>@SasLabels.DateTimeText(_collectionDate)</td>
+                                    <td>@Dash(row.Farmer.Location)</td>
+                                    <td>@Dash(row.Remarks)</td>
+                                    <td>@row.Amount.ToString("N2")</td>
+                                    <td class="sas-td-action">
+                                        <button type="button" class="sas-icon-btn sas-icon-edit"
+                                                aria-label="@($"Edit sample {index + 1}")" @onclick="() => EditRow(index)">
+                                            <i class="bi bi-pencil" aria-hidden="true"></i>
+                                        </button>
+                                        <button type="button" class="sas-icon-btn sas-icon-del"
+                                                aria-label="@($"Remove sample {index + 1}")" @onclick="() => RemoveRow(index)">
+                                            <i class="bi bi-trash" aria-hidden="true"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="9" class="sas-total-label">Total Amount</td>
+                                <td colspan="2" class="sas-total-value">@TotalText</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="sas-cards">
+                    @foreach (var (row, index) in _rows.Select((r, i) => (r, i)))
+                    {
+                        <div class="sas-prev-card @(index == _editingIndex ? "is-editing" : "")" @key="index">
+                            <div class="sas-prev-top">
+                                <span class="sas-td-code">@RowCode(index)</span>
+                                <span class="@SasLabels.PaymentTypePillClass(_paymentType)">@SasLabels.PaymentTypeName(_paymentType)</span>
+                            </div>
+                            <div class="sas-prev-line"><strong>@row.Farmer.Name</strong> &middot; @SasLabels.SampleTypeName(row.SampleType)</div>
+                            <div class="sas-prev-line">@Dash(row.Farmer.Location)</div>
+                            @if (!string.IsNullOrWhiteSpace(row.CropText))
+                            {
+                                <div class="sas-prev-line">@row.CropText</div>
+                            }
+                            <div class="sas-prev-foot">
+                                <span class="sas-prev-amount">@(IsFree ? "Free" : SasLabels.Money(row.Amount))</span>
+                                <span class="sas-prev-actions">
+                                    <button type="button" class="sas-icon-btn sas-icon-edit"
+                                            aria-label="@($"Edit sample {index + 1}")" @onclick="() => EditRow(index)">
+                                        <i class="bi bi-pencil" aria-hidden="true"></i>
+                                    </button>
+                                    <button type="button" class="sas-icon-btn sas-icon-del"
+                                            aria-label="@($"Remove sample {index + 1}")" @onclick="() => RemoveRow(index)">
+                                        <i class="bi bi-trash" aria-hidden="true"></i>
+                                    </button>
+                                </span>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="sas-prev-total">
+                        <span>Total Amount</span>
+                        <strong>@TotalText</strong>
+                    </div>
+                </div>
+            </section>
+        }
+
+        <ActionBar>
+            <Secondary>
+                <button type="button" class="sas-btn sas-btn-outline" @onclick="() => SaveAsync(draft: true)" disabled="@_saving">
+                    <i class="bi bi-save" aria-hidden="true"></i> Save Draft
+                </button>
+            </Secondary>
+            <ChildContent>
+                <button type="button" class="sas-btn sas-btn-blue" @onclick="() => SaveAsync(draft: false)" disabled="@_saving">
+                    <i class="bi bi-arrow-right-circle" aria-hidden="true"></i>
+                    @(_saving ? "Saving..." : "Save and Continue")
+                </button>
+            </ChildContent>
+        </ActionBar>
+
+        <NewFarmerDialog @bind-IsOpen="_newFarmerOpen" InitialName="@_farmerSearch" OnCreated="OnFarmerCreated" />
+
+        <SampleSummaryDrawer @bind-IsOpen="_summaryOpen" Summary="_summary" Busy="_submitting"
+                             OnContinue="ContinueFromSummaryAsync" />
+    }
+</div>
+
+@code {
+    /// <summary>?id=<n> loads that Draft for editing; absent means a brand new collection.</summary>
+    [SupplyParameterFromQuery(Name = "id")] public int? DraftId { get; set; }
+
+    // ---- collection ----
+    private int? _collectionId;
+    private string _code = "";
+    private DateTime _collectionDate = DateTime.Now;
+    private SamplePaymentType _paymentType = SamplePaymentType.Paid;
+    private SamplePaidCategory _paidCategory = SamplePaidCategory.Farmer;
+
+    private bool IsFree => _paymentType == SamplePaymentType.Free;
+
+    // ---- farmer box ----
+    private SasFarmerDto? _farmer;
+    private string _farmerSearch = "";
+    private List<SasFarmerDto> _suggestions = new();
+    private bool _suggestOpen;
+    private bool _searching;
+    private bool _farmerEditing;
+    private bool _savingFarmer;
+    private bool _newFarmerOpen;
+    private CancellationTokenSource? _searchCts;
+
+    private bool FarmerLocked => _farmer is null || !_farmerEditing;
+
+    private string _fMobile = "", _fAddress1 = "", _fAddress2 = "", _fVillage = "", _fTaluk = "";
+    private string _fDistrict = "", _fState = "", _fPinCode = "", _fLatitude = "", _fLongitude = "", _fSurvey = "";
+
+    // ---- sample form ----
+    private bool _soil = true;
+    private bool _water;
+    private string _crop1 = "", _crop2 = "", _remarks = "";
+    private int _editingIndex = -1;
+
+    // ---- preview ----
+    private readonly List<SampleDraftRow> _rows = new();
+
+    private readonly HashSet<string> _errors = new();
+    private bool _loadingDraft;
+    private bool _saving;
+    private bool _submitting;
+
+    private SasLookupsDto? _lookups;
+    private List<string> Crops => _lookups?.Crops ?? new List<string>();
+
+    // ---- summary drawer ----
+    private bool _summaryOpen;
+    private SasSummary? _summary;
+
+    private decimal Total => _rows.Sum(r => r.Amount);
+
+    private string TotalText => IsFree ? "Free" : SasLabels.Money(Total);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _lookups = await Api.GetLookupsAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (DraftId is not { } id || _collectionId == id || !Api.CanWrite) return;
+
+        _loadingDraft = true;
+        StateHasChanged();
+
+        var (detail, notFound) = await Api.GetCollectionAsync(id);
+        _loadingDraft = false;
+
+        if (detail is null)
+        {
+            if (notFound) Toast.Error("That draft no longer exists.");
+            Nav.NavigateTo("/SampleCollection");
+            return;
+        }
+
+        if (detail.Status != SampleCollectionStatus.Draft)
+        {
+            // The API only allows PUT on a Draft; anything further along belongs on the details page.
+            Toast.Info("This collection has already been submitted.");
+            Nav.NavigateTo($"/SampleCollection/view/{detail.Id}");
+            return;
+        }
+
+        _collectionId = detail.Id;
+        _code = detail.Code;
+        _collectionDate = detail.CollectionDate;
+        _paymentType = detail.PaymentType;
+        _paidCategory = detail.PaidCategory ?? SamplePaidCategory.Farmer;
+        _remarks = "";
+
+        _rows.Clear();
+        _rows.AddRange(detail.Items.Select(SampleDraftRow.FromDto));
+        Reprice();
+    }
+
+    private void OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString(), out var parsed))
+        {
+            // keep the time of day so the list's "09:15 AM" line stays meaningful
+            _collectionDate = parsed.Date + DateTime.Now.TimeOfDay;
+        }
+    }
+
+    // ---------------------------------------------------------------- payment type
+
+    private void SetPaymentType(SamplePaymentType type)
+    {
+        if (_paymentType == type) return;
+        _paymentType = type;
+        Reprice();
+    }
+
+    private void SetCategory(SamplePaidCategory category)
+    {
+        if (_paidCategory == category) return;
+        _paidCategory = category;
+        Reprice();
+    }
+
+    /// <summary>Recalculates every preview amount after Free/Paid or Farmer/NGO changes.</summary>
+    private void Reprice()
+    {
+        foreach (var row in _rows)
+        {
+            row.Amount = IsFree ? 0m : Api.ChargeFor(row.SampleType, _paidCategory);
+        }
+    }
+
+    // ---------------------------------------------------------------- farmer box
+
+    private async Task OnFarmerSearchInput(ChangeEventArgs e)
+    {
+        _farmerSearch = e.Value?.ToString() ?? "";
+        _suggestOpen = true;
+
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+        _searchCts = new CancellationTokenSource();
+        var ct = _searchCts.Token;
+
+        var term = _farmerSearch.Trim();
+        if (term.Length < 2)
+        {
+            _suggestions = new List<SasFarmerDto>();
+            _searching = false;
+            return;
+        }
+
+        _searching = true;
+
+        try
+        {
+            await Task.Delay(300, ct);         // debounce
+            var results = await Api.SearchFarmersAsync(term, 10, ct);
+            if (ct.IsCancellationRequested) return;
+
+            _suggestions = results;
+        }
+        catch (OperationCanceledException)
+        {
+            return;                            // a newer keystroke took over
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested) _searching = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private void PickFarmer(SasFarmerDto farmer)
+    {
+        _farmer = farmer;
+        _farmerSearch = farmer.Name;
+        _suggestOpen = false;
+        _farmerEditing = false;
+        _errors.Remove("farmer");
+        FillFarmerFields(farmer);
+    }
+
+    private void ClearFarmer()
+    {
+        _farmer = null;
+        _farmerSearch = "";
+        _suggestions = new List<SasFarmerDto>();
+        _suggestOpen = false;
+        _farmerEditing = false;
+        FillFarmerFields(new SasFarmerDto());
+    }
+
+    private void FillFarmerFields(SasFarmerDto farmer)
+    {
+        _fMobile = farmer.Mobile ?? "";
+        _fAddress1 = farmer.Address1 ?? "";
+        _fAddress2 = farmer.Address2 ?? "";
+        _fVillage = farmer.Village ?? "";
+        _fTaluk = farmer.Taluk ?? "";
+        _fDistrict = farmer.DistrictName ?? "";
+        _fState = farmer.StateName ?? "";
+        _fPinCode = farmer.PinCode ?? "";
+        _fLatitude = farmer.Latitude?.ToString("0.######") ?? "";
+        _fLongitude = farmer.Longitude?.ToString("0.######") ?? "";
+        _fSurvey = farmer.SurveyNumber ?? "";
+    }
+
+    private void OpenNewFarmer() => _newFarmerOpen = true;
+
+    private void OnFarmerCreated(SasFarmerDto farmer) => PickFarmer(farmer);
+
+    private void CancelFarmerEdit()
+    {
+        _farmerEditing = false;
+        if (_farmer is not null) FillFarmerFields(_farmer);
+    }
+
+    /// <summary>"Edit farmer" -> PUT api/Sas/farmers/{id}; the preview rows pick up the new address.</summary>
+    private async Task SaveFarmerEditAsync()
+    {
+        if (_farmer is null) return;
+
+        _savingFarmer = true;
+
+        var saved = await Api.UpdateFarmerAsync(_farmer.Id, new SasFarmerUpsertDto
+        {
+            Name = _farmer.Name,
+            Mobile = _fMobile.Trim(),
+            Address1 = Blank(_fAddress1),
+            Address2 = Blank(_fAddress2),
+            Village = Blank(_fVillage),
+            Taluk = Blank(_fTaluk),
+            StateId = _farmer.StateId,
+            DistrictId = _farmer.DistrictId,
+            PinCode = Blank(_fPinCode),
+            Latitude = double.TryParse(_fLatitude, out var lat) ? lat : null,
+            Longitude = double.TryParse(_fLongitude, out var lng) ? lng : null,
+            SurveyNumber = Blank(_fSurvey)
+        });
+
+        _savingFarmer = false;
+
+        if (saved is null) return;
+
+        _farmer = saved;
+        _farmerEditing = false;
+        FillFarmerFields(saved);
+
+        foreach (var row in _rows.Where(r => r.Farmer.Id == saved.Id)) row.Farmer = saved;
+
+        Toast.Success("Farmer details saved.");
+    }
+
+    // ---------------------------------------------------------------- sample form
+
+    private void SetSoil(bool value)
+    {
+        _soil = value;
+        if (_soil || _water) _errors.Remove("type");
+    }
+
+    private void SetWater(bool value)
+    {
+        _water = value;
+        if (_soil || _water) _errors.Remove("type");
+    }
+
+    /// <summary>"Add Another Sample" / "Update Sample": validates and writes into the preview.</summary>
+    private void AddOrUpdateRow() => CommitForm(showErrors: true);
+
+    private bool CommitForm(bool showErrors)
+    {
+        _errors.Clear();
+
+        if (_farmer is null) _errors.Add("farmer");
+        if (SasLabels.TypeFrom(_soil, _water) is null) _errors.Add("type");
+
+        if (_errors.Count > 0)
+        {
+            if (showErrors) StateHasChanged();
+            return false;
+        }
+
+        var type = SasLabels.TypeFrom(_soil, _water)!.Value;
+
+        var row = _editingIndex >= 0 && _editingIndex < _rows.Count ? _rows[_editingIndex] : new SampleDraftRow();
+        row.Farmer = _farmer!;
+        row.SampleType = type;
+        row.Crop1 = Blank(_crop1);
+        row.Crop2 = Blank(_crop2);
+        row.Remarks = Blank(_remarks);
+        row.Amount = IsFree ? 0m : Api.ChargeFor(type, _paidCategory);
+
+        if (_editingIndex < 0) _rows.Add(row);
+
+        _editingIndex = -1;
+        ResetSampleForm();
+        return true;
+    }
+
+    private void ResetSampleForm()
+    {
+        ClearFarmer();
+        _soil = true;
+        _water = false;
+        _crop1 = _crop2 = _remarks = "";
+    }
+
+    private void EditRow(int index)
+    {
+        if (index < 0 || index >= _rows.Count) return;
+
+        var row = _rows[index];
+        _editingIndex = index;
+
+        _farmer = row.Farmer;
+        _farmerSearch = row.Farmer.Name;
+        _farmerEditing = false;
+        _suggestOpen = false;
+        FillFarmerFields(row.Farmer);
+
+        _soil = row.Soil;
+        _water = row.Water;
+        _crop1 = row.Crop1 ?? "";
+        _crop2 = row.Crop2 ?? "";
+        _remarks = row.Remarks ?? "";
+        _errors.Clear();
+    }
+
+    private void CancelRowEdit()
+    {
+        _editingIndex = -1;
+        ResetSampleForm();
+        _errors.Clear();
+    }
+
+    private void RemoveRow(int index)
+    {
+        if (index < 0 || index >= _rows.Count) return;
+
+        _rows.RemoveAt(index);
+
+        if (_editingIndex == index) CancelRowEdit();
+        else if (_editingIndex > index) _editingIndex--;
+    }
+
+    private string RowCode(int index) =>
+        string.IsNullOrWhiteSpace(_code) ? $"Sample {index + 1}" : $"{_code}-{index + 1}";
+
+    // ---------------------------------------------------------------- save
+
+    /// <summary>
+    /// Save Draft keeps the collection editable; Save and Continue saves it the same way and
+    /// then opens the summary, which is where submit happens.
+    /// </summary>
+    private async Task SaveAsync(bool draft)
+    {
+        // A half-typed sample is folded in first, so "add then save" and "save" agree.
+        if (_farmer is not null || _rows.Count == 0)
+        {
+            if (!CommitForm(showErrors: true)) return;
+        }
+
+        if (_rows.Count == 0)
+        {
+            Toast.Warning("Add at least one sample before saving.");
+            return;
+        }
+
+        _saving = true;
+
+        var body = new SampleCollectionUpsertDto
+        {
+            CollectionDate = _collectionDate,
+            PaymentType = _paymentType,
+            PaidCategory = IsFree ? null : _paidCategory,
+            Remarks = null,
+            Items = _rows.Select(r => r.ToUpsert()).ToList(),
+            SaveAsDraft = true
+        };
+
+        var saved = _collectionId is { } id
+            ? await Api.UpdateCollectionAsync(id, body)
+            : await Api.CreateCollectionAsync(body);
+
+        _saving = false;
+
+        if (saved is null) return;      // SasApi already explained why
+
+        _collectionId = saved.Id;
+        _code = saved.Code;
+        _rows.Clear();
+        _rows.AddRange(saved.Items.Select(SampleDraftRow.FromDto));
+
+        if (draft)
+        {
+            Toast.Success($"Draft {saved.Code} saved.");
+            // stay on the page, but let a refresh reopen the same draft
+            Nav.NavigateTo($"/SampleCollection/new?id={saved.Id}", replace: true);
+            return;
+        }
+
+        _summary = SasSummary.FromDto(saved);
+        _summary.CollectedByName = string.IsNullOrWhiteSpace(saved.CollectedByName)
+            ? Api.CurrentUserName : saved.CollectedByName;
+        _summaryOpen = true;
+    }
+
+    /// <summary>Summary -> submit -> payment (Paid) or consignment (Free).</summary>
+    private async Task ContinueFromSummaryAsync()
+    {
+        if (_collectionId is not { } id) return;
+
+        _submitting = true;
+        var submitted = await Api.SubmitCollectionAsync(id);
+        _submitting = false;
+
+        if (submitted is null) return;
+
+        _summaryOpen = false;
+        Toast.Success($"{submitted.Code} submitted.");
+
+        Nav.NavigateTo(submitted.PaymentType == SamplePaymentType.Paid
+            ? $"/SampleCollection/payment/{id}"
+            : $"/SampleCollection/consignment/{id}");
+    }
+
+    private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    public void Dispose()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+    }
+}

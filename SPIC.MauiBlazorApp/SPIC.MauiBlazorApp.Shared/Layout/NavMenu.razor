@@ -12,23 +12,70 @@
     @if (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.Dashboard))
     {
         <NavLink class="@NavLinkClass("Dashboard")" href="/Dashboard" Match="NavLinkMatch.All">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
             Register
         </NavLink>
     }
      @if (loginState.CanAccess(PagePermission.SubDealerList))
     {
         <NavLink class="@NavLinkClass("Sub Dealer Master")" href="/SubDealerList" Match="NavLinkMatch.All">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
             Sub Dealer Master 
         </NavLink>
     }
 
+    @* Digital Library: gated by the DigitalLibrary page permission (Admin / CorporateAdmin
+       bypass CanAccess, so they keep seeing it without an assignment). *@
+    @* Content is viewable by every signed-in user; adding/editing is gated inside the pages by the
+       DigitalLibrary page permission. *@
+    @if (loginState.IsLoggedIn)
+    {
+        <NavLink class="@NavLinkClass("Digital Library")" href="/DigitalLibrary">
+            <i class="bi bi-collection-play SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Digital Library
+        </NavLink>
+    }
+
+    @* Knowledge Community: usable by every signed-in user (product decision 2026-09-20). The older
+       entry further down this file sits inside a commented-out farmer-portal block. *@
+    @if (loginState.IsLoggedIn)
+    {
+        <NavLink class="@NavLinkClass("Community")" href="/Community">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/Community.svg" class="SideBariconimg" />
+            Community
+        </NavLink>
+    }
+
+    @* SAS Portal: sample collection and consignments (page-permission gated). *@
+    @if (loginState.CanAccess(nameof(PagePermission.SampleCollection)))
+    {
+        <NavLink class="@NavLinkClass("Sample Collection")" href="/SampleCollection">
+            <i class="bi bi-droplet-half SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Sample Collection
+        </NavLink>
+    }
+    @if (loginState.CanAccess(nameof(PagePermission.ConsignmentHistory)))
+    {
+        <NavLink class="@NavLinkClass("Consignment History")" href="/ConsignmentHistory">
+            <i class="bi bi-box-seam SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Consignment History
+        </NavLink>
+    }
+
+
     @if (loginState.UserRole == AppRole.Admin)
     {
         <NavLink class="@NavLinkClass("IFMS Auto Import")" href="/IfmsAutoImport">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
             IFMS Auto Import
+        </NavLink>
+    }
+
+    @if (loginState.UserRole is AppRole.Admin or AppRole.SpecialAdmin)
+    {
+        <NavLink class="@NavLinkClass("Data Explorer")" href="/DataExplorer">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
+            Data Explorer
         </NavLink>
     }
 
@@ -39,16 +86,8 @@
        route mapping required (Admin/CorporateAdmin bypass via CanAccess). *@
     @if (loginState.CanAccess("IfmsRelaySetup"))
     {
-        <NavLink class="@NavLinkClass("IFMS OTP Relay")" href="/IfmsRelaySetup">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
-            IFMS OTP Relay
-        </NavLink>
-    }
-
-    @if (loginState.UserRole == AppRole.Admin)
-    {
         <NavLink class="@NavLinkClass("IFMS Logins")" href="/IfmsLogins">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
             IFMS Logins
         </NavLink>
     }
@@ -56,7 +95,7 @@
  @*    @if (loginState.CanAccess(PagePermission.Schemes))
     {
         <NavLink class="@NavLinkClass("Schemes")" href="/Schemes">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
             Schemes
         </NavLink>
     } *@
@@ -66,7 +105,7 @@
             <a href="javascript:void(0);"
                class="nav-link mt-2 @(ShowSubsidyExpanded ? "active" : "") @MatchClass("Subsidy Management System")"
                @onclick="ToggleSubsidyMenu">
-                <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
                 Subsidy Management System
                 <i class="bi @(ShowSubsidyExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
             </a>
@@ -150,7 +189,7 @@
             <a href="javascript:void(0);"
                class="nav-link mt-2 @(ShowMdPortalExpanded ? "active" : "") @MatchClass("MD Portal")"
                @onclick="ToggleMdPortalMenu">
-                <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/MDportal.png" class="SideBariconimg" />
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/MDportal.png" class="SideBariconimg" />
                 MD Portal
                 <i class="bi @(ShowMdPortalExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
             </a>
@@ -225,70 +264,70 @@
   @*   @if (loginState.CanAccess(PagePermission.BudgetSubmissions))
     {
         <NavLink class="@NavLinkClass("Budget Submissions")" href="/BudgetSubmissions">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
             Budget Submissions
         </NavLink>
     }
     @if (loginState.CanAccess(PagePermission.CSR1Create))
     {
         <NavLink class="@NavLinkClass("CSR-1 Create")" href="/CREATE-CSR-1Management">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
             CSR-1 Create
         </NavLink>
     }
     @if (loginState.CanAccess(PagePermission.CSR1Management))
     {
         <NavLink class="@NavLinkClass("CSR-1 Management")" href="/CSR-1List">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
             CSR-1 Management
         </NavLink>
     }
     @if (loginState.CanAccess(PagePermission.Purchases))
     {
         <NavLink class="@NavLinkClass("Purchases")" href="/Purchases">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
             Purchases
         </NavLink>
     }
     @if (loginState.CanAccess(PagePermission.Rewards))
     {
         <NavLink class="@NavLinkClass("Rewards")" href="/Rewards">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
             Rewards
         </NavLink>
     }
     @if (loginState.CanAccess(PagePermission.CropAdvice))
     {
         <NavLink class="@NavLinkClass("Crop Advice")" href="/CropAdvice">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
             Crop Advice
         </NavLink>
     }
     @if (loginState.CanAccess(PagePermission.YieldPrediction))
     {
         <NavLink class="@NavLinkClass("Yield Prediction")" href="/YieldPrediction">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
             Yield Prediction
         </NavLink>
     }
     @if (loginState.CanAccess(PagePermission.DiseaseDetection))
     {
         <NavLink class="@NavLinkClass("Disease Detection")" href="/DiseaseDetection">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
             Disease Detection
         </NavLink>
     }
-    @if (loginState.CanAccess(PagePermission.Community))
+    @if (loginState.IsLoggedIn)
     {
         <NavLink class="@NavLinkClass("Community")" href="/Community">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/Community.svg" class="SideBariconimg" />
             Community
         </NavLink>
     }
     @if (loginState.CanAccess(PagePermission.Notifications))
     {
         <NavLink class="@NavLinkClass("Notifications")" href="/Notifications">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
             Notifications
         </NavLink>
     }
@@ -296,7 +335,7 @@
     @if (loginState.CanAccess("Profile"))
     {
         <NavLink class="@NavLinkClass("Profile")" href="/Profile">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
             Profile
         </NavLink>
     }
@@ -304,7 +343,7 @@
     @if (loginState.CanAccess(PagePermission.EmployeeManagement))
     {
         <NavLink class="@NavLinkClass("Employee")" href="/EmployeeManagement">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
             Employee
         </NavLink>
     }
@@ -312,7 +351,7 @@
     @if (loginState.CanAccess(PagePermission.dealerreviewlist))
     {
         <NavLink class="@NavLinkClass("Dealer Application Review")" href="/dealerreviewlist">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
             Dealer Application Review
         </NavLink>
     }
@@ -320,7 +359,7 @@
     @if (loginState.CanAccess(PagePermission.CreditLimitSales))
     {
         <NavLink class="@NavLinkClass("Financial Year Sales Data")" href="/CreditLimitSales">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
             Financial year Sales Data
         </NavLink>
     }
@@ -330,7 +369,7 @@
             <a href="javascript:void(0);"
                class="nav-link mt-2 @(ShowSdwaExpanded ? "active" : "") @MatchClass("SDWA")"
                @onclick="ToggleSdwaMenu">
-                <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/sdwamenu.svg" class="SideBariconimg" />
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/sdwamenu.svg" class="SideBariconimg" />
                 SDWA
                 <i class="bi @(ShowSdwaExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
             </a>
@@ -403,7 +442,7 @@
             <a href="javascript:void(0);"
                class="nav-link mt-2 @(ShowSettingsExpanded ? "active" : "") @MatchClass("Settings")"
                @onclick="ToggleSettingsMenu">
-                <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
                 Settings
                 <i class="bi @(ShowSettingsExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
             </a>
@@ -461,7 +500,7 @@
      @if (loginState.CanAccess("ContactUs"))
     {
         <NavLink class="@NavLinkClass("ContactUs")" href="/ContactUs">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
             Contact Us
         </NavLink>
     }
@@ -701,15 +740,3 @@
             || uri == "mosubmissionvalidation" || uri == "rmapprovalstatus";
     }
 }
-<script>
-    window.navSearch = {
-        scrollToMatch: function () {
-            var match = document.querySelector('.search-match');
-            if (match) match.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        },
-        clickMatch: function () {
-            var match = document.querySelector('.search-match');
-            if (match) match.click();
-        }
-    };
-</script>

@@ -1,0 +1,382 @@
+@page "/Community"
+@* Pages.CommunityDiscussion (the detail page class) shares its name with the model. *@
+@using CommunityDiscussion = SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject CommunityApi Api
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>Knowledge Community - SPIC ONE</PageTitle>
+
+@*
+    SPIC Knowledge Community landing (Figma frame supplied 2026-09-20).
+    Hero + search, stats strip, Recent Discussions (grid / list toggle), Popular Products,
+    "New Here?" panel. Stats, recent discussions and products come from api/Community;
+    "Join" toggles through the API. Only the layout preference is local (localStorage).
+*@
+
+<div class="cmh-page">
+
+    <!-- ---------- hero ---------- -->
+    <section class="cmh-hero">
+        <div class="cmh-hero-inner">
+            <span class="cmh-hero-pill">Knowledge Community</span>
+            <h1 class="cmh-hero-title">SPIC Knowledge Community</h1>
+            <p class="cmh-hero-sub">Ask . Share . Learn . Grow Together</p>
+            <p class="cmh-hero-text">
+                A trusted platform to discuss products, farming practices, and learn from
+                community members and SPIC experts.
+            </p>
+
+            <form class="cmh-search" @onsubmit="Ask" @onsubmit:preventDefault>
+                <div class="cmh-search-box">
+                    <i class="bi bi-search cmh-search-icon" aria-hidden="true"></i>
+                    <input class="cmh-search-input"
+                           type="search"
+                           placeholder="What would you like to know? (e.g: Application, Yellow, Leaves, dosage)"
+                           aria-label="Search the knowledge community"
+                           @bind="_query" @bind:event="oninput" />
+                </div>
+                <button type="submit" class="cmh-ask">
+                    <i class="bi bi-send" aria-hidden="true"></i> Ask a Question
+                </button>
+            </form>
+
+            <p class="cmh-search-help">Search by product name or describe your problem in your own words.</p>
+        </div>
+    </section>
+
+    <!-- ---------- stats strip ---------- -->
+    <section class="cmh-stats" aria-label="Community at a glance">
+        <div class="cmh-stat">
+            <span class="cmh-stat-icon"><i class="bi bi-people-fill" aria-hidden="true"></i></span>
+            <span class="cmh-stat-text">
+                <span class="cmh-stat-value">@Count(_stats?.CommunityMembers)</span>
+                <span class="cmh-stat-label">Community Members</span>
+            </span>
+        </div>
+        <div class="cmh-stat">
+            <span class="cmh-stat-icon"><i class="bi bi-chat-left-text-fill" aria-hidden="true"></i></span>
+            <span class="cmh-stat-text">
+                <span class="cmh-stat-value">@Count(_stats?.TotalDiscussions)</span>
+                <span class="cmh-stat-label">Discussions</span>
+            </span>
+        </div>
+        <div class="cmh-stat">
+            <span class="cmh-stat-icon"><i class="bi bi-person-badge-fill" aria-hidden="true"></i></span>
+            <span class="cmh-stat-text">
+                <span class="cmh-stat-value">@Count(_stats?.ExpertAnswers)</span>
+                <span class="cmh-stat-label">Expert Answer</span>
+            </span>
+        </div>
+        <div class="cmh-stat">
+            <span class="cmh-stat-icon"><i class="bi bi-flower1" aria-hidden="true"></i></span>
+            <span class="cmh-stat-text">
+                <span class="cmh-stat-value cmh-stat-value--text">A Stronger Farming Community</span>
+                <span class="cmh-stat-label">Growing together, every season</span>
+            </span>
+        </div>
+    </section>
+
+    <!-- ---------- recent discussions ---------- -->
+    <section class="cmh-card">
+        <div class="cmh-card-head">
+            <div class="cmh-card-titles">
+                <h2 class="cmh-card-title">Recent Discussions</h2>
+                <p class="cmh-card-sub">Latest Questions from farmers, and community members.</p>
+            </div>
+            <a class="cmh-btn cmh-btn-outline" href="/Community/discussions">View All Discussions <span aria-hidden="true">&rarr;</span></a>
+        </div>
+
+        <div class="cmh-layout-toggle" role="group" aria-label="Recent discussions layout">
+            <button type="button" class="cmh-toggle @(IsGrid ? "active" : "")"
+                    aria-label="Grid layout" aria-pressed="@IsGrid" title="Grid layout"
+                    @onclick='() => SetLayoutAsync("grid")'>
+                <i class="bi bi-grid" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="cmh-toggle @(IsGrid ? "" : "active")"
+                    aria-label="List layout" aria-pressed="@(!IsGrid)" title="List layout"
+                    @onclick='() => SetLayoutAsync("list")'>
+                <i class="bi bi-list-ul" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        @if (_loading)
+        {
+            <div class="cmh-recent @(IsGrid ? "cmh-recent--grid" : "cmh-recent--list")">
+                <Skeleton Variant="card" Rows="@(IsGrid ? 2 : 3)" />
+                <Skeleton Variant="card" Rows="@(IsGrid ? 2 : 3)" />
+            </div>
+        }
+        else if (_recent is null)
+        {
+            <EmptyState Icon="bi-wifi-off" Title="Discussions could not be loaded"
+                        Message="The community service did not answer. Please try again.">
+                <button type="button" class="cmh-btn cmh-btn-outline" @onclick="LoadAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (_recent.Count == 0)
+        {
+            <EmptyState Icon="bi-chat-square-dots" Title="No discussions yet"
+                        Message="Be the first to ask the community a question.">
+                <a class="cmh-btn cmh-btn-primary" href="/Community/new">Ask a Question</a>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="cmh-recent @(IsGrid ? "cmh-recent--grid" : "cmh-recent--list")">
+                @foreach (var d in _recent)
+                {
+                    <DiscussionCard @key="d.Id" Discussion="d"
+                                    Variant="@(IsGrid ? DiscussionCard.CardVariant.Compact : DiscussionCard.CardVariant.Row)" />
+                }
+            </div>
+        }
+    </section>
+
+    <!-- ---------- popular products ---------- -->
+    <section class="cmh-card">
+        <div class="cmh-card-head">
+            <div class="cmh-card-titles">
+                <h2 class="cmh-card-title">Popular Product</h2>
+                <p class="cmh-card-sub">Quick Access to the most discussed SPIC Products.</p>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="card" Rows="2" />
+        }
+        else if (_products is null || _products.Count == 0)
+        {
+            <EmptyState Icon="bi-box-seam" Title="No products yet"
+                        Message="Product groups appear once discussions mention a SPIC product." Compact="true" />
+        }
+        else
+        {
+            <div class="cmh-products">
+                @foreach (var p in _products)
+                {
+                    <article class="cmh-product" @key="p.Name">
+                        <div class="cmh-product-media">
+                            <img class="cmh-product-img" src="@p.Image" alt="" loading="lazy"
+                                 onerror="this.onerror=null;this.classList.add('is-missing');this.removeAttribute('src')" />
+
+                            @* Editors (Admin / Digital Library designation) replace the picture in place. *@
+                            @if (Api.CanEditProducts)
+                            {
+                                <label class="cmh-product-cam"
+                                       title="@(p.HasImage ? $"Change the {p.Name} picture" : $"Add a picture for {p.Name}")"
+                                       aria-label="@(p.HasImage ? $"Change the {p.Name} picture" : $"Add a picture for {p.Name}")">
+                                    <InputFile accept="image/jpeg,image/png,image/webp" disabled="@(_uploading is not null)"
+                                               OnChange="e => OnProductImageAsync(p, e)" />
+                                    @if (_uploading == p.Name)
+                                    {
+                                        <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-camera-fill" aria-hidden="true"></i>
+                                    }
+                                </label>
+                            }
+                        </div>
+                        <h3 class="cmh-product-name">@p.Name</h3>
+                        <p class="cmh-product-count">@Short(p.DiscussionCount) discussion</p>
+                        <button type="button" class="cmh-join @(p.Joined ? "is-on" : "")"
+                                disabled="@(_joining == p.Name)"
+                                @onclick="() => ToggleJoinAsync(p)">
+                            @(p.Joined ? "Joined" : "Join")
+                        </button>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <!-- ---------- new here ---------- -->
+    <section class="cmh-new">
+        <div class="cmh-new-head">
+            <div>
+                <h2 class="cmh-new-title">New Here?</h2>
+                <p class="cmh-new-text">Ask questions, get expert advice and learn from other farmers.</p>
+            </div>
+            <a class="cmh-btn cmh-btn-primary" href="/Community/new">Ask a Question <span aria-hidden="true">&rarr;</span></a>
+        </div>
+
+        <div class="cmh-new-items">
+            @foreach (var item in NewHere)
+            {
+                <div class="cmh-new-item" @key="item.Label">
+                    <span class="cmh-new-icon"><i class="bi @item.Icon" aria-hidden="true"></i></span>
+                    <span class="cmh-new-label">@item.Label</span>
+                </div>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private const string LayoutKey = "community.recentLayout";
+
+    private string _query = "";
+    private string _layout = "grid";
+
+    private bool _loading = true;
+    private CommunityStats? _stats;
+    private List<CommunityDiscussion>? _recent;
+    private List<CommunityProduct>? _products;
+    private string? _joining;
+    private string? _uploading;
+
+    private CancellationTokenSource? _cts;
+
+    private bool IsGrid => _layout != "list";
+
+    private sealed record NewHereItem(string Icon, string Label);
+
+    private static readonly NewHereItem[] NewHere =
+    {
+        new("bi-chat-square-heart", "Share Your Experience"),
+        new("bi-patch-question", "Get answers from SPIC Experts"),
+        new("bi-hand-thumbs-up", "Help fellow farmers"),
+        new("bi-people", "Build a better farming community"),
+    };
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+
+        var stats = Api.GetStatsAsync(ct);
+        var recent = Api.GetRecentAsync(6, ct);
+        var products = Api.GetProductsAsync(ct);
+
+        await Task.WhenAll(stats, recent, products);
+
+        if (ct.IsCancellationRequested) return;
+
+        _stats = stats.Result;
+        _recent = recent.Result;
+        _products = products.Result;
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Remembered layout; the browser may refuse storage (private mode, MAUI WebView).
+        try
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", LayoutKey);
+            if (saved is "grid" or "list" && saved != _layout)
+            {
+                _layout = saved;
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // keep the default layout
+        }
+    }
+
+    private void Ask()
+    {
+        var q = _query.Trim();
+        Nav.NavigateTo(q.Length == 0 ? "/Community/new" : $"/Community/new?title={Uri.EscapeDataString(q)}");
+    }
+
+    private async Task SetLayoutAsync(string layout)
+    {
+        if (_layout == layout) return;
+        _layout = layout;
+
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", LayoutKey, layout);
+        }
+        catch
+        {
+            // preference simply is not remembered
+        }
+    }
+
+    private async Task ToggleJoinAsync(CommunityProduct p)
+    {
+        if (_joining is not null) return;
+
+        _joining = p.Name;
+        var wasJoined = p.Joined;
+        p.Joined = !wasJoined;              // optimistic
+
+        var result = await Api.ToggleJoinAsync(p.Name);
+        _joining = null;
+
+        if (result is null)
+        {
+            p.Joined = wasJoined;           // rolled back; CommunityApi raised the toast
+            return;
+        }
+
+        p.Joined = result.Active;
+        if (p.Joined) Toast.Success($"Joined {p.Name} discussions.");
+        else Toast.Info($"Left {p.Name} discussions.");
+    }
+
+    /// <summary>
+    /// Replaces a product picture (Admin / Digital Library designation only; the API enforces
+    /// the same rule). The card repaints from the product the server sends back.
+    /// </summary>
+    private async Task OnProductImageAsync(CommunityProduct product, InputFileChangeEventArgs e)
+    {
+        if (_uploading is not null) return;
+
+        var file = e.File;
+
+        if (file.Size > CommunityApi.MaxProductImageBytes)
+        {
+            Toast.Error("That picture is larger than 3 MB. Please choose a smaller one.");
+            return;
+        }
+
+        if (!(file.ContentType ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            Toast.Error("Please choose an image file.");
+            return;
+        }
+
+        _uploading = product.Name;
+        StateHasChanged();
+
+        var updated = await Api.UploadProductImageAsync(product.Name, file);
+        _uploading = null;
+
+        if (updated is null) return;            // CommunityApi already explained why
+
+        product.Image = updated.Image;
+        Toast.Success($"{product.Name} picture updated.");
+    }
+
+    /// <summary>Stat tiles read "-" until the numbers arrive.</summary>
+    private string Count(int? value) => value is int n ? n.ToString("N0") : "-";
+
+    /// <summary>12400 -> "12.4k" for the product cards.</summary>
+    private static string Short(int n) =>
+        n >= 1000 ? (n / 1000d).ToString("0.#") + "k" : n.ToString();
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

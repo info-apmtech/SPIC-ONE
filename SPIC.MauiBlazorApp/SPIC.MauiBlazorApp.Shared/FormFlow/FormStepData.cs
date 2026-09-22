@@ -36,7 +36,7 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			new FormStepModel
 			{
 				StepNo = 1,
-				Title = "Market Details & Territory Coverage",
+				Title = "Basic details of the dealership, its owner and how to reach them.",
 				Route = "/Register",
 				PreviousRoute = "/Dashboard",
 				NextRoute = "/Experience"
@@ -116,7 +116,7 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			new FormStepModel
 			{
 				StepNo = 11,
-				Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.",
+				Title = "Credit ceiling for Green Star products, based on the same performance and collateral review.",
 				Route = "/CreditLimitForGreenStar",
 				PreviousRoute = "/CreditLimit",
 				NextRoute = "/Enclosures"
@@ -124,7 +124,7 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			new FormStepModel
 			{
 				StepNo = 12,
-				Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.",
+				Title = "Upload the supporting documents: licences, identity, bank and property proofs.",
 				Route = "/Enclosures",
 				PreviousRoute = "/CreditLimitForGreenStar",
 				NextRoute = "/FinalSubmission"
@@ -132,7 +132,7 @@ namespace SPIC.MauiBlazorApp.Shared.FormFlow
 			new FormStepModel
 			{
 				StepNo = 13,
-				Title = "Finalize the commercial credit ceiling based on dealer performance and collateral.",
+				Title = "Review every step and submit the application for approval.",
 				Route = "/FinalSubmission",
 				PreviousRoute = "/Enclosures",
 				NextRoute = "/Dashboard"

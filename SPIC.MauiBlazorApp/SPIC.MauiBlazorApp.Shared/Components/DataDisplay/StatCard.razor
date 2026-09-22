@@ -1,0 +1,85 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.DataDisplay
+
+@*
+    StatCard - dashboard KPI tile.
+
+    <StatCard Label="Active dealers" Value="1,284" Icon="bi-people" Trend="+4.2%" Hint="vs last month" />
+
+    Trend direction is inferred from the sign of Trend ("+" up, "-" down, otherwise neutral)
+    unless TrendDirection ("up" | "down" | "neutral") is set explicitly.
+*@
+
+<div class="spic-stat" role="group" aria-label="@Label">
+    <div class="spic-stat-main">
+        <div class="spic-stat-label">@Label</div>
+        <div class="spic-stat-value">@Value</div>
+
+        @if (!string.IsNullOrWhiteSpace(Trend) || !string.IsNullOrWhiteSpace(Hint))
+        {
+            <div class="spic-stat-foot">
+                @if (!string.IsNullOrWhiteSpace(Trend))
+                {
+                    <span class="spic-stat-trend spic-stat-trend--@ResolvedDirection">
+                        <i class="bi @TrendIcon" aria-hidden="true"></i>
+                        @Trend
+                    </span>
+                }
+                @if (!string.IsNullOrWhiteSpace(Hint))
+                {
+                    <span class="spic-stat-hint">@Hint</span>
+                }
+            </div>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Icon))
+    {
+        <div class="spic-stat-icon" aria-hidden="true">
+            <i class="bi @Icon"></i>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+
+    /// <summary>Pre-formatted value text, e.g. "1,284" or "Rs 12.4 L".</summary>
+    [Parameter] public string Value { get; set; } = "";
+
+    /// <summary>bootstrap-icons class without the leading "bi", e.g. "bi-people".</summary>
+    [Parameter] public string? Icon { get; set; }
+
+    /// <summary>Optional trend text, e.g. "+4.2%" or "-3".</summary>
+    [Parameter] public string? Trend { get; set; }
+
+    /// <summary>"up", "down" or "neutral". When null the direction is inferred from Trend's sign.</summary>
+    [Parameter] public string? TrendDirection { get; set; }
+
+    /// <summary>Small caption next to the trend, e.g. "vs last month".</summary>
+    [Parameter] public string? Hint { get; set; }
+
+    private string ResolvedDirection
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(TrendDirection))
+            {
+                var d = TrendDirection.Trim().ToLowerInvariant();
+                return d is "up" or "down" ? d : "neutral";
+            }
+
+            var t = Trend?.Trim();
+            if (string.IsNullOrEmpty(t)) return "neutral";
+            if (t.StartsWith('+')) return "up";
+            if (t.StartsWith('-')) return "down";
+            return "neutral";
+        }
+    }
+
+    private string TrendIcon => ResolvedDirection switch
+    {
+        "up" => "bi-arrow-up-right",
+        "down" => "bi-arrow-down-right",
+        _ => "bi-dash"
+    };
+}

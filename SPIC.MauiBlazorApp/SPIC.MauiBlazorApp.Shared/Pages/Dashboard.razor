@@ -9,6 +9,7 @@
 @inject NavigationManager NavManager
 @inject LoginState LoginState
 @inject IJSRuntime JSRuntime
+@inject ToastService Toast
 
 <style>
     /* Dealer card status badge colors — visual only, no logic change */
@@ -149,16 +150,12 @@
     }
 </style>
 
-<div class="container-fluid py-4 px-0">
+<div class="container-fluid py-4 px-0 dash-page">
    <div class="dealer-page-header mb-4">
 
-    <div class="dealer-heading">
-        <h1 class="page-title">Dealer Registrations</h1>
-
-        <p class="page-subtitle">
-            Manage all draft, in-progress, submitted, and approved dealer applications
-        </p>
-    </div>
+    <PageHeader Title="Dealer Registrations"
+                Subtitle="Manage all draft, in-progress, submitted, and approved dealer applications"
+                CssClass="mb-0" />
 
     <div class="dealer-header-actions">
 
@@ -203,9 +200,9 @@
 
         }
 
-        @* Both read-only exports are available to every Dashboard role. Each uses
-           _filteredDealers, which has already been restricted by ApplyRoleFilter
-           to the logged-in user's State, Region, or HQ scope. *@
+        @* Both read-only exports are available to every Dashboard role. Each loads the
+           full filtered list on demand (LoadAllFilteredDealersAsync), which is still
+           restricted by ApplyRoleFilter to the logged-in user's State, Region, or HQ scope. *@
         <button type="button"
                 class="header-action-btn action-green"
                 @onclick="ExportDealerMaster">
@@ -239,7 +236,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-green"><i class="bi bi-file-earmark-check"></i></div>
-                    <div class="kpi-number">@_filteredDealers.Count</div>
+                    <div class="kpi-number">@_summary.TotalRegistrations</div>
                 </div>
                 <div class="kpi-label">Total Registrations</div>
             </div>
@@ -248,7 +245,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-gray"><i class="bi bi-file-earmark-text"></i></div>
-                    <div class="kpi-number">@CountDraft()</div>
+                    <div class="kpi-number">@_summary.Draft</div>
                 </div>
                 <div class="kpi-label">Draft</div>
             </div>
@@ -257,7 +254,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                   <div class="kpi-number">@CountInRM()</div>
+                   <div class="kpi-number">@_summary.InRM</div>
                 </div>
                 <div class="kpi-label">In RM</div>
             </div>
@@ -266,7 +263,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                  <div class="kpi-number">@CountInSMM()</div>
+                  <div class="kpi-number">@_summary.InSMM</div>
                 </div>
                 <div class="kpi-label">In SMM</div>
             </div>
@@ -275,7 +272,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-yellow"><i class="bi bi-clock"></i></div>
-                  <div class="kpi-number">@CountInAVP()</div>
+                  <div class="kpi-number">@_summary.InAVP</div>
                 </div>
                 <div class="kpi-label">In AVP</div>
             </div>
@@ -284,7 +281,7 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-green"><i class="bi bi-check-circle"></i></div>
-                   <div class="kpi-number">@CountApproved()</div>
+                   <div class="kpi-number">@_summary.Approved</div>
                 </div>
                 <div class="kpi-label">Approved</div>
             </div>
@@ -293,11 +290,11 @@
             <div class="kpi-card">
                 <div class="kpi-header">
                     <div class="kpi-icon bg-light-red"><i class="bi bi-x-circle"></i></div>
-                    <div class="kpi-number">@CountRejectedTotal()</div>
+                    <div class="kpi-number">@_summary.Rejected</div>
                 </div>
                 <div class="kpi-label">Rejected / Returned</div>
                 <div class="kpi-subtext text-muted" style="font-size:0.85rem; padding:6px 12px;">
-                    RM: @CountRejectedByRM() &nbsp;|&nbsp; SMM: @CountRejectedBySMM() &nbsp;|&nbsp; AVP: @CountRejectedByAVP()
+                    RM: @_summary.RejectedByRM &nbsp;|&nbsp; SMM: @_summary.RejectedBySMM &nbsp;|&nbsp; AVP: @_summary.RejectedByAVP
                 </div>
             </div>
         </div>
@@ -306,11 +303,11 @@
                 <div class="kpi-label mb-2">Status</div>
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <div class="status-list"><span class="status-dot bg-success"></span> Active</div>
-                    <div class="fw-bold fs-6">@_filteredDealers.Count(d => d.Status == 0)</div>
+                    <div class="fw-bold fs-6">@_summary.StatusActive</div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center">
                     <div class="status-list"><span class="status-dot" style="background-color: #F59E0B;"></span> Inact / Term</div>
-                    <div class="fw-bold fs-6">@_filteredDealers.Count(d => d.Status == 1) / @_filteredDealers.Count(d => d.Status == 2)</div>
+                    <div class="fw-bold fs-6">@_summary.StatusInactive / @_summary.StatusTerminated</div>
                 </div>
             </div>
         </div>
@@ -320,11 +317,13 @@
         <div class="row g-3">
             <div class="col-12 col-md-6 col-lg-4 col-xxl-4">
                 <div class="search-wrap h-100 position-relative">
-                    <input type="text" class="search-input w-100 h-100" placeholder="Search by Dealer Code or Firm Name" @bind="_searchText" @bind:after="ApplyFilters" style="padding: 8px 12px 8px 32px; min-height: 38px;">
+                    @* Typing reloads page 1 from the server, debounced so a keystroke
+                       does not fire a request. *@
+                    <input type="text" class="search-input w-100 h-100" placeholder="Search by Dealer Code or Firm Name" value="@_searchText" @oninput="OnSearchInput" style="padding: 8px 12px 8px 32px; min-height: 38px;">
                 </div>
             </div>
             <div class="col-12 col-md-6 col-lg-4 col-xxl">
-                <select class="filter-select w-100 h-100" @bind="_filterCompany" @bind:after="ApplyFilters" style="min-height: 38px;">
+                <select class="filter-select w-100 h-100" @bind="_filterCompany" @bind:after="ReloadFirstPage" style="min-height: 38px;">
                     <option value="">All Companies</option>
                     <option value="SPIC">SPIC</option>
                     <option value="GreenStar">GreenStar</option>
@@ -332,14 +331,14 @@
                 </select>
             </div>
             <div class="col-12 col-md-6 col-lg-4 col-xxl">
-                <select class="filter-select w-100 h-100" @bind="_filterDealerRegistrationType" @bind:after="ApplyFilters" style="min-height: 38px;">
+                <select class="filter-select w-100 h-100" @bind="_filterDealerRegistrationType" @bind:after="ReloadFirstPage" style="min-height: 38px;">
                     <option value="">All Dealer Types</option>
                     <option value="new">New Dealers</option>
                     <option value="existing">Existing Dealers</option>
                 </select>
             </div>
             <div class="col-12 col-md-6 col-lg-4 col-xxl">
-                <select class="filter-select w-100 h-100" @bind="_filterStatus" @bind:after="ApplyFilters" style="min-height: 38px;">
+                <select class="filter-select w-100 h-100" @bind="_filterStatus" @bind:after="ReloadFirstPage" style="min-height: 38px;">
                     <option value="-1">All Statuses</option>
                     <option value="0">Active</option>
                     <option value="1">Inactive</option>
@@ -347,7 +346,7 @@
                 </select>
             </div>
             <div class="col-12 col-md-6 col-lg-4 col-xxl">
-                <select class="filter-select w-100 h-100" @bind="_filterRegionId" @bind:after="ApplyFilters" style="min-height: 38px;">
+                <select class="filter-select w-100 h-100" @bind="_filterRegionId" @bind:after="ReloadFirstPage" style="min-height: 38px;">
                     <option value="0">All Regions</option>
                     @foreach (var r in _regionsAll)
                     {
@@ -356,7 +355,7 @@
                 </select>
             </div>
             <div class="col-12 col-md-6 col-lg-4 col-xxl">
-                <select class="filter-select w-100 h-100" @bind="_filterWorkflowStatus" @bind:after="ApplyFilters" style="min-height: 38px;">
+                <select class="filter-select w-100 h-100" @bind="_filterWorkflowStatus" @bind:after="ReloadFirstPage" style="min-height: 38px;">
                     <option value="All">All Approval Status</option>
                     <option value="Pending Draft">Pending Draft</option>
                     <option value="Pending RM">Pending RM</option>
@@ -367,7 +366,7 @@
                 </select>
             </div>
             <div class="col-12 col-md-6 col-lg-4 col-xxl">
-                <select class="filter-select w-100 h-100" @bind="_sortOrder" @bind:after="ApplyFilters" style="min-height: 38px;">
+                <select class="filter-select w-100 h-100" @bind="_sortOrder" @bind:after="ReloadFirstPage" style="min-height: 38px;">
                     <option value="recent">Recently Updated</option>
                     <option value="oldest">Oldest First</option>
                     <option value="name">Firm Name A-Z</option>
@@ -378,27 +377,21 @@
 
     @if (_isLoading)
     {
-        <div class="text-center py-5">
-            <div class="spinner-border text-primary" role="status"></div>
-            <p class="text-muted mt-2">Loading dealers...</p>
-        </div>
+        <Skeleton Variant="card" Rows="3" LoadingText="Loading dealers..." />
     }
-    else if (!_filteredDealers.Any())
+    else if (!_dealers.Any())
     {
-        <div class="text-center py-5">
-            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
-            <p class="text-muted mt-2">No dealer registrations found.</p>
-        </div>
+        <EmptyState Icon="bi-inbox" Title="No dealer registrations found." Message="Try a different search or filter." />
     }
     else
     {
         <div class="row g-4">
-            @foreach (var dealer in _filteredDealers)
+            @foreach (var dealer in _dealers)
             {
                 var approvalStatus = GetApprovalStatus(dealer);
                 var statusName = GetStatusName(dealer.Status);
-                var regionName = _regionsAll.FirstOrDefault(r => r.Id == dealer.Region)?.RegionName ?? "-";
-                var hqName = _headquartersAll.FirstOrDefault(h => h.Id == dealer.HQ)?.HeadquarterName ?? "-";
+                var regionName = _regionNames.GetValueOrDefault(dealer.Region) ?? "-";
+                var hqName = _hqNames.GetValueOrDefault(dealer.HQ) ?? "-";
                 var isPendingForMe = IsPendingForMe(dealer);
 
                 <div class="col-12 col-sm-12 col-md-6 col-xl-4">
@@ -616,6 +609,15 @@
                 </div>
             }
         </div>
+        @if (_total > _dealers.Count)
+        {
+            @* Cards arrive one server page at a time: a phone WebView must not lay out
+               a thousand cards at once, and the browser never downloads the whole list. *@
+            <div class="dash-show-more">
+                <span class="text-muted small">Showing @_dealers.Count of @_total</span>
+                <button type="button" class="btn btn-outline-success" @onclick="ShowMore">Show more</button>
+            </div>
+        }
    }
 
 </div>
@@ -624,7 +626,7 @@
 @if (_showManualModal)
 {
     <div class="modal-backdrop fade show"></div>
-    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block dash-modal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
                 <div class="modal-header">
@@ -686,7 +688,7 @@
 @if (_showImportModal)
 {
     <div class="modal-backdrop fade show"></div>
-    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block dash-modal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
                 <div class="modal-header">
@@ -749,7 +751,7 @@
 @if (_showDeleteConfirm)
 {
     <div class="modal-backdrop fade show"></div>
-    <div class="modal fade show d-block" tabindex="-1" role="dialog">
+    <div class="modal fade show d-block dash-modal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content" style="border-radius: 16px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
                 <div class="modal-body text-center p-4">
@@ -786,12 +788,40 @@
 }
 
 @code {
-    private List<DealerDto> _allDealers = new();
-    private List<DealerDto> _filteredDealers = new();
+    // Cards currently on screen. The server decides which rows these are and how many
+    // there are in total — the browser no longer downloads every registration.
+    private List<DealerDto> _dealers = new();
+    private DashboardSummary _summary = new();
+    private int _total;
+    private int _page = 1;
+    private bool _isLoadingMore;
+    private int _loadToken;
+
     private List<RegionDto> _regionsAll = new();
     private List<HeadquarterDto> _headquartersAll = new();
+    private Dictionary<int, string> _regionNames = new();
+    private Dictionary<int, string> _hqNames = new();
+
+    // Cards are fetched a batch at a time (the list can hold over a thousand
+    // registrations for an admin).
+    private const int CardBatch = 30;
     private List<StateDto> _statesAll = new();
     private bool _isLoading = true;
+
+    private const string PageEndpoint = "api/DealerRegistration/dashboard/page";
+    private const string SummaryEndpoint = "api/DealerRegistration/dashboard/summary";
+
+    // The filter/sort state, as a query string for both dashboard endpoints.
+    private string BuildDashboardQuery(int page) =>
+        $"page={page}" +
+        $"&pageSize={CardBatch}" +
+        $"&search={Uri.EscapeDataString(_searchText ?? string.Empty)}" +
+        $"&company={Uri.EscapeDataString(_filterCompany ?? string.Empty)}" +
+        $"&registrationType={Uri.EscapeDataString(_filterDealerRegistrationType ?? string.Empty)}" +
+        $"&status={_filterStatus}" +
+        $"&regionId={_filterRegionId}" +
+        $"&workflowStatus={Uri.EscapeDataString(_filterWorkflowStatus ?? "All")}" +
+        $"&sort={Uri.EscapeDataString(_sortOrder ?? "recent")}";
 
     private async Task ExportDealerMaster()
     {
@@ -800,7 +830,9 @@
 
         try
         {
-            var data = _filteredDealers.ToList();
+            // Exports are the only thing that still needs the WHOLE filtered list, so the
+            // full submitted-list endpoint is called here and nowhere else.
+            var data = await LoadAllFilteredDealersAsync();
             if (!data.Any()) return;
 
             // Dealer Master needs fields that are not guaranteed to be included in
@@ -896,13 +928,12 @@
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             var fileName = $"Dealer_Master_{DateTime.Now:yyyyMMdd}.xlsx";
-            var dataUri = $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(stream.ToArray())}";
-            var js = $"var a = document.createElement('a'); a.href = '{dataUri}'; a.download = '{fileName}'; document.body.appendChild(a); a.click(); document.body.removeChild(a);";
-            await JSRuntime.InvokeVoidAsync("eval", js);
+                        // Host download helper: browser download on the Web, native viewer inside the MAUI app.
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(stream.ToArray()));
         }
         catch (Exception ex)
         {
-            // ignore or show message
+            Toast.Error($"Export failed: {ex.Message}");
         }
         finally
         {
@@ -1168,89 +1199,165 @@
         _isLoading = true;
         try
         {
-            var dealersTask   = SafeGet<DealerDto>("api/DealerRegistration/submitted");
             var regionsTask   = SafeGet<RegionDto>("api/Region/all");
             var hqTask        = SafeGet<HeadquarterDto>("api/Headquarter/all");
             var statesTask    = SafeGet<StateDto>("api/State/all");
 
-            // Existing optimized endpoint for step counts.
-            var countsTask    = Http.GetFromJsonAsync<Dictionary<int, int>>("api/DealerRegistration/dashboard-completion-counts");
+            // One page of cards plus the KPI numbers. Filtering, sorting, counting and
+            // paging all happen on the server, against the same role scope the page
+            // used to apply here in ApplyRoleFilter.
+            var token = ++_loadToken;
+            var pageTask      = SafeGetSingle<DashboardPageResponse>($"{PageEndpoint}?{BuildDashboardQuery(1)}");
+            var summaryTask   = SafeGetSingle<DashboardSummary>($"{SummaryEndpoint}?{BuildDashboardQuery(1)}");
 
-            await Task.WhenAll(dealersTask, regionsTask, hqTask, statesTask, countsTask);
+            await Task.WhenAll(regionsTask, hqTask, statesTask, pageTask, summaryTask);
 
-            _allDealers          = await dealersTask;
             _regionsAll          = await regionsTask;
             _headquartersAll     = await hqTask;
+            _regionNames = _regionsAll.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First().RegionName ?? "-");
+            _hqNames = _headquartersAll.GroupBy(h => h.Id).ToDictionary(g => g.Key, g => g.First().HeadquarterName ?? "-");
             _statesAll           = await statesTask;
 
-            _dealerStepCounts = await countsTask ?? new Dictionary<int, int>();
-            _completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 11).Select(kv => kv.Key).ToHashSet();
-
-            ApplyRoleFilter();
-            ApplyFilters();
+            if (token == _loadToken)
+                ApplyPage(await pageTask, await summaryTask, append: false);
         }
-        catch { }
+        catch
+        {
+            Toast.Error("Could not load dealer registrations. Please try again.");
+        }
         finally
         {
             _isLoading = false;
         }
     }
 
-    private void ApplyRoleFilter()
+    // Any filter, sort or search change goes back to page 1 and refreshes the KPI
+    // numbers — the same reset the old client-side ApplyFilters did.
+    private async Task ReloadFirstPage()
+    {
+        var token = ++_loadToken;
+
+        var pageTask    = SafeGetSingle<DashboardPageResponse>($"{PageEndpoint}?{BuildDashboardQuery(1)}");
+        var summaryTask = SafeGetSingle<DashboardSummary>($"{SummaryEndpoint}?{BuildDashboardQuery(1)}");
+        await Task.WhenAll(pageTask, summaryTask);
+
+        // A slower earlier request must never overwrite a newer one.
+        if (token != _loadToken) return;
+
+        ApplyPage(await pageTask, await summaryTask, append: false);
+    }
+
+    private void ApplyPage(DashboardPageResponse? response, DashboardSummary? summary, bool append)
+    {
+        if (summary != null) _summary = summary;
+
+        if (response == null)
+        {
+            if (!append)
+            {
+                _dealers = new();
+                _total = 0;
+                _page = 1;
+            }
+            return;
+        }
+
+        if (!append)
+        {
+            _dealers = new();
+            _dealerStepCounts = new();
+            _page = 1;
+        }
+
+        _total = response.Total;
+        foreach (var item in response.Items)
+        {
+            _dealers.Add(item);
+            _dealerStepCounts[item.Id] = item.StepCount;
+        }
+
+        _completeDealerIds = _dealerStepCounts.Where(kv => kv.Value >= 11).Select(kv => kv.Key).ToHashSet();
+    }
+
+    private async Task ShowMore()
+    {
+        if (_isLoadingMore || _dealers.Count >= _total) return;
+
+        _isLoadingMore = true;
+        try
+        {
+            var token = _loadToken;
+            var next = await SafeGetSingle<DashboardPageResponse>($"{PageEndpoint}?{BuildDashboardQuery(_page + 1)}");
+            if (next == null || token != _loadToken) return;
+
+            _page++;
+            ApplyPage(next, null, append: true);
+        }
+        finally
+        {
+            _isLoadingMore = false;
+        }
+    }
+
+    // Debounced search: ~300 ms after the last keystroke the server is asked for a
+    // fresh page 1 and fresh KPI numbers.
+    private System.Threading.CancellationTokenSource? _searchDebounce;
+
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        _searchText = e.Value?.ToString() ?? string.Empty;
+
+        _searchDebounce?.Cancel();
+        var cts = new System.Threading.CancellationTokenSource();
+        _searchDebounce = cts;
+
+        try
+        {
+            await Task.Delay(300, cts.Token);
+            if (!cts.IsCancellationRequested)
+                await ReloadFirstPage();
+        }
+        catch (TaskCanceledException) { }
+        catch (OperationCanceledException) { }
+    }
+
+    // ── Export only ──
+    // Excel exports still need the complete filtered list, so they (and only they)
+    // fall back to the full submitted-list endpoint and run the original client-side
+    // role filter, filters and sort over it. The exported rows and their order are
+    // therefore unchanged.
+    private async Task<List<DealerDto>> LoadAllFilteredDealersAsync()
+    {
+        var all = await SafeGet<DealerDto>("api/DealerRegistration/submitted");
+        return ApplyExportFilters(ApplyRoleFilter(all));
+    }
+
+    private List<DealerDto> ApplyRoleFilter(List<DealerDto> dealers)
     {
         // SpecialAdmin: multi-location scope (all assigned states). Every other
         // role keeps its exact existing single-location filter below.
         if (LoginState.IsSpecialAdminWithAssignments)
-            _allDealers = _allDealers.Where(d => LoginState.AssignedStateIds.Contains(d.StateId)).ToList();
-        else if (LoginState.IsStateRole)
-            _allDealers = _allDealers.Where(d => d.StateId == LoginState.StateId).ToList();
-        else if (LoginState.IsRegionRole)
-            _allDealers = _allDealers.Where(d => d.Region == LoginState.RegionId).ToList();
-        else if (LoginState.IsHQRole)
-            _allDealers = _allDealers.Where(d => d.HQ == LoginState.HQId).ToList();
+            return dealers.Where(d => LoginState.AssignedStateIds.Contains(d.StateId)).ToList();
+        if (LoginState.IsStateRole)
+            return dealers.Where(d => d.StateId == LoginState.StateId).ToList();
+        if (LoginState.IsRegionRole)
+            return dealers.Where(d => d.Region == LoginState.RegionId).ToList();
+        if (LoginState.IsHQRole)
+            return dealers.Where(d => d.HQ == LoginState.HQId).ToList();
+
+        return dealers;
     }
 
 
 
     private bool IsDealerComplete(int dealerId) => _dealerStepCounts.TryGetValue(dealerId, out var c) && c >= 11;
 
-    private int CountRejectedTotal()
-    {
-        return _filteredDealers.Count(d => (d.RMApproved == false || d.SMApproved == false || d.AVPApproved == false));
-    }
-
-    private int CountRejectedByRM() => _filteredDealers.Count(d => d.RMApproved == false);
-    private int CountRejectedBySMM() => _filteredDealers.Count(d => d.SMApproved == false);
-    private int CountRejectedByAVP() => _filteredDealers.Count(d => d.AVPApproved == false);
-
-    // ── Stage counts for the KPI cards ──
-    // Driven purely by the approval flags (same logic as GetApprovalStatus) so
-    // they never silently read 0 when the completion-counts endpoint is stale
-    // or fails. Rejections are folded into the level they route back down to,
-    // matching the "In RM / In SMM" card semantics.
-    private int CountDraft() =>
-        _filteredDealers.Count(d => d.Status != 2 && GetApprovalStatus(d) == "Draft");
-
-    private int CountInRM() =>
-        _filteredDealers.Count(d =>
-        {
-            var s = GetApprovalStatus(d);
-            return s == "In RM" || s == "Rejected by SMM";
-        });
-
-    private int CountInSMM() =>
-        _filteredDealers.Count(d =>
-        {
-            var s = GetApprovalStatus(d);
-            return s == "In SMM" || s == "Rejected by AVP";
-        });
-
-    private int CountInAVP() =>
-        _filteredDealers.Count(d => GetApprovalStatus(d) == "In AVP");
-
-    // AVP-approved = fully approved dealers.
-    private int CountApproved() =>
-        _filteredDealers.Count(d => d.AVPApproved == true);
+    // ── KPI card numbers ──
+    // Every tile now reads its number from the server summary, which counts the same
+    // filtered, role-scoped set the cards come from. The definitions there are the
+    // ones that used to live here: rejections fold into the level they route back
+    // down to ("In RM" also counts "Rejected by SMM"), Draft skips Terminated rows,
+    // and Approved is simply AVPApproved == true.
 
     private string GetApprovalStatus(DealerDto d)
     {
@@ -1358,9 +1465,12 @@
         };
     }
 
-    private void ApplyFilters()
+    // Export only. The dashboard cards are filtered and sorted on the server now
+    // (api/DealerRegistration/dashboard/page); this keeps the Excel exports byte for
+    // byte what they were, by running the original pipeline over the full list.
+    private List<DealerDto> ApplyExportFilters(List<DealerDto> dealers)
     {
-        var query = _allDealers.AsEnumerable();
+        var query = dealers.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(_searchText))
         {
@@ -1404,7 +1514,7 @@
             _ => query.OrderByDescending(d => IsPendingForMe(d)).ThenByDescending(d => d.UpdatedAt)
         };
 
-        _filteredDealers = query.ToList();
+        return query.ToList();
     }
     private string GetEntityTypeName(int? entityType, string? fallbackName = null)
     {
@@ -1533,9 +1643,8 @@ private string GetStatusName(int status) => status switch
         {
             var bytes = await Http.GetByteArrayAsync("api/dealerbulkupload/sample-template");
             var fileName = "Dealer_Import_Sample_Template.xlsx";
-            var dataUri = $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(bytes)}";
-            var js = $@"var a = document.createElement('a'); a.href = '{dataUri}'; a.download = '{fileName}'; document.body.appendChild(a); a.click(); document.body.removeChild(a);";
-            await JSRuntime.InvokeVoidAsync("eval", js);
+                        // Host download helper: browser download on the Web, native viewer inside the MAUI app.
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(bytes));
         }
         catch (Exception ex)
         {
@@ -1695,11 +1804,20 @@ private string GetStatusName(int status) => status switch
             var response = await Http.DeleteAsync($"api/DealerRegistration/{_dealerToDelete.Id}");
             if (response.IsSuccessStatusCode)
             {
-                _allDealers.Remove(_dealerToDelete);
-                ApplyFilters();
+                // Same visible result as before: the list goes back to its first batch
+                // and every count is refreshed.
+                await ReloadFirstPage();
+                Toast.Success("Dealer registration deleted.");
+            }
+            else
+            {
+                Toast.Error("Could not delete the dealer registration.");
             }
         }
-        catch { }
+        catch
+        {
+            Toast.Error("Could not delete the dealer registration.");
+        }
         finally
         {
             _isDeleting = false;
@@ -1721,7 +1839,8 @@ private string GetStatusName(int status) => status switch
             if (!_allProducts.Any()) _allProducts = await SafeGet<Product>("api/Product");
             if (!_allApprovalHistory.Any()) _allApprovalHistory = await SafeGet<DealerApprovalHistory>("api/DealerApprovalHistory");
 
-            var data = _filteredDealers.ToList();
+            // Export only: the full filtered list, fetched on demand (see LoadAllFilteredDealersAsync).
+            var data = await LoadAllFilteredDealersAsync();
             if (!data.Any()) return;
 
         using var workbook = new XLWorkbook();
@@ -1780,20 +1899,45 @@ private string GetStatusName(int status) => status switch
         workbook.SaveAs(stream);
 
         var fileName = $"Dealer_List_{DateTime.Now:yyyyMMdd}.xlsx";
-        var dataUri = $"data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{Convert.ToBase64String(stream.ToArray())}";
-        var js = $@"var a = document.createElement('a'); a.href = '{dataUri}'; a.download = '{fileName}'; document.body.appendChild(a); a.click(); document.body.removeChild(a);";
-        await JSRuntime.InvokeVoidAsync("eval", js);
+                // Host download helper: browser download on the Web, native viewer inside the MAUI app.
+        await JSRuntime.InvokeVoidAsync("downloadFileFromBytes", fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Convert.ToBase64String(stream.ToArray()));
         
         }
         catch (Exception ex)
         {
-            // Log or handle error if necessary
+            Toast.Error($"Export failed: {ex.Message}");
         }
         finally
         {
             _isLoading = false;
             StateHasChanged();
         }
+    }
+
+    // ── Shapes returned by the two server-side dashboard endpoints ──
+    private sealed class DashboardPageResponse
+    {
+        public int Total { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public List<DealerDto> Items { get; set; } = new();
+    }
+
+    private sealed class DashboardSummary
+    {
+        public int TotalRegistrations { get; set; }
+        public int Draft { get; set; }
+        public int InRM { get; set; }
+        public int InSMM { get; set; }
+        public int InAVP { get; set; }
+        public int Approved { get; set; }
+        public int Rejected { get; set; }
+        public int RejectedByRM { get; set; }
+        public int RejectedBySMM { get; set; }
+        public int RejectedByAVP { get; set; }
+        public int StatusActive { get; set; }
+        public int StatusInactive { get; set; }
+        public int StatusTerminated { get; set; }
     }
 
     private sealed class DealerMasterExportRow
@@ -1854,6 +1998,9 @@ private string GetStatusName(int status) => status switch
        public bool? IsSubmittedForReview { get; set; }
         public bool? IsFinalAmountSettled { get; set; }
         public DateTime UpdatedAt { get; set; }
+        // Registration step-completion count, supplied per row by dashboard/page so the
+        // Dashboard no longer calls the whole-table dashboard-completion-counts endpoint.
+        public int StepCount { get; set; }
     }
 
     public class RegionDto

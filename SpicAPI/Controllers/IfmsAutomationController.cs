@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
@@ -36,17 +37,20 @@ namespace SpicAPI.Controllers
 		private readonly IConfiguration _config;
 		private readonly IIfmsAccountStore _accounts;
 		private readonly IIfmsRelayDeviceStore _devices;
+		private readonly IIfmsAlertSettingsStore _alerts;
 
 		public IfmsAutomationController(
 			IfmsDbContext db,
 			IConfiguration config,
 			IIfmsAccountStore accounts,
-			IIfmsRelayDeviceStore devices)
+			IIfmsRelayDeviceStore devices,
+			IIfmsAlertSettingsStore alerts)
 		{
 			_db = db;
 			_config = config;
 			_accounts = accounts;
 			_devices = devices;
+			_alerts = alerts;
 		}
 
 		/// <summary>The phone that made this call, once its token has been checked.</summary>
@@ -619,6 +623,136 @@ namespace SpicAPI.Controllers
 			}
 
 			return Ok(new { Success = true });
+		}
+
+		// ----------------------------------------------------------------- alerts
+
+		/// <summary>
+		/// The alert email settings. Defaults when nobody has saved any yet, so
+		/// the phone always has a form to show. The password is never returned;
+		/// HasPassword is all a client learns.
+		/// </summary>
+		[AllowAnonymous]
+		[HttpGet("alerts/email")]
+		public async Task<ActionResult<IfmsAlertSettingsDto>> AlertEmailSettings(
+			CancellationToken cancellationToken)
+		{
+			if (!await IsCallerAllowedAsync("alerts", cancellationToken))
+				return Unauthorized(new { Success = false, Message = "Unrecognised device." });
+
+			var row = await _alerts.GetAsync(cancellationToken);
+
+			return Ok(row is null ? new IfmsAlertSettingsDto() : IfmsAlertSettingsStore.ToDto(row));
+		}
+
+		/// <summary>
+		/// Saves the alert email settings. A blank password keeps the stored one,
+		/// because the phone never sees it and so cannot send it back. Required
+		/// fields are only enforced while email is switched on, so a half-filled
+		/// form can be saved and finished later.
+		/// </summary>
+		[AllowAnonymous]
+		[HttpPut("alerts/email")]
+		public async Task<ActionResult<IfmsAlertSettingsDto>> SaveAlertEmailSettings(
+			[FromBody] IfmsSetAlertSettingsDto dto,
+			CancellationToken cancellationToken)
+		{
+			if (!await IsCallerAllowedAsync("alerts", cancellationToken))
+				return Unauthorized(new { Success = false, Message = "Unrecognised device." });
+
+			var problem = ValidateAlertSettings(dto);
+
+			if (problem is not null)
+				return BadRequest(new { Success = false, Message = problem });
+
+			var row = await _alerts.SaveAsync(dto, CallerName(), cancellationToken);
+
+			return Ok(IfmsAlertSettingsStore.ToDto(row));
+		}
+
+		/// <summary>
+		/// Asks the automation to send a test email. Queued rather than sent here:
+		/// the API host has no SMTP access, the automation does, and it polls for
+		/// this flag every twenty seconds. The outcome lands in LastTestResult.
+		/// </summary>
+		[AllowAnonymous]
+		[HttpPost("alerts/email/test")]
+		public async Task<IActionResult> RequestAlertEmailTest(CancellationToken cancellationToken)
+		{
+			if (!await IsCallerAllowedAsync("alerts", cancellationToken))
+				return Unauthorized(new { Success = false, Message = "Unrecognised device." });
+
+			var row = await _alerts.GetAsync(cancellationToken);
+
+			if (row is null || !row.EmailEnabled)
+			{
+				return BadRequest(new
+				{
+					Success = false,
+					Message = "Save the email settings and switch email on before sending a test."
+				});
+			}
+
+			await _alerts.RequestTestAsync(CallerName(), cancellationToken);
+
+			return Accepted(new
+			{
+				Success = true,
+				Message = "Test queued. The automation sends it within about twenty seconds; the result appears here."
+			});
+		}
+
+		/// <summary>The signed-in user, else the paired phone, else just "phone".</summary>
+		private string CallerName() =>
+			User.FindFirstValue(ClaimTypes.Name) ??
+			User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+			_callingDevice?.DeviceName ??
+			"phone";
+
+		private static string? ValidateAlertSettings(IfmsSetAlertSettingsDto dto)
+		{
+			if (dto.SmtpPort is < 1 or > 65535)
+				return "The SMTP port must be between 1 and 65535.";
+
+			if (TooLong(dto.SmtpHost, 200) || TooLong(dto.UserName, 200) ||
+				TooLong(dto.FromAddress, 200) || TooLong(dto.FromName, 120) ||
+				TooLong(dto.ToAddresses, 2000) || TooLong(dto.CcAddresses, 2000))
+			{
+				return "One of the values is too long.";
+			}
+
+			var to = IfmsAlertSettingsStore.SplitAddresses(dto.ToAddresses);
+			var cc = IfmsAlertSettingsStore.SplitAddresses(dto.CcAddresses);
+
+			if (dto.EmailEnabled)
+			{
+				if (string.IsNullOrWhiteSpace(dto.SmtpHost))
+					return "An SMTP host is required while email is switched on.";
+
+				if (string.IsNullOrWhiteSpace(dto.FromAddress))
+					return "A From address is required while email is switched on.";
+
+				if (to.Count == 0)
+					return "At least one To address is required while email is switched on.";
+			}
+
+			// Syntax is checked whether or not email is on: a bad address saved
+			// today is a bounce at 04:05 the day it is switched on.
+			var addresses = to.Concat(cc);
+
+			if (!string.IsNullOrWhiteSpace(dto.FromAddress))
+				addresses = addresses.Prepend(dto.FromAddress.Trim());
+
+			foreach (var address in addresses)
+			{
+				if (!System.Net.Mail.MailAddress.TryCreate(address, out _))
+					return $"\"{address}\" is not a valid email address.";
+			}
+
+			return null;
+
+			static bool TooLong(string? value, int max) =>
+				value is not null && value.Trim().Length > max;
 		}
 
 		// ---------------------------------------------------------------- mapping

@@ -23,7 +23,14 @@ builder.Services.AddHealthChecks();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents()
+    .AddInteractiveServerComponents(options =>
+    {
+        // A user whose connection drops (mobile network, laptop sleep) keeps the page and
+        // the half-filled form on the server for 30 minutes; the browser retries for as long
+        // (see Blazor.start in App.razor). Default was 3 minutes / 100 circuits.
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
+        options.DisconnectedCircuitMaxRetained = 500;
+    })
     .AddHubOptions(options =>
     {
         options.MaximumReceiveMessageSize = 100 * 1024 * 1024; // 100 MB
@@ -38,12 +45,20 @@ builder.Services.AddRazorComponents()
 
 // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
-builder.Services.AddSingleton<IIfmsRelayHost, SPIC.MauiBlazorApp.Web.Services.IfmsRelayHost>();
+builder.Services.AddScoped<ISessionStore, BrowserSessionStore>();
+builder.Services.AddScoped<FileDownloadService>();
+builder.Services.AddScoped<ToastService>();
+builder.Services.AddScoped<ConnectivityState>();
 builder.Services.AddScoped<LoginState>();
+// Shell state shared by MainLayout and the parameterless Components/Shell components.
+builder.Services.AddScoped<ShellSession>();
 builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();
 builder.Services.AddScoped<LookupCacheService>();
 builder.Services.AddScoped<GuestHouseBookingState>();
+builder.Services.AddScoped<DigitalLibraryApi>();
+builder.Services.AddScoped<CommunityApi>();
+builder.Services.AddScoped<SasApi>();
 
 // ADD THIS
 builder.Services.AddSingleton(new PlatformService

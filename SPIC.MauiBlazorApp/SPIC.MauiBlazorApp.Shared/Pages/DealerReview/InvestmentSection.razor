@@ -1,0 +1,209 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@*
+    "Investment" accordion: bank / land / building assets, movables, infrastructure,
+    loan liabilities and the net financial position.
+*@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="OnToggle">
+            Investment
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Assets (Banking)</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (AssetBanks != null && AssetBanks.Any())
+                            {
+                                foreach (var b in AssetBanks)
+                                {
+                                    <div class="data-row"><div class="data-label">Bank Name:</div><div class="data-value">@(BankNames.TryGetValue(b.BankId, out var bn) ? bn : b.BankId.ToString())</div></div>
+                                    <div class="data-row"><div class="data-label">Bank Branch:</div><div class="data-value">@b.BankBranch</div></div>
+                                    <div class="data-row"><div class="data-label">Value (₹):</div><div class="data-value">@b.Value</div></div>
+                                    <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@b.Remarks</div></div>
+                                    <div class="data-row">
+                                        <div class="data-label">Document:</div>
+                                        <div class="data-value">@RenderFileRow(b.FileUploadPath)</div>
+                                    </div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Bank Assets</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-map"></i> Assets (Land)</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (AssetLands != null && AssetLands.Any())
+                            {
+                                foreach (var l in AssetLands)
+                                {
+                                    <div class="data-row"><div class="data-label">Land Name:</div><div class="data-value">@l.LandName</div></div>
+                                    <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">@l.SurvayNumber</div></div>
+                                    <div class="data-row"><div class="data-label">Land Size (in Cent):</div><div class="data-value">@l.LandSize</div></div>
+                                    <div class="data-row"><div class="data-label">Property Value (₹ in Lakhs):</div><div class="data-value">@l.PropertyValue</div></div>
+                                   <div class="data-row">
+                                        <div class="data-label">Land Document:</div>
+                                        <div class="data-value">@RenderFileRow(l.UploadedLandDocumentPath)</div>
+                                    </div>
+                                    <div class="data-row">
+                                        <div class="data-label">EC Document:</div>
+                                        <div class="data-value">@RenderFileRow(l.UploadedECDocumentPath)</div>
+                                    </div>
+                                    <div class="data-row">
+                                        <div class="data-label">Valuation Certificate:</div>
+                                        <div class="data-value">@RenderFileRow(l.UploadedValuationCertificatePath)</div>
+                                    </div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Land Assets</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-house"></i> Assets (Building)</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (AssetBuildings != null && AssetBuildings.Any())
+                            {
+                                foreach (var bld in AssetBuildings)
+                                {
+                                    <div class="data-row"><div class="data-label">Building Name:</div><div class="data-value">@bld.BuildingName</div></div>
+                                    <div class="data-row"><div class="data-label">Property Value (₹):</div><div class="data-value">@bld.PropertyValue</div></div>
+                                    <div class="data-row"><div class="data-label">Survey Number:</div><div class="data-value">@bld.SurveyNumber</div></div>
+                                    <div class="data-row"><div class="data-label">Land Size (in Square Ft):</div><div class="data-value">@bld.LandSize</div></div>
+                                    <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@bld.Remarks</div></div>
+                                    <div class="data-row">
+                                        <div class="data-label">Building Document:</div>
+                                        <div class="data-value">@RenderFileRow(bld.UploadedBuildingDocumentPath)</div>
+                                    </div>
+                                    <div class="data-row">
+                                        <div class="data-label">EC Document:</div>
+                                        <div class="data-value">@RenderFileRow(bld.UploadedECDocumentPath)</div>
+                                    </div>
+                                    <div class="data-row">
+                                        <div class="data-label">Valuation Certificate:</div>
+                                        <div class="data-value">@RenderFileRow(bld.UploadedValuationCertificatePath)</div>
+                                    </div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Building Assets</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-truck"></i> Movable</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Movable Assets Value (₹):</div><div class="data-value">@(Dealer?.AssetValue ?? 0)</div></div>
+                            <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@(Dealer?.Remarks ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-buildings"></i> Infrastructure</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Own Godown Capacity:</div><div class="data-value">@(Dealer?.OwnGodownCapacity ?? 0) MT</div></div>
+                            <div class="data-row"><div class="data-label">Rent Godown Capacity:</div><div class="data-value">@(Dealer?.RentGodownCapacity ?? 0) MT</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Loan Liabilities</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (Loans != null && Loans.Any())
+                            {
+                                foreach (var ln in Loans)
+                                {
+                                    <div class="data-row"><div class="data-label">Loan Source / Institution:</div><div class="data-value">@ln.LoanSource</div></div>
+                                    <div class="data-row"><div class="data-label">Loan Value:</div><div class="data-value">@ln.LoanValue</div></div>
+                                    <div class="data-row"><div class="data-label">Remarks:</div><div class="data-value">@ln.Remarks</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Loans</div><div class="data-value">None</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bar-chart"></i> Net Financial Position</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @* <div class="data-row"><div class="data-label">Capital Position:</div><div class="data-value">@($"₹{Figures.GetCapitalPosition():N0}")</div></div> *@
+                            <div class="data-row"><div class="data-label">Assets:</div><div class="data-value">@($"₹{Figures.GetTotalAssets():N0}")</div></div>
+                            <div class="data-row"><div class="data-label">Loans:</div><div class="data-value">@($"₹{Figures.GetTotalLoans():N0}")</div></div>
+                            <div class="data-row"><div class="data-label">Net Value:</div><div class="data-value">@($"₹{Figures.GetNetValue():N0}")</div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    [Parameter] public DR.DealerRegistration? Dealer { get; set; }
+    [Parameter] public List<DR.DealerAssetBank> AssetBanks { get; set; } = new();
+    [Parameter] public List<DR.DealerAssetLand> AssetLands { get; set; } = new();
+    [Parameter] public List<DR.DealerAssetBuilding> AssetBuildings { get; set; } = new();
+    [Parameter] public List<DR.DealerLoanLiabilities> Loans { get; set; } = new();
+    [Parameter] public Dictionary<int, string> BankNames { get; set; } = new();
+    [Parameter] public DealerReviewFigures Figures { get; set; } = default!;
+
+    [Parameter] public string? ApiBaseUrl { get; set; }
+    [Parameter] public string? AuthToken { get; set; }
+    [Parameter] public int DataVersion { get; set; }
+
+    private RenderFragment RenderFileRow(string? path) =>
+        DealerReviewFormat.FileRow(ApiBaseUrl, AuthToken, path);
+}

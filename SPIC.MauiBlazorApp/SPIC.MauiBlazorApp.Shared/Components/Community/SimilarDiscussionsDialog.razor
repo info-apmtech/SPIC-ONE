@@ -1,0 +1,150 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Community
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject NavigationManager Nav
+
+@*
+    "We found similar discussions" - shown after the author presses Post Discussion when
+    the similar check (POST api/Community/discussions/similar) returns matches. Centred modal on tablet/desktop,
+    bottom sheet on phones (same CSS pattern as DigitalLibraryUnpublishDialog).
+
+        <SimilarDiscussionsDialog @bind-IsOpen="_open" Items="_similar"
+                                  OnPostAnyway="PostAsync" OnBackToEdit="BackToEditAsync" />
+
+    The close button, the backdrop and Escape all mean "Back to edit".
+*@
+
+@if (IsOpen)
+{
+    <div class="sdd-backdrop" @onclick="BackToEditAsync"></div>
+
+    <div class="sdd"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="sdd-title"
+         aria-describedby="sdd-desc"
+         tabindex="-1"
+         @ref="_dialog"
+         @onkeydown="OnKeyDown">
+
+        <div class="sdd-handle" aria-hidden="true"></div>
+
+        <button type="button" class="sdd-close" aria-label="Back to edit" @onclick="BackToEditAsync">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+
+        <div class="sdd-head">
+            <span class="sdd-icon" aria-hidden="true">
+                <i class="bi bi-search"></i>
+                <i class="bi bi-exclamation-circle-fill sdd-icon-badge"></i>
+            </span>
+            <h2 id="sdd-title" class="sdd-title">We found similar discussions</h2>
+            <p id="sdd-desc" class="sdd-desc">
+                Your question may already be answered in the community. Please check the following
+                discussions before posting a new one.
+            </p>
+        </div>
+
+        <div class="sdd-list">
+            @foreach (var d in Shown)
+            {
+                var id = d.Id;
+                <article class="sdd-item">
+                    <MemberAvatar Member="d.Author" Size="56" />
+
+                    <div class="sdd-item-main">
+                        <h3 class="sdd-item-title">@d.Title</h3>
+                        <p class="sdd-item-text">@d.Body</p>
+                        <div class="sdd-item-meta">
+                            <span class="sdd-replies">
+                                <i class="bi bi-chat-dots" aria-hidden="true"></i> @d.ReplyCount reply
+                            </span>
+                            <StatusPill Status="d.Status" />
+                        </div>
+                    </div>
+
+                    <button type="button" class="sdd-btn sdd-btn-outline sdd-item-cta" @onclick="() => ViewAsync(id)">
+                        View Discussion
+                    </button>
+                </article>
+            }
+        </div>
+
+        <div class="sdd-info">
+            <h4 class="sdd-info-title">Can't find your answer?</h4>
+            <p class="sdd-info-text">
+                If your question is different or you need more specific advice, you can still post it
+                to get help from our community and SPIC Experts
+            </p>
+        </div>
+
+        <div class="sdd-foot">
+            <button type="button" class="sdd-btn sdd-btn-outline" @onclick="BackToEditAsync">Back to edit</button>
+            <button type="button" class="sdd-btn sdd-btn-primary" @onclick="PostAnywayAsync">Post Anyway</button>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Two-way bindable: <c>&lt;SimilarDiscussionsDialog @bind-IsOpen="_open" /&gt;</c>.</summary>
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    // Fully qualified throughout: the Pages namespace also has a CommunityDiscussion
+    // (the discussion detail page), which would otherwise be an ambiguous reference.
+
+    /// <summary>Matches to offer; at most three are rendered.</summary>
+    [Parameter] public IReadOnlyList<SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion>? Items { get; set; }
+
+    /// <summary>The author chose to post the question anyway.</summary>
+    [Parameter] public EventCallback OnPostAnyway { get; set; }
+
+    /// <summary>Close button, backdrop, Escape or "Back to edit".</summary>
+    [Parameter] public EventCallback OnBackToEdit { get; set; }
+
+    private ElementReference _dialog;
+    private bool _focused;
+
+    private IEnumerable<SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion> Shown =>
+        (Items ?? Array.Empty<SPIC.MauiBlazorApp.Shared.Services.CommunityDiscussion>()).Take(3);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && !_focused)
+        {
+            _focused = true;
+            try { await _dialog.FocusAsync(); } catch { /* not rendered yet */ }
+        }
+        else if (!IsOpen && _focused)
+        {
+            _focused = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (!IsOpen) return;
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private async Task BackToEditAsync()
+    {
+        await CloseAsync();
+        await OnBackToEdit.InvokeAsync();
+    }
+
+    private async Task PostAnywayAsync()
+    {
+        await CloseAsync();
+        await OnPostAnyway.InvokeAsync();
+    }
+
+    private async Task ViewAsync(int id)
+    {
+        await CloseAsync();
+        Nav.NavigateTo($"/Community/discussion/{id}");
+    }
+
+    private Task OnKeyDown(KeyboardEventArgs e) =>
+        e.Key == "Escape" ? BackToEditAsync() : Task.CompletedTask;
+}

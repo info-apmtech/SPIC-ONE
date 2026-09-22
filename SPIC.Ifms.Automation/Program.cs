@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -93,6 +93,7 @@ builder.Services.AddSingleton<IIfmsDataProtection>(_ =>
 // and this service never needs to know the SPIC schema at all.
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
+builder.Services.AddScoped<IIfmsAlertSettingsStore, IfmsAlertSettingsStore>();
 
 // ---------------------------------------------------------------- automation
 
@@ -118,7 +119,10 @@ builder.Services.AddSingleton<INightlyRunService, NightlyRunService>();
 // -------------------------------------------------------------------- alerts
 
 builder.Services.AddSingleton<PushAlertSink>();
-builder.Services.AddSingleton<IAlertSink, EmailAlertSink>();
+// Registered by concrete type as well, because AlertTestWorker needs the email
+// sink specifically — a test email has no business going to WhatsApp.
+builder.Services.AddSingleton<EmailAlertSink>();
+builder.Services.AddSingleton<IAlertSink>(sp => sp.GetRequiredService<EmailAlertSink>());
 builder.Services.AddSingleton<IAlertSink>(sp => sp.GetRequiredService<PushAlertSink>());
 builder.Services.AddSingleton<IAlertSink, WhatsAppAlertSink>();
 
@@ -139,13 +143,15 @@ builder.Services.AddSingleton<IAlertDispatcher, AlertDispatcher>();
 
 var command = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
 var isTool = command is "test-captcha" or "set-credentials" or "list-credentials"
-	or "test-email" or "otp" or "run-now" or "test-login" or "dump-page" or "test-job" or "test-jobs";
+	or "test-email" or "otp" or "run-now" or "test-login" or "dump-page" or "test-job" or "test-jobs"
+	or "upload-saved" or "backfill";
 
 if (!isTool)
 {
 	builder.Services.AddHostedService<DailyScheduleWorker>();
 	builder.Services.AddHostedService<ManualTriggerWorker>();
 	builder.Services.AddHostedService<RelayPresenceWorker>();
+	builder.Services.AddHostedService<AlertTestWorker>();
 }
 
 var host = builder.Build();
@@ -186,6 +192,15 @@ if (command == "dump-page")
 
 if (command == "test-job" || command == "test-jobs")
 	return await RunTestJobAsync(host.Services, args);
+
+// One-time history: every date-ranged report, month by month, download only.
+if (command == "backfill")
+	return await SPIC.Ifms.Automation.Reports.BackfillCommand.RunAsync(host.Services, args);
+
+// Push files an earlier run left behind - the day Upload:Enabled was off, or
+// SpicAPI was down at 04:05 - without logging in to the portal again.
+if (command == "upload-saved")
+	return await RunUploadSavedAsync(host.Services, args);
 
 if (command == "test-captcha")
 {
@@ -642,6 +657,136 @@ static async Task<int> RunTestJobAsync(IServiceProvider services, string[] args)
 /// a relayed SMS, so nothing downstream can tell the difference — which is the
 /// point: this is the same path the phone uses, exercised by hand.
 /// </summary>
+/// <summary>
+/// Uploads the files in downloads/&lt;date&gt;/ to SpicAPI, matching each file to
+/// its job by the fixed part of the job's FileNameTemplate:
+///
+///   dotnet SPIC.Ifms.Automation.dll upload-saved 2026-09-11
+///   dotnet SPIC.Ifms.Automation.dll upload-saved 2026-09-11 retail-stocks-greenstar
+///
+/// The folder date is the report date the run used for that job. Nothing is
+/// deleted afterwards; the retention sweep does that on its own schedule.
+/// </summary>
+static async Task<int> RunUploadSavedAsync(IServiceProvider services, string[] args)
+{
+	if (args.Length < 2 || !DateTime.TryParseExact(
+			args[1], "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+			System.Globalization.DateTimeStyles.None, out var date))
+	{
+		Console.WriteLine("usage: upload-saved <yyyy-MM-dd> [jobKey ...|all]");
+		return 1;
+	}
+
+	var keys = args.Skip(2).ToList();
+	var ifms = services.GetRequiredService<IOptions<IfmsOptions>>().Value;
+	var allJobs = services.GetRequiredService<IOptions<ReportJobsOptions>>().Value.Jobs;
+	var importer = services.GetRequiredService<IReportImporter>();
+
+	var root = ifms.DownloadRoot;
+	if (!System.IO.Path.IsPathRooted(root))
+		root = System.IO.Path.Combine(AppContext.BaseDirectory, root);
+	var folder = System.IO.Path.Combine(root, date.ToString("yyyy-MM-dd"));
+
+	if (!System.IO.Directory.Exists(folder))
+	{
+		Console.WriteLine($"Nothing at {folder}.");
+		return 1;
+	}
+
+	var selected = keys.Count == 0 || keys.Contains("all", StringComparer.OrdinalIgnoreCase)
+		? allJobs.ToList()
+		: keys.Select(k => allJobs.FirstOrDefault(j => string.Equals(j.Key, k, StringComparison.OrdinalIgnoreCase)))
+			.ToList();
+
+	if (selected.Count == 0 || selected.Any(j => j is null))
+	{
+		Console.WriteLine($"Unknown job key. Known: {string.Join(", ", allJobs.Select(j => j.Key))}, or 'all'.");
+		return 1;
+	}
+
+	var files = System.IO.Directory.GetFiles(folder).OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+	var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+	var uploaded = 0;
+	var failed = 0;
+
+	foreach (var job in selected)
+	{
+		var (prefix, suffix) = TemplateEnds(job!.FileNameTemplate ?? job.Key);
+		var extension = job.ExpectedExtension;
+
+		var matches = files
+			.Where(f => !claimed.Contains(f))
+			.Where(f => string.Equals(System.IO.Path.GetExtension(f), extension, StringComparison.OrdinalIgnoreCase))
+			.Where(f =>
+			{
+				var stem = System.IO.Path.GetFileNameWithoutExtension(f);
+				return stem.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+					&& stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+			})
+			.ToList();
+
+		if (matches.Count == 0)
+		{
+			Console.WriteLine($"{job.Key}: no file like {prefix}*{suffix}{extension} in {folder}.");
+			continue;
+		}
+
+		var reportDate = NightlyRunService.RequiresReportDate(job.CategoryId) ? date : (DateTime?)null;
+
+		foreach (var path in matches)
+		{
+			claimed.Add(path);
+			var name = System.IO.Path.GetFileName(path);
+
+			var download = new DownloadedReport
+			{
+				FileName = name,
+				FilePath = path,
+				Bytes = new System.IO.FileInfo(path).Length,
+				Extension = extension.ToLowerInvariant()
+			};
+
+			try
+			{
+				var result = await importer.UploadSavedAsync(job, download, reportDate, CancellationToken.None);
+
+				if (result.Success)
+				{
+					uploaded++;
+					Console.WriteLine(
+						$"OK    {name}: {result.TotalRows} rows, {result.RowsInserted} inserted, " +
+						$"{result.RowsUpdated} updated, {result.RowsSkipped} skipped.");
+				}
+				else
+				{
+					failed++;
+					Console.WriteLine($"FAIL  {name}: {result.Message}");
+				}
+			}
+			catch (Exception ex)
+			{
+				failed++;
+				Console.WriteLine($"FAIL  {name}: {ex.Message}");
+			}
+		}
+	}
+
+	Console.WriteLine();
+	Console.WriteLine(
+		$"{uploaded} uploaded, {failed} failed, {files.Count - claimed.Count} file(s) matched no job.");
+	return failed == 0 ? 0 : 1;
+}
+
+/// <summary>The literal text before the first and after the last {{token}}.</summary>
+static (string Prefix, string Suffix) TemplateEnds(string template)
+{
+	var first = template.IndexOf("{{", StringComparison.Ordinal);
+	var last = template.LastIndexOf("}}", StringComparison.Ordinal);
+	if (first < 0 || last < 0)
+		return (template, string.Empty);
+	return (template[..first], template[(last + 2)..]);
+}
+
 static async Task<int> RunOtpCommandAsync(IServiceProvider services, string[] args)
 {
 	if (args.Length < 2)
@@ -723,62 +868,43 @@ static async Task<int> RunNowCommandAsync(IServiceProvider services, string[] ar
 }
 
 /// <summary>
-/// Sends one message through the configured SMTP settings and reports exactly
-/// what the server said, rather than leaving it buried in a run's alert failure.
+/// Sends one message through whichever SMTP settings are in effect — the
+/// database row when it is switched on, otherwise configuration — and reports
+/// exactly what the server said, rather than leaving it buried in a run's
+/// alert failure.
 /// </summary>
 static async Task<int> RunTestEmailAsync(IServiceProvider services)
 {
-	var options = services.GetRequiredService<IOptions<AlertOptions>>().Value.Email;
-
-	Console.WriteLine($"Host      : {options.Host}:{options.Port}");
-	Console.WriteLine($"StartTls  : {options.UseStartTls}");
-	Console.WriteLine($"From      : {options.FromAddress}");
-	Console.WriteLine($"To        : {string.Join(", ", options.To)}");
-	Console.WriteLine($"Password  : {(string.IsNullOrEmpty(options.Password) ? "NOT SET" : "set")}");
-	Console.WriteLine();
-
-	if (!options.Enabled)
-	{
-		Console.WriteLine("Alerts:Email:Enabled is false; nothing to test.");
-		return 1;
-	}
-
-	var sink = services.GetServices<IAlertSink>().FirstOrDefault(s => s.Name == "Email");
-
-	if (sink is null)
-	{
-		Console.WriteLine("The email sink is not registered.");
-		return 1;
-	}
+	var sink = services.GetRequiredService<EmailAlertSink>();
 
 	try
 	{
-		await sink.SendNoticeAsync(
-			"IFMS automation test message",
-			"If you are reading this, the alert email is working.\n\n" +
-			"Sent by: dotnet SPIC.Ifms.Automation.dll test-email",
-			urgent: false,
-			CancellationToken.None);
-
-		Console.WriteLine("SENT. Check the inbox.");
-		return 0;
+		Console.WriteLine(await sink.DescribeAsync(CancellationToken.None));
 	}
 	catch (Exception ex)
 	{
-		Console.WriteLine($"FAILED: {ex.GetType().Name}");
-		Console.WriteLine($"        {ex.Message}");
-
-		if (ex.InnerException is not null)
-			Console.WriteLine($"        inner: {ex.InnerException.Message}");
-
-		Console.WriteLine();
-		Console.WriteLine("Common causes:");
-		Console.WriteLine("  does not support STARTTLS  -> set Alerts:Email:UseStartTls false");
-		Console.WriteLine("  timed out                  -> that host/port is not reachable from here");
-		Console.WriteLine("  authentication failed      -> wrong Alerts__Email__Password in secrets.env");
-
+		Console.WriteLine($"Could not read the alert settings from the database: {ex.Message}");
 		return 1;
 	}
+
+	Console.WriteLine();
+
+	var result = await sink.SendTestAsync(CancellationToken.None);
+
+	if (result.StartsWith("Sent to", StringComparison.Ordinal))
+	{
+		Console.WriteLine($"{result}. Check the inbox.");
+		return 0;
+	}
+
+	Console.WriteLine($"FAILED: {result}");
+	Console.WriteLine();
+	Console.WriteLine("Common causes:");
+	Console.WriteLine("  does not support STARTTLS  -> switch STARTTLS off (phone app, or Alerts:Email:UseStartTls)");
+	Console.WriteLine("  timed out                  -> that host/port is not reachable from here");
+	Console.WriteLine("  authentication failed      -> wrong password (phone app, or Alerts__Email__Password in secrets.env)");
+
+	return 1;
 }
 
 /// <summary>

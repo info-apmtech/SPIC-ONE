@@ -7,12 +7,10 @@
     <div class="bo-wrapper">
 
         <!-- Header Section -->
-        <div class="bo-header-wrapper">
-            <div class="bo-header-info">
-                <h1>HQ Budget Allocation</h1>
-                <p>Allocated approved regional budget to HQs and monitor utilization across the region.</p>
-            </div>
-            <div class="bo-header-actions">
+        <PageHeader Title="HQ Budget Allocation"
+                    Subtitle="Allocated approved regional budget to HQs and monitor utilization across the region."
+                    CssClass="bo-page-header">
+            <Actions>
                 <button class="bo-action-btn-outline">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                     Refresh Data
@@ -33,8 +31,8 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     Allocate Budget
                 </button>
-            </div>
-        </div>
+            </Actions>
+        </PageHeader>
 
         <!-- Stats Grid (4 Cards) -->
         <div class="bo-stats-grid-4">
@@ -207,16 +205,16 @@
                         @foreach (var row in GetFilteredRows())
                         {
                             <tr>
-                                <td style="padding-left: 24px;">
+                                <td class="bo-cell-primary" data-label="HQ Name" style="padding-left: 24px;">
                                     <div class="bo-hq-cell">
                                         <span class="bo-hq-main">@row.HqName</span>
                                         <span class="bo-hq-sub">@row.Region</span>
                                     </div>
                                 </td>
-                                <td>@row.Allocated.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
-                                <td>@row.Utilized.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
-                                <td>@row.Remaining.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
-                                <td>
+                                <td data-label="Allocated">@row.Allocated.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
+                                <td data-label="Utilized">@row.Utilized.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
+                                <td data-label="Remaining">@row.Remaining.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
+                                <td data-label="Utilization %">
                                     <div class="bo-progress-cell">
                                         <span class="bo-progress-text @row.ProgressTheme">@row.UtilizationPercent.ToString("F1") %</span>
                                         <div class="bo-progress-bar-bg">
@@ -224,12 +222,12 @@
                                         </div>
                                     </div>
                                 </td>
-                                <td>@row.PendingCsr1</td>
-                                <td>@row.PendingCsr2</td>
-                                <td>
+                                <td data-label="Pending CSR-1">@row.PendingCsr1</td>
+                                <td data-label="Pending CSR-2">@row.PendingCsr2</td>
+                                <td data-label="Status">
                                     <span class="bo-status-pill @row.StatusTheme">@row.Status</span>
                                 </td>
-                                <td style="text-align: right; padding-right: 24px;">
+                                <td class="bo-cell-actions" data-label="Action" style="text-align: right; padding-right: 24px;">
                                     <div class="bo-row-actions">
                                         <button class="bo-icon-btn" aria-label="Sync">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
@@ -353,10 +351,23 @@
         background-color: #ffffff;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
+    /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
+       watermarks (::before/::after) that leak onto these tiles and onto the
+       status pills, covering the label text. Neutralise them for this page. */
+    .bo-stat-card::before,
+    .bo-stat-card::after,
+    .bo-status-pill::before,
+    .bo-status-pill::after,
+    .bo-progress-text::before,
+    .bo-progress-text::after {
+        content: none !important;
+    }
+
     .bo-stat-content {
         display: flex;
         flex-direction: column;
         gap: 4px;
+        min-width: 0;
     }
     .bo-stat-value {
         font-size: 24px;
@@ -814,6 +825,178 @@
         .bo-table-footer {
             flex-direction: column;
             gap: 12px;
+        }
+    }
+
+    /* PageHeader adoption: reproduces the old .bo-header-wrapper look on desktop. */
+    .shell-page-header.bo-page-header {
+        margin-bottom: 24px;
+    }
+    .shell-page-header.bo-page-header .shell-page-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    .shell-page-header.bo-page-header .shell-page-subtitle {
+        font-size: 13px;
+        font-weight: 500;
+        color: #64748b;
+        margin-top: 4px;
+    }
+    .shell-page-header.bo-page-header .shell-page-actions {
+        gap: 10px;
+    }
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .shell-page-header.bo-page-header {
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .shell-page-header.bo-page-header .shell-page-title {
+            font-size: 1.15rem;
+        }
+        .shell-page-header.bo-page-header .shell-page-subtitle {
+            font-size: 0.8rem;
+            margin-top: 2px;
+        }
+        /* Toolbar drops under the title: primary action full width, secondary ones 2-up. */
+        .shell-page-header.bo-page-header .shell-page-actions {
+            flex: 1 1 100%;
+            justify-content: stretch;
+            gap: 8px;
+        }
+        .shell-page-header.bo-page-header .bo-action-btn-outline {
+            flex: 1 1 calc(50% - 4px);
+            justify-content: center;
+            min-height: 44px;
+        }
+        .shell-page-header.bo-page-header .bo-action-btn-solid {
+            flex: 1 1 100%;
+            justify-content: center;
+            min-height: 44px;
+        }
+
+        .bo-stats-grid-4 {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .bo-stat-card {
+            padding: 14px;
+        }
+        /* Keep "₹ 4.85 Cr" on one line inside the narrow tile. */
+        .bo-stat-value {
+            font-size: 18px;
+            white-space: nowrap;
+        }
+        .bo-stat-icon {
+            width: 36px;
+            height: 36px;
+        }
+        .bo-filter-toggle {
+            min-height: 44px;
+            padding: 12px 16px;
+        }
+        .bo-form-control,
+        .bo-form-select {
+            min-height: 44px;
+            font-size: 16px; /* prevents iOS zoom on focus */
+        }
+        .bo-btn {
+            min-height: 44px;
+        }
+        .bo-card-header-actions {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 10px;
+        }
+        .bo-search-wrapper,
+        .bo-search-input {
+            width: 100%;
+        }
+        .bo-search-input {
+            min-height: 44px;
+            font-size: 16px;
+        }
+        /* Table becomes one card per HQ: every column (Utilization, Status and
+           the row actions) is on screen instead of off the right edge of an
+           860px scroller. */
+        .bo-table-container {
+            overflow: visible;
+            padding: 0 12px 4px;
+        }
+        .bo-table thead {
+            display: none;
+        }
+        .bo-table,
+        .bo-table tbody,
+        .bo-table tr,
+        .bo-table td {
+            display: block;
+            width: 100%;
+        }
+        .bo-table tbody tr {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 6px 12px;
+            margin-bottom: 10px;
+        }
+        .bo-table td {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            text-align: right !important;
+            padding: 8px 0 !important;
+            border-bottom: 1px solid #f1f5f9;
+            white-space: normal;
+        }
+        .bo-table td::before {
+            content: attr(data-label);
+            flex: 0 0 40%;
+            text-align: left;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .bo-table td:last-child {
+            border-bottom: 0;
+        }
+        .bo-table td.bo-cell-primary {
+            display: block;
+            text-align: left !important;
+        }
+        .bo-table td.bo-cell-primary::before {
+            display: none;
+        }
+        .bo-table td .bo-progress-cell {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .bo-table td.bo-cell-actions .bo-row-actions {
+            gap: 4px;
+        }
+        .bo-icon-btn {
+            min-width: 44px;
+            min-height: 44px;
+            justify-content: center;
+        }
+        /* Pagination stays inside the card and wraps instead of running off. */
+        .bo-table-footer {
+            padding: 12px;
+            align-items: stretch;
+        }
+        .bo-pagination {
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .bo-pag-btn {
+            width: 44px;
+            height: 44px;
+        }
+        .bo-select-small {
+            min-height: 44px;
         }
     }
 </style>

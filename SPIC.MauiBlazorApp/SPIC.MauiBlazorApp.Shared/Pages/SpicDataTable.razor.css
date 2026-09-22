@@ -1,0 +1,313 @@
+/* =====================================================================
+   SpicDataTable - scoped responsive styles.
+
+   Breakpoints: phone <= 767px, tablet 768-1199px, desktop >= 1200px.
+   DESKTOP IS UNCHANGED: the only rules outside a max-width query hide the
+   phone-only elements that are always present in the DOM.
+   Colours come from the Layout.css tokens (--primary, --border, ...) with
+   light fallbacks; tints are translucent so they also work on dark surfaces.
+   ===================================================================== */
+
+/* Phone-only elements: hidden on tablet and desktop. */
+.export-dropdown,
+.spic-cards,
+.spic-page-status {
+    display: none;
+}
+
+/* Loading / empty rows inside the table (all sizes). */
+.spic-state-cell {
+    padding-top: 4px;
+    padding-bottom: 8px;
+}
+
+/* =====================================================================
+   TABLET (and below, but the table is hidden on phone): horizontal scroll
+   container, sticky header row, right-edge shadow while columns overflow.
+   ===================================================================== */
+@media (max-width: 1199.98px) {
+
+    .table-wrapper {
+        position: relative;
+        /* lets .table-wrapper::after read the scroller's timeline below */
+        timeline-scope: --spic-table-x;
+    }
+
+    .spic-scroll {
+        overflow: auto;
+        /* a bounded height makes the sticky header meaningful inside the scroller */
+        max-height: min(70vh, 640px);
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        scroll-timeline: --spic-table-x x;
+    }
+
+    /* Sticky header. th elements come from TableHeader (host scope) -> ::deep. */
+    .spic-table thead ::deep th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        /* border-collapse drops the sticky cell's own border; redraw it */
+        box-shadow: inset 0 -1px 0 var(--border, #e5e7eb);
+    }
+
+    /* Right-edge hint. Base state is hidden; the scroll-driven animation shows it
+       only while the table actually overflows and has not been scrolled to the end.
+       Browsers without scroll-driven animations simply never show it. */
+    .table-wrapper::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 28px;
+        pointer-events: none;
+        border-radius: 0 6px 6px 0;
+        background: linear-gradient(to left, rgba(15, 23, 42, 0.16), rgba(15, 23, 42, 0));
+        opacity: 0;
+        animation: spic-edge-hint linear both;
+        animation-timeline: --spic-table-x;
+    }
+
+    @keyframes spic-edge-hint {
+        0%, 92% { opacity: 1; }
+        100%    { opacity: 0; }
+    }
+}
+
+/* =====================================================================
+   PHONE: card mode, export dropdown, touch-friendly pagination.
+   ===================================================================== */
+@media (max-width: 767.98px) {
+
+    .main-card {
+        padding: 16px;
+    }
+
+    /* Toolbar: title above the filter controls, controls wrap to full width. */
+    .section-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .table-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .table-controls ::deep input,
+    .table-controls ::deep select {
+        min-height: 44px;
+    }
+
+    /* Export: five buttons -> one dropdown. !important beats Bootstrap's .d-flex. */
+    .export-buttons {
+        display: none !important;
+    }
+
+    .export-dropdown {
+        display: block;
+        position: relative; /* anchor for the absolutely positioned .dropdown-menu */
+    }
+
+    .export-dropdown-btn {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 16px;
+        border-radius: 10px;
+        font-weight: 600;
+    }
+
+    .export-dropdown .dropdown-menu {
+        min-width: 220px;
+        border-radius: 12px;
+        padding: 6px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+    }
+
+    .export-dropdown .dropdown-item {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-radius: 8px;
+        font-size: 0.95rem;
+    }
+
+    .export-dropdown .dropdown-item i {
+        font-size: 1.05rem;
+        color: var(--primary, #0b6b3a);
+    }
+
+    /* Table off, cards on. */
+    .table-wrapper {
+        display: none;
+    }
+
+    .spic-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .spic-card {
+        background: var(--card, #ffffff);
+        color: var(--text-main, #1f2937);
+        border: 1px solid var(--border, #e5e7eb);
+        border-radius: 12px;
+        padding: 14px 16px;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+    }
+
+    .spic-card-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+
+    .spic-card-no {
+        flex: 0 0 auto;
+        margin-top: 2px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        line-height: 1.4;
+        color: var(--text-soft, #6b7280);
+        background: rgba(128, 128, 128, 0.12);
+    }
+
+    .spic-card-title {
+        flex: 1 1 auto;
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .spic-card-rows {
+        margin: 0;
+        display: grid;
+        grid-template-columns: minmax(96px, 38%) minmax(0, 1fr);
+        column-gap: 10px;
+        row-gap: 6px;
+    }
+
+    .spic-card-row {
+        display: contents;
+    }
+
+    .spic-card-rows dt {
+        margin: 0;
+        font-size: 0.78rem;
+        font-weight: 600;
+        line-height: 1.5;
+        color: var(--text-soft, #6b7280);
+    }
+
+    .spic-card-rows dd {
+        margin: 0;
+        font-size: 0.9rem;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+    }
+
+    .spic-card-more {
+        width: 100%;
+        min-height: 44px;
+        margin-top: 10px;
+        border: 0;
+        border-top: 1px dashed var(--border, #e5e7eb);
+        background: transparent;
+        color: var(--primary, #0b6b3a);
+        font-size: 0.9rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+
+    .spic-card-more i {
+        transition: transform 0.2s ease;
+    }
+
+    .spic-card-more[aria-expanded="true"] i {
+        transform: rotate(180deg);
+    }
+
+    .spic-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--border, #e5e7eb);
+    }
+
+    .spic-card-actions ::deep .btn,
+    .spic-card-actions ::deep button {
+        min-height: 44px;
+        min-width: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+
+    /* Pagination: stacked, centred, 44px targets. */
+    .pagination-container {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        margin-top: 16px;
+    }
+
+    .items-per-page {
+        justify-content: space-between;
+    }
+
+    .items-per-page select {
+        min-height: 44px;
+        padding: 8px 12px;
+        font-size: 0.9rem;
+    }
+
+    .spic-page-status {
+        display: block;
+        text-align: center;
+        font-size: 0.85rem;
+        color: var(--text-soft, #6b7280);
+    }
+
+    .pagination-controls {
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .page-btn {
+        width: 44px;
+        height: 44px;
+        font-size: 0.95rem;
+        border-radius: 10px;
+    }
+
+    /* Keep only prev / current +-1 / next so five 44px buttons fit a 320px card. */
+    .page-btn.ellipsis,
+    .page-btn.spic-pg-far {
+        display: none;
+    }
+
+    .page-btn.disabled {
+        opacity: 0.45;
+        pointer-events: none;
+    }
+}

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<application android:allowBackup="false" android:supportsRtl="true" />
+
+	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+	<!--
+		IFMS OTP relay. These let the phone holding the IFMS SIM forward the
+		one-time password to SpicAPI so the 04:05 login needs nobody awake.
+
+		Note for distribution: Google Play restricts RECEIVE_SMS/READ_SMS to apps
+		whose core function is messaging, so this build is for internal sideloading
+		or a managed enterprise channel, not the public Play Store. The relay also
+		stays switched off until the phone is paired on the Pair tab, so installing
+		the app does not by itself read anyone's messages, and by default only
+		messages that look like IFMS traffic ever leave the handset.
+	-->
+	<uses-permission android:name="android.permission.RECEIVE_SMS" />
+	<uses-permission android:name="android.permission.READ_SMS" />
+
+	<!-- Restart the watcher after a reboot. -->
+	<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+	<!--
+		The watcher is a foreground service so Android does not stop it. It is
+		typed specialUse rather than dataSync: Android 15 will not start a
+		dataSync service from BOOT_COMPLETED and halts one after six hours in
+		any 24, which would end it just before the 04:05 run.
+	-->
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+	<!-- Android 13+ needs this before any notification is shown. -->
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+	<!-- The CAPTCHA prompt must be able to wake somebody at four in the morning. -->
+	<uses-permission android:name="android.permission.VIBRATE" />
+
+	<!-- Lets the app ask to be exempted from Doze, so the polls keep flowing overnight. -->
+	<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+</manifest>

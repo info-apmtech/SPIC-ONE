@@ -135,8 +135,13 @@ body {
     box-sizing: border-box;
 }
 
-    /* Chevron <i> inside nav-link – always pinned right, never squished */
-    .nav-section .nav-link i,
+    /* Chevron <i> inside nav-link – always pinned right, never squished.
+       :not(.SideBariconimg) is essential: some entries (Digital Library, Sample
+       Collection, Consignment History) use a Bootstrap-Icon <i> as their LEADING
+       icon instead of an <img>. Without the exclusion those leading icons also
+       picked up margin-left:auto and were pushed toward the middle of the row,
+       so those rows looked indented compared with their <img> neighbours. */
+    .nav-section .nav-link i:not(.SideBariconimg),
     .nav-section .nav-link .chevron-icon {
         font-size: 14px;
         flex-shrink: 0;
@@ -214,7 +219,18 @@ body {
     list-style: none;
     padding: 0;
     margin: 0 0 16px 28px; /* 28px aligns vertical line with icon center */
-    width: 100%;
+    /* NO width:100% – it is added to the 28px left margin, so the list used to
+       stick 28px past the sidebar and the longest labels ("Top Ranking
+       Wholesaler") were clipped by the sidebar's overflow. As a block element
+       the <ul> already fills the width left over after the margin. */
+}
+
+/* css/SettingTreeLayout.css loads after this file and re-declares
+   `.submenu-list { width: 100% }`. These two selectors are more specific, so the
+   list stays inside the sidebar / offcanvas whichever order the files load in. */
+.sidebar .submenu-list,
+.offcanvas-body .submenu-list {
+    width: auto;
 }
 
 .submenu-item {
@@ -259,10 +275,10 @@ body {
     overflow: hidden;
 }
 
-.mobile-topbar {
+/* Brand shown inside .topbar on phone only (see phone block below).
+   display:none here keeps the desktop topbar pixel-identical. */
+.shell-topbar-lead {
     display: none;
-    margin-bottom: 0;
-    flex-shrink: 0;
 }
 
 .topbar {
@@ -331,6 +347,47 @@ body {
     height: 100%;
 }
 
+/* ---------------------------------------------------------------------
+   TOP BAR QUICK ACTIONS (Ask SPIC AI + Alerts) - phone and tablet only.
+   Desktop (>= 1200px) keeps the original bell button and never renders
+   these, so the live desktop bar is unchanged.
+   --------------------------------------------------------------------- */
+.shell-topbar-quick {
+    display: none;
+}
+
+@media (max-width: 1199.98px) {
+
+    /* The dead desktop bell is replaced by the /Alerts link below it. */
+    .top-actions .shell-topbar-bell-desktop {
+        display: none !important;
+    }
+
+    .top-actions .shell-topbar-quick {
+        display: inline-flex;
+        width: var(--tap-min, 44px);
+        height: var(--tap-min, 44px);
+        min-width: var(--tap-min, 44px);
+        flex: 0 0 auto;
+        padding: 0;
+        text-decoration: none;
+    }
+
+    .top-actions .shell-topbar-quick .iconimg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .top-actions .shell-topbar-ai {
+        color: #0b6b3a;
+    }
+
+        .top-actions .shell-topbar-ai i {
+            font-size: 22px;
+            line-height: 1;
+        }
+}
+
 .profile {
     width: 34px;
     height: 34px;
@@ -361,68 +418,57 @@ body {
 }
 
 /* =====================================================================
-   RESPONSIVE – Tablet / small-laptop  (769 px … 1024 px)
-   Desktop sidebar stays visible; tighten width & spacing only.
+   RESPONSIVE SHELL - breakpoint contract (see css/tokens.css)
+       phone    <= 767.98px
+       tablet   768px .. 1199.98px
+       desktop  >= 1200px   (NO rules below apply: desktop is unchanged)
    ===================================================================== */
-@media (min-width: 769px) and (max-width: 1024px) {
-
-    .sidebar {
-        width: 185px !important;
-        padding: 8px 8px 16px;
-    }
-
-    .nav-section .nav-link {
-        gap: 8px;
-        padding: 8px 8px;
-        font-size: 12px;
-        min-height: 42px;
-    }
-
-    .submenu-list {
-        margin: 0 0 12px 20px;
-    }
-
-    .submenu-link {
-        padding: 8px 0 8px 14px;
-        font-size: 0.78rem;
-        min-height: 38px;
-    }
-
-    .brand {
-        font-size: 1.3rem;
-    }
-}
 
 /* =====================================================================
-   RESPONSIVE – Mobile  (≤ 768 px)
-   Desktop sidebar hidden; nav uses Bootstrap offcanvas (#mobileSidebar).
+   TABLET  (768 px … 1199.98 px)
+   Desktop sidebar is replaced by the 72px NavRail (Components/Shell/NavRail).
+   The full menu stays reachable through the #mobileSidebar offcanvas
+   (opened by the rail's menu button). Topbar and scrolling main-content
+   keep their desktop behaviour.
    ===================================================================== */
-@media (max-width: 768px) {
-
-    .app-shell {
-        display: flex;
-        flex-direction: column;
-        height: auto;
-        min-height: 100vh;
-        overflow: visible;
-    }
+@media (min-width: 768px) and (max-width: 1199.98px) {
 
     .sidebar {
         display: none !important;
     }
 
-    .mobile-topbar {
+    .topbar {
+        padding: 0 16px;
+    }
+
+    .main-content {
+        padding: 16px 16px 24px;
+    }
+}
+
+/* =====================================================================
+   PHONE  (≤ 767.98 px)
+   - body scrolls (app-shell/content-wrap lose their 100vh + overflow)
+   - sidebar hidden; navigation = BottomTabBar + More sheet + offcanvas
+   - .topbar becomes the compact sticky bar: brand | notification | avatar
+   - .main-content gets bottom padding = tab bar height + safe area so no
+     content is ever hidden behind the fixed tab bar.
+   ===================================================================== */
+@media (max-width: 767.98px) {
+
+    .app-shell {
+        /* Sticky ActionBars and toasts (Feedback components) sit above the bottom tab bar */
+        --shell-bottom-offset: calc(var(--shell-tabbar-h, 60px) + var(--safe-bottom, 0px));
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 12px 14px;
-        background: var(--header-bg);
-        border-bottom: 1px solid #dfe3e8;
-        position: sticky;
-        top: 0;
-        z-index: 100;
-        flex-shrink: 0;
+        flex-direction: column;
+        height: auto;
+        min-height: 100vh;
+        min-height: 100dvh;
+        overflow: visible;
+    }
+
+    .sidebar {
+        display: none !important;
     }
 
     .content-wrap {
@@ -431,21 +477,92 @@ body {
         overflow: visible;
     }
 
+    /* Compact top bar */
     .topbar {
-        padding: 10px 14px;
+        position: sticky;
+        top: 0;
+        z-index: var(--z-topbar, 1020);
         height: auto;
+        min-height: calc(var(--shell-topbar-h, 56px) + var(--safe-top, 0px));
+        padding: var(--safe-top, 0px) calc(8px + var(--safe-right, 0px)) 0 calc(12px + var(--safe-left, 0px));
+        gap: 8px;
         align-items: center;
         flex-shrink: 0;
+        border-bottom: 1px solid #dfe3e8;
+        box-shadow: none;
+    }
+
+    .shell-topbar-lead {
+        display: flex;
+        align-items: center;
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: var(--tap-min, 44px);
+    }
+
+    .shell-topbar-brand {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--tap-min, 44px);
+        text-decoration: none;
+        padding: 0 4px;
+    }
+
+    /* Same artwork as the app icon (Resources/AppIcon/appiconfg.png). */
+    .shell-topbar-logo {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: block;
+    }
+
+    /* Global search lives in the desktop bar only; phones use in-page search. */
+    .topbar .search-box {
+        display: none;
     }
 
     .top-actions {
         justify-content: flex-end;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    /* Notification button grows to a 44px tap target; the glyph stays 24px. */
+    .top-actions .icon-btn {
+        width: var(--tap-min, 44px);
+        height: var(--tap-min, 44px);
+    }
+
+    .top-actions .icon-btn .iconimg {
+        width: 24px;
+        height: 24px;
     }
 
     .main-content {
         flex: none;
         overflow: visible;
-        padding: 12px;
+        padding: 12px 12px calc(var(--shell-tabbar-h, 60px) + var(--safe-bottom, 0px) + 16px);
+    }
+
+    /* The page-level error card should not sit under the tab bar either. */
+    .page-error {
+        margin: 24px auto;
+    }
+}
+
+/* Body scroll lock while the phone "More" sheet is open (MoreSheet.razor.js). */
+body.shell-sheet-open {
+    overflow: hidden;
+}
+
+/* Bootstrap's dismiss glyph on alerts is ~32x40 – below the 44px tap minimum on
+   phones. Phone-only, so the live desktop alerts are untouched. */
+@media (max-width: 767.98px) {
+    .alert-dismissible .btn-close {
+        box-sizing: border-box;
+        width: var(--tap-min, 44px);
+        height: var(--tap-min, 44px);
+        background-position: center;
     }
 }
 
@@ -472,6 +589,17 @@ body {
     border-bottom: 1px solid var(--border);
     align-items: center;
 }
+
+    /* Bootstrap's close glyph is 40px; the full menu's only close control gets a
+       full 44px thumb target on phones. The glyph itself is unchanged. */
+    @media (max-width: 767.98px) {
+        .offcanvas-header .btn-close {
+            box-sizing: border-box; /* Bootstrap uses content-box here */
+            width: var(--tap-min, 44px);
+            height: var(--tap-min, 44px);
+            background-position: center;
+        }
+    }
 
 /* Scrollable body */
 .offcanvas-body {
@@ -557,8 +685,10 @@ body {
     display: block;
 }
 
-/* ── Chevron inside offcanvas nav-link ───────────────────────────────── */
-.offcanvas-body .nav-link i,
+/* ── Chevron inside offcanvas nav-link ─────────────────────────────────
+   :not(.SideBariconimg) keeps Bootstrap-Icon LEADING icons out of this rule –
+   margin-left:auto would otherwise shove them to the middle of the row. */
+.offcanvas-body .nav-link i:not(.SideBariconimg),
 .offcanvas-body .nav-link .chevron-icon {
     /* Pin to right edge */
     margin-left: auto !important;
@@ -574,14 +704,6 @@ body {
     background-image: none !important;
 }
 
-/* Exception: the hamburger .bi-list icon in the mobile topbar must keep its style */
-.mobile-topbar .bi {
-    margin-right: 0 !important;
-    position: static !important;
-    width: auto !important;
-    height: auto !important;
-}
-
 /* ── Settings-menu-wrapper inside offcanvas ──────────────────────────── */
 .offcanvas-body .settings-menu-wrapper {
     width: 100%;
@@ -593,7 +715,8 @@ body {
     list-style: none;
     padding: 0;
     margin: 0 0 10px 22px;
-    width: 100%;
+    /* width:100% + a 22px left margin overflowed the offcanvas and clipped the
+       longest submenu labels – the <ul> fills the remaining width on its own. */
 }
 
 .offcanvas-body .submenu-item {
@@ -630,3 +753,32 @@ body {
 .offcanvas-body::-webkit-scrollbar { width: 4px; }
 .offcanvas-body::-webkit-scrollbar-track { background: transparent; }
 .offcanvas-body::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 4px; }
+
+/* Shown by the page-level ErrorBoundary in MainLayout when a page throws */
+.page-error {
+    max-width: 520px;
+    margin: 48px auto;
+    padding: 28px 24px;
+    background: #fff;
+    border: 1px solid #fde2e2;
+    border-radius: 12px;
+    text-align: center;
+    color: #374151;
+}
+
+.page-error .bi {
+    font-size: 2rem;
+    color: #dc2626;
+}
+
+.page-error h5 {
+    margin: 10px 0 6px;
+    font-weight: 700;
+}
+
+.page-error-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 14px;
+}

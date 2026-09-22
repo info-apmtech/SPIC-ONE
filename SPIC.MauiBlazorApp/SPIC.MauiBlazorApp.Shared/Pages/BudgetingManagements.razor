@@ -231,13 +231,13 @@
             <!-- Left Info Badges -->
             <div class="bm-info-badges">
                 <!-- Total Allocated -->
-                <div class="bm-info-badge badge-green">
+                <div class="bm-info-badge bm-badge-green">
                     <span class="bm-badge-label">TOTAL ALLOCATED</span>
                     <span class="bm-badge-value">$@TotalAllocatedFormatted</span>
                 </div>
 
                 <!-- Monthly Avg -->
-                <div class="bm-info-badge badge-orange">
+                <div class="bm-info-badge bm-badge-orange">
                     <span class="bm-badge-label">MONTHLY AVG</span>
                     <span class="bm-badge-value">$@MonthlyAvgFormatted</span>
                 </div>
@@ -253,9 +253,9 @@
                 </div>
             </div>
 
-            <!-- Right Action Buttons -->
-            <div class="bm-actions">
-                <button class="bm-btn-secondary" @onclick="HandleSaveDraft">
+            <!-- Right Action Buttons; native: ActionBar = inline row on tablet/desktop, fixed 44px bar on phone -->
+            <ActionBar CssClass="bm-actionbar" AriaLabel="Budget plan actions">
+                <button type="button" class="bm-btn-secondary" @onclick="HandleSaveDraft">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                         <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -270,7 +270,7 @@
                     </svg>
                     Submit for Validation
                 </button>
-            </div>
+            </ActionBar>
         </div>
 
     </div>
@@ -344,10 +344,19 @@
         background-color: #ffffff;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
+    /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
+       watermarks (::before/::after) that leak onto these tiles and sit on top
+       of the label text. Neutralise them for this page only. */
+    .bm-stat-card::before,
+    .bm-stat-card::after {
+        content: none !important;
+    }
+
     .bm-stat-content {
         display: flex;
         flex-direction: column;
         gap: 4px;
+        min-width: 0;
     }
     .bm-stat-value {
         font-size: 24px;
@@ -556,12 +565,12 @@
         border: 1px solid transparent;
         font-family: inherit;
     }
-    .badge-green {
+    .bm-badge-green {
         background-color: #e6fcf1;
         border-color: #d1fae5;
         color: #047857;
     }
-    .badge-orange {
+    .bm-badge-orange {
         background-color: #fff7ed;
         border-color: #ffedd5;
         color: #c2410c;
@@ -649,6 +658,107 @@
         }
         .bm-actions {
             justify-content: flex-end;
+        }
+    }
+
+    /* PageHeader adoption: reproduces the old .bm-header look on desktop. */
+    .shell-page-header.bm-page-header {
+        margin-bottom: 24px;
+    }
+    .shell-page-header.bm-page-header .shell-page-title {
+        font-size: 22px;
+        font-weight: 700;
+        color: #1e293b;
+    }
+    /* ActionBar host: same row and gap as the old .bm-actions. */
+    .bm-wrapper .fb-actionbar.bm-actionbar {
+        padding: 0;
+        gap: 12px;
+    }
+    .bm-wrapper .fb-actionbar.bm-actionbar .fb-actionbar__primary {
+        gap: 12px;
+    }
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .shell-page-header.bm-page-header {
+            margin-bottom: 14px;
+        }
+        .shell-page-header.bm-page-header .shell-page-title {
+            font-size: 1.15rem;
+        }
+        .bm-stats-grid-4 {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+        .bm-stat-card {
+            padding: 14px;
+        }
+        /* Keep "₹ 4.85 Cr" on one line inside the narrow tile. */
+        .bm-stat-value {
+            font-size: 18px;
+            white-space: nowrap;
+        }
+        .bm-stat-icon {
+            width: 36px;
+            height: 36px;
+        }
+        /* Budget table becomes one card per HQ so the Budget input is always
+           on screen (it used to sit off the right edge of a 720px table). */
+        .bm-table-card {
+            overflow: visible;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+        .bm-table thead {
+            display: none;
+        }
+        .bm-table,
+        .bm-table tbody,
+        .bm-table tr,
+        .bm-table td {
+            display: block;
+            width: 100%;
+        }
+        .bm-table tbody tr {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+        .bm-table td {
+            padding: 4px 0 !important;
+            border-bottom: 0;
+        }
+        .bm-table td::before {
+            content: attr(data-label);
+            display: block;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .bm-table td.bm-hq-name::before {
+            display: none;
+        }
+        .bm-table input,
+        .bm-table select,
+        .bm-form-control,
+        .bm-form-select {
+            min-height: 44px;
+            font-size: 16px; /* prevents iOS zoom on focus */
+        }
+        .bm-btn-secondary,
+        .bm-btn-primary {
+            min-height: 44px;
+            justify-content: center;
+        }
+        /* Fixed phone bar keeps its own padding. */
+        .bm-wrapper .fb-actionbar.bm-actionbar {
+            padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+            gap: 10px;
         }
     }
 </style>

@@ -1,0 +1,197 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Feedback
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    BottomSheet: on phones (<= 767px) slides up from the bottom with a drag handle;
+    on tablet/desktop (>= 768px) renders as a right-side drawer (420px) with the same API,
+    so existing *Drawer.razor pages can wrap their body in it without changing their markup.
+
+    Closes on: close button, backdrop tap (CloseOnBackdrop), Escape, browser/hardware back
+    (a history entry is pushed on open; see feedback-interop.js), swipe-down on the handle.
+*@
+
+@if (IsOpen)
+{
+    <div class="fb-sheet @SizeClass @(_closing ? "fb-sheet--closing" : "") @CssClass" data-sheet-id="@_id">
+        <div class="fb-sheet__backdrop" @onclick="OnBackdropClick"></div>
+
+        <div class="fb-sheet__panel"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="@(_id)-title"
+             tabindex="-1"
+             @ref="_panel">
+
+            <div class="fb-sheet__handle-wrap" aria-hidden="true">
+                <span class="fb-sheet__handle"></span>
+            </div>
+
+            <header class="fb-sheet__header">
+                <div class="fb-sheet__heading">
+                    <h2 class="fb-sheet__title" id="@(_id)-title">@Title</h2>
+                    @if (!string.IsNullOrWhiteSpace(Subtitle))
+                    {
+                        <p class="fb-sheet__subtitle">@Subtitle</p>
+                    }
+                </div>
+
+                @if (HeaderActions is not null)
+                {
+                    <div class="fb-sheet__header-actions">@HeaderActions</div>
+                }
+
+                @if (ShowCloseButton)
+                {
+                    <button type="button" class="fb-sheet__close" aria-label="Close" @onclick="() => CloseAsync(CloseReason.Button)">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                }
+            </header>
+
+            <div class="fb-sheet__body">
+                @ChildContent
+            </div>
+
+            @if (Footer is not null)
+            {
+                <footer class="fb-sheet__footer">
+                    @Footer
+                </footer>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    public enum SheetSize
+    {
+        /// <summary>Phone: as tall as its content, up to ~90% of the viewport. Drawer: 420px.</summary>
+        Auto,
+        /// <summary>Phone: half the viewport height. Drawer: 420px.</summary>
+        Half,
+        /// <summary>Phone: full height (below the status bar). Drawer: 720px wide (capped at the viewport).</summary>
+        Full
+    }
+
+    public enum CloseReason { Button, Backdrop, Escape, History, Swipe, Programmatic }
+
+    /// <summary>Two-way bindable: <c>&lt;BottomSheet @bind-IsOpen="_open"&gt;</c>.</summary>
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+    /// <summary>Optional extra controls rendered in the header, left of the close button.</summary>
+    [Parameter] public RenderFragment? HeaderActions { get; set; }
+
+    [Parameter] public SheetSize Size { get; set; } = SheetSize.Auto;
+    [Parameter] public bool CloseOnBackdrop { get; set; } = true;
+    [Parameter] public bool ShowCloseButton { get; set; } = true;
+    [Parameter] public string? CssClass { get; set; }
+
+    /// <summary>Raised after the sheet has fully closed, with the reason.</summary>
+    [Parameter] public EventCallback<CloseReason> OnClosed { get; set; }
+
+    private const int CloseAnimationMs = 200;
+
+    private readonly string _id = "fbs-" + Guid.NewGuid().ToString("N")[..8];
+    private ElementReference _panel;
+    private DotNetObjectReference<BottomSheet>? _selfRef;
+    private bool _jsOpen;
+    private bool _closing;
+    private bool _disposed;
+
+    private string SizeClass => Size switch
+    {
+        SheetSize.Half => "fb-sheet--half",
+        SheetSize.Full => "fb-sheet--full",
+        _ => "fb-sheet--auto"
+    };
+
+    /// <summary>Open from code (for <c>@ref</c> usage). Also raises IsOpenChanged.</summary>
+    public async Task OpenAsync()
+    {
+        if (IsOpen || _disposed) return;
+        IsOpen = true;
+        await IsOpenChanged.InvokeAsync(true);
+        StateHasChanged();
+    }
+
+    /// <summary>Close with a short slide-out animation, then raise IsOpenChanged(false) and OnClosed.</summary>
+    public Task CloseAsync() => CloseAsync(CloseReason.Programmatic);
+
+    public async Task CloseAsync(CloseReason reason)
+    {
+        if (!IsOpen || _closing || _disposed) return;
+
+        _closing = true;
+        StateHasChanged();
+
+        try { await Task.Delay(CloseAnimationMs); }
+        catch (TaskCanceledException) { }
+
+        if (_disposed) return;
+
+        _closing = false;
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+        await OnClosed.InvokeAsync(reason);
+        StateHasChanged();
+    }
+
+    /// <summary>Called from feedback-interop.js on Escape, browser/hardware back, or swipe-down.</summary>
+    [JSInvokable]
+    public Task RequestClose(string reason) => InvokeAsync(() => CloseAsync(reason switch
+    {
+        "escape" => CloseReason.Escape,
+        "history" => CloseReason.History,
+        "swipe" => CloseReason.Swipe,
+        _ => CloseReason.Programmatic
+    }));
+
+    private Task OnBackdropClick() => CloseOnBackdrop ? CloseAsync(CloseReason.Backdrop) : Task.CompletedTask;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_disposed) return;
+
+        if (IsOpen && !_jsOpen)
+        {
+            _jsOpen = true;
+            _selfRef ??= DotNetObjectReference.Create(this);
+            await SafeJsAsync(() => JS.InvokeVoidAsync("spicFeedback.sheet.open", _id, _panel, _selfRef));
+        }
+        else if (!IsOpen && _jsOpen)
+        {
+            _jsOpen = false;
+            await SafeJsAsync(() => JS.InvokeVoidAsync("spicFeedback.sheet.close", _id));
+        }
+    }
+
+    private static async Task SafeJsAsync(Func<ValueTask> call)
+    {
+        try { await call(); }
+        catch (JSException) { /* feedback-interop.js missing: sheet still works via buttons */ }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        if (_jsOpen)
+        {
+            _jsOpen = false;
+            await SafeJsAsync(() => JS.InvokeVoidAsync("spicFeedback.sheet.close", _id));
+        }
+
+        _selfRef?.Dispose();
+        _selfRef = null;
+    }
+}

@@ -4,6 +4,7 @@
 @using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject NavigationManager Navigation
@@ -34,7 +35,7 @@
 
 <div class="container-fluid">
 
-	<h2 class="page-title">Sub Dealer &amp; Employee</h2>
+	<PageHeader Title="Sub Dealer &amp; Employee" />
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -55,9 +56,12 @@
 		</div>
 	</div>
 
+	@* The entire "Add New" card is admin-only. The .main-card wrapper stays inside
+	   the guard so other roles (MDO, SM, AVP) do not get an empty white card
+	   between the tabs and the metric cards. *@
+	@if (IsAdmin)
+	{
 	<div class="main-card">
-		@if (IsAdmin)
-		{
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {(ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee")}" : $"Add New {(ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee")}")</h3>
 			<div class="d-flex gap-2">
@@ -220,8 +224,8 @@
 				<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
 			</button>
 		</div>
-		}
 	</div>
+	}
 
 	<div class="row g-3 mb-4">
 		<div class="col-md-4">
@@ -401,6 +405,24 @@
 				}
 			</td>
 		</TableRow>
+
+		<CardActions Context="item">
+			@if (IsAdmin)
+			{
+				<button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+				<button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+			}
+			else if (IsSMRole && item.SMApproved == null)
+			{
+				<button type="button" class="btn btn-success btn-sm" @onclick="() => ShowApprovalModal(item, true, true)"><i class="bi bi-check-lg"></i> Approve</button>
+				<button type="button" class="btn btn-danger btn-sm" @onclick="() => ShowApprovalModal(item, false, true)"><i class="bi bi-x-lg"></i> Reject</button>
+			}
+			else if (IsAVPRole && item.SMApproved == true && item.AVPApproved == null)
+			{
+				<button type="button" class="btn btn-success btn-sm" @onclick="() => ShowApprovalModal(item, true, false)"><i class="bi bi-check-lg"></i> Approve</button>
+				<button type="button" class="btn btn-danger btn-sm" @onclick="() => ShowApprovalModal(item, false, false)"><i class="bi bi-x-lg"></i> Reject</button>
+			}
+		</CardActions>
 	</SpicDataTable>
 
 </div>
@@ -408,7 +430,7 @@
 @if (_showDeleteConfirm)
 {
 	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+	<div class="modal fade show d-block wiz-modal" tabindex="-1" role="dialog">
 		<div class="modal-dialog modal-dialog-centered" role="document">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -433,7 +455,7 @@
 @if (_showUploadModal)
 {
 	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+	<div class="modal fade show d-block wiz-modal" tabindex="-1" role="dialog">
 		<div class="modal-dialog modal-dialog-centered" role="document">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -502,7 +524,7 @@
 @if (_showApprovalModal)
 {
 	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+	<div class="modal fade show d-block wiz-modal" tabindex="-1" role="dialog">
 		<div class="modal-dialog modal-dialog-centered" role="document">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -606,7 +628,7 @@
 
 		try
 		{
-			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			var token = await SessionStore.GetAsync(SessionKeys.Token);
 			if (!string.IsNullOrEmpty(token))
 			{
 				var uid = GetUserIdFromToken(token);

@@ -1,0 +1,266 @@
+@using SPIC.Core.DTOs
+@inject SasApi Api
+@inject ToastService Toast
+@inject IJSRuntime JS
+
+@*
+    "New Farmer" from the New Sample Collection page. BottomSheet gives a right-side drawer on
+    tablet/desktop and a bottom sheet on phones, so one component covers both designs.
+
+    State and District come from api/Sas/lookups; Taluk is free text (the master has no taluk
+    list). "Use my location" calls the host's getCurrentPosition bridge (location.js on the Web,
+    the same name bridged to the native locator inside MAUI) and falls back to a toast.
+
+    The farmer is created through SasApi (POST api/Sas/farmers) and handed back to the caller,
+    which selects it straight away.
+*@
+
+<BottomSheet IsOpen="IsOpen" IsOpenChanged="IsOpenChanged"
+             Title="New Farmer" Subtitle="Add a farmer while collecting the sample"
+             Size="BottomSheet.SheetSize.Full" CssClass="nfd">
+    <ChildContent>
+        <div class="nfd-body">
+            <div class="nfd-grid">
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-name">Farmer Name <span class="nfd-req">*</span></label>
+                    <input id="nfd-name" class="nfd-input @(_errors.Contains("name") ? "is-bad" : "")"
+                           placeholder="Enter farmer name" @bind="_name" @bind:event="oninput" />
+                    @if (_errors.Contains("name"))
+                    {
+                        <span class="nfd-error">Please enter the farmer's name.</span>
+                    }
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-mobile">Mobile Number <span class="nfd-req">*</span></label>
+                    <input id="nfd-mobile" class="nfd-input @(_errors.Contains("mobile") ? "is-bad" : "")"
+                           type="tel" inputmode="numeric" maxlength="10"
+                           placeholder="Enter Mobile Number" @bind="_mobile" @bind:event="oninput" />
+                    @if (_errors.Contains("mobile"))
+                    {
+                        <span class="nfd-error">Enter a 10-digit mobile number.</span>
+                    }
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-a1">Address 1</label>
+                    <input id="nfd-a1" class="nfd-input" placeholder="Enter Address" @bind="_address1" />
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-a2">Address 2</label>
+                    <input id="nfd-a2" class="nfd-input" placeholder="Enter Address" @bind="_address2" />
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-village">Village / Area</label>
+                    <input id="nfd-village" class="nfd-input" placeholder="Enter Village / Area" @bind="_village" />
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-taluk">Taluk</label>
+                    <input id="nfd-taluk" class="nfd-input" placeholder="Enter Taluk" @bind="_taluk" />
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-state">State</label>
+                    <select id="nfd-state" class="nfd-input" value="@_stateId" @onchange="OnStateChanged">
+                        <option value="">Select State</option>
+                        @foreach (var state in States)
+                        {
+                            <option value="@state.Id">@state.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-district">District</label>
+                    <select id="nfd-district" class="nfd-input" @bind="_districtId" disabled="@(Districts.Count == 0)">
+                        <option value="">Select District</option>
+                        @foreach (var district in Districts)
+                        {
+                            <option value="@district.Id">@district.Name</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-pin">Pin Code</label>
+                    <input id="nfd-pin" class="nfd-input @(_errors.Contains("pin") ? "is-bad" : "")"
+                           inputmode="numeric" maxlength="6" placeholder="Enter Pin Code" @bind="_pinCode" />
+                    @if (_errors.Contains("pin"))
+                    {
+                        <span class="nfd-error">A pin code is 6 digits.</span>
+                    }
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-lat">Latitude</label>
+                    <input id="nfd-lat" class="nfd-input" inputmode="decimal" placeholder="Enter Latitude" @bind="_latitude" />
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-lng">Longitude</label>
+                    <input id="nfd-lng" class="nfd-input" inputmode="decimal" placeholder="Enter Longitude" @bind="_longitude" />
+                </div>
+
+                <div class="nfd-field">
+                    <label class="nfd-label" for="nfd-survey">Survey Number</label>
+                    <input id="nfd-survey" class="nfd-input" placeholder="Enter Survey Number" @bind="_surveyNumber" />
+                </div>
+            </div>
+
+            <button type="button" class="nfd-locate" @onclick="UseMyLocationAsync" disabled="@_locating">
+                <i class="bi @(_locating ? "bi-hourglass-split" : "bi-geo-alt")" aria-hidden="true"></i>
+                @(_locating ? "Getting your location..." : "Use my location")
+            </button>
+        </div>
+    </ChildContent>
+
+    <Footer>
+        <button type="button" class="nfd-btn nfd-btn-outline" @onclick="CancelAsync" disabled="@_saving">Cancel</button>
+        <button type="button" class="nfd-btn nfd-btn-primary" @onclick="SaveAsync" disabled="@_saving">
+            @(_saving ? "Saving..." : "Save Farmer")
+        </button>
+    </Footer>
+</BottomSheet>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    /// <summary>Raised with the saved farmer so the form can select it immediately.</summary>
+    [Parameter] public EventCallback<SasFarmerDto> OnCreated { get; set; }
+
+    /// <summary>Pre-fills the name box from whatever the caller had typed in the farmer search.</summary>
+    [Parameter] public string? InitialName { get; set; }
+
+    private string _name = "", _mobile = "", _address1 = "", _address2 = "", _village = "", _taluk = "";
+    private string _stateId = "", _districtId = "", _pinCode = "", _latitude = "", _longitude = "", _surveyNumber = "";
+
+    private readonly HashSet<string> _errors = new();
+    private bool _saving;
+    private bool _locating;
+    private bool _wasOpen;
+
+    private SasLookupsDto? _lookups;
+
+    private List<SasStateDto> States => _lookups?.States ?? new List<SasStateDto>();
+
+    private List<SasDistrictDto> Districts =>
+        int.TryParse(_stateId, out var id)
+            ? States.FirstOrDefault(s => s.Id == id)?.Districts ?? new List<SasDistrictDto>()
+            : new List<SasDistrictDto>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            Reset();
+            _lookups ??= await Api.GetLookupsAsync();
+        }
+
+        _wasOpen = IsOpen;
+    }
+
+    private void Reset()
+    {
+        _name = InitialName?.Trim() ?? "";
+        _mobile = _address1 = _address2 = _village = _taluk = "";
+        _stateId = _districtId = _pinCode = _latitude = _longitude = _surveyNumber = "";
+        _errors.Clear();
+        _saving = false;
+        _locating = false;
+    }
+
+    private void OnStateChanged(ChangeEventArgs e)
+    {
+        _stateId = e.Value?.ToString() ?? "";
+        _districtId = "";   // the district list belongs to the chosen state
+    }
+
+    /// <summary>
+    /// window.getCurrentPosition (js/location.js on the Web; the MAUI host bridges the same
+    /// name). It always resolves, with an "error" field when the browser refused.
+    /// </summary>
+    private async Task UseMyLocationAsync()
+    {
+        _locating = true;
+        try
+        {
+            var position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+
+            if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+            {
+                Toast.Warning(string.IsNullOrWhiteSpace(position?.Error)
+                    ? "We could not read your location. Please type the coordinates."
+                    : position!.Error!);
+                return;
+            }
+
+            _latitude = position.Latitude.ToString("0.######");
+            _longitude = position.Longitude.ToString("0.######");
+        }
+        catch (Exception)
+        {
+            Toast.Warning("Location is not available on this device. Please type the coordinates.");
+        }
+        finally
+        {
+            _locating = false;
+        }
+    }
+
+    private sealed class GeoResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+
+    private async Task SaveAsync()
+    {
+        _errors.Clear();
+
+        if (string.IsNullOrWhiteSpace(_name)) _errors.Add("name");
+        if (_mobile.Trim().Length != 10 || !_mobile.Trim().All(char.IsDigit)) _errors.Add("mobile");
+        if (!string.IsNullOrWhiteSpace(_pinCode) &&
+            (_pinCode.Trim().Length != 6 || !_pinCode.Trim().All(char.IsDigit))) _errors.Add("pin");
+
+        if (_errors.Count > 0)
+        {
+            StateHasChanged();
+            return;
+        }
+
+        _saving = true;
+
+        var farmer = await Api.CreateFarmerAsync(new SasFarmerUpsertDto
+        {
+            Name = _name.Trim(),
+            Mobile = _mobile.Trim(),
+            Address1 = Blank(_address1),
+            Address2 = Blank(_address2),
+            Village = Blank(_village),
+            Taluk = Blank(_taluk),
+            StateId = int.TryParse(_stateId, out var s) ? s : null,
+            DistrictId = int.TryParse(_districtId, out var d) ? d : null,
+            PinCode = Blank(_pinCode),
+            Latitude = double.TryParse(_latitude, out var lat) ? lat : null,
+            Longitude = double.TryParse(_longitude, out var lng) ? lng : null,
+            SurveyNumber = Blank(_surveyNumber)
+        });
+
+        _saving = false;
+
+        if (farmer is null) return;     // SasApi already explained why
+
+        Toast.Success($"{farmer.Name} added.");
+        await OnCreated.InvokeAsync(farmer);
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private Task CancelAsync() => IsOpenChanged.InvokeAsync(false);
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}

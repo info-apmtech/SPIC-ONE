@@ -8,8 +8,12 @@
   temporary env file; they never appear on a command line.
   The Azure firewall is opened for this PC only for the duration of the copy.
 
+  With -DumpFile the source step is skipped and an existing custom-format dump (a nightly copy
+  downloaded from the backup storage account, or one kept with -KeepDump) is restored instead.
+
 .EXAMPLE
   .\deploy\azure\copy-db.ps1 -Environment staging -SourcePasswordFile C:\secure\vps-postgres.txt
+  .\deploy\azure\copy-db.ps1 -Environment prod -DumpFile C:\restore\spicone-20260918T203000Z.dump
 #>
 [CmdletBinding()]
 param(
@@ -18,7 +22,9 @@ param(
     [int]$SourcePort = 30001,
     [string]$SourceUser = 'postgres',
     [string]$SourceDatabase = 'spicone',
-    [Parameter(Mandatory)][string]$SourcePasswordFile,
+    [string]$SourcePasswordFile,
+    [string]$SourceConnectionStringFile,   # alternative: a Npgsql connection string (or an appsettings JSON line) holding host/port/db/user/password
+    [string]$DumpFile,                     # restore this pg_dump custom-format file instead of dumping a source server
     [string]$PostgresImage = 'postgres:16-alpine',
     [switch]$KeepDump
 )
@@ -31,7 +37,25 @@ $outputs = Get-Outputs -Names $names
 $vault = Find-KeyVault -ResourceGroup $names.ResourceGroup
 $targetPassword = Get-KeyVaultSecretValue -VaultName $vault -Name 'postgres-admin-password'
 if (-not $targetPassword) { throw 'postgres-admin-password not readable from Key Vault.' }
-$sourcePassword = (Get-Content $SourcePasswordFile -Raw).Trim()
+$sourcePassword = ''
+if ($DumpFile) {
+    if (-not (Test-Path $DumpFile)) { throw "Dump file not found: $DumpFile" }
+    Write-Host "Source: dump file $DumpFile" -ForegroundColor DarkGray
+} elseif ($SourceConnectionStringFile) {
+    $cs = (Get-Content $SourceConnectionStringFile -Raw).Trim()
+    if ($cs -match '^\s*"[^"]+"\s*:\s*"(.*)"\s*,?\s*$') { $cs = $Matches[1] }
+    $kv = @{}
+    foreach ($part in ($cs -split ';')) { if ($part -match '^\s*([^=]+)=(.*)$') { $kv[$Matches[1].Trim().ToLower()] = $Matches[2].Trim() } }
+    if ($kv['host'])     { $SourceHost = $kv['host'] }
+    if ($kv['port'])     { $SourcePort = [int]$kv['port'] }
+    if ($kv['database']) { $SourceDatabase = $kv['database'] }
+    if ($kv['username']) { $SourceUser = $kv['username'] }
+    $sourcePassword = $kv['password']
+    if (-not $sourcePassword) { throw 'No Password= in the connection string file.' }
+} elseif ($SourcePasswordFile) {
+    $sourcePassword = (Get-Content $SourcePasswordFile -Raw).Trim()
+} else { throw 'Give -SourcePasswordFile, -SourceConnectionStringFile or -DumpFile.' }
+if (-not $DumpFile) { Write-Host "Source: ${SourceHost}:${SourcePort}/${SourceDatabase} as ${SourceUser}" -ForegroundColor DarkGray }
 
 $work = Join-Path ([IO.Path]::GetTempPath()) "spicone-dbcopy-$((Get-Date).ToString('yyyyMMddHHmmss'))"
 New-Item -ItemType Directory -Path $work | Out-Null
@@ -41,14 +65,18 @@ $dumpDir = Join-Path $work 'dump'; New-Item -ItemType Directory -Path $dumpDir |
 
 $ip = Get-MyPublicIp
 $rule = "dbcopy-$((Get-Date).ToString('yyyyMMddHHmmss'))"
-Invoke-Az postgres flexible-server firewall-rule create --resource-group $names.ResourceGroup --name $outputs.postgresServerName `
-    --rule-name $rule --start-ip-address $ip --end-ip-address $ip | Out-Null
+Invoke-Az postgres flexible-server firewall-rule create --resource-group $names.ResourceGroup --server-name $outputs.postgresServerName `
+    --name $rule --start-ip-address $ip --end-ip-address $ip | Out-Null
 
 try {
-    Write-Host "Dumping $SourceDatabase from $SourceHost:$SourcePort ..." -ForegroundColor Cyan
-    docker run --rm --env-file $srcEnv -v "${dumpDir}:/dump" $PostgresImage `
-        pg_dump -h $SourceHost -p $SourcePort -U $SourceUser -d $SourceDatabase -Fc --no-owner --no-privileges -f /dump/spicone.dump
-    if ($LASTEXITCODE -ne 0) { throw 'pg_dump failed.' }
+    if ($DumpFile) {
+        Copy-Item $DumpFile (Join-Path $dumpDir 'spicone.dump')
+    } else {
+        Write-Host "Dumping $SourceDatabase from ${SourceHost}:${SourcePort} ..." -ForegroundColor Cyan
+        docker run --rm --env-file $srcEnv -v "${dumpDir}:/dump" $PostgresImage `
+            pg_dump -h $SourceHost -p $SourcePort -U $SourceUser -d $SourceDatabase -Fc --no-owner --no-privileges -f /dump/spicone.dump
+        if ($LASTEXITCODE -ne 0) { throw 'pg_dump failed.' }
+    }
 
     Write-Host "Restoring into $($outputs.postgresFqdn)/$($outputs.postgresDatabase) ..." -ForegroundColor Cyan
     docker run --rm --env-file $dstEnv -v "${dumpDir}:/dump" $PostgresImage `
@@ -58,7 +86,7 @@ try {
     Write-Host 'Database copied.' -ForegroundColor Green
 }
 finally {
-    Invoke-Az postgres flexible-server firewall-rule delete --resource-group $names.ResourceGroup --name $outputs.postgresServerName --rule-name $rule --yes | Out-Null
+    Invoke-Az postgres flexible-server firewall-rule delete --resource-group $names.ResourceGroup --server-name $outputs.postgresServerName --name $rule --yes | Out-Null
     Remove-Item $srcEnv, $dstEnv -Force -ErrorAction SilentlyContinue
     if (-not $KeepDump) { Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue } else { Write-Host "Dump kept at $dumpDir" }
 }

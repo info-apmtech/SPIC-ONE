@@ -1,0 +1,240 @@
+/* MoreSheet - full-screen slide-up sheet. Only ever opened from the phone tab bar,
+   but sized defensively so it also behaves if opened on a wider viewport. */
+
+.shell-sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-sheet, 1050) - 1);
+    background: rgba(15, 23, 42, 0.45);
+    animation: shell-sheet-fade 0.18s ease-out;
+}
+
+.shell-sheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-sheet, 1050);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - var(--safe-top, 0px) - 12px);
+    height: calc(100dvh - var(--safe-top, 0px) - 12px);
+    background: var(--card, #fff);
+    border-top-left-radius: var(--radius-lg, 16px);
+    border-top-right-radius: var(--radius-lg, 16px);
+    box-shadow: var(--shadow-sheet, 0 -8px 32px rgba(15, 23, 42, 0.18));
+    outline: none;
+    animation: shell-sheet-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+    padding-bottom: var(--safe-bottom, 0px);
+}
+
+/* Older engines without dvh support */
+@supports not (height: 100dvh) {
+    .shell-sheet {
+        max-height: calc(100vh - var(--safe-top, 0px) - 12px);
+        height: calc(100vh - var(--safe-top, 0px) - 12px);
+    }
+}
+
+@media (min-width: 768px) {
+    .shell-sheet {
+        left: 50%;
+        right: auto;
+        width: min(560px, 100vw);
+        transform: translateX(-50%);
+        animation: none;
+    }
+}
+
+.shell-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 8px 10px 20px;
+    border-bottom: 1px solid var(--border, #e5e7eb);
+    flex-shrink: 0;
+}
+
+.shell-sheet-title {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-main, #1f2937);
+}
+
+.shell-sheet-close {
+    width: var(--tap-min, 44px);
+    height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-soft, #6b7280);
+    font-size: 18px;
+}
+
+    .shell-sheet-close:hover,
+    .shell-sheet-close:focus {
+        background: #f3f4f6;
+        color: var(--text-main, #1f2937);
+    }
+
+.shell-sheet-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 16px 16px;
+}
+
+.shell-sheet-empty {
+    margin: 24px 0;
+    text-align: center;
+    color: var(--text-soft, #6b7280);
+    font-size: 14px;
+}
+
+.shell-sheet-group {
+    margin: 14px 4px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--text-soft, #6b7280);
+}
+
+    .shell-sheet-group:first-child {
+        margin-top: 4px;
+    }
+
+.shell-sheet-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+@media (min-width: 420px) {
+    .shell-sheet-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.shell-sheet-tile {
+    min-height: 84px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 6px 10px;
+    border-radius: var(--radius-md, 12px);
+    background: #f7f9f8;
+    border: 1px solid transparent;
+    color: var(--text-main, #1f2937);
+    text-decoration: none;
+    text-align: center;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+    .shell-sheet-tile:hover,
+    .shell-sheet-tile:focus {
+        background: var(--primary-soft, #e8f5ee);
+        border-color: rgba(11, 107, 58, 0.18);
+        color: var(--text-main, #1f2937);
+        text-decoration: none;
+    }
+
+    .shell-sheet-tile:active {
+        transform: scale(0.97);
+    }
+
+.shell-sheet-tile-icon {
+    font-size: 24px;
+    line-height: 1;
+    color: var(--primary, #0b6b3a);
+}
+
+.shell-sheet-tile-label {
+    font-size: 12px;
+    line-height: 1.25;
+    font-weight: 500;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.shell-sheet-footer {
+    flex-shrink: 0;
+    display: flex;
+    gap: 10px;
+    padding: 10px 16px 12px;
+    border-top: 1px solid var(--border, #e5e7eb);
+    background: var(--card, #fff);
+}
+
+.shell-sheet-action {
+    flex: 1 1 0;
+    min-height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border, #e5e7eb);
+    border-radius: var(--radius-md, 12px);
+    background: #fff;
+    color: var(--text-main, #1f2937);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+    .shell-sheet-action:hover,
+    .shell-sheet-action:focus {
+        background: #f3f4f6;
+        color: var(--text-main, #1f2937);
+        text-decoration: none;
+    }
+
+    .shell-sheet-action i {
+        font-size: 18px;
+        line-height: 1;
+    }
+
+.shell-sheet-action--danger {
+    color: #d84c4b;
+    border-color: #f8d7d6;
+    background: #feefea;
+}
+
+    .shell-sheet-action--danger:hover,
+    .shell-sheet-action--danger:focus {
+        background: #fcdcda;
+        color: #c23b3a;
+    }
+
+@keyframes shell-sheet-up {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+}
+
+@keyframes shell-sheet-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .shell-sheet,
+    .shell-sheet-backdrop {
+        animation: none;
+    }
+
+    .shell-sheet-tile {
+        transition: none;
+    }
+}

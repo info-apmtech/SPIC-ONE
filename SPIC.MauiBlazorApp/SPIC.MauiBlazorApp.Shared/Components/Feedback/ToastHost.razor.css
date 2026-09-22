@@ -1,0 +1,140 @@
+/* ToastHost — desktop/tablet: top-right stack; phone: bottom-centre above action bar / tab bar. */
+
+.fb-toasts {
+    position: fixed;
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    right: 16px;
+    z-index: var(--fb-z-toast, 10020);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: min(380px, calc(100vw - 32px));
+    pointer-events: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.fb-toast {
+    --fb-toast-accent: #2563eb;
+    --fb-toast-tint: #eff6ff;
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 12px 12px 14px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid var(--fb-toast-accent);
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.16);
+    pointer-events: auto;
+    animation: fb-toast-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.fb-toast--success { --fb-toast-accent: var(--primary, #0b6b3a); --fb-toast-tint: #ecfdf3; }
+.fb-toast--error   { --fb-toast-accent: #dc2626; --fb-toast-tint: #fef2f2; }
+.fb-toast--warning { --fb-toast-accent: #d97706; --fb-toast-tint: #fffbeb; }
+.fb-toast--info    { --fb-toast-accent: #2563eb; --fb-toast-tint: #eff6ff; }
+
+.fb-toast__icon {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: var(--fb-toast-accent);
+}
+
+.fb-toast__content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.fb-toast__title {
+    color: #111827;
+    font-size: 0.86rem;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.fb-toast__message {
+    color: #374151;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.fb-toast__close {
+    flex: 0 0 28px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -4px -4px -4px 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: 0.15s ease;
+}
+
+.fb-toast__close:hover,
+.fb-toast__close:focus-visible {
+    color: #111827;
+    background: #f3f4f6;
+    outline: none;
+}
+
+/* 767.98px matches the shell's phone breakpoint (Layout.css / tokens.css). */
+@media (max-width: 767.98px) {
+    /* The 28px dismiss glyph stays 28px – an invisible overlay gives it a 44px
+       thumb target without making the toast row any taller. */
+    .fb-toast__close {
+        position: relative;
+    }
+
+    .fb-toast__close::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: var(--tap-min, 44px);
+        height: var(--tap-min, 44px);
+        transform: translate(-50%, -50%);
+    }
+
+    .fb-toasts {
+        top: auto;
+        right: 12px;
+        left: 12px;
+        bottom: calc(12px
+                     + env(safe-area-inset-bottom, 0px)
+                     + var(--shell-bottom-offset, 0px)
+                     + var(--fb-actionbar-height, 0px));
+        width: auto;
+        align-items: center;
+    }
+
+    .fb-toast {
+        width: 100%;
+        max-width: 480px;
+        animation-name: fb-toast-in-up;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .fb-toast { animation-duration: 0.01s; }
+}
+
+@keyframes fb-toast-in {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fb-toast-in-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+}

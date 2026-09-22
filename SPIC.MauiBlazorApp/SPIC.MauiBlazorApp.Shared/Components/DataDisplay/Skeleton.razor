@@ -1,0 +1,80 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.DataDisplay
+
+@*
+    Skeleton - shimmering placeholder shown while data loads.
+
+    Variant: "text"  -> Rows text lines of Height (last one shorter)
+             "card"  -> Rows card-shaped blocks (title + 3 detail lines)
+             "table" -> a header bar + Rows table-like rows of 5 cells
+
+    Colours are translucent greys so the shimmer reads correctly on light and dark
+    backgrounds. Animation is disabled for users who prefer reduced motion.
+*@
+
+<div class="spic-skeleton spic-skeleton--@Variant" role="status" aria-busy="true" aria-live="polite">
+    <span class="visually-hidden">@LoadingText</span>
+
+    @if (Variant == "card")
+    {
+        @for (var i = 0; i < SafeRows; i++)
+        {
+            <div class="spic-skeleton-card" aria-hidden="true">
+                <div class="spic-skeleton-card-head">
+                    <span class="spic-skeleton-bar spic-skeleton-pill"></span>
+                    <span class="spic-skeleton-bar spic-skeleton-title"></span>
+                </div>
+                <span class="spic-skeleton-bar" style="width: 85%; height: @Height;"></span>
+                <span class="spic-skeleton-bar" style="width: 70%; height: @Height;"></span>
+                <span class="spic-skeleton-bar" style="width: 55%; height: @Height;"></span>
+            </div>
+        }
+    }
+    else if (Variant == "table")
+    {
+        <div class="spic-skeleton-table" aria-hidden="true">
+            <div class="spic-skeleton-trow spic-skeleton-thead">
+                @foreach (var w in CellWidths)
+                {
+                    <span class="spic-skeleton-bar" style="width: @w; height: 12px;"></span>
+                }
+            </div>
+            @for (var i = 0; i < SafeRows; i++)
+            {
+                <div class="spic-skeleton-trow">
+                    @foreach (var w in CellWidths)
+                    {
+                        <span class="spic-skeleton-bar" style="width: @w; height: @Height;"></span>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        @for (var i = 0; i < SafeRows; i++)
+        {
+            var last = i == SafeRows - 1 && SafeRows > 1;
+            <span class="spic-skeleton-bar spic-skeleton-line" aria-hidden="true"
+                  style="width: @(last ? "60%" : "100%"); height: @Height;"></span>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>Number of lines / cards / table rows to render. Default 3.</summary>
+    [Parameter] public int Rows { get; set; } = 3;
+
+    /// <summary>CSS height of each bar (text lines, detail lines, table cells). Default "14px".</summary>
+    [Parameter] public string Height { get; set; } = "14px";
+
+    /// <summary>"text" (default), "card" or "table".</summary>
+    [Parameter] public string Variant { get; set; } = "text";
+
+    /// <summary>Screen-reader only text. Default "Loading...".</summary>
+    [Parameter] public string LoadingText { get; set; } = "Loading...";
+
+    private int SafeRows => Math.Clamp(Rows, 1, 50);
+
+    // Varied cell widths so table rows do not look like a solid block.
+    private static readonly string[] CellWidths = { "8%", "26%", "22%", "18%", "14%" };
+}

@@ -466,6 +466,12 @@ public class SubDealerRegistrationController : ControllerBase
 			if (!string.IsNullOrWhiteSpace(msErrors))
 				return BadRequest(msErrors);
 		}
+
+		// A Create must never carry an existing id: edits go through PUT, and
+		// an accidental POST of an edit would insert a duplicate record.
+		if (model.Id != 0)
+			return BadRequest("A new Sub Dealer cannot be created with an existing Id. Use PUT api/SubDealerRegistration/{id} to update an existing record.");
+
 		var validationError = ValidateModel(model);
 		if (validationError != null)
 			return BadRequest(validationError);
@@ -486,12 +492,6 @@ public class SubDealerRegistrationController : ControllerBase
 
 		_db.SubDealerRegistrations.Add(entity);
 		await _db.SaveChangesAsync(cancellationToken);
-
-		if (string.IsNullOrWhiteSpace(entity.SubDealerCode))
-		{
-			entity.SubDealerCode = $"SD{entity.Id:D6}";
-			await _db.SaveChangesAsync(cancellationToken);
-		}
 
 		return Ok(ToModel(entity));
 	}

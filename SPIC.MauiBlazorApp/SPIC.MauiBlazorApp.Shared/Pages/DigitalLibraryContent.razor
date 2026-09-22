@@ -1,0 +1,340 @@
+@page "/DigitalLibrary/content"
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject DigitalLibraryApi Api
+@inject LoginState LoginState
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@implements IDisposable
+
+<PageTitle>All Content - Digital Library - SPIC ONE</PageTitle>
+
+@*
+    Digital Library "All Content" list (Figma frame supplied 2026-09-20). Reached from the
+    landing page's category cards / headings / "View All Content" with ?type=videos|products|
+    brochures, which pre-selects the type tab. The filters live in the URL and are sent to
+    api/Library; paging is server side and "Load More" appends the next page.
+*@
+
+<div class="dlc-page">
+
+    @if (CanAdd)
+    {
+        <PageHeader Title="All Content" Subtitle="@Subtitle" BackHref="/DigitalLibrary">
+            <Actions>
+                <button type="button" class="dlc-add" @onclick="() => _createOpen = true">
+                    <i class="bi bi-plus-square"></i> Add Content
+                </button>
+            </Actions>
+        </PageHeader>
+    }
+    else
+    {
+        <PageHeader Title="All Content" Subtitle="@Subtitle" BackHref="/DigitalLibrary" />
+    }
+
+    <div class="dlc-stats @(CanEdit ? "" : "dlc-stats-3")">
+        <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Products ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Products)">
+            <span class="dlc-stat-label">Product Information</span>
+            <span class="dlc-stat-value">@(_stats?.Products ?? 0)</span>
+            <span class="dlc-stat-hint">Product information pages</span>
+            <span class="dlc-stat-icon dlc-ic-blue"><i class="bi bi-clipboard2-data"></i></span>
+        </button>
+        <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Videos ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Videos)">
+            <span class="dlc-stat-label">AI Videos</span>
+            <span class="dlc-stat-value">@(_stats?.Videos ?? 0)</span>
+            <span class="dlc-stat-hint">Explainer and product videos</span>
+            <span class="dlc-stat-icon dlc-ic-purple"><i class="bi bi-camera-video"></i></span>
+        </button>
+        <button type="button" class="dlc-stat @(Type == DigitalLibraryType.Brochures ? "active" : "")" @onclick="() => SetType(DigitalLibraryType.Brochures)">
+            <span class="dlc-stat-label">Product Brochures</span>
+            <span class="dlc-stat-value">@(_stats?.Brochures ?? 0)</span>
+            <span class="dlc-stat-hint">Brochures, datasheets, catalogues</span>
+            <span class="dlc-stat-icon dlc-ic-pink"><i class="bi bi-journal-bookmark"></i></span>
+        </button>
+        @if (CanEdit)
+        {
+            <button type="button" class="dlc-stat @(Status == "draft" ? "active" : "")" @onclick='() => SetStatus("draft")'>
+                <span class="dlc-stat-label">Draft Content</span>
+                <span class="dlc-stat-value">@(_stats?.Drafts ?? 0)</span>
+                <span class="dlc-stat-hint">Pending content</span>
+                <span class="dlc-stat-icon dlc-ic-yellow"><i class="bi bi-pencil-square"></i></span>
+            </button>
+        }
+    </div>
+
+    <div class="dlc-filters">
+        <div class="dlc-tabs" role="tablist" aria-label="Content type">
+            <button type="button" role="tab" class="dlc-tab @(Type is null ? "active" : "")" aria-selected="@(Type is null)" @onclick="() => SetType(null)">All Types</button>
+            <button type="button" role="tab" class="dlc-tab @(Type == DigitalLibraryType.Videos ? "active" : "")" aria-selected="@(Type == DigitalLibraryType.Videos)" @onclick="() => SetType(DigitalLibraryType.Videos)">AI Videos</button>
+            <button type="button" role="tab" class="dlc-tab @(Type == DigitalLibraryType.Products ? "active" : "")" aria-selected="@(Type == DigitalLibraryType.Products)" @onclick="() => SetType(DigitalLibraryType.Products)">Products</button>
+            <button type="button" role="tab" class="dlc-tab @(Type == DigitalLibraryType.Brochures ? "active" : "")" aria-selected="@(Type == DigitalLibraryType.Brochures)" @onclick="() => SetType(DigitalLibraryType.Brochures)">Brochures</button>
+        </div>
+        <div class="dlc-filter-right">
+            @if (CanEdit)
+            {
+                <select class="dlc-select" aria-label="Status" value="@Status" @onchange="e => SetStatus(e.Value?.ToString())">
+                    <option value="">All Status</option>
+                    <option value="published">Published</option>
+                    <option value="draft">Draft</option>
+                </select>
+            }
+            <div class="dlc-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" placeholder="Search content..." aria-label="Search content" value="@Query" @oninput="e => SetQuery(e.Value?.ToString())" />
+            </div>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <Skeleton Variant="card" Rows="6" />
+    }
+    else if (_failed)
+    {
+        <EmptyState Icon="bi-wifi-off" Title="The library is not available" Message="@_error">
+            <button type="button" class="btn btn-outline-success" @onclick="() => Load(reset: true)">Try again</button>
+        </EmptyState>
+    }
+    else if (Items.Count == 0)
+    {
+        <EmptyState Icon="bi-collection" Title="No content found" Message="Try another type, status or search term.">
+            <button type="button" class="btn btn-outline-success" @onclick="ClearFilters">Clear filters</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="dlc-grid">
+            @foreach (var item in Items)
+            {
+                <DigitalLibraryCard @key="item.Id" Item="item"
+                                    ShowActions="CanEdit" CanUpdate="CanUpdate" CanDelete="CanDelete"
+                                    OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
+            }
+        </div>
+
+        @if (_hasMore)
+        {
+            <div class="dlc-more">
+                <button type="button" class="dlc-more-btn" disabled="@_loadingMore" @onclick="LoadMore">
+                    @if (_loadingMore)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    }
+                    Load More
+                </button>
+            </div>
+        }
+    }
+
+    @if (CanAdd)
+    {
+        <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
+    }
+    <DigitalLibraryUnpublishDialog Item="_unpublishTarget" OnConfirm="ConfirmUnpublish" OnCancel="() => _unpublishTarget = null" />
+</div>
+
+@code {
+    // Content is readable by every signed-in user; adding and editing needs the DigitalLibrary
+    // page in the designation (Admin / CorporateAdmin bypass). The API enforces the same rule.
+    private bool CanEdit => LoginState.CanAccess("DigitalLibrary");
+    private bool CanAdd => CanEdit && LoginState.Can("DigitalLibrary", "Entry");
+    private bool CanUpdate => CanEdit && LoginState.Can("DigitalLibrary", "Update");
+    private bool CanDelete => CanEdit && LoginState.Can("DigitalLibrary", "Delete");
+
+    private bool _createOpen;
+    private DigitalLibraryItem? _unpublishTarget;
+
+    private const int PageSize = 9;
+
+    [SupplyParameterFromQuery(Name = "type")] public string? TypeQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+
+    private DigitalLibraryType? Type { get; set; }
+    private string Status { get; set; } = "";
+    private string Query { get; set; } = "";
+
+    private List<DigitalLibraryItem> Items { get; set; } = new();
+    private LibraryStatsDto? _stats;
+    private int _page = 1;
+    private int _total;
+    private bool _hasMore;
+    private bool _loading = true;
+    private bool _loadingMore;
+    private bool _failed;
+    private string? _error;
+
+    private string _appliedKey = "";
+    private CancellationTokenSource? _search;
+
+    private string Subtitle => _loading ? "Loading..." : $"{_total} item{(_total == 1 ? "" : "s")} total";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Type = DigitalLibraryItem.ParseType(TypeQuery);
+        // A reader has no status filter at all, so a hand-typed ?status=draft is ignored here
+        // as well as server side.
+        Status = CanEdit ? (StatusQuery?.ToLowerInvariant() ?? "") : "";
+        Query = SearchQuery ?? "";
+
+        // Only refetch when the filters actually changed (OnParametersSet also runs on re-render).
+        var key = $"{Type}|{Status}|{Query}";
+        if (key == _appliedKey) return;
+        _appliedKey = key;
+
+        await Load(reset: true);
+    }
+
+    private LibraryContentStatus? StatusFilter => CanEdit
+        ? Status switch
+        {
+            "published" => LibraryContentStatus.Published,
+            "draft" => LibraryContentStatus.Draft,
+            _ => null
+        }
+        : LibraryContentStatus.Published;
+
+    private async Task Load(bool reset)
+    {
+        if (reset)
+        {
+            _page = 1;
+            _loading = true;
+            _failed = false;
+            _error = null;
+            StateHasChanged();
+        }
+        else
+        {
+            _loadingMore = true;
+        }
+
+        var kind = Type is null ? (LibraryContentKind?)null : DigitalLibraryItem.ToKind(Type.Value);
+        var result = await Api.ListAsync(kind, StatusFilter, Query, _page, PageSize);
+
+        if (Api.LastError is not null)
+        {
+            _error = Api.LastError;
+            Toast.Error(_error);
+            if (reset) { _failed = true; Items = new(); }
+            _loading = false;
+            _loadingMore = false;
+            return;
+        }
+
+        var mapped = Api.ToItems(result.Items);
+        if (reset) Items = mapped;
+        else Items.AddRange(mapped);
+
+        _total = result.Total;
+        _hasMore = result.HasMore;
+        _loading = false;
+        _loadingMore = false;
+
+        // Stat tiles show the whole library, so they are fetched once and after every change.
+        _stats = await Api.GetStatsAsync() ?? _stats;
+    }
+
+    private async Task LoadMore()
+    {
+        if (_loadingMore || !_hasMore) return;
+        _page++;
+        await Load(reset: false);
+    }
+
+    // Filters live in the URL so the landing page links, the back button and refresh all agree.
+    private void SetType(DigitalLibraryType? t) => Apply(t, Status, Query);
+    private void SetStatus(string? s) => Apply(Type, s ?? "", Query);
+    private void ClearFilters() => Apply(null, "", "");
+
+    private void SetQuery(string? q)
+    {
+        // Typing hits the API, so wait for a pause before changing the URL.
+        Query = q ?? "";
+        _search?.Cancel();
+        _search = new CancellationTokenSource();
+        var token = _search.Token;
+        var text = Query;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(400, token);
+                await InvokeAsync(() => Apply(Type, Status, text));
+            }
+            catch (TaskCanceledException) { }
+        });
+    }
+
+    private void Apply(DigitalLibraryType? t, string status, string query)
+    {
+        var parts = new List<string>();
+        if (t is not null) parts.Add("type=" + DigitalLibraryItem.RouteOf(t.Value));
+        if (!string.IsNullOrEmpty(status)) parts.Add("status=" + status);
+        if (!string.IsNullOrWhiteSpace(query)) parts.Add("q=" + Uri.EscapeDataString(query));
+        Nav.NavigateTo("/DigitalLibrary/content" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
+    }
+
+    private void Edit(DigitalLibraryItem item) => Nav.NavigateTo($"/DigitalLibrary/add/{DigitalLibraryItem.RouteOf(item.Type)}?id={item.Id}");
+
+    private async Task Delete(DigitalLibraryItem item)
+    {
+        if (!await Toast.ConfirmAsync("Delete content", $"Delete \"{item.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
+        if (!await Api.DeleteAsync(item.Id)) { Toast.Error(Api.LastError ?? "The item could not be deleted."); return; }
+        Items.Remove(item);
+        _total = Math.Max(0, _total - 1);
+        Toast.Success("Content deleted.");
+        _stats = await Api.GetStatsAsync() ?? _stats;
+    }
+
+    private async Task Archive(DigitalLibraryItem item)
+    {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Archived) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be archived.");
+            return;
+        }
+        Items.Remove(item);
+        _total = Math.Max(0, _total - 1);
+        Toast.Info("Content archived.");
+        _stats = await Api.GetStatsAsync() ?? _stats;
+    }
+
+    private async Task TogglePublish(DigitalLibraryItem item)
+    {
+        if (item.Published)
+        {
+            _unpublishTarget = item; // confirmed in the dialog
+            return;
+        }
+
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Published) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be published.");
+            return;
+        }
+        item.Published = true;
+        item.Status = LibraryContentStatus.Published;
+        Toast.Success("Content published.");
+        _stats = await Api.GetStatsAsync() ?? _stats;
+        if (StatusFilter == LibraryContentStatus.Draft) Items.Remove(item);
+    }
+
+    private async Task ConfirmUnpublish(DigitalLibraryItem item)
+    {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Draft) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be unpublished.");
+            return;
+        }
+        item.Published = false;
+        item.Status = LibraryContentStatus.Draft;
+        _unpublishTarget = null;
+        Toast.Success("Content moved to Drafts.");
+        _stats = await Api.GetStatsAsync() ?? _stats;
+        if (StatusFilter == LibraryContentStatus.Published) Items.Remove(item);
+    }
+
+    public void Dispose() => _search?.Cancel();
+}

@@ -1,0 +1,335 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@*
+    "Company Details" accordion: terminated/inactive status, business information, the
+    New Dealer saved details, SPIC security deposit, primary location, tax & compliance,
+    licences, bank details and office automation.
+
+    Everything is read-only except the header toggle and the pencil icons, which are raised
+    to the page as EventCallbacks so the page keeps owning navigation and the open flags.
+*@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "") mt-3">
+        <div class="accordion-header" @onclick="OnToggle">
+            Company Details
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                @if (IsTerminatedRestricted)
+                {
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-activity"></i> Terminated Status</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Final Amount Settled</div><div class="data-value">@(Dealer != null ? (Dealer.IsFinalAmountSettled.HasValue && Dealer.IsFinalAmountSettled.Value ? "Yes" : "No") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Final Approval Date</div><div class="data-value">@(Dealer?.FinalApprovalDate.HasValue == true && Dealer.FinalApprovalDate.Value != DateTime.MinValue ? Dealer.FinalApprovalDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Settlement Date</div><div class="data-value">@(Dealer?.SettlementDate.HasValue == true && Dealer.SettlementDate.Value != DateTime.MinValue ? Dealer.SettlementDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Settlement Amount</div><div class="data-value">₹@(Dealer?.SettlementAmount.ToString("N2") ?? "0")</div></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (Dealer?.Status == DR.DealerStatus.InActive)
+                {
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-pause-circle"></i> Inactive Status</h4>
+                                <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Last Transaction Date</div><div class="data-value">@(Dealer?.LastTransactionDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Is Last Transaction a Sale?</div><div class="data-value">@(Dealer?.IsLastTransactionIsSale == true ? "Yes" : "No")</div></div>
+                                <div class="data-row"><div class="data-label">Debtor Balance</div><div class="data-value">₹@(Dealer?.DebitorBalance.ToString("N2") ?? "0")</div></div>
+                                <div class="data-row"><div class="data-label">Future Business Proposal</div><div class="data-value">@DealerReviewFormat.GetInactiveProposalDisplay(Dealer)</div></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-briefcase"></i> Business Information</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Firm Name</div><div class="data-value">@(Dealer?.FirmName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(Dealer?.DealerCode ?? (Dealer?.IsNewDealerRegistration == true ? "Pending — generated after final approval" : (Dealer != null ? $"DL-{Dealer.Id}" : "-")))</div></div>
+                            @if (Dealer?.InSpic ?? false)
+                            {
+                                <div class="data-row"><div class="data-label">Date of Appointment (SPIC)</div><div class="data-value">@(Dealer?.DateOfAppointment.ToString("dd MMM yyyy") ?? "-")</div></div>
+                            }
+                            @if (Dealer?.InGreenStar ?? false)
+                            {
+                                <div class="data-row"><div class="data-label">Date of Appointment (Greenstar)</div><div class="data-value">@(Dealer?.GreenstarDateOfAppointment?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                            }
+                            @* <div class="data-row"><div class="data-label">Business Type</div><div class="data-value">@(Dealer?.BusinessEntityType ?? "-")</div></div> *@
+                            @if (ShowBusinessInfo)
+                            {
+                                <div class="data-row"><div class="data-label">Years of Experience</div><div class="data-value">@(Dealer?.YearsofExperiance > 0 ? $"{Dealer.YearsofExperiance} Years" : "-")</div></div>
+                                <div class="data-row"><div class="data-label">Entity Type</div><div class="data-value">@DealerReviewFormat.GetEntityTypeName(Dealer?.EntityType)</div></div>
+                            }</div>
+                    </div>
+                </div>
+                @if (ShowNewDealerSavedDetails)
+                {
+                    <div class="col-12">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-person-badge"></i> New Dealer Saved Details</h4>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="row g-4">
+                                    <div class="col-12 col-lg-6">
+                                        <div class="newdealer-review-box">
+                                            <div class="newdealer-review-title">Registration & Generated Codes</div>
+                                            <div class="data-row"><div class="data-label">Registration Type</div><div class="data-value">New Dealer</div></div>
+                                            <div class="data-row"><div class="data-label">Selected Company</div><div class="data-value">@DealerReviewFormat.GetSelectedCompanyDisplay(Dealer)</div></div>
+                                            <div class="data-row"><div class="data-label">Dealer Code</div><div class="data-value">@(Dealer?.DealerCode ?? "Pending - generated after final approval")</div></div>
+                                            @if (Dealer?.InSpic == true || !string.IsNullOrWhiteSpace(Dealer?.SPICCode))
+                                            {
+                                                <div class="data-row"><div class="data-label">SPIC Code</div><div class="data-value">@(Dealer?.SPICCode ?? "-")</div></div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(Dealer?.NCode))
+                                            {
+                                                <div class="data-row"><div class="data-label">GreenStar N Code</div><div class="data-value">@(Dealer?.NCode ?? "-")</div></div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(Dealer?.GreenStarCode))
+                                            {
+                                                <div class="data-row"><div class="data-label">GreenStar Z Code</div><div class="data-value">@(Dealer?.GreenStarCode ?? "-")</div></div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(Dealer?.TnCode))
+                                            {
+                                                <div class="data-row"><div class="data-label">GreenStar T Code</div><div class="data-value">@(Dealer?.TnCode ?? "-")</div></div>
+                                            }
+                                        </div>
+                                    </div>
+
+                                    @if (Dealer?.InSpic == true ||
+                                         Dealer?.DealershipApplicationFeeBankId.HasValue == true ||
+                                         !string.IsNullOrWhiteSpace(Dealer?.DealershipApplicationFeeDDNumber) ||
+                                         Dealer?.DealershipApplicationFeeAmount.HasValue == true)
+                                    {
+                                        <div class="col-12 col-lg-6">
+                                            <div class="newdealer-review-box">
+                                                <div class="newdealer-review-title">SPIC Dealership Application Fee</div>
+                                                <div class="data-row"><div class="data-label">Bank</div><div class="data-value">@DealerReviewFormat.GetReviewBankName(BankNames, Dealer?.DealershipApplicationFeeBankId)</div></div>
+                                                <div class="data-row"><div class="data-label">DD Number</div><div class="data-value">@(Dealer?.DealershipApplicationFeeDDNumber ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">DD Date</div><div class="data-value">@(Dealer?.DealershipApplicationFeeDDDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">Amount</div><div class="data-value">@DealerReviewFormat.MoneyOrDash(Dealer?.DealershipApplicationFeeAmount)</div></div>
+                                                <div class="data-row"><div class="data-label">Payable At</div><div class="data-value">@(Dealer?.DealershipApplicationFeePayableAt ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">Attachment</div><div class="data-value">@RenderFileRow(Dealer?.DealershipApplicationFeeFilePath)</div></div>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (Dealer?.InSpic == true ||
+                                         Dealer?.SpicTradeDepositDDBankId.HasValue == true ||
+                                         !string.IsNullOrWhiteSpace(Dealer?.SpicTradeDepositDDNumber) ||
+                                         Dealer?.SpicTradeDepositDDAmount.HasValue == true)
+                                    {
+                                        <div class="col-12 col-lg-6">
+                                            <div class="newdealer-review-box">
+                                                <div class="newdealer-review-title">SPIC Trade Deposit - New Dealer</div>
+                                                <div class="data-row"><div class="data-label">Bank</div><div class="data-value">@DealerReviewFormat.GetReviewBankName(BankNames, Dealer?.SpicTradeDepositDDBankId)</div></div>
+                                                <div class="data-row"><div class="data-label">DD Number</div><div class="data-value">@(Dealer?.SpicTradeDepositDDNumber ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">DD Date</div><div class="data-value">@(Dealer?.SpicTradeDepositDDDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">Amount</div><div class="data-value">@DealerReviewFormat.MoneyOrDash(Dealer?.SpicTradeDepositDDAmount)</div></div>
+                                                <div class="data-row"><div class="data-label">Attachment</div><div class="data-value">@RenderFileRow(Dealer?.SpicTradeDepositFilePath)</div></div>
+                                            </div>
+                                        </div>
+                                    }
+
+                                    @if (Dealer?.InGreenStar == true ||
+                                         Dealer?.GflTradeDepositDDBankId.HasValue == true ||
+                                         !string.IsNullOrWhiteSpace(Dealer?.GflTradeDepositDDNumber) ||
+                                         Dealer?.GflTradeDepositDDAmount.HasValue == true)
+                                    {
+                                        <div class="col-12 col-lg-6">
+                                            <div class="newdealer-review-box">
+                                                <div class="newdealer-review-title">GFL / GreenStar Trade Deposit - New Dealer</div>
+                                                <div class="data-row"><div class="data-label">Bank</div><div class="data-value">@DealerReviewFormat.GetReviewBankName(BankNames, Dealer?.GflTradeDepositDDBankId)</div></div>
+                                                <div class="data-row"><div class="data-label">DD Number</div><div class="data-value">@(Dealer?.GflTradeDepositDDNumber ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">DD Date</div><div class="data-value">@(Dealer?.GflTradeDepositDDDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                                                <div class="data-row"><div class="data-label">Amount</div><div class="data-value">@DealerReviewFormat.MoneyOrDash(Dealer?.GflTradeDepositDDAmount)</div></div>
+                                                <div class="data-row"><div class="data-label">Attachment</div><div class="data-value">@RenderFileRow(Dealer?.GflTradeDepositFilePath)</div></div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (Dealer?.InSpic == true)
+                {
+                    <div class="col-md-6">
+                        <div class="detail-card">
+                            <div class="detail-card-header">
+                                <h4 class="detail-card-title"><i class="bi bi-cash-coin"></i> Security Deposit Details for SPIC</h4>
+                            </div>
+                            <div class="detail-card-body">
+                                <div class="data-row"><div class="data-label">Security Deposit Amount</div><div class="data-value">@DealerReviewFormat.MoneyOrDash(Dealer?.SpicSecurityDepositAmount)</div></div>
+                                <div class="data-row"><div class="data-label">Security Deposit Receipt No</div><div class="data-value">@(Dealer?.SpicSecurityDepositReceiptNo ?? "-")</div></div>
+                                <div class="data-row"><div class="data-label">Security Deposit Date</div><div class="data-value">@(Dealer?.SpicSecurityDepositDate?.ToString("dd MMM yyyy") ?? "-")</div></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+@*                 <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-cash-stack"></i> Investment & Credit</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Capital Investment</div><div class="data-value">₹@(Dealer?.CapitalInvestment.ToString("N2") ?? "0")</div></div>
+                            <div class="data-row"><div class="data-label">Investment Remarks</div><div class="data-value">@(Dealer?.CapitalInvestmentRemarks ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Cash Credit Limit</div><div class="data-value">₹@(Dealer?.CashCreditLimit.ToString("N2") ?? "0")</div></div>
+                            <div class="data-row"><div class="data-label">Credit Limit Remarks</div><div class="data-value">@(Dealer?.CashCreditLimitRrmarks ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+ *@
+                @if (!IsTerminatedRestricted)
+                {
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-geo-alt"></i> Primary Location</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @* <div class="data-row"><div class="data-label">Google Map URL</div><div class="data-value text-primary">@(Dealer?.GoogleMapURL ?? "-")</div></div> *@
+                            <div class="data-row"><div class="data-label">Shop No / Room No / Block No</div><div class="data-value">@(Dealer?.ShopNoORRoomNoOrBlockNo ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Street / Area / Locality</div><div class="data-value">@(Dealer?.Street ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Sub Village</div><div class="data-value">@(Dealer?.SubVillage ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Village</div><div class="data-value">@(Dealer?.Village ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Pincode</div><div class="data-value">@(Dealer?.PinCode ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Block</div><div class="data-value">@(Dealer?.Block ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Taluk</div><div class="data-value">@(Dealer?.Taluk ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">District</div><div class="data-value">@(DistrictName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">State</div><div class="data-value">@(StateName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Official Contact Number</div><div class="data-value">@(Dealer?.OfficialContactNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">WhatsApp Number</div><div class="data-value">@(Dealer?.WhatsAppNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Alternative Number</div><div class="data-value">@(Dealer?.AlternativeNumber ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-shield-check"></i> Tax & Compliance</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">GST Number</div><div class="data-value">@(Dealer?.GSTNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(Dealer?.GSTFilePath)</div></div>
+                            <div class="data-row mt-4"><div class="data-label">PAN Number</div><div class="data-value">@(Dealer?.PANNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(Dealer?.PANFilePath)</div></div>
+                            <div class="data-row mt-4"><div class="data-label">Aadhaar Number</div><div class="data-value">@(Dealer?.AadhaarNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(Dealer?.AadhaarFilePath)</div></div>
+                            <div class="data-row mt-4"><div class="data-label">TAN Number</div><div class="data-value">@(Dealer?.TANNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(Dealer?.TANFilePath)</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-box-seam"></i> Wholesale Fertilizer Details</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                        </div>
+                       <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Wholesale Fertilizer License</div><div class="data-value">@(Dealer?.WholeSaleFertilizerLicenseNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Expiry Date</div><div class="data-value">@(Dealer?.WholesaleLicenseExpiryDate != DateTime.MinValue ? Dealer?.WholesaleLicenseExpiryDate.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">mFMS Code</div><div class="data-value">@(Dealer?.WholesalemFMSCode ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(Dealer?.WholesaleLicenseFilePath)</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-shop"></i> Retail Fertilizer Details</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                        </div>
+                       <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Retail Fertilizer License Details</div><div class="data-value">@(Dealer?.RetailFertilizerLicenseNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Expiry Date</div><div class="data-value">@(Dealer?.RetailLicenseExpiryDate != DateTime.MinValue ? Dealer?.RetailLicenseExpiryDate.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">mFMS Code</div><div class="data-value">@(Dealer?.RetailmFMSCode ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">File</div><div class="data-value">@RenderFileRow(Dealer?.RetailLicenseFilePath)</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-bank"></i> Bank Details</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Account Holder Name</div><div class="data-value">@(Dealer?.AccountHolderName ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Account Number</div><div class="data-value">@(Dealer?.AccountNumber ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">Bank Name</div><div class="data-value">@(Dealer != null && BankNames.TryGetValue(Dealer.BankId ?? 0, out var dbn) ? dbn : (Dealer?.BankId.ToString() ?? "-"))</div></div>
+                            <div class="data-row"><div class="data-label">Bank Branch</div><div class="data-value">@(Dealer?.Branch ?? "-")</div></div>
+                            <div class="data-row"><div class="data-label">IFSC Code</div><div class="data-value">@(Dealer?.IFSC ?? "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-pc-display"></i> Office Automation</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEditRegister" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            <div class="data-row"><div class="data-label">Do you have office automation</div><div class="data-value">@(Dealer != null ? (Dealer.IsOfficeAutomation ? "Yes" : "No") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Expected Automation Date</div><div class="data-value">@(Dealer?.ExpectedOfficeAutomationDate.HasValue == true && Dealer.ExpectedOfficeAutomationDate.Value != DateTime.MinValue ? Dealer.ExpectedOfficeAutomationDate.Value.ToString("dd MMM yyyy") : "-")</div></div>
+                            <div class="data-row"><div class="data-label">Enrolled in eDAK</div><div class="data-value">@(Dealer != null ? (Dealer.IsSDWA ? "Yes" : "No") : "-")</div></div>
+                        </div>
+                    </div>
+                </div>
+                }
+            </div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnEditRegister { get; set; }
+
+    [Parameter] public DR.DealerRegistration? Dealer { get; set; }
+    [Parameter] public bool IsTerminatedRestricted { get; set; }
+    [Parameter] public bool ShowBusinessInfo { get; set; }
+    [Parameter] public bool ShowNewDealerSavedDetails { get; set; }
+    [Parameter] public string? DistrictName { get; set; }
+    [Parameter] public string? StateName { get; set; }
+    [Parameter] public Dictionary<int, string> BankNames { get; set; } = new();
+
+    /// <summary>Base url and token used to build the "View" file links; both are constant
+    /// for the lifetime of the page, so they never force a re-render.</summary>
+    [Parameter] public string? ApiBaseUrl { get; set; }
+    [Parameter] public string? AuthToken { get; set; }
+
+    [Parameter] public int DataVersion { get; set; }
+
+    private RenderFragment RenderFileRow(string? path) =>
+        DealerReviewFormat.FileRow(ApiBaseUrl, AuthToken, path);
+}

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,6 +13,7 @@ namespace SpicAPI.Controllers
 	/// AgricultureBulkUploadController. The RakePointMasters table is created
 	/// manually, so no EF migration is involved.
 	/// </summary>
+	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class RakePointMasterController : ControllerBase

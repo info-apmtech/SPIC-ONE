@@ -1,0 +1,135 @@
+@page "/Activities"
+@using SPIC.Core.Entities
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+@*
+    "My Activities" hub - a phone tab destination (bottom tab bar) that gathers the
+    field-staff day: what is pending on the user, guest house bookings and reports.
+    Pure navigation: no API calls, no writes. Every tile is filtered through
+    LoginState so a user never sees a link the route guard would refuse, and a
+    section with no visible tile is not rendered at all.
+*@
+
+<div class="hub-page">
+
+    <PageHeader Title="My Activities"
+                Subtitle="Field work, approvals and bookings in one place"
+                ShowBack="false" />
+
+    @{
+        var field = Visible(FieldTiles);
+        var pending = Visible(PendingTiles);
+        var guestHouse = Visible(GuestHouseTiles);
+        var reports = Visible(ReportTiles);
+    }
+
+    <HubSection Title="Field activities">
+        @foreach (var tile in field)
+        {
+            <HubTile @key="tile.Key" Icon="@tile.Icon" Label="@tile.Label" Hint="@tile.Hint" Href="@tile.Href" />
+        }
+        <HubNotice Icon="bi-stars"
+                   Title="More of the Sales Activity System is on its way"
+                   Message="Budgeting, van tracking, field programmes and farm activities will be recorded right here."
+                   Points="@FieldActivityPoints" />
+    </HubSection>
+
+    @if (pending.Count > 0)
+    {
+        <HubSection Title="Pending on you">
+            @foreach (var tile in pending)
+            {
+                <HubTile @key="tile.Key" Icon="@tile.Icon" Label="@tile.Label" Hint="@tile.Hint" Href="@tile.Href" />
+            }
+        </HubSection>
+    }
+
+    @if (guestHouse.Count > 0)
+    {
+        <HubSection Title="Guest house">
+            @foreach (var tile in guestHouse)
+            {
+                <HubTile @key="tile.Key" Icon="@tile.Icon" Label="@tile.Label" Hint="@tile.Hint" Href="@tile.Href" />
+            }
+        </HubSection>
+    }
+
+    @if (reports.Count > 0)
+    {
+        <HubSection Title="Reports">
+            @foreach (var tile in reports)
+            {
+                <HubTile @key="tile.Key" Icon="@tile.Icon" Label="@tile.Label" Hint="@tile.Hint" Href="@tile.Href" />
+            }
+        </HubSection>
+    }
+
+</div>
+
+@code {
+    private sealed record HubLink(
+        string Key,
+        string Label,
+        string Hint,
+        string Icon,
+        string Href,
+        Func<LoginState, bool> Rule);
+
+    private static readonly string[] FieldActivityPoints =
+    {
+        "Daily activity log", "Dealer visits", "Farmer meetings", "Tour plans"
+    };
+
+    private static readonly HubLink[] FieldTiles =
+    {
+        new("SampleCollection", "Sample Collection", "Collect soil and water samples, take payment, send to the lab",
+            "bi-droplet-half", "/SampleCollection",
+            s => s.CanAccess("SampleCollection")),
+
+        new("ConsignmentHistory", "Consignment History", "Track every consignment and its lab results",
+            "bi-box-seam", "/ConsignmentHistory",
+            s => s.CanAccess("ConsignmentHistory")),
+    };
+
+    private static readonly HubLink[] PendingTiles =
+    {
+        new("SchemeApproval", "Scheme Approval", "Approve or return dealer scheme requests",
+            "bi-clipboard-check", "/SchemeApproval",
+            s => s.UserRole != AppRole.Dealer && (s.CanAccess("SchemeApproval") || s.UserRole == AppRole.Director)),
+
+        new("MOSubmissionValidation", "MO Submission Validation", "Check submissions made by marketing officers",
+            "bi-check2-square", "/MOSubmissionValidation",
+            s => s.CanAccess("MOSubmissionValidation")),
+
+        new("RMApprovalStatus", "RM Approval Status", "Track where your submissions have reached",
+            "bi-hourglass-split", "/RMApprovalStatus",
+            s => s.CanAccess("RMApprovalStatus")),
+
+        new("CompanySales", "Pending Acknowledgement", "Acknowledge company sales entries",
+            "bi-receipt", "/CompanySales",
+            s => s.CanAccess("CompanySales")),
+    };
+
+    private static readonly HubLink[] GuestHouseTiles =
+    {
+        new("GuestHouse", "Book a room", "Check availability and raise a booking",
+            "bi-house-door", "/GuestHouse",
+            s => s.CanAccess("GuestHouse")),
+
+        new("MyBookings", "My Bookings", "Your upcoming and past stays",
+            "bi-calendar2-check", "/MyBookings",
+            s => s.CanAccess("MyBookings")),
+    };
+
+    private static readonly HubLink[] ReportTiles =
+    {
+        new("ReportsCenter", "Reports Center", "Sales, stock and ageing reports in one place",
+            "bi-bar-chart-line", "/ReportsCenter",
+            s => s.CanAccess("ReportsCenter")),
+    };
+
+    private List<HubLink> Visible(HubLink[] tiles) =>
+        LoginState.IsLoggedIn
+            ? tiles.Where(t => t.Rule(LoginState)).ToList()
+            : new List<HubLink>();
+}

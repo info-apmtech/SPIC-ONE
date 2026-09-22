@@ -1,4 +1,5 @@
 ﻿using System;
+using Microsoft.AspNetCore.Authorization;
 using System.IO;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
@@ -9,6 +10,7 @@ using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
+	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class StockReportController : ControllerBase
