@@ -156,7 +156,7 @@ var records = _context.RakePointMasters
 		}
 
 		// POST /api/RakePointMaster/bulk-upload
-		// Excel template columns: "Rakepoint Code" and "Name".
+		// Excel template columns: "Rakepoint Code", "Name" and an optional "State".
 		[HttpPost("bulk-upload")]
 		public async Task<IActionResult> BulkUpload(IFormFile file)
 		{
@@ -169,31 +169,92 @@ var records = _context.RakePointMasters
 
 			using var stream = file.OpenReadStream();
 			using var workbook = new XLWorkbook(stream);
-			var worksheet = workbook.Worksheets.First();
-
-			var headerRow = worksheet.Row(1);
-			var lastHeaderCell = headerRow.LastCellUsed()?.Address.ColumnNumber ?? 0;
-			if (lastHeaderCell == 0)
-				return BadRequest(new { message = "Empty worksheet or missing header row" });
-
+			// Do not assume the first worksheet: the active table may live in another
+			// sheet (e.g. a leading "Instructions"/"Read Me" tab). Skip worksheets
+			// without any used row and pick the first one (in tab order) whose header
+			// row is recognized. Header titles are matched after normalization
+			// (lowercase; trim + strip ALL whitespace, underscores and hyphens), so
+			// "Rake Point Code", "Rake_Point_Code", "Rake-Point-Code" and
+			// "Rakepoint Code" all map to "rakepointcode".
+			IXLWorksheet? worksheet = null;
 			var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-			for (int c = 1; c <= lastHeaderCell; c++)
+			var headerRowNumber = 0;
+			var sheetDebug = new List<object>();
+
+			foreach (var ws in workbook.Worksheets)
 			{
-				var n = NormalizeHeader(headerRow.Cell(c).GetString());
-				if (!string.IsNullOrEmpty(n) && !headerMap.ContainsKey(n))
-					headerMap[n] = c;
+				var lastRow = ws.LastRowUsed();
+				if (lastRow == null)
+				{
+					sheetDebug.Add(new { name = ws.Name, rows = new List<object>() });
+					continue;
+				}
+
+				var scanLimit = Math.Min(lastRow.RowNumber(), 10);
+				var rowsDebug = new List<object>();
+				var candidates = new List<Dictionary<string, int>>();
+
+				for (int r = 1; r <= scanLimit; r++)
+				{
+					var row = ws.Row(r);
+					var lastCell = row.LastCellUsed()?.Address.ColumnNumber ?? 0;
+					var values = new List<string>();
+					var candidate = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+					for (int c = 1; c <= lastCell; c++)
+					{
+						var raw = row.Cell(c).GetString();
+						values.Add(raw);
+
+						var n = NormalizeHeader(raw);
+						if (!string.IsNullOrEmpty(n) && !candidate.ContainsKey(n))
+							candidate[n] = c;
+					}
+
+					AddAliasEntries(candidate);
+					candidates.Add(candidate);
+
+					rowsDebug.Add(new
+					{
+						row = r,
+						values,
+						normalized = candidate.Select(kvp => $"{kvp.Key}=C{kvp.Value}").ToList()
+					});
+				}
+
+				for (int r = 0; r < candidates.Count && worksheet == null; r++)
+				{
+					if (candidates[r].ContainsKey("rakepointcode") && candidates[r].ContainsKey("name"))
+					{
+						headerMap = candidates[r];
+						headerRowNumber = r + 1;
+						worksheet = ws;
+					}
+				}
+
+				sheetDebug.Add(new { name = ws.Name, rows = rowsDebug });
+
+				if (worksheet != null)
+					break;
 			}
 
-			AddAliasEntries(headerMap);
+			if (worksheet == null)
+			{
+				return BadRequest(new
+				{
+					message = "Empty worksheet or missing header row",
+					debug = new
+					{
+						sheets = sheetDebug,
+						note = "A header row containing both 'rakepointcode' and 'name' was not found in the first 10 rows of any worksheet."
+					}
+				});
+			}
 
-			var expected = new[] { "rakepointcode", "name" };
-			var missing = expected.Where(h => !headerMap.ContainsKey(h)).ToList();
-			if (missing.Any())
-				return BadRequest(new { message = $"Invalid template. Missing columns: {string.Join(", ", missing)}" });
-
-			var dataRows = worksheet.RowsUsed().Skip(1).ToList();
+			var dataRows = worksheet.RowsUsed().Where(row => row.RowNumber() > headerRowNumber).ToList();
 			var now = DateTime.Now;
 			var insertedCount = 0;
+			var updatedCount = 0;
 			var totalRows = 0;
 			var rejectedRecords = new List<RejectedRecord>();
 			var duplicateRecords = new List<object>();
@@ -204,12 +265,22 @@ var records = _context.RakePointMasters
 			foreach (var existing in _context.RakePointMasters)
 				existingByCode[existing.RakePointCode.Trim()] = existing;
 
+			// Pre-load the State master to resolve the optional "State" column.
+			var stateIdByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+			foreach (var state in _context.States)
+			{
+				if (!string.IsNullOrWhiteSpace(state.StateName))
+					stateIdByName[state.StateName.Trim()] = state.Id;
+			}
+
 			try
 			{
 				foreach (var row in dataRows)
 				{
 					var code = GetCellString(row, headerMap, "rakepointcode");
 					var name = GetCellString(row, headerMap, "name");
+					// Optional State column (blank when the workbook has no State header).
+					var stateName = GetCellString(row, headerMap, "state");
 
 					if (string.IsNullOrWhiteSpace(code))
 					{
@@ -240,32 +311,63 @@ var records = _context.RakePointMasters
 						continue;
 					}
 
-					// SAP Code already exists in database — skip instead of updating
-					if (existingByCode.ContainsKey(key))
+					// Resolve the optional State column. Empty State -> StateId is left
+					// unchanged (or null for inserts). Unknown State name -> skip only
+					// this row and report the missing State.
+					int? resolvedStateId = null;
+
+					if (!string.IsNullOrWhiteSpace(stateName))
 					{
-						duplicateRecords.Add(new
+						if (!stateIdByName.TryGetValue(
+							stateName,
+							out var stateId))
 						{
-							rowNumber = row.RowNumber(),
-							sapCode = key,
-							rakePointName = name.Trim(),
-							reason = "SAP Code already exists in database"
-						});
-						continue;
+							duplicateRecords.Add(new
+							{
+								rowNumber = row.RowNumber(),
+								sapCode = key,
+								rakePointName = name.Trim(),
+								reason = $"Invalid State: '{stateName}' not found in State Master"
+							});
+							continue;
+						}
+
+						resolvedStateId = stateId;
 					}
 
-					var ent = new RakePointMaster
+					// Existing RakePoint Code -> update StateId only. The existing
+					// Code and Name are never changed.
+					if (existingByCode.TryGetValue(
+						key,
+						out var existingRecord))
 					{
-						RakePointCode = key,
-						Name = name.Trim(),
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						CreatedBy = "bulk-upload",
-						UpdatedBy = "bulk-upload"
-					};
-					_context.RakePointMasters.Add(ent);
-					existingByCode[key] = ent;
-					insertedCount++;
+						if (resolvedStateId.HasValue &&
+							existingRecord.StateId != resolvedStateId.Value)
+						{
+							existingRecord.StateId = resolvedStateId.Value;
+							existingRecord.UpdatedAt = now;
+							existingRecord.UpdatedBy = "bulk-upload";
+						}
+
+						updatedCount++;
+					}
+					else
+					{
+						var ent = new RakePointMaster
+						{
+							RakePointCode = key,
+							Name = name.Trim(),
+							StateId = resolvedStateId,
+							IsActive = true,
+							CreatedAt = now,
+							UpdatedAt = now,
+							CreatedBy = "bulk-upload",
+							UpdatedBy = "bulk-upload"
+						};
+						_context.RakePointMasters.Add(ent);
+						existingByCode[key] = ent;
+						insertedCount++;
+					}
 				}
 
 				await _context.SaveChangesAsync();
@@ -279,6 +381,7 @@ var records = _context.RakePointMasters
 			{
 				TotalRecords = totalRows,
 				InsertedCount = insertedCount,
+				UpdatedCount = updatedCount,
 				RejectedCount = rejectedRecords.Count,
 				RejectedRecords = rejectedRecords,
 				DuplicateRecords = duplicateRecords
@@ -294,7 +397,8 @@ var records = _context.RakePointMasters
 			(string Header, string Sample)[] columns = new[]
 			{
 				("Rakepoint Code", "PABS"),
-				("Name", "Abohar Rkpt")
+				("Name", "Abohar Rkpt"),
+				("State", "Punjab")
 			};
 
 			using var wb = new XLWorkbook();
@@ -331,7 +435,11 @@ var records = _context.RakePointMasters
 		}
 
 		private static string NormalizeHeader(string h) =>
-			(h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
+			string.IsNullOrWhiteSpace(h) ? string.Empty : new string(h
+				.Trim()
+				.Where(ch => !char.IsWhiteSpace(ch) && ch != '_' && ch != '-')
+				.Select(char.ToLowerInvariant)
+				.ToArray());
 
 		private static void AddAliasEntries(Dictionary<string, int> headerMap)
 		{

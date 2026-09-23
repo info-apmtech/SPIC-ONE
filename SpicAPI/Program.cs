@@ -8,6 +8,7 @@ using Microsoft.OpenApi;
 using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services;
 using Spic.Infrastructure.Services.Assistant;
+using Spic.Infrastructure.Services.Payments;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using SpicAPI.Services;
@@ -105,6 +106,18 @@ builder.Services.AddScoped<IAssistantProvider>(sp =>
 builder.Services.Configure<ContactUsMailOptions>(
     builder.Configuration.GetSection(ContactUsMailOptions.SectionName));
 builder.Services.AddScoped<IContactUsMailService, ContactUsMailService>();
+
+// SDWA Guest House online payment. KeySecret comes from the Razorpay__KeySecret
+// environment variable in Azure (never from appsettings.json) - see RazorpayOptions.
+builder.Services.Configure<RazorpayOptions>(
+    builder.Configuration.GetSection(RazorpayOptions.SectionName));
+builder.Services.AddScoped<IRazorpayService, RazorpayService>();
+
+// How long a PendingPayment Guest House booking still holds its room slot before the
+// hold lapses and the room becomes bookable by someone else again - see
+// GuestHouseBookingOptions.
+builder.Services.Configure<GuestHouseBookingOptions>(
+    builder.Configuration.GetSection(GuestHouseBookingOptions.SectionName));
 
 // Shares the IFMS portal-password encryption keys with the automation service.
 // The application name is part of the key derivation, so it must match the
