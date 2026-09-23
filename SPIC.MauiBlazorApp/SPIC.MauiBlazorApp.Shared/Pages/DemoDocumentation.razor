@@ -1,0 +1,632 @@
+﻿@page "/DemoDocumentation"
+
+@inject HttpClient Http
+
+
+<div class="container-fluid py-4">
+
+    <PageHeader Title="Demo Documentation"
+                Subtitle="Track eligible field demonstrations and treatment-wise documentation">
+
+        <Actions>
+
+            <div class="info-alert">
+
+                <i class="bi bi-info-circle"></i>
+
+                <span>
+                    Records are shown for CSR2 Completed and eligible Program Type only
+                </span>
+
+            </div>
+
+        </Actions>
+
+    </PageHeader>
+
+
+
+    <!-- FILTER CARD -->
+
+    <div class="filter-card">
+
+
+        <div class="filter-header">
+
+            <span>
+                <i class="bi bi-funnel"></i>
+                Filters
+            </span>
+
+            <i class="bi bi-chevron-down"></i>
+
+        </div>
+
+
+
+        <div class="filter-body">
+
+
+            <div class="filter-grid">
+
+
+                <div>
+                    <label>Sanction Number</label>
+
+                    <select class="form-control"
+                            @bind="SelectedSeason">
+
+                        <option value="">
+                            Select Sanction Number
+                        </option>
+
+                        @foreach (var item in DemoList.Select(x => x.SeasonNumber).Distinct())
+                        {
+                            <option value="@item">@item</option>
+                        }
+
+                    </select>
+
+                </div>
+
+
+
+                <div>
+                    <label>Program Name</label>
+
+                    <select class="form-control"
+                            @bind="SelectedProgram">
+
+                        <option value="">
+                            Select Program Name
+                        </option>
+
+                        @foreach (var item in DemoList.Select(x => x.ProgramName).Distinct())
+                        {
+                            <option value="@item">@item</option>
+                        }
+
+                    </select>
+
+                </div>
+
+
+
+                <div>
+                    <label>Product</label>
+
+                    <select class="form-control"
+                            @bind="SelectedProduct">
+
+                        <option value="">
+                            Select Product
+                        </option>
+
+                        @foreach (var item in DemoList.Select(x => x.Product).Distinct())
+                        {
+                            <option value="@item">@item</option>
+                        }
+
+                    </select>
+
+                </div>
+
+
+
+                <div>
+                    <label>Crop</label>
+
+                    <select class="form-control"
+                            @bind="SelectedCrop">
+
+                        <option value="">
+                            Select Crop
+                        </option>
+
+                        @foreach (var item in DemoList.Select(x => x.Crop).Distinct())
+                        {
+                            <option value="@item">@item</option>
+                        }
+
+                    </select>
+
+                </div>
+
+
+
+                <div>
+                    <label>District</label>
+
+                    <select class="form-control"
+                            @bind="SelectedDistrict">
+
+                        <option value="">
+                            Select District
+                        </option>
+
+                        @foreach (var item in DemoList.Select(x => x.District).Distinct())
+                        {
+                            <option value="@item">@item</option>
+                        }
+
+                    </select>
+
+                </div>
+
+
+
+                <div>
+                    <label>Stage</label>
+
+                    <select class="form-control"
+                            @bind="SelectedStage">
+
+                        <option value="">
+                            Select Stage
+                        </option>
+
+                        @foreach (var item in DemoList.Select(x => x.CurrentStage).Distinct())
+                        {
+                            <option value="@item">@item</option>
+                        }
+
+                    </select>
+
+                </div>
+
+
+
+                <div>
+                    <label>Status</label>
+
+                    <select class="form-control"
+                            @bind="SelectedStatus">
+
+                        <option value="">
+                            Select Status
+                        </option>
+
+                        @foreach (var item in DemoList.Select(x => x.Status).Distinct())
+                        {
+                            <option value="@item">@item</option>
+                        }
+
+                    </select>
+
+                </div>
+
+
+
+                <div class="filter-actions">
+
+                    <button class="clear-btn"
+                            @onclick="ClearFilter">
+
+                        <i class="bi bi-x"></i>
+                        Clear All
+
+                    </button>
+
+
+                    <button class="apply-btn"
+                            @onclick="ApplyFilter">
+
+                        <i class="bi bi-funnel"></i>
+                        Apply Filters
+
+                    </button>
+
+                </div>
+
+
+            </div>
+
+
+        </div>
+
+
+    </div>
+
+
+
+
+    <!-- SUMMARY -->
+
+    <div class="row mt-4 g-3">
+        <div class="col-md-3"><div class="summary-card summary-total"><div><div class="summary-title">Total Demonstrations</div><div class="summary-value">42</div><div class="summary-description">All eligible records</div></div><div class="summary-icon"><i class="bi bi-file-earmark-text"></i></div></div></div>
+        <div class="col-md-3"><div class="summary-card summary-notstarted"><div><div class="summary-title">Not Started</div><div class="summary-value">28</div><div class="summary-description">Pending First visit</div></div><div class="summary-icon"><i class="bi bi-file-earmark-check"></i></div></div></div>
+        <div class="col-md-3"><div class="summary-card summary-progress"><div><div class="summary-title">In Progress</div><div class="summary-value">22</div><div class="summary-description">Active Documentation</div></div><div class="summary-icon"><i class="bi bi-clock"></i></div></div></div>
+        <div class="col-md-3"><div class="summary-card summary-completed"><div><div class="summary-title">Completed</div><div class="summary-value">2</div><div class="summary-description">Invoiced document</div></div><div class="summary-icon"><i class="bi bi-patch-check"></i></div></div></div>
+    </div>
+
+
+    <!-- TABLE -->
+
+
+    <SpicDataTable 
+        Title="Demo Documentation List"
+        Items="FilteredDemoList">
+
+
+        <FilterControls>
+
+            <div class="search-box">
+
+                <i class="bi bi-search"></i>
+
+                <input placeholder="Search demo..."
+                       @bind="SearchText"
+                       @bind:event="oninput"/>
+
+            </div>
+
+
+        </FilterControls>
+
+
+
+
+        <TableHeader>
+
+            <th>Sanction Number</th>
+            <th>Program Name</th>
+            <th>Product/Crop</th>
+            <th>Location</th>
+            <th>Current Stage</th>
+            <th>Date Of Sowing</th>
+            <th>Harvest Date</th>
+            <th>Treatments</th>
+            <th>Last Treatment</th>
+            <th>Documentation</th>
+            <th>Status</th>
+            <th>Action</th>
+
+        </TableHeader>
+
+
+
+
+        <TableRow Context="item">
+
+
+            <td>
+                <span class="season-text">
+                    @item.SeasonNumber
+                </span>
+            </td>
+
+
+            <td>
+                <div class="program-text">
+                    @item.ProgramName
+                </div>
+            </td>
+
+
+            <td>
+
+                <div class="product-cell">
+
+                    <b>@item.Product</b>
+
+                    <small>
+                        @item.Crop
+                    </small>
+
+                </div>
+
+            </td>
+
+
+            <td>
+
+                <div class="location-cell">
+
+                    <i class="bi bi-geo-alt-fill"></i>
+
+                    @item.Location
+
+                </div>
+
+            </td>
+
+
+            <td>
+
+                @if (item.CurrentStage.Contains("Completed"))
+                {
+                    <span class="stage completed">
+                        <i class="bi bi-check-circle"></i>
+                        @item.CurrentStage
+                    </span>
+                }
+                else if (item.CurrentStage.Contains("Treatment"))
+                {
+                    <span class="stage progress">
+                        <i class="bi bi-arrow-repeat"></i>
+                        @item.CurrentStage
+                    </span>
+                }
+                else
+                {
+                    <span class="stage pending">
+                        <i class="bi bi-hourglass"></i>
+                        @item.CurrentStage
+                    </span>
+                }
+
+            </td>
+
+
+
+            <td>
+                @item.SowingDate.ToString("dd-MM-yyyy")
+            </td>
+
+
+
+            <td>
+                @item.HarvestDate.ToString("dd-MM-yyyy")
+            </td>
+
+
+
+            <td>
+
+                <div class="treatment">
+
+                    <b>
+                        @item.CompletedTreatments Completed
+                    </b>
+
+                    <small>
+                        Out of @item.TotalTreatments
+                    </small>
+
+                </div>
+
+            </td>
+
+
+
+            <td>
+                @item.LastTreatmentDate?.ToString("dd-MM-yyyy")
+            </td>
+
+
+
+            <td>
+
+                <span class="doc-status">
+
+                    @item.DocumentationStatus
+
+                </span>
+
+            </td>
+
+
+
+            <td>
+
+                <span class="status">
+
+                    @if (item.Status == "Completed")
+                    {
+                        <i class="bi bi-check-circle"></i>
+                    }
+
+                    @item.Status
+
+                </span>
+
+            </td>
+
+
+
+            <td>
+
+                <button class="view-btn">
+                    View
+                </button>
+
+
+                <button class="continue-btn">
+                    Continue
+                </button>
+
+
+            </td>
+
+
+        </TableRow>
+
+
+    </SpicDataTable>
+
+
+</div>
+@code {
+
+
+    private List<DemoDocumentationDto> DemoList = new();
+
+    private List<DemoDocumentationDto> FilteredDemoList = new();
+
+
+    private string SearchText = "";
+
+    private string SelectedSeason = "";
+    private string SelectedProgram = "";
+    private string SelectedProduct = "";
+    private string SelectedCrop = "";
+    private string SelectedDistrict = "";
+    private string SelectedStage = "";
+    private string SelectedStatus = "";
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        // await LoadData();
+        LoadData();
+    }
+
+
+
+    // private async Task LoadData()
+    // {
+    //     DemoList =
+    //         await Http.GetFromJsonAsync<List<DemoDocumentationDto>>
+    //         ("api/DemoDocumentation")
+    //         ?? new();
+
+
+    //     FilteredDemoList = DemoList;
+    // }
+
+    private void LoadData()
+    {
+        DemoList = new()
+    {
+        new DemoDocumentationDto
+        {
+            Id = 1,
+            SeasonNumber = "2025-26",
+            ProgramName = "Crop Demonstration",
+            Product = "SPIC Growth",
+            Crop = "Paddy",
+            District = "Chennai",
+            Location = "Farm - 01",
+            CurrentStage = "Treatment Stage 2",
+            SowingDate = new DateTime(2026, 06, 10),
+            HarvestDate = new DateTime(2026, 09, 15),
+            TotalTreatments = 5,
+            CompletedTreatments = 2,
+            LastTreatmentDate = new DateTime(2026, 07, 20),
+            DocumentationStatus = "In Progress",
+            Status = "In Progress"
+        },
+
+        new DemoDocumentationDto
+        {
+            Id = 2,
+            SeasonNumber = "2025-26",
+            ProgramName = "Field Trial",
+            Product = "SPIC Plus",
+            Crop = "Maize",
+            District = "Madurai",
+            Location = "Farm - 02",
+            CurrentStage = "Completed",
+            SowingDate = new DateTime(2026, 05, 15),
+            HarvestDate = new DateTime(2026, 08, 25),
+            TotalTreatments = 4,
+            CompletedTreatments = 4,
+            LastTreatmentDate = new DateTime(2026, 08, 10),
+            DocumentationStatus = "Completed",
+            Status = "Completed"
+        },
+
+        new DemoDocumentationDto
+        {
+            Id = 3,
+            SeasonNumber = "2025-26",
+            ProgramName = "Demo Program",
+            Product = "SPIC Organic",
+            Crop = "Groundnut",
+            District = "Salem",
+            Location = "Farm - 03",
+            CurrentStage = "Not Started",
+            SowingDate = DateTime.Now,
+            HarvestDate = DateTime.Now.AddDays(90),
+            TotalTreatments = 3,
+            CompletedTreatments = 0,
+            LastTreatmentDate = null,
+            DocumentationStatus = "Pending",
+            Status = "Not Started"
+        }
+    };
+
+
+        FilteredDemoList = DemoList;
+    }
+
+    private void ApplyFilter()
+    {
+
+        FilteredDemoList = DemoList
+            .Where(x =>
+                (string.IsNullOrEmpty(SearchText) ||
+                 x.Product.Contains(SearchText, StringComparison.OrdinalIgnoreCase))
+
+                &&
+                (string.IsNullOrEmpty(SelectedSeason) ||
+                 x.SeasonNumber == SelectedSeason)
+
+                &&
+                (string.IsNullOrEmpty(SelectedProgram) ||
+                 x.ProgramName == SelectedProgram)
+
+                &&
+                (string.IsNullOrEmpty(SelectedStatus) ||
+                 x.Status == SelectedStatus)
+
+            )
+            .ToList();
+
+    }
+
+
+
+    private void ClearFilter()
+    {
+        SelectedSeason = "";
+        SelectedProgram = "";
+        SelectedProduct = "";
+        SelectedCrop = "";
+        SelectedDistrict = "";
+        SelectedStage = "";
+        SelectedStatus = "";
+        SearchText = "";
+
+        FilteredDemoList = DemoList;
+    }
+
+
+
+    public class DemoDocumentationDto
+    {
+
+        public int Id { get; set; }
+
+        public string SeasonNumber { get; set; } = "";
+
+        public string ProgramName { get; set; } = "";
+
+        public string Product { get; set; } = "";
+
+        public string Crop { get; set; } = "";
+
+        public string District { get; set; } = "";
+
+        public string Location { get; set; } = "";
+
+        public string CurrentStage { get; set; } = "";
+
+        public DateTime SowingDate { get; set; }
+
+        public DateTime HarvestDate { get; set; }
+
+        public int TotalTreatments { get; set; }
+
+        public int CompletedTreatments { get; set; }
+
+        public DateTime? LastTreatmentDate { get; set; }
+
+        public string DocumentationStatus { get; set; } = "";
+
+        public string Status { get; set; } = "";
+
+    }
+
+}
