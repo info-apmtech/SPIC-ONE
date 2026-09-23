@@ -1,0 +1,105 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@*
+    "Sales Planning & Forecast" accordion: the month-by-month forecast matrix (only months with
+    a non-zero qty or amount are shown) plus the two total pills.
+*@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="OnToggle">
+            Sales Planning & Forecast
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            @if (SalesPlanning != null && SalesPlanning.Any())
+            {
+                @* Only keep months where at least one row has a non-zero qty or amount *@
+                var activeMonths = Enumerable.Range(0, DealerReviewFormat.Months.Length)
+                    .Where(i => SalesPlanning.Any(x => DealerReviewFormat.GetSalesQty(x, i) != 0 || DealerReviewFormat.GetSalesAmount(x, i) != 0))
+                    .ToList();
+
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h4 class="detail-card-title"><i class="bi bi-file-earmark-bar-graph"></i> Sales Planning & Forecast</h4>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="sales-table">
+                            <thead>
+                                <tr>
+                                    <th rowspan="2" style="min-width: 180px; position: sticky; left: 0; background: #fff; z-index: 2;">Product Name</th>
+                                    @foreach (var i in activeMonths)
+                                    {
+                                        <th colspan="2" class="text-center border-start">@DealerReviewFormat.Months[i]</th>
+                                    }
+                                </tr>
+                                <tr>
+                                    @foreach (var i in activeMonths)
+                                    {
+                                        <th class="text-center text-muted fw-normal border-start">Qty</th>
+                                        <th class="text-center text-muted fw-normal">Lakhs</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in SalesPlanning)
+                                {
+                                    var product = Products.FirstOrDefault(p => p.Id == item.ProductId);
+                                    var category = Categories.FirstOrDefault(c => c.Id == item.CategoryId);
+                                    var unitName = category != null ? (Units.FirstOrDefault(u => u.Id == category.UnitId)?.Name ?? "MT") : "MT";
+                                    <tr>
+                                        <td class="fw-medium text-dark" style="position: sticky; left: 0; background: #fff; z-index: 1;">@(product?.Name ?? "Unknown") (@unitName)</td>
+                                        @foreach (var i in activeMonths)
+                                        {
+                                            var q = DealerReviewFormat.GetSalesQty(item, i);
+                                            var amt = DealerReviewFormat.GetSalesAmount(item, i);
+                                            <td class="border-start">@(q == 0 ? "-" : q.ToString("N2"))</td>
+                                            <td>@(amt == 0 ? "-" : $"₹{amt.ToString("N2")}")</td>
+                                        }
+                                    </tr>
+                                }
+                                <tr class="grand-total-row">
+                                    <td style="text-align: right; padding-right: 40px; position: sticky; left: 0; background: #fff; z-index: 1;">GRAND TOTAL</td>
+                                    @foreach (var i in activeMonths)
+                                    {
+                                        var monthIndex = i;
+                                        var qTot = SalesPlanning.Sum(x => DealerReviewFormat.GetSalesQty(x, monthIndex));
+                                        var amtTot = SalesPlanning.Sum(x => DealerReviewFormat.GetSalesAmount(x, monthIndex));
+                                        <td class="border-start">@(qTot == 0 ? "-" : qTot.ToString("N2"))</td>
+                                        <td>@(amtTot == 0 ? "-" : $"₹{amtTot.ToString("N2")}")</td>
+                                    }
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="detail-card-body pb-3 pt-0">
+                        <div style="display: flex; gap: 16px; justify-content: flex-end; margin-top: 16px;">
+                            <div class="total-pill">Total Volume: @Figures.GetTotalSalesVolume().ToString("N2") @( SalesPlanning.FirstOrDefault() != null ? Figures.GetUnitName(SalesPlanning.FirstOrDefault()!) : "Units")</div>
+                            <div class="total-pill">Total Forecast Value: ₹@Figures.GetTotalForecastValue().ToString("N2") Lakhs</div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="detail-card">
+                    <div class="detail-card-body">
+                        <div class="data-row"><div class="data-label">Sales Planning</div><div class="data-value">No sales planning data available</div></div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+
+    [Parameter] public List<DR.SalesPlanningInDealerRegistration> SalesPlanning { get; set; } = new();
+    [Parameter] public List<DR.Product> Products { get; set; } = new();
+    [Parameter] public List<DR.Category> Categories { get; set; } = new();
+    [Parameter] public List<DR.Unit> Units { get; set; } = new();
+    [Parameter] public DealerReviewFigures Figures { get; set; } = default!;
+    [Parameter] public int DataVersion { get; set; }
+}

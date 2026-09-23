@@ -1,8 +1,11 @@
 ﻿@page "/Payment"
+@implements IDisposable
 
 @inject HttpClient Http
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
+@inject ToastService Toast
+@inject IJSRuntime JS
 
 @using System.Globalization
 @using System.Net.Http.Json
@@ -415,13 +418,39 @@
     .m-val { font-size: 0.85rem; color: #1f2937; font-weight: 500; text-align: right; }
     .m-row { display: flex; justify-content: space-between; margin-bottom: 12px; }
     .m-row:last-child { margin-bottom: 0; }
+
+    /* native: phone */
+    .bottom-actions > .fb-actionbar { flex: 1 1 100%; }
+    @@media (min-width: 768px) {
+        .bottom-actions > .fb-actionbar { padding: 0; gap: 12px; }
+    }
+    @@media (max-width: 767.98px) {
+        .payment-card { margin-bottom: 12px; }
+        .payment-card-header { padding: 12px 16px; }
+        .payment-card-body { padding: 16px; }
+        .payment-option { min-height: 56px; }
+        .bottom-actions { margin-top: 0; padding-bottom: 0; }
+        .btn-outline-back, .btn-primary-continue { min-height: 44px; }
+
+        /* Confirmation dialog becomes a bottom card */
+        .modal-overlay { align-items: flex-end; }
+        .modal-card {
+            width: 100%;
+            max-width: none;
+            border-radius: 16px 16px 0 0;
+            padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+            max-height: 92vh;
+            animation: none;
+        }
+        .modal-actions { flex-direction: column; }
+        .btn-modal-outline, .btn-modal-solid { min-height: 44px; width: 100%; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
     
     <div class="mb-4">
-        <h1 class="page-title">Payment</h1>
-        <p class="page-subtitle">Select a payment method to complete your booking</p>
+        <PageHeader Title="Payment" Subtitle="Step 5 of 5 · Select a payment method to complete your booking" />
     </div>
 
     @if (_submitError != null)
@@ -442,50 +471,24 @@
                 </div>
                 <div class="payment-card-body">
                     
-                    <div class="payment-option @(selectedMethod == "Razorpay" ? "active" : "")" @onclick='() => SelectPaymentMethod("Razorpay")'>
+                    <div class="payment-option @(selectedMethod == "Online" ? "active" : "")" @onclick='() => SelectPaymentMethod("Online")'>
                         <div class="pay-icon-box icon-razorpay">
                             <i class="bi bi-shield-check"></i>
                         </div>
                         <div class="pay-details">
-                            <div class="pay-name">Razorpay</div>
-                            <div class="pay-desc">Pay securely using Razorpay</div>
+                            <div class="pay-name">Online Payment</div>
+                            <div class="pay-desc">UPI, Card, Net Banking or Wallet via Razorpay's secure checkout</div>
                         </div>
                         <div class="custom-radio"></div>
                     </div>
 
-                    <div class="payment-option @(selectedMethod == "UPI" ? "active" : "")" @onclick='() => SelectPaymentMethod("UPI")'>
-                        <div class="pay-icon-box icon-upi">
-                            <i class="bi bi-qr-code-scan"></i>
-                        </div>
-                        <div class="pay-details">
-                            <div class="pay-name">UPI</div>
-                            <div class="pay-desc">Pay using UPI ID or QR code</div>
-                        </div>
-                        <div class="custom-radio"></div>
-                    </div>
-
-                    <div class="payment-option @(selectedMethod == "Card" ? "active" : "")" @onclick='() => SelectPaymentMethod("Card")'>
-                        <div class="pay-icon-box icon-card">
-                            <i class="bi bi-credit-card"></i>
-                        </div>
-                        <div class="pay-details">
-                            <div class="pay-name">Credit / Debit Card</div>
-                            <div class="pay-desc">Visa, Mastercard, Rupay</div>
-                        </div>
-                        <div class="custom-radio"></div>
-                    </div>
-
-                    <div class="payment-option @(selectedMethod == "NetBanking" ? "active" : "")" @onclick='() => SelectPaymentMethod("NetBanking")'>
-                        <div class="pay-icon-box icon-bank">
-                            <i class="bi bi-bank"></i>
-                        </div>
-                        <div class="pay-details">
-                            <div class="pay-name">Net Banking</div>
-                            <div class="pay-desc">All major banks supported</div>
-                        </div>
-                        <div class="custom-radio"></div>
-                    </div>
-
+                    @* Pay After Stay / Cash After Payment - temporarily hidden from the payment
+                       selection UI so Online Payment (Razorpay) is the only selectable option.
+                       Underlying implementation (SelectPaymentMethod("PayAfterStay"), IsPayAfterStay,
+                       SubmitBooking's PaymentMethod mapping, and the confirmation modal's Pay After
+                       Stay branch) is intentionally left intact below for re-enabling later - just
+                       uncomment this block to bring the option back. *@
+                    @*
                     <div class="payment-option @(selectedMethod == "PayAfterStay" ? "active" : "")" @onclick='() => SelectPaymentMethod("PayAfterStay")'>
                         <div class="pay-icon-box icon-paylater">
                             <i class="bi bi-cash-coin"></i>
@@ -496,6 +499,7 @@
                         </div>
                         <div class="custom-radio"></div>
                     </div>
+                    *@
 
                 </div>
             </div>
@@ -522,15 +526,15 @@
             {
                 <div class="payment-card">
                     <div class="payment-card-header">
-                        <h3 class="payment-card-title">Payment Details</h3>
+                        <h3 class="payment-card-title">Online Payment</h3>
                     </div>
                     <div class="payment-card-body">
-                        <div class="info-alert info-alert-orange">
-                            <i class="bi bi-exclamation-circle"></i>
+                        <div class="info-alert info-alert-green">
+                            <i class="bi bi-shield-lock"></i>
                             <div>
-                                Payment gateways are not yet integrated. Your booking will be recorded with
-                                a <strong>Pending Payment</strong> status and you can complete the payment at the
-                                guest house or once the online gateway becomes available.
+                                You'll be redirected to Razorpay's secure checkout to pay
+                                <strong>@_money(BookingState.Total)</strong> using UPI, Card, Net Banking or Wallet.
+                                Your booking is confirmed automatically once the payment succeeds.
                             </div>
                         </div>
                     </div>
@@ -624,11 +628,17 @@
     }
 
     <div class="bottom-actions">
-        <button class="btn-outline-back" @onclick="GoBack">Back</button>
-        <button class="btn-primary-continue" @onclick="SubmitBooking"
-                disabled="@(!BookingState.IsInitialized || _isSubmitting)">
-            @(_isSubmitting ? "Submitting..." : "Complete Booking")
-        </button>
+        <ActionBar AriaLabel="Payment actions">
+            <Secondary>
+                <button class="btn-outline-back" @onclick="GoBack">Back</button>
+            </Secondary>
+            <ChildContent>
+                <button class="btn-primary-continue" @onclick="HandlePrimaryAction"
+                        disabled="@(!BookingState.IsInitialized || _isSubmitting || _paymentFailed)">
+                    @(_isSubmitting ? "Please wait..." : (_paymentFailed ? "Payment Failed" : (_pendingBookingId.HasValue ? "Retry Payment" : "Complete Booking")))
+                </button>
+            </ChildContent>
+        </ActionBar>
     </div>
 
 </div>
@@ -661,7 +671,7 @@
                     }
                     else
                     {
-                        <span class="status-pill-pending">Pending</span>
+                        <span class="status-pill-confirmed">Paid</span>
                     }
                 </div>
             </div>
@@ -706,9 +716,15 @@
             }
             else
             {
-                <div class="modal-alert modal-alert-orange">
-                    <i class="bi bi-exclamation-circle"></i>
-                    <div>Your booking is recorded with <strong>Payment Pending</strong> status. The online payment gateway is not yet integrated.</div>
+                <div class="modal-alert modal-alert-green">
+                    <i class="bi bi-check-circle"></i>
+                    <div>
+                        Payment of <strong>@_money(BookingState.Total)</strong> received via Razorpay.
+                        @if (!string.IsNullOrEmpty(_razorpayPaymentId))
+                        {
+                            <text> Payment ID: <strong>@_razorpayPaymentId</strong>.</text>
+                        }
+                    </div>
                 </div>
             }
 
@@ -735,13 +751,25 @@
 }
 
 @code {
-    private string selectedMethod = "Razorpay";
+    private string selectedMethod = "Online";
     private bool isBookingConfirmed = false;
     private bool _isSubmitting = false;
     private string? _submitError;
     private string _bookingReference = "";
     private string? _documentWarning;
     private bool IsPayAfterStay => selectedMethod == "PayAfterStay";
+
+    // Set once the booking row exists (Draft/PendingPayment) so a page reload of the
+    // Payment step, a dismissed Checkout, or a failed attempt never re-submits the
+    // booking form again - only ever retries the payment for the SAME booking.
+    private int? _pendingBookingId;
+    private string? _razorpayPaymentId;
+    private DotNetObjectReference<Payment>? _dotNetRef;
+
+    // Set once Razorpay reports the Checkout was dismissed or a payment attempt failed.
+    // The booking itself is marked Failed/Cancelled server-side (MarkPaymentFailedAsync) -
+    // this just stops the page from ever offering Retry Payment for that dead attempt.
+    private bool _paymentFailed;
 
     protected override void OnInitialized()
     {
@@ -753,6 +781,7 @@
 
     private void SelectPaymentMethod(string method)
     {
+        if (_pendingBookingId.HasValue) return; // payment method is locked in once the booking exists
         selectedMethod = method;
         _submitError = null;
     }
@@ -760,6 +789,12 @@
     private void GoBack()
     {
         Navigation.NavigateTo("/BookingPreview");
+    }
+
+    private Task HandlePrimaryAction()
+    {
+        if (_paymentFailed) return Task.CompletedTask; // defensive: button is already disabled for this
+        return _pendingBookingId.HasValue ? StartOnlinePayment(_pendingBookingId.Value) : SubmitBooking();
     }
 
     private async Task SubmitBooking()
@@ -775,14 +810,9 @@
 
         try
         {
-            var paymentMethod = selectedMethod switch
-            {
-                "PayAfterStay" => 4,      // GuestHousePaymentMethod.PayAfterStay
-                "UPI" => 1,               // UPI
-                "Card" => 2,              // Card
-                "NetBanking" => 3,        // NetBanking
-                _ => 0                    // Razorpay
-            };
+            // Only two payment methods are offered on the page now: Pay After Stay, or
+            // Online Payment (GuestHousePaymentMethod.Razorpay = 0) via Razorpay Checkout.
+            var paymentMethod = IsPayAfterStay ? 4 : 0;
 
             var request = new CreateBookingRequest
             {
@@ -800,6 +830,8 @@
                 EmployeeOrDealerCode = BookingState.EmployeeOrDealerCode,
                 GuestName = BookingState.GuestName,
                 CompanyName = BookingState.CompanyName,
+                SdwaCompanyId = BookingState.SdwaCompanyId,
+                GstinNumber = BookingState.GstinNumber,
                 PhoneNumber = BookingState.PhoneNumber,
                 Email = BookingState.Email,
                 AadhaarOrPassportNumber = BookingState.AadhaarOrPassport,
@@ -811,7 +843,6 @@
             };
 
             var response = await Http.PostAsJsonAsync("api/GuestHouseBooking/book", request);
-            var content = await response.Content.ReadAsStringAsync();
 
             if (response.IsSuccessStatusCode)
             {
@@ -820,7 +851,19 @@
                 {
                     _bookingReference = result.BookingReference;
                     _documentWarning = result.DocumentWarning;
-                    isBookingConfirmed = true;
+
+                    if (IsPayAfterStay)
+                    {
+                        // Unchanged: no online payment involved, booking is already Confirmed server-side.
+                        isBookingConfirmed = true;
+                    }
+                    else
+                    {
+                        // The booking now exists as PendingPayment; only a payment retry (never
+                        // another "book" call) can happen from here on for this booking.
+                        _pendingBookingId = result.BookingId;
+                        await StartOnlinePayment(result.BookingId);
+                    }
                 }
                 else
                 {
@@ -829,15 +872,7 @@
             }
             else
             {
-                try
-                {
-                    var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-                    _submitError = error?.Message ?? "The booking could not be completed. Please try again.";
-                }
-                catch
-                {
-                    _submitError = "The booking could not be completed. Please try again.";
-                }
+                _submitError = await ReadErrorMessageAsync(response, "The booking could not be completed. Please try again.");
             }
         }
         catch (Exception ex)
@@ -847,6 +882,182 @@
         finally
         {
             _isSubmitting = false;
+        }
+
+        if (_submitError != null)
+        {
+            Toast.Error(_submitError);
+        }
+    }
+
+    // Asks the server to create (or reuse) a Razorpay Order for the booking's own
+    // server-computed total, then opens Razorpay Checkout. Never sends an amount -
+    // the server derives it from the booking that was already saved.
+    private async Task StartOnlinePayment(int bookingId)
+    {
+        _submitError = null;
+        _isSubmitting = true;
+
+        try
+        {
+            var response = await Http.PostAsync($"api/GuestHouseBooking/bookings/{bookingId}/payment/create-order", null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _submitError = await ReadErrorMessageAsync(response, "Could not start the online payment. Please try again.");
+                Toast.Error(_submitError);
+                return;
+            }
+
+            var order = await response.Content.ReadFromJsonAsync<CreatePaymentOrderResult>();
+            if (order == null || string.IsNullOrWhiteSpace(order.OrderId) || string.IsNullOrWhiteSpace(order.KeyId))
+            {
+                _submitError = "The payment gateway returned an unexpected response. Please try again.";
+                Toast.Error(_submitError);
+                return;
+            }
+
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+
+            await JS.InvokeVoidAsync("spicRazorpay.open", new
+            {
+                Key = order.KeyId,
+                Amount = order.AmountInPaise,
+                Currency = order.Currency,
+                Name = "SPIC Guest House",
+                Description = $"Booking {_bookingReference}",
+                OrderId = order.OrderId,
+                Prefill = new
+                {
+                    Name = BookingState.GuestName,
+                    Email = BookingState.Email,
+                    Contact = BookingState.PhoneNumber
+                },
+                Theme = new { Color = "#3b82f6" }
+            }, _dotNetRef);
+        }
+        catch (Exception ex)
+        {
+            _submitError = $"Could not start the online payment: {ex.Message}";
+            Toast.Error(_submitError);
+        }
+        finally
+        {
+            // Not "done" - the Razorpay widget is now open and in control. This just
+            // re-enables the button (OnRazorpayDismiss/OnRazorpayFailed disable it again
+            // if the widget reports the attempt didn't go through).
+            _isSubmitting = false;
+        }
+    }
+
+    // Called by Razorpay Checkout's handler after a successful charge. The client-side
+    // callback is NEVER trusted on its own - it only forwards the three values to the
+    // server, which verifies the HMAC signature before marking anything Paid.
+    [JSInvokable]
+    public Task OnRazorpaySuccess(string razorpayOrderId, string razorpayPaymentId, string razorpaySignature) =>
+        InvokeAsync(async () => await VerifyPaymentAsync(razorpayOrderId, razorpayPaymentId, razorpaySignature));
+
+    [JSInvokable]
+    public Task OnRazorpayDismiss() => InvokeAsync(async () =>
+    {
+        // A verified success may have already landed just before the modal closed - never
+        // let a dismiss signal override that.
+        if (isBookingConfirmed) return;
+
+        _isSubmitting = false;
+        _submitError = "Payment was not completed and this booking could not go through. Please start a new booking.";
+        Toast.Warning(_submitError);
+        await MarkPaymentFailedAsync("dismissed");
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task OnRazorpayFailed(string? reason) => InvokeAsync(async () =>
+    {
+        if (isBookingConfirmed) return;
+
+        _isSubmitting = false;
+        _submitError = string.IsNullOrWhiteSpace(reason)
+            ? "Payment failed and this booking could not go through. Please start a new booking."
+            : $"Payment failed: {reason}. This booking could not go through. Please start a new booking.";
+        Toast.Error(_submitError);
+        await MarkPaymentFailedAsync(string.IsNullOrWhiteSpace(reason) ? "payment.failed" : reason);
+        StateHasChanged();
+    });
+
+    // Tells the server to record this attempt as Failed (existing GuestHousePaymentStatus.Failed)
+    // and release the room hold (existing GuestHouseBookingStatus.Cancelled), so My Bookings shows
+    // Failed instead of Pending Payment and this page never offers Retry Payment for it again.
+    // Best-effort: even if this call itself fails, Retry Payment is disabled client-side regardless -
+    // the booking still safely expires via its existing PendingPayment hold window either way.
+    private async Task MarkPaymentFailedAsync(string reason)
+    {
+        _paymentFailed = true;
+
+        if (!_pendingBookingId.HasValue) return;
+
+        try
+        {
+            await Http.PostAsJsonAsync(
+                $"api/GuestHouseBooking/bookings/{_pendingBookingId}/payment/failed",
+                new MarkPaymentFailedRequest { Reason = reason });
+        }
+        catch
+        {
+            // Best-effort audit call - the button is already disabled either way.
+        }
+    }
+
+    private async Task VerifyPaymentAsync(string orderId, string paymentId, string signature)
+    {
+        _submitError = null;
+        _isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/GuestHouseBooking/bookings/{_pendingBookingId}/payment/verify",
+                new VerifyPaymentRequest
+                {
+                    RazorpayOrderId = orderId,
+                    RazorpayPaymentId = paymentId,
+                    RazorpaySignature = signature
+                });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _razorpayPaymentId = paymentId;
+                isBookingConfirmed = true;
+            }
+            else
+            {
+                _submitError = await ReadErrorMessageAsync(response, "Payment verification failed. If an amount was debited, it will be refunded automatically.");
+                Toast.Error(_submitError);
+            }
+        }
+        catch (Exception ex)
+        {
+            _submitError = $"Payment verification failed: {ex.Message}";
+            Toast.Error(_submitError);
+        }
+        finally
+        {
+            _isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private static async Task<string> ReadErrorMessageAsync(HttpResponseMessage response, string fallback)
+    {
+        try
+        {
+            var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            return error?.Message ?? fallback;
+        }
+        catch
+        {
+            return fallback;
         }
     }
 
@@ -875,6 +1086,11 @@
         return value.Value.ToString("dd MMM yyyy, hh:mm tt", CultureInfo.InvariantCulture);
     }
 
+    public void Dispose()
+    {
+        _dotNetRef?.Dispose();
+    }
+
     public class CreateBookingRequest
     {
         public int GuestHouseId { get; set; }
@@ -891,6 +1107,8 @@
         public string? EmployeeOrDealerCode { get; set; }
         public string? GuestName { get; set; }
         public string? CompanyName { get; set; }
+        public int? SdwaCompanyId { get; set; }
+        public string? GstinNumber { get; set; }
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? AadhaarOrPassportNumber { get; set; }
@@ -913,6 +1131,27 @@
         public decimal TotalAmount { get; set; }
         public int PaymentMethod { get; set; }
         public string? DocumentWarning { get; set; }
+    }
+
+    public class CreatePaymentOrderResult
+    {
+        public bool Success { get; set; }
+        public string? OrderId { get; set; }
+        public long AmountInPaise { get; set; }
+        public string Currency { get; set; } = "INR";
+        public string? KeyId { get; set; }
+    }
+
+    public class VerifyPaymentRequest
+    {
+        public string? RazorpayOrderId { get; set; }
+        public string? RazorpayPaymentId { get; set; }
+        public string? RazorpaySignature { get; set; }
+    }
+
+    public class MarkPaymentFailedRequest
+    {
+        public string? Reason { get; set; }
     }
 
     public class ErrorResponse

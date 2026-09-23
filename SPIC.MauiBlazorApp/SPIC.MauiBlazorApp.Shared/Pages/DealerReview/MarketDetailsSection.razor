@@ -1,0 +1,51 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@* "Market Details" accordion: one card per block with crops, dealers, farmers and season. *@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="OnToggle">
+            Market Details
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                @if (MarketDetails != null && MarketDetails.Any())
+                {
+                    foreach (var m in MarketDetails)
+                    {
+                        <div class="col-md-6">
+                            <div class="detail-card">
+                                <div class="detail-card-header">
+                                    <h4 class="detail-card-title"><i class="bi bi-grid-fill"></i> @m.NameOfBlock</h4>
+                                    <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                                </div>
+                                <div class="detail-card-body">
+                                    <div class="data-row"><div class="data-label">Major Crops:</div><div class="data-value">@(CropNames.TryGetValue(m.MajorCrops.ToString(), out var cropName) ? cropName : m.MajorCrops.ToString())</div></div>
+                                    <div class="data-row"><div class="data-label">No of Dealers:</div><div class="data-value">@m.NoOfDealer</div></div>
+                                    <div class="data-row"><div class="data-label">No of Farmers:</div><div class="data-value">@m.NoOfFarmer</div></div>
+                                    <div class="data-row"><div class="data-label">Season (From → To):</div><div class="data-value">@m.SeasonFromMonth → @m.SeasonToMonth</div></div>
+                                    <div class="data-row"><div class="data-label">Irrigation Type:</div><div class="data-value">@((m.IsCanal ? "Canal " : "") + (m.IsTank ? "Tank " : "") + (m.IsWell ? "Well" : "") + (m.IsRainfed ? "Rainfed" : ""))</div></div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="col-12"><div class="text-muted">No market details</div></div>
+                }
+            </div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    [Parameter] public List<DR.DealerMarketDetail> MarketDetails { get; set; } = new();
+    [Parameter] public Dictionary<string, string> CropNames { get; set; } = new();
+    [Parameter] public int DataVersion { get; set; }
+}

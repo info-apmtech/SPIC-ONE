@@ -2,12 +2,16 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services;
+using Spic.Infrastructure.Services.Assistant;
+using Spic.Infrastructure.Services.Payments;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 using System.Security.Claims;
 using System.Text;
 
@@ -71,6 +75,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IExcelBulkUploadService, ExcelBulkUploadService>();
 builder.Services.AddScoped<IIfmsAccountStore, IfmsAccountStore>();
 builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
+builder.Services.AddScoped<IIfmsAlertSettingsStore, IfmsAlertSettingsStore>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IStockReportService, StockReportService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();
@@ -79,6 +84,40 @@ builder.Services.AddScoped<IAckCycleService, AckCycleService>();
 builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
 builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
 builder.Services.AddScoped<IStockDetailsService, StockDetailsService>();
+
+// Digital Library assistant (SPIC AI). The keyword provider needs no network and
+// always works; the Anthropic provider is used only when Assistant:AnthropicApiKey
+// is configured (in Azure: the Assistant__AnthropicApiKey env var from Key Vault)
+// and itself falls back to the keyword provider on any error.
+builder.Services.Configure<AssistantOptions>(
+    builder.Configuration.GetSection(AssistantOptions.SectionName));
+builder.Services.AddScoped<LibraryRetriever>();
+builder.Services.AddScoped<KeywordAssistantProvider>();
+builder.Services.AddScoped<AnthropicAssistantProvider>();
+builder.Services.AddScoped<IAssistantProvider>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AssistantOptions>>().Value;
+    return options.HasAnthropicKey
+        ? sp.GetRequiredService<AnthropicAssistantProvider>()
+        : sp.GetRequiredService<KeywordAssistantProvider>();
+});
+// Contact Us enquiry email. Options bind to the SAME "Alerts:Email" section that
+// SPIC.Ifms.Automation uses, so both apps share one SMTP configuration/pattern.
+builder.Services.Configure<ContactUsMailOptions>(
+    builder.Configuration.GetSection(ContactUsMailOptions.SectionName));
+builder.Services.AddScoped<IContactUsMailService, ContactUsMailService>();
+
+// SDWA Guest House online payment. KeySecret comes from the Razorpay__KeySecret
+// environment variable in Azure (never from appsettings.json) - see RazorpayOptions.
+builder.Services.Configure<RazorpayOptions>(
+    builder.Configuration.GetSection(RazorpayOptions.SectionName));
+builder.Services.AddScoped<IRazorpayService, RazorpayService>();
+
+// How long a PendingPayment Guest House booking still holds its room slot before the
+// hold lapses and the room becomes bookable by someone else again - see
+// GuestHouseBookingOptions.
+builder.Services.Configure<GuestHouseBookingOptions>(
+    builder.Configuration.GetSection(GuestHouseBookingOptions.SectionName));
 
 // Shares the IFMS portal-password encryption keys with the automation service.
 // The application name is part of the key derivation, so it must match the
@@ -141,7 +180,10 @@ builder.Services.AddAuthentication(options =>
                  path.StartsWithSegments("/api/LogisticsFile/download") ||
                  path.StartsWithSegments("/api/SDWAWelfareApplication/document") ||
                  path.StartsWithSegments("/api/WelfareSchemeApproval/document") ||
-                 path.StartsWithSegments("/api/GuestHouseBooking/image")))
+                 path.StartsWithSegments("/api/GuestHouseBooking/image") ||
+                 path.StartsWithSegments("/api/Library/file") ||
+                 path.StartsWithSegments("/api/Community/file") ||
+                 path.StartsWithSegments("/api/Sas/file")))
             {
                 context.Token = accessToken;
             }

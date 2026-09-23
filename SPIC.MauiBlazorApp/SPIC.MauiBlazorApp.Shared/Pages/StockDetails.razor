@@ -1,8 +1,10 @@
 ﻿@page "/StockDetails"
 @implements IDisposable
 @inject HttpClient Http
+@inject FileDownloadService Downloads
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
+@inject ToastService Toast
 @using System.Text.Json
 @using System.Net.Http.Json
 @using System.Globalization
@@ -12,92 +14,62 @@
 
     <!-- Page Header -->
     <div class="sd-header-section">
-        <div class="sd-header-left">
-            <div class="sd-title-area">
-                <h1>Stock Details</h1>
-                <div class="sd-badges">
-                    <span class="sd-badge"><i class="bi bi-calendar3"></i> Date as on: @(_dashboard is null ? "—" : _dashboard.Labels.ClosingAsOn)</span>
-                    <span class="sd-badge"><i class="bi bi-calendar-event"></i> Period: @(_dateFrom?.ToString("dd MMM yyyy") ?? "—") – @(_dateTo?.ToString("dd MMM yyyy") ?? "—")</span>
-                </div>
-            </div>
-            <p class="sd-subtitle">Consolidated stock and sales updated daily</p>
-        </div>
-        <div class="sd-header-actions">
-            <button class="btn-custom" disabled="@_isLoading" @onclick="RefreshData"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
-            <button class="btn-custom" disabled="@(_dashboard is null || _isLoading)" @onclick="ExportExcel"><i class="bi bi-file-earmark-spreadsheet" style="color:#16A34A"></i> Excel</button>
-            <button class="btn-custom" disabled title="PDF export is not implemented yet"><i class="bi bi-file-earmark-pdf" style="color:#DC2626"></i> PDF</button>
-            <button class="btn-custom btn-primary-custom" disabled title="Send mail is not implemented yet"><i class="bi bi-envelope"></i> Mail</button>
+        <PageHeader Title="Stock Details" Subtitle="Consolidated stock and sales updated daily" CssClass="sd-page-header">
+            <Actions>
+                <button class="btn-custom" disabled="@_isLoading" @onclick="RefreshData"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                <button class="btn-custom" disabled="@(_dashboard is null || _isLoading)" @onclick="ExportExcel"><i class="bi bi-file-earmark-spreadsheet" style="color:#16A34A"></i> Excel</button>
+                <button class="btn-custom" disabled title="PDF export is not implemented yet"><i class="bi bi-file-earmark-pdf" style="color:#DC2626"></i> PDF</button>
+                <button class="btn-custom btn-primary-custom" disabled title="Send mail is not implemented yet"><i class="bi bi-envelope"></i> Mail</button>
+            </Actions>
+        </PageHeader>
+        <div class="sd-badges">
+            <span class="sd-badge"><i class="bi bi-calendar3"></i> Date as on: @(_dashboard is null ? "—" : _dashboard.Labels.ClosingAsOn)</span>
+            <span class="sd-badge"><i class="bi bi-calendar-event"></i> Period: @(_dateFrom?.ToString("dd MMM yyyy") ?? "—") – @(_dateTo?.ToString("dd MMM yyyy") ?? "—")</span>
         </div>
     </div>
 
     <!-- Filter Card -->
-    <div class="sd-card">
-        <div class="sd-filters-header">
-            <span><i class="bi bi-filter-left"></i> Filters</span>
-            <i class="bi bi-chevron-down"></i>
-        </div>
-        <div class="sd-filters-body">
-            <div class="sd-filters-grid">
-                <div class="sd-form-group">
-                    <label>From Date</label>
-                    <input type="date" class="sd-form-control" disabled="@(!_masterDataLoaded)" @bind="_dateFrom" />
+    @if (_isPhone)
+    {
+        @* native: phone - same filter controls (FilterFields) in a bottom sheet; native <select multiple>, no Select2. *@
+        <button type="button" class="sd-filter-trigger" @onclick="() => _filterSheetOpen = true" disabled="@(!_masterDataLoaded)">
+            <span><i class="bi bi-filter-left"></i> Filters
+                @if (ActiveFilterCount > 0)
+                {
+                    <span class="sd-filter-count">@ActiveFilterCount</span>
+                }
+            </span>
+            <i class="bi bi-chevron-right"></i>
+        </button>
+
+        <BottomSheet @bind-IsOpen="_filterSheetOpen" Title="Filters" Size="BottomSheet.SheetSize.Full" CssClass="sd-filter-sheet">
+            <ChildContent>
+                <div class="sd-filters-body">
+                    @FilterFields
                 </div>
-                <div class="sd-form-group">
-                    <label>To Date</label>
-                    <input type="date" class="sd-form-control" disabled="@(!_masterDataLoaded)" @bind="_dateTo" />
-                </div>
-                <div class="sd-form-group">
-                    <label>Financial Year</label>
-                    <select id="sd-fy-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)">
-                        @foreach (var fy in _financialYears)
-                        {
-                            <option value="@fy.Id" selected="@(_selFinancialYears.Contains(fy.Id))">@fy.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="sd-form-group">
-                    <label>State</label>
-                    <select id="sd-state-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)">
-                        @foreach (var s in _states)
-                        {
-                            <option value="@s.Id" selected="@(_selStates.Contains(s.Id))">@s.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="sd-form-group">
-                    <label>Region</label>
-                    <select id="sd-region-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)">
-                        @foreach (var r in _regions)
-                        {
-                            <option value="@r.Id" selected="@(_selRegions.Contains(r.Id))">@r.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="sd-form-group">
-                    <label>Head Quarters</label>
-                    <select id="sd-hq-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)">
-                        @foreach (var h in _hq)
-                        {
-                            <option value="@h.Id" selected="@(_selHqs.Contains(h.Id))">@h.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="sd-form-group">
-                    <label>Product</label>
-                    <select id="sd-product-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)">
-                        @foreach (var p in _products)
-                        {
-                            <option value="@p.Key" selected="@(_selProductKeys.Any(x => string.Equals(x, p.Key, StringComparison.OrdinalIgnoreCase)))">@p.Name @(p.Source == "IFMS Products" ? "(IFMS)" : "")</option>
-                        }
-                    </select>
+            </ChildContent>
+            <Footer>
+                <button type="button" class="btn-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ClearAll"><i class="bi bi-x"></i> Clear All</button>
+                <button type="button" class="btn-custom btn-primary-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ApplyFiltersFromSheet"><i class="bi bi-funnel"></i> Search</button>
+            </Footer>
+        </BottomSheet>
+    }
+    else
+    {
+        <div class="sd-card">
+            <div class="sd-filters-header">
+                <span><i class="bi bi-filter-left"></i> Filters</span>
+                <i class="bi bi-chevron-down"></i>
+            </div>
+            <div class="sd-filters-body">
+                @FilterFields
+                <div class="sd-filter-actions">
+                    <button class="btn-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ClearAll"><i class="bi bi-x"></i> Clear All</button>
+                    <button class="btn-custom btn-primary-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ApplyFilters"><i class="bi bi-funnel"></i> Search</button>
                 </div>
             </div>
-            <div class="sd-filter-actions">
-                <button class="btn-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ClearAll"><i class="bi bi-x"></i> Clear All</button>
-                <button class="btn-custom btn-primary-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ApplyFilters"><i class="bi bi-funnel"></i> Search</button>
-            </div>
         </div>
-    </div>
+    }
 
     @if (_dashboard is null)
     {
@@ -142,9 +114,11 @@
         else
         {
             <div class="sd-empty-state">
-                <i class="bi bi-exclamation-circle"></i>
-                <div>@(_loadError is null ? "No Data Available" : $"Could not load report: {_loadError}")</div>
-                <button type="button" class="btn-custom" @onclick="RefreshData">Try Again</button>
+                <EmptyState Icon="@(_loadError is null ? "bi-inbox" : "bi-exclamation-circle")"
+                            Title="@(_loadError is null ? "No Data Available" : "Could not load report")"
+                            Message="@_loadError">
+                    <button type="button" class="btn-custom" @onclick="RefreshData">Try Again</button>
+                </EmptyState>
             </div>
         }
     }
@@ -229,35 +203,41 @@
                         <tbody>
                             @if (_dashboard.Grid.Items.Count == 0)
                             {
-                                <tr><td class="text-start" colspan="9" style="text-align:center; padding:24px; color:#94a3b8;">No Data Available</td></tr>
+                                <tr class="sd-empty-row"><td class="text-start" colspan="9" style="text-align:center; padding:24px; color:#94a3b8;"><EmptyState Title="No Data Available" Message="Try widening the filters or clearing the search." Compact="true" /></td></tr>
                             }
                             else
                             {
+                                var openingLabel = $"Opening Stock ({_dashboard.Labels.OpeningAsOn})";
+                                var suppliesLabel = $"Supplies ({_dashboard.Labels.SuppliesMonth})";
+                                var salesBeforeLabel = $"Sales ({_dashboard.Labels.SalesBeforeRange})";
+                                var salesOnDayLabel = $"Sales ({_dashboard.Labels.SalesOnDay})";
+                                var closingLabel = $"Closing Stock ({_dashboard.Labels.ClosingAsOn})";
+
                                 @foreach (var row in _dashboard.Grid.Items)
                                 {
                                     <tr>
-                                        <td class="text-start">@row.StateName</td>
-                                        <td>@Fmt(row.OpeningStock)</td>
-                                        <td>@Fmt(row.Supplies)</td>
-                                        <td>@Fmt(row.TotalStock)</td>
-                                        <td>@Fmt(row.SalesBefore)</td>
-                                        <td>@Fmt(row.SalesOnDay)</td>
-                                        <td>@Fmt(row.TotalSales)</td>
-                                        <td>@Fmt(row.ClosingStock)</td>
-                                        <td>@Math.Round(row.SalesPct)%</td>
+                                        <td data-label="State" class="text-start">@row.StateName</td>
+                                        <td data-label="@openingLabel">@Fmt(row.OpeningStock)</td>
+                                        <td data-label="@suppliesLabel">@Fmt(row.Supplies)</td>
+                                        <td data-label="Total Stock">@Fmt(row.TotalStock)</td>
+                                        <td data-label="@salesBeforeLabel">@Fmt(row.SalesBefore)</td>
+                                        <td data-label="@salesOnDayLabel">@Fmt(row.SalesOnDay)</td>
+                                        <td data-label="Total Sales">@Fmt(row.TotalSales)</td>
+                                        <td data-label="@closingLabel">@Fmt(row.ClosingStock)</td>
+                                        <td data-label="Sales %">@Math.Round(row.SalesPct)%</td>
                                     </tr>
                                 }
 
                                 <tr class="sd-grand-total">
-                                    <td class="text-start">Grand Total</td>
-                                    <td>@Fmt(_dashboard.GrandTotal.OpeningStock)</td>
-                                    <td>@Fmt(_dashboard.GrandTotal.Supplies)</td>
-                                    <td>@Fmt(_dashboard.GrandTotal.TotalStock)</td>
-                                    <td>@Fmt(_dashboard.GrandTotal.SalesBefore)</td>
-                                    <td>@Fmt(_dashboard.GrandTotal.SalesOnDay)</td>
-                                    <td>@Fmt(_dashboard.GrandTotal.TotalSales)</td>
-                                    <td>@Fmt(_dashboard.GrandTotal.ClosingStock)</td>
-                                    <td>@Math.Round(_dashboard.GrandTotal.SalesPct)%</td>
+                                    <td data-label="State" class="text-start">Grand Total</td>
+                                    <td data-label="@openingLabel">@Fmt(_dashboard.GrandTotal.OpeningStock)</td>
+                                    <td data-label="@suppliesLabel">@Fmt(_dashboard.GrandTotal.Supplies)</td>
+                                    <td data-label="Total Stock">@Fmt(_dashboard.GrandTotal.TotalStock)</td>
+                                    <td data-label="@salesBeforeLabel">@Fmt(_dashboard.GrandTotal.SalesBefore)</td>
+                                    <td data-label="@salesOnDayLabel">@Fmt(_dashboard.GrandTotal.SalesOnDay)</td>
+                                    <td data-label="Total Sales">@Fmt(_dashboard.GrandTotal.TotalSales)</td>
+                                    <td data-label="@closingLabel">@Fmt(_dashboard.GrandTotal.ClosingStock)</td>
+                                    <td data-label="Sales %">@Math.Round(_dashboard.GrandTotal.SalesPct)%</td>
                                 </tr>
                             }
                         </tbody>
@@ -344,6 +324,97 @@
         public int? RegionId { get; set; }
     }
 
+    // ---------- native: phone ----------
+    // Measured once from window.innerWidth (phone <= 767px). On phone the filter
+    // controls live in a BottomSheet and Select2 is never initialised, so the
+    // native <select multiple> pickers are used (same handlers via @onchange).
+    private bool _isPhone;
+    private bool _viewportChecked;
+    private bool _filterSheetOpen;
+
+    private int ActiveFilterCount =>
+        _selFinancialYears.Count + _selStates.Count + _selRegions.Count + _selHqs.Count + _selProductKeys.Count +
+        (_dateFrom.HasValue ? 1 : 0) + (_dateTo.HasValue ? 1 : 0);
+
+    private static List<string> NativeValues(ChangeEventArgs e) => e.Value switch
+    {
+        string[] arr => arr.ToList(),
+        string s when !string.IsNullOrEmpty(s) => new List<string> { s },
+        _ => new List<string>()
+    };
+
+    private Task OnNativeSelect(ChangeEventArgs e, Func<List<string>?, Task> handler)
+        => _isPhone ? handler(NativeValues(e)) : Task.CompletedTask;
+
+    private void OnNativeSelect(ChangeEventArgs e, Action<List<string>?> handler)
+    {
+        if (_isPhone) handler(NativeValues(e));
+    }
+
+    private async Task ApplyFiltersFromSheet()
+    {
+        _filterSheetOpen = false;
+        await ApplyFilters();
+    }
+
+    // The filter controls, rendered once: inline in the filter card (tablet/desktop)
+    // or inside the phone BottomSheet. Only one host is in the DOM at a time.
+    private RenderFragment FilterFields => @<div class="sd-filters-grid">
+        <div class="sd-form-group">
+            <label for="sd-date-from">From Date</label>
+            <input id="sd-date-from" type="date" class="sd-form-control" disabled="@(!_masterDataLoaded)" @bind="_dateFrom" />
+        </div>
+        <div class="sd-form-group">
+            <label for="sd-date-to">To Date</label>
+            <input id="sd-date-to" type="date" class="sd-form-control" disabled="@(!_masterDataLoaded)" @bind="_dateTo" />
+        </div>
+        <div class="sd-form-group">
+            <label for="sd-fy-select">Financial Year</label>
+            <select id="sd-fy-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)" @onchange="e => OnNativeSelect(e, OnFinancialYearChanged)">
+                @foreach (var fy in _financialYears)
+                {
+                    <option value="@fy.Id" selected="@(_selFinancialYears.Contains(fy.Id))">@fy.Name</option>
+                }
+            </select>
+        </div>
+        <div class="sd-form-group">
+            <label for="sd-state-select">State</label>
+            <select id="sd-state-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)" @onchange="e => OnNativeSelect(e, OnStateChanged)">
+                @foreach (var s in _states)
+                {
+                    <option value="@s.Id" selected="@(_selStates.Contains(s.Id))">@s.Name</option>
+                }
+            </select>
+        </div>
+        <div class="sd-form-group">
+            <label for="sd-region-select">Region</label>
+            <select id="sd-region-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)" @onchange="e => OnNativeSelect(e, OnRegionChanged)">
+                @foreach (var r in _regions)
+                {
+                    <option value="@r.Id" selected="@(_selRegions.Contains(r.Id))">@r.Name</option>
+                }
+            </select>
+        </div>
+        <div class="sd-form-group">
+            <label for="sd-hq-select">Head Quarters</label>
+            <select id="sd-hq-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)" @onchange="e => OnNativeSelect(e, OnHqChanged)">
+                @foreach (var h in _hq)
+                {
+                    <option value="@h.Id" selected="@(_selHqs.Contains(h.Id))">@h.Name</option>
+                }
+            </select>
+        </div>
+        <div class="sd-form-group">
+            <label for="sd-product-select">Product</label>
+            <select id="sd-product-select" class="sd-form-control sd-state-select" multiple="multiple" disabled="@(!_masterDataLoaded)" @onchange="e => OnNativeSelect(e, OnProductChanged)">
+                @foreach (var p in _products)
+                {
+                    <option value="@p.Key" selected="@(_selProductKeys.Any(x => string.Equals(x, p.Key, StringComparison.OrdinalIgnoreCase)))">@p.Name @(p.Source == "IFMS Products" ? "(IFMS)" : "")</option>
+                }
+            </select>
+        </div>
+    </div>;
+
     public class FinancialYearDto
     {
         public int Id { get; set; }
@@ -379,9 +450,32 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        // native: phone - decide once whether this is a phone-width viewport.
+        if (!_viewportChecked && !_disposed)
+        {
+            _viewportChecked = true;
+            try
+            {
+                var width = await JS.InvokeAsync<int>("eval", "window.innerWidth");
+                if (width > 0 && width < 768)
+                {
+                    _isPhone = true;
+                    StateHasChanged();
+                }
+            }
+            catch
+            {
+                // JS unavailable (prerender): keep the desktop/tablet layout.
+            }
+        }
+
         if (!_masterDataLoaded || _select2Initialized || _disposed) return;
 
         _select2Initialized = true;
+
+        // Phone: native selects are used; Select2 is never attached.
+        if (_isPhone) return;
+
         try
         {
             _objRef ??= DotNetObjectReference.Create(this);
@@ -739,14 +833,40 @@
         yield return total;
     }
 
-    private async Task ExportExcel() { SyncSelectionsToFilter(); await JS.InvokeVoidAsync("spicDownload.post", "api/StockDetails/export/excel", _filter, "StockDetails.xlsx"); }
-    private async Task ExportPdf() { SyncSelectionsToFilter(); await JS.InvokeVoidAsync("spicDownload.post", "api/StockDetails/export/pdf", _filter, "StockDetails.pdf"); }
+    private async Task ExportExcel()
+    {
+        SyncSelectionsToFilter();
+        try
+        {
+            await Downloads.PostAsync("api/StockDetails/export/excel", _filter, "StockDetails.xlsx");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[StockDetails] export excel: {ex}");
+            Toast.Error("Could not export the Excel file. Please try again.");
+        }
+    }
+
+    private async Task ExportPdf()
+    {
+        SyncSelectionsToFilter();
+        try
+        {
+            await Downloads.PostAsync("api/StockDetails/export/pdf", _filter, "StockDetails.pdf");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[StockDetails] export pdf: {ex}");
+            Toast.Error("Could not export the PDF file. Please try again.");
+        }
+    }
+
     private async Task SendMail() { SyncSelectionsToFilter(); await Http.PostAsJsonAsync("api/StockDetails/send-mail", _filter); }
 
-    // ---- Select2 (Financial Year + State + Region + HQ + Product) ----
+    // ---- Select2 (Financial Year + State + Region + HQ + Product); never on phone ----
     private async Task InitSelect2()
     {
-        if (_objRef is null) return;
+        if (_objRef is null || _isPhone) return;
 
         var configs = new[]
         {
@@ -893,6 +1013,8 @@
 
     private async Task RefreshSelect2()
     {
+        if (_isPhone || _objRef is null) return;
+
         await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", new[]
         {
             "sd-fy-select",

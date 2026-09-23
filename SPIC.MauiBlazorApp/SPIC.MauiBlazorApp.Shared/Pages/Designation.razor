@@ -1,8 +1,6 @@
 ﻿@page "/Designation"
-@rendermode InteractiveServer
 @using System.Net.Http.Json
 @using Microsoft.AspNetCore.Components
-@using System.Reflection
 @using DR = SPIC.Core.Entities
 @inject HttpClient Http
 @inject LoadingService Loading
@@ -16,6 +14,19 @@
 
     // Selected permission tokens in "Page.Action" form, e.g. "Register.View"
     private HashSet<string> _selectedTokens = new(StringComparer.OrdinalIgnoreCase);
+
+    // Page catalog loaded from the ApplicationPage table — the source of the
+    // Role Access grid (replaces the old static PagePermission enum list).
+    private List<DR.ApplicationPage> _catalogPages = new();
+
+    // Page order for stable RoleAccess serialization = catalog SortOrder.
+    private List<string> _allCatalogKeys = new();
+
+    // Module grouping built from ApplicationPage.Module (first page per module
+    // renders as the parent row, exactly like the old enum module grouping).
+    private HashSet<string> _parentPages = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string[]> _childMap = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _childSet = new(StringComparer.OrdinalIgnoreCase);
 
     private bool _isEditMode;
     private bool _isSaving;
@@ -31,48 +42,21 @@
 
     private ElementReference _firstInputRef;
 
-    private static readonly string[] _allPages = Enum.GetNames(typeof(DR.PagePermission));
     private static readonly string[] _actions = { "View", "Entry", "Update", "Delete" };
 
-    private static bool IsParent(string page) => _parentPages.Contains(page);
-    private static bool IsChild(string page) => _childSet.Contains(page);
-    private static string[] GetChildren(string page) => _childMap.TryGetValue(page, out var c) ? c : Array.Empty<string>();
+    private bool IsParent(string page) => _parentPages.Contains(page);
+    private bool IsChild(string page) => _childSet.Contains(page);
+    private string[] GetChildren(string page) => _childMap.TryGetValue(page, out var c) ? c : Array.Empty<string>();
 
-    private static readonly HashSet<string> _parentPages;
-    private static readonly Dictionary<string, string[]> _childMap = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> _childSet = new(StringComparer.OrdinalIgnoreCase);
-
-    static Designation()
+    private IEnumerable<(string Page, string DisplayName, bool IsParent, int Indent)> GetDisplayPages()
     {
-        var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in _allPages)
+        foreach (var page in _catalogPages)
         {
-            var field = typeof(DR.PagePermission).GetField(name);
-            var attr = field?.GetCustomAttribute<DR.PageModuleAttribute>();
-            if (attr != null)
-            {
-                if (!groups.ContainsKey(attr.Module))
-                    groups[attr.Module] = new List<string>();
-                groups[attr.Module].Add(name);
-            }
-        }
-        _parentPages = new(groups.Select(g => g.Value[0]), StringComparer.OrdinalIgnoreCase);
-        foreach (var kv in groups)
-        {
-            var children = kv.Value.Skip(1).ToArray();
-            _childMap[kv.Value[0]] = children;
-            foreach (var c in children) _childSet.Add(c);
-        }
-    }
-
-    private IEnumerable<(string Page, bool IsParent, int Indent)> GetDisplayPages()
-    {
-        foreach (var page in _allPages)
-        {
-            if (IsParent(page))
-                yield return (page, true, 0);
-            else if (!IsChild(page))
-                yield return (page, false, 0);
+            var displayName = string.IsNullOrWhiteSpace(page.Name) ? DisplayFor(page.Key) : page.Name;
+            if (IsParent(page.Key))
+                yield return (page.Key, displayName, true, 0);
+            else if (!IsChild(page.Key))
+                yield return (page.Key, displayName, false, 0);
         }
     }
 
@@ -160,7 +144,7 @@
         }
     }
 
-    private bool IsAllSelected => _allPages.All(IsRowAll);
+    private bool IsAllSelected => _allCatalogKeys.All(IsRowAll);
 
     private void ToggleAllRoles()
     {
@@ -171,7 +155,7 @@
         else
         {
             _selectedTokens.Clear();
-            foreach (var p in _allPages)
+            foreach (var p in _allCatalogKeys)
                 foreach (var a in _actions)
                     _selectedTokens.Add($"{p}.{a}");
         }
@@ -186,11 +170,55 @@
         Loading.Show();
         try
         {
+            await LoadCatalog();
             await LoadDesignations();
         }
         finally
         {
             Loading.Hide();
+        }
+    }
+
+    // Loads the active ApplicationPage catalog that drives the Role Access grid.
+    private async Task LoadCatalog()
+    {
+        try
+        {
+            _catalogPages = await Http.GetFromJsonAsync<List<DR.ApplicationPage>>("api/Designation/pagecatalog") ?? new();
+            _allCatalogKeys = _catalogPages.Select(p => p.Key).ToList();
+            RebuildModuleGroups();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load page catalog: {ex.Message}", true);
+        }
+    }
+
+    // First page of each Module group becomes the parent row (children collapse
+    // under it) — identical to the old enum PageModuleAttribute grouping.
+    private void RebuildModuleGroups()
+    {
+        _parentPages.Clear();
+        _childMap.Clear();
+        _childSet.Clear();
+
+        var groups = new Dictionary<string, List<DR.ApplicationPage>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var page in _catalogPages)
+        {
+            if (string.IsNullOrWhiteSpace(page.Module))
+                continue;
+            if (!groups.TryGetValue(page.Module!, out var list))
+                groups[page.Module!] = list = new List<DR.ApplicationPage>();
+            list.Add(page);
+        }
+
+        foreach (var kv in groups)
+        {
+            var first = kv.Value[0];
+            _parentPages.Add(first.Key);
+            var children = kv.Value.Skip(1).Select(p => p.Key).ToArray();
+            _childMap[first.Key] = children;
+            foreach (var c in children) _childSet.Add(c);
         }
     }
 
@@ -295,11 +323,22 @@
         {
             _model.Name = _model.Name.Trim();
 
-            // Build RoleAccess in a stable order: page order, then action order.
-            _model.RoleAccess = string.Join(",",
-                _allPages.SelectMany(p => _actions
-                    .Where(a => _selectedTokens.Contains($"{p}.{a}"))
-                    .Select(a => $"{p}.{a}")));
+            // Build RoleAccess in a stable order: page order (SortOrder), then action order.
+            var selectedTokens = _allCatalogKeys.SelectMany(p => _actions
+                .Where(a => _selectedTokens.Contains($"{p}.{a}"))
+                .Select(a => $"{p}.{a}"));
+
+            // Preserve tokens for pages NOT in the current catalog (deactivated or
+            // removed) so existing permissions are never dropped on edit-save.
+            var catalogKeys = new HashSet<string>(_allCatalogKeys, StringComparer.OrdinalIgnoreCase);
+            var preservedTokens = Enumerable.Empty<string>();
+            if (!string.IsNullOrWhiteSpace(_model.RoleAccess))
+            {
+                preservedTokens = DR.RoleAccessPermissions.ParseTokens(_model.RoleAccess)
+                    .Where(t => !catalogKeys.Contains(DR.RoleAccessPermissions.PagePart(t)));
+            }
+
+            _model.RoleAccess = string.Join(",", selectedTokens.Concat(preservedTokens).Distinct(StringComparer.OrdinalIgnoreCase));
 
             _model.UpdatedBy = LoginState.UserId ?? "System";
             _model.UpdatedAt = DateTime.Now;
@@ -467,7 +506,7 @@
 
         // Pass 1: collapse a module to its parent row when every child holds the
         // same actions (mirrors the single parent row shown in the grid).
-        foreach (var page in _allPages)
+        foreach (var page in _allCatalogKeys)
         {
             if (displayed.Contains(page) || !map.ContainsKey(page)) continue;
 
@@ -495,7 +534,7 @@
         }
 
         // Pass 2: any child pages left over (non-uniform module) listed individually.
-        foreach (var page in _allPages)
+        foreach (var page in _allCatalogKeys)
         {
             if (displayed.Contains(page) || !map.ContainsKey(page)) continue;
             var self = Format(page, map[page]);
@@ -602,11 +641,84 @@
     .desig-modal-actions { display: flex; gap: 12px; justify-content: center; }
     .desig-btn-delete { background: #DC2626; color: #fff; }
     .desig-btn-delete:hover { background: #B91C1C; }
+
+    /* native: phone */
+    .desig-perm-cards { display: none; }
+    @@media (max-width: 767.98px) {
+        .desig-page .desig-form-card, .desig-page .desig-list-card { padding: 16px; border-radius: 12px; }
+        .desig-page .desig-field { width: 100%; }
+        .desig-page .desig-field input[type="text"] { width: 100%; min-height: var(--tap-min, 44px); font-size: 16px; }
+        .desig-page .desig-toggle-pill { min-height: var(--tap-min, 44px); width: 100%; justify-content: space-between; }
+        .desig-page .desig-roles-box { padding: 12px; }
+        .desig-page .desig-role-all { min-height: var(--tap-min, 44px); }
+        .desig-page .desig-role-all input { width: 20px; height: 20px; }
+
+        /* permission matrix -> one accordion per page group with toggle switches */
+        .desig-page .desig-perm-scroll { display: none; }
+        .desig-page .desig-perm-cards { display: flex; flex-direction: column; gap: 8px; }
+        .desig-perm-acc { border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; overflow: hidden; }
+        .desig-perm-acc-head { display: flex; align-items: center; gap: 10px; min-height: var(--tap-min, 44px); padding: 10px 12px; cursor: pointer; list-style: none; font-weight: 600; font-size: 0.9rem; color: #1F2937; -webkit-tap-highlight-color: transparent; }
+        .desig-perm-acc-head::-webkit-details-marker { display: none; }
+        .desig-perm-acc-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .desig-perm-acc-count { font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #FEF3C7; color: #92400E; }
+        .desig-perm-acc-count.all { background: #D1FAE5; color: #065F46; }
+        .desig-perm-acc-count.none { background: #F3F4F6; color: #6B7280; }
+        .desig-perm-acc-chev { transition: transform .2s; color: #6B7280; }
+        .desig-perm-acc[open] .desig-perm-acc-chev { transform: rotate(180deg); }
+        .desig-perm-acc-body { border-top: 1px solid #F3F4F6; padding: 4px 12px 8px; }
+        .desig-perm-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--tap-min, 44px); font-size: 0.88rem; color: #374151; cursor: pointer; position: relative; margin: 0; }
+        .desig-perm-switch-all { font-weight: 700; color: #065F46; border-bottom: 1px solid #F3F4F6; }
+        .desig-perm-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .desig-perm-slider { position: relative; flex-shrink: 0; width: 44px; height: 24px; border-radius: 24px; background: #D1D5DB; transition: background .2s; }
+        .desig-perm-slider::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .2s; }
+        .desig-perm-switch input:checked + .desig-perm-slider { background: #22C55E; }
+        .desig-perm-switch input:checked + .desig-perm-slider::after { left: 22px; }
+        .desig-perm-switch input:focus-visible + .desig-perm-slider { outline: 2px solid #059669; outline-offset: 2px; }
+
+        /* form buttons stretch */
+        .desig-page .desig-form-actions { flex-wrap: nowrap; gap: 10px; padding: 8px 0 0; }
+        .desig-page .desig-form-actions .fb-actionbar__secondary,
+        .desig-page .desig-form-actions .fb-actionbar__primary { flex: 1 1 0; min-width: 0; }
+        .desig-page .desig-form-actions .desig-btn { width: 100%; min-height: var(--tap-min, 44px); justify-content: center; }
+
+        /* stats: three compact tiles */
+        .desig-page .desig-stats-row { gap: 8px; flex-wrap: nowrap; margin-bottom: 16px; }
+        .desig-page .desig-stat-card { min-width: 0; padding: 12px 10px; }
+        .desig-page .desig-stat-label { font-size: 0.72rem; margin-bottom: 4px; }
+        .desig-page .desig-stat-value { font-size: 1.25rem; }
+
+        /* list: cards instead of the table */
+        .desig-page .desig-list-tools { width: 100%; }
+        .desig-page .desig-search { flex: 1 1 auto; min-width: 0; min-height: var(--tap-min, 44px); font-size: 16px; }
+        .desig-page .desig-status-select { min-height: var(--tap-min, 44px); }
+        .desig-page .desig-table-wrap { display: none; }
+        .desig-cards { display: flex; flex-direction: column; gap: 10px; }
+        .desig-card { border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px 14px; background: #fff; }
+        .desig-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .desig-card-no { font-size: 0.72rem; color: #9CA3AF; font-weight: 600; }
+        .desig-card-title { flex: 1 1 auto; margin: 0; font-size: 0.98rem; font-weight: 700; color: #1F2937; min-width: 0; overflow-wrap: anywhere; }
+        .desig-card-roles { margin-top: 8px; font-size: 0.8rem; color: #4B5563; word-break: break-word; }
+        .desig-card-meta { margin-top: 6px; font-size: 0.75rem; color: #9CA3AF; }
+        .desig-card-actions { display: flex; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #F3F4F6; }
+        .desig-card-actions .btn { flex: 1 1 0; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+
+        .desig-modal { padding: 20px; }
+        .desig-modal-actions .desig-btn { flex: 1 1 0; min-height: var(--tap-min, 44px); justify-content: center; }
+    }
+    @@media (min-width: 768px) and (max-width: 1199.98px) {
+        .desig-page .desig-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .desig-page .desig-table { min-width: 720px; }
+    }
+
+    /* native: keep the pre-existing desktop/tablet spacing of the inline ActionBar */
+    @@media (min-width: 768px) {
+        .desig-page .desig-form-actions.fb-actionbar { padding-top: 0; padding-bottom: 0; }
+    }
 </style>
 
-<div class="container-fluid py-2 px-0">
+<div class="container-fluid py-2 px-0 desig-page">
 
-    <h1 class="desig-page-title">Designation Master</h1>
+    <PageHeader Title="Designation Master" Subtitle="Roles and page permissions" CssClass="desig-page-title" />
 
     @if (!string.IsNullOrEmpty(_message))
     {
@@ -646,6 +758,35 @@
                 </label>
             </div>
 
+            <div class="desig-perm-cards phone-only">
+                @foreach (var (page, displayName, _, _) in GetDisplayPages())
+                {
+                    var granted = _actions.Count(a => HasAction(page, a));
+                    <details class="desig-perm-acc">
+                        <summary class="desig-perm-acc-head">
+                            <span class="desig-perm-acc-name">@displayName</span>
+                            <span class="desig-perm-acc-count @(granted == _actions.Length ? "all" : granted == 0 ? "none" : "")">@granted/@_actions.Length</span>
+                            <i class="bi bi-chevron-down desig-perm-acc-chev" aria-hidden="true"></i>
+                        </summary>
+                        <div class="desig-perm-acc-body">
+                            <label class="desig-perm-switch desig-perm-switch-all">
+                                <span>All permissions</span>
+                                <input type="checkbox" role="switch" checked="@IsRowAll(page)" @onchange="() => ToggleRowAll(page)" />
+                                <span class="desig-perm-slider" aria-hidden="true"></span>
+                            </label>
+                            @foreach (var action in _actions)
+                            {
+                                <label class="desig-perm-switch">
+                                    <span>@action</span>
+                                    <input type="checkbox" role="switch" checked="@HasAction(page, action)" @onchange="() => ToggleAction(page, action)" />
+                                    <span class="desig-perm-slider" aria-hidden="true"></span>
+                                </label>
+                            }
+                        </div>
+                    </details>
+                }
+            </div>
+
             <div class="desig-perm-scroll">
                 <table class="desig-perm-table">
                     <thead>
@@ -661,12 +802,12 @@
                     </thead>
                     <tbody>
                         @{ var pno = 1; }
-                        @foreach (var (page, _, _) in GetDisplayPages())
+                        @foreach (var (page, displayName, _, _) in GetDisplayPages())
                         {
                             <tr>
                                 <td>@pno</td>
                                 <td class="desig-perm-page">
-                                    @DisplayFor(page)
+                                    @displayName
                                 </td>
                                 <td>
                                     <input type="checkbox" checked="@IsRowAll(page)"
@@ -687,14 +828,18 @@
             </div>
         </div>
 
-        <div class="desig-form-actions">
-            <button type="button" class="desig-btn desig-btn-cancel" @onclick="ResetForm">
-                <i class="bi bi-x-lg"></i> Cancel
-            </button>
-            <button type="button" class="desig-btn desig-btn-save" @onclick="SaveDesignation" disabled="@_isSaving">
-                <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
-            </button>
-        </div>
+        <ActionBar Sticky="false" CssClass="desig-form-actions">
+            <Secondary>
+                <button type="button" class="desig-btn desig-btn-cancel" @onclick="ResetForm">
+                    <i class="bi bi-x-lg"></i> Cancel
+                </button>
+            </Secondary>
+            <ChildContent>
+                <button type="button" class="desig-btn desig-btn-save" @onclick="SaveDesignation" disabled="@_isSaving">
+                    <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
+                </button>
+            </ChildContent>
+        </ActionBar>
         </div>
     }
 
@@ -729,7 +874,48 @@
             </div>
         </div>
 
-        <div class="table-responsive">
+        <div class="desig-cards phone-only">
+            @if (_filtered.Any())
+            {
+                var cno = 1;
+                foreach (var d in _filtered)
+                {
+                    <article class="desig-card">
+                        <header class="desig-card-head">
+                            <span class="desig-card-no">#@cno</span>
+                            <h4 class="desig-card-title">@d.Name</h4>
+                            <span class="desig-badge @(d.IsActive ? "desig-badge-active" : "desig-badge-inactive")">@(d.IsActive ? "Active" : "Inactive")</span>
+                        </header>
+                        <div class="desig-card-roles">@CompressRoleAccessForDisplay(d.RoleAccess)</div>
+                        <div class="desig-card-meta">Created @d.CreatedAt.ToString("yyyy-MM-dd")</div>
+                        @if (CanEditDesignation || CanDeleteDesignation)
+                        {
+                            <div class="desig-card-actions">
+                                @if (CanEditDesignation)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditDesignation(d)"><i class="bi bi-pencil-square"></i> Edit</button>
+                                }
+                                @if (d.IsActive && CanDeleteDesignation)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OpenDeleteModal(d)"><i class="bi bi-slash-circle"></i> Deactivate</button>
+                                }
+                                else if (!d.IsActive && CanEditDesignation)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-success" @onclick="() => ReactivateDesignation(d)"><i class="bi bi-arrow-counterclockwise"></i> Activate</button>
+                                }
+                            </div>
+                        }
+                    </article>
+                    cno++;
+                }
+            }
+            else
+            {
+                <EmptyState Icon="bi-person-badge" Title="No designations found" Message="Add a designation using the form above or change the filter." />
+            }
+        </div>
+
+        <div class="table-responsive desig-table-wrap">
             <table class="desig-table">
                 <thead>
                     <tr>

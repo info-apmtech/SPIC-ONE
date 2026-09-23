@@ -4,6 +4,7 @@
 @inject LoginState LoginState
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject ToastService Toast
 
 @using System.Globalization
 @using SPIC.MauiBlazorApp.Shared.Services
@@ -102,18 +103,73 @@
     .inv-sigs { display: flex; justify-content: space-between; padding-top: 24px; font-weight: 700; font-size: 11px; }
     .inv-thanks { text-align: center; font-weight: 700; font-size: 12px; padding-top: 9px; }
     @@media (max-width: 640px) { .inv-header { flex-direction: column; align-items: flex-start; } .inv-band { width: 5px; flex-basis: 5px; } .inv-doc { padding: 6px 10px 14px; } }
+
+    @@media (max-width: 900px) {
+        .gb-container .table-controls { flex-wrap: wrap; row-gap: 8px; }
+        .gb-container .table-controls .search-box { min-width: 100%; margin-left: 0; }
+    }
+    @@media (max-width: 768px) {
+        .gb-container .pagination-container { flex-wrap: wrap; gap: 10px; justify-content: center; }
+        .gb-summary-grid { grid-template-columns: 1fr; }
+        .gb-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .gb-tab { white-space: nowrap; }
+    }
+    @@media (max-width: 640px) {
+        .gb-kv { flex-wrap: wrap; gap: 6px; }
+        .modal-body { overflow-x: auto; }
+        .inv-wrap { min-width: 540px; }
+        .modal-footer { flex-wrap: wrap; gap: 8px; }
+        .modal-footer .btn { flex: 1 1 auto; }
+    }
+    @@media (max-width: 480px) {
+        .gb-card-body { padding: 14px; }
+        .gb-tab { padding: 10px 12px; font-size: 0.8rem; }
+        .modal-footer .btn { width: 100%; }
+    }
+
+    /* native: phone */
+    .gb-form-actions > .fb-actionbar { flex: 1 1 100%; }
+    @@media (min-width: 768px) {
+        .gb-form-actions > .fb-actionbar { padding: 0; gap: 10px; justify-content: flex-start; }
+    }
+    @@media (max-width: 767.98px) {
+        .gb-btn { min-height: 44px; }
+        .gb-input { min-height: 44px; font-size: 16px; } /* prevents iOS zoom on focus */
+        .gb-table .gb-input { min-height: 40px; font-size: 14px; }
+        .gb-tabs { display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+        .gb-tabs::-webkit-scrollbar { display: none; }
+        .gb-tab { flex: 0 0 auto; min-height: 44px; }
+        .gb-filters { flex-direction: column; align-items: stretch; }
+        .gb-filters > div, .gb-filters .gb-input { width: 100% !important; }
+        .gb-filters .gb-btn { width: 100%; }
+        .gb-card-body { padding: 14px; }
+        .gb-summary-grid { grid-template-columns: 1fr; }
+        .gb-form-actions { margin-top: 8px !important; }
+        /* bill items table: contained horizontal scroll, never the viewport */
+        .gb-table { min-width: 720px; }
+        .gb-card-body .table-responsive { -webkit-overflow-scrolling: touch; }
+
+        /* Invoice dialog: full-height bottom sheet */
+        .gb-modal .modal-dialog { max-width: none; margin: 0; position: fixed; left: 0; right: 0; bottom: 0; align-items: flex-end; min-height: 0; }
+        .gb-modal .modal-content { border-radius: 16px 16px 0 0 !important; max-height: 94vh; }
+        .gb-modal .modal-body { padding: 10px !important; max-height: none !important; overflow: auto; -webkit-overflow-scrolling: touch; }
+        .gb-modal .modal-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); flex-wrap: wrap; gap: 8px; }
+        .gb-modal .modal-footer .gb-btn { flex: 1 1 0; margin: 0; }
+        .gb-modal .btn-close { width: 44px; height: 44px; padding: 0; margin: -10px -10px -10px auto; background-size: 14px; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-3 px-md-4 gb-container">
 
     <div class="gb-row" style="justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem;">
-        <div>
-            <h1 class="gb-title">Generate Bill</h1>
-            <p class="gb-subtitle">View completed bookings, create invoices, and manage bills</p>
-        </div>
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="gb-btn gb-btn-secondary" @onclick="BackToList"><i class="bi bi-arrow-left"></i> Back to List</button>
-        </div>
+        <PageHeader Title="@(_draft == null ? "Generate Bill" : "New Bill")"
+                    Subtitle="@(_draft == null ? "View completed bookings, create invoices, and manage bills" : "Review the charges and generate the invoice")"
+                    BackHref="/FrontOffice"
+                    CssClass="w-100">
+            <Actions>
+                <button class="gb-btn gb-btn-secondary" @onclick="BackToList"><i class="bi bi-arrow-left"></i> Back to List</button>
+            </Actions>
+        </PageHeader>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(_error)) { <div class="gb-alert-warning">@_error</div> }
@@ -218,6 +274,17 @@
                         }
                     </td>
                 </TableRow>
+
+                <CardActions Context="item">
+                    @if (item.HasBill)
+                    {
+                        <button class="gb-btn gb-btn-view" @onclick="() => OpenBillByBookingId(item.BookingId)"><i class="bi bi-eye"></i> View Bill</button>
+                    }
+                    else
+                    {
+                        <button class="gb-btn gb-btn-success" @onclick="() => OpenBillForm(item.BookingId)"><i class="bi bi-receipt-cutoff"></i> Generate Bill</button>
+                    }
+                </CardActions>
             </SpicDataTable>
         }
         else
@@ -275,6 +342,11 @@
                         <button class="gb-btn gb-btn-pdf" style="padding:6px 12px;" @onclick="() => DownloadPdf(bill.BillId, bill.BillNumber)"><i class="bi bi-download"></i> PDF</button>
                     </td>
                 </TableRow>
+
+                <CardActions Context="bill">
+                    <button class="gb-btn gb-btn-view" @onclick="() => OpenBill(bill.BillId)"><i class="bi bi-eye"></i> View</button>
+                    <button class="gb-btn gb-btn-pdf" @onclick="() => DownloadPdf(bill.BillId, bill.BillNumber)"><i class="bi bi-download"></i> PDF</button>
+                </CardActions>
             </SpicDataTable>
         }
     }
@@ -294,6 +366,8 @@
             <div class="gb-card-body">
                 <div class="gb-kv"><span class="gb-kv-label">Booking</span><span class="gb-kv-value">@_draft.BookingReference</span></div>
                 <div class="gb-kv"><span class="gb-kv-label">Guest</span><span class="gb-kv-value">@(string.IsNullOrEmpty(_draft.GuestName) ? "-" : _draft.GuestName)</span></div>
+                <div class="gb-kv"><span class="gb-kv-label">Company Name</span><span class="gb-kv-value">@(string.IsNullOrEmpty(_draft.CompanyName) ? "-" : _draft.CompanyName)</span></div>
+                <div class="gb-kv"><span class="gb-kv-label">GSTIN</span><span class="gb-kv-value">@(string.IsNullOrEmpty(_draft.GstinNumber) ? "-" : _draft.GstinNumber)</span></div>
                 <div class="gb-kv"><span class="gb-kv-label">Guest House</span><span class="gb-kv-value">@_draft.GuestHouseName</span></div>
                 <div class="gb-kv"><span class="gb-kv-label">Room</span><span class="gb-kv-value">@(_draft.RoomType + (string.IsNullOrEmpty(_draft.RoomNumber) ? "" : " (" + _draft.RoomNumber + ")"))</span></div>
                 <div class="gb-kv"><span class="gb-kv-label">Stay</span><span class="gb-kv-value">@(FormatDate(_draft.CheckInAt)) → @(FormatDate(_draft.CheckOutAt)) (@(_draft.NumberOfNights) night(s))</span></div>
@@ -436,7 +510,7 @@
                         <div>
                             <label class="gb-label">Payment Method</label>
                             <select class="gb-input" @bind="_paymentMethod">fe
-                                <option value="0">Razorpay</option>
+                               @*  <option value="0">Razorpay</option> *@
                                 <option value="1">UPI</option>
                                 <option value="2">Card</option>
                                 <option value="3">Net Banking</option>
@@ -460,11 +534,17 @@
                     <div class="gb-alert-warning" style="margin-top:10px;">@BillingValidationMessage</div>
                 }
 
-                <div style="margin-top: 18px; display:flex; gap:10px; flex-wrap:wrap;">
-                    <button class="gb-btn gb-btn-success" @onclick="SaveBillAsync" disabled="@(_busy || _draft.ExistingBillId.HasValue)">
-                        <i class="bi bi-check-circle"></i> @(_busy ? "Saving..." : "Generate Bill")
-                    </button>
-                    <button class="gb-btn gb-btn-secondary" @onclick="BackToList">Cancel</button>
+                <div class="gb-form-actions" style="margin-top: 18px; display:flex; gap:10px; flex-wrap:wrap;">
+                    <ActionBar AriaLabel="Bill actions" Align="ActionBar.BarAlign.Start">
+                        <Secondary>
+                            <button class="gb-btn gb-btn-secondary" @onclick="BackToList">Cancel</button>
+                        </Secondary>
+                        <ChildContent>
+                            <button class="gb-btn gb-btn-success" @onclick="SaveBillAsync" disabled="@(_busy || _draft.ExistingBillId.HasValue)">
+                                <i class="bi bi-check-circle"></i> @(_busy ? "Saving..." : "Generate Bill")
+                            </button>
+                        </ChildContent>
+                    </ActionBar>
                 </div>
                 @if (_draft.ExistingBillId.HasValue)
                 {
@@ -478,7 +558,7 @@
 @* ------------------------- VIEW BILL MODAL ------------------------- *@
 @if (_viewBill != null)
 {
-    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+    <div class="modal d-block gb-modal" tabindex="-1" style="background: rgba(0,0,0,0.5);">
         <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
                 <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
@@ -997,7 +1077,11 @@
             IsEditable = true,
             CanRemove = true,
             IsSystemLine = false,
-            IsGstEditable = false
+            // Only Additional Charge rows get an editable CGST/SGST % - Room, Food Bill and
+            // Additional Beds rows keep IsGstEditable = false exactly as before. There is no
+            // separate IGST field anywhere in this bill model/calculation (confirmed - CGST +
+            // SGST is the only tax split used), so only these two are made editable.
+            IsGstEditable = true
         });
     }
 
@@ -1174,11 +1258,13 @@
             else
             {
                 _error = result?.Message ?? "Bill could not be generated.";
+                Toast.Error(_error);
             }
         }
         catch (Exception)
         {
             _error = "Bill could not be generated.";
+            Toast.Error(_error);
         }
         finally
         {
@@ -1361,6 +1447,8 @@
         public int BookingId { get; set; }
         public string BookingReference { get; set; } = "";
         public string? GuestName { get; set; }
+        public string? CompanyName { get; set; }
+        public string? GstinNumber { get; set; }
         public string? Address { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }

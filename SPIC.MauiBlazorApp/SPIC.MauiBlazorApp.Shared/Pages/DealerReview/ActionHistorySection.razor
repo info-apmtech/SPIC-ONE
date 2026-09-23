@@ -1,0 +1,168 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@*
+    "Action History": the MO submission card plus one Action Details / Remarks pair per
+    approval-history row. Read-only.
+*@
+
+   <h4 class="sent-title">Action History</h4>
+
+    <div class="row g-4 mb-1">
+        <div class="col-12 col-lg-6">
+            <div class="detail-box">
+                <h5>Action Details</h5>
+                <div class="info-row"><span>Action</span><strong>Submitted</strong></div>
+                <div class="info-row"><span>Action By</span><strong>@(SubmittedByName ?? Dealer?.UpdatedBy ?? Dealer?.CreatedBy ?? "-")</strong></div>
+                <div class="info-row"><span>Role</span><strong>@SubmittedByRoleDisplay</strong></div>
+                <div class="info-row"><span>Date & Time</span><strong>@(Dealer != null ? (Dealer.UpdatedAt.Year > 2000 ? Dealer.UpdatedAt.ToString("dd-MMM-yyyy, hh:mm tt") : Dealer.CreatedAt.ToString("dd-MMM-yyyy, hh:mm tt")) : "-")</strong></div>
+                <div class="info-row"><span>Stage</span><strong>MO Review</strong></div>
+                @if (ShowBusinessInfo && !IsNewDealer && Dealer?.IsCreditLimitConsentGiven != true)
+                {
+                    <div class="info-row"><span>MO Recommended Credit Limit (SPIC)</span><strong>₹ @Figures.GetSpicMoRecommendedLimit().ToString("N2")</strong></div>
+                    <div class="info-row"><span>MO Recommended Credit Limit (GFL)</span><strong>₹ @Figures.GetGflMoRecommendedLimit().ToString("N2")</strong></div>
+                }
+            </div>
+        </div>
+        <div class="col-12 col-lg-6">
+            <div class="detail-box">
+                <h5>Remarks</h5>
+                <ul class="remarks"><li>Application submitted by @SubmittedByRoleDisplay for review.</li></ul>
+            </div>
+        </div>
+    </div>
+
+   @if (ApprovalHistory != null && ApprovalHistory.Any())
+    {
+        <div class="row g-4">
+            @foreach (var action in ApprovalHistory.OrderBy(h => h.ApprovedAt))
+            {
+                <div class="col-12 col-lg-6">
+                    <div class="detail-box">
+                        <h5>Action Details</h5>
+
+                        <div class="info-row">
+                            <span>Action</span>
+                            <strong>@(action.Remarks?.Contains("Sections:") == true ? "Sent Back" : "Updated")</strong>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Action By</span>
+                            <strong>@(
+                                !string.IsNullOrEmpty(action.ApprovedBy) && UserNames.ContainsKey(action.ApprovedBy)
+                                    ? UserNames[action.ApprovedBy]
+                                    : (action.ApprovedBy ?? "-")
+                            )</strong>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Role</span>
+                            <strong>@(action.Role ?? "-")</strong>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Date & Time</span>
+                            <strong>@(action.ApprovedAt.ToString("dd-MMM-yyyy, hh:mm tt"))</strong>
+                        </div>
+
+                        <div class="info-row">
+                            <span>Stage</span>
+                            <strong>@(action.Role != null ? $"{action.Role} Review" : "-")</strong>
+                        </div>
+                        @{
+                            string rolePrefix = "";
+                            decimal? spicLimit = null;
+                            decimal? gflLimit = null;
+
+                            if (action.RmCreditLimit.HasValue || action.RmCreditLimitGfl.HasValue)
+                            {
+                                rolePrefix = "RM";
+                                spicLimit = action.RmCreditLimit;
+                                gflLimit = action.RmCreditLimitGfl;
+                            }
+                            else if (action.SmCreditLimit.HasValue || action.SmCreditLimitGfl.HasValue)
+                            {
+                                rolePrefix = "SM";
+                                spicLimit = action.SmCreditLimit;
+                                gflLimit = action.SmCreditLimitGfl;
+                            }
+                            else if (action.AvpCreditLimit.HasValue || action.AvpCreditLimitGfl.HasValue)
+                            {
+                                rolePrefix = "AVP";
+                                spicLimit = action.AvpCreditLimit;
+                                gflLimit = action.AvpCreditLimitGfl;
+                            }
+
+                         var limitWord = rolePrefix == "AVP" ? "Approved" : "Recommended";
+                            if (!IsNewDealer)
+                            {
+                            if (spicLimit.HasValue)
+                            {
+                                <div class="info-row">
+                                    <span>@rolePrefix @limitWord Credit Limit (SPIC)</span>
+                                    <strong>₹ @spicLimit.Value.ToString("N2")</strong>
+                                </div>
+                            }
+                            if (gflLimit.HasValue)
+                            {
+                                <div class="info-row">
+                                    <span>@rolePrefix @limitWord Credit Limit (GFL)</span>
+                                    <strong>₹ @gflLimit.Value.ToString("N2")</strong>
+                                </div>
+                            }
+                            }
+                        }
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <div class="detail-box">
+                        <h5>Remarks</h5>
+
+                        <ul class="remarks">
+                            @if (!string.IsNullOrWhiteSpace(action.Remarks))
+                            {
+                                var lines = action.Remarks.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                                foreach (var line in lines)
+                                {
+                                    <li>@line</li>
+                                }
+                            }
+                            else
+                            {
+                                <li>No remarks</li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="detail-box">
+                    <h5>Action History</h5>
+                    <div class="text-muted">No actions available.</div>
+                </div>
+            </div>
+        </div>
+    }
+
+@code {
+    [Parameter] public DR.DealerRegistration? Dealer { get; set; }
+    [Parameter] public string? SubmittedByName { get; set; }
+    [Parameter] public string SubmittedByRoleDisplay { get; set; } = "-";
+    [Parameter] public List<DR.DealerApprovalHistory> ApprovalHistory { get; set; } = new();
+    [Parameter] public Dictionary<string, string> UserNames { get; set; } = new();
+    [Parameter] public bool ShowBusinessInfo { get; set; }
+    [Parameter] public bool IsNewDealer { get; set; }
+
+    /// <summary>Shared calculator instance; the MO recommended limits come from it.</summary>
+    [Parameter] public DealerReviewFigures Figures { get; set; } = default!;
+
+    /// <summary>The page fills UserNames in place while loading, so it bumps this when done.</summary>
+    [Parameter] public int DataVersion { get; set; }
+}

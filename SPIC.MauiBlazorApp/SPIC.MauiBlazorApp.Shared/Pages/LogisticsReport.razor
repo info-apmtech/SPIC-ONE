@@ -283,22 +283,46 @@
         .lr-table thead th { font-size: .58rem; padding: 4px 3px; }
         .lr-table tbody td { font-size: .72rem; padding: 4px 3px; }
     }
+
+    /* native: phone */
+    .lr-loading-wrap { padding: 16px; }
+    @@media (max-width: 767.98px) {
+        .lr-tabs { display: flex; width: 100%; }
+        .lr-tab { flex: 1 1 0; min-height: var(--tap-min, 44px); text-align: center; }
+        .lr-btn { min-height: var(--tap-min, 44px); }
+        .lr-search-input { min-height: var(--tap-min, 44px); font-size: 16px; }
+        /* wide pivot table: contained horizontal scroll with a sticky state column */
+        .lr-table-wrap { -webkit-overflow-scrolling: touch; }
+        .lr-table { min-width: 900px; }
+        .lr-table thead th:first-child,
+        .lr-table tbody td:first-child { position: sticky; left: 0; z-index: 2; background: #fff; box-shadow: 1px 0 0 #e5e7eb; }
+        .lr-table thead th:first-child { z-index: 3; background: #f8fafc; }
+        .lr-table .lr-total-row td:first-child { background: #f0fdf4; }
+        .lr-table thead th { font-size: .68rem; padding: 6px 6px; }
+        .lr-table tbody td { font-size: .78rem; padding: 8px 6px; }
+    }
+    @@media (min-width: 768px) and (max-width: 1199.98px) {
+        .lr-table { min-width: 1100px; }
+        .lr-table thead th:first-child,
+        .lr-table tbody td:first-child { position: sticky; left: 0; z-index: 2; background: #fff; box-shadow: 1px 0 0 #e5e7eb; }
+        .lr-table thead th:first-child { z-index: 3; background: #f8fafc; }
+        .lr-table .lr-total-row td:first-child { background: #f0fdf4; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-0 lr-container">
-    <button class="lr-back-btn" @onclick="GoBack">
+    <button class="lr-back-btn tablet-up" @onclick="GoBack">
         <i class="bi bi-arrow-left"></i> Back to Logistics
     </button>
 
-    <div class="lr-header">
-        <h5>Logistics Reports</h5>
-        <div class="lr-header-actions">
+    <PageHeader Title="Logistics Reports" Subtitle="Warehouse and rake point status by state" BackHref="/Logistics">
+        <Actions>
             <button class="lr-btn lr-btn-outline" @onclick="LoadData" disabled="@_isLoading">
                 <i class="bi bi-arrow-clockwise"></i>
                 Refresh
             </button>
-        </div>
-    </div>
+        </Actions>
+    </PageHeader>
 
     <div class="lr-tabs">
         <button class="lr-tab @(_activeTab == "warehouse" ? "active" : "")"
@@ -328,18 +352,14 @@
 
     @if (_isLoading)
     {
-        <div class="lr-loading">
-            <div class="lr-spinner"></div>
-            Loading report data...
+        <div class="lr-table-wrap lr-loading-wrap">
+            <Skeleton Variant="table" Rows="6" LoadingText="Loading report data..." />
         </div>
     }
     else if (_filteredRows.Count == 0)
     {
         <div class="lr-table-wrap">
-            <div class="lr-empty">
-                <i class="bi bi-bar-chart-line"></i>
-                <p>No data available for the current filter.</p>
-            </div>
+            <EmptyState Icon="bi-bar-chart-line" Title="No data available" Message="Nothing matches the current filter. Try another state or refresh the report." />
         </div>
     }
     else
@@ -502,10 +522,10 @@
 
         var sapTotal = totalData?.AsPerSap ?? 0;
         _reportSapTotal = sapTotal;
-        var totalRm = totalData?.PendingRm ?? 0;
-        var totalSmm = totalData?.PendingSmm ?? 0;
-        var totalAvp = totalData?.PendingWithAvp ?? 0;
-        var totalCompleted = totalData?.Completed ?? 0;
+        var totalRm = totalData?.PendingRmTotal ?? 0;
+        var totalSmm = totalData?.PendingSmmTotal ?? 0;
+        var totalAvp = totalData?.PendingWithAvpTotal ?? 0;
+        var totalCompleted = totalData?.CompletedTotal ?? 0;
         _reportPendingWithMo = Math.Max(0, sapTotal - (totalRm + totalSmm + totalAvp + totalCompleted));
 
         if (string.IsNullOrWhiteSpace(_searchTerm))

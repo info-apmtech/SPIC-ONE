@@ -1,0 +1,82 @@
+/* ActionBar — phone: fixed bottom bar + spacer; tablet/desktop: inline row. */
+
+.fb-actionbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 12px 0;
+    background: transparent;
+}
+
+.fb-actionbar--start { justify-content: flex-start; }
+.fb-actionbar--between { justify-content: space-between; }
+.fb-actionbar--end { justify-content: flex-end; }
+
+.fb-actionbar__secondary,
+.fb-actionbar__primary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* The spacer only occupies space on phones (see below). */
+.fb-actionbar-spacer {
+    display: none;
+}
+
+/* 767.98px, not 767px: the shell's phone breakpoint (Layout.css / tokens.css) is
+   <= 767.98px, and at a fractional width between the two the bottom tab bar was
+   already fixed while the ActionBar was still inline and its spacer switched off. */
+@media (max-width: 767.98px) {
+    .fb-actionbar--sticky {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: var(--shell-bottom-offset, 0px);
+        z-index: var(--fb-z-actionbar, 1030);
+        flex-wrap: nowrap;
+        justify-content: stretch;
+        gap: 10px;
+        padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+        background: #ffffff;
+        border-top: 1px solid #eef0f3;
+        box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.10);
+    }
+
+    .fb-actionbar--sticky .fb-actionbar__secondary,
+    .fb-actionbar--sticky .fb-actionbar__primary {
+        flex: 1 1 0;
+        flex-wrap: nowrap;
+        min-width: 0;
+    }
+
+    /* Primary group gets more room when both slots are present. */
+    .fb-actionbar--sticky .fb-actionbar__primary {
+        flex-grow: 1.4;
+    }
+
+    .fb-actionbar--sticky ::deep .btn,
+    .fb-actionbar--sticky ::deep button {
+        flex: 1 1 0;
+        min-height: 44px;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Spacer keeps page content clear of the fixed bar. feedback-interop.js sets the exact
+       height; the fallback covers one row of 44px buttons + padding + safe area. */
+    .fb-actionbar-spacer {
+        display: block;
+        height: calc(64px + env(safe-area-inset-bottom, 0px));
+        pointer-events: none;
+    }
+
+    .fb-actionbar-spacer--off {
+        display: none;
+    }
+}

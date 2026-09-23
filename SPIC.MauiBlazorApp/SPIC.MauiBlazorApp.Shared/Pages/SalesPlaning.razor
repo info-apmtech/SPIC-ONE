@@ -210,6 +210,7 @@
 </style>
 <div class="container-fluid py-4 px-0">
     <FormLoader />
+    <PageHeader Title="Sales Planning & Forecast" />
     <fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 
         @if (!string.IsNullOrEmpty(_message))
@@ -220,28 +221,30 @@
             </div>
         }
 
-        <div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-            <h3 class="fw-bold m-0 company-title">Sales Planning & Forecast</h3>
-        </div>
-
         <div class="main-card sp-main-card">
 
             <div class="section-title mb-3">
-                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/businessIcon1.svg" class="sp-section-icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/businessIcon1.svg" class="sp-section-icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
                 Business Plan
             </div>
 
-            <!-- Dynamic Category Tabs -->
-            <div class="custom-tabs sp-custom-tabs">
-                @foreach (var cat in _categories)
-                {
-                    var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
-                    <div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
-                         @onclick="() => SelectCategory(cat.Id)">
-                        @cat.Name (@unitName/Value)
-                    </div>
-                }
-            </div>
+            <!-- Dynamic Category Tabs.
+                 Rendered only when there is at least one category: .custom-tabs draws a
+                 filled pill background, so an empty list showed as a blank grey bar above
+                 the plan table on both phone and desktop. -->
+            @if (_categories.Count > 0)
+            {
+                <div class="custom-tabs sp-custom-tabs">
+                    @foreach (var cat in _categories)
+                    {
+                        var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
+                        <div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
+                             @onclick="() => SelectCategory(cat.Id)">
+                            @cat.Name (@unitName/Value)
+                        </div>
+                    }
+                </div>
+            }
 
             <!-- Table -->
             <div class="table-wrapper sp-table-wrapper">

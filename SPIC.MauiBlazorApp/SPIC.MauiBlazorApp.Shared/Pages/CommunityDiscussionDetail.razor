@@ -1,0 +1,699 @@
+@page "/Community/discussion/{Id:int}"
+@* Discussion Details: question card, attachments (beside the text on desktop, below it elsewhere), nested replies, composer. *@
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject CommunityApi Api
+@inject IJSRuntime JS
+@implements IDisposable
+
+@*
+    Knowledge Community - "Discussion Details" (Figma frames supplied 2026-09-20).
+
+    One responsive page covers both Figma attachment variants: on desktop a discussion with
+    1-4 images puts them in a 2x2 grid beside the question text ("side"); on tablet/phone -
+    and on desktop with more than four - they sit under the text as tiles ("down").
+    Files that are not images are listed under the images and open in a new tab.
+
+    Everything comes from api/Community: GET .../discussions/{id} counts the view server side
+    (never increment it here), like / save / follow toggle optimistically and roll back when
+    the call fails, and replies are posted through the API.
+*@
+
+@if (_loading)
+{
+    <PageTitle>Discussion - Knowledge Community - SPIC ONE</PageTitle>
+
+    <div class="cd-page">
+        <section class="cd-card cd-q">
+            <Skeleton Variant="card" Rows="1" />
+            <Skeleton Rows="4" />
+        </section>
+        <section class="cd-card cd-replies">
+            <Skeleton Variant="card" Rows="2" />
+        </section>
+    </div>
+}
+else if (_d is null)
+{
+    <PageTitle>Discussion not found - Knowledge Community - SPIC ONE</PageTitle>
+
+    <EmptyState Icon="bi-chat-square-text"
+                Title="@(_failed ? "Discussion could not be loaded" : "Discussion not found")"
+                Message="@(_failed
+                    ? "The community service did not answer. Please try again."
+                    : "This discussion is not in the community any more.")">
+        @if (_failed)
+        {
+            <button type="button" class="cd-btn-solid" @onclick="LoadAsync">Try again</button>
+        }
+        <button type="button" class="cd-btn-outline" @onclick='() => Nav.NavigateTo("/Community/discussions")'>
+            Back to Discussions
+        </button>
+    </EmptyState>
+}
+else
+{
+    <div class="cd-page">
+
+        <PageHeader Title="Discussion Details"
+                    Subtitle="View the question, replies, and expert guidance"
+                    ShowBack="true"
+                    BackHref="/Community/discussions"
+                    CssClass="cd-head">
+            <Actions>
+                <a class="cd-btn-outline desktop-only" href="Community">
+                    <span aria-hidden="true">&#8592;</span> Back to Knowledge Community
+                </a>
+            </Actions>
+        </PageHeader>
+
+        @* rendered after PageHeader so this title is the one the head outlet keeps *@
+        <PageTitle>@_d.Title - Knowledge Community - SPIC ONE</PageTitle>
+
+        @* ------------------------------------------------ question *@
+        <section class="cd-card cd-q">
+
+            <div class="cd-q-top">
+                <MemberAvatar Member="_d.Author" Size="56" />
+
+                <div class="cd-q-who">
+                    <div class="cd-q-name-row">
+                        <span class="cd-q-name">@_d.Author.Name</span>
+                        <span class="cd-q-role @(_d.Author.IsExpert ? "is-expert" : "is-farmer")">@_d.Author.Role</span>
+                    </div>
+                    <div class="cd-q-meta">
+                        <i class="bi bi-geo-alt" aria-hidden="true"></i>
+                        @(string.IsNullOrWhiteSpace(_d.Author.Location) ? "" : _d.Author.Location + " · ")@_d.CreatedAt.ToString("MMM d, yyyy") · @_d.CreatedAt.ToString("h:mm tt")
+                    </div>
+                </div>
+
+                <div class="cd-q-tools">
+                    <span class="cd-q-kind"><span class="cd-dot" aria-hidden="true"></span> Discussion</span>
+                    <StatusPill Status="_d.Status" />
+
+                    <div class="cd-q-btns">
+                        @if (CanResolve)
+                        {
+                            <button type="button"
+                                    class="cd-tool @(IsResolved ? "" : "cd-tool-resolve")"
+                                    title="@(IsResolved ? "Reopen this discussion" : "Mark this discussion as resolved")"
+                                    disabled="@_statusBusy"
+                                    @onclick="ToggleResolvedAsync">
+                                <i class="bi @(IsResolved ? "bi-arrow-counterclockwise" : "bi-check2-circle")" aria-hidden="true"></i>
+                                <span class="cd-tool-label">@(IsResolved ? "Reopen" : "Mark as Resolved")</span>
+                            </button>
+                        }
+                        <button type="button" class="cd-tool @(_d.IsSaved ? "is-on" : "")" title="@(_d.IsSaved ? "Saved" : "Save")" @onclick="ToggleSaveAsync">
+                            <i class="bi @(_d.IsSaved ? "bi-bookmark-fill" : "bi-bookmark")" aria-hidden="true"></i>
+                            <span class="cd-tool-label">@(_d.IsSaved ? "Saved" : "Save")</span>
+                        </button>
+                        <button type="button" class="cd-tool" title="Share" @onclick="ShareAsync">
+                            <i class="bi bi-share" aria-hidden="true"></i>
+                            <span class="cd-tool-label">Share</span>
+                        </button>
+                        <button type="button" class="cd-tool @(_d.IsFollowing ? "is-on" : "")" title="@(_d.IsFollowing ? "Following" : "Follow")" @onclick="ToggleFollowAsync">
+                            <i class="bi @(_d.IsFollowing ? "bi-check2" : "bi-plus-lg")" aria-hidden="true"></i>
+                            <span class="cd-tool-label">@(_d.IsFollowing ? "Following" : "Follow")</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="cd-q-title">@_d.Title</h2>
+
+            <div class="cd-q-split @(HasImages && SideLayout ? "cd-q-split--side" : "")">
+                <div class="cd-q-text">
+                    <p class="cd-q-body">@_d.Body</p>
+                </div>
+
+                @if (HasImages)
+                {
+                    <div class="cd-q-imgs cd-q-imgs--@Images.Count">
+                        @for (var i = 0; i < Images.Count; i++)
+                        {
+                            var index = i;
+                            <button type="button" class="cd-q-img" @onclick="() => OpenLightbox(Images, index)" aria-label="@($"Open image {index + 1} of {Images.Count}")">
+                                <img src="@Images[index].Url" alt="" loading="lazy"
+                                     onerror="this.onerror=null;this.parentElement.classList.add('is-broken')" />
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+
+            @if (Files.Count > 0)
+            {
+                <ul class="cd-q-files">
+                    @foreach (var file in Files)
+                    {
+                        <li class="cd-q-file" @key="file.Id">
+                            <a href="@file.Url" target="_blank" rel="noopener">
+                                <i class="bi @FileIcon(file.FileName) cd-q-file-icon" aria-hidden="true"></i>
+                                <span class="cd-q-file-name">@file.FileName</span>
+                                <span class="cd-q-file-size">@SizeLabel(file.Size)</span>
+                                <i class="bi bi-box-arrow-up-right cd-q-file-open" aria-hidden="true"></i>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <div class="cd-q-foot">
+                <div class="cd-q-chips">
+                    @if (!string.IsNullOrWhiteSpace(_d.Product))
+                    {
+                        <TagChip Text="@($"⊞ {_d.Product}")" ShowHash="false" CssClass="cm-tag-green" />
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_d.Category))
+                    {
+                        <TagChip Text="@($"\U0001F3F7 {_d.Category}")" ShowHash="false" CssClass="cm-tag-green" />
+                    }
+                    @foreach (var tag in _d.Tags)
+                    {
+                        <TagChip Text="@tag" />
+                    }
+                </div>
+
+                <div class="cd-q-counts">
+                    <span class="cd-count"><i class="bi bi-eye" aria-hidden="true"></i> @_d.Views View</span>
+                    <span class="cd-count"><i class="bi bi-chat-dots" aria-hidden="true"></i> @Replies.Count reply</span>
+                    <button type="button"
+                            class="cd-count cd-count-btn @(_d.IsLiked ? "is-on" : "")"
+                            aria-pressed="@(_d.IsLiked ? "true" : "false")"
+                            @onclick="ToggleLikeAsync">
+                        <i class="bi @(_d.IsLiked ? "bi-hand-thumbs-up-fill" : "bi-hand-thumbs-up")" aria-hidden="true"></i> @_d.Likes likes
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        @* ------------------------------------------------ replies *@
+        <section class="cd-card cd-replies">
+
+            <div class="cd-rep-head">
+                <h2 class="cd-rep-title">Replied (@Replies.Count)</h2>
+                <label class="cd-sort">
+                    <span>Sort by:</span>
+                    <select class="cd-sort-select" @bind="_sort">
+                        <option value="latest">Latest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="liked">Most Liked</option>
+                    </select>
+                </label>
+            </div>
+
+            <div class="cd-rep-list">
+                @if (Replies.Count == 0)
+                {
+                    <EmptyState Icon="bi-chat-dots" Title="No replies yet" Message="Be the first to answer this question." Compact="true" />
+                }
+                else
+                {
+                    @foreach (var reply in TopLevel)
+                    {
+                        <ReplyItem @key="reply.Id"
+                                   Reply="reply"
+                                   DiscussionId="_d.Id"
+                                   Children="ChildrenOf(reply.Id)"
+                                   Me="_me"
+                                   OnPosted="OnReplyPosted"
+                                   OnDeleted="OnReplyDeleted"
+                                   OnOpenImage="OpenLightbox"
+                                   OnAvatarClick="OpenPhotoSheet" />
+                    }
+                }
+            </div>
+
+            <ReplyComposer DiscussionId="_d.Id"
+                           Me="_me"
+                           IsPhone="_isPhone"
+                           OnPosted="OnComposerPostedAsync"
+                           OnAvatarClick="OpenPhotoSheet" />
+        </section>
+    </div>
+
+    <ProfilePhotoSheet @bind-IsOpen="_photoOpen" Me="_me" OnChanged="OnPhotoChangedAsync" />
+
+    @* ------------------------------------------------ lightbox *@
+    @if (_lightbox >= 0 && _lightbox < _lbImages.Count)
+    {
+        <div class="cd-lb"
+             role="dialog"
+             aria-modal="true"
+             aria-label="Attachment"
+             tabindex="0"
+             @ref="_lbRef"
+             @onclick="CloseLightbox"
+             @onkeydown="LightboxKey">
+
+            <button type="button" class="cd-lb-btn cd-lb-close" title="Close" aria-label="Close"
+                    @onclick="CloseLightbox" @onclick:stopPropagation="true">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+
+            @if (_lbImages.Count > 1)
+            {
+                <button type="button" class="cd-lb-btn cd-lb-prev" title="Previous" aria-label="Previous image"
+                        @onclick="PrevImage" @onclick:stopPropagation="true">
+                    <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                </button>
+            }
+
+            <img class="cd-lb-img" src="@_lbImages[_lightbox].Url" alt="" @onclick="NoOp" @onclick:stopPropagation="true" />
+
+            @if (_lbImages.Count > 1)
+            {
+                <button type="button" class="cd-lb-btn cd-lb-next" title="Next" aria-label="Next image"
+                        @onclick="NextImage" @onclick:stopPropagation="true">
+                    <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                </button>
+            }
+
+            @if (_lbImages.Count > 1)
+            {
+                <div class="cd-lb-count">@(_lightbox + 1) / @_lbImages.Count</div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    // Services.* prefix: inside this namespace the bare name would find the page class itself.
+    private CommunityDiscussion? _d;
+    private int _loadedId = -1;
+    private bool _loading = true;
+    private bool _failed;
+
+    private string _sort = "latest";
+
+    /// <summary>The signed-in user as the API knows them (GET me): the composer avatar.</summary>
+    private CommunityMember? _me;
+    private bool _photoOpen;
+
+    private bool _statusBusy;
+
+    private int _lightbox = -1;
+    private List<CommunityAttachment> _lbImages = new();
+    private ElementReference _lbRef;
+    private bool _focusLightbox;
+
+    private int? _scrollToReplyId;
+
+    private CancellationTokenSource? _cts;
+
+    // Phone is measured once from window.innerWidth (same pattern as the report pages):
+    // on phone Enter inserts a newline and the send button posts.
+    private bool _isPhone;
+    private bool _viewportChecked;
+
+    private List<CommunityReply> Replies => _d?.Replies ?? new List<CommunityReply>();
+
+    private List<CommunityAttachment> Images => _d?.Images.ToList() ?? new List<CommunityAttachment>();
+
+    private List<CommunityAttachment> Files => _d?.Files.ToList() ?? new List<CommunityAttachment>();
+
+    private bool HasImages => Images.Count > 0;
+
+    /// <summary>Figma "side" variant: 1-4 images beside the text (desktop only, via CSS).</summary>
+    private bool SideLayout => Images.Count is >= 1 and <= 4;
+
+    /// <summary>The author closes their own question; Admin / CorporateAdmin close any.</summary>
+    private bool CanResolve => _d is not null && (_d.IsMine || Api.IsModerator);
+
+    private bool IsResolved => _d?.Status == DiscussionStatus.Resolved;
+
+    private IEnumerable<CommunityReply> TopLevel
+    {
+        get
+        {
+            // A reply whose parent is gone (the server deletes one reply at a time) is shown at
+            // the top level, so nothing in the thread is counted but invisible.
+            var ids = Replies.Select(r => r.Id).ToHashSet();
+            var top = Replies.Where(r => r.ParentReplyId is not int parent || !ids.Contains(parent));
+            return _sort switch
+            {
+                "oldest" => top.OrderBy(r => r.CreatedAt).ThenBy(r => r.Id),
+                "liked" => top.OrderByDescending(r => r.Likes).ThenByDescending(r => r.CreatedAt),
+                _ => top.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id)
+            };
+        }
+    }
+
+    private IReadOnlyList<CommunityReply> ChildrenOf(int parentId) =>
+        Replies.Where(r => r.ParentReplyId == parentId).OrderBy(r => r.CreatedAt).ThenBy(r => r.Id).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id) return;
+
+        _loadedId = Id;
+        _lightbox = -1;
+        _lbImages = new List<CommunityAttachment>();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        _failed = false;
+        StateHasChanged();
+
+        // The server counts the view inside this call; nothing is incremented client side.
+        var discussion = Api.GetDiscussionAsync(Id, ct);
+        var me = _me is null ? Api.GetMeAsync(ct) : Task.FromResult<CommunityMember?>(_me);
+
+        var (item, notFound) = await discussion;
+        _me = await me ?? _me;                  // a failed GET me only costs the composer photo
+
+        if (ct.IsCancellationRequested) return;
+
+        _d = item;
+        _failed = item is null && !notFound;
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_viewportChecked)
+        {
+            _viewportChecked = true;
+            try
+            {
+                var width = await JS.InvokeAsync<int>("eval", "window.innerWidth");
+                if (width > 0 && width < 768)
+                {
+                    _isPhone = true;
+                    StateHasChanged();
+                }
+            }
+            catch
+            {
+                // JS not available (prerender / MAUI start-up): keep the desktop behaviour.
+            }
+        }
+
+        if (_focusLightbox)
+        {
+            _focusLightbox = false;
+            try { await _lbRef.FocusAsync(); } catch { /* element already gone */ }
+        }
+
+        if (_scrollToReplyId is int replyId && _d is not null)
+        {
+            _scrollToReplyId = null;
+            try
+            {
+                await JS.InvokeVoidAsync("eval",
+                    $"var e=document.getElementById('cm-reply-{_d.Id}-{replyId}'); if(e) e.scrollIntoView({{behavior:'smooth',block:'center'}});");
+            }
+            catch
+            {
+                // scrolling is a nicety; never break the post because of it
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- question actions
+    private async Task ToggleSaveAsync()
+    {
+        if (_d is null) return;
+
+        var was = _d.IsSaved;
+        _d.IsSaved = !was;                      // optimistic
+
+        var result = await Api.ToggleSaveAsync(_d.Id);
+
+        if (result is null)
+        {
+            _d.IsSaved = was;                   // rolled back; CommunityApi raised the toast
+            return;
+        }
+
+        _d.IsSaved = result.Active;
+        Toast.Info(_d.IsSaved ? "Saved to your list." : "Removed from your list.");
+    }
+
+    private async Task ToggleFollowAsync()
+    {
+        if (_d is null) return;
+
+        var was = _d.IsFollowing;
+        _d.IsFollowing = !was;
+
+        var result = await Api.ToggleFollowAsync(_d.Id);
+
+        if (result is null)
+        {
+            _d.IsFollowing = was;
+            return;
+        }
+
+        _d.IsFollowing = result.Active;
+        Toast.Info(_d.IsFollowing ? "You are following this discussion." : "You stopped following this discussion.");
+    }
+
+    private async Task ToggleLikeAsync()
+    {
+        if (_d is null) return;
+
+        var wasLiked = _d.IsLiked;
+        var wasCount = _d.Likes;
+
+        _d.IsLiked = !wasLiked;
+        _d.Likes = Math.Max(0, wasCount + (wasLiked ? -1 : 1));
+
+        var result = await Api.ToggleLikeAsync(_d.Id);
+
+        if (result is null)
+        {
+            _d.IsLiked = wasLiked;
+            _d.Likes = wasCount;
+            return;
+        }
+
+        _d.IsLiked = result.Active;
+        _d.Likes = result.Count;
+    }
+
+    /// <summary>
+    /// "Mark as Resolved" / "Reopen". Resolving is confirmed first (it closes the thread for
+    /// everyone); reopening is a single tap. The status changes only once the API agrees.
+    /// </summary>
+    private async Task ToggleResolvedAsync()
+    {
+        if (_d is null || _statusBusy) return;
+
+        var resolved = IsResolved;
+
+        if (!resolved)
+        {
+            var ok = await Toast.ConfirmAsync("Mark as resolved",
+                "This question will be shown as Resolved. You can reopen it at any time.",
+                "Mark as Resolved");
+            if (!ok) return;
+        }
+
+        var target = resolved ? DiscussionStatus.Open : DiscussionStatus.Resolved;
+
+        _statusBusy = true;
+        var saved = await Api.SetStatusAsync(_d.Id, target);
+        _statusBusy = false;
+
+        if (!saved) return;                     // CommunityApi already explained why
+
+        _d.Status = target;
+        Toast.Success(target == DiscussionStatus.Resolved ? "Marked as resolved." : "Discussion reopened.");
+    }
+
+    private async Task ShareAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Nav.Uri);
+        }
+        catch
+        {
+            // no clipboard permission / no JS: the toast still tells the user what happened
+        }
+        Toast.Info("Link copied");
+    }
+
+    // ---------------------------------------------------------------- composer
+    /// <summary>A reply from the bar composer: newest first, so the author sees it land.</summary>
+    private Task OnComposerPostedAsync(CommunityReply posted)
+    {
+        _sort = "latest";
+        return OnReplyPosted(posted);
+    }
+
+    // ---------------------------------------------------------------- profile photo
+    private void OpenPhotoSheet() => _photoOpen = true;
+
+    /// <summary>
+    /// The sheet uploaded or removed the photo. The avatar on my own replies is refreshed too,
+    /// so the change is visible without a reload.
+    /// </summary>
+    private async Task OnPhotoChangedAsync(CommunityMember? member)
+    {
+        _me = member ?? await Api.GetMeAsync();
+
+        if (_d is not null && _me is not null && !string.IsNullOrEmpty(_me.UserId))
+        {
+            if (_d.Author.UserId == _me.UserId) _d.Author = _d.Author.WithAvatar(_me.Avatar);
+
+            for (var i = 0; i < _d.Replies.Count; i++)
+            {
+                if (_d.Replies[i].Author.UserId == _me.UserId)
+                {
+                    _d.Replies[i] = CloneWithAvatar(_d.Replies[i], _me.Avatar);
+                }
+            }
+
+            for (var i = 0; i < _d.Participants.Count; i++)
+            {
+                if (_d.Participants[i].UserId == _me.UserId)
+                {
+                    _d.Participants[i] = _d.Participants[i].WithAvatar(_me.Avatar);
+                }
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>CommunityReply.Author is init-only, so a refreshed avatar means a new row.</summary>
+    private static CommunityReply CloneWithAvatar(CommunityReply reply, string? avatar) => new()
+    {
+        Id = reply.Id,
+        DiscussionId = reply.DiscussionId,
+        ParentReplyId = reply.ParentReplyId,
+        Author = reply.Author.WithAvatar(avatar),
+        MentionName = reply.MentionName,
+        Body = reply.Body,
+        CreatedAt = reply.CreatedAt,
+        Likes = reply.Likes,
+        IsLiked = reply.IsLiked,
+        ReplyCount = reply.ReplyCount,
+        IsMine = reply.IsMine,
+        Attachments = reply.Attachments
+    };
+
+    /// <summary>
+    /// Adds the reply the server created to the thread and mirrors the server's status rule
+    /// (a reply from SPIC staff makes the discussion an Expert Answer; anyone else answering
+    /// a question that was waiting moves it to Open).
+    /// </summary>
+    private Task OnReplyPosted(CommunityReply reply)
+    {
+        if (_d is null) return Task.CompletedTask;
+
+        _d.Replies.Add(reply);
+        _d.ReplyCount = _d.Replies.Count;
+        _d.LastActivityAt = reply.CreatedAt;
+
+        if (reply.ParentReplyId is int parentId)
+        {
+            var parent = _d.Replies.FirstOrDefault(r => r.Id == parentId);
+            if (parent is not null) parent.ReplyCount++;
+        }
+
+        if (reply.Author.IsExpert) _d.Status = DiscussionStatus.ExpertAnswer;
+        else if (_d.Status == DiscussionStatus.WaitingForReply) _d.Status = DiscussionStatus.Open;
+
+        _scrollToReplyId = reply.Id;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Drops a deleted reply and re-counts the thread. The API soft-deletes exactly one row
+    /// (DELETE replies/{id}), so replies nested under it stay and are re-drawn at the top level
+    /// by <see cref="TopLevel"/> - which is what a reload shows as well.
+    /// </summary>
+    private void OnReplyDeleted(CommunityReply reply)
+    {
+        if (_d is null) return;
+
+        var gone = _d.Replies.Where(r => r.Id == reply.Id).ToList();
+        foreach (var r in gone) _d.Replies.Remove(r);
+
+        if (reply.ParentReplyId is int parentId)
+        {
+            var parent = _d.Replies.FirstOrDefault(r => r.Id == parentId);
+            if (parent is not null) parent.ReplyCount = Math.Max(0, parent.ReplyCount - 1);
+        }
+
+        _d.ReplyCount = _d.Replies.Count;
+        StateHasChanged();
+    }
+
+    // ---------------------------------------------------------------- attachments
+    private static string FileIcon(string name)
+    {
+        var ext = System.IO.Path.GetExtension(name).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => "bi-file-earmark-pdf",
+            ".doc" or ".docx" => "bi-file-earmark-word",
+            ".xls" or ".xlsx" or ".csv" => "bi-file-earmark-spreadsheet",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private static string SizeLabel(long bytes) => bytes >= 1024 * 1024
+        ? $"{bytes / 1024d / 1024d:0.0} MB"
+        : $"{Math.Max(1, bytes / 1024d):0} KB";
+
+    // ---------------------------------------------------------------- lightbox
+    /// <summary>One lightbox for the page: the question's pictures, or a reply's.</summary>
+    private void OpenLightbox(IReadOnlyList<CommunityAttachment> images, int index)
+    {
+        if (images.Count == 0) return;
+
+        _lbImages = images.ToList();
+        _lightbox = Math.Clamp(index, 0, _lbImages.Count - 1);
+        _focusLightbox = true;
+    }
+
+    private void OpenLightbox(CommunityImageOpen request) => OpenLightbox(request.Images, request.Index);
+
+    private void CloseLightbox() => _lightbox = -1;
+
+    private void NextImage()
+    {
+        if (_lbImages.Count == 0) return;
+        _lightbox = (_lightbox + 1) % _lbImages.Count;
+    }
+
+    private void PrevImage()
+    {
+        if (_lbImages.Count == 0) return;
+        _lightbox = (_lightbox - 1 + _lbImages.Count) % _lbImages.Count;
+    }
+
+    private void LightboxKey(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape": CloseLightbox(); break;
+            case "ArrowRight": NextImage(); break;
+            case "ArrowLeft": PrevImage(); break;
+        }
+    }
+
+    private void NoOp() { }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

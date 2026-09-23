@@ -1,0 +1,291 @@
+@page "/DigitalLibrary"
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject DigitalLibraryApi Api
+@inject LoginState LoginState
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+
+<PageTitle>Digital Library - SPIC ONE</PageTitle>
+
+@*
+    Digital Library landing page (design: Figma "SPIC" > Digital Library, screenshot supplied
+    2026-09-20). Stats, category counts and content all come from api/Library.
+    Layout: hero + search + three category cards, featured strip, content grid.
+    Category cards, their headings and "View All Content" open the All Content list
+    (/DigitalLibrary/content) pre-filtered by type.
+    Phone: everything stacks; tablet: 2 columns; desktop: 3 columns as designed.
+*@
+
+<div class="dl-page">
+
+    <section class="dl-hero">
+        <h1 class="dl-hero-title">Digital Library Assistant</h1>
+        <p class="dl-hero-sub">
+            Get instant answers and discover relevant knowledge from the digital library.
+            Ask about products, usage guides, or find related content.
+        </p>
+
+        <div class="dl-hero-actions">
+            <button type="button" class="dl-btn dl-btn-light" @onclick='() => Nav.NavigateTo("/DigitalLibrary/chat")'>
+                <i class="bi bi-stars"></i> Start Chat
+            </button>
+            @if (CanAdd)
+            {
+                <button type="button" class="dl-btn dl-btn-outline" @onclick="() => _createOpen = true">
+                    <i class="bi bi-plus-square"></i> Add Content
+                </button>
+            }
+        </div>
+
+        <form class="dl-search" @onsubmit="Search" @onsubmit:preventDefault>
+            <i class="bi bi-search dl-search-icon" aria-hidden="true"></i>
+            <input class="dl-search-input"
+                   type="search"
+                   placeholder="Search products, videos, brochures or ask a question"
+                   aria-label="Search the digital library"
+                   @bind="_query" @bind:event="oninput" />
+            <button type="submit" class="dl-search-go" aria-label="Search"><i class="bi bi-arrow-right"></i></button>
+        </form>
+
+        <div class="dl-chips" role="list">
+            @foreach (var s in Suggestions)
+            {
+                <button type="button" class="dl-chip" role="listitem" @onclick="() => UseSuggestion(s)">@s</button>
+            }
+        </div>
+
+        <h2 class="dl-hero-heading">Digital Library</h2>
+
+        <div class="dl-categories">
+            @foreach (var c in Categories)
+            {
+                <article class="dl-cat" @onclick="() => OpenType(c.Type)">
+                    <div class="dl-cat-body">
+                        <h3 class="dl-cat-title"><a href="@ListHref(c.Type)" @onclick:stopPropagation>@c.Title</a></h3>
+                        <p class="dl-cat-desc">@c.Description</p>
+                    </div>
+                    <div class="dl-cat-art" aria-hidden="true">
+                        <i class="bi @c.Icon"></i>
+                    </div>
+                    <a class="dl-cat-footer" href="@ListHref(c.Type)" @onclick:stopPropagation>
+                        <span class="dl-cat-count"><i class="bi @c.CountIcon"></i> @Count(c.Type) @c.Unit</span>
+                        <span class="dl-cat-link">@c.LinkText <i class="bi bi-chevron-right"></i></span>
+                    </a>
+                </article>
+            }
+        </div>
+    </section>
+
+    <section class="dl-section">
+        <h2 class="dl-section-title">Featured Content</h2>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="card" Rows="3" />
+        }
+        else if (_failed)
+        {
+            <EmptyState Icon="bi-wifi-off" Title="The library is not available" Message="@_error">
+                <button type="button" class="btn btn-outline-success" @onclick="Reload">Try again</button>
+            </EmptyState>
+        }
+        else if (Items.Count == 0)
+        {
+            <EmptyState Icon="bi-collection" Title="Nothing in the library yet"
+                        Message="@(CanAdd ? "Add a product, an AI video or a brochure to get started." : "There is no published content in the library yet.")">
+                @if (CanAdd)
+                {
+                    <button type="button" class="btn btn-success" @onclick="() => _createOpen = true">Add Content</button>
+                }
+            </EmptyState>
+        }
+        else
+        {
+            <div class="dl-featured">
+                @foreach (var f in Items.Where(i => i.Published).Take(3))
+                {
+                    <article class="dl-feat">
+                        <img class="dl-feat-img" src="@f.Image" alt="" loading="lazy"
+                                 onerror="this.onerror=null;this.src='@DigitalLibraryItem.PlaceholderImage(f.Id)'" />
+                        <div class="dl-feat-body">
+                            <h3 class="dl-feat-title">@f.Title</h3>
+                            <p class="dl-feat-desc">@f.Description</p>
+                            <a class="dl-more" href="@($"DigitalLibrary/view/{f.Id}")">
+                                @(f.Type == DigitalLibraryType.Videos ? "Explore Videos" : "Open") <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </div>
+                    </article>
+                }
+            </div>
+
+            <a class="dl-viewall" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
+
+            <div class="dl-grid">
+                @foreach (var item in Items.Take(9))
+                {
+                    <DigitalLibraryCard @key="item.Id" Item="item"
+                                        ShowActions="CanEdit" CanUpdate="CanUpdate" CanDelete="CanDelete"
+                                        OnEdit="Edit" OnDelete="Delete" OnArchive="Archive" OnTogglePublish="TogglePublish" />
+                }
+            </div>
+
+            <a class="dl-viewall dl-viewall-end" href="DigitalLibrary/content">View All Content <i class="bi bi-chevron-right"></i></a>
+        }
+    </section>
+
+    @if (CanAdd)
+    {
+        <DigitalLibraryCreateDialog @bind-IsOpen="_createOpen" />
+    }
+    <DigitalLibraryUnpublishDialog Item="_unpublishTarget" OnConfirm="ConfirmUnpublish" OnCancel="() => _unpublishTarget = null" />
+</div>
+
+@code {
+    // Content is readable by every signed-in user; adding and editing needs the DigitalLibrary
+    // page in the designation (Admin / CorporateAdmin bypass). The API enforces the same rule.
+    private bool CanEdit => LoginState.CanAccess("DigitalLibrary");
+    private bool CanAdd => CanEdit && LoginState.Can("DigitalLibrary", "Entry");
+    private bool CanUpdate => CanEdit && LoginState.Can("DigitalLibrary", "Update");
+    private bool CanDelete => CanEdit && LoginState.Can("DigitalLibrary", "Delete");
+
+    private bool _createOpen;
+    private DigitalLibraryItem? _unpublishTarget;
+
+    private string _query = "";
+
+    private bool _loading = true;
+    private bool _failed;
+    private string? _error;
+
+    private static readonly string[] Suggestions =
+    {
+        "Find Product Information", "Show latest brochures", "Explain a product", "Find a related video"
+    };
+
+    private sealed record Category(DigitalLibraryType Type, string Title, string Description, string Icon, string CountIcon, string Unit, string LinkText);
+
+    private static readonly Category[] Categories =
+    {
+        new(DigitalLibraryType.Videos, "AI Videos", "Watch smart, AI-powered videos that explain products, solutions and technologies.",
+            "bi-camera-video-fill", "bi-play-btn", "Videos", "Explore Videos"),
+        new(DigitalLibraryType.Products, "Product Information", "Explore detailed product information, specifications and technical resources.",
+            "bi-clipboard2-data-fill", "bi-box-seam", "Products", "Explore Products"),
+        new(DigitalLibraryType.Brochures, "Product Brochures", "Access official brochures, datasheets and catalogues in one place.",
+            "bi-journal-bookmark-fill", "bi-file-earmark-pdf", "Brochures", "Explore Brochures"),
+    };
+
+    private List<DigitalLibraryItem> Items { get; set; } = new();
+    private LibraryStatsDto? _stats;
+
+    protected override Task OnInitializedAsync() => Reload();
+
+    private async Task Reload()
+    {
+        _loading = true;
+        _failed = false;
+        _error = null;
+        StateHasChanged();
+
+        _stats = await Api.GetStatsAsync();
+        if (_stats is null)
+        {
+            _error = Api.LastError;
+        }
+
+        // Readers never ask for drafts: the API refuses a non-published status for them.
+        var page = await Api.ListAsync(status: CanEdit ? null : LibraryContentStatus.Published, page: 1, pageSize: 12);
+        if (Api.LastError is not null)
+        {
+            _failed = true;
+            _error ??= Api.LastError;
+            Toast.Error(_error ?? "The library could not be loaded.");
+        }
+        else
+        {
+            Items = Api.ToItems(page.Items);
+        }
+
+        _loading = false;
+    }
+
+    // Counts come from the stats endpoint so the cards show the whole library, not one page.
+    private int Count(DigitalLibraryType t) => t switch
+    {
+        DigitalLibraryType.Videos => _stats?.Videos ?? 0,
+        DigitalLibraryType.Products => _stats?.Products ?? 0,
+        _ => _stats?.Brochures ?? 0
+    };
+
+    private static string ListHref(DigitalLibraryType t) => $"DigitalLibrary/content?type={DigitalLibraryItem.RouteOf(t)}";
+
+    private void OpenType(DigitalLibraryType t) => Nav.NavigateTo("/" + ListHref(t));
+
+    private void Search()
+    {
+        if (string.IsNullOrWhiteSpace(_query)) return;
+        Nav.NavigateTo($"/DigitalLibrary/chat?q={Uri.EscapeDataString(_query.Trim())}");
+    }
+
+    private void UseSuggestion(string s)
+    {
+        _query = s;
+        Search();
+    }
+
+    private void Edit(DigitalLibraryItem item) => Nav.NavigateTo($"/DigitalLibrary/add/{DigitalLibraryItem.RouteOf(item.Type)}?id={item.Id}");
+
+    private async Task Delete(DigitalLibraryItem item)
+    {
+        if (!await Toast.ConfirmAsync("Delete content", $"Delete \"{item.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
+        if (!await Api.DeleteAsync(item.Id)) { Toast.Error(Api.LastError ?? "The item could not be deleted."); return; }
+        Items.Remove(item);
+        Toast.Success("Content deleted.");
+        await Reload();
+    }
+
+    private async Task Archive(DigitalLibraryItem item)
+    {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Archived) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be archived.");
+            return;
+        }
+        Items.Remove(item);
+        Toast.Info("Content archived.");
+        await Reload();
+    }
+
+    private async Task TogglePublish(DigitalLibraryItem item)
+    {
+        if (item.Published)
+        {
+            _unpublishTarget = item; // confirmed in the dialog
+            return;
+        }
+
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Published) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be published.");
+            return;
+        }
+        item.Published = true;
+        item.Status = LibraryContentStatus.Published;
+        Toast.Success("Content published.");
+        await Reload();
+    }
+
+    private async Task ConfirmUnpublish(DigitalLibraryItem item)
+    {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Draft) is null)
+        {
+            Toast.Error(Api.LastError ?? "The item could not be unpublished.");
+            return;
+        }
+        item.Published = false;
+        item.Status = LibraryContentStatus.Draft;
+        _unpublishTarget = null;
+        Toast.Success("Content moved to Drafts.");
+        await Reload();
+    }
+}

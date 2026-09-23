@@ -1,0 +1,318 @@
+@page "/dev/data-display"
+@layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
+@namespace SPIC.MauiBlazorApp.Shared.Components.DataDisplay
+
+@*
+    ============================================================================
+    DEV PAGE - NOT FOR END USERS.  /dev/data-display
+    Exercises SpicDataTable (loaded / loading / empty / empty-search / custom
+    card template), Skeleton, EmptyState and StatCard with in-memory sample data
+    so the responsive behaviour can be checked at 375 / 768 / 1280 px.
+    Uses EmptyLayout so it opens without a login. Not linked from any menu.
+    ============================================================================
+*@
+
+<PageTitle>DEV - Data display demo</PageTitle>
+
+<div class="dd-page">
+    <div class="dd-banner" role="note">
+        <i class="bi bi-tools" aria-hidden="true"></i>
+        <div>
+            <strong>Developer demo page</strong> - sample data only, nothing here is saved.
+            Resize to 375 px (phone cards), 768-1199 px (scrollable table, sticky header) and 1280 px (desktop, unchanged).
+        </div>
+        <span class="dd-viewport" aria-live="polite"></span>
+    </div>
+
+    <h1 class="dd-h1">Data display components</h1>
+
+    <!-- StatCards -->
+    <section class="dd-section">
+        <h2 class="dd-h2">StatCard</h2>
+        <div class="dd-stats">
+            <StatCard Label="Active dealers" Value="1,284" Icon="bi-people" Trend="+4.2%" Hint="vs last month" />
+            <StatCard Label="Orders this month" Value="312" Icon="bi-bag-check" Trend="-3.1%" Hint="vs last month" />
+            <StatCard Label="Gross sales" Value="Rs 42.6 L" Icon="bi-currency-rupee" Trend="0.0%" TrendDirection="neutral" />
+            <StatCard Label="Pending approvals" Value="17" Icon="bi-hourglass-split" />
+        </div>
+    </section>
+
+    <!-- SpicDataTable in all states -->
+    <section class="dd-section">
+        <h2 class="dd-h2">SpicDataTable</h2>
+
+        <div class="dd-toolbar" role="group" aria-label="Table state">
+            <span class="dd-toolbar-label">State:</span>
+            <button type="button" class="btn @(_state == DemoState.Loaded ? "btn-success" : "btn-outline-secondary")" @onclick="() => SetState(DemoState.Loaded)">Loaded (@_rows.Count rows)</button>
+            <button type="button" class="btn @(_state == DemoState.Loading ? "btn-success" : "btn-outline-secondary")" @onclick="() => SetState(DemoState.Loading)">Loading</button>
+            <button type="button" class="btn @(_state == DemoState.Empty ? "btn-success" : "btn-outline-secondary")" @onclick="() => SetState(DemoState.Empty)">Empty</button>
+            <button type="button" class="btn @(_state == DemoState.EmptySearch ? "btn-success" : "btn-outline-secondary")" @onclick="() => SetState(DemoState.EmptySearch)">Empty (search)</button>
+            <button type="button" class="btn btn-outline-secondary" @onclick="SimulateReload"><i class="bi bi-arrow-clockwise"></i> Simulate 2s reload</button>
+        </div>
+
+        <p class="dd-note">
+            Auto-generated cards (no <code>CardTemplate</code>): first export column is the title, next five are rows,
+            the remaining @(Math.Max(0, ExportColumnsForCards - 6)) sit behind "Show more". <code>CardActions</code> supplies the edit/delete buttons.
+        </p>
+
+        <SpicDataTable Items="_visibleRows"
+                       IsLoading="_isLoading"
+                       Title="Existing Dealers (demo)"
+                       FileName="DemoDealers"
+                       ExportColumns="GetExportColumns()"
+                       SearchText="@_search">
+
+            <FilterControls>
+                <div class="dd-search">
+                    <i class="bi bi-search" aria-hidden="true"></i>
+                    <input type="text" placeholder="Search dealers..." aria-label="Search dealers"
+                           @bind="_search" @bind:event="oninput" @bind:after="StateHasChanged" />
+                </div>
+                <select class="dd-select" aria-label="Status filter" @bind="_statusFilter" @bind:after="ApplyFilter">
+                    <option value="All">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="On hold">On hold</option>
+                    <option value="Closed">Closed</option>
+                </select>
+            </FilterControls>
+
+            <TableHeader>
+                <th>Dealer Code</th>
+                <th>Dealer Name</th>
+                <th>District</th>
+                <th>State</th>
+                <th>Product</th>
+                <th>Quantity (MT)</th>
+                <th>Gross Amount</th>
+                <th>Status</th>
+                <th>Last Order</th>
+                <th>Contact</th>
+                <th>Action</th>
+            </TableHeader>
+
+            <TableRow Context="item">
+                <td>@item.Code</td>
+                <td>@item.Name</td>
+                <td>@item.District</td>
+                <td>@item.State</td>
+                <td>@item.Product</td>
+                <td>@item.Quantity.ToString("N1")</td>
+                <td>@item.GrossAmount.ToString("N2")</td>
+                <td><span class="dd-badge dd-badge--@item.Status.Replace(" ", "").ToLowerInvariant()">@item.Status</span></td>
+                <td>@item.LastOrder.ToString("dd MMM yyyy")</td>
+                <td>@item.Phone</td>
+                <td>
+                    <div class="dd-actions">
+                        <i class="bi bi-pencil-square dd-icon-edit" role="button" aria-label="Edit" @onclick="() => Edit(item)"></i>
+                        <i class="bi bi-trash dd-icon-del" role="button" aria-label="Delete" @onclick="() => Delete(item)"></i>
+                    </div>
+                </td>
+            </TableRow>
+
+            <CardActions Context="item">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => Edit(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => Delete(item)"><i class="bi bi-trash"></i> Delete</button>
+            </CardActions>
+
+            <EmptyActions>
+                @if (_state == DemoState.EmptySearch || !string.IsNullOrWhiteSpace(_search))
+                {
+                    <button type="button" class="btn btn-outline-secondary" @onclick="ClearSearch"><i class="bi bi-x-circle"></i> Clear search</button>
+                }
+                else
+                {
+                    <button type="button" class="btn btn-success" @onclick="() => SetState(DemoState.Loaded)"><i class="bi bi-plus-lg"></i> Load sample dealers</button>
+                }
+            </EmptyActions>
+        </SpicDataTable>
+
+        @if (_lastAction != null)
+        {
+            <div class="dd-toast" role="status">@_lastAction</div>
+        }
+    </section>
+
+    <!-- Custom CardTemplate -->
+    <section class="dd-section">
+        <h2 class="dd-h2">SpicDataTable with a custom CardTemplate</h2>
+        <p class="dd-note">Same data, but the phone card is supplied by the page via <code>CardTemplate</code>. Shrink to &lt;= 767 px to see it.</p>
+
+        <SpicDataTable Items="_rows.Take(6).ToList()"
+                       Title="Top dealers (custom cards)"
+                       FileName="TopDealers"
+                       ExportColumns="GetExportColumns()">
+            <TableHeader>
+                <th>Dealer Code</th>
+                <th>Dealer Name</th>
+                <th>District</th>
+                <th>Gross Amount</th>
+                <th>Status</th>
+            </TableHeader>
+            <TableRow Context="item">
+                <td>@item.Code</td>
+                <td>@item.Name</td>
+                <td>@item.District</td>
+                <td>@item.GrossAmount.ToString("N2")</td>
+                <td><span class="dd-badge dd-badge--@item.Status.Replace(" ", "").ToLowerInvariant()">@item.Status</span></td>
+            </TableRow>
+            <CardTemplate Context="item">
+                <div class="dd-custom-card">
+                    <div class="dd-custom-avatar">@item.Name[0]</div>
+                    <div class="dd-custom-body">
+                        <div class="dd-custom-name">@item.Name <span class="dd-badge dd-badge--@item.Status.Replace(" ", "").ToLowerInvariant()">@item.Status</span></div>
+                        <div class="dd-custom-sub">@item.Code &middot; @item.District, @item.State</div>
+                        <div class="dd-custom-amount">Rs @item.GrossAmount.ToString("N0")</div>
+                    </div>
+                </div>
+            </CardTemplate>
+        </SpicDataTable>
+    </section>
+
+    <!-- Skeleton + EmptyState standalone -->
+    <section class="dd-section dd-two-col">
+        <div>
+            <h2 class="dd-h2">Skeleton</h2>
+            <div class="dd-panel">
+                <div class="dd-caption">Variant="text" Rows="4"</div>
+                <Skeleton Variant="text" Rows="4" />
+            </div>
+            <div class="dd-panel">
+                <div class="dd-caption">Variant="card" Rows="2"</div>
+                <Skeleton Variant="card" Rows="2" />
+            </div>
+            <div class="dd-panel">
+                <div class="dd-caption">Variant="table" Rows="3" Height="12px"</div>
+                <Skeleton Variant="table" Rows="3" Height="12px" />
+            </div>
+        </div>
+        <div>
+            <h2 class="dd-h2">EmptyState</h2>
+            <div class="dd-panel">
+                <EmptyState Icon="bi-inbox" Title="No bookings yet" Message="Bookings you create will appear here.">
+                    <button type="button" class="btn btn-success"><i class="bi bi-plus-lg"></i> New booking</button>
+                    <button type="button" class="btn btn-outline-secondary">Learn more</button>
+                </EmptyState>
+            </div>
+            <div class="dd-panel dd-panel--dark">
+                <div class="dd-caption dd-caption--light">Same component on a dark surface</div>
+                <EmptyState Icon="bi-search" Title="No results found" Message="Try a different search term." Compact="true" />
+                <Skeleton Variant="text" Rows="2" />
+            </div>
+        </div>
+    </section>
+</div>
+
+@code {
+    private enum DemoState { Loaded, Loading, Empty, EmptySearch }
+
+    public sealed class DemoDealer
+    {
+        public string Code { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string District { get; set; } = "";
+        public string State { get; set; } = "";
+        public string Product { get; set; } = "";
+        public double Quantity { get; set; }
+        public decimal GrossAmount { get; set; }
+        public string Status { get; set; } = "Active";
+        public DateTime LastOrder { get; set; }
+        public string Phone { get; set; } = "";
+    }
+
+    private DemoState _state = DemoState.Loaded;
+    private bool _isLoading;
+    private string _search = "";
+    private string _statusFilter = "All";
+    private string? _lastAction;
+
+    private readonly List<DemoDealer> _rows = BuildRows(40);
+    private List<DemoDealer> _visibleRows = new();
+
+    private int ExportColumnsForCards => GetExportColumns().Count - 1; // minus S:No
+
+    protected override void OnInitialized() => ApplyFilter();
+
+    private void SetState(DemoState state)
+    {
+        _state = state;
+        _isLoading = state == DemoState.Loading;
+        _search = state == DemoState.EmptySearch ? "zzz-no-such-dealer" : "";
+        ApplyFilter();
+    }
+
+    private async Task SimulateReload()
+    {
+        _state = DemoState.Loading;
+        _isLoading = true;
+        await Task.Delay(2000);
+        _state = DemoState.Loaded;
+        _isLoading = false;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        if (_state == DemoState.Empty)
+        {
+            _visibleRows = new();
+            return;
+        }
+
+        _visibleRows = _statusFilter == "All"
+            ? _rows.ToList()
+            : _rows.Where(r => r.Status == _statusFilter).ToList();
+    }
+
+    private void ClearSearch()
+    {
+        _search = "";
+        if (_state == DemoState.EmptySearch) _state = DemoState.Loaded;
+        ApplyFilter();
+    }
+
+    private void Edit(DemoDealer d) => _lastAction = $"Edit clicked: {d.Code} - {d.Name}";
+    private void Delete(DemoDealer d) => _lastAction = $"Delete clicked: {d.Code} - {d.Name}";
+
+    private List<ExportColumn<DemoDealer>> GetExportColumns() => new()
+    {
+        new ExportColumn<DemoDealer> { Header = "S:No", ValueSelector = d => (_visibleRows.IndexOf(d) + 1).ToString() },
+        new ExportColumn<DemoDealer> { Header = "Dealer Name", ValueSelector = d => d.Name },
+        new ExportColumn<DemoDealer> { Header = "Dealer Code", ValueSelector = d => d.Code },
+        new ExportColumn<DemoDealer> { Header = "District", ValueSelector = d => d.District },
+        new ExportColumn<DemoDealer> { Header = "State", ValueSelector = d => d.State },
+        new ExportColumn<DemoDealer> { Header = "Product", ValueSelector = d => d.Product },
+        new ExportColumn<DemoDealer> { Header = "Status", ValueSelector = d => d.Status },
+        new ExportColumn<DemoDealer> { Header = "Quantity (MT)", ValueSelector = d => d.Quantity.ToString("N1") },
+        new ExportColumn<DemoDealer> { Header = "Gross Amount", ValueSelector = d => d.GrossAmount.ToString("N2") },
+        new ExportColumn<DemoDealer> { Header = "Last Order", ValueSelector = d => d.LastOrder.ToString("dd MMM yyyy") },
+        new ExportColumn<DemoDealer> { Header = "Contact", ValueSelector = d => d.Phone },
+    };
+
+    private static List<DemoDealer> BuildRows(int count)
+    {
+        var names = new[] { "Sri Murugan Agro", "Annai Fertilisers", "Green Field Traders", "Kaveri Agri Centre", "Vel Agencies", "Thamizh Farm Inputs", "Ponni Agro Mart", "Bharathi Traders", "Nila Agri Store", "Amman Fertilizer Depot" };
+        var districts = new[] { ("Thanjavur", "Tamil Nadu"), ("Madurai", "Tamil Nadu"), ("Erode", "Tamil Nadu"), ("Guntur", "Andhra Pradesh"), ("Mysuru", "Karnataka"), ("Palakkad", "Kerala"), ("Salem", "Tamil Nadu"), ("Nellore", "Andhra Pradesh") };
+        var products = new[] { "Urea", "DAP", "Complex 20:20:0:13", "MOP", "Gypsum" };
+        var statuses = new[] { "Active", "Active", "Active", "On hold", "Closed" };
+        var rnd = new Random(20260919);
+        var list = new List<DemoDealer>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var (district, state) = districts[i % districts.Length];
+            list.Add(new DemoDealer
+            {
+                Code = $"D{(1001 + i * 7):D5}",
+                Name = $"{names[i % names.Length]}{(i >= names.Length ? $" {i / names.Length + 1}" : "")}",
+                District = district,
+                State = state,
+                Product = products[i % products.Length],
+                Quantity = Math.Round(rnd.NextDouble() * 120 + 5, 1),
+                GrossAmount = Math.Round((decimal)(rnd.NextDouble() * 900000 + 25000), 2),
+                Status = statuses[i % statuses.Length],
+                LastOrder = new DateTime(2026, 9, 19).AddDays(-rnd.Next(0, 120)),
+                Phone = $"+91 9{rnd.Next(1000, 9999)} {rnd.Next(10000, 99999)}"
+            });
+        }
+        return list;
+    }
+}

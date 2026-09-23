@@ -270,6 +270,7 @@ namespace SPIC.Ifms.Automation.Reports
 			IfmsAccountCredentials account,
 			ReportJob job,
 			DateTime reportDate,
+			SessionBudget budget,
 			CancellationToken cancellationToken)
 		{
 			if (job.ForEach.Count == 0)
@@ -280,32 +281,54 @@ namespace SPIC.Ifms.Automation.Reports
 				};
 			}
 
-			var tokens = new RunTokens(reportDate, DateTime.Now, account.UserName)
-				.WithLiteral("company", account.CompanyName)
-				.WithLiteral("accountKey", account.AccountKey);
-
-			// Resolve every dimension first, then cross them.
-			var dimensions = new List<(string Name, List<string> Values)>();
-
-			foreach (var loop in job.ForEach)
+			// Later dimensions depend on the earlier ones: the portal fills the
+			// product list only after a plant is chosen, so products must be read
+			// once per plant, with that plant already selected. A first dimension
+			// with no values is a configuration failure; an inner one with none
+			// is just a branch with nothing in it.
+			List<List<(string Name, string Value)>> combinations;
+			try
 			{
-				var values = loop.Values.Count > 0
-					? loop.Values.ToList()
-					: (await portal.DiscoverLoopValuesAsync(job, loop, tokens, cancellationToken)).ToList();
+				combinations = await ExpandAsync(
+					portal, account, job, reportDate, 0, new List<(string Name, string Value)>(), cancellationToken);
+			}
+			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+			{
+				throw;
+			}
+			catch (Exception ex)
+			{
+				// Reading a dropdown is portal work like any other step, and a
+				// slow page here must cost this job alone, not the whole run.
+				_logger.LogError(ex, "{Title}: could not read the loop values from the report page.", job.Title);
 
-				if (values.Count == 0)
+				return new List<ReportSummary>
 				{
-					_logger.LogError(
-						"{Title} loops over {Token} but no values were configured or discovered.",
-						job.Title, loop.TokenName);
-
-					return new List<ReportSummary> { NoValuesFailure(account, job, loop.TokenName) };
-				}
-
-				dimensions.Add((loop.TokenName, values));
+					new()
+					{
+						JobKey = job.Key,
+						AccountKey = account.AccountKey,
+						CompanyName = account.CompanyName,
+						Title = job.Title,
+						CategoryId = job.CategoryId,
+						Status = IfmsRunStatus.Failed,
+						ErrorMessage = $"Could not read the loop values from the report page: {ex.Message}"
+					}
+				};
 			}
 
-			var combinations = CrossProduct(dimensions);
+			if (combinations.Count == 0)
+			{
+				_logger.LogError(
+					"{Title} loops over {Token} but no values were configured or discovered.",
+					job.Title, job.ForEach[0].TokenName);
+
+				return new List<ReportSummary> { NoValuesFailure(account, job, job.ForEach[0].TokenName) };
+			}
+
+			var dimensions = job.ForEach
+				.Select((l, i) => (Name: l.TokenName, Values: combinations.Select(c => c[i].Value).Distinct().ToList()))
+				.ToList();
 			var continueOnFailure = job.ForEach.All(l => l.ContinueOnFailure);
 
 			_logger.LogInformation(
@@ -323,6 +346,16 @@ namespace SPIC.Ifms.Automation.Reports
 					portal, runId, account, job, reportDate, combination, cancellationToken);
 
 				summaries.Add(summary);
+
+				// One lapsed session used to fail every remaining state of a
+				// 36-state loop before the between-jobs check noticed. Check here.
+				if (summary.Status != IfmsRunStatus.Succeeded &&
+					!await RecoverSessionAsync(portal, account, runId, budget, cancellationToken))
+				{
+					_logger.LogWarning(
+						"Stopping {Title}: the session is gone and could not be recovered.", job.Title);
+					break;
+				}
 
 				if (summary.Status != IfmsRunStatus.Succeeded && !continueOnFailure)
 				{
@@ -342,29 +375,45 @@ namespace SPIC.Ifms.Automation.Reports
 		}
 
 		/// <summary>
-		/// Every combination of the loop dimensions, in order, with the first
-		/// dimension changing slowest — so a plant is chosen once and then walked
-		/// through its products, rather than the dropdowns thrashing.
+		/// Every combination of the loop dimensions, discovering each inner
+		/// dimension with the outer values already selected on the page.
 		/// </summary>
-		private static List<List<(string Name, string Value)>> CrossProduct(
-			List<(string Name, List<string> Values)> dimensions)
+		private async Task<List<List<(string Name, string Value)>>> ExpandAsync(
+			IfmsPortalClient portal,
+			IfmsAccountCredentials account,
+			ReportJob job,
+			DateTime reportDate,
+			int index,
+			List<(string Name, string Value)> prefix,
+			CancellationToken cancellationToken)
 		{
-			var result = new List<List<(string, string)>> { new() };
+			if (index >= job.ForEach.Count)
+				return new List<List<(string Name, string Value)>> { prefix };
 
-			foreach (var (name, values) in dimensions)
+			var loop = job.ForEach[index];
+
+			var tokens = new RunTokens(reportDate, DateTime.Now, account.UserName)
+				.WithLiteral("company", account.CompanyName)
+				.WithLiteral("accountKey", account.AccountKey);
+			foreach (var (name, value) in prefix)
+				tokens.WithLiteral(name, value);
+
+			var values = loop.Values.Count > 0
+				? loop.Values.ToList()
+				: (await portal.DiscoverLoopValuesAsync(job, loop, tokens, cancellationToken)).ToList();
+
+			if (values.Count == 0 && index > 0)
 			{
-				var next = new List<List<(string, string)>>(result.Count * values.Count);
+				_logger.LogWarning(
+					"{Title}: no {Token} values for {Prefix}; skipping that branch.",
+					job.Title, loop.TokenName, string.Join(" / ", prefix.Select(p => p.Value)));
+			}
 
-				foreach (var prefix in result)
-				{
-					foreach (var value in values)
-					{
-						var combination = new List<(string, string)>(prefix) { (name, value) };
-						next.Add(combination);
-					}
-				}
-
-				result = next;
+			var result = new List<List<(string Name, string Value)>>();
+			foreach (var value in values)
+			{
+				var next = new List<(string Name, string Value)>(prefix) { (loop.TokenName, value) };
+				result.AddRange(await ExpandAsync(portal, account, job, reportDate, index + 1, next, cancellationToken));
 			}
 
 			return result;
@@ -541,7 +590,7 @@ namespace SPIC.Ifms.Automation.Reports
 			CancellationToken cancellationToken)
 		{
 			var reports = new List<ReportSummary>();
-			var reLogins = 0;
+			var budget = new SessionBudget();
 
 			await using var scope = _scopeFactory.CreateAsyncScope();
 			await using var portal = scope.ServiceProvider.GetRequiredService<IfmsPortalClient>();
@@ -568,42 +617,73 @@ namespace SPIC.Ifms.Automation.Reports
 				cancellationToken.ThrowIfCancellationRequested();
 
 				var summaries = await RunJobWithLoopAsync(
-					portal, runId, account, job, reportDate, cancellationToken);
+					portal, runId, account, job, reportDate, budget, cancellationToken);
 
 				reports.AddRange(summaries);
 
-				// Between jobs is the cheap place to notice a lapsed session: the
-				// check costs nothing when it passes, and catching it here means at
-				// most one job's worth of work is lost rather than every remaining one.
+				// A failed job is the moment to check the session is still alive;
+				// the check is one page load and costs nothing when it passes.
 				if (summaries.Any(r => r.Status != IfmsRunStatus.Succeeded) &&
-					reLogins < MaxReLoginsPerAccount &&
-					!await portal.IsPortalNotFoundPageAsync() &&
-					!await portal.IsSignedInAsync(cancellationToken))
+					!await RecoverSessionAsync(portal, account, runId, budget, cancellationToken))
 				{
-					reLogins++;
-
-					_logger.LogWarning(
-						"The {Company} session has lapsed part-way through the run; signing in again " +
-						"(attempt {Attempt} of {Max}).",
-						account.CompanyName, reLogins, MaxReLoginsPerAccount);
-
-					var again = await portal.LoginAsync(account, runId, cancellationToken);
-
-					if (!again.Success)
-					{
-						_logger.LogError(
-							"Could not sign back in as {Company}; abandoning its remaining reports. {Reason}",
-							account.CompanyName, again.FailureReason);
-						break;
-					}
-
-					_logger.LogInformation("Signed back in as {Company}; carrying on.", account.CompanyName);
+					break;
 				}
 			}
 
 			return new AccountOutcome(
 				true, null, reports,
 				login.CaptchaMethod, login.CaptchaAttempts, login.OtpMethod);
+		}
+
+		/// <summary>Re-logins are precious: each one costs a CAPTCHA and an OTP.</summary>
+		private sealed class SessionBudget
+		{
+			public int ReLogins;
+		}
+
+		/// <summary>
+		/// True when the portal session is alive, or was brought back with a fresh
+		/// login. False means stop this account: the session lapsed and the
+		/// re-login budget is spent, or the fresh login itself failed.
+		/// </summary>
+		private async Task<bool> RecoverSessionAsync(
+			IfmsPortalClient portal,
+			IfmsAccountCredentials account,
+			int runId,
+			SessionBudget budget,
+			CancellationToken cancellationToken)
+		{
+			if (await portal.ProbeSessionAsync(cancellationToken))
+				return true;
+
+			if (budget.ReLogins >= MaxReLoginsPerAccount)
+			{
+				_logger.LogError(
+					"The {Company} session has lapsed again and this run's {Max} re-logins are used up; " +
+					"abandoning its remaining reports.",
+					account.CompanyName, MaxReLoginsPerAccount);
+				return false;
+			}
+
+			budget.ReLogins++;
+
+			_logger.LogWarning(
+				"The {Company} session has lapsed part-way through the run; signing in again " +
+				"(attempt {Attempt} of {Max}).",
+				account.CompanyName, budget.ReLogins, MaxReLoginsPerAccount);
+
+			var again = await portal.LoginAsync(account, runId, cancellationToken);
+
+			if (!again.Success)
+			{
+				_logger.LogError(
+					"Could not sign back in as {Company}; abandoning its remaining reports. {Reason}",
+					account.CompanyName, again.FailureReason);
+				return false;
+			}
+
+			_logger.LogInformation("Signed back in as {Company}; carrying on.", account.CompanyName);
+			return true;
 		}
 
 		/// <summary>
@@ -649,7 +729,7 @@ namespace SPIC.Ifms.Automation.Reports
 		}
 
 		/// <summary>Matches ExcelBulkUploadController.RequiresReportDate.</summary>
-		private static bool RequiresReportDate(string categoryId) =>
+		internal static bool RequiresReportDate(string categoryId) =>
 			categoryId is "One" or "Three" or "Six" or "Seven";
 
 		private string ArchiveFolder(DateTime reportDate)

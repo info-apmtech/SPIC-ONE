@@ -1,4 +1,5 @@
 ﻿using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,7 @@ using SPIC.Core.Entities;
 
 namespace SpicAPI.Controllers
 {
+	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class PVTMasterController : ControllerBase
@@ -34,6 +36,7 @@ namespace SpicAPI.Controllers
 						x.Id,
 						x.Code,
 						x.Name,
+						x.StateId,
 						x.CreatedAt,
 						x.UpdatedAt
 					})
@@ -79,6 +82,7 @@ namespace SpicAPI.Controllers
 						x.Id,
 						x.Code,
 						x.Name,
+						x.StateId,
 						x.CreatedAt,
 						x.UpdatedAt
 					})
@@ -171,6 +175,72 @@ namespace SpicAPI.Controllers
 		}
 
 		// ============================================================
+		// MAP STATE TO A PVT MASTER RECORD
+		// Only the State mapping is editable. The SAP Code is never changed.
+		// ============================================================
+
+		[HttpPost("map-state")]
+		public async Task<IActionResult> MapState([FromBody] PVTMapStateDto dto)
+		{
+			if (dto == null || dto.Id <= 0)
+			{
+				return BadRequest(new
+				{
+					message = "Invalid request"
+				});
+			}
+
+			try
+			{
+				var record = await _context.PVTMasters
+					.FirstOrDefaultAsync(x => x.Id == dto.Id && x.IsActive);
+
+				if (record == null)
+				{
+					return NotFound(new
+					{
+						message = "SAP Code record not found."
+					});
+				}
+
+				if (dto.StateId.HasValue &&
+					dto.StateId.Value > 0 &&
+					!(await _context.States.AnyAsync(s => s.Id == dto.StateId.Value)))
+				{
+					return BadRequest(new
+					{
+						message = "Selected State does not exist."
+					});
+				}
+
+				var now = DateTime.Now;
+				var userName = User?.Identity?.Name ?? "System";
+
+				record.StateId = dto.StateId.HasValue && dto.StateId.Value > 0
+					? dto.StateId.Value
+					: (int?)null;
+				record.UpdatedAt = now;
+				record.UpdatedBy = userName;
+
+				await _context.SaveChangesAsync();
+
+				return Ok(new
+				{
+					message = "State mapping saved successfully.",
+					id = record.Id,
+					stateId = record.StateId
+				});
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new
+				{
+					message = $"Save failed: {ex.Message}"
+				});
+			}
+		}
+
+		// ============================================================
 		// BULK EXCEL UPLOAD
 		// ============================================================
 
@@ -249,6 +319,7 @@ namespace SpicAPI.Controllers
 				int headerRowNumber = 0;
 				int codeColumn = 0;
 				int nameColumn = 0;
+				int stateColumn = 0; // Optional "State" header -> state name lookup
 
 				foreach (var currentSheet in workbook.Worksheets)
 				{
@@ -271,6 +342,7 @@ namespace SpicAPI.Controllers
 
 						int foundCodeColumn = 0;
 						int foundNameColumn = 0;
+						int foundStateColumn = 0;
 
 						var lastColumnUsed =
 							row.LastCellUsed()?.Address.ColumnNumber ?? 0;
@@ -302,6 +374,13 @@ namespace SpicAPI.Controllers
 							{
 								foundNameColumn = columnNumber;
 							}
+
+							if (header.Equals(
+								"State",
+								StringComparison.OrdinalIgnoreCase))
+							{
+								foundStateColumn = columnNumber;
+							}
 						}
 
 						if (foundCodeColumn > 0 &&
@@ -311,6 +390,8 @@ namespace SpicAPI.Controllers
 							headerRowNumber = rowNumber;
 							codeColumn = foundCodeColumn;
 							nameColumn = foundNameColumn;
+							// State is optional; 0 means the workbook has no State column.
+							stateColumn = foundStateColumn;
 
 							break;
 						}
@@ -378,6 +459,21 @@ namespace SpicAPI.Controllers
 					new HashSet<string>(
 						StringComparer.OrdinalIgnoreCase);
 
+				// Pre-load the State master so the optional "State" column can be
+				// resolved to a StateId. An unknown State name only skips that row;
+				// it never fails a valid upload.
+				var stateIdByName =
+					new Dictionary<string, int>(
+						StringComparer.OrdinalIgnoreCase);
+
+				foreach (var state in _context.States)
+				{
+					if (!string.IsNullOrWhiteSpace(state.StateName))
+					{
+						stateIdByName[state.StateName.Trim()] = state.Id;
+					}
+				}
+
 				int totalRows = 0;
 				int insertedCount = 0;
 				int updatedCount = 0;
@@ -406,6 +502,13 @@ namespace SpicAPI.Controllers
 					var name = row.Cell(nameColumn)
 						.GetFormattedString()
 						.Trim();
+
+					// Optional State column (blank when the workbook has no State header).
+					var stateName = stateColumn > 0
+						? row.Cell(stateColumn)
+							.GetFormattedString()
+							.Trim()
+						: string.Empty;
 
 				// Ignore completely empty rows
 				if (string.IsNullOrWhiteSpace(code) &&
@@ -447,23 +550,54 @@ namespace SpicAPI.Controllers
 				}
 
 				// ------------------------------------------------
-				// Skip existing record (SAP Code already in database)
+				// Resolve the optional State column
+				// ------------------------------------------------
+
+				// Empty State -> StateId is left unchanged (or stays null for inserts).
+				// Unknown State name -> skip the row and report the missing State.
+				int? resolvedStateId = null;
+
+				if (!string.IsNullOrWhiteSpace(stateName))
+				{
+					if (!stateIdByName.TryGetValue(
+						stateName,
+						out var stateId))
+					{
+						skippedCount++;
+						duplicateRecords.Add(new
+						{
+							rowNumber = rowNumber,
+							sapCode = code,
+							warehouseName = name,
+							reason = $"Invalid State: '{stateName}' not found in State Master"
+						});
+						errors.Add(
+							$"Row {rowNumber}: Invalid State: '{stateName}' not found in State Master.");
+						continue;
+					}
+
+					resolvedStateId = stateId;
+				}
+
+				// ------------------------------------------------
+				// Existing SAP Code -> update StateId only
 				// ------------------------------------------------
 
 				if (existingByCode.TryGetValue(
 					code,
 					out var existingRecord))
 				{
-					skippedCount++;
-					duplicateRecords.Add(new
+					// The existing Code and Name are never changed; only the StateId
+					// is mapped when the Excel provides a valid State name.
+					if (resolvedStateId.HasValue &&
+						existingRecord.StateId != resolvedStateId.Value)
 					{
-						rowNumber = rowNumber,
-						sapCode = code,
-						warehouseName = name,
-						reason = "SAP Code already exists in database"
-					});
-					errors.Add(
-						$"Row {rowNumber}: SAP Code '{code}' already exists in database.");
+						existingRecord.StateId = resolvedStateId.Value;
+						existingRecord.UpdatedAt = now;
+						existingRecord.UpdatedBy = userName;
+					}
+
+					updatedCount++;
 				}
 				else
 				{
@@ -475,6 +609,7 @@ namespace SpicAPI.Controllers
 					{
 						Code = code,
 						Name = name,
+						StateId = resolvedStateId,
 						IsActive = true,
 						CreatedAt = now,
 						UpdatedAt = now,
@@ -486,7 +621,7 @@ namespace SpicAPI.Controllers
 
 					existingByCode[code] = newRecord;
 
-				insertedCount++;
+					insertedCount++;
 				}
 			}
 
@@ -564,16 +699,19 @@ namespace SpicAPI.Controllers
 				// Headers
 				worksheet.Cell(1, 1).Value = "Code";
 				worksheet.Cell(1, 2).Value = "Name";
+				worksheet.Cell(1, 3).Value = "State";
 
 				// Sample data
 				worksheet.Cell(2, 1).Value = "1001";
 				worksheet.Cell(2, 2).Value = "PVT GODOWN ARIYALUR";
+				worksheet.Cell(2, 3).Value = "Tamil Nadu";
 
 				worksheet.Cell(3, 1).Value = "1002";
 				worksheet.Cell(3, 2).Value = "PVT GODOWN PALAYAVOYAL";
+				worksheet.Cell(3, 3).Value = "Karnataka";
 
 				// Header style
-				var headerRange = worksheet.Range("A1:B1");
+				var headerRange = worksheet.Range("A1:C1");
 
 				headerRange.Style.Font.Bold = true;
 				headerRange.Style.Fill.BackgroundColor = XLColor.LightBlue;
@@ -586,6 +724,7 @@ namespace SpicAPI.Controllers
 				// Column widths
 				worksheet.Column(1).Width = 15;
 				worksheet.Column(2).Width = 40;
+				worksheet.Column(3).Width = 25;
 
 				// Borders and filter
 				var usedRange = worksheet.RangeUsed();
@@ -632,5 +771,16 @@ namespace SpicAPI.Controllers
 		public string Code { get; set; } = string.Empty;
 
 		public string Name { get; set; } = string.Empty;
+	}
+
+	// ================================================================
+	// MAP STATE DTO
+	// ================================================================
+
+	public class PVTMapStateDto
+	{
+		public int Id { get; set; }
+
+		public int? StateId { get; set; }
 	}
 }

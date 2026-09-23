@@ -12,13 +12,79 @@ products deploy.
 | Container app `ca-spicone-api-<env>` | SpicAPI, 8080, public HTTPS, 1–2 replicas (staging) / 2–4 (prod) |
 | Container app `ca-spicone-web-<env>` | Blazor Server web portal, sticky sessions, same scaling |
 | PostgreSQL Flexible Server `pg-spicone-<env>-xxxxxx` | Database `spicone`, automated backups, optional zone-redundant standby |
-| Storage account, Azure Files shares | `api-uploads` (Uploads), `api-webuploads` (wwwroot/uploads), `api-keys`, `web-keys` |
+| Storage account, Azure Files shares | `api-uploads` (Uploads), `api-webuploads` (wwwroot/uploads), `api-keys`, `web-keys`; deleted shares recoverable for 14 days |
+| Backup storage account `stspiconebk<env>xxxxxx` | Nightly `pg_dump` copies in container `pg-dumps`, kept 35 days, delete-locked in prod |
+| Container Apps job `caj-spicone-dbbackup-<env>` | Runs the nightly dump at 02:00 IST (image `spicone-backup`) |
 | Container Registry `crspicone<env>xxxxxx` | Images `spicone-api`, `spicone-web` |
 | Key Vault `kv-spicone-<env>-xxxxxx` | DB password, connection string, JWT key, IFMS keys |
 | Managed identity `id-spicone-<env>` | Apps pull images and read secrets; no passwords in app config |
 | Log Analytics `log-spicone-<env>` | Console logs, metrics |
 
 Not deployed: `SPIC.Ifms.Automation` (stays on the VPS), `SPICBlazorApp`, `SPIC.Worker`, the MAUI app.
+
+Only one environment is used: **prod** (`rg-spicone-prod`). The `staging` parameter file is kept
+for a future test environment but nothing is provisioned for it.
+
+## Deploying into the client's own subscription (SPIC-owned Azure)
+
+The kit is subscription-agnostic. To deploy into a subscription that belongs to SPIC:
+
+1. SPIC creates a pay-as-you-go subscription in **their** Microsoft directory and gives the person
+   who will deploy the **Owner** role on it (Subscriptions → Access control (IAM) → Add role
+   assignment → Privileged administrator roles → Owner). A guest user from another directory works.
+2. On the PC: `az login --tenant <their tenant id or domain>` (browser sign-in; device-code may be
+   blocked by security defaults), then `az account list -o table` to see the subscription.
+3. `.\deploy\azure\provision.ps1 -Environment prod -Subscription "<name or id>" -AllowMyIp -WebApiBaseUrl https://api.spicone.in/`
+   Registers the resource providers, creates everything, builds and deploys both apps (~15 min).
+4. `.\deploy\azure\bind-domains.ps1 -Environment prod` prints the four DNS records (new static IP and
+   verification id). Send them to the DNS administrator.
+5. When the records resolve: `.\deploy\azure\bind-domains.ps1 -Environment prod -Bind` binds both
+   hostnames with managed certificates and checks `/health` on the public names.
+6. Then copy the database and uploads (Phase 1 of the cut-over plan below).
+
+History: the first deployment (10 Sep 2026) was in APM's subscription and was deleted on 16 Sep 2026
+at SPIC's request; SPIC hosts under their own Azure account.
+
+## Onboarding another developer to deploy
+
+What the developer needs, in this order:
+
+1. **Access to SPIC's Azure.** SPIC IT (spic1support@greenstar.net.in) invites the developer's
+   Microsoft account as a guest into the SOUTHERN PETROCHEMICAL directory (Microsoft Entra ID →
+   Users → New user → Invite external user) and gives it the **Owner** role on the subscription
+   "Azure subscription 1" (Subscriptions → Access control (IAM) → Add role assignment →
+   Privileged administrator roles → Owner). Contributor is not enough: the template assigns roles.
+2. **Access to the code.** GitHub repository `info-apmtech/SPIC-ONE`, branch `azure-deploy`
+   (releases are built from it; merge `Satham` into it first).
+3. **On the PC.** Git, Docker Desktop (Linux containers), .NET 10 SDK, Azure CLI
+   (`winget install Microsoft.AzureCLI`, then `az bicep install`), Windows PowerShell 5.1 or later.
+4. **Sign in once**: `az login --tenant southernpetrochemical.onmicrosoft.com` (browser window;
+   pick the invited account; device-code sign-in is blocked by SPIC's security defaults).
+5. **Release**: from the repository root, `.\deploy\azure\deploy.ps1 -Environment prod -Quick`.
+   The first run on a new PC rebuilds the local outputs file from the resource group by itself.
+   Add `-RemoteBuild` if Docker Desktop is not available. Roll back with
+   `-Quick -SkipBuild -Tag <previous tag>` (tags are printed at the end of every release and
+   listed under the container registry in the portal).
+
+### Connecting to the production database
+
+The database is Azure Database for PostgreSQL Flexible Server, reachable only from allowed IPs
+and only over SSL.
+
+```powershell
+.\deploy\azure\db-access.ps1 -Environment prod                 # opens the firewall for this PC, prints host/db/user
+.\deploy\azure\db-access.ps1 -Environment prod -ShowPassword   # also prints the password from Key Vault
+.\deploy\azure\db-access.ps1 -Environment prod -Remove         # closes it again
+```
+
+Then in pgAdmin / DBeaver / psql: host and user as printed, port 5432, database `spicone`,
+SSL mode `require`. Reading the password needs the **Key Vault Secrets User** role on the
+vault `kv-spicone-prd-…` (portal → Key Vault → Access control (IAM)); the person who ran
+provision.ps1 has it already. Without that role the password can be read by anyone with
+Key Vault access in the portal under Secrets → postgres-admin-password.
+
+The IFMS tables live in a separate database `spiconeifms` on cam.server (103.14.121.144:30001),
+not in Azure; see the IFMS automation notes.
 
 ## One-time prerequisites on the PC
 
@@ -64,7 +130,11 @@ Values land in Key Vault and are reused on every later run.
 .\deploy\azure\deploy.ps1 -Environment staging          # build, push, roll out, health check
 .\deploy\azure\deploy.ps1 -Environment prod             # same for production
 .\deploy\azure\deploy.ps1 -Environment prod -Quick      # image swap only, no template run
+.\deploy\azure\deploy.ps1 -Environment staging -RemoteBuild   # build inside the registry, no local Docker
 ```
+
+`-RemoteBuild` uploads the source tree to Azure Container Registry and builds there (ACR Tasks,
+a few rupees per build). Use it when Docker Desktop is not available or keeps hanging.
 
 Images are tagged `<git-sha>-<timestamp>`; `-dirty` is appended when the working tree has
 uncommitted changes. To roll back, redeploy an earlier tag:
@@ -91,21 +161,121 @@ from `appsettings.json` in Azure except defaults.
 Health endpoint: `/health` on both apps. Container Apps uses it for startup, readiness and
 liveness probes; a replica that fails it is replaced and receives no traffic.
 
+## Backups
+
+Three layers, all created by the template; nothing runs on a developer PC.
+
+| Layer | What it protects against | Where |
+|---|---|---|
+| PostgreSQL automated backups, **35 days** in prod (`postgresBackupRetentionDays`), locally redundant | Bad data, a mistaken migration: point-in-time restore to any minute in the window | Portal → PostgreSQL server → Backup and restore |
+| Nightly `pg_dump` copy, **02:00 IST**, kept 35 days | Loss of the server itself; anything the automated backups go down with | Storage account `stspiconebk<env>…`, container `pg-dumps/<yyyy>/<mm>/` |
+| Azure Files share soft delete, 14 days | A share (`api-uploads`, key rings) deleted by mistake | Portal → storage account → File shares → Show deleted shares |
+
+The dump job is a scheduled Container Apps job, `caj-spicone-dbbackup-<env>`, running the image
+`spicone-backup:latest` (`deploy/azure/backup/`: Azure CLI image plus PostgreSQL 16 client).
+It dumps the Azure server in custom format with the same flags as `copy-db.ps1`, checks the
+archive opens, and uploads it with the managed identity (no storage keys exist: shared-key access
+is off on that account). Dumps are Cool-tier blobs; a lifecycle rule deletes them after
+`backupDumpRetentionDays`, deleted blobs stay recoverable for 14 days, and in prod the account
+carries a `CanNotDelete` lock, so `az group delete` fails until the lock is removed on purpose.
+`deploy.ps1` builds and pushes the image with every release; the job always pulls `:latest`.
+
+```powershell
+# Run a dump now and watch it
+az containerapp job start --name caj-spicone-dbbackup-prd --resource-group rg-spicone-prod
+az containerapp job execution list --name caj-spicone-dbbackup-prd --resource-group rg-spicone-prod -o table
+az containerapp job logs show --name caj-spicone-dbbackup-prd --resource-group rg-spicone-prod --container backup
+
+# List and download copies (needs Storage Blob Data Reader on the backup account)
+az storage blob list --auth-mode login --account-name <stspiconebk…> --container-name pg-dumps -o table
+az storage blob download --auth-mode login --account-name <stspiconebk…> --container-name pg-dumps `
+    --name 2026/09/spicone-20260918T203000Z.dump --file C:\restore\spicone-20260918T203000Z.dump
+```
+
+Restore a copy over the live database (replaces every table; stop writes first):
+
+```powershell
+.\deploy\azure\copy-db.ps1 -Environment prod -DumpFile C:\restore\spicone-20260918T203000Z.dump
+```
+
+For a point-in-time restore of the last 35 days use the portal (Backup and restore → Restore)
+into a **new** server, then either repoint the API with `provision.ps1 -DatabaseConnectionStringFile`
+or dump that server and load it with `copy-db.ps1 -DumpFile`. Do a restore drill into a scratch
+database every few months; a backup nobody has restored is a hope, not a backup.
+
+Not yet in place (decided 2026-09-18, to revisit): geo-redundant backup and zone-redundant HA on
+PostgreSQL, GRS on the uploads account, Azure Backup for the file shares.
+
 ## Sizes and cost
 
 | | staging | prod |
 |---|---|---|
 | API / Web replicas | 1–2 each, 0.5 vCPU 1 GiB | 2–4 each, 1 vCPU 2 GiB |
-| PostgreSQL | B1ms, 32 GB, 7-day backup | D2ds_v4, 128 GB, 14-day backup |
-| Zone redundancy | off | Container Apps on; PostgreSQL standby optional (`postgresHaMode`) |
+| PostgreSQL | B1ms, 32 GB, 7-day backup | D2ds_v4, 128 GB, 35-day backup |
+| Nightly dump copies | 35 days, no lock | 35 days, delete lock |
+| Zone redundancy | off | off (`zoneRedundant`; needs a new environment); PostgreSQL standby optional (`postgresHaMode`) |
 
 Edit `infra/azure/<env>.parameters.json` to change sizes; the next `deploy.ps1` applies them.
 
 ## Custom domains
 
-Bind `api.<domain>` and `app.<domain>` to the container apps from the portal (Container App →
-Custom domains → Add, managed certificate). Then redeploy with
-`-WebApiBaseUrl https://api.<domain>/` so browser links to files use the public name.
+`spicone.in` → web app, `api.spicone.in` → API app, bound from the portal
+(Container App → Custom domains → Add, managed certificate). Then redeploy with
+`-WebApiBaseUrl https://api.spicone.in/` so browser links to files use the public name.
+
+## Cut-over plan: VPS to Azure (single live environment)
+
+Azure serves nobody until DNS moves, so steps 1–5 are risk-free and can be repeated.
+
+### Phase 1 — build the live environment (no user impact)
+1. `provision.ps1 -Environment prod -AllowMyIp` — platform + both apps on Azure URLs.
+2. Copy the database once as a rehearsal: `copy-db.ps1 -Environment prod -SourceHost <vps> -SourcePort 30001 -SourcePasswordFile <file>`.
+   Full `pg_dump` (custom format) from the VPS PostgreSQL → `pg_restore --clean` into Azure. Runs from
+   the PC through the `postgres:16` Docker image. Re-runnable; each run replaces the Azure copy.
+3. Copy the uploaded files from the VPS API folders (`Uploads/`, `wwwroot/uploads/`) into the
+   `api-uploads` and `api-webuploads` shares (`az storage file upload-batch`).
+4. Pass the IFMS keys and the IFMS connection string (still pointing at the VPS database) once via
+   `provision.ps1 -PlatformOnly -Ifms*File ...`, then `deploy.ps1 -Environment prod`.
+5. Test on the Azure URLs with real data: login, dealer registration with PDF upload (OCR on Linux),
+   report PDFs, IFMS screens. Compare row counts of key tables VPS vs Azure.
+
+### Phase 2 — domains (still no user impact until the records change)
+Public names agreed 2026-09-10: web **spicone.in** (apex), API **api.spicone.in**. The old
+`spicapi.apmiot.com` is not bound: the MAUI app has not been distributed yet, so its default API
+address is changed to `api.spicone.in` before the first release instead.
+
+DNS records (environment static IP 4.224.119.18; verification id from
+`az containerapp show --query properties.customDomainVerificationId`):
+
+| Type  | Name       | Value |
+|-------|------------|-------|
+| A     | @          | 4.224.119.18 |
+| TXT   | asuid      | <verification id> |
+| CNAME | api        | ca-spicone-api-prd.ashysmoke-4be6f3e0.centralindia.azurecontainerapps.io (an A record to the static IP also works) |
+| TXT   | asuid.api  | <verification id> |
+
+6. Bind from the CLI: `az containerapp hostname add` + `hostname bind` on each app. Use
+   `--validation-method CNAME` for `api.spicone.in` and **`--validation-method HTTP` for the apex
+   `spicone.in`** (TXT validation on an apex waits for an extra `_dnsauth` record and stays Pending).
+   Done 2026-09-10: both certificates Succeeded, https://spicone.in and https://api.spicone.in live.
+   `www.spicone.in` still needs its `asuid.www` TXT fixed (value was entered with a trailing space).
+7. A day before cut-over, lower the TTL of the affected DNS records to 300 s.
+8. At cut-over, create/change the records. Azure validates and issues managed certificates (5–15 min).
+9. `deploy.ps1 -Environment prod -Quick -SkipBuild -Tag <tag> -WebApiBaseUrl https://api.spicone.in/`
+   so browser links to files use the public API name (already set on the current deployment).
+
+### Phase 3 — cut-over night (15–30 minutes of write freeze)
+10. Stop the API and web on the VPS (or block writes). Users see the VPS site down briefly.
+11. Final `copy-db.ps1` run and final file sync (only files newer than the rehearsal).
+12. Switch the DNS records (step 8). Verify login and one write on the Azure site.
+13. Keep the VPS services stopped but intact for two weeks. Rollback = point DNS back.
+14. Afterwards: rotate the JWT key and IFMS keys committed in `appsettings.json`; remove the dealer
+    documents from the repository; set the Docker Desktop disk limit.
+
+### What stays on the VPS
+- The IFMS automation and its `spiconeifms` database. The Azure API reads it over the internet
+  through `ConnectionStrings__IfmsConnection`; the automation posts uploads to
+  `spicapi.apmiot.com`, which becomes Azure after the DNS switch (same device/automation keys).
 
 ## Useful commands
 

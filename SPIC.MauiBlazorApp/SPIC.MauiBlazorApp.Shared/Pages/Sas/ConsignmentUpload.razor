@@ -1,0 +1,676 @@
+@page "/SampleCollection/consignment/{CollectionId:int}"
+@using System.Text.Json
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject SasApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject IJSRuntime JS
+@implements IDisposable
+
+@*
+    Upload Consignment (Figma frame 10, supplied 2026-09-21). Reached from the Sample Summary
+    of a collection that is ReadyForConsignment (free sample) or whose payment was approved.
+
+    Both / Free Sample / Paid Sample only decides WHICH of the caller's other ready collections
+    are offered under "Include other ready collections"; the collection in the route is always
+    part of the dispatch. Submit creates the consignment (POST api/Sas/consignments), then
+    uploads each drop zone's pictures by kind, then goes to the submitted page.
+
+    Save Draft keeps the typed fields in sessionStorage (pictures cannot be kept), so a reload
+    or a trip back to the summary does not lose the courier details.
+*@
+
+<div class="cu-page">
+    <PageHeader Title="Upload Consignment"
+                Subtitle="Enter courier details and upload photos to complete your consignment"
+                BackHref="@BackHref">
+        <Actions>
+            @if (_collection is not null && CanSubmit)
+            {
+                <div class="cu-mode" role="radiogroup" aria-label="Which collections to include">
+                    @foreach (var option in Modes)
+                    {
+                        <button type="button" role="radio"
+                                class="cu-mode-btn @(_mode == option.Key ? "is-on" : "")"
+                                aria-checked="@((_mode == option.Key) ? "true" : "false")"
+                                @onclick="() => SetModeAsync(option.Key)">
+                            <span class="cu-mode-dot" aria-hidden="true"></span>@option.Label
+                        </button>
+                    }
+                </div>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <div class="cu-card"><Skeleton Rows="3" Height="18px" /></div>
+        <div class="cu-card"><Skeleton Variant="card" Rows="2" /></div>
+    }
+    else if (_collection is null)
+    {
+        <EmptyState Icon="bi-box-seam"
+                    Title="@(_notFound ? "Collection not found" : "The collection could not be loaded")"
+                    Message="@(_notFound ? "This sample collection is no longer available, or the link is out of date." : "Please check your connection and try again.")">
+            <a class="cu-btn cu-btn-outline" href="/SampleCollection">Back to Sample Collection</a>
+        </EmptyState>
+    }
+    else if (!CanSubmit)
+    {
+        <EmptyState Icon="bi-hourglass-split"
+                    Title="This collection is not ready to send"
+                    Message="@NotReadyMessage">
+            <a class="cu-btn cu-btn-primary" href="@($"/SampleCollection/view/{CollectionId}")">View collection details</a>
+        </EmptyState>
+    }
+    else
+    {
+        <section class="cu-card" aria-labelledby="cu-courier">
+            <h2 id="cu-courier" class="cu-card-title">Courier Details</h2>
+
+            <div class="cu-grid">
+                <div class="cu-field">
+                    <label for="cu-service">Courier Service <span class="cu-req" aria-hidden="true">*</span></label>
+                    <select id="cu-service" class="cu-input @(_showErrors && string.IsNullOrWhiteSpace(_courier) ? "is-bad" : "")"
+                            value="@_courier" @onchange="e => _courier = e.Value?.ToString() ?? string.Empty">
+                        <option value="">Select courier</option>
+                        @foreach (var c in Couriers)
+                        {
+                            <option value="@c.Name">@c.Name</option>
+                        }
+                    </select>
+                    @if (_showErrors && string.IsNullOrWhiteSpace(_courier))
+                    {
+                        <span class="cu-err">Choose the courier that took the package.</span>
+                    }
+                </div>
+
+                <div class="cu-field">
+                    <label for="cu-awb">Tracking Number (AWB) <span class="cu-req" aria-hidden="true">*</span></label>
+                    <input id="cu-awb" class="cu-input @(_showErrors && string.IsNullOrWhiteSpace(_awb) ? "is-bad" : "")"
+                           type="text" inputmode="latin" autocomplete="off" maxlength="60"
+                           placeholder="Enter tracking number" value="@_awb"
+                           @oninput="e => _awb = e.Value?.ToString() ?? string.Empty" />
+                    @if (_showErrors && string.IsNullOrWhiteSpace(_awb))
+                    {
+                        <span class="cu-err">The AWB / tracking number is required.</span>
+                    }
+                </div>
+
+                <div class="cu-field">
+                    <label for="cu-link">Tracking Link (Optional)</label>
+                    <input id="cu-link" class="cu-input" type="url" inputmode="url" placeholder="Paste tracking link"
+                           value="@_trackingLink" @oninput="e => _trackingLink = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="cu-field">
+                    <label for="cu-eta">Expected Delivery Date</label>
+                    <input id="cu-eta" class="cu-input" type="date" value="@_expected"
+                           @oninput="e => _expected = e.Value?.ToString() ?? string.Empty" />
+                </div>
+            </div>
+        </section>
+
+        <section class="cu-card" aria-labelledby="cu-include">
+            <button type="button" class="cu-disclosure" aria-expanded="@(_includeOpen ? "true" : "false")" @onclick="() => _includeOpen = !_includeOpen">
+                <span>
+                    <span id="cu-include" class="cu-card-title">Include other ready collections</span>
+                    <span class="cu-card-sub">@IncludeSummary</span>
+                </span>
+                <i class="bi @(_includeOpen ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+            </button>
+
+            @if (_includeOpen)
+            {
+                <div class="cu-include">
+                    <label class="cu-tick is-locked">
+                        <input type="checkbox" checked disabled />
+                        <span class="cu-tick-main">
+                            <span class="cu-tick-title">@_collection.Code</span>
+                            <span class="cu-tick-sub">
+                                @_collection.SampleCount sample@(_collection.SampleCount == 1 ? "" : "s")
+                                &middot; @SasLabels.PaymentTypeName(_collection.PaymentType)
+                                &middot; @(_collection.PaymentType == SamplePaymentType.Free ? "Free" : SasLabels.Money(_collection.TotalAmount))
+                            </span>
+                        </span>
+                        <span class="cu-tick-tag">This collection</span>
+                    </label>
+
+                    @if (_readyLoading)
+                    {
+                        <Skeleton Rows="2" />
+                    }
+                    else if (Others.Count == 0)
+                    {
+                        <p class="cu-note">No other collection of yours is ready to send under this filter.</p>
+                    }
+                    else
+                    {
+                        @foreach (var other in Others)
+                        {
+                            var id = other.Id;
+                            <label class="cu-tick">
+                                <input type="checkbox" checked="@_selected.Contains(id)"
+                                       @onchange="e => Toggle(id, (bool?)e.Value == true)" />
+                                <span class="cu-tick-main">
+                                    <span class="cu-tick-title">@other.Code</span>
+                                    <span class="cu-tick-sub">
+                                        @other.SampleCount sample@(other.SampleCount == 1 ? "" : "s")
+                                        &middot; @SasLabels.PaymentTypeName(other.PaymentType)
+                                        &middot; @(other.PaymentType == SamplePaymentType.Free ? "Free" : SasLabels.Money(other.TotalAmount))
+                                        @if (!string.IsNullOrWhiteSpace(other.FarmerName))
+                                        {
+                                            <text> &middot; @other.FarmerName</text>
+                                        }
+                                    </span>
+                                </span>
+                            </label>
+                        }
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="cu-card" aria-labelledby="cu-photos">
+            <h2 id="cu-photos" class="cu-card-title">Upload Photos and Documents</h2>
+            <p class="cu-card-sub">Upload clear photos of the package and shipping label</p>
+
+            <div class="cu-zones">
+                @foreach (var zone in _zones)
+                {
+                    <div class="cu-zone">
+                        <h3 class="cu-zone-title">
+                            @zone.Title
+                            @if (zone.Optional)
+                            {
+                                <span class="cu-zone-optional">(Optional)</span>
+                            }
+                        </h3>
+
+                        <label class="cu-drop @(_showErrors && !zone.Optional && zone.Files.Count == 0 ? "is-bad" : "")">
+                            <InputFile OnChange="e => OnFilesAsync(zone, e)" multiple
+                                       accept="image/png,image/jpeg,image/jpg" class="cu-drop-input" />
+                            <span class="cu-drop-icon" aria-hidden="true"><i class="bi @zone.Icon"></i></span>
+                            <span class="cu-drop-text">Click to Upload or Drag and Drop</span>
+                            <span class="cu-drop-hint">PNG, JPG or JPEG (Max. 5 MB)</span>
+                        </label>
+
+                        @if (zone.Camera)
+                        {
+                            <label class="cu-camera phone-only">
+                                <InputFile OnChange="e => OnFilesAsync(zone, e)" multiple
+                                           accept="image/*" capture="environment" class="cu-drop-input" />
+                                <i class="bi bi-camera" aria-hidden="true"></i> Take a photo
+                            </label>
+                        }
+
+                        @if (_showErrors && !zone.Optional && zone.Files.Count == 0)
+                        {
+                            <span class="cu-err">At least one shipping label or waybill photo is required.</span>
+                        }
+
+                        @foreach (var file in zone.Files)
+                        {
+                            var f = file;
+                            <div class="cu-chip">
+                                <i class="bi bi-file-earmark-image" aria-hidden="true"></i>
+                                <span class="cu-chip-name">@f.Name</span>
+                                <button type="button" class="cu-chip-x" aria-label="@($"Remove {f.Name}")"
+                                        @onclick="() => zone.Files.Remove(f)">
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="cu-card" aria-labelledby="cu-package">
+            <button type="button" class="cu-disclosure" aria-expanded="@(_packageOpen ? "true" : "false")" @onclick="() => _packageOpen = !_packageOpen">
+                <span>
+                    <span id="cu-package" class="cu-card-title">Package and contact details</span>
+                    <span class="cu-card-sub">Packaging, weight and who the lab should call (optional)</span>
+                </span>
+                <i class="bi @(_packageOpen ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+            </button>
+
+            @if (_packageOpen)
+            {
+                <div class="cu-grid">
+                    <div class="cu-field">
+                        <label for="cu-packaging">Packaging Type</label>
+                        <select id="cu-packaging" class="cu-input" value="@_packagingType"
+                                @onchange="e => _packagingType = e.Value?.ToString() ?? string.Empty">
+                            <option value="">Select packaging</option>
+                            @foreach (var p in PackagingTypes)
+                            {
+                                <option value="@p">@p</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="cu-field">
+                        <label for="cu-packages">No. of Packages</label>
+                        <input id="cu-packages" class="cu-input" type="number" min="1" max="999" step="1"
+                               value="@_packageCount" @oninput="e => _packageCount = ParseInt(e.Value, 1)" />
+                    </div>
+
+                    <div class="cu-field">
+                        <label for="cu-weight">Package Weight (kg)</label>
+                        <input id="cu-weight" class="cu-input" type="number" min="0" step="0.01" inputmode="decimal"
+                               value="@_weight" @oninput="e => _weight = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+
+                    <div class="cu-field">
+                        <label for="cu-contact">Contact Person</label>
+                        <input id="cu-contact" class="cu-input" type="text" maxlength="120" value="@_contactPerson"
+                               @oninput="e => _contactPerson = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+
+                    <div class="cu-field">
+                        <label for="cu-mobile">Mobile</label>
+                        <input id="cu-mobile" class="cu-input" type="tel" inputmode="numeric" maxlength="15"
+                               value="@_contactMobile" @oninput="e => _contactMobile = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+
+                    <div class="cu-field">
+                        <label for="cu-email">Email</label>
+                        <input id="cu-email" class="cu-input" type="email" inputmode="email" maxlength="160"
+                               value="@_contactEmail" @oninput="e => _contactEmail = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+
+                    <div class="cu-field cu-field--wide">
+                        <label for="cu-notes">Collection Notes</label>
+                        <textarea id="cu-notes" class="cu-input cu-textarea" rows="2" maxlength="500"
+                                  placeholder="Handle with care..." value="@_notes"
+                                  @oninput="e => _notes = e.Value?.ToString() ?? string.Empty"></textarea>
+                    </div>
+                </div>
+            }
+        </section>
+
+        <ActionBar>
+            <Secondary>
+                <button type="button" class="cu-btn cu-btn-outline" disabled="@_saving" @onclick="SaveDraftAsync">
+                    <i class="bi bi-pencil-square" aria-hidden="true"></i> Save Draft
+                </button>
+            </Secondary>
+            <ChildContent>
+                <button type="button" class="cu-btn cu-btn-primary" disabled="@_saving" @onclick="SubmitAsync">
+                    @if (_saving)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-save" aria-hidden="true"></i>
+                    }
+                    Submit Consignment
+                </button>
+            </ChildContent>
+        </ActionBar>
+    }
+</div>
+
+@code {
+    [Parameter] public int CollectionId { get; set; }
+
+    private sealed class Zone
+    {
+        public Zone(ConsignmentPhotoKind kind, string title, string icon, bool optional, bool camera)
+        {
+            Kind = kind; Title = title; Icon = icon; Optional = optional; Camera = camera;
+        }
+
+        public ConsignmentPhotoKind Kind { get; }
+        public string Title { get; }
+        public string Icon { get; }
+        public bool Optional { get; }
+        public bool Camera { get; }
+        public List<IBrowserFile> Files { get; } = new();
+    }
+
+    private readonly Zone[] _zones =
+    {
+        new(ConsignmentPhotoKind.ShippingLabel, "Shipping Label / Waybill", "bi-file-earmark-text", false, true),
+        new(ConsignmentPhotoKind.Package, "Package Photo", "bi-image", true, true),
+        new(ConsignmentPhotoKind.Other, "Any other Document", "bi-files", true, false)
+    };
+
+    private static readonly (string Key, string Label)[] Modes =
+    {
+        ("both", "Both"), ("free", "Free Sample"), ("paid", "Paid Sample")
+    };
+
+    private SampleCollectionDetailDto? _collection;
+    private SasLookupsDto? _lookups;
+    private List<SampleCollectionSummaryDto> _ready = new();
+    private readonly HashSet<int> _selected = new();
+
+    private string _mode = "both";
+    private string _courier = "";
+    private string _awb = "";
+    private string _trackingLink = "";
+    private string _expected = "";
+    private string _packagingType = "";
+    private int _packageCount = 1;
+    private string _weight = "";
+    private string _contactPerson = "";
+    private string _contactMobile = "";
+    private string _contactEmail = "";
+    private string _notes = "";
+
+    private bool _loading = true;
+    private bool _readyLoading;
+    private bool _notFound;
+    private bool _saving;
+    private bool _showErrors;
+    private bool _includeOpen;
+    private bool _packageOpen;
+    private int _loadedId = -1;
+    private CancellationTokenSource? _cts;
+
+    private string DraftKey => $"sas.consignment.draft.{CollectionId}";
+    private string BackHref => $"/SampleCollection/view/{CollectionId}";
+
+    private List<SasCourierDto> Couriers => _lookups?.Couriers ?? new();
+    private List<string> PackagingTypes => _lookups?.PackagingTypes ?? new();
+
+    /// <summary>The ready list minus the collection already in the route.</summary>
+    private List<SampleCollectionSummaryDto> Others =>
+        _ready.Where(r => r.Id != CollectionId).ToList();
+
+    private bool CanSubmit =>
+        _collection is not null &&
+        _collection.CanConsign &&
+        _collection.Status == SampleCollectionStatus.ReadyForConsignment;
+
+    private string NotReadyMessage => _collection is null ? ""
+        : _collection.Status switch
+        {
+            SampleCollectionStatus.Draft => "This collection is still a draft. Submit it first.",
+            SampleCollectionStatus.PendingPayment => "The payment for this collection has not been recorded yet.",
+            SampleCollectionStatus.PendingApproval => "The payment is waiting for approval. You can send the samples once it is approved.",
+            SampleCollectionStatus.Dispatched or SampleCollectionStatus.InTransit
+                or SampleCollectionStatus.DeliveredToLab or SampleCollectionStatus.TestInProgress
+                or SampleCollectionStatus.Completed => "This collection has already been sent to the lab.",
+            _ => "Only the person who collected the samples can send them, and only once the collection is ready."
+        };
+
+    private string IncludeSummary
+    {
+        get
+        {
+            var extra = _selected.Count(id => id != CollectionId);
+            return extra == 0
+                ? "Only this collection will be sent"
+                : $"{extra + 1} collections in this consignment";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == CollectionId) return;
+        _loadedId = CollectionId;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        _notFound = false;
+        _selected.Clear();
+        _selected.Add(CollectionId);
+
+        _lookups = await Api.GetLookupsAsync(ct);
+        var (item, notFound) = await Api.GetCollectionAsync(CollectionId, ct);
+        if (ct.IsCancellationRequested) return;
+
+        _collection = item;
+        _notFound = notFound;
+        _loading = false;
+
+        if (!CanSubmit) return;
+
+        // The toggle starts on what this collection is, which is what the sender expects.
+        _mode = _collection!.PaymentType == SamplePaymentType.Free ? "free" : "paid";
+        _contactPerson = _collection.CollectedByName;
+
+        await LoadReadyAsync(ct);
+        await RestoreDraftAsync();
+    }
+
+    private async Task LoadReadyAsync(CancellationToken ct)
+    {
+        _readyLoading = true;
+        StateHasChanged();
+
+        _ready = await Api.GetReadyAsync(_mode, ct);
+
+        // Drop ticks that the new filter no longer offers (the route's own id always stays).
+        var allowed = _ready.Select(r => r.Id).Append(CollectionId).ToHashSet();
+        _selected.RemoveWhere(id => !allowed.Contains(id));
+        _selected.Add(CollectionId);
+
+        _readyLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task SetModeAsync(string mode)
+    {
+        if (_mode == mode) return;
+        _mode = mode;
+        _includeOpen = true;
+        await LoadReadyAsync(_cts?.Token ?? CancellationToken.None);
+    }
+
+    private void Toggle(int id, bool on)
+    {
+        if (id == CollectionId) return;           // the route's collection is always in
+        if (on) _selected.Add(id); else _selected.Remove(id);
+    }
+
+    private static int ParseInt(object? value, int fallback) =>
+        int.TryParse(value?.ToString(), out var n) && n > 0 ? n : fallback;
+
+    private async Task OnFilesAsync(Zone zone, InputFileChangeEventArgs e)
+    {
+        foreach (var file in e.GetMultipleFiles(10))
+        {
+            if (file.Size > SasApi.MaxImageBytes)
+            {
+                Toast.Error($"\"{file.Name}\" is larger than 5 MB.");
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(file.ContentType) &&
+                !file.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                Toast.Error($"\"{file.Name}\" is not a PNG or JPG picture.");
+                continue;
+            }
+
+            if (zone.Files.Any(f => f.Name == file.Name && f.Size == file.Size)) continue;
+            zone.Files.Add(file);
+        }
+
+        await Task.CompletedTask;
+    }
+
+    // ------------------------------------------------------------------ submit
+
+    private async Task SubmitAsync()
+    {
+        if (_saving || _collection is null) return;
+
+        _showErrors = true;
+        if (string.IsNullOrWhiteSpace(_courier) || string.IsNullOrWhiteSpace(_awb) ||
+            _zones[0].Files.Count == 0)
+        {
+            Toast.Error("Please fill the courier details and add the shipping label photo.");
+            return;
+        }
+
+        _saving = true;
+        var ct = _cts?.Token ?? CancellationToken.None;
+
+        var body = new ConsignmentUpsertDto
+        {
+            CollectionIds = _selected.ToList(),
+            CourierService = _courier.Trim(),
+            TrackingNumber = _awb.Trim(),
+            TrackingLink = Clean(_trackingLink),
+            ExpectedDeliveryDate = DateTime.TryParse(_expected, out var eta) ? eta : null,
+            PackageCount = Math.Max(1, _packageCount),
+            PackageWeightKg = decimal.TryParse(_weight, out var kg) && kg > 0 ? kg : null,
+            PackagingType = Clean(_packagingType),
+            ContactPerson = Clean(_contactPerson),
+            ContactMobile = Clean(_contactMobile),
+            ContactEmail = Clean(_contactEmail),
+            Notes = Clean(_notes)
+        };
+
+        var created = await Api.CreateConsignmentAsync(body, ct);
+        if (created is null)
+        {
+            _saving = false;      // the API already raised the toast
+            return;
+        }
+
+        // Photos follow the consignment: a failure here costs only the pictures, so the user
+        // still lands on the submitted page and can add them from the details page later.
+        var failed = 0;
+        foreach (var zone in _zones.Where(z => z.Files.Count > 0))
+        {
+            var uploaded = await Api.UploadConsignmentPhotosAsync(created.Id, zone.Kind, zone.Files, zone.Title, ct);
+            if (uploaded is null) failed++;
+        }
+
+        if (failed > 0) Toast.Warning("The consignment was submitted, but some photos did not upload.");
+
+        await ClearDraftAsync();
+        _saving = false;
+        Nav.NavigateTo($"/SampleCollection/submitted/{created.Id}");
+    }
+
+    private static string? Clean(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // ------------------------------------------------------------------ draft (sessionStorage)
+
+    private sealed class DraftState
+    {
+        public string Mode { get; set; } = "both";
+        public string Courier { get; set; } = "";
+        public string Awb { get; set; } = "";
+        public string TrackingLink { get; set; } = "";
+        public string Expected { get; set; } = "";
+        public string PackagingType { get; set; } = "";
+        public int PackageCount { get; set; } = 1;
+        public string Weight { get; set; } = "";
+        public string ContactPerson { get; set; } = "";
+        public string ContactMobile { get; set; } = "";
+        public string ContactEmail { get; set; } = "";
+        public string Notes { get; set; } = "";
+        public List<int> Selected { get; set; } = new();
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        var state = new DraftState
+        {
+            Mode = _mode,
+            Courier = _courier,
+            Awb = _awb,
+            TrackingLink = _trackingLink,
+            Expected = _expected,
+            PackagingType = _packagingType,
+            PackageCount = _packageCount,
+            Weight = _weight,
+            ContactPerson = _contactPerson,
+            ContactMobile = _contactMobile,
+            ContactEmail = _contactEmail,
+            Notes = _notes,
+            Selected = _selected.ToList()
+        };
+
+        try
+        {
+            await JS.InvokeVoidAsync("sessionStorage.setItem", DraftKey, JsonSerializer.Serialize(state));
+            Toast.Success("Draft saved on this device. The photos still need to be added again.");
+        }
+        catch (Exception)
+        {
+            // Prerender, a closed circuit or storage turned off: nothing to persist to.
+            Toast.Warning("This device would not keep the draft.");
+        }
+    }
+
+    private async Task RestoreDraftAsync()
+    {
+        string? raw;
+        try
+        {
+            raw = await JS.InvokeAsync<string?>("sessionStorage.getItem", DraftKey);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(raw)) return;
+
+        DraftState? state;
+        try
+        {
+            state = JsonSerializer.Deserialize<DraftState>(raw!);
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (state is null) return;
+
+        _courier = state.Courier;
+        _awb = state.Awb;
+        _trackingLink = state.TrackingLink;
+        _expected = state.Expected;
+        _packagingType = state.PackagingType;
+        _packageCount = Math.Max(1, state.PackageCount);
+        _weight = state.Weight;
+        if (!string.IsNullOrWhiteSpace(state.ContactPerson)) _contactPerson = state.ContactPerson;
+        _contactMobile = state.ContactMobile;
+        _contactEmail = state.ContactEmail;
+        _notes = state.Notes;
+        _packageOpen = !string.IsNullOrWhiteSpace(_packagingType) || !string.IsNullOrWhiteSpace(_notes);
+
+        if (!string.IsNullOrWhiteSpace(state.Mode) && state.Mode != _mode)
+        {
+            _mode = state.Mode;
+            await LoadReadyAsync(_cts?.Token ?? CancellationToken.None);
+        }
+
+        var allowed = _ready.Select(r => r.Id).Append(CollectionId).ToHashSet();
+        foreach (var id in state.Selected.Where(allowed.Contains)) _selected.Add(id);
+        if (_selected.Count > 1) _includeOpen = true;
+
+        StateHasChanged();
+    }
+
+    private async Task ClearDraftAsync()
+    {
+        try { await JS.InvokeVoidAsync("sessionStorage.removeItem", DraftKey); }
+        catch (Exception) { /* nothing stored, nothing to clear */ }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

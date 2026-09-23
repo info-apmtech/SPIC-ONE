@@ -8,6 +8,7 @@
 @using Microsoft.AspNetCore.Components
 @using SPIC.Core.Entities
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject NavigationManager Nav
@@ -1469,6 +1470,58 @@
         }
     }
 
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .lg-page .lm-page-heading-row { flex-wrap: wrap; margin-bottom: 1rem; }
+        .lg-page .lm-page-heading-row > div { width: 100%; }
+        .lg-page .lm-page-heading-row > div > button { flex: 1 1 0; min-height: var(--tap-min, 44px); justify-content: center; }
+        .lg-page .tab-item { padding: 10px 16px; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; }
+        .lg-page .form-control-custom,
+        .lg-page .form-select-custom { min-height: var(--tap-min, 44px); font-size: 16px; }
+        /* Active / Inactive and the PVT WH / C&F WH / Both selector are the only
+           way to set those fields, so they need a full 44px thumb target. */
+        .lg-page .status-btn-group .btn { min-height: var(--tap-min, 44px); }
+        .lg-page .lm-category-btn { min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; justify-content: center; }
+        /* map: 60vh so the pin can be placed with a thumb; 44px location buttons */
+        .lg-page .map-box-wrap,
+        .lg-page .leaflet-map-el { height: 60vh; min-height: 60vh; }
+        .lg-page .map-loc-btn { font-size: 0.8rem; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; gap: 6px; }
+        .lg-page .use-current-loc-btn { min-height: var(--tap-min, 44px); width: 100%; justify-content: center; }
+        .lg-page .primary-location-header { flex-direction: column; align-items: stretch; }
+        /* uploads: one full-width zone per document */
+        .lg-page .lm-doc-grid { grid-template-columns: 1fr; gap: 10px; }
+        .lg-page .lm-doc-card { min-height: 0; }
+        .lg-page .lm-upload-btn { width: 100%; min-height: var(--tap-min, 44px); }
+        /* three compact metric tiles */
+        .lg-page .row.g-3.mb-4 > .col-md-4 { flex: 0 0 33.333%; max-width: 33.333%; }
+        .lg-page .metric-card { padding: 12px 8px; }
+        .lg-page .metric-title { font-size: 0.72rem; }
+        .lg-page .metric-val { font-size: 1.25rem; }
+        .lg-page .lm-save-row { margin: 0; }
+        .lg-page .table-controls { flex-wrap: wrap; }
+        .lg-page .table-controls .filter-select { flex: 1 1 45%; min-height: var(--tap-min, 44px); }
+        .lg-page .table-controls .search-box { flex: 1 1 100%; }
+        .lg-page .spic-card-actions .btn { flex: 1 1 auto; }
+    }
+    @@media (min-width: 768px) and (max-width: 1199.98px) {
+        .lg-page .map-box-wrap,
+        .lg-page .leaflet-map-el { height: 420px; min-height: 420px; }
+        .lg-page .map-loc-btn { font-size: 0.75rem; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; gap: 6px; }
+        .lg-page .use-current-loc-btn { min-height: var(--tap-min, 44px); }
+        .lg-page .lm-upload-btn { min-height: var(--tap-min, 44px); }
+    }
+
+    /* native: keep the pre-existing desktop/tablet spacing of the inline ActionBar */
+    @@media (min-width: 768px) {
+        .lg-page .lm-save-row.fb-actionbar { padding-top: 0; padding-bottom: 0; }
+    }
+
+    /* native: phone - lift the sticky ActionBar above the shell's bottom tab bar */
+    @@media (max-width: 767.98px) {
+        .lg-page { --shell-bottom-offset: calc(var(--shell-tabbar-h, 60px) + var(--safe-bottom, 0px)); }
+        .lg-page .fb-actionbar--sticky { padding-bottom: 10px; } /* tab bar already covers the home-indicator area */
+    }
 </style>
 
 @if (PdfViewMode && PdfViewId > 0)
@@ -1481,9 +1534,9 @@ else
 {
 
 
-    <div class="container-fluid py-4 px-0">
+    <div class="container-fluid py-4 px-0 lg-page">
         <div class="lm-page-heading-row">
-            <h5 class="fw-bold reg-page-heading">Logistics Master</h5>
+            <PageHeader Title="Logistics Master" Subtitle="Warehouses, rake points and ports" CssClass="reg-page-heading" />
 
             <div style="display:inline-flex; align-items:center; gap:8px;">
                 <button type="button"
@@ -1543,7 +1596,7 @@ else
                 <div class="basic-info-card">
                     <div class="basic-info-header">
                         <h3 class="basic-info-title">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/BasicInfoIcon.svg"
                                  class="formicon"
                                  alt="icon" /> Port Information
                         </h3>
@@ -1613,10 +1666,13 @@ else
                     </div>
                 </div>
 
-                <div class="lm-save-row">
-                    <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
-                        <i class="bi bi-x"></i> Cancel
-                    </button>
+                <ActionBar CssClass="lm-save-row" AriaLabel="Save logistics record">
+                    <Secondary>
+                        <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
+                            <i class="bi bi-x"></i> Cancel
+                        </button>
+                    </Secondary>
+                    <ChildContent>
 
                     @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
                                                                      (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
@@ -1629,7 +1685,8 @@ else
                             @(_isSaving ? "Saving..." : (_isEditing ? "Update" : "Save"))
                         </button>
                     }
-                </div>
+                    </ChildContent>
+                </ActionBar>
             </div>
         }
         else
@@ -1639,7 +1696,7 @@ else
                 <div class="basic-info-card">
                     <div class="basic-info-header">
                         <h3 class="basic-info-title">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/BasicInfoIcon.svg"
                                  class="formicon"
                                  alt="icon" /> Basic Information
                         </h3>
@@ -1656,7 +1713,7 @@ else
                                         <div class="card-checkbox">
                                             <i class="bi bi-check-lg"></i>
                                         </div>
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/logo.png" />
                                         <span>SPIC</span>
                                     </div>
                                 </div>
@@ -1667,7 +1724,7 @@ else
                                         <div class="card-checkbox">
                                             <i class="bi bi-check-lg"></i>
                                         </div>
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/GreenSratIcon.svg" />
                                         <span>GREEN STAR</span>
                                     </div>
                                 </div>
@@ -1982,7 +2039,7 @@ else
                 <div class="form-card">
                     <div class="primary-location-header">
                         <div class="card-header-title mb-0">
-                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg"
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/LocationIcon.svg"
                                  alt="Location"
                                  class="formicon" />Primary Location
                         </div>
@@ -1998,7 +2055,7 @@ else
                             }
                             else
                             {
-                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg"
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/CurrentLocation.svg"
                                      alt="Current Location"
                                      class="verifyicon" />
                                 <span>Use Current Location</span>
@@ -3143,10 +3200,13 @@ else
                     }
                 </div>
 
-                <div class="lm-save-row">
-                    <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
-                        <i class="bi bi-x"></i> Cancel
-                    </button>
+                <ActionBar CssClass="lm-save-row" AriaLabel="Save logistics record">
+                    <Secondary>
+                        <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
+                            <i class="bi bi-x"></i> Cancel
+                        </button>
+                    </Secondary>
+                    <ChildContent>
 
                     @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
                                                                  _isEditing)
@@ -3159,7 +3219,8 @@ else
                             @(_isUploadingDocuments ? "Uploading Documents..." : (_isSaving ? "Saving..." : (_isEditing ? "Update" : "Save")))
                         </button>
                     }
-                </div>
+                    </ChildContent>
+                </ActionBar>
             </div>
         }
 
@@ -3197,7 +3258,9 @@ else
                            Title="@($"Existing {ActiveTabDisplayName}")"
                            FileName="@CurrentFileName"
                            ExportColumns="GetExportColumns()"
-                           SearchText="@_searchText">
+                           SearchText="@_searchText"
+                           EmptyTitle="@($"No {ActiveTabDisplayName.ToLowerInvariant()} yet")"
+                           EmptyMessage="Use the form above to add the first record, or change the filters.">
 
                 <FilterControls>
                     <div class="search-box">
@@ -3398,7 +3461,7 @@ else
                                             class="lm-company-pdf-btn"
                                             title="View SPIC @ActiveTabDisplayName PDF"
                                             @onclick='() => OpenLogisticsPdf(item, "SPIC")'>
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png"
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/logo.png"
                                              class="lm-company-pdf-logo"
                                              alt="SPIC PDF" />
                                     </button>
@@ -3410,7 +3473,7 @@ else
                                             class="lm-company-pdf-btn"
                                             title="View GreenStar @ActiveTabDisplayName PDF"
                                             @onclick='() => OpenLogisticsPdf(item, "GreenStar")'>
-                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg"
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/GreenSratIcon.svg"
                                              class="lm-company-pdf-logo greenstar"
                                              alt="GreenStar PDF" />
                                     </button>
@@ -3451,6 +3514,38 @@ else
                         </td>
                     }
                 </TableRow>
+                <CardActions Context="item">
+                    @if (IsWarehouseTab || IsRakePointTab)
+                    {
+                        var cardDocCount = GetItemDocumentEntries(item).Count;
+                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(cardDocCount == 0)" @onclick="() => OpenDocumentsModal(item)">
+                            <i class="bi bi-folder2-open"></i> Documents (@cardDocCount)
+                        </button>
+                    }
+                    @if (item.InSpic == true)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick='() => OpenLogisticsPdf(item, "SPIC")'><i class="bi bi-file-earmark-pdf"></i> SPIC PDF</button>
+                    }
+                    @if (item.InGreenStar == true)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick='() => OpenLogisticsPdf(item, "GreenStar")'><i class="bi bi-file-earmark-pdf"></i> Green Star PDF</button>
+                    }
+                    @if (item.InSpic != true && item.InGreenStar != true)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenLogisticsPdf(item, null)"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                    }
+                    @if (CanApprove(item))
+                    {
+                        <button type="button" class="btn btn-sm btn-success" @onclick="() => OpenApproveModal(item)" disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
+                            <i class="bi bi-check-circle"></i> @(_approvingId == item.Id ? "Approving..." : GetApproveButtonText(item))
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning" @onclick="() => OpenRejectModal(item)" disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
+                            <i class="bi bi-arrow-counterclockwise"></i> Send Back
+                        </button>
+                    }
+                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+                </CardActions>
             </SpicDataTable>
         </div>
     </div>
@@ -3826,13 +3921,15 @@ else
     // Keep PDF rendering inside the already-authorized /Logistics route.
     // ===============================================================
     [SupplyParameterFromQuery(Name = "pdf")]
-    public bool PdfViewMode { get; set; }
+    public bool? PdfViewModeQuery { get; set; }
+    private bool PdfViewMode => PdfViewModeQuery ?? false;
 
     [SupplyParameterFromQuery(Name = "pdfTab")]
     public string? PdfViewTab { get; set; }
 
     [SupplyParameterFromQuery(Name = "pdfId")]
-    public int PdfViewId { get; set; }
+    public int? PdfViewIdQuery { get; set; }
+    private int PdfViewId => PdfViewIdQuery ?? 0;
 
     [SupplyParameterFromQuery(Name = "company")]
     public string? PdfViewCompany { get; set; }
@@ -4085,8 +4182,23 @@ else
     private List<SapCodeOptionDto> _pvtMasterAll = new();
     private List<SapCodeOptionDto> _rakePointMasterAll = new();
 
-    private List<SapCodeOptionDto> CurrentSapCodeOptions =>
-        IsRakePointTab ? _rakePointMasterAll : _pvtMasterAll;
+    private List<SapCodeOptionDto> CurrentSapCodeOptions
+    {
+        get
+        {
+            var source = IsRakePointTab ? _rakePointMasterAll : _pvtMasterAll;
+
+            // The SAP Code dropdown is driven purely by the selected State: only
+            // codes mapped to that State are offered. With no State selected the
+            // full master list is shown so the existing flow is unchanged.
+            if (_form.BasicStateId <= 0)
+                return source;
+
+            return source
+                .Where(o => o.StateId.HasValue && o.StateId.Value == _form.BasicStateId)
+                .ToList();
+        }
+    }
 
     // Same pincode lookup behaviour used by Register.
     private bool _isPincodeLookup;
@@ -4128,7 +4240,7 @@ else
 
         try
         {
-            var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+            var token = await SessionStore.GetAsync(SessionKeys.Token);
             if (!string.IsNullOrWhiteSpace(token))
                 _currentUserId = GetUserIdFromToken(token);
         }
@@ -4239,7 +4351,7 @@ else
         {
             var data = await Http.GetFromJsonAsync<List<RakePointMasterItemDto>>("api/RakePointMaster/all") ?? new();
             _rakePointMasterAll = data
-                .Select(x => new SapCodeOptionDto { Id = x.Id, Code = x.RakePointCode, Name = x.Name })
+                .Select(x => new SapCodeOptionDto { Id = x.Id, Code = x.RakePointCode, Name = x.Name, StateId = x.StateId })
                 .ToList();
         }
         catch (Exception ex)
@@ -4411,6 +4523,26 @@ else
         _form.HeadquarterId = 0;
         _filteredRegions = _regions.Where(x => x.StateId == _form.BasicStateId).ToList();
         _filteredHeadquarters = new();
+
+        // The SAP Code dropdown only offers codes mapped to the selected State,
+        // so a code that no longer belongs to this State must be cleared.
+        if (!string.IsNullOrWhiteSpace(_form.SapCode) &&
+            !CurrentSapCodeOptions.Any(o => string.Equals(o.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase)))
+        {
+            var fullSource = IsRakePointTab ? _rakePointMasterAll : _pvtMasterAll;
+            var previous = fullSource.FirstOrDefault(o =>
+                string.Equals(o.Code, _form.SapCode, StringComparison.OrdinalIgnoreCase));
+
+            // Only clear the auto-filled Name; keep a manually entered one.
+            if (previous != null &&
+                string.Equals(_form.Name, previous.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                _form.Name = "";
+            }
+
+            _form.SapCode = "";
+            _errors.Remove("SapCode");
+        }
     }
 
     private void OnRegionChanged()
@@ -6415,7 +6547,7 @@ else
 
             if (string.IsNullOrWhiteSpace(LoginState.Token) && !url.Contains("access_token=", StringComparison.OrdinalIgnoreCase))
             {
-                var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+                var token = await SessionStore.GetAsync(SessionKeys.Token);
                 if (!string.IsNullOrWhiteSpace(token))
                 {
                     var rawToken = token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
@@ -6957,6 +7089,7 @@ else
         public int Id { get; set; }
         public string Code { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public int? StateId { get; set; }
     }
 
     public class RakePointMasterItemDto
@@ -6964,6 +7097,7 @@ else
         public int Id { get; set; }
         public string RakePointCode { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public int? StateId { get; set; }
     }
 
     public class UserInfoLookupDto

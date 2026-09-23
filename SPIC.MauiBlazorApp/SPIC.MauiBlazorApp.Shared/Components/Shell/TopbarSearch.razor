@@ -1,0 +1,100 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+@implements IDisposable
+
+@inject SPIC.MauiBlazorApp.Shared.Services.AppSearchState SearchState
+@inject IJSRuntime JS
+
+@*
+    Desktop topbar global search, lifted out of MainLayout unchanged (Layout.css targets
+    .topbar .search-box, which still matches because a component adds no wrapper element).
+
+    No parameters, so MainLayout renders never reach it - and, more importantly, a
+    keystroke here no longer re-renders MainLayout (which used to diff the whole shell,
+    including the full menu, on every character typed).
+*@
+
+<div class="search-box">
+
+    <i class="bi bi-search"></i>
+
+    <input type="text"
+           class="form-control"
+           placeholder="Search something here"
+           value="@SearchState.Query"
+           @oninput="OnGlobalSearchInput"
+           @onkeydown="HandleSearchKeyDown" />
+
+    @if (SearchState.HasQuery)
+    {
+        <i class="bi bi-x-circle-fill global-search-clear"
+               title="Clear search"
+               @onclick="() => SearchState.Clear()">
+        </i>
+    }
+
+</div>
+
+<style>
+
+/* ================= SEARCH ================= */
+
+.search-box {
+    position: relative;
+}
+
+.global-search-clear {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9CA3AF;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: color 0.15s;
+}
+
+    .global-search-clear:hover {
+        color: #EF4444;
+    }
+</style>
+
+@code {
+    protected override void OnInitialized()
+    {
+        SearchState.OnChange += OnSearchChanged;
+    }
+
+
+    private void OnSearchChanged() => InvokeAsync(StateHasChanged);
+
+
+    private void OnGlobalSearchInput(ChangeEventArgs e)
+    {
+        SearchState.Query =
+            e.Value?.ToString() ?? "";
+    }
+
+
+    private async Task HandleSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            try
+            {
+                await JS.InvokeVoidAsync(
+                    "navSearch.clickMatch"
+                );
+            }
+            catch
+            {
+                // Ignore JS errors
+            }
+        }
+    }
+
+
+    public void Dispose()
+    {
+        SearchState.OnChange -= OnSearchChanged;
+    }
+}

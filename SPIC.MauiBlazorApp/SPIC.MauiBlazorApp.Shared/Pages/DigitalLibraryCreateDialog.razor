@@ -1,0 +1,77 @@
+@inject NavigationManager Nav
+
+@*
+    "Create New Content" chooser (Figma frame supplied 2026-09-20). Centred modal on tablet
+    and desktop, bottom sheet on phones. Each option opens that type's add form.
+*@
+
+@if (IsOpen)
+{
+    <div class="dlcd-backdrop" @onclick="Close"></div>
+    <div class="dlcd" role="dialog" aria-modal="true" aria-labelledby="dlcd-title" @onkeydown="OnKeyDown" tabindex="-1" @ref="_dialog">
+        <div class="dlcd-handle" aria-hidden="true"></div>
+        <div class="dlcd-head">
+            <div>
+                <h2 id="dlcd-title" class="dlcd-title">Create New Content</h2>
+                <p class="dlcd-sub">Choose the type of content you want to create</p>
+            </div>
+            <button type="button" class="dlcd-close" aria-label="Close" @onclick="Close"><i class="bi bi-x-circle"></i></button>
+        </div>
+
+        <div class="dlcd-options">
+            @foreach (var o in Options)
+            {
+                <button type="button" class="dlcd-option" @onclick="() => Choose(o.Route)">
+                    <span class="dlcd-option-art" aria-hidden="true"><i class="bi @o.Icon"></i></span>
+                    <span class="dlcd-option-text">
+                        <span class="dlcd-option-title">@o.Title</span>
+                        <span class="dlcd-option-desc">@o.Description</span>
+                    </span>
+                    <i class="bi bi-chevron-right dlcd-option-chevron" aria-hidden="true"></i>
+                </button>
+            }
+        </div>
+
+        <div class="dlcd-foot">
+            <button type="button" class="dlcd-cancel" @onclick="Close"><i class="bi bi-x-lg"></i> Cancel</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private ElementReference _dialog;
+
+    private sealed record Option(string Title, string Description, string Icon, string Route);
+
+    private static readonly Option[] Options =
+    {
+        new("AI Videos", "Upload educational and product-related video content.", "bi-camera-video-fill", "videos"),
+        new("Product Information", "Create structured product knowledge and detailed information pages.", "bi-clipboard2-data-fill", "products"),
+        new("Product Brochures", "Upload and publish product brochures and reference documents.", "bi-journal-bookmark-fill", "brochures"),
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen)
+        {
+            try { await _dialog.FocusAsync(); } catch { /* element may not be rendered yet */ }
+        }
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private async Task Choose(string route)
+    {
+        await Close();
+        Nav.NavigateTo($"/DigitalLibrary/add/{route}");
+    }
+
+    private Task OnKeyDown(KeyboardEventArgs e) => e.Key == "Escape" ? Close() : Task.CompletedTask;
+}

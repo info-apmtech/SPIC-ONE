@@ -1,0 +1,223 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Community
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject ToastService Toast
+@inject CommunityApi Api
+
+@*
+    One reply in a discussion thread (Figma "Discussion Details").
+
+        <ReplyItem Reply="r" DiscussionId="12" Children="ChildrenOf(r.Id)" OnPosted="Added" />
+
+    Used recursively ONE level deep: a top-level reply renders its nested replies through
+    Children; a nested reply renders no list of its own, but its reply button still posts
+    under the same top-level parent (PostUnderId).
+
+    Likes and posts go to api/Community; the like toggles optimistically and rolls back when
+    the call fails. OnPosted hands the reply the server created back to the page, which owns
+    the thread list.
+*@
+
+<article id="@DomId" class="cm-reply @(Nested ? "cm-reply--nested" : "")">
+    <MemberAvatar Member="Reply.Author" Size="@(Nested ? 40 : 48)" />
+
+    <div class="cm-reply-main">
+        <div class="cm-reply-head">
+            <span class="cm-reply-name">@Reply.Author.Name</span>
+            <span class="cm-reply-role @(Reply.Author.IsExpert ? "is-expert" : "is-farmer")">@Reply.Author.Role</span>
+            <span class="cm-reply-meta">@Meta</span>
+        </div>
+
+        <p class="cm-reply-body">@if (!string.IsNullOrWhiteSpace(Reply.MentionName))
+            {<span class="cm-reply-mention">@("@" + Reply.MentionName)</span>@(" ")}@CommunityText.Linkify(Reply.Body)</p>
+
+        @if (ReplyImages.Count > 0)
+        {
+            <div class="cm-reply-imgs">
+                @for (var i = 0; i < ReplyImages.Count; i++)
+                {
+                    var index = i;
+                    <button type="button" class="cm-reply-img"
+                            aria-label="@($"Open image {index + 1} of {ReplyImages.Count}")"
+                            @onclick="() => OpenImageAsync(index)">
+                        <img src="@ReplyImages[index].Url" alt="" loading="lazy"
+                             onerror="this.onerror=null;this.parentElement.classList.add('is-broken')" />
+                    </button>
+                }
+            </div>
+        }
+
+        <div class="cm-reply-actions">
+            <button type="button"
+                    class="cm-reply-act @(Reply.IsLiked ? "is-on" : "")"
+                    aria-pressed="@(Reply.IsLiked ? "true" : "false")"
+                    @onclick="ToggleLikeAsync">
+                <i class="bi @(Reply.IsLiked ? "bi-hand-thumbs-up-fill" : "bi-hand-thumbs-up")" aria-hidden="true"></i>
+                <span>@Reply.Likes Likes</span>
+            </button>
+            <button type="button"
+                    class="cm-reply-act @(_boxOpen ? "is-on" : "")"
+                    aria-expanded="@(_boxOpen ? "true" : "false")"
+                    @onclick="ToggleBox">
+                <i class="bi bi-reply" aria-hidden="true"></i>
+                <span>@Reply.ReplyCount reply</span>
+            </button>
+
+            @if (CanDelete)
+            {
+                <button type="button"
+                        class="cm-reply-act cm-reply-del"
+                        title="Delete this reply"
+                        aria-label="Delete this reply"
+                        disabled="@_deleting"
+                        @onclick="DeleteAsync">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                </button>
+            }
+        </div>
+
+        @if (_boxOpen)
+        {
+            <ReplyComposer Inline="true"
+                           DiscussionId="DiscussionId"
+                           ParentReplyId="@(PostUnderId ?? Reply.Id)"
+                           MentionName="@Reply.Author.Name"
+                           Me="Me"
+                           Placeholder="@($"Reply to {Reply.Author.Name}...")"
+                           OnPosted="OnComposerPostedAsync"
+                           OnCancel="CloseBox"
+                           OnAvatarClick="OnAvatarClick" />
+        }
+
+        @if (!Nested && Children.Count > 0)
+        {
+            <div class="cm-reply-children">
+                @foreach (var child in Children)
+                {
+                    <ReplyItem @key="child.Id"
+                               Reply="child"
+                               DiscussionId="DiscussionId"
+                               Nested="true"
+                               PostUnderId="Reply.Id"
+                               Me="Me"
+                               OnPosted="OnPosted"
+                               OnDeleted="OnDeleted"
+                               OnOpenImage="OnOpenImage"
+                               OnAvatarClick="OnAvatarClick" />
+                }
+            </div>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public CommunityReply Reply { get; set; } = new();
+
+    /// <summary>Discussion the reply belongs to (used when posting).</summary>
+    [Parameter, EditorRequired] public int DiscussionId { get; set; }
+
+    /// <summary>Nested (second level) reply: smaller avatar, no list of its own.</summary>
+    [Parameter] public bool Nested { get; set; }
+
+    /// <summary>Nested replies of this reply (top level only; the design nests one level).</summary>
+    [Parameter] public IReadOnlyList<CommunityReply> Children { get; set; } = Array.Empty<CommunityReply>();
+
+    /// <summary>Reply new posts are nested under. Null = this reply (top level).</summary>
+    [Parameter] public int? PostUnderId { get; set; }
+
+    /// <summary>Raised with the reply the server created, so the page can add it to the thread.</summary>
+    [Parameter] public EventCallback<CommunityReply> OnPosted { get; set; }
+
+    /// <summary>Raised with the reply the server deleted, so the page can drop it and its children.</summary>
+    [Parameter] public EventCallback<CommunityReply> OnDeleted { get; set; }
+
+    /// <summary>Asks the page to open its lightbox on this reply's images.</summary>
+    [Parameter] public EventCallback<CommunityImageOpen> OnOpenImage { get; set; }
+
+    /// <summary>The signed-in user, for the inline composer's avatar.</summary>
+    [Parameter] public CommunityMember? Me { get; set; }
+
+    /// <summary>The user tapped their own avatar in the inline composer.</summary>
+    [Parameter] public EventCallback OnAvatarClick { get; set; }
+
+    private bool _boxOpen;
+    private bool _deleting;
+
+    private string DomId => $"cm-reply-{DiscussionId}-{Reply.Id}";
+
+    /// <summary>The author may remove their own reply; Admin / CorporateAdmin may remove any.</summary>
+    private bool CanDelete => Reply.IsMine || Api.IsModerator;
+
+    private List<CommunityAttachment> ReplyImages => Reply.Images.ToList();
+
+    /// <summary>"Farmer · Thanjavur · Sep 3, 2026 · 9:12 AM" (town only, without the state).</summary>
+    private string Meta
+    {
+        get
+        {
+            var town = (Reply.Author.Location ?? "").Split(',')[0].Trim();
+            var when = $"{Reply.CreatedAt:MMM d, yyyy} · {Reply.CreatedAt:h:mm tt}";
+            return string.IsNullOrEmpty(town) ? $"· {when}" : $"· {town} · {when}";
+        }
+    }
+
+    private async Task ToggleLikeAsync()
+    {
+        var wasLiked = Reply.IsLiked;
+        var wasCount = Reply.Likes;
+
+        // Optimistic, rolled back when the API refuses.
+        Reply.IsLiked = !wasLiked;
+        Reply.Likes = Math.Max(0, wasCount + (wasLiked ? -1 : 1));
+
+        var result = await Api.ToggleReplyLikeAsync(Reply.Id);
+
+        if (result is null)
+        {
+            Reply.IsLiked = wasLiked;
+            Reply.Likes = wasCount;
+        }
+        else
+        {
+            Reply.IsLiked = result.Active;
+            Reply.Likes = result.Count;
+        }
+
+        StateHasChanged();
+    }
+
+    private void ToggleBox() => _boxOpen = !_boxOpen;
+
+    private void CloseBox() => _boxOpen = false;
+
+    /// <summary>The composer posted; the page owns the thread, so it does the bookkeeping.</summary>
+    private async Task OnComposerPostedAsync(CommunityReply posted)
+    {
+        CloseBox();
+        if (OnPosted.HasDelegate) await OnPosted.InvokeAsync(posted);
+    }
+
+    private Task OpenImageAsync(int index) =>
+        OnOpenImage.HasDelegate
+            ? OnOpenImage.InvokeAsync(new CommunityImageOpen(ReplyImages, index))
+            : Task.CompletedTask;
+
+    private async Task DeleteAsync()
+    {
+        if (_deleting) return;
+
+        var ok = await Toast.ConfirmAsync("Delete reply",
+            "This reply will be removed from the discussion.",
+            "Delete", danger: true);
+
+        if (!ok) return;
+
+        _deleting = true;
+        var removed = await Api.DeleteReplyAsync(Reply.Id);
+        _deleting = false;
+
+        if (!removed) return;         // CommunityApi already explained why
+
+        Toast.Info("Reply deleted.");
+        if (OnDeleted.HasDelegate) await OnDeleted.InvokeAsync(Reply);
+    }
+}

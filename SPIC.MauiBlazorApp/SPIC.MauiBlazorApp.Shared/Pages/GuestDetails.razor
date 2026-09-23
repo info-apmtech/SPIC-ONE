@@ -4,6 +4,7 @@
 @inject NavigationManager Navigation
 @inject LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
+@inject ToastService Toast
 
 @using System.Globalization
 @using System.IO
@@ -229,13 +230,42 @@
         .btn-primary-continue:hover {
             background-color: var(--primary-blue-hover);
         }
+
+    /* ── Mobile additions ── */
+    @@media (max-width: 640px) {
+        .form-card, .summary-card { padding: 1.25rem; }
+        .summary-row { flex-wrap: wrap; gap: 6px; }
+        .summary-row .val { text-align: left; }
+        .summary-total { flex-wrap: wrap; gap: 6px; }
+    }
+    @@media (max-width: 480px) {
+        .btn-action-row { flex-wrap: wrap; }
+        .btn-action-row .btn-outline-back,
+        .btn-action-row .btn-primary-continue { width: 100%; flex: 1 1 100%; }
+        .page-title { font-size: 1.25rem; }
+        .summary-total .val { font-size: 1.15rem; }
+    }
+
+    /* native: phone */
+    .btn-action-row > .fb-actionbar { flex: 1 1 100%; }
+    @@media (min-width: 768px) {
+        .btn-action-row > .fb-actionbar { padding: 0; gap: 12px; }
+    }
+    @@media (max-width: 767.98px) {
+        .form-card, .summary-card { padding: 1rem; height: auto; }
+        .form-control-custom, .form-select-custom { min-height: 44px; font-size: 16px; }
+        .upload-box { height: auto; min-height: 110px; padding: 12px; }
+        .summary-title { font-size: 1.1rem; margin-bottom: 1rem; }
+        .summary-row { margin-bottom: 0.85rem; }
+        .btn-action-row { margin-top: 0.5rem; }
+        .btn-outline-back, .btn-primary-continue { min-height: 44px; }
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
     
     <div class="mb-4">
-        <h1 class="page-title">Guest Details</h1>
-        <p class="page-subtitle">Please provide your information to complete the booking</p>
+        <PageHeader Title="Guest Details" Subtitle="Step 3 of 5 · Please provide your information to complete the booking" />
     </div>
 
     <div class="row g-4">
@@ -255,7 +285,16 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Company Name</label>
-                        <input type="text" class="form-control-custom" placeholder="Enter Company Name" @bind="_form.CompanyName">
+                        <select class="form-select-custom" @bind="_form.CompanyName" @bind:after="OnCompanyChanged">
+                            <option value="">-- Select Company --</option>
+                            @foreach (var company in _companies)
+                            {
+                                var label = string.IsNullOrWhiteSpace(company.ShortCode)
+                                    ? company.CompanyName
+                                    : company.ShortCode;
+                                <option value="@company.CompanyName">@label</option>
+                            }
+                        </select>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label">Phone Number</label>
@@ -359,9 +398,7 @@
 
                 @if (_isLoading)
                 {
-                    <div class="summary-row bold-val mt-4">
-                        <span class="val" style="color:#6b7280;">Loading...</span>
-                    </div>
+                    <Skeleton Variant="text" Rows="6" LoadingText="Loading booking summary" />
                 }
                 else if (!string.IsNullOrEmpty(_loadError))
                 {
@@ -429,8 +466,14 @@
     </div>
 
     <div class="btn-action-row">
-        <button class="btn-outline-back" @onclick="GoBack">Back</button>
-        <button class="btn-primary-continue" @onclick="ContinueToPreview">Continue Review</button>
+        <ActionBar AriaLabel="Guest details actions">
+            <Secondary>
+                <button class="btn-outline-back" @onclick="GoBack">Back</button>
+            </Secondary>
+            <ChildContent>
+                <button class="btn-primary-continue" @onclick="ContinueToPreview">Continue Review</button>
+            </ChildContent>
+        </ActionBar>
     </div>
 
 </div>
@@ -461,6 +504,11 @@
 
     private bool _isLoading = true;
     private string _loadError = "";
+
+    // Company Master (optional dropdown — filtered by the selected Guest House)
+    private List<CompanyLookupDto> _companies = new();
+    private int? _selectedSdwaCompanyId;
+    private string? _selectedGstin;
 
     private DateTime _checkInDate;
     private DateTime _checkOutDate;
@@ -522,6 +570,9 @@
         _extraBeds = Math.Max(0, ExtraBeds ?? 0);
 
         await LoadRoomAsync();
+
+        // Company Master dropdown — load companies applicable to the selected Guest House.
+        await LoadCompaniesAsync();
 
         // Dealer-only: automatically bind the dealer's Phone Number and Email from
         // the same Dealer/proprietor data source used by the Proprietor page.
@@ -601,6 +652,44 @@
     private static string _money(decimal value)
     {
         return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    // --------------- COMPANY MASTER DROPDOWN ---------------
+    // Loads the active companies mapped to the selected Guest House only.
+    private async Task LoadCompaniesAsync()
+    {
+        if (!GuestHouseId.HasValue)
+        {
+            _companies = new();
+            return;
+        }
+
+        try
+        {
+            _companies = await Http.GetFromJsonAsync<List<CompanyLookupDto>>(
+                $"api/SdwaCompany/by-guest-house/{GuestHouseId}") ?? new();
+        }
+        catch (Exception)
+        {
+            // Graceful: an empty list leaves Company Name optional, existing validation is untouched.
+            _companies = new();
+        }
+    }
+
+    // Captures the selected company's master id + GSTIN for the booking/billing flow.
+    private void OnCompanyChanged()
+    {
+        var selected = _companies.FirstOrDefault(c => c.CompanyName == _form.CompanyName);
+        if (selected != null)
+        {
+            _selectedSdwaCompanyId = selected.Id;
+            _selectedGstin = selected.GSTIN;
+        }
+        else
+        {
+            _selectedSdwaCompanyId = null;
+            _selectedGstin = null;
+        }
     }
 
     // ---------------------------- ID PROOF UPLOAD ----------------------------
@@ -730,6 +819,13 @@
     private async Task ContinueToPreview()
     {
         _loadError = "";
+        var validationError = ValidateForm();
+        if (validationError != null)
+        {
+            _loadError = validationError;
+            Toast.Error(validationError);
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(_form.EmployeeOrDealerCode))
         {
@@ -780,6 +876,8 @@
         BookingState.EmployeeOrDealerCode = _form.EmployeeOrDealerCode?.Trim();
         BookingState.GuestName = _form.GuestName?.Trim();
         BookingState.CompanyName = _form.CompanyName?.Trim();
+        BookingState.SdwaCompanyId = _selectedSdwaCompanyId;
+        BookingState.GstinNumber = _selectedGstin;
         BookingState.PhoneNumber = _form.PhoneNumber?.Trim();
         BookingState.Email = _form.Email?.Trim();
         BookingState.AadhaarOrPassport = _form.AadhaarOrPassport?.Trim();
@@ -791,6 +889,16 @@
         BookingState.MarkInitialized();
 
         Navigation.NavigateTo("/BookingPreview");
+    }
+
+    private string? ValidateForm()
+    {
+        if (string.IsNullOrWhiteSpace(_form.EmployeeOrDealerCode)) return "Employee ID / Dealer Code is required to continue.";
+        if (string.IsNullOrWhiteSpace(_form.GuestName)) return "Guest Name is required to continue.";
+        if (string.IsNullOrWhiteSpace(_form.PhoneNumber)) return "Phone Number is required to continue.";
+        if (string.IsNullOrWhiteSpace(_form.Email)) return "Email ID is required to continue.";
+        if (string.IsNullOrWhiteSpace(_form.Nationality)) return "Please select the Nationality.";
+        return null;
     }
 
     public class RoomDetailDto
@@ -820,6 +928,14 @@
         public string? NumberOfPersons { get; set; }
         public string? NumberOfAdults { get; set; }
         public string? NumberOfChildren { get; set; }
+    }
+
+    public class CompanyLookupDto
+    {
+        public int Id { get; set; }
+        public string CompanyName { get; set; } = "";
+        public string? ShortCode { get; set; }
+        public string? GSTIN { get; set; }
     }
 
     public class DealerLookupDto

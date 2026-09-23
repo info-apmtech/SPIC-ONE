@@ -19,14 +19,27 @@ function Get-AzCli {
 }
 
 function Invoke-Az {
-    # Runs az with the given arguments and returns stdout as text. Throws on failure.
+    # Runs az with the given arguments and returns stdout as text. Throws on a non-zero exit.
+    # Windows PowerShell 5.1 turns every stderr line of a native command into an ErrorRecord,
+    # which is fatal under ErrorActionPreference=Stop even for a plain WARNING. So stderr is
+    # collected with the preference relaxed and only the exit code decides success.
     param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
     $az = Get-AzCli
-    $out = & $az @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "az $($Arguments -join ' ') failed:`n$($out -join "`n")"
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $az @Arguments 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
     }
-    return ($out | Where-Object { $_ -is [string] }) -join "`n"
+    $stdout = @($out | Where-Object { $_ -is [string] })
+    $stderr = @($out | Where-Object { $_ -isnot [string] } | ForEach-Object { $_.ToString() })
+    if ($code -ne 0) {
+        throw "az $($Arguments -join ' ') failed (exit $code):`n$(($stdout + $stderr) -join "`n")"
+    }
+    $stderr | Where-Object { $_ -match 'WARNING' -and $_ -notmatch 'Bicep release|preview|under development' } | ForEach-Object { Write-Warning $_ }
+    return $stdout -join "`n"
 }
 
 function Invoke-AzJson {
@@ -63,10 +76,19 @@ function Find-KeyVault {
 
 function Get-KeyVaultSecretValue {
     param([Parameter(Mandatory)][string]$VaultName, [Parameter(Mandatory)][string]$Name)
+    # Optional secrets are allowed to be absent: a non-zero exit returns $null, and the
+    # error preference is relaxed so PowerShell 5.1 does not turn stderr into a fatal error.
     $az = Get-AzCli
-    $out = & $az keyvault secret show --vault-name $VaultName --name $Name --query value --output tsv 2>$null
-    if ($LASTEXITCODE -ne 0) { return $null }
-    return ($out | Where-Object { $_ -is [string] }) -join ''
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & $az keyvault secret show --vault-name $VaultName --name $Name --query value --output tsv 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+    if ($code -ne 0) { return $null }
+    return (@($out | Where-Object { $_ -is [string] }) -join '')
 }
 
 function New-SecretParametersFile {
@@ -75,7 +97,8 @@ function New-SecretParametersFile {
     # SAME values instead of letting newGuid() rotate them. Caller must delete the file.
     param(
         [string]$VaultName,
-        [hashtable]$Overrides = @{}
+        [hashtable]$Overrides = @{},
+        [hashtable]$ExtraParameters = @{}   # non-secret values that must not travel on the command line
     )
     $map = @{
         postgresAdminPassword = 'postgres-admin-password'
@@ -83,6 +106,8 @@ function New-SecretParametersFile {
         ifmsDeviceKey         = 'ifms-device-key'
         ifmsAutomationKey     = 'ifms-automation-key'
         ifmsConnectionString  = 'ifms-connection'
+        databaseConnectionString = 'db-connection-override'
+        dataExplorerPassword  = 'data-explorer-password'
     }
     $parameters = @{}
     foreach ($param in $map.Keys) {
@@ -91,12 +116,13 @@ function New-SecretParametersFile {
         elseif ($VaultName) { $value = Get-KeyVaultSecretValue -VaultName $VaultName -Name $map[$param] }
         if ($value) { $parameters[$param] = @{ value = $value } }
     }
+    foreach ($k in $ExtraParameters.Keys) { $parameters[$k] = @{ value = $ExtraParameters[$k] } }
     $file = Join-Path ([IO.Path]::GetTempPath()) ("spicone-secrets-" + [guid]::NewGuid().ToString('N') + '.json')
     @{
         '$schema'      = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
         contentVersion = '1.0.0.0'
         parameters     = $parameters
-    } | ConvertTo-Json -Depth 5 | Set-Content -Path $file -Encoding utf8
+    } | ConvertTo-Json -Depth 8 | Set-Content -Path $file -Encoding utf8
     return $file
 }
 
@@ -127,9 +153,30 @@ function Invoke-PlatformDeployment {
 }
 
 function Get-Outputs {
+    # The outputs file is written by provision.ps1 and is not committed. On a PC that never ran
+    # provision (another developer), rebuild it by looking at what exists in the resource group.
     param([Parameter(Mandatory)][hashtable]$Names)
     if (-not (Test-Path $Names.OutputsFile)) {
-        throw "No outputs for this environment yet. Run provision.ps1 -Environment <env> first."
+        Write-Host "No local outputs file; discovering resources in $($Names.ResourceGroup) ..." -ForegroundColor DarkGray
+        $rg = $Names.ResourceGroup
+        $acr = Invoke-AzJson acr list -g $rg --query "[0].{name:name, login:loginServer}"
+        $kv = Find-KeyVault -ResourceGroup $rg
+        $st = Invoke-AzJson storage account list -g $rg --query "[0].name"
+        $pg = Invoke-AzJson postgres flexible-server list -g $rg --query "[0].{name:name, fqdn:fullyQualifiedDomainName, admin:administratorLogin}"
+        $cae = Invoke-AzJson containerapp env list -g $rg --query "[0].name"
+        $law = Invoke-AzJson monitor log-analytics workspace list -g $rg --query "[0].name"
+        $apps = Invoke-AzJson containerapp list -g $rg --query "[].{name:name, fqdn:properties.configuration.ingress.fqdn}"
+        if (-not ($acr -and $kv -and $st -and $pg -and $cae)) { throw "Resource group $rg does not contain a SPIC ONE environment. Run provision.ps1 first." }
+        $api = $apps | Where-Object { $_.name -like 'ca-spicone-api-*' } | Select-Object -First 1
+        $web = $apps | Where-Object { $_.name -like 'ca-spicone-web-*' } | Select-Object -First 1
+        $discovered = @{
+            resourceGroupName = $rg; acrName = $acr.name; acrLoginServer = $acr.login; keyVaultName = $kv
+            storageAccountName = $st; postgresServerName = $pg.name; postgresFqdn = $pg.fqdn
+            postgresDatabase = 'spicone'; postgresAdminLogin = $pg.admin; environmentName = $cae; logAnalyticsName = $law
+            apiAppName = $(if ($api) { $api.name } else { '' }); webAppName = $(if ($web) { $web.name } else { '' })
+            apiFqdn = $(if ($api) { $api.fqdn } else { '' }); webFqdn = $(if ($web) { $web.fqdn } else { '' })
+        }
+        $discovered | ConvertTo-Json | Set-Content -Path $Names.OutputsFile -Encoding utf8
     }
     $obj = Get-Content $Names.OutputsFile -Raw | ConvertFrom-Json
     $flat = @{}

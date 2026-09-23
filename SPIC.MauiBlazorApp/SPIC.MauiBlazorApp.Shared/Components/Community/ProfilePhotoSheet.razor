@@ -1,0 +1,167 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Community
+@using Microsoft.AspNetCore.Components.Forms
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject ToastService Toast
+@inject CommunityApi Api
+
+@*
+    "Profile photo": the small sheet behind your own avatar in a community composer.
+    Choose a picture (image/*, up to 2 MB, previewed before it is sent) -> POST me/avatar,
+    or Remove photo -> DELETE me/avatar. OnChanged hands the refreshed member back so the
+    page can repaint every composer avatar.
+*@
+
+<BottomSheet IsOpen="IsOpen" IsOpenChanged="IsOpenChanged" Title="Profile photo"
+             Subtitle="Shown beside everything you post in the community"
+             Size="BottomSheet.SheetSize.Auto" CssClass="pp-sheet">
+
+    <ChildContent>
+        <div class="pp-body">
+            <span class="pp-preview">
+                @if (_preview is not null)
+                {
+                    <img src="@_preview" alt="" />
+                }
+                else if (!string.IsNullOrEmpty(Me?.Avatar))
+                {
+                    <img src="@Me!.Avatar" alt="" />
+                }
+                else
+                {
+                    <span class="pp-initial">@(Me?.Initial ?? "?")</span>
+                }
+            </span>
+
+            <div class="pp-text">
+                <p class="pp-name">@(string.IsNullOrWhiteSpace(Me?.Name) ? "You" : Me!.Name)</p>
+                <p class="pp-hint">JPG, PNG or WebP &middot; up to 2 MB</p>
+                @if (_chosen is not null)
+                {
+                    <p class="pp-chosen" title="@_chosen.Name">@_chosen.Name</p>
+                }
+            </div>
+        </div>
+
+        <label class="pp-choose">
+            <InputFile OnChange="OnChosenAsync" accept="image/jpeg,image/png,image/webp" disabled="@_busy" />
+            <i class="bi bi-camera" aria-hidden="true"></i>
+            <span>@(_chosen is null ? "Choose a photo" : "Choose a different photo")</span>
+        </label>
+    </ChildContent>
+
+    <Footer>
+        @if (!string.IsNullOrEmpty(Me?.Avatar))
+        {
+            <button type="button" class="pp-btn pp-btn-danger" disabled="@_busy" @onclick="RemoveAsync">
+                <i class="bi bi-trash" aria-hidden="true"></i> Remove photo
+            </button>
+        }
+        <button type="button" class="pp-btn pp-btn-primary" disabled="@(_busy || _chosen is null)" @onclick="SaveAsync">
+            @(_busy ? "Saving…" : "Save photo")
+        </button>
+    </Footer>
+</BottomSheet>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    /// <summary>The signed-in user as the API knows them (null until GET me answers).</summary>
+    [Parameter] public CommunityMember? Me { get; set; }
+
+    /// <summary>The refreshed member after a successful upload, or null after Remove.</summary>
+    [Parameter] public EventCallback<CommunityMember?> OnChanged { get; set; }
+
+    private IBrowserFile? _chosen;
+    private string? _preview;
+    private bool _busy;
+    private bool _wasOpen;
+
+    protected override void OnParametersSet()
+    {
+        // every fresh open starts empty
+        if (IsOpen && !_wasOpen)
+        {
+            _chosen = null;
+            _preview = null;
+        }
+        _wasOpen = IsOpen;
+    }
+
+    private async Task OnChosenAsync(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+
+        if (file.Size > CommunityApi.MaxAvatarBytes)
+        {
+            Toast.Error("That picture is larger than 2 MB. Please choose a smaller one.");
+            return;
+        }
+
+        if (!(file.ContentType ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        {
+            Toast.Error("Please choose an image file.");
+            return;
+        }
+
+        _chosen = file;
+        _preview = null;
+
+        try
+        {
+            var resized = await file.RequestImageFileAsync("image/jpeg", 256, 256);
+            using var stream = resized.OpenReadStream(1024L * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            _preview = $"data:image/jpeg;base64,{Convert.ToBase64String(buffer.ToArray())}";
+        }
+        catch (Exception)
+        {
+            // no browser-side resizing: the file name alone tells the user what will be sent
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_chosen is null || _busy) return;
+
+        _busy = true;
+        var member = await Api.UploadAvatarAsync(_chosen);
+        _busy = false;
+
+        if (member is null) return;                 // CommunityApi already explained why
+
+        _chosen = null;
+        _preview = null;
+        Toast.Success("Profile photo updated.");
+
+        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync(member);
+        await CloseAsync();
+    }
+
+    private async Task RemoveAsync()
+    {
+        if (_busy) return;
+
+        var ok = await Toast.ConfirmAsync("Remove photo",
+            "Your initial will be shown beside your posts instead.", "Remove", danger: true);
+        if (!ok) return;
+
+        _busy = true;
+        var removed = await Api.RemoveAvatarAsync();
+        _busy = false;
+
+        if (!removed) return;
+
+        _chosen = null;
+        _preview = null;
+        Toast.Info("Profile photo removed.");
+
+        if (OnChanged.HasDelegate) await OnChanged.InvokeAsync(null);
+        await CloseAsync();
+    }
+
+    private Task CloseAsync() => IsOpenChanged.HasDelegate ? IsOpenChanged.InvokeAsync(false) : Task.CompletedTask;
+}

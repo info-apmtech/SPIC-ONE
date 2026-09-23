@@ -1,0 +1,833 @@
+@page "/DigitalLibrary/chat"
+@page "/DigitalLibrary/chat/{ConversationId:int}"
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject IJSRuntime JS
+@inject LoginState LoginState
+@inject DigitalLibraryApi Api
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@implements IAsyncDisposable
+
+<PageTitle>Ask SPIC AI - Digital Library - SPIC ONE</PageTitle>
+
+@*
+    SPIC AI assistant (Figma frame supplied 2026-09-20): conversation list on the left,
+    welcome screen with suggestion cards or the conversation thread on the right, composer
+    with source, attach, voice and send. Conversations, messages and answers come from
+    api/Library/assistant; ?q= and ?about= start a conversation straight away.
+    Phone: the list opens as a sheet from the "Chats" button; the composer sits above the tab bar.
+*@
+
+<div class="ch-page">
+
+    <aside class="ch-side @(_listOpen ? "open" : "")">
+        <div class="ch-side-head">
+            <h2>Chat</h2>
+            <button type="button" class="ch-icon-btn" aria-label="Search conversations" @onclick="() => _searchOpen = !_searchOpen"><i class="bi bi-search"></i></button>
+            <button type="button" class="ch-icon-btn ch-side-close" aria-label="Close" @onclick="() => _listOpen = false"><i class="bi bi-x-lg"></i></button>
+        </div>
+        @if (_searchOpen)
+        {
+            <input class="ch-side-search" type="search" placeholder="Search conversations" @bind="_search" @bind:event="oninput" />
+        }
+        <button type="button" class="ch-new" @onclick="NewChat"><i class="bi bi-plus-lg"></i> New Chat</button>
+
+        <div class="ch-group">
+            <button type="button" class="ch-group-head" @onclick="() => _menuOpen = !_menuOpen">Menu <i class="bi @(_menuOpen ? "bi-chevron-up" : "bi-chevron-down")"></i></button>
+            @if (_menuOpen)
+            {
+                @* Ask SPIC AI is open to every signed-in user; the rest of the library
+                   stays gated by the DigitalLibrary permission. *@
+                <a class="ch-menu-item active" href="DigitalLibrary/chat"><i class="bi bi-robot"></i> Ask SPIC AI</a>
+                @if (CanBrowseLibrary)
+                {
+                    <a class="ch-menu-item" href="DigitalLibrary/content?type=videos"><i class="bi bi-camera-video"></i> AI Videos</a>
+                    <a class="ch-menu-item" href="DigitalLibrary/content?type=products"><i class="bi bi-clipboard2-data"></i> Product Information</a>
+                    <a class="ch-menu-item" href="DigitalLibrary/content?type=brochures"><i class="bi bi-journal-bookmark"></i> Product Brochures</a>
+                }
+            }
+        </div>
+
+        @if (_listLoading)
+        {
+            <div class="ch-group"><Skeleton Variant="text" Rows="4" /></div>
+        }
+        else
+        {
+            foreach (var group in GroupedConversations)
+            {
+                <div class="ch-group">
+                    <div class="ch-group-head">@group.Key <i class="bi bi-chevron-down"></i></div>
+                    @foreach (var c in group)
+                    {
+                        <div class="ch-conv-row">
+                            <a class="ch-conv @(c.Id == ConversationId ? "active" : "")" href="@($"DigitalLibrary/chat/{c.Id}")" @onclick="() => _listOpen = false">@c.Title</a>
+                            <button type="button" class="ch-icon-btn ch-conv-del" aria-label="@($"Delete {c.Title}")" title="Delete conversation" @onclick="() => DeleteConversation(c)"><i class="bi bi-trash"></i></button>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (FilteredConversations.Count == 0)
+            {
+                <p class="ch-side-empty">No conversations yet. Ask a question to start one.</p>
+            }
+        }
+
+        @if (!_showAll && FilteredConversations.Count > VisibleConversations)
+        {
+            <button type="button" class="ch-viewall" @onclick="() => _showAll = true">View all Conversation <i class="bi bi-chat-left-text"></i></button>
+        }
+    </aside>
+
+    <section class="ch-main">
+        <header class="ch-head">
+            <button type="button" class="ch-icon-btn ch-list-toggle" aria-label="Open chats" @onclick="() => _listOpen = true"><i class="bi bi-list"></i></button>
+            <h1 class="ch-title">Digital Library Assistant</h1>
+            <span class="ch-badge">AI Assistant</span>
+            <span class="ch-head-spacer"></span>
+            <button type="button" class="ch-btn ch-btn-outline" @onclick="Share"><i class="bi bi-box-arrow-up"></i> <span>Share</span></button>
+            <button type="button" class="ch-btn ch-btn-primary" @onclick="NewChat"><i class="bi bi-stars"></i> <span>Start Chat</span></button>
+        </header>
+
+        <div class="ch-body" @ref="_body">
+            @if (_threadLoading)
+            {
+                <div class="ch-thread"><Skeleton Variant="text" Rows="5" /></div>
+            }
+            else if (Current is null)
+            {
+                <div class="ch-welcome">
+                    <span class="ch-orb" aria-hidden="true"></span>
+                    <h2>Hi there! <span aria-hidden="true">👋</span></h2>
+                    <p>I'm SPIC AI, your intelligent assistant.<br />Ask me anything about our products, videos, brochures and more.</p>
+                    <div class="ch-suggestions">
+                        @foreach (var s in Suggestions)
+                        {
+                            <button type="button" class="ch-suggest" @onclick="() => Ask(s.Prompt)">
+                                <span class="ch-suggest-icon"><i class="bi @s.Icon"></i></span>
+                                <strong>@s.Title</strong>
+                                <span>@s.Description</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="ch-thread" aria-live="polite">
+                    @foreach (var m in Current.Messages)
+                    {
+                        var fromUser = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase);
+                        <div class="ch-msg @(fromUser ? "user" : "ai")">
+                            <div class="ch-msg-col">
+                                <div class="ch-bubble">
+                                    <p>@m.Text</p>
+                                    @if (m.Sources.Count > 0)
+                                    {
+                                        <div class="ch-sources">
+                                            @foreach (var src in m.Sources)
+                                            {
+                                                @* Only library users can open the item page; everyone else sees the title as plain text. *@
+                                                @if (CanBrowseLibrary)
+                                                {
+                                                    <a class="ch-source" href="@($"DigitalLibrary/view/{src.ContentId}")"><i class="bi @SourceIcon(src.Kind)"></i> @src.Title</a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="ch-source ch-source-static"><i class="bi @SourceIcon(src.Kind)"></i> @src.Title</span>
+                                                }
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                <span class="ch-time">@m.CreatedAt.ToString("H:mm") <i class="bi bi-check2-all"></i></span>
+                            </div>
+                            <span class="ch-avatar @(fromUser ? "ch-avatar-user" : "")" aria-hidden="true">
+                                @if (fromUser) { <text>@UserInitial</text> } else { <i class="bi bi-robot"></i> }
+                            </span>
+                        </div>
+                    }
+
+                    @if (_pending is not null)
+                    {
+                        <div class="ch-msg user">
+                            <div class="ch-msg-col">
+                                <div class="ch-bubble"><p>@_pending</p></div>
+                                <span class="ch-time">@DateTime.Now.ToString("H:mm")</span>
+                            </div>
+                            <span class="ch-avatar ch-avatar-user" aria-hidden="true">@UserInitial</span>
+                        </div>
+                    }
+
+                    @if (_thinking)
+                    {
+                        <div class="ch-msg ai">
+                            <div class="ch-msg-col"><div class="ch-bubble ch-typing"><span></span><span></span><span></span></div></div>
+                            <span class="ch-avatar" aria-hidden="true"><i class="bi bi-robot"></i></span>
+                        </div>
+                    }
+
+                    @if (!_thinking && FollowUps.Count > 0)
+                    {
+                        <div class="ch-followups">
+                            @foreach (var s in FollowUps)
+                            {
+                                <button type="button" class="ch-followup" @onclick="() => Ask(s)">@s</button>
+                            }
+                        </div>
+                    }
+
+                    @if (_provider == "keyword")
+                    {
+                        <p class="ch-provider-note"><i class="bi bi-info-circle"></i> Answers from library content</p>
+                    }
+                </div>
+            }
+        </div>
+
+        <form class="ch-composer" @onsubmit="Send" @onsubmit:preventDefault>
+            @if (_aboutId is not null)
+            {
+                @* Context chip: the next question is answered from this library item until it is removed. *@
+                <div class="ch-context">
+                    <span class="ch-context-chip">
+                        <i class="bi @SourceIcon(_aboutKind)" aria-hidden="true"></i>
+                        <span class="ch-context-text">Asking about: <strong>@_aboutTitle</strong></span>
+                        <button type="button" class="ch-context-clear" aria-label="@($"Stop asking about {_aboutTitle}")" title="Remove" @onclick="ClearAbout">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </span>
+                </div>
+            }
+            <div class="ch-input-row">
+                <i class="bi bi-stars ch-input-icon" aria-hidden="true"></i>
+                <input type="text" class="ch-input" placeholder="Ask anything about SPIC products, videos, brochures" aria-label="Message" @bind="_input" @bind:event="oninput" />
+            </div>
+            <div class="ch-tools">
+                <select class="ch-source-select" aria-label="Source" @bind="_source">
+                    <option value="">Select Source</option>
+                    <option>All content</option><option>AI Videos</option><option>Product Information</option><option>Product Brochures</option>
+                </select>
+                <span class="ch-tools-spacer"></span>
+                <button type="button" class="ch-btn ch-btn-outline @(_aboutId is null ? "" : "ch-btn-on")" @onclick="OpenPicker">
+                    <i class="bi bi-paperclip"></i> <span>Attach</span>
+                </button>
+                <button type="button" class="ch-btn @(_listening ? "ch-btn-listening" : "ch-btn-outline")"
+                        aria-pressed="@_listening" @onclick="ToggleVoice">
+                    <i class="bi @(_listening ? "bi-mic-fill" : "bi-mic")"></i>
+                    <span>@(_listening ? "Listening…" : "Voice")</span>
+                </button>
+                <button type="submit" class="ch-btn ch-btn-primary" disabled="@(string.IsNullOrWhiteSpace(_input) || _thinking)"><i class="bi bi-send"></i> Send</button>
+            </div>
+        </form>
+        <p class="ch-disclaimer">SPIC AI may display inaccurate info, so please check the response. <a href="DigitalLibrary/chat">Learn more</a></p>
+    </section>
+
+    @if (_listOpen)
+    {
+        <div class="ch-backdrop" @onclick="() => _listOpen = false"></div>
+    }
+
+    @*
+        "Attach": pick a published library item to ask about. Centred modal on tablet and
+        desktop, bottom sheet on phones (same pattern as DigitalLibraryUnpublishDialog).
+    *@
+    @if (_pickerOpen)
+    {
+        <div class="ch-pick-backdrop" @onclick="ClosePicker"></div>
+        <div class="ch-pick" role="dialog" aria-modal="true" aria-labelledby="ch-pick-title"
+             @onkeydown="PickerKeyDown" tabindex="-1" @ref="_pickerEl">
+            <div class="ch-pick-handle" aria-hidden="true"></div>
+            <div class="ch-pick-head">
+                <div>
+                    <h2 id="ch-pick-title" class="ch-pick-title">Ask about a library item</h2>
+                    <p class="ch-pick-sub">Choose a product, video or brochure and your next question is answered from it.</p>
+                </div>
+                <button type="button" class="ch-pick-close" aria-label="Close" @onclick="ClosePicker"><i class="bi bi-x-circle"></i></button>
+            </div>
+
+            <div class="ch-pick-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" placeholder="Search published content..." aria-label="Search library content"
+                       value="@_pickQuery" @oninput="e => PickSearch(e.Value?.ToString())" />
+            </div>
+
+            <div class="ch-pick-chips" role="tablist" aria-label="Content type">
+                @foreach (var chip in PickChips)
+                {
+                    <button type="button" role="tab" class="ch-pick-chip @(_pickKind == chip.Kind ? "active" : "")"
+                            aria-selected="@(_pickKind == chip.Kind)" @onclick="() => SetPickKind(chip.Kind)">@chip.Label</button>
+                }
+            </div>
+
+            <div class="ch-pick-list">
+                @if (_pickLoading)
+                {
+                    <Skeleton Variant="text" Rows="4" />
+                }
+                else if (_pickItems.Count == 0)
+                {
+                    <p class="ch-pick-empty">No published content matches that search.</p>
+                }
+                else
+                {
+                    @foreach (var entry in _pickItems)
+                    {
+                        <button type="button" class="ch-pick-item" @key="entry.Id" @onclick="() => ChooseAbout(entry)">
+                            <span class="ch-pick-item-icon" aria-hidden="true"><i class="bi @SourceIcon(entry.Kind)"></i></span>
+                            <span class="ch-pick-item-text">
+                                <span class="ch-pick-item-title">@entry.Title</span>
+                                <span class="ch-pick-item-desc">@(string.IsNullOrWhiteSpace(entry.ShortDescription) ? KindLabel(entry.Kind) : entry.ShortDescription)</span>
+                            </span>
+                            <i class="bi bi-chevron-right ch-pick-item-go" aria-hidden="true"></i>
+                        </button>
+                    }
+
+                    @if (_pickHasMore)
+                    {
+                        <button type="button" class="ch-pick-more" disabled="@_pickLoadingMore" @onclick="PickMore">
+                            @if (_pickLoadingMore)
+                            {
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            }
+                            Load more
+                        </button>
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int? ConversationId { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? InitialQuestion { get; set; }
+    [SupplyParameterFromQuery(Name = "about")] public int? AboutId { get; set; }
+
+    private const int VisibleConversations = 8;
+
+    // Library CONTENT is readable by every signed-in user (product decision 2026-09-20), so the
+    // menu links and the source links on an answer are offered to everyone; only adding and
+    // editing content needs the DigitalLibrary page, and those pages hide their own controls.
+    private bool CanBrowseLibrary => LoginState.IsLoggedIn;
+
+    private static string SourceIcon(LibraryContentKind kind) => kind switch
+    {
+        LibraryContentKind.Video => "bi-camera-video",
+        LibraryContentKind.Brochure => "bi-file-earmark-pdf",
+        _ => "bi-box-seam"
+    };
+
+    private static string KindLabel(LibraryContentKind kind) => kind switch
+    {
+        LibraryContentKind.Video => "AI Video",
+        LibraryContentKind.Brochure => "Brochure",
+        _ => "Product"
+    };
+
+    private sealed record Suggestion(string Icon, string Title, string Description, string Prompt);
+    private static readonly Suggestion[] Suggestions =
+    {
+        new("bi-robot", "Tell me about a SPIC product", "Get detailed information about our products and benefits", "Tell me about SPIC DAP fertilizer"),
+        new("bi-journal-richtext", "Show latest brochures", "Find and view our latest product brochures", "Show me the latest brochures"),
+        new("bi-play-btn", "Recommend videos", "Find relevant product videos and tutorials", "Recommend videos about soil health"),
+        new("bi-box-seam", "Explain product usage", "Understand how our products work and are used", "How do I apply NPK 20-20 in cotton?"),
+    };
+
+    private List<AssistantConversationDto> _conversations = new();
+    private AssistantConversationDetailDto? Current { get; set; }
+
+    private List<AssistantConversationDto> FilteredConversations =>
+        _conversations.Where(c => _search == "" || c.Title.Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private IEnumerable<IGrouping<string, AssistantConversationDto>> GroupedConversations =>
+        (_showAll ? FilteredConversations : FilteredConversations.Take(VisibleConversations))
+            .GroupBy(GroupOf);
+
+    private static string GroupOf(AssistantConversationDto c)
+    {
+        var day = c.UpdatedAt.Date;
+        if (day == DateTime.Today) return "Today";
+        if (day == DateTime.Today.AddDays(-1)) return "Yesterday";
+        return "Earlier";
+    }
+
+    private List<string> FollowUps =>
+        Current?.Messages.LastOrDefault(m => !string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))?.Suggestions
+        ?? new List<string>();
+
+    private ElementReference _body;
+
+    private string UserInitial
+    {
+        get
+        {
+            // First letter of the signed-in user's name from the JWT (same claims MainLayout reads).
+            try
+            {
+                var parts = LoginState.Token?.Split('.');
+                if (parts is { Length: >= 2 })
+                {
+                    var payload = parts[1].Replace('-', '+').Replace('_', '/');
+                    payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+                    using var doc = System.Text.Json.JsonDocument.Parse(Convert.FromBase64String(payload));
+                    foreach (var key in new[] { "name", "unique_name", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "given_name", "sub" })
+                    {
+                        if (doc.RootElement.TryGetProperty(key, out var v) && v.GetString() is { Length: > 0 } n) return n[..1].ToUpperInvariant();
+                    }
+                }
+            }
+            catch { }
+            return "U";
+        }
+    }
+
+    private string _input = "";
+    private string _source = "";
+    private string _search = "";
+    private bool _listOpen;
+    private bool _searchOpen;
+    private bool _menuOpen = true;
+    private bool _showAll;
+    private bool _thinking;
+    private bool _listLoading = true;
+    private bool _threadLoading;
+    private string? _pending;
+    private string? _provider;
+    private int? _loadedId;
+    private bool _started;
+    private CancellationTokenSource? _cts;
+
+    // ---------------------------------------------------------- "Asking about" context
+
+    private int? _aboutId;
+    private string _aboutTitle = "";
+    private LibraryContentKind _aboutKind = LibraryContentKind.Product;
+
+    private void SetAbout(int id, string title, LibraryContentKind kind)
+    {
+        _aboutId = id;
+        _aboutTitle = string.IsNullOrWhiteSpace(title) ? "this item" : title;
+        _aboutKind = kind;
+    }
+
+    private void ClearAbout()
+    {
+        _aboutId = null;
+        _aboutTitle = "";
+    }
+
+    // ------------------------------------------------------------- Attach picker
+
+    private sealed record PickChip(string Label, LibraryContentKind? Kind);
+
+    private static readonly PickChip[] PickChips =
+    {
+        new("All", null),
+        new("Videos", LibraryContentKind.Video),
+        new("Products", LibraryContentKind.Product),
+        new("Brochures", LibraryContentKind.Brochure),
+    };
+
+    private const int PickPageSize = 8;
+
+    private ElementReference _pickerEl;
+    private bool _pickerOpen;
+    private bool _pickLoading;
+    private bool _pickLoadingMore;
+    private bool _pickHasMore;
+    private int _pickPage = 1;
+    private string _pickQuery = "";
+    private LibraryContentKind? _pickKind;
+    private readonly List<LibraryContentSummaryDto> _pickItems = new();
+    private CancellationTokenSource? _pickSearchCts;
+
+    private async Task OpenPicker()
+    {
+        _pickerOpen = true;
+        await LoadPicks(reset: true);
+    }
+
+    private void ClosePicker()
+    {
+        _pickerOpen = false;
+        _pickSearchCts?.Cancel();
+    }
+
+    private Task PickerKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") ClosePicker();
+        return Task.CompletedTask;
+    }
+
+    private async Task SetPickKind(LibraryContentKind? kind)
+    {
+        if (_pickKind == kind) return;
+        _pickKind = kind;
+        await LoadPicks(reset: true);
+    }
+
+    private void PickSearch(string? text)
+    {
+        // Typing hits the API, so wait for a pause (same debounce as the All Content list).
+        _pickQuery = text ?? "";
+        _pickSearchCts?.Cancel();
+        _pickSearchCts = new CancellationTokenSource();
+        var token = _pickSearchCts.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(350, token);
+                await InvokeAsync(() => LoadPicks(reset: true));
+            }
+            catch (TaskCanceledException) { }
+        });
+    }
+
+    private Task PickMore()
+    {
+        if (_pickLoadingMore || !_pickHasMore) return Task.CompletedTask;
+        _pickPage++;
+        return LoadPicks(reset: false);
+    }
+
+    /// <summary>One page of published content for the picker; failures toast and leave the list as it is.</summary>
+    private async Task LoadPicks(bool reset)
+    {
+        if (reset)
+        {
+            _pickPage = 1;
+            _pickLoading = true;
+        }
+        else
+        {
+            _pickLoadingMore = true;
+        }
+        StateHasChanged();
+
+        // Only published content is offered: it is what the assistant can read, and it is all
+        // a reader is allowed to fetch.
+        var result = await Api.ListAsync(_pickKind, LibraryContentStatus.Published, _pickQuery, _pickPage, PickPageSize);
+
+        if (Api.LastError is not null)
+        {
+            Toast.Error(Api.LastError);
+            if (reset) _pickItems.Clear();
+            _pickHasMore = false;
+        }
+        else
+        {
+            if (reset) _pickItems.Clear();
+            _pickItems.AddRange(result.Items);
+            _pickHasMore = result.HasMore;
+        }
+
+        _pickLoading = false;
+        _pickLoadingMore = false;
+        StateHasChanged();
+    }
+
+    private void ChooseAbout(LibraryContentSummaryDto item)
+    {
+        SetAbout(item.Id, item.Title, item.Kind);
+        ClosePicker();
+    }
+
+    // -------------------------------------------------------------------- voice
+
+    private IJSObjectReference? _voice;
+    private DotNetObjectReference<DigitalLibraryChat>? _self;
+    private bool _listening;
+
+    private async Task ToggleVoice()
+    {
+        if (_listening)
+        {
+            await StopVoice();
+            return;
+        }
+
+        try
+        {
+            _voice ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/SPIC.MauiBlazorApp.Shared/Pages/DigitalLibraryChat.razor.js");
+            _self ??= DotNetObjectReference.Create(this);
+
+            if (await _voice.InvokeAsync<bool>("start", _self))
+            {
+                _listening = true;
+                return;
+            }
+        }
+        catch
+        {
+            // no JS module (MAUI host without the asset, a dropped circuit, ...) - fall through
+        }
+
+        _listening = false;
+        Toast.Info("Voice input is not available on this device.");
+    }
+
+    private async Task StopVoice()
+    {
+        _listening = false;
+        try
+        {
+            if (_voice is not null) await _voice.InvokeVoidAsync("stop");
+        }
+        catch { /* already gone */ }
+    }
+
+    /// <summary>Interim speech goes into the composer; the final transcript replaces it.</summary>
+    [JSInvokable]
+    public Task OnSpeech(string text, bool isFinal)
+    {
+        _input = text ?? "";
+        if (isFinal) _listening = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnSpeechError(string error)
+    {
+        _listening = false;
+        // "aborted" is what the browser reports when the page (or the user) stopped it.
+        if (!string.Equals(error, "aborted", StringComparison.OrdinalIgnoreCase))
+        {
+            Toast.Info("Voice input is not available on this device.");
+        }
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnSpeechEnd()
+    {
+        _listening = false;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConversations();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId != ConversationId)
+        {
+            _loadedId = ConversationId;
+            _provider = null;
+            // The "Asking about" chip belongs to one conversation.
+            ClearAbout();
+            await LoadThread();
+        }
+
+        // ?q= / ?about= start one conversation, once.
+        if (!_started && ConversationId is null)
+        {
+            if (!string.IsNullOrWhiteSpace(InitialQuestion))
+            {
+                _started = true;
+                await Ask(InitialQuestion!);
+            }
+            else if (AboutId is int about)
+            {
+                _started = true;
+                // ?about= fills the same context chip the Attach picker sets, so the user can
+                // see (and remove) what the conversation is anchored to.
+                var detail = await Api.GetAsync(about);
+                if (detail is not null) SetAbout(detail.Id, detail.Title, detail.Kind);
+                await Ask(detail is null ? "Tell me about this library item" : $"Tell me about \"{detail.Title}\"", about);
+            }
+        }
+    }
+
+    private async Task LoadConversations()
+    {
+        _listLoading = true;
+        _conversations = await Api.GetConversationsAsync();
+        if (Api.LastError is not null) Toast.Error(Api.LastError);
+        _listLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadThread()
+    {
+        if (ConversationId is not int id)
+        {
+            Current = null;
+            return;
+        }
+
+        _threadLoading = true;
+        StateHasChanged();
+
+        Current = await Api.GetConversationAsync(id);
+        if (Current is null && Api.LastError is not null)
+        {
+            Toast.Error(Api.LastError);
+        }
+
+        _threadLoading = false;
+    }
+
+    private void NewChat()
+    {
+        _listOpen = false;
+        _pending = null;
+        _provider = null;
+        ClearAbout();
+        Nav.NavigateTo("/DigitalLibrary/chat");
+    }
+
+    private void Share() => Toast.Info(Current is null ? "Start a conversation to share it." : "Sharing a conversation is not part of the assistant yet.");
+
+    private Task Send()
+    {
+        var text = _input.Trim();
+        if (text.Length == 0 || _thinking) return Task.CompletedTask;
+        _input = "";
+        return Ask(text);
+    }
+
+    private async Task Ask(string question, int? aboutContentId = null)
+    {
+        if (_thinking || string.IsNullOrWhiteSpace(question)) return;
+
+        // "Select Source" narrows the assistant's retrieval to one content kind.
+        var text = question.Trim();
+        LibraryContentKind? kind = _source switch
+        {
+            "AI Videos" => LibraryContentKind.Video,
+            "Product Information" => LibraryContentKind.Product,
+            "Product Brochures" => LibraryContentKind.Brochure,
+            _ => null
+        };
+
+        _pending = text;
+        _thinking = true;
+        StateHasChanged();
+
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+
+        var response = await Api.AskAsync(new AssistantAskRequest
+        {
+            ConversationId = ConversationId,
+            Question = text,
+            // The context chip (Attach / ?about=) anchors every question until it is removed.
+            AboutContentId = aboutContentId ?? _aboutId,
+            Kind = kind
+        }, _cts.Token);
+
+        _thinking = false;
+        _pending = null;
+
+        if (response is null)
+        {
+            Toast.Error(Api.LastError ?? "SPIC AI could not answer just now.");
+            return;
+        }
+
+        _provider = response.Provider;
+
+        if (Current is null || Current.Id != response.ConversationId)
+        {
+            Current = new AssistantConversationDetailDto
+            {
+                Id = response.ConversationId,
+                Title = response.ConversationTitle,
+                CreatedAt = response.UserMessage.CreatedAt,
+                UpdatedAt = response.Reply.CreatedAt,
+                Messages = new List<AssistantMessageDto> { response.UserMessage, response.Reply }
+            };
+            // The thread is already in hand, so the URL change must not trigger a reload.
+            _loadedId = response.ConversationId;
+            Nav.NavigateTo($"/DigitalLibrary/chat/{response.ConversationId}");
+        }
+        else
+        {
+            Current.Messages.Add(response.UserMessage);
+            Current.Messages.Add(response.Reply);
+            Current.UpdatedAt = response.Reply.CreatedAt;
+        }
+
+        await LoadConversations();
+    }
+
+    private async Task DeleteConversation(AssistantConversationDto conversation)
+    {
+        if (!await Toast.ConfirmAsync("Delete conversation", $"Delete \"{conversation.Title}\"? This cannot be undone.", "Delete", danger: true)) return;
+
+        if (!await Api.DeleteConversationAsync(conversation.Id))
+        {
+            Toast.Error(Api.LastError ?? "The conversation could not be deleted.");
+            return;
+        }
+
+        _conversations.Remove(conversation);
+        Toast.Success("Conversation deleted.");
+
+        if (ConversationId == conversation.Id)
+        {
+            Current = null;
+            _loadedId = null;
+            Nav.NavigateTo("/DigitalLibrary/chat");
+        }
+    }
+
+    private int _renderedCount;
+
+    private bool _pickerFocused;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Escape closes the picker, so it has to hold the focus while it is open.
+        if (_pickerOpen && !_pickerFocused)
+        {
+            _pickerFocused = true;
+            try { await _pickerEl.FocusAsync(); } catch { /* not rendered yet */ }
+        }
+        else if (!_pickerOpen)
+        {
+            _pickerFocused = false;
+        }
+
+        // Keep the newest message in view when the thread grows.
+        var count = Current?.Messages.Count ?? 0;
+        if (count != _renderedCount || _thinking)
+        {
+            _renderedCount = count;
+            try { await JS.InvokeVoidAsync("eval", "var b=document.querySelector('.ch-body'); if(b) b.scrollTop = b.scrollHeight;"); } catch { }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _cts?.Cancel();
+        _pickSearchCts?.Cancel();
+
+        try
+        {
+            if (_voice is not null)
+            {
+                await _voice.InvokeVoidAsync("dispose");
+                await _voice.DisposeAsync();
+            }
+        }
+        catch
+        {
+            // circuit or web view may already be gone
+        }
+
+        _voice = null;
+        _self?.Dispose();
+        _self = null;
+    }
+}

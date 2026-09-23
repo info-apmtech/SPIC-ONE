@@ -1,7 +1,10 @@
 ﻿@page "/ContactUs"
+@using SPIC.Core.Entities
+@inject IJSRuntime JS
+@inject HttpClient Http
 
 <div class="container-fluid py-4 px-0">
-    <h1 class="cu-page-title">Contact Us</h1>
+    <PageHeader Title="Contact Us" Subtitle="Welfare schemes, room bookings and general enquiries" BackHref="/SDWADashboard" />
 
     <div class="cu-banner">
         <div class="cu-circle cu-circle-1"></div>
@@ -11,7 +14,7 @@
         <div class="cu-banner-content">
             
             <div class="cu-main-text">
-                <h2>Get in Touch with SDWA</h2>
+                <h2>Get in Touch with Spic</h2>
                 <p>We're here to help with welfare schemes, room bookings, and general enquiries. Reach out to us anytime during office hours.</p>
             </div>
 
@@ -50,14 +53,16 @@
                 <img src="_content/SPIC.MauiBlazorApp.Shared/Images/ContactUs/Address.png" />
             </div>
             <div class="cu-card-label">Our Address</div>
-            <h3 class="cu-card-value">SPIC House, 88 Anna Salai<br>Little Mount, Guindy<br>Chennai – 600032</h3>
+            <h3 class="cu-card-value">SPIC House, 88 Anna Salai
+Little Mount, Guindy
+Chennai – 600032</h3>
             <div class="cu-card-subtext">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
                 </svg>
-                Mon–Fri • 9:30 AM – 6:00 PM
+                Mon–Fri  •  9:30 AM – 6:00 PM
             </div>
-            <button class="cu-card-btn">Open in Maps</button>
+            <button class="cu-card-btn" @onclick="OpenInMapsAsync">Open in Maps</button>
         </div>
 
         <div class="cu-contact-card cu-card-email">
@@ -79,7 +84,7 @@
             <div class="cu-card-label">Call Us</div>
             <h3 class="cu-card-value">044-2235 0245</h3>
             <div class="cu-card-subtext">
-                Ext: 375 / 416 • Support: 9:30 AM – 6:00 PM
+                Ext: 375 / 416  •  Support: 9:30 AM – 6:00 PM
             </div>
             <button class="cu-card-btn">Call Office</button>
         </div>
@@ -108,7 +113,7 @@
                 Send Email
             </button>
 
-            <button class="cu-qca-btn cu-btn-maps">
+            <button class="cu-qca-btn cu-btn-maps" @onclick="OpenInMapsAsync">
                 <img src="_content/SPIC.MauiBlazorApp.Shared/Images/ContactUs/Location2.png" />
                 Open in Maps
             </button>
@@ -119,72 +124,273 @@
             
         <div class="cu-action-card">
             <div class="cu-action-header">
-                <h3>SPIC House</h3>
-                <p>88, Anna Salai, Little Mount, Guindy, Chennai – 600032</p>
+                <h3>Get Directions</h3>
+                <p>Your route to SPIC Office</p>
             </div>
-                
+
+            <div class="cu-spic-address">
+                <span class="cu-spic-address-label"><i class="bi bi-geo-alt-fill"></i> SPIC Office</span>
+                <span class="cu-spic-address-text">SPIC House, 88 Anna Salai, Little Mount, Guindy, Chennai – 600032</span>
+            </div>
+
             <div class="cu-map-wrapper">
-                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/ContactUs/Map.png" alt="Satellite Map View" onerror="this.style.backgroundColor='#cbd5e1';" />
-                    
-                @*    <div class="cu-map-badge cu-badge-location">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/ContactUs/CurrentLocation.png" />
-                    Use Current Location
-                </div>
-
-                <div class="cu-map-pin">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/ContactUs/Location.png" />
-                </div> *@
-
+                <div class="cu-leaflet-map" id="contactUsLeafletMap"></div>
                 <div class="cu-map-badge cu-badge-interactive">
-                    Map Interactive Area
+                    @if (_isGettingLocation)
+                    {
+                        <i class="bi bi-arrow-repeat spin"></i> <span>Getting Location...</span>
+                    }
+                    else if (_distanceToSpic.HasValue)
+                    {
+                        <span>Distance to SPIC Office: @_distanceToSpic.Value.ToString("F1") km (approx.)</span>
+                        <br />
+                        <span>Estimated travel time: @(_travelTimeMin.HasValue ? _travelTimeMin.Value.ToString("0") : "?") min (approx.)</span>
+                    }
+                    else if (!string.IsNullOrEmpty(_locationErrorMessage))
+                    {
+                        <span>@_locationErrorMessage</span>
+                    }
+                    else
+                    {
+                        <span>Tap "Get Directions" to show your route</span>
+                    }
                 </div>
             </div>
 
-            <button class="cu-btn-primary">Get Directions</button>
+            <button class="cu-btn-primary" @onclick="GetDirectionsAsync" disabled="@_isGettingLocation">
+                @if (_isGettingLocation)
+                {
+                    <i class="bi bi-arrow-repeat spin"></i> <span>Getting Location...</span>
+                }
+                else
+                {
+                    <span>Get Directions</span>
+                }
+            </button>
         </div>
 
         <div class="cu-action-card">
             <div class="cu-action-header">
                 <h3>Send Us a Message</h3>
-                <p>We'll get back to you within 24-48 hours</p>
+                <p>We usually reply within 24–48 hours.</p>
             </div>
                 
             <div class="cu-form-fields">
                 <div class="cu-form-row">
                     <div class="cu-form-group">
                         <label class="cu-form-label">Full Name</label>
-                        <input type="text" class="cu-form-input" placeholder="Enter Full Name" />
+                        <input type="text" class="cu-form-input" placeholder="Enter Full Name" @bind="_fullName" />
                     </div>
                     <div class="cu-form-group">
                         <label class="cu-form-label">Email Address</label>
-                        <input type="email" class="cu-form-input" placeholder="Enter Email Address" />
+                        <input type="email" class="cu-form-input" placeholder="Enter Email Address" @bind="_emailAddress" />
                     </div>
                 </div>
 
                 <div class="cu-form-row">
                     <div class="cu-form-group">
                         <label class="cu-form-label">Enquiry Type</label>
-                        <select class="cu-form-select">
+                        <select class="cu-form-select" @bind="_enquiryType">
                             <option value="" disabled selected hidden>Select an enquiry type</option>
-                            <option value="welfare">Welfare Schemes</option>
-                            <option value="booking">Room Bookings</option>
-                            <option value="general">General Enquiry</option>
+                            <option value="@EnquiryType.WelfareSchemes">Welfare Schemes</option>
+                            <option value="@EnquiryType.RoomBookings">Room Bookings</option>
+                            <option value="@EnquiryType.GeneralEnquiry">General Enquiry</option>
                         </select>
                     </div>
                     <div class="cu-form-group">
                         <label class="cu-form-label">Subject</label>
-                        <input type="text" class="cu-form-input" placeholder="Briefly describe your issue" />
+                        <input type="text" class="cu-form-input" placeholder="Briefly describe your issue" @bind="_subject" />
                     </div>
                 </div>
 
                 <div class="cu-form-group">
                     <label class="cu-form-label">Message</label>
-                    <textarea class="cu-form-textarea" placeholder="Type your message here..."></textarea>
+                    <textarea class="cu-form-textarea" placeholder="Type your message here..." @bind="_message"></textarea>
                 </div>
             </div>
 
-            <button class="cu-btn-primary">Send Feedback</button>
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <div class="cu-form-feedback cu-form-feedback-error">
+                    <span>@_errorMessage</span>
+                </div>
+            }
+
+            @if (_sent)
+            {
+                <div class="cu-form-feedback cu-form-feedback-success">
+                    <span>Thank you! Your enquiry has been sent. We will get back to you shortly.</span>
+                </div>
+            }
+
+            <button class="cu-btn-primary" @onclick="SendFeedbackAsync" disabled="@_sending">
+                @if (_sending)
+                {
+                    <span>Sending...</span>
+                }
+                else
+                {
+                    <span>Send Feedback</span>
+                }
+            </button>
         </div>
 
     </div>
 </div>
+
+@code {
+    private bool _isGettingLocation;
+    private double? _distanceToSpic;
+    private double? _travelTimeMin;
+    private string? _locationErrorMessage;
+
+    private string _fullName = string.Empty;
+    private string _emailAddress = string.Empty;
+    private EnquiryType? _enquiryType;
+    private string _subject = string.Empty;
+    private string _message = string.Empty;
+
+    private string? _errorMessage;
+    private bool _sending;
+    private bool _sent;
+
+    private const string MapElementId = "contactUsLeafletMap";
+    private const double SpicOfficeLatitude = 13.011683879768821;
+    private const double SpicOfficeLongitude = 80.21861485797974;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initLeafletMap", MapElementId, (object?)null);
+                await JS.InvokeVoidAsync("updateLeafletMap", MapElementId, SpicOfficeLatitude, SpicOfficeLongitude);
+            }
+            catch
+            {
+                // Map unavailable — page remains functional; Get Directions still computes distance.
+            }
+        }
+    }
+
+    private async Task SendFeedbackAsync()
+    {
+        _errorMessage = null;
+        _sent = false;
+
+        if (string.IsNullOrWhiteSpace(_fullName) ||
+            string.IsNullOrWhiteSpace(_emailAddress) ||
+            !_enquiryType.HasValue ||
+            string.IsNullOrWhiteSpace(_subject) ||
+            string.IsNullOrWhiteSpace(_message))
+        {
+            _errorMessage = "Please fill in every field before sending.";
+            return;
+        }
+
+        if (!_emailAddress.Contains('@') || !_emailAddress.Contains('.'))
+        {
+            _errorMessage = "Please enter a valid email address.";
+            return;
+        }
+
+        _sending = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/ContactUs/enquiry", new ContactUsMessage
+            {
+                FullName = _fullName.Trim(),
+                EmailAddress = _emailAddress.Trim(),
+                EnquiryType = _enquiryType,
+                Subject = _subject.Trim(),
+                Message = _message.Trim()
+            });
+
+            if (response.IsSuccessStatusCode)
+            {
+                _sent = true;
+                _fullName = string.Empty;
+                _emailAddress = string.Empty;
+                _enquiryType = null;
+                _subject = string.Empty;
+                _message = string.Empty;
+            }
+            else
+            {
+                _errorMessage = "Your enquiry could not be sent. Please try again later.";
+            }
+        }
+        catch
+        {
+            _errorMessage = "Your enquiry could not be sent. Please try again later.";
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private async Task OpenInMapsAsync()
+    {
+        var url =
+            $"https://maps.google.com/maps?q={SpicOfficeLatitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{SpicOfficeLongitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task GetDirectionsAsync()
+    {
+        _isGettingLocation = true;
+        _locationErrorMessage = null;
+        _distanceToSpic = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await JS.InvokeAsync<GeoLocationResult>("getCurrentPosition");
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                _locationErrorMessage = result.Error.Contains("denied", StringComparison.OrdinalIgnoreCase)
+                    ? "Location permission is required to calculate the distance to SPIC Office."
+                    : $"Location error: {result.Error}";
+                return;
+            }
+
+            var route = await JS.InvokeAsync<RoadRouteResult>("showRouteOnMap", MapElementId,
+                result.Latitude, result.Longitude,
+                SpicOfficeLatitude, SpicOfficeLongitude);
+
+            if (!string.IsNullOrEmpty(route.Error))
+            {
+                _locationErrorMessage = "Unable to calculate road route right now.";
+                return;
+            }
+
+            _distanceToSpic = route.DistanceKm;
+            _travelTimeMin = route.DurationMin;
+        }
+        catch (Exception ex)
+        {
+            _locationErrorMessage = $"Failed to get location: {ex.Message}";
+        }
+        finally
+        {
+            _isGettingLocation = false;
+            StateHasChanged();
+        }
+    }
+
+    private class RoadRouteResult
+    {
+        public double DistanceKm { get; set; }
+        public double DurationMin { get; set; }
+        public string? Error { get; set; }
+    }
+
+    private class GeoLocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+}

@@ -1,0 +1,776 @@
+@page "/ConsignmentHistory"
+@using System.Text
+@using System.IO
+@using ClosedXML.Excel
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject SasApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject IJSRuntime JS
+@inject FileDownloadService Downloads
+@implements IDisposable
+
+@*
+    Consignment History (Figma frame 13, supplied 2026-09-21): five stat cards, the filter
+    panel, and the list with one expandable row per consignment.
+
+    Every filter lives in the URL (?status=&courier=&paymentType=&from=&to=&q=&page=&size=)
+    and is written with replace:true, so the back button leaves the page instead of walking
+    back through filter changes.
+
+    Phone (<= 767.98px): the table becomes cards with an "n samples" expander; the export
+    buttons collapse into the header row.
+*@
+
+<div class="ch-page">
+    <PageHeader Title="Consignment History"
+                Subtitle="View the history of all consignments with their current status and tracking.">
+        <Actions>
+            <div class="ch-tools">
+                <button type="button" class="ch-tool" @onclick="RefreshAsync" disabled="@_loading">
+                    <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> <span class="ch-tool-text">Refresh Data</span>
+                </button>
+                <button type="button" class="ch-tool" @onclick="ExportExcelAsync" disabled="@(_rows.Count == 0)">
+                    <i class="bi bi-file-earmark-excel" aria-hidden="true"></i> <span class="ch-tool-text">Excel</span>
+                </button>
+                <button type="button" class="ch-tool" @onclick="ExportPdfAsync" disabled="@(_rows.Count == 0)">
+                    <i class="bi bi-filetype-pdf" aria-hidden="true"></i> <span class="ch-tool-text">PDF</span>
+                </button>
+            </div>
+        </Actions>
+    </PageHeader>
+
+    <div class="ch-stats">
+        <div class="ch-stat ch-stat--green">
+            <div class="ch-stat-main">
+                <span class="ch-stat-label">Total Consignments</span>
+                <span class="ch-stat-value">@(_stats?.Total ?? 0)</span>
+                <span class="ch-stat-hint">(@(_stats?.WithMultipleCollections ?? 0) with multiple collections)</span>
+            </div>
+            <span class="ch-stat-icon" aria-hidden="true"><i class="bi bi-box-seam"></i></span>
+        </div>
+        <div class="ch-stat ch-stat--blue">
+            <div class="ch-stat-main">
+                <span class="ch-stat-label">Total Consignment Sent</span>
+                <span class="ch-stat-value">@(_stats?.TotalSent ?? 0)</span>
+                <span class="ch-stat-hint">All consignments</span>
+            </div>
+            <span class="ch-stat-icon" aria-hidden="true"><i class="bi bi-send"></i></span>
+        </div>
+        <div class="ch-stat ch-stat--violet">
+            <div class="ch-stat-main">
+                <span class="ch-stat-label">Total Samples</span>
+                <span class="ch-stat-value">@(_stats?.TotalSamples ?? 0)</span>
+                <span class="ch-stat-hint">Across all consignments</span>
+            </div>
+            <span class="ch-stat-icon" aria-hidden="true"><i class="bi bi-eyedropper"></i></span>
+        </div>
+        <div class="ch-stat ch-stat--green">
+            <div class="ch-stat-main">
+                <span class="ch-stat-label">Delivered</span>
+                <span class="ch-stat-value">@(_stats?.Delivered ?? 0)</span>
+                <span class="ch-stat-hint">@Percent(_stats?.Delivered)</span>
+            </div>
+            <span class="ch-stat-icon" aria-hidden="true"><i class="bi bi-truck"></i></span>
+        </div>
+        <div class="ch-stat ch-stat--red">
+            <div class="ch-stat-main">
+                <span class="ch-stat-label">Pending</span>
+                <span class="ch-stat-value">@(_stats?.Pending ?? 0)</span>
+                <span class="ch-stat-hint">@Percent(_stats?.Pending)</span>
+            </div>
+            <span class="ch-stat-icon" aria-hidden="true"><i class="bi bi-x-circle"></i></span>
+        </div>
+    </div>
+
+    <section class="ch-card">
+        <button type="button" class="ch-filters-head" aria-expanded="@(_filtersOpen ? "true" : "false")"
+                @onclick="() => _filtersOpen = !_filtersOpen">
+            <span><i class="bi bi-funnel" aria-hidden="true"></i> Filters</span>
+            <i class="bi @(_filtersOpen ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+        </button>
+
+        @if (_filtersOpen)
+        {
+            <div class="ch-filters">
+                @* An empty date input paints nothing at all in the Android
+                   WebView, so on phones it reads as a broken blank box. The
+                   overlay below names the field until a date is picked. *@
+                <div class="ch-field">
+                    <label for="ch-from">From</label>
+                    <div class="ch-datefield @(string.IsNullOrWhiteSpace(_from) ? "is-empty" : null)">
+                        <input id="ch-from" class="ch-input" type="date" value="@_from"
+                               @oninput="e => _from = e.Value?.ToString() ?? string.Empty" />
+                        <span class="ch-datefield-ph" aria-hidden="true">From date</span>
+                    </div>
+                </div>
+                <div class="ch-field">
+                    <label for="ch-to">To</label>
+                    <div class="ch-datefield @(string.IsNullOrWhiteSpace(_to) ? "is-empty" : null)">
+                        <input id="ch-to" class="ch-input" type="date" value="@_to"
+                               @oninput="e => _to = e.Value?.ToString() ?? string.Empty" />
+                        <span class="ch-datefield-ph" aria-hidden="true">To date</span>
+                    </div>
+                </div>
+                <div class="ch-field">
+                    <label for="ch-status">Status</label>
+                    <select id="ch-status" class="ch-input" value="@_status"
+                            @onchange="e => _status = e.Value?.ToString() ?? string.Empty">
+                        <option value="">All Status</option>
+                        @foreach (var s in StatusOptions)
+                        {
+                            <option value="@((int)s)">@SasLabels.ConsignmentStatusName(s)</option>
+                        }
+                    </select>
+                </div>
+                <div class="ch-field">
+                    <label for="ch-courier">Courier Partner</label>
+                    <select id="ch-courier" class="ch-input" value="@_courier"
+                            @onchange="e => _courier = e.Value?.ToString() ?? string.Empty">
+                        <option value="">All Partners</option>
+                        @foreach (var c in Couriers)
+                        {
+                            <option value="@c.Name">@c.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="ch-field">
+                    <label for="ch-pay">Payment Type</label>
+                    <select id="ch-pay" class="ch-input" value="@_paymentType"
+                            @onchange="e => _paymentType = e.Value?.ToString() ?? string.Empty">
+                        <option value="">All</option>
+                        <option value="0">Free Sample</option>
+                        <option value="1">Paid Sample</option>
+                    </select>
+                </div>
+
+                <div class="ch-filter-actions">
+                    <button type="button" class="ch-btn ch-btn-outline" @onclick="ClearFilters">
+                        <i class="bi bi-x-lg" aria-hidden="true"></i> Clear All
+                    </button>
+                    <button type="button" class="ch-btn ch-btn-primary" @onclick="ApplyFilters">
+                        <i class="bi bi-funnel" aria-hidden="true"></i> Apply Filters
+                    </button>
+                </div>
+            </div>
+        }
+    </section>
+
+    <section class="ch-card">
+        <div class="ch-list-head">
+            <h2 class="ch-list-title">Consignment History List</h2>
+            <div class="ch-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" placeholder="Search consignment, AWB, transaction..."
+                       aria-label="Search consignments" value="@_search"
+                       @oninput="e => SetSearch(e.Value?.ToString())" />
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="table" Rows="6" />
+        }
+        else if (_rows.Count == 0)
+        {
+            <EmptyState Icon="bi-truck" Title="No consignments found"
+                        Message="Try another date range, status, courier or search term.">
+                <button type="button" class="ch-btn ch-btn-outline" @onclick="ClearFilters">Clear filters</button>
+            </EmptyState>
+        }
+        else
+        {
+            <!-- tablet / desktop table -->
+            <div class="ch-table-wrap tablet-up">
+                <table class="ch-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Consignment ID</th>
+                            <th scope="col">Transaction ID</th>
+                            <th scope="col">Dispatched Date &amp; Time</th>
+                            <th scope="col">Courier Partner</th>
+                            <th scope="col">AWB/Tracking No.</th>
+                            <th scope="col">Total samples</th>
+                            <th scope="col">Current Status</th>
+                            <th scope="col">Payment Status</th>
+                            <th scope="col">Total amount</th>
+                            <th scope="col" class="ch-th-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _rows)
+                        {
+                            var id = row.Id;
+                            <tr @key="id">
+                                <td><a class="ch-link" href="@DetailsHref(id)">@row.Code</a></td>
+                                <td>@Dash(row.TransactionIds)</td>
+                                <td>@row.DispatchedAt.ToString("dd/MM/yyyy")<br /><span class="ch-muted">@row.DispatchedAt.ToString("hh:mm tt")</span></td>
+                                <td>@Dash(row.CourierService)</td>
+                                <td>
+                                    @if (string.IsNullOrWhiteSpace(row.TrackingNumber))
+                                    {
+                                        <span class="ch-muted">-</span>
+                                    }
+                                    else if (TrackingUrl(row) is { Length: > 0 } url)
+                                    {
+                                        <button type="button" class="ch-link ch-link-btn" @onclick="() => OpenTrackingAsync(url)">@row.TrackingNumber</button>
+                                    }
+                                    else
+                                    {
+                                        <span>@row.TrackingNumber</span>
+                                    }
+                                </td>
+                                <td>@row.SampleCount</td>
+                                <td>
+                                    <span class="@StatusPillClass(row.Status)">@SasLabels.ConsignmentStatusName(row.Status)</span>
+                                    <span class="ch-sub">@StatusHint(row.Status)</span>
+                                </td>
+                                <td>
+                                    @if (row.PaymentStatus is { } ps)
+                                    {
+                                        <span class="@SasLabels.PaymentStatusPillClass(ps)">@SasLabels.PaymentStatusName(ps)</span>
+                                        @if (row.PaymentReviewedAt is { } at)
+                                        {
+                                            <span class="ch-sub">@SasLabels.LongDate(at)</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="sas-pill sas-pill--grey">Free</span>
+                                    }
+                                </td>
+                                <td>@(row.TotalAmount > 0 ? SasLabels.Money(row.TotalAmount) : "-")</td>
+                                <td class="ch-td-action">
+                                    <a class="ch-icon-btn" href="@DetailsHref(id)" aria-label="@($"View {row.Code}")" title="View">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </a>
+                                    <button type="button" class="ch-icon-btn"
+                                            aria-expanded="@(_expanded.Contains(id) ? "true" : "false")"
+                                            aria-label="@($"Samples in {row.Code}")"
+                                            @onclick="() => ToggleRow(id)">
+                                        <i class="bi @(_expanded.Contains(id) ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+                                    </button>
+                                </td>
+                            </tr>
+
+                            @if (_expanded.Contains(id))
+                            {
+                                <tr class="ch-expand-row" @key="@($"x{id}")">
+                                    <td colspan="10">
+                                        @RenderLines(row)
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- phone cards -->
+            <div class="ch-cards phone-only">
+                @foreach (var row in _rows)
+                {
+                    var id = row.Id;
+                    <article class="ch-rowcard" @key="@($"c{id}")">
+                        <div class="ch-rowcard-top">
+                            <a class="ch-link ch-rowcard-code" href="@DetailsHref(id)">@row.Code</a>
+                            <span class="@StatusPillClass(row.Status)">@SasLabels.ConsignmentStatusName(row.Status)</span>
+                        </div>
+
+                        <dl class="ch-rowcard-facts">
+                            <dt>Dispatched</dt><dd>@SasLabels.DateTimeText(row.DispatchedAt)</dd>
+                            <dt>Courier</dt><dd>@Dash(row.CourierService)</dd>
+                            <dt>AWB</dt>
+                            <dd>
+                                @if (string.IsNullOrWhiteSpace(row.TrackingNumber))
+                                {
+                                    <span class="ch-muted">-</span>
+                                }
+                                else if (TrackingUrl(row) is { Length: > 0 } url)
+                                {
+                                    <button type="button" class="ch-link ch-link-btn" @onclick="() => OpenTrackingAsync(url)">@row.TrackingNumber</button>
+                                }
+                                else
+                                {
+                                    <span>@row.TrackingNumber</span>
+                                }
+                            </dd>
+                            <dt>Transaction</dt><dd>@Dash(row.TransactionIds)</dd>
+                            <dt>Payment</dt>
+                            <dd>
+                                @if (row.PaymentStatus is { } ps)
+                                {
+                                    <span class="@SasLabels.PaymentStatusPillClass(ps)">@SasLabels.PaymentStatusName(ps)</span>
+                                }
+                                else
+                                {
+                                    <span class="sas-pill sas-pill--grey">Free</span>
+                                }
+                            </dd>
+                            <dt>Amount</dt><dd>@(row.TotalAmount > 0 ? SasLabels.Money(row.TotalAmount) : "-")</dd>
+                        </dl>
+
+                        <div class="ch-rowcard-actions">
+                            <button type="button" class="ch-expander"
+                                    aria-expanded="@(_expanded.Contains(id) ? "true" : "false")"
+                                    @onclick="() => ToggleRow(id)">
+                                @row.SampleCount sample@(row.SampleCount == 1 ? "" : "s")
+                                <i class="bi @(_expanded.Contains(id) ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+                            </button>
+                            <a class="ch-btn ch-btn-outline ch-btn-sm" href="@DetailsHref(id)">
+                                <i class="bi bi-eye" aria-hidden="true"></i> View
+                            </a>
+                        </div>
+
+                        @if (_expanded.Contains(id))
+                        {
+                            @RenderLines(row)
+                        }
+                    </article>
+                }
+            </div>
+
+            <div class="ch-pager">
+                <div class="ch-pagesize">
+                    <label for="ch-size">Items Per Page</label>
+                    <select id="ch-size" class="ch-input ch-input--sm" value="@_size"
+                            @onchange="e => SetSize(e.Value?.ToString())">
+                        <option value="8">8</option>
+                        <option value="16">16</option>
+                        <option value="32">32</option>
+                        <option value="64">64</option>
+                    </select>
+                </div>
+
+                <nav class="ch-pages" aria-label="Pagination">
+                    <button type="button" class="ch-page" aria-label="Previous page"
+                            disabled="@(_page <= 1)" @onclick="() => GoToPage(_page - 1)">
+                        <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                    </button>
+
+                    @foreach (var p in PageNumbers)
+                    {
+                        if (p < 0)
+                        {
+                            <span class="ch-page ch-page--gap" aria-hidden="true">..</span>
+                        }
+                        else
+                        {
+                            var n = p;
+                            <button type="button" class="ch-page @(n == _page ? "is-on" : "")"
+                                    aria-current="@(n == _page ? "page" : null)"
+                                    @onclick="() => GoToPage(n)">@n</button>
+                        }
+                    }
+
+                    <button type="button" class="ch-page" aria-label="Next page"
+                            disabled="@(_page >= TotalPages)" @onclick="() => GoToPage(_page + 1)">
+                        <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                    </button>
+                </nav>
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    // ---------------- URL state
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "courier")] public string? CourierQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "paymentType")] public string? PaymentTypeQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "from")] public string? FromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "to")] public string? ToQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "size")] public int? SizeQuery { get; set; }
+
+    // Working copies: the filter panel edits these, "Apply Filters" writes them to the URL.
+    private string _status = "";
+    private string _courier = "";
+    private string _paymentType = "";
+    private string _from = "";
+    private string _to = "";
+    private string _search = "";
+    private int _page = 1;
+    private int _size = 16;
+
+    private ConsignmentStatsDto? _stats;
+    private SasLookupsDto? _lookups;
+    private List<ConsignmentSummaryDto> _rows = new();
+    private readonly HashSet<int> _expanded = new();
+
+    private int _total;
+    private bool _loading = true;
+    private bool _filtersOpen = true;
+    private string _appliedKey = "?";
+    private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _searchDebounce;
+
+    private static readonly ConsignmentStatus[] StatusOptions =
+    {
+        ConsignmentStatus.PendingPickup, ConsignmentStatus.Dispatched, ConsignmentStatus.InTransit,
+        ConsignmentStatus.Delivered, ConsignmentStatus.Completed
+    };
+
+    private List<SasCourierDto> Couriers => _lookups?.Couriers ?? new();
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_total / (double)Math.Max(1, _size)));
+
+    private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
+
+    private static string DetailsHref(int id) => $"/ConsignmentHistory/view/{id}";
+
+    private string Percent(int? part)
+    {
+        var total = _stats?.Total ?? 0;
+        if (total <= 0 || part is null or 0) return "";
+        return $"{(part.Value * 100.0 / total):0.##}%";
+    }
+
+    private static string StatusPillClass(ConsignmentStatus status) => "sas-pill " + status switch
+    {
+        ConsignmentStatus.PendingPickup => "sas-pill--amber",
+        ConsignmentStatus.Dispatched => "sas-pill--blue",
+        ConsignmentStatus.InTransit => "sas-pill--blue",
+        ConsignmentStatus.Delivered => "sas-pill--green",
+        ConsignmentStatus.Completed => "sas-pill--green",
+        _ => "sas-pill--grey"
+    };
+
+    private static string StatusHint(ConsignmentStatus status) => status switch
+    {
+        ConsignmentStatus.PendingPickup => "Awaiting pickup",
+        ConsignmentStatus.Dispatched => "Collection completed",
+        ConsignmentStatus.InTransit => "On the way to the lab",
+        ConsignmentStatus.Delivered => "At the lab",
+        ConsignmentStatus.Completed => "Results available",
+        _ => ""
+    };
+
+    // ---------------- load
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _status = StatusQuery ?? "";
+        _courier = CourierQuery ?? "";
+        _paymentType = PaymentTypeQuery ?? "";
+        _from = FromQuery ?? "";
+        _to = ToQuery ?? "";
+        _search = SearchQuery ?? "";
+        _page = Math.Max(1, PageQuery ?? 1);
+        _size = SizeQuery is > 0 ? SizeQuery!.Value : 16;
+
+        var key = $"{_status}|{_courier}|{_paymentType}|{_from}|{_to}|{_search}|{_page}|{_size}";
+        if (key == _appliedKey) return;
+        _appliedKey = key;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        _expanded.Clear();
+        StateHasChanged();
+
+        _lookups ??= await Api.GetLookupsAsync(ct);
+
+        var page = await Api.GetConsignmentsAsync(
+            status: int.TryParse(_status, out var s) ? (ConsignmentStatus)s : null,
+            courier: string.IsNullOrWhiteSpace(_courier) ? null : _courier,
+            paymentType: int.TryParse(_paymentType, out var p) ? (SamplePaymentType)p : null,
+            from: string.IsNullOrWhiteSpace(_from) ? null : _from,
+            to: string.IsNullOrWhiteSpace(_to) ? null : _to,
+            search: string.IsNullOrWhiteSpace(_search) ? null : _search,
+            page: _page,
+            pageSize: _size,
+            ct: ct);
+
+        if (ct.IsCancellationRequested) return;
+
+        _rows = page?.Items ?? new List<ConsignmentSummaryDto>();
+        _total = page?.Total ?? 0;
+        _loading = false;
+
+        _stats = await Api.GetConsignmentStatsAsync(ct) ?? _stats;
+        if (!ct.IsCancellationRequested) StateHasChanged();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _appliedKey = "?";
+        await LoadAsync();
+        _appliedKey = $"{_status}|{_courier}|{_paymentType}|{_from}|{_to}|{_search}|{_page}|{_size}";
+    }
+
+    // ---------------- filters in the URL
+
+    private void ApplyFilters() => Apply(1);
+
+    private void ClearFilters()
+    {
+        _status = _courier = _paymentType = _from = _to = _search = "";
+        Apply(1);
+    }
+
+    private void GoToPage(int page)
+    {
+        if (page < 1 || page > TotalPages || page == _page) return;
+        Apply(page);
+    }
+
+    private void SetSize(string? size)
+    {
+        _size = int.TryParse(size, out var n) && n > 0 ? n : 16;
+        Apply(1);
+    }
+
+    private void SetSearch(string? text)
+    {
+        _search = text ?? "";
+        _searchDebounce?.Cancel();
+        _searchDebounce = new CancellationTokenSource();
+        var token = _searchDebounce.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(400, token);
+                await InvokeAsync(() => Apply(1));
+            }
+            catch (TaskCanceledException) { }
+        });
+    }
+
+    private void Apply(int page)
+    {
+        _page = Math.Max(1, page);
+
+        var parts = new List<string>();
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) parts.Add($"{key}={Uri.EscapeDataString(value)}");
+        }
+
+        Add("status", _status);
+        Add("courier", _courier);
+        Add("paymentType", _paymentType);
+        Add("from", _from);
+        Add("to", _to);
+        Add("q", _search);
+        if (_page > 1) parts.Add($"page={_page}");
+        if (_size != 16) parts.Add($"size={_size}");
+
+        Nav.NavigateTo("/ConsignmentHistory" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""),
+            replace: true);
+    }
+
+    private void ToggleRow(int id)
+    {
+        if (!_expanded.Add(id)) _expanded.Remove(id);
+    }
+
+    /// <summary>Up to seven page buttons; -1 means the "..." gap.</summary>
+    private IEnumerable<int> PageNumbers
+    {
+        get
+        {
+            var last = TotalPages;
+            if (last <= 7)
+            {
+                for (var i = 1; i <= last; i++) yield return i;
+                yield break;
+            }
+
+            yield return 1;
+            var start = Math.Max(2, _page - 1);
+            var end = Math.Min(last - 1, _page + 1);
+            if (start > 2) yield return -1;
+            for (var i = start; i <= end; i++) yield return i;
+            if (end < last - 1) yield return -1;
+            yield return last;
+        }
+    }
+
+    // ---------------- tracking link
+
+    /// <summary>
+    /// The courier's own template ({0} / {awb} replaced by the AWB) when the master has one,
+    /// otherwise the link typed on the upload form.
+    /// </summary>
+    private string TrackingUrl(ConsignmentSummaryDto row)
+    {
+        var template = Couriers
+            .FirstOrDefault(c => string.Equals(c.Name, row.CourierService, StringComparison.OrdinalIgnoreCase))?
+            .TrackingUrlTemplate;
+
+        if (!string.IsNullOrWhiteSpace(template) && !string.IsNullOrWhiteSpace(row.TrackingNumber))
+        {
+            return template!
+                .Replace("{0}", row.TrackingNumber)
+                .Replace("{awb}", row.TrackingNumber, StringComparison.OrdinalIgnoreCase)
+                .Replace("{tracking}", row.TrackingNumber, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return row.TrackingLink ?? "";
+    }
+
+    /// <summary>
+    /// window.open is bridged by both hosts: a new browser tab on the Web, the system browser
+    /// from the MAUI WebView (maui-interop.js).
+    /// </summary>
+    private async Task OpenTrackingAsync(string url)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("window.open", url, "_blank");
+        }
+        catch (Exception)
+        {
+            Toast.Info(url);
+        }
+    }
+
+    // ---------------- exports (same pattern as SpicDataTable)
+
+    private static readonly string[] Headers =
+    {
+        "Consignment ID", "Transaction ID", "Dispatched Date & Time", "Courier Partner",
+        "AWB/Tracking No.", "Total samples", "Current Status", "Payment Status", "Total amount"
+    };
+
+    private List<string> RowValues(ConsignmentSummaryDto r) => new()
+    {
+        r.Code,
+        Dash(r.TransactionIds),
+        SasLabels.DateTimeText(r.DispatchedAt),
+        Dash(r.CourierService),
+        Dash(r.TrackingNumber),
+        r.SampleCount.ToString(),
+        SasLabels.ConsignmentStatusName(r.Status),
+        r.PaymentStatus is { } ps ? SasLabels.PaymentStatusName(ps) : "Free",
+        r.TotalAmount > 0 ? r.TotalAmount.ToString("N2") : "0.00"
+    };
+
+    private async Task ExportExcelAsync()
+    {
+        if (_rows.Count == 0) return;
+
+        try
+        {
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Consignments");
+
+            for (var c = 0; c < Headers.Length; c++) sheet.Cell(1, c + 1).Value = Headers[c];
+
+            for (var r = 0; r < _rows.Count; r++)
+            {
+                var values = RowValues(_rows[r]);
+                for (var c = 0; c < values.Count; c++) sheet.Cell(r + 2, c + 1).Value = values[c];
+            }
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            await Downloads.SaveAsync($"ConsignmentHistory_{DateTime.Now:yyyyMMdd}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", stream.ToArray());
+        }
+        catch (Exception)
+        {
+            Toast.Error("The Excel file could not be created. Please try again.");
+        }
+    }
+
+    private async Task ExportPdfAsync()
+    {
+        if (_rows.Count == 0) return;
+
+        // Rendered by the API (api/Export/table-pdf): QuestPDF's native libraries cannot ship
+        // inside the Android app, so every host uses the server renderer.
+        var request = new
+        {
+            Title = "Consignment History",
+            Headers = Headers.ToList(),
+            Rows = _rows.Select(RowValues).ToList()
+        };
+
+        try
+        {
+            await Downloads.PostAsync("api/Export/table-pdf", request,
+                $"ConsignmentHistory_{DateTime.Now:yyyyMMdd}.pdf");
+        }
+        catch (Exception)
+        {
+            Toast.Error("The PDF could not be created. Please try again.");
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+    }
+
+    // ---------------- expanded row
+
+    private RenderFragment RenderLines(ConsignmentSummaryDto row) => @<div class="ch-lines">
+        <div class="ch-lines-main">
+            <h3 class="ch-lines-title">Sample in this Consignment (@row.SampleCount Samples)</h3>
+
+            @if (row.SampleLines.Count == 0)
+            {
+                <p class="ch-muted">The sample breakdown is not available for this consignment.</p>
+            }
+            else
+            {
+                <div class="ch-table-wrap">
+                    <table class="ch-table ch-table--inner">
+                        <thead>
+                            <tr>
+                                <th scope="col">S.NO</th>
+                                <th scope="col">Test / Sample Type</th>
+                                <th scope="col">Sample Count</th>
+                                <th scope="col">Sample ID Range</th>
+                                <th scope="col">Amount (&#8377;)</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var n = 0; }
+                            @foreach (var line in row.SampleLines)
+                            {
+                                n++;
+                                <tr>
+                                    <td>@n</td>
+                                    <td>@SasLabels.SampleTypeName(line.SampleType)</td>
+                                    <td>@line.SampleCount</td>
+                                    <td>@Dash(line.SampleCodeRange)</td>
+                                    <td>@line.Amount.ToString("N2")</td>
+                                    <td><span class="@SasLabels.StatusPillClass(line.Status)">@SasLabels.Status(line.Status)</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <div class="ch-lines-side">
+            <div class="ch-totals">
+                <div class="ch-total"><span>Total Sample</span><strong>@row.SampleCount</strong></div>
+                <div class="ch-total"><span>Sample Types</span><strong>@row.SampleLines.Count</strong></div>
+                <div class="ch-total"><span>Total Amount</span><strong>@(row.TotalAmount > 0 ? SasLabels.Money(row.TotalAmount) : "Free")</strong></div>
+            </div>
+            <a class="ch-viewall" href="@DetailsHref(row.Id)">View All Sample <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+        </div>
+    </div>;
+}

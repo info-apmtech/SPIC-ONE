@@ -4,6 +4,7 @@
 @using System.Net
 @using SPIC.Core.Entities
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
@@ -59,13 +60,13 @@
 
 	<div class="auth-icons">
 		<a href="#" class="auth-icon-btn" title="Fingerprint Login">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/LoginImages/Passkey.svg" alt="Passkey" class="login-secure-img" />
+			<img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/Passkey.svg" alt="Passkey" class="login-secure-img" />
 		</a>
 		<a href="#" class="auth-icon-btn" title="Face Scan Login">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/LoginImages/FaceLock.svg" alt="FaceLock" class="login-secure-img" />
+			<img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/FaceLock.svg" alt="FaceLock" class="login-secure-img" />
 		</a>
 		<a href="#" class="auth-icon-btn" title="Fingerprint Login">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/LoginImages/FingerPrint.svg" alt="FingerPrint" class="login-secure-img" />
+			<img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/FingerPrint.svg" alt="FingerPrint" class="login-secure-img" />
 		</a>
 	</div>
 
@@ -125,15 +126,15 @@
 			Http.DefaultRequestHeaders.Authorization =
 				new AuthenticationHeaderValue("Bearer", rawToken);
 
-			// Persist to sessionStorage FIRST, then populate LoginState as one
+			// Persist to the session store FIRST, then populate LoginState as one
 			// atomic synchronous batch. This way every LoginState.OnChange
 			// subscriber (NavMenu, PageGuard) and the authenticated layout only
 			// ever sees the complete authenticated state, never intermediate
 			// partial states during login.
-			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_token", rawToken);
-			await JS.InvokeVoidAsync("sessionStorage.setItem", "jwt_expiration", result.Expiration.ToString("O"));
-			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_role_access", result.RoleAccess ?? "");
-			await JS.InvokeVoidAsync("sessionStorage.setItem", "spic_designation_name", result.DesignationName ?? "");
+			await SessionStore.SetAsync(SessionKeys.Token, rawToken);
+			await SessionStore.SetAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
+			await SessionStore.SetAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
+			await SessionStore.SetAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
 
 			// Persist token + page permissions for refreshes and other pages
 			LoginState.Token = rawToken;
@@ -141,13 +142,7 @@
 			LoginState.SetAllowedPages(result.RoleAccess);
 			LoginState.SetDesignationName(result.DesignationName);
 
-			var landingPage = LoginState.UserRole switch
-			{
-				AppRole.Dealer => "/SDWADashboard",
-				AppRole.SpecialAdmin => LoginState.CanAccess("Logistics") ? "/Logistics" : "/Welcome",
-				_ => "/Dashboard"
-			};
-			Navigation.NavigateTo(landingPage);
+			Navigation.NavigateTo(LoginState.LandingPage);
 		}
 		catch (HttpRequestException)
 		{

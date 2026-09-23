@@ -1,0 +1,496 @@
+@page "/DigitalLibrary/view/{Id:int}"
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject DigitalLibraryApi Api
+@inject FileDownloadService Files
+@inject LoginState LoginState
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+
+<PageTitle>@(Detail?.Title ?? "Content") - Digital Library - SPIC ONE</PageTitle>
+
+@*
+    Single-item view for the Digital Library (Figma frame supplied 2026-09-20): hero banner,
+    SPIC AI chat box, overview with video player / document, details panel, related videos,
+    related brochures, key features, usage. Everything comes from GET api/Library/{id}; the
+    section order is the item's saved layout (step 3 of the add wizard) and disabled sections
+    are left out. Opening the page counts a view server side.
+*@
+
+@if (_loading)
+{
+    <div class="dv-page dv-page-loading">
+        <Skeleton Variant="card" Rows="3" />
+    </div>
+}
+else if (Detail is null)
+{
+    <EmptyState Icon="bi-collection" Title="@(_failed ? "The library is not available" : "Content not found")"
+                Message="@(_error ?? "This item is not in the library any more.")">
+        <button type="button" class="btn btn-outline-success" @onclick="Load">Try again</button>
+        <button type="button" class="btn btn-success" @onclick='() => Nav.NavigateTo("/DigitalLibrary/content")'>Back to All Content</button>
+    </EmptyState>
+}
+else
+{
+    var item = Detail;
+
+    <div class="dv-page">
+
+        @if (Enabled("hero"))
+        {
+            <section class="dv-hero" style="background-image:url('@CoverUrl')">
+                <div class="dv-hero-shade"></div>
+                <div class="dv-hero-top">
+                    <button type="button" class="dv-hero-btn" @onclick="Back"><i class="bi bi-arrow-left"></i> Back</button>
+                    @if (CanUpdate)
+                    {
+                        <button type="button" class="dv-hero-btn" @onclick="Edit"><i class="bi bi-pencil"></i> Edit Content</button>
+                    }
+                </div>
+                <div class="dv-hero-body">
+                    <div class="dv-tags">
+                        <span class="dv-pill dv-pill-type">@TypeLabel</span>
+                        <span class="dv-pill @(IsPublished ? "dv-pill-pub" : "dv-pill-draft")">@StatusLabel</span>
+                    </div>
+                    <h1 class="dv-title">@item.Title</h1>
+                    <p class="dv-desc">@item.ShortDescription</p>
+                    <div class="dv-chips">
+                        @foreach (var t in item.Tags) { <span class="dv-chip">@t</span> }
+                    </div>
+                </div>
+            </section>
+        }
+
+        <div class="dv-main">
+            <div class="dv-content">
+
+                @foreach (var section in Sections)
+                {
+                    @RenderSection(section)
+                }
+
+                @foreach (var extra in ExtraCustomSections)
+                {
+                    <section class="dv-card">
+                        <h2 class="dv-card-title">@extra.Title</h2>
+                        <p class="dv-text">@extra.Body</p>
+                    </section>
+                }
+            </div>
+
+            <aside class="dv-side">
+                <section class="dv-card dv-details">
+                    <h2 class="dv-card-title">Details</h2>
+                    <dl>
+                        <div><dt>Category</dt><dd>@(string.IsNullOrWhiteSpace(item.Category) ? "-" : item.Category)</dd></div>
+                        <div><dt>Published</dt><dd>@((item.PublishedAt ?? item.CreatedAt).ToString("dd MMM yyyy"))</dd></div>
+                        <div><dt>Author</dt><dd>@(string.IsNullOrWhiteSpace(item.Author) ? "SPIC Agri Team" : item.Author)</dd></div>
+                        <div><dt>Status</dt><dd><span class="dv-pill @(IsPublished ? "dv-pill-pub" : "dv-pill-draft")">@StatusLabel</span></dd></div>
+                        @if (!string.IsNullOrWhiteSpace(item.SubCategory)) { <div><dt>Sub-category</dt><dd>@item.SubCategory</dd></div> }
+                        @if (Kind == DigitalLibraryType.Videos && item.DurationSeconds > 0) { <div><dt>Duration</dt><dd>@ContentDraft.ShortDuration(item.DurationSeconds)</dd></div> }
+                        <div><dt>Views</dt><dd>@item.Views</dd></div>
+                        @if (item.Tags.Count > 0)
+                        {
+                            <div><dt>Tag</dt><dd class="dv-chips">@foreach (var t in item.Tags) { <span class="dv-chip dv-chip-green">@t</span> }</dd></div>
+                        }
+                    </dl>
+                    @if (CanUpdate)
+                    {
+                        <button type="button" class="dv-side-btn dv-side-edit" @onclick="Edit">Edit Details</button>
+                        @if (IsPublished)
+                        {
+                            <button type="button" class="dv-side-btn dv-side-unpub" @onclick="() => _unpublishTarget = AsItem()">Unpublish @KindWordCap</button>
+                        }
+                        else
+                        {
+                            <button type="button" class="dv-side-btn dv-side-pub" @onclick="Publish">Publish @KindWordCap</button>
+                        }
+                    }
+                </section>
+            </aside>
+        </div>
+
+        <DigitalLibraryUnpublishDialog Item="_unpublishTarget" OnConfirm="ConfirmUnpublish" OnCancel="() => _unpublishTarget = null" />
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    // Every signed-in user may read a published item; editing needs the DigitalLibrary page
+    // in the designation (Admin / CorporateAdmin bypass). The API enforces the same rule.
+    private bool CanEdit => LoginState.CanAccess("DigitalLibrary");
+    private bool CanUpdate => CanEdit && LoginState.Can("DigitalLibrary", "Update");
+
+    private LibraryContentDetailDto? Detail { get; set; }
+    private DigitalLibraryItem? _unpublishTarget;
+
+    private bool _loading = true;
+    private bool _failed;
+    private string? _error;
+    private int _loadedId;
+
+    private DigitalLibraryType Kind => Detail is null ? DigitalLibraryType.Products : DigitalLibraryItem.ToType(Detail.Kind);
+    private bool IsPublished => Detail?.Status == LibraryContentStatus.Published;
+    private string StatusLabel => Detail?.Status switch
+    {
+        LibraryContentStatus.Published => "Published",
+        LibraryContentStatus.Archived => "Archived",
+        _ => "Draft"
+    };
+    private string TypeLabel => Kind switch
+    {
+        DigitalLibraryType.Videos => "AI Video",
+        DigitalLibraryType.Brochures => "Brochure",
+        _ => "Product"
+    };
+    private string KindWord => Kind switch { DigitalLibraryType.Videos => "video", DigitalLibraryType.Brochures => "brochure", _ => "product" };
+    private string KindWordCap => char.ToUpperInvariant(KindWord[0]) + KindWord[1..];
+
+    private string CoverUrl => Detail is null
+        ? ""
+        : string.IsNullOrWhiteSpace(Detail.CoverImagePath)
+            ? DigitalLibraryItem.PlaceholderImage(Detail.Id)
+            : Api.FileUrl(Detail.CoverImagePath);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id && Detail is not null) return;
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        _loading = true;
+        _failed = false;
+        _error = null;
+        StateHasChanged();
+
+        Detail = await Api.GetAsync(Id);
+        if (Detail is null)
+        {
+            _failed = true;
+            _error = Api.LastError;
+            if (_error is not null) Toast.Error(_error);
+        }
+        else
+        {
+            _loadedId = Id;
+        }
+
+        _loading = false;
+    }
+
+    // ------------------------------------------------------------------ sections
+
+    /// <summary>Enabled sections in saved order; a missing layout falls back to the kind's defaults.</summary>
+    private List<LibraryLayoutSectionDto> Sections
+    {
+        get
+        {
+            if (Detail is null) return new();
+            if (Detail.Layout.Count > 0)
+                return Detail.Layout.Where(s => s.Enabled).OrderBy(s => s.Order).ToList();
+
+            return LayoutSection.Defaults(Kind)
+                .Select((s, i) => new LibraryLayoutSectionDto { Key = s.Key, Title = s.Title, Enabled = true, Order = i })
+                .ToList();
+        }
+    }
+
+    private bool Enabled(string key)
+        => Detail is not null && (Detail.Layout.Count == 0 || Detail.Layout.Any(s => s.Enabled && Normalise(s.Key) == key));
+
+    /// <summary>
+    /// The wizard writes its own keys; the DTO header also documents a shorter set. Both are
+    /// accepted so the page keeps working whichever the API stores.
+    /// </summary>
+    private static string Normalise(string key) => key.ToLowerInvariant() switch
+    {
+        "hero" => "hero",
+        "ai" => "ai",
+        "player" or "media" or "document" => "media",
+        "overview" => "overview",
+        "videos" or "relatedvideos" => "videos",
+        "brochures" or "relatedbrochures" => "brochures",
+        "features" => "features",
+        "usage" => "usage",
+        "safety" => "safety",
+        var k => k
+    };
+
+    /// <summary>Custom text sections from step 1 that no layout row already covers.</summary>
+    private List<LibraryCustomSectionDto> ExtraCustomSections =>
+        Detail?.AdditionalSections.Where(s => !string.IsNullOrWhiteSpace(s.Title) || !string.IsNullOrWhiteSpace(s.Body)).ToList()
+        ?? new List<LibraryCustomSectionDto>();
+
+    private RenderFragment RenderSection(LibraryLayoutSectionDto section) => __builder =>
+    {
+        var item = Detail!;
+        switch (Normalise(section.Key))
+        {
+            case "hero":
+                break; // drawn above the two-column area
+
+            case "ai":
+                <section class="dv-ai">
+                    <span class="dv-ai-logo" aria-hidden="true"><i class="bi bi-stars"></i></span>
+                    <div class="dv-ai-text">
+                        <strong>SPIC AI Chatbox</strong>
+                        <span>Ask SPIC AI about this @KindWord or the related product</span>
+                    </div>
+                    <button type="button" class="dv-ai-btn" @onclick='() => Nav.NavigateTo($"/DigitalLibrary/chat?about={item.Id}")'><i class="bi bi-stars"></i> Start Conversation</button>
+                </section>
+                break;
+
+            case "media":
+            case "overview":
+                <section class="dv-card dv-overview">
+                    <div class="dv-overview-text">
+                        <h2 class="dv-card-title">@(string.IsNullOrWhiteSpace(section.Title) ? "Overview / Summary" : section.Title)</h2>
+                        <p>@(string.IsNullOrWhiteSpace(item.Overview) ? item.ShortDescription : item.Overview)</p>
+                    </div>
+                    @if (Kind == DigitalLibraryType.Videos)
+                    {
+                        @RenderVideo
+                    }
+                    else if (Kind == DigitalLibraryType.Brochures)
+                    {
+                        <div class="dv-document">
+                            <img src="@CoverUrl" alt="" onerror="this.onerror=null;this.src='@DigitalLibraryItem.PlaceholderImage(item.Id)'" />
+                            @if (!string.IsNullOrWhiteSpace(item.DocumentPath))
+                            {
+                                <button type="button" class="dv-doc-btn" disabled="@_downloading" @onclick="OpenDocument">
+                                    <i class="bi bi-file-earmark-pdf"></i> Open brochure (@DocumentLabel)
+                                </button>
+                            }
+                            else
+                            {
+                                <p class="dv-text">No brochure file has been uploaded yet.</p>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="dv-product-img">
+                            <img src="@CoverUrl" alt="" onerror="this.onerror=null;this.src='@DigitalLibraryItem.PlaceholderImage(item.Id)'" />
+                        </div>
+                    }
+                </section>
+                break;
+
+            case "videos":
+                if (item.RelatedVideoItems.Count > 0)
+                {
+                    <section class="dv-card">
+                        <h2 class="dv-card-title">@(string.IsNullOrWhiteSpace(section.Title) ? "Related Video" : section.Title)</h2>
+                        <div class="dv-related-grid">
+                            @foreach (var r in item.RelatedVideoItems.Take(Math.Max(1, item.RelatedVideos.MaxItems)).Select(Api.ToItem))
+                            {
+                                <a class="dv-related-card" href="@($"DigitalLibrary/view/{r.Id}")">
+                                    <div class="dv-related-img">
+                                        <img src="@r.Image" alt="" loading="lazy" onerror="this.onerror=null;this.src='@DigitalLibraryItem.PlaceholderImage(r.Id)'" />
+                                        <span class="dv-pill dv-pill-type">@r.TypeLabel</span>
+                                        <span class="dv-pill dv-pill-related">Related Video</span>
+                                    </div>
+                                    <span class="dv-related-title">@r.Title</span>
+                                    <span class="dv-related-desc">@r.Description</span>
+                                </a>
+                            }
+                        </div>
+                    </section>
+                }
+                break;
+
+            case "brochures":
+                if (item.RelatedBrochureItems.Count > 0)
+                {
+                    <section class="dv-card">
+                        <h2 class="dv-card-title">@(string.IsNullOrWhiteSpace(section.Title) ? "Related Brochure" : section.Title)</h2>
+                        <div class="dv-brochure-grid">
+                            @foreach (var b in item.RelatedBrochureItems.Take(Math.Max(1, item.RelatedBrochures.MaxItems)).Select(Api.ToItem))
+                            {
+                                <a class="dv-brochure-row" href="@($"DigitalLibrary/view/{b.Id}")">
+                                    <img src="@b.Image" alt="" loading="lazy" onerror="this.onerror=null;this.src='@DigitalLibraryItem.PlaceholderImage(b.Id)'" />
+                                    <div class="dv-brochure-text">
+                                        <div class="dv-brochure-pills"><span class="dv-pill dv-pill-brochure">Brochure</span><span class="dv-pill dv-pill-related">Related Brochure</span></div>
+                                        <span class="dv-related-title">@b.Title</span>
+                                        <span class="dv-related-desc">@b.Description</span>
+                                    </div>
+                                </a>
+                            }
+                        </div>
+                    </section>
+                }
+                break;
+
+            case "features":
+                if (!string.IsNullOrWhiteSpace(item.Features))
+                {
+                    <section class="dv-card">
+                        <h2 class="dv-card-title">@(string.IsNullOrWhiteSpace(section.Title) ? "Key Features & Benefits" : section.Title)</h2>
+                        <p class="dv-text">@item.Features</p>
+                    </section>
+                }
+                break;
+
+            case "usage":
+                if (!string.IsNullOrWhiteSpace(item.Usage))
+                {
+                    <section class="dv-card">
+                        <h2 class="dv-card-title">@(string.IsNullOrWhiteSpace(section.Title) ? "Usage & Application" : section.Title)</h2>
+                        <p class="dv-text">@item.Usage</p>
+                    </section>
+                }
+                break;
+
+            default:
+                // Custom layout rows carry a title only; the text sections from step 1 are
+                // rendered together after the layout (see ExtraCustomSections).
+                break;
+        }
+    };
+
+    private RenderFragment RenderVideo => __builder =>
+    {
+        var item = Detail!;
+        if (!string.IsNullOrWhiteSpace(item.VideoFilePath))
+        {
+            <div class="dv-player">
+                <video controls preload="metadata" poster="@CoverUrl" src="@Api.FileUrl(item.VideoFilePath)"></video>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(item.VideoUrl))
+        {
+            var embed = EmbedUrl(item.VideoUrl!);
+            if (embed is not null)
+            {
+                <div class="dv-player">
+                    <iframe src="@embed" title="@item.Title" allowfullscreen
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
+                </div>
+            }
+            else if (IsDirectVideo(item.VideoUrl!))
+            {
+                <div class="dv-player">
+                    <video controls preload="metadata" poster="@CoverUrl" src="@item.VideoUrl"></video>
+                </div>
+            }
+            else
+            {
+                <div class="dv-player dv-player-link">
+                    <a class="dv-doc-btn" href="@item.VideoUrl" target="_blank" rel="noopener noreferrer">
+                        <i class="bi bi-box-arrow-up-right"></i> Open the video
+                    </a>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="dv-player dv-player-link">
+                <p class="dv-text">No video has been uploaded or linked yet.</p>
+            </div>
+        }
+    };
+
+    private LibraryCustomSectionDto? MatchingCustom(string title)
+        => Detail?.AdditionalSections.FirstOrDefault(s => string.Equals(s.Title, title, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>YouTube / Vimeo watch links to their embed form; null for anything else.</summary>
+    private static string? EmbedUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return null;
+        var host = uri.Host.Replace("www.", "", StringComparison.OrdinalIgnoreCase).ToLowerInvariant();
+
+        if (host is "youtube.com" or "m.youtube.com")
+        {
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            var id = query["v"];
+            if (!string.IsNullOrWhiteSpace(id)) return $"https://www.youtube.com/embed/{Uri.EscapeDataString(id)}";
+            if (uri.AbsolutePath.StartsWith("/embed/", StringComparison.OrdinalIgnoreCase)) return url;
+        }
+        if (host == "youtu.be" && uri.AbsolutePath.Length > 1)
+            return $"https://www.youtube.com/embed/{Uri.EscapeDataString(uri.AbsolutePath.Trim('/'))}";
+        if (host is "vimeo.com" && uri.AbsolutePath.Trim('/') is { Length: > 0 } path && path.All(char.IsDigit))
+            return $"https://player.vimeo.com/video/{path}";
+
+        return null;
+    }
+
+    private static bool IsDirectVideo(string url)
+    {
+        var clean = url.Split('?')[0];
+        return clean.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)
+            || clean.EndsWith(".webm", StringComparison.OrdinalIgnoreCase)
+            || clean.EndsWith(".mov", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string DocumentLabel
+    {
+        get
+        {
+            var name = Detail?.DocumentName ?? "";
+            var dot = name.LastIndexOf('.');
+            var ext = dot > 0 ? name[(dot + 1)..].ToUpperInvariant() : "PDF";
+            var size = Detail?.DocumentSize;
+            if (size is not > 0) return ext;
+            return size.Value >= 1024 * 1024
+                ? $"{ext}, {(size.Value / 1024.0 / 1024.0):0.0} MB"
+                : $"{ext}, {Math.Max(1, size.Value / 1024)} KB";
+        }
+    }
+
+    private bool _downloading;
+
+    private async Task OpenDocument()
+    {
+        if (Detail?.DocumentPath is not { Length: > 0 } path || _downloading) return;
+        _downloading = true;
+        try
+        {
+            // Same route as every other authenticated file in the app: the client fetches the
+            // bytes with the bearer token and hands them to the host to open or save.
+            await Files.GetAsync(DigitalLibraryApi.FilePath(path), Detail.DocumentName ?? "brochure.pdf");
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"The brochure could not be opened: {ex.Message}");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
+    // ------------------------------------------------------------------- actions
+
+    private DigitalLibraryItem AsItem() => DigitalLibraryItem.FromDto(Detail!, Api.FileUrl);
+
+    private void Back() => Nav.NavigateTo($"/DigitalLibrary/content?type={DigitalLibraryItem.RouteOf(Kind)}");
+    private void Edit() => Nav.NavigateTo($"/DigitalLibrary/add/{DigitalLibraryItem.RouteOf(Kind)}?id={Id}");
+
+    private async Task Publish()
+    {
+        if (Detail is null) return;
+        if (await Api.SetStatusAsync(Detail.Id, LibraryContentStatus.Published) is null)
+        {
+            Toast.Error(Api.LastError ?? $"The {KindWord} could not be published.");
+            return;
+        }
+        Detail.Status = LibraryContentStatus.Published;
+        Toast.Success($"{KindWordCap} published.");
+    }
+
+    private async Task ConfirmUnpublish(DigitalLibraryItem item)
+    {
+        if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Draft) is null)
+        {
+            Toast.Error(Api.LastError ?? $"The {KindWord} could not be unpublished.");
+            return;
+        }
+        if (Detail is not null) Detail.Status = LibraryContentStatus.Draft;
+        _unpublishTarget = null;
+        Toast.Success($"{KindWordCap} moved to Drafts.");
+    }
+}

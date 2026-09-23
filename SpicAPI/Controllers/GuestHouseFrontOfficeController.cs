@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.Payments;
 using SpicAPI.Services;
 using SPIC.Core.Entities;
 using System.Data;
@@ -33,11 +35,18 @@ namespace SpicAPI.Controllers
 	public class GuestHouseFrontOfficeController : ControllerBase
 	{
 		private readonly AppDbContext _db;
+		private readonly GuestHouseBookingOptions _bookingOptions;
 
-		public GuestHouseFrontOfficeController(AppDbContext db)
+		public GuestHouseFrontOfficeController(AppDbContext db, IOptions<GuestHouseBookingOptions> bookingOptions)
 		{
 			_db = db;
+			_bookingOptions = bookingOptions.Value;
 		}
+
+		// A PendingPayment booking only holds its room for this long from its own CreatedAt -
+		// same rule, same configuration, as GuestHouseBookingController.GetCommittedRoomsByRoomAsync,
+		// so Front Office room occupancy never disagrees with the customer-facing availability check.
+		private DateTime PendingPaymentHoldCutoff => DateTime.Now.AddMinutes(-_bookingOptions.PendingPaymentHoldMinutes);
 
 		// GET /api/GuestHouseFrontOffice/rooms
 		// Returns every active guest house and its rooms with a dynamically computed
@@ -76,11 +85,16 @@ namespace SpicAPI.Controllers
 			var todayStart = DateTime.Today;
 			var todayEnd = todayStart.AddDays(1);
 
-			// Every inventory-holding booking (not Cancelled/Completed) overlapping today.
+			// Every inventory-holding booking overlapping today: Cancelled/Completed never hold
+			// inventory; Confirmed/CheckedIn always do; PendingPayment only within its configured
+			// hold window (PendingPaymentHoldCutoff) - matching GuestHouseBookingController's
+			// GetCommittedRoomsByRoomAsync exactly, so this view never disagrees with availability.
+			var pendingPaymentHoldCutoff = PendingPaymentHoldCutoff;
 			var activeBookings = await _db.GuestHouseBookings
 				.AsNoTracking()
 				.Where(b => b.BookingStatus != GuestHouseBookingStatus.Cancelled
 					&& b.BookingStatus != GuestHouseBookingStatus.Completed
+					&& (b.BookingStatus != GuestHouseBookingStatus.PendingPayment || b.CreatedAt >= pendingPaymentHoldCutoff)
 					&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
 					&& b.CheckInDate.Value.Date < todayEnd
 					&& b.CheckOutDate.Value.Date > todayStart)
@@ -848,6 +862,8 @@ namespace SpicAPI.Controllers
 				BillDate = DateTime.Now,
 				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
 				GuestName = guest?.GuestName,
+				CompanyName = guest?.CompanyName,
+				GstinNumber = guest?.GstinNumber,
 				Address = guest?.Address,
 				Email = guest?.Email,
 				PhoneNumber = guest?.PhoneNumber,
@@ -1026,6 +1042,8 @@ namespace SpicAPI.Controllers
 				BookingId = booking.Id,
 				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
 				GuestName = guest?.GuestName,
+				CompanyName = guest?.CompanyName,
+				GstinNumber = guest?.GstinNumber,
 				Address = guest?.Address,
 				Email = guest?.Email,
 				PhoneNumber = guest?.PhoneNumber,
@@ -1141,11 +1159,16 @@ namespace SpicAPI.Controllers
 
 			var numbers = EnumeratePhysicalRoomNumbers(room, room.AvailableQuantity);
 
+			var pendingPaymentHoldCutoff = PendingPaymentHoldCutoff;
 			var overlapQuery = _db.GuestHouseBookings
 				.AsNoTracking()
 				.Where(b => b.GuestHouseRoomId == roomId
 					&& b.BookingStatus != GuestHouseBookingStatus.Cancelled
 					&& b.BookingStatus != GuestHouseBookingStatus.Completed
+					// Same PendingPayment hold-window rule as the customer-facing availability
+					// check (GuestHouseBookingController.GetCommittedRoomsByRoomAsync) - an
+					// expired, unpaid hold stops reserving a physical room number here too.
+					&& (b.BookingStatus != GuestHouseBookingStatus.PendingPayment || b.CreatedAt >= pendingPaymentHoldCutoff)
 					&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
 					&& b.CheckInDate.Value.Date < checkOutDate.Date
 					&& b.CheckOutDate.Value.Date > checkInDate.Date);
@@ -1368,6 +1391,8 @@ namespace SpicAPI.Controllers
 		public int BookingId { get; set; }
 		public string BookingReference { get; set; } = "";
 		public string? GuestName { get; set; }
+		public string? CompanyName { get; set; }
+		public string? GstinNumber { get; set; }
 		public string? Address { get; set; }
 		public string? Email { get; set; }
 		public string? PhoneNumber { get; set; }

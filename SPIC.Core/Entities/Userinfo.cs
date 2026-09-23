@@ -60,7 +60,11 @@ namespace SPIC.Core.Entities
         dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, SDWADashboard, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
         Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration, SubDealerList , SchemeApproval,
-        SubDealerEmployeeMaster,SDWA,SDWAAdmin,GuestHouse,GuestHouseBooking,Rooms,RoomDetails,GuestDetails,Payment, MyBookings,BookingPreview,BookingDetails,FrontOffice,GenerateBill,BillList
+        SubDealerEmployeeMaster,SDWA,SDWAAdmin,GuestHouse,GuestHouseBooking,Rooms,RoomDetails,GuestDetails,Payment, MyBookings,BookingPreview,BookingDetails,FrontOffice,GenerateBill,BillList,LogisticsReport, DealerStateSummary,
+        // Appended at the END on purpose: ApplicationPage seed ids are enum-index based (see AppDbContext).
+        [PageModule("Digital Library")] DigitalLibrary,
+        [PageModule("SAS")] SampleCollection,
+        [PageModule("SAS")] ConsignmentHistory
 
     }
 }

@@ -1,0 +1,112 @@
+@page "/Alerts"
+@using SPIC.Core.Entities
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+@*
+    "Alerts" hub - a phone tab destination listing everything waiting for the signed-in
+    user, for every role including Dealer. Until push notifications ship with the app
+    store release this page is the inbox: it links to the queues, it does not read them.
+    Pure navigation: no API calls, no writes. Tiles are filtered through LoginState and
+    a section with no visible tile is not rendered.
+*@
+
+<div class="hub-page">
+
+    <PageHeader Title="Alerts"
+                Subtitle="Items waiting for your action"
+                ShowBack="false" />
+
+    <p class="hub-note">
+        Push notifications arrive with the app store release. Until then, everything waiting for you is listed here.
+    </p>
+
+    @{
+        var approvals = Visible(ApprovalTiles);
+        var bookings = Visible(BookingTiles);
+    }
+
+    @if (approvals.Count > 0)
+    {
+        <HubSection Title="Approvals waiting">
+            @foreach (var tile in approvals)
+            {
+                <HubTile @key="tile.Key" Icon="@tile.Icon" Label="@tile.Label" Hint="@tile.Hint" Href="@tile.Href" />
+            }
+        </HubSection>
+    }
+
+    @if (bookings.Count > 0)
+    {
+        <HubSection Title="Bookings and applications">
+            @foreach (var tile in bookings)
+            {
+                <HubTile @key="tile.Key" Icon="@tile.Icon" Label="@tile.Label" Hint="@tile.Hint" Href="@tile.Href" />
+            }
+        </HubSection>
+    }
+
+    @if (approvals.Count == 0 && bookings.Count == 0)
+    {
+        <EmptyState Icon="bi-bell"
+                    Title="Nothing waiting for you"
+                    Message="When an approval, booking or application needs you, it will show up here." />
+    }
+
+</div>
+
+@code {
+    private sealed record HubLink(
+        string Key,
+        string Label,
+        string Hint,
+        string Icon,
+        string Href,
+        Func<LoginState, bool> Rule);
+
+    private static readonly HubLink[] ApprovalTiles =
+    {
+        new("SchemeApproval", "Scheme Approval", "Approve or return dealer scheme requests",
+            "bi-clipboard-check", "/SchemeApproval",
+            s => s.UserRole != AppRole.Dealer && (s.CanAccess("SchemeApproval") || s.UserRole == AppRole.Director)),
+
+        new("SMMApprovals", "SMM Approvals", "State marketing manager sign-off queue",
+            "bi-check2-circle", "/SMMApprovals",
+            s => s.CanAccess("SMMApprovals")),
+
+        new("AVPApprovals", "AVP Approvals", "Requests escalated to the AVP",
+            "bi-patch-check", "/AVPApprovals",
+            s => s.CanAccess("AVPApprovals")),
+
+        new("RMDValidationQueue", "RMD Validation Queue", "Entries waiting for regional validation",
+            "bi-list-check", "/RMDValidationQueue",
+            s => s.CanAccess("RMDValidationQueue")),
+
+        new("MOSubmissionValidation", "MO Submission Validation", "Check submissions made by marketing officers",
+            "bi-check2-square", "/MOSubmissionValidation",
+            s => s.CanAccess("MOSubmissionValidation")),
+
+        new("DealerReviewList", "Dealer Application Review", "New dealership applications to review",
+            "bi-person-badge", "/DealerReviewList",
+            s => s.CanAccess("dealerreviewlist")),
+
+        new("CompanySales", "Pending Acknowledgement", "Acknowledge company sales entries",
+            "bi-receipt", "/CompanySales",
+            s => s.CanAccess("CompanySales")),
+    };
+
+    private static readonly HubLink[] BookingTiles =
+    {
+        new("MyBookings", "My Bookings", "Your upcoming and past guest house stays",
+            "bi-calendar2-check", "/MyBookings",
+            s => s.CanAccess("MyBookings")),
+
+        new("WelfareSchemes", "Welfare Schemes", "Schemes you can apply for and track",
+            "bi-heart-pulse", "/WelfareSchemes",
+            s => s.UserRole == AppRole.Dealer || s.CanAccess("WelfareSchemes")),
+    };
+
+    private List<HubLink> Visible(HubLink[] tiles) =>
+        LoginState.IsLoggedIn
+            ? tiles.Where(t => t.Rule(LoginState)).ToList()
+            : new List<HubLink>();
+}

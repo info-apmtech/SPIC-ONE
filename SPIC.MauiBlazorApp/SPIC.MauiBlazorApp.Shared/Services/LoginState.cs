@@ -15,6 +15,14 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         private string? _token;
         public DateTime Expiration { get; set; }
         public bool IsTokenExpired => Expiration != default && DateTime.UtcNow >= Expiration.ToUniversalTime();
+
+        /// <summary>Where a signed-in user lands: used after login and when a stored session is restored.</summary>
+        public string LandingPage => UserRole switch
+        {
+            AppRole.Dealer => "/SDWADashboard",
+            AppRole.SpecialAdmin => CanAccess("Logistics") ? "/Logistics" : "/Welcome",
+            _ => "/Dashboard"
+        };
         public event Action? OnChange;
 
         public string? Token

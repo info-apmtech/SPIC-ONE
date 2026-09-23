@@ -1,9 +1,9 @@
-﻿@page "/FinalReportCSRView"
+@page "/FinalReportCSRView"
 
 <div class="container-fluid py-4 px-0">
     <div class="frcsr-wrapper">
 
-        <h1 class="frcsr-title">Final Report - CSR Program Tracking</h1>
+        <PageHeader Title="Final Report - CSR Program Tracking" CssClass="frcsr-page-header" />
 
         <!-- KPI Cards -->
         <div class="frcsr-kpi-grid">
@@ -156,14 +156,14 @@
                         @foreach (var row in tableRows)
                         {
                             <tr>
-                                <td><input type="checkbox" /></td>
-                                <td>@row.Type</td>
-                                <td class="frcsr-cell-left">@row.Program</td>
-                                <td>@row.SubmittedDate</td>
-                                <td><span class="frcsr-pill @GetPill(row.Csr1Status)">@row.Csr1Status</span></td>
-                                <td><span class="frcsr-pill @GetPill(row.Csr2Status)">@row.Csr2Status</span></td>
-                                <td>@row.Sanction</td>
-                                <td>
+                                <td class="frcsr-cell-select" data-label=""><input type="checkbox" /></td>
+                                <td data-label="Program Type">@row.Type</td>
+                                <td class="frcsr-cell-left" data-label="Program Name">@row.Program</td>
+                                <td data-label="Submitted Date">@row.SubmittedDate</td>
+                                <td data-label="CSR - 1 Status"><span class="frcsr-pill @GetPill(row.Csr1Status)">@row.Csr1Status</span></td>
+                                <td data-label="CSR - 2 Status"><span class="frcsr-pill @GetPill(row.Csr2Status)">@row.Csr2Status</span></td>
+                                <td data-label="Sanction Number">@row.Sanction</td>
+                                <td data-label="Report Status">
                                     @if (row.ReportStatus == "Completed")
                                     {
                                         <span class="frcsr-pill frcsr-pill-green"><i class="bi bi-check-circle"></i> Completed</span>
@@ -173,11 +173,11 @@
                                         <span class="frcsr-pill frcsr-pill-amber">Pending</span>
                                     }
                                 </td>
-                                <td>@row.TotalExpenses</td>
-                                <td>@row.ApprovedBudget</td>
-                                <td>@row.RemainingBudget</td>
-                                <td>@row.ValidationDue</td>
-                                <td>
+                                <td data-label="Total Expenses">@row.TotalExpenses</td>
+                                <td data-label="Approved Budget">@row.ApprovedBudget</td>
+                                <td data-label="Remaining Budget">@row.RemainingBudget</td>
+                                <td data-label="Validation Due">@row.ValidationDue</td>
+                                <td data-label="Action">
                                     <div class="frcsr-row-actions">
                                         <button class="frcsr-icon-btn frcsr-action-view" @onclick="OpenViewPopup"><i class="bi bi-eye"></i></button>
                                         <button class="frcsr-icon-btn frcsr-action-delete"><i class="bi bi-trash"></i></button>
@@ -224,18 +224,14 @@
     </div>
 </div>
 
-@if (isViewPopupOpen)
-{
-    <div class="frcsr-overlay" @onclick="CloseViewPopup"></div>
-    <div class="frcsr-drawer">
-        <div class="frcsr-drawer-head">
-            <div>
-                <h2>CSR-1 Program Details</h2>
-                <p>Crop Protection Workshop</p>
-            </div>
-            <button class="frcsr-drawer-close" @onclick="CloseViewPopup">&times;</button>
-        </div>
-        <div class="frcsr-drawer-body">
+@* native: BottomSheet = bottom sheet on phone, right-side drawer on tablet/desktop.
+   The former .frcsr-overlay/.frcsr-drawer/.frcsr-drawer-head markup is replaced by the sheet's
+   own chrome; the body sections and footer buttons are unchanged. *@
+<BottomSheet IsOpen="isViewPopupOpen" IsOpenChanged="OnSheetOpenChanged"
+             Title="CSR-1 Program Details" Subtitle="Crop Protection Workshop"
+             Size="BottomSheet.SheetSize.Full" CssClass="frcsr-sheet">
+    <ChildContent>
+        <div class="frcsr-drawer-body frcsr-drawer-body--sheet">
             <div class="frcsr-drawer-section">
                 <h3 class="frcsr-drawer-section-title">Program Information</h3>
                 <div class="frcsr-drawer-row"><span>Program Type:</span><span>Training</span></div>
@@ -293,19 +289,22 @@
                 </div>
             </div>
         </div>
-        <div class="frcsr-drawer-foot">
-            <button class="frcsr-drawer-btn frcsr-drawer-btn-dark"><i class="bi bi-box-arrow-up-right"></i> Open CSR-2</button>
-            <button class="frcsr-drawer-btn frcsr-drawer-btn-green"><i class="bi bi-printer"></i> Print</button>
-            <button class="frcsr-drawer-btn frcsr-drawer-btn-blue"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button>
-        </div>
-    </div>
-}
+    </ChildContent>
+    <Footer>
+            <button type="button" class="frcsr-drawer-btn frcsr-drawer-btn-dark"><i class="bi bi-box-arrow-up-right"></i> Open CSR-2</button>
+            <button type="button" class="frcsr-drawer-btn frcsr-drawer-btn-green"><i class="bi bi-printer"></i> Print</button>
+            <button type="button" class="frcsr-drawer-btn frcsr-drawer-btn-blue"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button>
+    </Footer>
+</BottomSheet>
 
 @code {
     private bool isViewPopupOpen = false;
 
     private void OpenViewPopup() => isViewPopupOpen = true;
     private void CloseViewPopup() => isViewPopupOpen = false;
+
+    // Raised by the sheet (close button, backdrop, Escape, hardware/browser back, swipe).
+    private void OnSheetOpenChanged(bool open) => isViewPopupOpen = open;
 
     private record TableRow(string Type, string Program, string SubmittedDate, string Csr1Status, string Csr2Status, string Sanction, string ReportStatus, string TotalExpenses, string ApprovedBudget, string RemainingBudget, string ValidationDue);
 

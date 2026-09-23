@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject NavigationManager Nav
+@inject ISessionStore SessionStore
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
 @using System.Linq
@@ -17,6 +18,24 @@
         "Welcome"
     };
 
+    // Shell hub pages (phone tab bar / top bar destinations). Each hub only LINKS to pages the
+    // user can already open (every link is filtered by LoginState.CanAccess), so they are open to
+    // every signed-in user who has a designation.
+    // Product decision 2026-09-20: the Knowledge Community is usable by everyone, and Digital
+    // Library CONTENT is viewable by everyone; only adding/editing content (/DigitalLibrary/add/...)
+    // needs the DigitalLibrary page in the user's designation (the API enforces the same rule).
+    private static readonly HashSet<string> _shellHubs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Activities",
+        "Farmers",
+        "Alerts",
+        "Community"
+    };
+
+    // Generic identity rule: a dynamically registered page's ApplicationPage.Key
+    // must equal its URL's FIRST path segment (e.g. page "/TestReport" has Key
+    // "TestReport"). The same generic check used by every legacy page therefore
+    // applies with no per-page code, constant, or route mapping.
     private bool _restored;
 
     protected override async Task OnInitializedAsync()
@@ -24,11 +43,11 @@
         Nav.LocationChanged += OnLocationChanged;
         LoginState.OnChange += OnLoginStateChanged;
 
-        // Restore role access from sessionStorage BEFORE the first check,
+        // Restore role access from the session store BEFORE the first check,
         // so a hard navigation (URL typed into address bar) doesn't slip through.
         try
         {
-            var roleAccess = await JS.InvokeAsync<string?>("sessionStorage.getItem", "spic_role_access");
+            var roleAccess = await SessionStore.GetAsync(SessionKeys.RoleAccess);
             if (roleAccess != null)
             {
                 LoginState.SetAllowedPages(roleAccess);
@@ -46,7 +65,7 @@
     private void OnLoginStateChanged()
     {
         // Re-check the current URL whenever LoginState changes (e.g. after login,
-        // or after MainLayout restores AllowedPages from sessionStorage).
+        // or after MainLayout restores AllowedPages from the session store).
         if (_restored) Check(Nav.Uri);
     }
 
@@ -65,9 +84,9 @@
             .TrimEnd('/');
 
         // Match on the FIRST path segment only, so routes WITH parameters
-        var firstSegment = path
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault() ?? "";
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var firstSegment = segments.FirstOrDefault() ?? "";
+        var secondSegment = segments.Skip(1).FirstOrDefault() ?? "";
 
         // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
         // but must NEVER reach the SchemeApproval page.
@@ -121,6 +140,12 @@
         }
 
         if (_alwaysOpen.Contains(firstSegment)) return;
+        if (_shellHubs.Contains(firstSegment)) return;
+        if (firstSegment.Equals("DigitalLibrary", StringComparison.OrdinalIgnoreCase)
+            && !secondSegment.Equals("add", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
 
         // ApprovalDetail (and its legacy MOApproval alias) is a dedicated
         // full-page route for approval details shared by all roles;
@@ -132,7 +157,8 @@
         }
 
         // CanAccess understands "Page.Action" tokens (page reachable if any action
-        // is granted) as well as legacy bare page tokens.
+        // is granted) as well as legacy bare page tokens. Dynamically registered
+        // pages use the same generic check: Key == URL first segment.
         if (!LoginState.CanAccess(firstSegment) && !isDirectorSchemeApproval)
         {
             string fallback;

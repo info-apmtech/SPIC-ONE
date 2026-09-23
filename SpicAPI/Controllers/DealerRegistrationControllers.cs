@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using Spic.Infrastructure.Data;
+using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Collections.Generic;
 using static System.Net.WebRequestMethods;
@@ -399,6 +401,22 @@ namespace SpicAPI.Controllers
 				return Forbid();
 
 			if (id != dealer.Id) return BadRequest("ID mismatch");
+
+			// A dealer's State/HQ/Region are assigned once at registration from the
+			// original registering MO and must remain permanently fixed. Editors of any
+			// role (MO/RM/SM/AVP/Admin/other MOs) must never be able to overwrite them
+			// with their own State/HQ/Region while updating an existing dealer.
+			var persisted = await _db.DealerRegistrations
+				.AsNoTracking()
+				.FirstOrDefaultAsync(d => d.Id == id);
+			if (persisted == null)
+				return NotFound(new { message = "Dealer registration was not found." });
+
+			// A record that never had a location (older dealers, imports) may be filled in once;
+			// a stored value is never replaced.
+			if (persisted.StateId > 0) dealer.StateId = persisted.StateId;
+			if (persisted.Region > 0) dealer.Region = persisted.Region;
+			if (persisted.HQ > 0) dealer.HQ = persisted.HQ;
 
 			if (string.IsNullOrEmpty(dealer.UserTableId) && !string.IsNullOrEmpty(dealer.DealerCode))
 			{
@@ -1413,44 +1431,11 @@ namespace SpicAPI.Controllers
 			//  - it's a Terminated / Inactive-Terminated (restricted) flow, which
 			//    intentionally skips Primary Location / PinCode collection, OR
 			//  - it's a Department (entity type), which skips the full registration flow.
-			var query = _repo.GetAllWithInactive()
-				.Where(x => (x.PinCode != null && x.PinCode != "")
-					|| x.Status == DealerStatus.Terminated
-					|| (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated)
-					|| (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.NotTraceable)
-					|| x.DealerType == RegistrationDealerType.Department);
+			// The predicate and the role scope below are the single definition shared with
+			// the paged dashboard endpoints (see the "Dashboard server-side paging" region).
+			var query = _repo.GetAllWithInactive().Where(SubmittedDashboardPredicate);
 
-			var role = User.FindFirst(ClaimTypes.Role)?.Value;
-			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-			var regionClaim = User.FindFirst("spic:region_id")?.Value;
-			var stateClaim = User.FindFirst("spic:state_id")?.Value;
-			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
-
-			var isUnrestrictedRole =
-				role == "Admin" || role == "CorporateAdmin" ||
-				role == "Director";
-
-			if (role == "AVP")
-			{
-				var zoneStateIds = await GetZoneStateIdsAsync();
-				query = query.Where(x => zoneStateIds.Contains(x.StateId));
-			}
-			else if (SpecialAdminScope.IsSpecialAdmin(User))
-			{
-				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
-				query = query.Where(x => assignedStates.Contains(x.StateId));
-			}
-			else if (!isUnrestrictedRole)
-			{
-				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
-					query = query.Where(x => x.StateId == stateId);
-				else if ((role == "RM" || role == "RMD") && int.TryParse(regionClaim, out var regionId) && regionId > 0)
-					query = query.Where(x => x.Region == regionId);
-				else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId) && hqId > 0)
-					query = query.Where(x => x.HQ == hqId);
-				else
-					query = query.Where(x => x.CreatedBy == userId);
-			}
+			query = await ApplySubmittedRoleScopeAsync(query);
 
 			// Dashboard needs to distinguish the FIRST New Dealer final approval from an
 			// approved New Dealer that later completed the Existing Dealer maintenance cycle.
@@ -1559,6 +1544,556 @@ namespace SpicAPI.Controllers
 				.Select(s => s.Id)
 				.ToListAsync();
 		}
+
+		#region Dashboard server-side paging
+
+		// ─────────────────────────────────────────────────────────────────────────────
+		//  GET api/DealerRegistration/dashboard/page
+		//  GET api/DealerRegistration/dashboard/summary
+		//
+		//  Shared/Pages/Dashboard.razor used to download EVERY submitted registration
+		//  (≈1,200 rows for an admin) and then filter, sort, count and page in the
+		//  browser. These two endpoints do the same work in SQL and return one page of
+		//  rows plus the numbers behind the KPI tiles.
+		//
+		//  Both reuse the SAME "submitted" definition and the SAME role scope as
+		//  GET submitted (see SubmittedDashboardPredicate / ApplySubmittedRoleScopeAsync
+		//  below — GetSubmitted now calls them too), and then additionally apply the
+		//  location scope the page applied client-side in ApplyRoleFilter.
+		//
+		//  Nothing here changes GET submitted or GET dashboard-completion-counts: the
+		//  Dealer Review List, the Dealer State Summary page and the Dashboard's Excel
+		//  export still use the full list endpoint unchanged.
+		// ─────────────────────────────────────────────────────────────────────────────
+
+		/// <summary>
+		/// The Dashboard's "submitted" definition — the single copy, shared by
+		/// GET submitted and the two paged dashboard endpoints. See GetSubmitted's
+		/// comment for what each branch means.
+		/// </summary>
+		private static readonly Expression<Func<DealerRegistration, bool>> SubmittedDashboardPredicate =
+			x => (x.PinCode != null && x.PinCode != "")
+				|| x.Status == DealerStatus.Terminated
+				|| (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.Terminated)
+				|| (x.Status == DealerStatus.InActive && x.InactiveProposal == FutureBusinessProposal.NotTraceable)
+				|| x.DealerType == RegistrationDealerType.Department;
+
+		/// <summary>
+		/// "New Dealer" as the Dashboard sees it. The permanent DB flag is the primary
+		/// source; the remaining conditions are the same backward-compatible recovery the
+		/// GET submitted projection performs for historical records whose flag was cleared.
+		/// </summary>
+		private static readonly Expression<Func<DealerRegistration, bool>> IsNewDealerRegistrationExpr =
+			x => x.IsNewDealerRegistration
+				|| x.DealershipApplicationFeeBankId != null
+				|| x.DealershipApplicationFeeDDNumber != null
+				|| x.DealershipApplicationFeeDDDate != null
+				|| x.DealershipApplicationFeeAmount != null
+				|| x.DealershipApplicationFeeFilePath != null
+				|| x.SpicTradeDepositDDBankId != null
+				|| x.SpicTradeDepositDDNumber != null
+				|| x.SpicTradeDepositDDDate != null
+				|| x.SpicTradeDepositDDAmount != null
+				|| x.SpicTradeDepositFilePath != null
+				|| x.GflTradeDepositDDBankId != null
+				|| x.GflTradeDepositDDNumber != null
+				|| x.GflTradeDepositDDDate != null
+				|| x.GflTradeDepositDDAmount != null
+				|| x.GflTradeDepositFilePath != null;
+
+		/// <summary>Same rule, evaluated in memory for the rows of one page.</summary>
+		private static readonly Func<DealerRegistration, bool> IsNewDealerRegistrationFunc =
+			IsNewDealerRegistrationExpr.Compile();
+
+		private static Expression<Func<T, bool>> Not<T>(Expression<Func<T, bool>> expression) =>
+			Expression.Lambda<Func<T, bool>>(Expression.Not(expression.Body), expression.Parameters);
+
+		/// <summary>
+		/// The role scope GET submitted applies. Extracted verbatim so the paged
+		/// endpoints can never drift from it.
+		/// </summary>
+		private async Task<IQueryable<DealerRegistration>> ApplySubmittedRoleScopeAsync(IQueryable<DealerRegistration> query)
+		{
+			var role = User.FindFirst(ClaimTypes.Role)?.Value;
+			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			var regionClaim = User.FindFirst("spic:region_id")?.Value;
+			var stateClaim = User.FindFirst("spic:state_id")?.Value;
+			var hqClaim = User.FindFirst("spic:hq_id")?.Value;
+
+			var isUnrestrictedRole =
+				role == "Admin" || role == "CorporateAdmin" ||
+				role == "Director";
+
+			if (role == "AVP")
+			{
+				var zoneStateIds = await GetZoneStateIdsAsync();
+				query = query.Where(x => zoneStateIds.Contains(x.StateId));
+			}
+			else if (SpecialAdminScope.IsSpecialAdmin(User))
+			{
+				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+				query = query.Where(x => assignedStates.Contains(x.StateId));
+			}
+			else if (!isUnrestrictedRole)
+			{
+				if ((role == "SMD" || role == "SMM") && int.TryParse(stateClaim, out var stateId) && stateId > 0)
+					query = query.Where(x => x.StateId == stateId);
+				else if ((role == "RM" || role == "RMD") && int.TryParse(regionClaim, out var regionId) && regionId > 0)
+					query = query.Where(x => x.Region == regionId);
+				else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(hqClaim, out var hqId) && hqId > 0)
+					query = query.Where(x => x.HQ == hqId);
+				else
+					query = query.Where(x => x.CreatedBy == userId);
+			}
+
+			return query;
+		}
+
+		/// <summary>
+		/// The extra location narrowing the Dashboard page used to do in the browser
+		/// (ApplyRoleFilter). LoginState reads the very same JWT claims this reads:
+		///   IsSpecialAdminWithAssignments → spic:assigned_state_ids
+		///   IsStateRole  (SMD / SMM)      → spic:state_id   → DealerRegistration.StateId
+		///   IsRegionRole (RM / RMD)       → spic:region_id  → DealerRegistration.Region
+		///   IsHQRole     (MO/MDO/JMDO)    → spic:hq_id      → DealerRegistration.HQ
+		/// Every other role (Admin, CorporateAdmin, Director, AVP, …) is left unfiltered
+		/// here, exactly as the page left it. A missing claim reads as 0 on both sides.
+		/// </summary>
+		private IQueryable<DealerRegistration> ApplyDashboardUserScope(IQueryable<DealerRegistration> query)
+		{
+			var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+			if (SpecialAdminScope.IsSpecialAdmin(User))
+			{
+				var assignedStates = SpecialAdminScope.AssignedStateIds(User);
+				return assignedStates.Count > 0
+					? query.Where(x => assignedStates.Contains(x.StateId))
+					: query;
+			}
+
+			var stateId = ClaimInt("spic:state_id");
+			var regionId = ClaimInt("spic:region_id");
+			var hqId = ClaimInt("spic:hq_id");
+
+			if (role == "SMD" || role == "SMM")
+				return query.Where(x => x.StateId == stateId);
+			if (role == "RM" || role == "RMD")
+				return query.Where(x => x.Region == regionId);
+			if (role == "MO" || role == "MDO" || role == "JMDO")
+				return query.Where(x => x.HQ == hqId);
+
+			return query;
+		}
+
+		private int ClaimInt(string claimType) =>
+			int.TryParse(User.FindFirst(claimType)?.Value, out var value) ? value : 0;
+
+		/// <summary>
+		/// The page's search / company / dealer-type / status / region / approval-status
+		/// filters, translated to SQL. Mirrors Dashboard.razor's ApplyFilters exactly,
+		/// including the approval-status chain of GetApprovalStatus:
+		///   not submitted        → "Draft"
+		///   RM false             → "Rejected by RM"
+		///   SM false             → "Rejected by SMM"
+		///   AVP false            → "Rejected by AVP"
+		///   AVP true             → "Approved"
+		///   RM null              → "In RM"
+		///   RM true, SM null     → "In SMM"
+		///   RM true, SM true,
+		///   AVP null             → "In AVP"
+		/// </summary>
+		private static IQueryable<DealerRegistration> ApplyDashboardFilters(
+			IQueryable<DealerRegistration> query, DealerDashboardQuery request)
+		{
+			var search = request.Search?.Trim().ToLower();
+			if (!string.IsNullOrWhiteSpace(search))
+				query = query.Where(x =>
+					(x.DealerCode != null && x.DealerCode.ToLower().Contains(search)) ||
+					(x.FirmName != null && x.FirmName.ToLower().Contains(search)));
+
+			var company = request.Company?.Trim();
+			if (company == "SPIC") query = query.Where(x => x.InSpic);
+			else if (company == "GreenStar") query = query.Where(x => x.InGreenStar);
+			else if (company == "Both") query = query.Where(x => x.InSpic && x.InGreenStar);
+
+			var registrationType = request.RegistrationType?.Trim();
+			if (registrationType == "new") query = query.Where(IsNewDealerRegistrationExpr);
+			else if (registrationType == "existing") query = query.Where(Not(IsNewDealerRegistrationExpr));
+
+			if (request.Status >= 0)
+			{
+				var status = (DealerStatus)request.Status;
+				query = query.Where(x => x.Status == status);
+			}
+
+			if (request.RegionId > 0)
+			{
+				var regionId = request.RegionId;
+				query = query.Where(x => x.Region == regionId);
+			}
+
+			var workflowStatus = request.WorkflowStatus;
+			if (!string.IsNullOrWhiteSpace(workflowStatus) && workflowStatus != "All")
+			{
+				query = workflowStatus switch
+				{
+					"Pending Draft" => query.Where(x => x.IsSubmittedForReview != true),
+					"Pending RM" => query.Where(x => x.IsSubmittedForReview == true
+						&& x.RMApproved == null && x.SMApproved != false && x.AVPApproved == null),
+					"Pending SMM" => query.Where(x => x.IsSubmittedForReview == true
+						&& x.RMApproved == true && x.SMApproved == null && x.AVPApproved == null),
+					"Pending AVP" => query.Where(x => x.IsSubmittedForReview == true
+						&& x.RMApproved == true && x.SMApproved == true && x.AVPApproved == null),
+					"Approved" => query.Where(x => x.IsSubmittedForReview == true
+						&& x.RMApproved != false && x.SMApproved != false && x.AVPApproved == true),
+					"Rejected/Returned" => query.Where(x => x.IsSubmittedForReview == true
+						&& (x.RMApproved == false || x.SMApproved == false || x.AVPApproved == false)),
+					_ => query
+				};
+			}
+
+			return query;
+		}
+
+		/// <summary>
+		/// "Pending for me", as Dashboard.razor's IsPendingForMe computes it: the record's
+		/// current owner level (GetCurrentOwnerLevel) matched against the signed-in user's
+		/// role. The role tests are constants for the request, so this translates to a
+		/// plain CASE expression and can drive ORDER BY.
+		///   Draft / Rejected by RM → MO  → the creator, or an MO / MDO / JMDO user
+		///   In RM  / Rejected SMM  → RM  → RM / RMD
+		///   In SMM / Rejected AVP  → SMM → SMD / SMM
+		///   In AVP                 → AVP → Admin / CorporateAdmin / Director / AVP
+		/// </summary>
+		private Expression<Func<DealerRegistration, bool>> BuildPendingForMeExpression()
+		{
+			var role = User.FindFirst(ClaimTypes.Role)?.Value;
+			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+			var isCreatorRole = role == "MO" || role == "MDO" || role == "JMDO";
+			var isRegionRole = role == "RM" || role == "RMD";
+			var isStateRole = role == "SMD" || role == "SMM";
+			var isAdminRole = role == "Admin" || role == "CorporateAdmin" || role == "Director" || role == "AVP";
+
+			var hasUserId = !string.IsNullOrEmpty(userId);
+			var currentUserId = userId ?? string.Empty;
+
+			return x =>
+				x.IsSubmittedForReview != true
+					? isCreatorRole || (hasUserId && x.CreatedBy == currentUserId)
+					: x.AVPApproved == true
+						? false
+						: x.RMApproved == false
+							? isCreatorRole || (hasUserId && x.CreatedBy == currentUserId)
+							: x.SMApproved == false
+								? isRegionRole
+								: x.AVPApproved == false
+									? isStateRole
+									: x.RMApproved == null
+										? isRegionRole
+										: x.RMApproved == true && x.SMApproved == null
+											? isStateRole
+											: x.RMApproved == true && x.SMApproved == true && x.AVPApproved == null
+												? isAdminRole
+												: false;
+		}
+
+		/// <summary>The submitted, role-scoped, filtered set both endpoints work on.</summary>
+		private async Task<IQueryable<DealerRegistration>> BuildDashboardQueryAsync(DealerDashboardQuery request)
+		{
+			var query = _repo.GetAllWithInactive().Where(SubmittedDashboardPredicate);
+			query = await ApplySubmittedRoleScopeAsync(query);
+			query = ApplyDashboardUserScope(query);
+			return ApplyDashboardFilters(query, request);
+		}
+
+		/// <summary>
+		/// One page of dealer cards. Ordering is "pending for me" first, then the
+		/// requested sort — the same two-key ordering the page did client-side. Id is
+		/// added as a final tie-break so paging can never repeat or drop a row.
+		/// </summary>
+		[HttpGet("dashboard/page")]
+		public async Task<IActionResult> GetDashboardPage([FromQuery] DealerDashboardQuery request)
+		{
+			request ??= new DealerDashboardQuery();
+
+			var page = request.Page < 1 ? 1 : request.Page;
+			var pageSize = request.PageSize < 1 ? 30 : Math.Min(request.PageSize, 200);
+
+			var query = await BuildDashboardQueryAsync(request);
+
+			var total = await query.CountAsync();
+
+			var pendingForMe = BuildPendingForMeExpression();
+			var sort = (request.Sort ?? "newest").Trim().ToLowerInvariant();
+
+			IOrderedQueryable<DealerRegistration> ordered = sort switch
+			{
+				"oldest" => query.OrderByDescending(pendingForMe).ThenBy(x => x.UpdatedAt),
+				"name" => query.OrderByDescending(pendingForMe).ThenBy(x => x.FirmName),
+				_ => query.OrderByDescending(pendingForMe).ThenByDescending(x => x.UpdatedAt)
+			};
+
+			var rows = await ordered
+				.ThenBy(x => x.Id)
+				.Skip((page - 1) * pageSize)
+				.Take(pageSize)
+				.AsNoTracking()
+				.ToListAsync();
+
+			var items = await MapDashboardItemsAsync(rows);
+
+			return Ok(new DealerDashboardPageDto
+			{
+				Total = total,
+				Page = page,
+				PageSize = pageSize,
+				Items = items
+			});
+		}
+
+		/// <summary>
+		/// Every number the Dashboard's KPI tiles and status counters show, for the same
+		/// filter and scope as dashboard/page. One aggregate query; no rows travel.
+		/// </summary>
+		[HttpGet("dashboard/summary")]
+		public async Task<IActionResult> GetDashboardSummary([FromQuery] DealerDashboardQuery request)
+		{
+			request ??= new DealerDashboardQuery();
+
+			var query = await BuildDashboardQueryAsync(request);
+
+			// The tiles read their numbers off the filtered list, so these counters
+			// reproduce Dashboard.razor's CountDraft / CountInRM / CountInSMM /
+			// CountInAVP / CountApproved / CountRejected* one for one — including the
+			// fact that Approved and the Rejected counters look at the raw approval
+			// flags and ignore IsSubmittedForReview.
+			var aggregate = await query
+				.GroupBy(x => 1)
+				.Select(g => new
+				{
+					Total = g.Count(),
+					Draft = g.Count(x => x.Status != DealerStatus.Terminated && x.IsSubmittedForReview != true),
+					InRM = g.Count(x => x.IsSubmittedForReview == true
+						&& ((x.RMApproved == null && x.SMApproved != false && x.AVPApproved == null)
+							|| (x.RMApproved != false && x.SMApproved == false))),
+					InSMM = g.Count(x => x.IsSubmittedForReview == true
+						&& ((x.RMApproved == true && x.SMApproved == null && x.AVPApproved == null)
+							|| (x.RMApproved != false && x.SMApproved != false && x.AVPApproved == false))),
+					InAVP = g.Count(x => x.IsSubmittedForReview == true
+						&& x.RMApproved == true && x.SMApproved == true && x.AVPApproved == null),
+					Approved = g.Count(x => x.AVPApproved == true),
+					Rejected = g.Count(x => x.RMApproved == false || x.SMApproved == false || x.AVPApproved == false),
+					RejectedByRM = g.Count(x => x.RMApproved == false),
+					RejectedBySMM = g.Count(x => x.SMApproved == false),
+					RejectedByAVP = g.Count(x => x.AVPApproved == false),
+					StatusActive = g.Count(x => x.Status == DealerStatus.Active),
+					StatusInactive = g.Count(x => x.Status == DealerStatus.InActive),
+					StatusTerminated = g.Count(x => x.Status == DealerStatus.Terminated)
+				})
+				.FirstOrDefaultAsync();
+
+			var summary = new DealerDashboardSummaryDto();
+
+			if (aggregate != null)
+			{
+				summary.TotalRegistrations = aggregate.Total;
+				summary.Draft = aggregate.Draft;
+				summary.InRM = aggregate.InRM;
+				summary.InSMM = aggregate.InSMM;
+				summary.InAVP = aggregate.InAVP;
+				summary.Approved = aggregate.Approved;
+				summary.Rejected = aggregate.Rejected;
+				summary.RejectedByRM = aggregate.RejectedByRM;
+				summary.RejectedBySMM = aggregate.RejectedBySMM;
+				summary.RejectedByAVP = aggregate.RejectedByAVP;
+				summary.StatusActive = aggregate.StatusActive;
+				summary.StatusInactive = aggregate.StatusInactive;
+				summary.StatusTerminated = aggregate.StatusTerminated;
+			}
+
+			summary.ByStatus = new Dictionary<int, int>
+			{
+				[(int)DealerStatus.Active] = summary.StatusActive,
+				[(int)DealerStatus.InActive] = summary.StatusInactive,
+				[(int)DealerStatus.Terminated] = summary.StatusTerminated
+			};
+
+			return Ok(summary);
+		}
+
+		/// <summary>
+		/// Turns one page of entities into cards. The projection matches GET submitted
+		/// field for field; HasCompletedExistingMaintenance and StepCount are resolved
+		/// for the page's ids only, instead of for the whole table.
+		/// </summary>
+		private async Task<List<DealerDashboardItemDto>> MapDashboardItemsAsync(List<DealerRegistration> rows)
+		{
+			var ids = rows.Select(x => x.Id).ToList();
+
+			// Same evidence GET submitted uses, narrowed to this page.
+			var creditLimitDealerIds = _creditRepo == null || ids.Count == 0
+				? new List<int>()
+				: await _creditRepo.GetAll()
+					.Where(x => ids.Contains(x.DealerId))
+					.Select(x => x.DealerId)
+					.Distinct()
+					.ToListAsync();
+
+			var twiceFinalApprovedDealerIds = _historyRepo == null || ids.Count == 0
+				? new List<int>()
+				: await _historyRepo.GetAll()
+					.Where(h => ids.Contains(h.DealerId))
+					.Where(h =>
+						h.IsApproved == true &&
+						(h.Role == "AVP" ||
+						 h.Role == "Director" ||
+						 h.Role == "CorporateAdmin" ||
+						 h.Role == "Admin"))
+					.GroupBy(h => h.DealerId)
+					.Where(g => g.Count() >= 2)
+					.Select(g => g.Key)
+					.ToListAsync();
+
+			var stepCounts = await GetDashboardStepCountsAsync(ids);
+
+			return rows.Select(x => new DealerDashboardItemDto
+			{
+				Id = x.Id,
+				IsDealer = x.IsDealer,
+				InSpic = x.InSpic,
+				InGreenStar = x.InGreenStar,
+				IsNewDealerRegistration = IsNewDealerRegistrationFunc(x),
+				HasCompletedExistingMaintenance =
+					creditLimitDealerIds.Contains(x.Id) && twiceFinalApprovedDealerIds.Contains(x.Id),
+				DealerCode = x.DealerCode,
+				CreatedBy = x.CreatedBy,
+				SPICCode = x.SPICCode,
+				GreenStarCode = x.GreenStarCode ?? x.NCode ?? x.TnCode,
+				NCode = x.NCode,
+				TnCode = x.TnCode,
+				StateId = x.StateId,
+				Region = x.Region,
+				HQ = x.HQ,
+				Status = (int)x.Status,
+				InactiveProposal = x.InactiveProposal,
+				FirmName = x.FirmName,
+				BusinessEntityType = x.BusinessEntityType,
+				EntityType = (int?)x.EntityType,
+				WholeSaleFertilizerLicenseNumber = x.WholeSaleFertilizerLicenseNumber,
+				RetailFertilizerLicenseNumber = x.RetailFertilizerLicenseNumber,
+				PinCode = x.PinCode,
+				Latitude = x.Latitude,
+				Longitude = x.Longitude,
+				RMApproved = x.RMApproved,
+				SMApproved = x.SMApproved,
+				AVPApproved = x.AVPApproved,
+				IsSubmittedForReview = x.IsSubmittedForReview,
+				IsFinalAmountSettled = x.IsFinalAmountSettled,
+				UpdatedAt = x.UpdatedAt,
+				StepCount = (string.IsNullOrWhiteSpace(x.PinCode) ? 0 : 1)
+					+ (stepCounts.TryGetValue(x.Id, out var extra) ? extra : 0)
+			}).ToList();
+		}
+
+		/// <summary>
+		/// Registration step-completion counts for a handful of dealers. Same step
+		/// definition and same order as GET dashboard-completion-counts, minus step 1
+		/// (PinCode), which the caller adds from the row it already has. Restricting the
+		/// sub-table queries to the page's ids is what makes this cheap enough to fold
+		/// into the page response, so the Dashboard no longer needs the whole-table call.
+		/// </summary>
+		private async Task<Dictionary<int, int>> GetDashboardStepCountsAsync(List<int> dealerIds)
+		{
+			var counts = dealerIds.Distinct().ToDictionary(id => id, _ => 0);
+			if (counts.Count == 0) return counts;
+
+			void Bump(IEnumerable<int> ids)
+			{
+				foreach (var id in ids.Distinct())
+					if (counts.ContainsKey(id)) counts[id]++;
+			}
+
+			async Task<List<int>> DealerIdsOf<T>(IGenericRepository<T>? repo) where T : class =>
+				repo == null
+					? new List<int>()
+					: await repo.GetAll()
+						.Where(x => dealerIds.Contains(EF.Property<int>(x, "DealerId")))
+						.Select(x => EF.Property<int>(x, "DealerId"))
+						.Distinct()
+						.ToListAsync();
+
+			Bump(await DealerIdsOf(_expRepo));                                          // Step 2
+			Bump(await DealerIdsOf(_annualRepo));                                       // Step 3
+
+			var warehouseIds = await DealerIdsOf(_whRepo);                              // Step 4
+			var railIds = await DealerIdsOf(_railRepo);
+			var portIds = await DealerIdsOf(_portRepo);
+			Bump(warehouseIds.Concat(railIds).Concat(portIds));
+
+			Bump(await DealerIdsOf(_marketRepo));                                       // Step 5
+			Bump(await DealerIdsOf(_compRepo));                                         // Step 6
+			Bump(await DealerIdsOf(_ownerRepo));                                        // Step 7
+
+			if (_ownerRepo != null)                                                     // Step 8
+			{
+				var ownershipIds = await _ownerRepo.GetAll()
+					.Where(o => dealerIds.Contains(EF.Property<int>(o, "DealerId")))
+					.Select(o => o.Id)
+					.ToListAsync();
+
+				if (ownershipIds.Count > 0)
+				{
+					var ownerPartners = _partnerRepo != null
+						? await _partnerRepo.GetAll()
+							.Where(x => ownershipIds.Contains(EF.Property<int>(x, "OwnershipPartnerId")))
+							.Select(x => EF.Property<int>(x, "OwnershipPartnerId"))
+							.Distinct().ToListAsync()
+						: new List<int>();
+
+					var ownerOccupations = _occRepo != null
+						? await _occRepo.GetAll()
+							.Where(x => ownershipIds.Contains(EF.Property<int>(x, "OwnershipPartnerId")))
+							.Select(x => EF.Property<int>(x, "OwnershipPartnerId"))
+							.Distinct().ToListAsync()
+						: new List<int>();
+
+					var step8Owners = ownerPartners.Concat(ownerOccupations).Distinct().ToList();
+					if (step8Owners.Count > 0)
+					{
+						var step8Dealers = await _ownerRepo.GetAll()
+							.Where(o => step8Owners.Contains(o.Id))
+							.Select(o => EF.Property<int>(o, "DealerId"))
+							.Distinct().ToListAsync();
+						Bump(step8Dealers);
+					}
+				}
+			}
+
+			Bump(await DealerIdsOf(_salesPlanRepo));                                    // Step 9
+
+			var bankIds = await DealerIdsOf(_bankRepo);                                 // Step 10
+			var landIds = await DealerIdsOf(_landRepo);
+			var buildingIds = await DealerIdsOf(_buildingRepo);
+			Bump(bankIds.Concat(landIds).Concat(buildingIds));
+
+			Bump(await DealerIdsOf(_loanRepo));                                         // Step 11
+
+			if (_creditRepo != null)                                                    // Step 12
+			{
+				var creditIds = await _creditRepo.GetAll()
+					.Where(x => dealerIds.Contains(x.DealerId))
+					.Select(x => x.DealerId)
+					.Distinct().ToListAsync();
+				Bump(creditIds);
+			}
+
+			Bump(await DealerIdsOf(_docsRepo));                                         // Step 13
+
+			return counts;
+		}
+
+		#endregion
 	}
 	[Route("api/[controller]")]
 	public class DealerExperienceController(IGenericRepository<DealerExperience> repo) : GenericCrudController<DealerExperience>(repo);

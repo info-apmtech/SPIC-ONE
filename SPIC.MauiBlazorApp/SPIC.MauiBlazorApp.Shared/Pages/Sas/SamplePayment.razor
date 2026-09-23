@@ -1,0 +1,536 @@
+@page "/SampleCollection/payment/{Id:int}"
+@using System.Text.Json
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject NavigationManager Nav
+@inject SasApi Api
+@inject ToastService Toast
+@inject FileDownloadService Downloads
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@*
+    Payments (Figma frame 8): collection total + UPI QR + the transaction details and the
+    payment proof.
+
+    The QR encodes the standard UPI intent
+    upi://pay?pa={UpiId}&pn={MerchantName}&am={amount}&cu=INR&tn={code}
+    with the ids from api/Sas/lookups; it is drawn client side by SamplePayment.razor.js so
+    nothing has to reach a QR service (and it still works inside the MAUI app offline).
+
+    "Save Draft" keeps what has been typed in sessionStorage, so a refresh or a trip to the
+    summary does not lose it. Nothing is sent to the API until "Save Payment".
+*@
+
+<div class="sas-pay">
+
+    <PageHeader Title="Payments" Subtitle="Create a new payment for the selected collection"
+                BackHref="/SampleCollection">
+        <Actions>
+            @if (_collection is not null)
+            {
+                <span class="@SasLabels.PaymentTypePillClass(_collection.PaymentType)">
+                    @SasLabels.PaymentTypeName(_collection.PaymentType) Sample
+                </span>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <Skeleton Variant="card" Rows="2" />
+    }
+    else if (_collection is null)
+    {
+        <EmptyState Icon="bi-wifi-off" Title="This payment could not be opened"
+                    Message="The collection did not load. Please try again.">
+            <button type="button" class="sas-btn sas-btn-outline" @onclick="LoadAsync">Try again</button>
+            <a class="sas-btn sas-btn-outline" href="/SampleCollection">Back to the list</a>
+        </EmptyState>
+    }
+    else if (!CanPay)
+    {
+        <EmptyState Icon="bi-info-circle" Title="@BlockedTitle" Message="@BlockedMessage">
+            <a class="sas-btn sas-btn-primary" href="@($"/SampleCollection/view/{Id}")">Open the collection</a>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="sas-pay-grid">
+
+            <!-- ---------- collection information ---------- -->
+            <section class="sas-card">
+                <h2 class="sas-card-title">Collection Information</h2>
+
+                <p class="sas-total-label">Total Amount to Collect</p>
+                <div class="sas-total-row">
+                    <span class="sas-total-value">@SasLabels.Money(_collection.TotalAmount)</span>
+                    <span class="sas-pill sas-pill--green">@_collection.SampleCount Sample@(_collection.SampleCount == 1 ? "" : "s")</span>
+                </div>
+
+                <hr class="sas-rule" />
+
+                <button type="button" class="sas-link-btn" @onclick="OpenSummary">View Sample Summary</button>
+            </section>
+
+            <!-- ---------- scan & pay ---------- -->
+            <section class="sas-card">
+                <h2 class="sas-card-title">Scan &amp; Pay</h2>
+                <p class="sas-card-sub">Scan the QR Code Using any UPI App to make the Payment</p>
+
+                <div class="sas-qr-row">
+                    <div class="sas-qr-box">
+                        <canvas @ref="_qrCanvas" class="sas-qr" aria-label="UPI payment QR code" role="img"></canvas>
+                        @if (!_qrReady)
+                        {
+                            <p class="sas-qr-fallback">
+                                QR code unavailable on this device. Pay to <strong>@UpiId</strong>.
+                            </p>
+                        }
+                    </div>
+
+                    <div class="sas-qr-info">
+                        <p class="sas-qr-merchant">@MerchantName</p>
+                        <p class="sas-qr-line">UPI ID : @UpiId</p>
+                        <p class="sas-qr-line">Merchant Name: @MerchantName</p>
+                        <button type="button" class="sas-btn sas-btn-soft" @onclick="DownloadQrAsync" disabled="@(!_qrReady)">
+                            <i class="bi bi-download" aria-hidden="true"></i> Download QR Code
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ---------- payment information ---------- -->
+            <section class="sas-card">
+                <h2 class="sas-card-title">Payment Information</h2>
+
+                <div class="sas-grid2">
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-txn">Transaction ID <span class="sas-req">*</span></label>
+                        <input id="pay-txn" class="sas-input @(_errors.Contains("txn") ? "is-bad" : "")"
+                               placeholder="Enter Transaction ID"
+                               value="@_form.TransactionId" @oninput="OnTransactionIdInput" />
+                        @if (_errors.Contains("txn"))
+                        {
+                            <span class="sas-error">Enter the UPI transaction id.</span>
+                        }
+                    </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-bank">Bank / Gateway</label>
+                        <input id="pay-bank" class="sas-input" placeholder="Enter Bank / Gateway"
+                               value="@_form.BankGateway" @oninput="e => _form.BankGateway = e.Value?.ToString()" />
+                    </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-utr">Payment Gateway / UTR No.</label>
+                        <input id="pay-utr" class="sas-input" placeholder="Enter UTR Number"
+                               value="@_form.UtrNumber" @oninput="e => _form.UtrNumber = e.Value?.ToString()" />
+                    </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-by">Paid By <span class="sas-req">*</span></label>
+                        <input id="pay-by" class="sas-input @(_errors.Contains("paidby") ? "is-bad" : "")"
+                               list="pay-farmers" placeholder="Who paid?"
+                               value="@_form.PaidByName" @oninput="OnPaidByInput" />
+                        <datalist id="pay-farmers">
+                            @foreach (var name in FarmerNames)
+                            {
+                                <option value="@name"></option>
+                            }
+                        </datalist>
+                        @if (_errors.Contains("paidby"))
+                        {
+                            <span class="sas-error">Enter who made the payment.</span>
+                        }
+                    </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-contact">Contact Number</label>
+                        <input id="pay-contact" class="sas-input" type="tel" inputmode="numeric" maxlength="10"
+                               placeholder="Enter Contact Number"
+                               value="@_form.ContactNumber" @oninput="e => _form.ContactNumber = e.Value?.ToString()" />
+                    </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-email">Email (optional)</label>
+                        <input id="pay-email" class="sas-input" type="email" placeholder="name@example.com"
+                               value="@_form.Email" @oninput="e => _form.Email = e.Value?.ToString()" />
+                    </div>
+                </div>
+            </section>
+
+            <!-- ---------- proof ---------- -->
+            <section class="sas-card">
+                <h2 class="sas-card-title">Payment Proof</h2>
+                <p class="sas-card-sub">Attach the screenshot or receipt of the UPI payment</p>
+
+                <label class="sas-drop">
+                    <InputFile OnChange="OnProofSelected" accept="image/png,image/jpeg" class="sas-drop-input" />
+                    <i class="bi bi-file-earmark-arrow-up sas-drop-icon" aria-hidden="true"></i>
+                    <span class="sas-drop-title">Click to Upload or Drag and Drop</span>
+                    <span class="sas-drop-hint">PNG, JPG or JPEG (Max.5MB)</span>
+                </label>
+
+                @if (_proof is not null)
+                {
+                    <div class="sas-file">
+                        <i class="bi bi-image" aria-hidden="true"></i>
+                        <span class="sas-file-name">@_proof.Name</span>
+                        <span class="sas-file-size">@SizeText(_proof.Size)</span>
+                        <button type="button" class="sas-file-x" aria-label="Remove the attachment" @onclick="() => _proof = null">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(_existingProofPath))
+                {
+                    <div class="sas-file">
+                        <i class="bi bi-paperclip" aria-hidden="true"></i>
+                        <a class="sas-file-name" href="@Api.FileUrl(_existingProofPath)" target="_blank" rel="noopener">
+                            Proof already uploaded
+                        </a>
+                    </div>
+                }
+
+                @if (_errors.Contains("proof"))
+                {
+                    <span class="sas-error">Pick a PNG or JPG image of 5 MB or less.</span>
+                }
+            </section>
+        </div>
+
+        <p class="sas-note">
+            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+            After collecting payment you will be able to view the final summary and save the collection.
+        </p>
+
+        <ActionBar>
+            <Secondary>
+                <button type="button" class="sas-btn sas-btn-outline" @onclick="SaveDraftAsync" disabled="@_saving">
+                    <i class="bi bi-save" aria-hidden="true"></i> Save Draft
+                </button>
+            </Secondary>
+            <ChildContent>
+                <button type="button" class="sas-btn sas-btn-blue" @onclick="SavePaymentAsync" disabled="@_saving">
+                    <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                    @(_saving ? "Saving..." : "Save Payment")
+                </button>
+            </ChildContent>
+        </ActionBar>
+
+        <SampleSummaryDrawer @bind-IsOpen="_summaryOpen" Summary="_summary" ReadOnly="true" />
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private SampleCollectionDetailDto? _collection;
+    private SasLookupsDto? _lookups;
+    private bool _loading = true;
+
+    private readonly SasPaymentForm _form = new();
+    private readonly HashSet<string> _errors = new();
+    private IBrowserFile? _proof;
+    private string? _existingProofPath;
+    private bool _saving;
+
+    private bool _summaryOpen;
+    private SasSummary? _summary;
+
+    // ---- QR ----
+    private ElementReference _qrCanvas;
+    private IJSObjectReference? _qr;
+    private bool _qrReady;
+    private string _qrPayload = "";
+
+    private string SessionKey => $"sas_payment_draft_{Id}";
+
+    private string UpiId => string.IsNullOrWhiteSpace(_lookups?.UpiId) ? "not configured" : _lookups!.UpiId;
+
+    private string MerchantName => string.IsNullOrWhiteSpace(_lookups?.MerchantName)
+        ? "SPIC Sample Collection" : _lookups!.MerchantName;
+
+    /// <summary>The server decides; the page only reflects it (CanPay is on the detail DTO).</summary>
+    private bool CanPay =>
+        _collection is { PaymentType: SamplePaymentType.Paid } c &&
+        c.Status == SampleCollectionStatus.PendingPayment &&
+        c.CanPay;
+
+    private string BlockedTitle => _collection switch
+    {
+        { PaymentType: SamplePaymentType.Free } => "This is a free sample",
+        { Status: SampleCollectionStatus.Draft } => "This collection is still a draft",
+        { Status: SampleCollectionStatus.PendingApproval } => "Payment already recorded",
+        { Status: SampleCollectionStatus.PendingPayment } => "You cannot record this payment",
+        _ => "Payment is not open for this collection"
+    };
+
+    private string BlockedMessage => _collection switch
+    {
+        { PaymentType: SamplePaymentType.Free } => "Free collections go straight to the consignment; nothing is charged.",
+        { Status: SampleCollectionStatus.Draft } => "Submit the collection first, then record the payment.",
+        { Status: SampleCollectionStatus.PendingApproval } => "The payment is waiting for an administrator to approve it.",
+        { Status: SampleCollectionStatus.PendingPayment, CanPay: false } => "Your account cannot record payments for this collection.",
+        _ => "The collection has already moved past the payment step."
+    };
+
+    private List<string> FarmerNames =>
+        (_collection?.Items ?? new List<SampleItemDto>())
+            .Select(i => i.Farmer?.Name)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Select(n => n!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_collection?.Id == Id) return;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _qrReady = false;
+        StateHasChanged();
+
+        var lookupsTask = Api.GetLookupsAsync();
+        var detailTask = Api.GetCollectionAsync(Id);
+        await Task.WhenAll(lookupsTask, detailTask);
+
+        _lookups = lookupsTask.Result;
+        var (detail, notFound) = detailTask.Result;
+
+        _loading = false;
+
+        if (detail is null)
+        {
+            if (notFound) Toast.Error("That collection no longer exists.");
+            return;
+        }
+
+        _collection = detail;
+        _summary = SasSummary.FromDto(detail);
+        _existingProofPath = detail.Payment?.ProofPath;
+
+        if (detail.Payment is not null)
+        {
+            var saved = SasPaymentForm.FromDto(detail.Payment);
+            CopyInto(saved);
+        }
+
+        await RestoreDraftAsync();
+
+        _qrPayload = BuildUpiPayload();
+    }
+
+    private void CopyInto(SasPaymentForm source)
+    {
+        _form.TransactionId = source.TransactionId;
+        _form.BankGateway = source.BankGateway;
+        _form.UtrNumber = source.UtrNumber;
+        _form.PaidByName = source.PaidByName;
+        _form.ContactNumber = source.ContactNumber;
+        _form.Email = source.Email;
+    }
+
+    /// <summary>upi://pay?pa=..&amp;pn=..&amp;am=..&amp;cu=INR&amp;tn=..</summary>
+    private string BuildUpiPayload()
+    {
+        if (_collection is null || _lookups is null) return "";
+
+        return "upi://pay" +
+               $"?pa={Uri.EscapeDataString(_lookups.UpiId ?? "")}" +
+               $"&pn={Uri.EscapeDataString(MerchantName)}" +
+               $"&am={_collection.TotalAmount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}" +
+               "&cu=INR" +
+               $"&tn={Uri.EscapeDataString(_collection.Code)}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_loading || !CanPay || string.IsNullOrEmpty(_qrPayload) || _qrReady) return;
+
+        try
+        {
+            _qr ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/SPIC.MauiBlazorApp.Shared/Pages/Sas/SamplePayment.razor.js");
+
+            _qrReady = await _qr.InvokeAsync<bool>("draw", _qrCanvas, _qrPayload, 220);
+        }
+        catch (JSException)
+        {
+            _qrReady = false;          // the UPI id below the box is the fallback
+        }
+        catch (JSDisconnectedException)
+        {
+            return;
+        }
+        catch (InvalidOperationException)
+        {
+            return;                    // prerender: the next render draws it
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task DownloadQrAsync()
+    {
+        if (_qr is null || !_qrReady) return;
+
+        try
+        {
+            var base64 = await _qr.InvokeAsync<string?>("toPngBase64", _qrCanvas);
+            if (string.IsNullOrWhiteSpace(base64))
+            {
+                Toast.Error("We could not build the QR image.");
+                return;
+            }
+
+            await Downloads.SaveAsync($"UPI_{_collection?.Code ?? "payment"}.png", "image/png",
+                Convert.FromBase64String(base64!));
+        }
+        catch (Exception)
+        {
+            Toast.Error("We could not download the QR code on this device.");
+        }
+    }
+
+    private void OnTransactionIdInput(ChangeEventArgs e)
+    {
+        _form.TransactionId = e.Value?.ToString() ?? string.Empty;
+        _errors.Remove("txn");
+    }
+
+    private void OnPaidByInput(ChangeEventArgs e)
+    {
+        _form.PaidByName = e.Value?.ToString() ?? string.Empty;
+        _errors.Remove("paidby");
+    }
+
+    private void OpenSummary()
+    {
+        if (_summary is not null) _summaryOpen = true;
+    }
+
+    // ---------------------------------------------------------------- proof
+
+    private void OnProofSelected(InputFileChangeEventArgs e)
+    {
+        _errors.Remove("proof");
+
+        var file = e.FileCount > 0 ? e.File : null;
+        if (file is null) return;
+
+        var isImage = file.ContentType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) == true;
+
+        if (!isImage || file.Size > SasApi.MaxImageBytes)
+        {
+            _errors.Add("proof");
+            _proof = null;
+            return;
+        }
+
+        _proof = file;
+    }
+
+    private static string SizeText(long bytes) =>
+        bytes >= 1024 * 1024 ? $"{bytes / 1024d / 1024d:0.0} MB" : $"{Math.Max(1, bytes / 1024)} KB";
+
+    // ---------------------------------------------------------------- save
+
+    /// <summary>
+    /// "Save Draft" is client-side only: the payment endpoint immediately moves the collection
+    /// to PendingApproval, so a half-filled form has nowhere to live on the server.
+    /// </summary>
+    private async Task SaveDraftAsync()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(_form);
+            await JS.InvokeVoidAsync("sessionStorage.setItem", SessionKey, json);
+            Toast.Success("Payment details kept on this device. They will still be here if you come back.");
+        }
+        catch (Exception)
+        {
+            Toast.Warning("This device will not keep the draft. Please finish the payment in one go.");
+        }
+    }
+
+    private async Task RestoreDraftAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("sessionStorage.getItem", SessionKey);
+            if (string.IsNullOrWhiteSpace(json)) return;
+
+            var saved = JsonSerializer.Deserialize<SasPaymentForm>(json!);
+            if (saved is not null) CopyInto(saved);
+        }
+        catch (Exception)
+        {
+            // prerender, private mode or a stale value: the blank form is fine
+        }
+    }
+
+    private async Task ClearDraftAsync()
+    {
+        try { await JS.InvokeVoidAsync("sessionStorage.removeItem", SessionKey); }
+        catch (Exception) { /* nothing to clear */ }
+    }
+
+    private async Task SavePaymentAsync()
+    {
+        _errors.Clear();
+
+        if (string.IsNullOrWhiteSpace(_form.TransactionId)) _errors.Add("txn");
+        if (string.IsNullOrWhiteSpace(_form.PaidByName)) _errors.Add("paidby");
+
+        if (_errors.Count > 0)
+        {
+            Toast.Warning("Please fill in the Transaction ID and Paid By.");
+            return;
+        }
+
+        _saving = true;
+
+        var payment = await Api.SavePaymentAsync(Id, _form.ToDto());
+
+        if (payment is null)
+        {
+            _saving = false;
+            return;             // SasApi already explained why
+        }
+
+        if (_proof is not null)
+        {
+            // The payment itself is saved; a failed upload only costs the picture.
+            var file = await Api.UploadPaymentProofAsync(Id, _proof);
+            if (file is null) Toast.Warning("The payment was saved, but the proof could not be uploaded.");
+        }
+
+        _saving = false;
+        await ClearDraftAsync();
+
+        Toast.Success("Payment saved. It is now waiting for approval.");
+        Nav.NavigateTo($"/SampleCollection/view/{Id}");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_qr is not null) await _qr.DisposeAsync();
+        }
+        catch (Exception)
+        {
+            // the circuit may already be gone
+        }
+    }
+}

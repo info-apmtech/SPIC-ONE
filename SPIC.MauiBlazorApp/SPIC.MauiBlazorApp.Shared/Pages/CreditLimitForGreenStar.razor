@@ -9,6 +9,7 @@
 @inject NavigationManager Nav
 @inject LoadingService Loading
 @inject LoginState LoginState
+@inject ToastService Toast
 <style>
 	.table-wrapper {
 		width: 100%;
@@ -179,11 +180,11 @@
 	</style>
 @if (!_isCheckingGreenStar)
 {
-	<div class="container-fluid py-4 px-0">
+	<div class="container-fluid py-4 px-0 cl-page">
         <FormLoader />
 		@if (!IsNewDealerFlow)
 		{
-			<h5 class="fw-bold mb-4 reg-page-heading">Credit Limit — GreenStar</h5>
+			<PageHeader Title="Credit Limit — GreenStar" />
 		}
 		<fieldset style="border:0;padding:0;margin:0;">
 		@if (!string.IsNullOrEmpty(_message))
@@ -340,7 +341,7 @@
 			<div class="form-card">
 				<div class="d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
 					<div class="card-header-title mb-0">
-						<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/FiscalYear.svg" class="formicon" /> Greenstar Valuation
+						<img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/FiscalYear.svg" class="formicon" /> Greenstar Valuation
 					</div>
 				</div>
 				<div class="table-wrapper">
@@ -539,10 +540,10 @@
 									<td class="text-center">&lt;20</td>
 									<td class="text-center">&lt;30</td>
 									<td rowspan="2" class="align-middle">
-                                        <input type="number" class="form-control-custom w-100 @(_overduesError ? "val-input-error" : "")" step="0.01" value="@_greenstarValues[6]" @onchange="(e) => OnGreenstarValueChanged(6, e)" />
+                                        <input type="number" class="form-control-custom w-100 @(_overduesError ? "val-input-error" : "")" step="0.01" min="0" value="@(_greenstarValueEntered[6] ? _greenstarValues[6].ToString() : string.Empty)" @onchange="(e) => OnGreenstarValueChanged(6, e)" />
 									@if (_overduesError)
 									{
-										<div class="val-field-error">Monthly Average Net Overdues is required.</div>
+										<div class="val-field-error">Monthly Average Net Overdues is required and must be 0 or greater.</div>
 									}
 									</td>
 									<td rowspan="2" class="text-center align-middle">
@@ -1982,10 +1983,10 @@ if (dealerTenure > 0 && !_greenstarValueEntered[5])
 				return;
 			}
 
-			if (!_greenstarValueEntered[6])
+			if (!_greenstarValueEntered[6] || _greenstarValues[6] < 0)
 			{
 				_overduesError = true;
-				ShowMessage("Monthly Average Net Overdues during last year is required.", true);
+				ShowMessage("Monthly Average Net Overdues during last year is required and must be 0 or greater.", true);
 				return;
 			}
 
@@ -2286,7 +2287,7 @@ private decimal GreenstarMORecommendedCreditLimit =>
 			};
 			await Http.PostAsJsonAsync("api/CreditLimitHistory", history);
 		}
-		catch { }
+		catch { Toast.Error("Could not record the credit limit history."); }
 	}
 
 	private bool CanAdd => LoginState.Can("CreditLimitForGreenStar", "Entry");

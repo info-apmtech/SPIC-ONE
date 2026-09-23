@@ -4,13 +4,66 @@
 @using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject NavigationManager Navigation
+@inject ToastService Toast
+
+<style>
+    /* ── Responsive mobile/tablet tweaks (page-scoped, active only while this page is open) ── */
+    @@media (max-width: 900px) {
+        .table-controls { flex-wrap: wrap; row-gap: 8px; }
+        .table-controls .search-box { min-width: 100%; margin-left: 0; }
+    }
+    @@media (max-width: 768px) {
+        .pagination-container { flex-wrap: wrap; gap: 10px; justify-content: center; }
+        .tabs-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .tabs-container { flex-wrap: nowrap; }
+        .tab-item { white-space: nowrap; }
+    }
+    @@media (max-width: 640px) {
+        .section-header { flex-wrap: wrap; gap: 10px; }
+        .section-header .d-flex.gap-2 { flex-wrap: wrap; }
+        .section-header .d-flex.gap-2 .btn-outline-green { flex: 1 1 auto; }
+        .main-card { padding-left: 14px; padding-right: 14px; }
+        .d-flex.align-items-center.gap-3 { flex-wrap: wrap; }
+        .tab-hint { font-size: 0.75rem; }
+    }
+    @@media (max-width: 480px) {
+        .btn-outline-green { white-space: normal; }
+        .section-header .d-flex.gap-2 .btn-outline-green { width: 100%; }
+    }
+
+    /* native: phone */
+    .ghm-form-actions > .fb-actionbar { flex: 1 1 100%; }
+    @@media (min-width: 768px) {
+        .ghm-form-actions > .fb-actionbar { padding: 0; }
+    }
+    .ghm-card-actions .btn-outline-green,
+    .ghm-card-actions .btn-cancel { margin: 0; }
+    @@media (max-width: 767.98px) {
+        .btn-outline-green, .btn-save, .btn-cancel { min-height: 44px; }
+        .form-control-custom, .form-select-custom { min-height: 44px; font-size: 16px; } /* prevents iOS zoom on focus */
+        .ghm-form-actions { padding-top: 0 !important; margin-top: 8px !important; }
+        .ghm-form-actions .btn-save, .ghm-form-actions .btn-cancel { margin-top: 0 !important; }
+        .main-card { padding: 14px; }
+        .metric-card { padding: 14px; }
+        .status-pill { min-height: 32px; display: inline-flex; align-items: center; }
+
+        /* Delete / upload dialogs: bottom sheets */
+        .ghm-modal .modal-dialog { max-width: none; margin: 0; position: fixed; left: 0; right: 0; bottom: 0; align-items: flex-end; min-height: 0; }
+        .ghm-modal .modal-content { border-radius: 16px 16px 0 0; max-height: 92vh; }
+        .ghm-modal .modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .ghm-modal .modal-footer { padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); flex-wrap: wrap; gap: 8px; }
+        .ghm-modal .modal-footer .btn { flex: 1 1 0; margin: 0; min-height: 44px; }
+        .ghm-modal .btn-close { width: 44px; height: 44px; padding: 0; margin: -10px -10px -10px auto; background-size: 14px; }
+    }
+</style>
 
 <div class="container-fluid">
 
-	<h2 class="page-title">Guest House &amp; Room Master</h2>
+	<PageHeader Title="Guest House &amp; Room Master" Subtitle="Guest houses and the rooms mapped to them" ShowBack="false" />
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -65,12 +118,12 @@
 						<input type="text" class="form-control-custom w-100" placeholder="Enter Phone Number"
 							   @bind="_houseForm.PhoneNumber" />
 					</div>
-<div class="col-md-12 col-lg-8">
+<div class="col-md-12 col-lg-4">
 					<label class="form-label-custom">Description</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Short description"
 						   @bind="_houseForm.Description" />
 				</div>
-				<div class="col-md-12">
+				<div class="col-md-4">
 					<label class="form-label-custom">Guest House Image</label>
 					<div class="d-flex align-items-center gap-3">
 						@if (!string.IsNullOrEmpty(_houseImagePreview))
@@ -133,10 +186,10 @@
 					</div>
 				}
 
-				<div class="col-md-6 col-lg-1">
-					<label class="form-label-custom d-block">&nbsp;</label>
-					<div class="status-toggle-box @(CurrentFormIsActive ? "" : "status-toggle-inactive")">
-						<span>@(CurrentFormIsActive ? "Active" : "Inactive")</span>
+			<div class="col-md-6 col-lg-2">
+				<label class="form-label-custom d-block">&nbsp;</label>
+				<div class="status-toggle-box @(CurrentFormIsActive ? "" : "status-toggle-inactive")">
+					<span>@(CurrentFormIsActive ? "Active" : "Inactive")</span>
 						<label class="switch">
 							@if (ActiveTab == TabHouse)
 							{
@@ -152,11 +205,17 @@
 				</div>
 			</div>
 
-			<div class="d-flex justify-content-end pt-2 mt-4">
-				<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
-				<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
-					<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
-				</button>
+			<div class="d-flex justify-content-end pt-2 mt-4 ghm-form-actions">
+				<ActionBar AriaLabel="@(ActiveTab == TabHouse ? "Guest house form actions" : "Room form actions")">
+					<Secondary>
+						<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
+					</Secondary>
+					<ChildContent>
+						<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
+							<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+						</button>
+					</ChildContent>
+				</ActionBar>
 			</div>
 		</div>
 
@@ -249,6 +308,16 @@
 						</div>
 					</td>
 				</TableRow>
+
+				<CardActions Context="item">
+					<div class="ghm-card-actions d-flex gap-2 w-100 flex-wrap">
+						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
+							@(item.IsActive ? "Active" : "Inactive")
+						</span>
+						<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+						<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+					</div>
+				</CardActions>
 			</SpicDataTable>
 		}
 		else
@@ -305,6 +374,16 @@
 						</div>
 					</td>
 				</TableRow>
+
+				<CardActions Context="item">
+					<div class="ghm-card-actions d-flex gap-2 w-100 flex-wrap">
+						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
+							@(item.IsActive ? "Active" : "Inactive")
+						</span>
+						<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+						<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+					</div>
+				</CardActions>
 			</SpicDataTable>
 		}
 	}
@@ -314,7 +393,7 @@
 @if (_showDeleteConfirm)
 {
 	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+	<div class="modal fade show d-block ghm-modal" tabindex="-1" role="dialog">
 		<div class="modal-dialog modal-dialog-centered" role="document">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -339,7 +418,7 @@
 @if (_showUploadModal)
 {
 	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+	<div class="modal fade show d-block ghm-modal" tabindex="-1" role="dialog">
 		<div class="modal-dialog modal-dialog-centered" role="document">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -492,7 +571,7 @@
 
 		try
 		{
-			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			var token = await SessionStore.GetAsync(SessionKeys.Token);
 			if (!string.IsNullOrEmpty(token))
 			{
 				var uid = GetUserIdFromToken(token);
@@ -898,6 +977,7 @@
 	{
 		_message = message;
 		_isError = isError;
+		if (isError) Toast.Error(message); else Toast.Success(message);
 	}
 
 	private async Task OnBulkFileSelected(InputFileChangeEventArgs e)

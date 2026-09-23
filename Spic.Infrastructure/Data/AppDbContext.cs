@@ -6,6 +6,7 @@ using SPIC.Core.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using static SPIC.Core.Entities.EmployeeRegistration;
@@ -74,12 +75,276 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(a => new { a.GuestHouseRoomId, a.RoomNumber });
             });
 
+        // =====================================================================
+        //  Permission System Phase 1 - page catalog tables (ADDITIVE ONLY).
+        //
+        //  These two tables are a normalized compatibility mirror of the existing
+        //  PagePermission enum + Designation.RoleAccess. Nothing at runtime reads
+        //  them yet - login, LoginState, NavMenu, PageGuard, Designation.razor
+        //  and the server-side SDWA checks all continue to use RoleAccess exactly
+        //  as before. They exist only so a future Phase 2+ can become database
+        //  driven without a destructive rewrite.
+        // =====================================================================
+
+        builder.Entity<ApplicationPage>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.Key).IsRequired();
+            entity.HasIndex(p => p.Key).IsUnique();
+        });
+
+        builder.Entity<DesignationPermission>(entity =>
+        {
+            entity.HasKey(dp => new { dp.DesignationId, dp.PageId });
+
+            entity.HasOne(dp => dp.Designation)
+                .WithMany()
+                .HasForeignKey(dp => dp.DesignationId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(dp => dp.Page)
+                .WithMany()
+                .HasForeignKey(dp => dp.PageId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(dp => dp.PageId);
+        });
+
+        // Seed the catalog from the existing PagePermission enum + its
+        // PageModuleAttribute metadata, preserving every exact existing key and
+        // the existing display/grouping behavior. Future enum changes surface
+        // as model diffs in later EF migrations.
+        builder.Entity<ApplicationPage>().HasData(
+            Enum.GetNames(typeof(PagePermission))
+                .Select((key, index) => new ApplicationPage
+                {
+                    Id = index + 1,
+                    Key = key,
+                    Name = PageDisplayName(key),
+                    Module = PageModuleName(key),
+                    SortOrder = index,
+                    HasActions = true,
+                    IsActive = true,
+                    CreatedBy = "System",
+                    CreatedAt = staticDate,
+                    UpdatedBy = "System",
+                    UpdatedAt = staticDate
+                })
+                .ToArray());
+
+        // ---------------------------------------------------------------- Digital Library
+        builder.Entity<LibraryContent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Kind, x.Status });
+            entity.HasIndex(x => x.PublishedAt);
+        });
+
+        builder.Entity<LibraryConversation>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.UpdatedAt });
+            entity.HasMany(x => x.Messages)
+                .WithOne(m => m.Conversation)
+                .HasForeignKey(m => m.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<LibraryMessage>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.ConversationId);
+        });
+
+        // ---------------------------------------------------------------- SAS sample collection
+        builder.Entity<SasFarmer>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Mobile);
+            entity.HasIndex(x => x.Name);
+            entity.HasIndex(x => x.UserId);
+        });
+
+        builder.Entity<SampleCollection>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.CollectedByUserId);
+            entity.HasIndex(x => x.CollectionDate);
+            entity.Property(x => x.TotalAmount).HasColumnType("numeric(12,2)");
+            entity.HasOne(x => x.Consignment)
+                .WithMany(c => c.Collections)
+                .HasForeignKey(x => x.ConsignmentId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(x => x.Items)
+                .WithOne(i => i.Collection)
+                .HasForeignKey(i => i.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Payments)
+                .WithOne(p => p.Collection)
+                .HasForeignKey(p => p.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SampleItem>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CollectionId);
+            entity.HasIndex(x => x.FarmerId);
+            entity.Property(x => x.Amount).HasColumnType("numeric(12,2)");
+            entity.HasOne(x => x.Farmer)
+                .WithMany()
+                .HasForeignKey(x => x.FarmerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(x => x.Results)
+                .WithOne(r => r.SampleItem)
+                .HasForeignKey(r => r.SampleItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SamplePayment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CollectionId);
+            entity.HasIndex(x => x.Status);
+            entity.Property(x => x.Amount).HasColumnType("numeric(12,2)");
+        });
+
+        builder.Entity<SampleConsignment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.DispatchedAt);
+            entity.Property(x => x.PackageWeightKg).HasColumnType("numeric(8,2)");
+            entity.HasMany(x => x.Photos)
+                .WithOne(p => p.Consignment)
+                .HasForeignKey(p => p.ConsignmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ConsignmentPhoto>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.ConsignmentId);
+        });
+
+        builder.Entity<SasStatusEvent>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CollectionId);
+            entity.HasIndex(x => x.ConsignmentId);
+        });
+
+        builder.Entity<SampleLabResult>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.SampleItemId);
+        });
+
+        builder.Entity<SasSampleCharge>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.SampleType, x.Category }).IsUnique();
+            entity.Property(x => x.AmountPerSample).HasColumnType("numeric(12,2)");
+            entity.HasData(
+                new SasSampleCharge { Id = 1, SampleType = SampleType.Soil, Category = SamplePaidCategory.Farmer, AmountPerSample = 100m, NoOfTests = 1, IsActive = true },
+                new SasSampleCharge { Id = 2, SampleType = SampleType.Water, Category = SamplePaidCategory.Farmer, AmountPerSample = 100m, NoOfTests = 1, IsActive = true },
+                new SasSampleCharge { Id = 3, SampleType = SampleType.SoilAndWater, Category = SamplePaidCategory.Farmer, AmountPerSample = 150m, NoOfTests = 2, IsActive = true },
+                new SasSampleCharge { Id = 4, SampleType = SampleType.Soil, Category = SamplePaidCategory.Ngo, AmountPerSample = 150m, NoOfTests = 1, IsActive = true },
+                new SasSampleCharge { Id = 5, SampleType = SampleType.Water, Category = SamplePaidCategory.Ngo, AmountPerSample = 150m, NoOfTests = 1, IsActive = true },
+                new SasSampleCharge { Id = 6, SampleType = SampleType.SoilAndWater, Category = SamplePaidCategory.Ngo, AmountPerSample = 200m, NoOfTests = 2, IsActive = true });
+        });
+
+        builder.Entity<SasCourier>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasData(
+                new SasCourier { Id = 1, Name = "Professional Courier", TrackingUrlTemplate = "https://www.tpcindia.com/Tracking2014.aspx?id={0}", IsActive = true },
+                new SasCourier { Id = 2, Name = "Blue Dart Express", TrackingUrlTemplate = "https://www.bluedart.com/tracking?awb={0}", IsActive = true },
+                new SasCourier { Id = 3, Name = "DTDC", TrackingUrlTemplate = "https://www.dtdc.in/tracking.asp?awb={0}", IsActive = true },
+                new SasCourier { Id = 4, Name = "India Post", TrackingUrlTemplate = "https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx", IsActive = true });
+        });
+
+        // ---------------------------------------------------------------- Knowledge Community
+        builder.Entity<CommunityPost>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.CreatedAt);
+            entity.HasIndex(x => x.LastActivityAt);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.AuthorUserId);
+            entity.HasIndex(x => x.Product);
+            entity.HasMany(x => x.Replies)
+                .WithOne(r => r.Post)
+                .HasForeignKey(r => r.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Attachments)
+                .WithOne(a => a.Post)
+                .HasForeignKey(a => a.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<CommunityPostReply>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PostId, x.CreatedAt });
+            entity.HasIndex(x => x.ParentReplyId);
+        });
+
+        builder.Entity<CommunityPostAttachment>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.PostId);
+            entity.HasIndex(x => x.ReplyId);
+        });
+
+        builder.Entity<CommunityReaction>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.TargetType, x.TargetId, x.Kind }).IsUnique();
+            entity.HasIndex(x => new { x.TargetType, x.TargetId, x.Kind });
+        });
+
+        builder.Entity<CommunityProductMember>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.ProductName }).IsUnique();
+        });
+
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
         }
 
+        // Same prettification the existing Designation UI uses (Designation.razor
+        // DisplayFor): "AnnualSales" -> "Annual Sales". Lower-case keys such as
+        // "dealerreviewlist" are left as-is, matching that UI exactly.
+        private static string PageDisplayName(string key)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < key.Length; i++)
+            {
+                if (i > 0 && char.IsUpper(key[i]) && !char.IsUpper(key[i - 1]))
+                    sb.Append(' ');
+                sb.Append(key[i]);
+            }
+            return sb.ToString();
+        }
+
+        // Module grouping from PageModuleAttribute (null = standalone page).
+        private static string? PageModuleName(string key)
+        {
+            var field = typeof(PagePermission).GetField(key);
+            return field?.GetCustomAttribute<PageModuleAttribute>()?.Module;
+        }
+
         // User related
         public DbSet<Designation> Designations { get; set; }
+
+        // Permission System Phase 1 (additive - not read by any runtime flow yet)
+        public DbSet<ApplicationPage> Pages { get; set; }
+        public DbSet<DesignationPermission> DesignationPermissions { get; set; }
 
         // Location
         public DbSet<Zone> Zones { get; set; }
@@ -184,8 +449,36 @@ namespace Spic.Infrastructure.Data
 		public DbSet<GuestHouseBillLineItem> GuestHouseBillLineItems { get; set; }
 		public DbSet<GuestHouseRoomAllocation> GuestHouseRoomAllocations { get; set; }
 
+		//// SDWA Company Details Master
+		public DbSet<SdwaCompany> SdwaCompanies { get; set; }
+		public DbSet<SdwaCompanyGuestHouse> SdwaCompanyGuestHouses { get; set; }
+
 		//// Contact Us
 		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }
+
+		//// Digital Library
+		public DbSet<LibraryContent> LibraryContents { get; set; }
+		public DbSet<LibraryConversation> LibraryConversations { get; set; }
+		public DbSet<LibraryMessage> LibraryMessages { get; set; }
+
+		//// SAS: sample collection
+		public DbSet<SasFarmer> SasFarmers { get; set; }
+		public DbSet<SampleCollection> SampleCollections { get; set; }
+		public DbSet<SampleItem> SampleItems { get; set; }
+		public DbSet<SamplePayment> SamplePayments { get; set; }
+		public DbSet<SampleConsignment> SampleConsignments { get; set; }
+		public DbSet<ConsignmentPhoto> ConsignmentPhotos { get; set; }
+		public DbSet<SasStatusEvent> SasStatusEvents { get; set; }
+		public DbSet<SampleLabResult> SampleLabResults { get; set; }
+		public DbSet<SasSampleCharge> SasSampleCharges { get; set; }
+		public DbSet<SasCourier> SasCouriers { get; set; }
+
+		//// Knowledge Community
+		public DbSet<CommunityPost> CommunityPosts { get; set; }
+		public DbSet<CommunityPostReply> CommunityPostReplies { get; set; }
+		public DbSet<CommunityPostAttachment> CommunityPostAttachments { get; set; }
+		public DbSet<CommunityReaction> CommunityReactions { get; set; }
+		public DbSet<CommunityProductMember> CommunityProductMembers { get; set; }
 
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
