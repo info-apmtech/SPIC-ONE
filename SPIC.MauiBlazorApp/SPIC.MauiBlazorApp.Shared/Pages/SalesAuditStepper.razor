@@ -1,9 +1,11 @@
 @inject NavigationManager Nav
 
-@* Five-step progress bar shared by the Sales Audit flow pages (Program -> Tracking).
-   Completed steps show a tick and link back to their page. *@
-<div class="sas-stepper">
-    @foreach (var step in Steps)
+@* Five-step progress bar shared by the Sales Audit flow pages.
+   Planning phase: Program -> Sales Plan -> Dealers -> Plan Review -> Tracking; completed steps
+   link back to their page. Tracking phase (TrackingPhase="true"): Program -> Sales Plan ->
+   Dealers -> Tracking -> Period-End Review. *@
+<div class="sas-stepper @(TrackingPhase ? "sas-tracking" : "")">
+    @foreach (var step in ActiveSteps)
     {
         var state = step.Number < CurrentStep ? "done" : step.Number == CurrentStep ? "active" : "pending";
 
@@ -32,9 +34,11 @@
             </div>
         </div>
 
-        @if (step.Number < Steps.Count)
+        @if (step.Number < ActiveSteps.Count)
         {
-            <span class="sas-step-line @(step.Number < CurrentStep ? "sas-line-done" : "")"></span>
+            @* Tracking phase: only lines between two completed steps are solid (the Figma draws Dealers -> Tracking dashed). *@
+            var lineDone = TrackingPhase ? step.Number + 1 < CurrentStep : step.Number < CurrentStep;
+            <span class="sas-step-line @(lineDone ? "sas-line-done" : "")"></span>
         }
     }
 </div>
@@ -45,13 +49,28 @@
 
     private record StepInfo(int Number, string Label, string? Href);
 
-    private static readonly List<StepInfo> Steps = new()
+    /// <summary>Show the post-confirmation steps (Tracking, Period-End Review).</summary>
+    [Parameter] public bool TrackingPhase { get; set; }
+
+    private List<StepInfo> ActiveSteps => TrackingPhase ? TrackingSteps : PlanningSteps;
+
+    // After the plan is confirmed the planning steps are locked, so they carry no link.
+    private static readonly List<StepInfo> TrackingSteps = new()
+    {
+        new(1, "Program", null),
+        new(2, "Sales Plan", null),
+        new(3, "Dealers", null),
+        new(4, "Tracking", "/SalesTracking"),
+        new(5, "Period - End Review", "/PeriodEndReview"),
+    };
+
+    private static readonly List<StepInfo> PlanningSteps = new()
     {
         new(1, "Program", "/AuditOverview"),
         new(2, "Sales Plan", "/SalesPlan"),
         new(3, "Dealers", "/DealerMapping"),
         new(4, "Plan Review", "/PlanReview"),
-        new(5, "Tracking", null),
+        new(5, "Tracking", "/SalesTracking"),
     };
 
     private void GoTo(StepInfo step, string state)
