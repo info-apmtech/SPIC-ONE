@@ -482,5 +482,10 @@ namespace Spic.Infrastructure.Data
 
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
-	}
+
+        //Budget
+        public DbSet<ProgramType> ProgramTypes { get; set; }
+        public DbSet<ProgramMaster> ProgramMasters { get; set; }
+        public DbSet<BudgetProgram> BudgetPrograms { get; set; }
+    }
 }
