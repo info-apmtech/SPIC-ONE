@@ -1,0 +1,62 @@
+@inject NavigationManager Nav
+
+@* Five-step progress bar shared by the Sales Audit flow pages (Program -> Tracking).
+   Completed steps show a tick and link back to their page. *@
+<div class="sas-stepper">
+    @foreach (var step in Steps)
+    {
+        var state = step.Number < CurrentStep ? "done" : step.Number == CurrentStep ? "active" : "pending";
+
+        <div class="sas-step sas-step-@state @(state == "done" && step.Href is not null ? "sas-step-link" : "")"
+             @onclick="() => GoTo(step, state)">
+            <span class="sas-step-circle">
+                @if (state == "done")
+                {
+                    <SalesAuditIcon Name="check-circle" Size="26" StrokeWidth="2" />
+                }
+                else
+                {
+                    @step.Number.ToString("00")
+                }
+            </span>
+            <div class="sas-step-text">
+                <span class="sas-step-label">@step.Label</span>
+                @if (state == "done")
+                {
+                    <span class="sas-step-sub">Completed</span>
+                }
+                else if (state == "active")
+                {
+                    <span class="sas-step-sub">Current</span>
+                }
+            </div>
+        </div>
+
+        @if (step.Number < Steps.Count)
+        {
+            <span class="sas-step-line @(step.Number < CurrentStep ? "sas-line-done" : "")"></span>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>1-based number of the step being shown.</summary>
+    [Parameter] public int CurrentStep { get; set; } = 1;
+
+    private record StepInfo(int Number, string Label, string? Href);
+
+    private static readonly List<StepInfo> Steps = new()
+    {
+        new(1, "Program", "/AuditOverview"),
+        new(2, "Sales Plan", "/SalesPlan"),
+        new(3, "Dealers", "/DealerMapping"),
+        new(4, "Plan Review", "/PlanReview"),
+        new(5, "Tracking", null),
+    };
+
+    private void GoTo(StepInfo step, string state)
+    {
+        if (state == "done" && step.Href is not null)
+            Nav.NavigateTo(step.Href);
+    }
+}

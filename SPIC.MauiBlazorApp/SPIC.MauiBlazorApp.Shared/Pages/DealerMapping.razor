@@ -1,0 +1,307 @@
+@page "/DealerMapping"
+@inject NavigationManager Nav
+
+<PageTitle>Dealer Mapping · SPIC ONE</PageTitle>
+<ScrollToTop />
+
+<div class="container-fluid py-4 px-0">
+    <div class="dm-wrapper">
+
+        <!-- Header -->
+        <div class="dm-header">
+            <h1>Dealer Mapping <span class="dm-header-sub">(Upload &amp; Map Commitment)</span></h1>
+            <p>Upload dealer list and map planned commitment (₹) for this program.</p>
+        </div>
+
+        <SalesAuditStepper CurrentStep="3" />
+
+        <!-- Upload Dealer List -->
+        <div class="dm-card">
+            <h3 class="dm-card-title">Upload Dealer List</h3>
+
+            <div class="dm-dropzone">
+                <SalesAuditIcon Name="cloud-upload" Size="30" StrokeWidth="1.6" CssClass="dm-drop-icon" />
+                <p class="dm-drop-text">Drop your Excel file here, or</p>
+                <span class="dm-upload-btn">
+                    <SalesAuditIcon Name="folder-open" Size="15" />
+                    Upload File
+                </span>
+                <p class="dm-drop-hint">.xlsx or .xls format, max 5MB</p>
+
+                @* Invisible file input covering the whole zone: handles both click and drag & drop. *@
+                <InputFile OnChange="OnFileSelected" accept=".xlsx,.xls" class="dm-file-input" title="Upload dealer list" />
+            </div>
+
+            @if (UploadError is not null)
+            {
+                <div class="dm-alert">
+                    <span><SalesAuditIcon Name="alert-circle" Size="15" /> @UploadError</span>
+                </div>
+            }
+
+            @if (UploadedFile is not null)
+            {
+                <div class="dm-file-row">
+                    <div class="dm-file-info">
+                        <SalesAuditIcon Name="file-spreadsheet" Size="26" StrokeWidth="1.5" CssClass="dm-file-icon" />
+                        <div>
+                            <span class="dm-file-name">@UploadedFile.Name</span>
+                            <span class="dm-file-meta">@FormatSize(UploadedFile.Size) . Uploaded on @UploadedFile.UploadedOn.ToString("dd MMM yyyy, hh:mm tt")</span>
+                        </div>
+                    </div>
+                    <span class="dm-replace-btn">
+                        <SalesAuditIcon Name="file-pen" Size="15" />
+                        Replace File
+                        <InputFile OnChange="OnFileSelected" accept=".xlsx,.xls" class="dm-file-input" title="Replace dealer list" />
+                    </span>
+                </div>
+
+                @if (ValidationErrors.Count > 0)
+                {
+                    <div class="dm-alert">
+                        <span>@ValidationErrors.Count rows have validation errors and will not be imported.</span>
+                        <button type="button" class="dm-view-errors" @onclick="() => ShowErrors = !ShowErrors">
+                            <SalesAuditIcon Name="@(ShowErrors ? "eye-off" : "eye")" Size="16" />
+                            @(ShowErrors ? "Hide Errors" : "View Errors")
+                        </button>
+                    </div>
+                }
+            }
+        </div>
+
+        <!-- Dealer Commitment Mapping -->
+        <div class="dm-card">
+            <h3 class="dm-card-title">Dealer Commitment Mapping</h3>
+
+            <div class="dm-table-wrapper">
+                <table class="dm-table">
+                    <thead>
+                        <tr>
+                            <th class="dm-col-no">S:NO</th>
+                            <th>Dealer Name</th>
+                            <th>Location</th>
+                            <th>Mapped By</th>
+                            <th>Planned Commitment ₹</th>
+                            <th class="dm-col-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (row, index) in Dealers.Select((r, i) => (r, i)))
+                        {
+                            <tr>
+                                <td class="dm-col-no">@(index + 1)</td>
+                                <td class="dm-center">@row.DealerName</td>
+                                <td class="dm-center">@row.Location</td>
+                                <td>
+                                    <select class="dm-select" @bind="row.MappedBy">
+                                        @foreach (var option in MappedByOptions)
+                                        {
+                                            <option value="@option">@option</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>
+                                    <div class="dm-number">
+                                        <input type="text" inputmode="numeric" class="dm-number-input"
+                                               value="@SalesAuditFormat.Rupees(row.Commitment)"
+                                               @onchange="e => row.Commitment = SalesAuditFormat.ParseAmount(e.Value, row.Commitment)" />
+                                        <div class="dm-spin">
+                                            <button type="button" aria-label="Increase commitment" @onclick="() => row.Commitment += CommitmentStep">
+                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4" /></svg>
+                                            </button>
+                                            <button type="button" aria-label="Decrease commitment" @onclick="() => row.Commitment = Math.Max(0, row.Commitment - CommitmentStep)">
+                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="dm-col-action">
+                                    <button type="button" class="dm-icon-btn" aria-label="Remove dealer" @onclick="() => Dealers.Remove(row)">
+                                        <SalesAuditIcon Name="trash" Size="17" />
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+
+                        @if (!Dealers.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="dm-empty">No dealers mapped. Upload a dealer list to start.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="dm-table-foot">
+                    <span class="dm-showing">
+                        Showing @(Dealers.Any() ? 1 : 0) to @Dealers.Count Dealers
+                        @if (ValidationErrors.Count > 0)
+                        {
+                            <span class="dm-invalid">(@ValidationErrors.Count invalid rows not imported)</span>
+                        }
+                    </span>
+                    <span class="dm-total">
+                        Total Planned Commitment
+                        <strong>@SalesAuditFormat.Rupees(AllocatedTotal)</strong>
+                    </span>
+                </div>
+            </div>
+
+            @if (ShowErrors && ValidationErrors.Count > 0)
+            {
+                <div class="dm-errors">
+                    <div class="dm-errors-title">Validation Errors ( @ValidationErrors.Count rows)</div>
+                    <table class="dm-errors-table">
+                        <thead>
+                            <tr>
+                                <th class="dm-col-no">Row No.</th>
+                                <th>Dealer Name</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var error in ValidationErrors)
+                            {
+                                <tr>
+                                    <td class="dm-col-no">@error.RowNo</td>
+                                    <td>@error.DealerName</td>
+                                    <td>@error.Reason</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <!-- Plan Summary & Comparison -->
+        <div class="dm-card">
+            <h3 class="dm-card-title">Plan Summary &amp; Comparison</h3>
+
+            <div class="dm-summary-grid">
+                <div class="dm-tile dm-tile-purple">
+                    <div class="dm-tile-top">
+                        <span class="dm-tile-label">Required Turnover</span>
+                        <span class="dm-auto-badge">Auto Calculated</span>
+                    </div>
+                    <span class="dm-tile-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                    <span class="dm-tile-sub">Minimum Target you must achieve</span>
+                </div>
+
+                <div class="dm-tile dm-tile-green">
+                    <span class="dm-tile-label">Total Planned Commitment</span>
+                    <span class="dm-tile-value">₹ @SalesAuditFormat.Crore(ProductPlanTotal) Cr</span>
+                    <span class="dm-tile-sub">Sum of all product-wise planned values</span>
+                </div>
+
+                <div class="dm-tile @(Remaining < 0 ? "dm-tile-red" : "dm-tile-blue")">
+                    <span class="dm-tile-label">Difference</span>
+                    <span class="dm-tile-value">@(Remaining > 0 ? "+ " : Remaining < 0 ? "- " : "")₹ @SalesAuditFormat.Crore(Math.Abs(Remaining)) Cr</span>
+                    <span class="dm-tile-sub">
+                        @(Remaining > 0 ? "Allocate remaining amount to complete the target"
+                          : Remaining < 0 ? "Dealer allocation exceeds the product plan"
+                          : "Dealer allocation matches the product plan")
+                    </span>
+                </div>
+
+                <div class="dm-tile @(Remaining == 0 ? "dm-tile-green" : Remaining > 0 ? "dm-tile-orange" : "dm-tile-red")">
+                    <span class="dm-tile-label">Allocation Status</span>
+                    <span class="dm-tile-value">@(Remaining == 0 ? "Complete" : Remaining > 0 ? "Incomplete" : "Over Allocated")</span>
+                    <span class="dm-tile-sub">
+                        @(Remaining == 0 ? "Dealer allocation matches the product plan"
+                          : Remaining > 0 ? "Dealer allocation is below the product plan"
+                          : "Dealer allocation is above the product plan")
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer actions -->
+        <div class="dm-footer">
+            <button type="button" class="dm-btn dm-btn-back" @onclick="@(() => Nav.NavigateTo("/SalesAudit"))">
+                <SalesAuditIcon Name="chevrons-left" Size="16" />
+                Back to List
+            </button>
+
+            <div class="dm-footer-right">
+                <button type="button" class="dm-btn dm-btn-draft">
+                    <SalesAuditIcon Name="file-pen" Size="16" />
+                    Save Draft
+                </button>
+                <button type="button" class="dm-btn dm-btn-primary" @onclick="@(() => Nav.NavigateTo("/PlanReview"))">
+                    Continue to Plan Review
+                    <SalesAuditIcon Name="chevrons-right" Size="16" />
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private const long MaxFileBytes = 5 * 1024 * 1024;
+    private const decimal CommitmentStep = 10000m;
+
+    private static readonly string[] MappedByOptions = { "MO", "RM", "ZM" };
+
+    // Both come from the earlier steps (Audit Overview / Sales Plan); sample values for now.
+    private const decimal RequiredTurnover = 2_00_00_000m;
+    private const decimal ProductPlanTotal = 2_30_00_000m;
+
+    private record UploadInfo(string Name, long Size, DateTime UploadedOn);
+    private record ValidationError(int RowNo, string DealerName, string Reason);
+
+    private class DealerRow
+    {
+        public string DealerName { get; set; } = "";
+        public string Location { get; set; } = "";
+        public string MappedBy { get; set; } = "MO";
+        public decimal Commitment { get; set; }
+    }
+
+    private UploadInfo? UploadedFile = new("Punjab Dealers List.xlsx", 12_698, new DateTime(2026, 5, 11, 11, 45, 0));
+    private string? UploadError;
+    private bool ShowErrors = true;
+
+    private readonly List<DealerRow> Dealers = Enumerable.Range(0, 5)
+        .Select(_ => new DealerRow { DealerName = "Green Field Agri Traders", Location = "Ludhiana", Commitment = 40_00_000 })
+        .ToList();
+
+    private readonly List<ValidationError> ValidationErrors = new()
+    {
+        new(6, "ABC Traders", "Dealer not found in master"),
+        new(7, "ABC Traders", "Duplicate dealer name found"),
+    };
+
+    private decimal AllocatedTotal => Dealers.Sum(d => d.Commitment);
+
+    /// <summary>Product plan still to be allocated to dealers (negative when over-allocated).</summary>
+    private decimal Remaining => ProductPlanTotal - AllocatedTotal;
+
+    // Only the file's details are recorded for now; reading the rows is wired with the API.
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        var extension = Path.GetExtension(file.Name).ToLowerInvariant();
+
+        if (extension is not (".xlsx" or ".xls"))
+        {
+            UploadError = "Only .xlsx or .xls files can be uploaded.";
+            return;
+        }
+
+        if (file.Size > MaxFileBytes)
+        {
+            UploadError = "The file is larger than 5MB.";
+            return;
+        }
+
+        UploadError = null;
+        UploadedFile = new UploadInfo(file.Name, file.Size, DateTime.Now);
+    }
+
+    private static string FormatSize(long bytes) =>
+        bytes >= 1024 * 1024
+            ? (bytes / 1024d / 1024d).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB"
+            : (bytes / 1024d).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " kB";
+}

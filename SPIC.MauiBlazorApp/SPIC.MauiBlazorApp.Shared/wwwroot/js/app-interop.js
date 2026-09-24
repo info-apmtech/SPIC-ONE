@@ -133,3 +133,12 @@ window.navSearch = {
         if (match) match.click();
     }
 };
+
+// Pages live inside the .main-content scroll container (MainLayout), which Blazor does not
+// reset on navigation, so a new page would open at the previous page's scroll offset.
+// The window is reset too for layouts where the document itself scrolls (phone).
+window.scrollPageToTop = function () {
+    var content = document.querySelector('.main-content');
+    if (content) content.scrollTop = 0;
+    window.scrollTo(0, 0);
+};
