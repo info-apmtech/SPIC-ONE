@@ -29,6 +29,14 @@ public sealed record ShellTab(string Key, string Label, string Icon, string Href
     /// <summary>Short label (about 10 characters) for the tab bar / rail; falls back to <see cref="Label"/>.</summary>
     public string? ShortLabel { get; init; }
 
+    /// <summary>
+    /// More-sheet-only destination: accessible users find it in the "More" sheet and the
+    /// tablet rail never lists it, and it is excluded from the phone bottom tab bar's
+    /// priority/fallback fill. Used for pages grouped only for menu purposes (e.g. the
+    /// Schemes parent) that must not steal a bottom-tab or rail slot by role priority.
+    /// </summary>
+    public bool MoreOnly { get; init; }
+
     public string TabLabel => ShortLabel ?? Label;
 }
 
@@ -57,6 +65,7 @@ public static class ShellNavigation
     public const string GroupAdminTools = "Admin tools";
     public const string GroupGuestHouse = "Guest House";
     public const string GroupApprovals = "Approvals & Reports";
+    public const string GroupSchemes = "Schemes";
 
     // Convenience so the rules read like NavMenu.razor.
     private static bool IsAdminOrCorporate(LoginState s) => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
@@ -240,6 +249,19 @@ public static class ShellNavigation
         new("DealerReviewList", "Dealer Application Review", "bi-person-vcard-fill", "/DealerReviewList", nameof(PagePermission.dealerreviewlist)),
         new("CreditLimitSales", "Financial Year Sales Data", "bi-currency-rupee", "/CreditLimitSales", nameof(PagePermission.CreditLimitSales)),
 
+        // ---- Schemes parent menu (10 pages that previously had no menu entry). MoreOnly: these
+        //      must never auto-fill the phone bottom tab bar or tablet rail, only the More sheet. ----
+        new("SchemeOverview", "Scheme Overview", "bi-clipboard-data-fill", "/SchemeOverview", "SchemeOverview") { Group = GroupSchemes, MoreOnly = true },
+        new("AddScheme", "Add Scheme", "bi-plus-square-fill", "/AddScheme", "AddScheme") { Group = GroupSchemes, MoreOnly = true },
+        new("Schemes", "Scheme List", "bi-collection-fill", "/Schemes", "Schemes") { Group = GroupSchemes, MoreOnly = true },
+        new("WinnerPopUp", "Winner PopUp", "bi-gift-fill", "/WinnerPopUp", "WinnerPopUp") { Group = GroupSchemes, MoreOnly = true },
+        new("WinnerDetails", "Winner Details", "bi-trophy-fill", "/WinnerDetails", "WinnerDetails") { Group = GroupSchemes, MoreOnly = true },
+        new("Luckydraw", "Lucky Draw", "bi-dice-6-fill", "/Luckydraw", "Luckydraw") { Group = GroupSchemes, MoreOnly = true },
+        new("LuckyDrawList", "Lucky Draw List", "bi-file-earmark-text-fill", "/LuckyDrawList", "LuckyDrawList") { Group = GroupSchemes, MoreOnly = true },
+        new("SelectPurchasedProducts", "Select Purchased Products", "bi-bag-check-fill", "/SelectPurchasedProducts", "SelectPurchasedProducts") { Group = GroupSchemes, MoreOnly = true },
+        new("Scanproduct", "Scan Product", "bi-upc-scan", "/Scanproduct", "Scanproduct") { Group = GroupSchemes, MoreOnly = true },
+        new("qr-scanner", "QR Scanner", "bi-qr-code-scan", "/qr-scanner", "qr-scanner") { Group = GroupSchemes, MoreOnly = true },
+
         // ---- SDWA accordion (remaining items) ----
         new("ReportDashboard", "Admin Dashboard", "bi-grid-fill", "/ReportDashboard", "ReportDashboard") { Group = GroupSdwa },
         new("SubDealerEmployeeMaster", "Sub Dealer & Employee", "bi-people-fill", "/SubDealerEmployeeMaster", nameof(PagePermission.SubDealerEmployeeMaster)) { Group = GroupSdwa },
@@ -366,6 +388,8 @@ public static class ShellNavigation
         foreach (var tab in Candidates)
         {
             if (result.Count >= max) break;
+            // More-only destinations (e.g. Schemes parent pages) never take a tab-bar / rail slot.
+            if (tab.MoreOnly) continue;
             if (!result.Contains(tab) && IsAccessible(state, tab))
                 result.Add(tab);
         }

@@ -92,13 +92,84 @@
         </NavLink>
     }
 
- @*    @if (loginState.CanAccess(PagePermission.Schemes))
+ @if (AnySchemesAccessible)
     {
-        <NavLink class="@NavLinkClass("Schemes")" href="/Schemes">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
-            Schemes
-        </NavLink>
-    } *@
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowSchemesExpanded ? "active" : "") @MatchClass("Schemes")"
+               @onclick="ToggleSchemesMenu">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+                Schemes
+                <i class="bi @(ShowSchemesExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
+
+            @if (ShowSchemesExpanded)
+            {
+                <ul class="submenu-list">
+                    @if (loginState.CanAccess("SchemeOverview"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/SchemeOverview" class="@SubmenuLinkClass("Scheme Overview")" Match="NavLinkMatch.All">Scheme Overview</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("AddScheme"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/AddScheme" class="@SubmenuLinkClass("Add Scheme")" Match="NavLinkMatch.All">Add Scheme</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Schemes))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Schemes" class="@SubmenuLinkClass("Scheme List")" Match="NavLinkMatch.All">Scheme List</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("WinnerPopUp"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/WinnerPopUp" class="@SubmenuLinkClass("Winner PopUp")" Match="NavLinkMatch.All">Winner PopUp</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("WinnerDetails"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/WinnerDetails" class="@SubmenuLinkClass("Winner Details")" Match="NavLinkMatch.All">Winner Details</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("Luckydraw"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Luckydraw" class="@SubmenuLinkClass("Lucky Draw")" Match="NavLinkMatch.All">Lucky Draw</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("LuckyDrawList"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/LuckyDrawList" class="@SubmenuLinkClass("Lucky Draw List")" Match="NavLinkMatch.All">Lucky Draw List</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("SelectPurchasedProducts"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/SelectPurchasedProducts" class="@SubmenuLinkClass("Select Purchased Products")" Match="NavLinkMatch.All">Select Purchased Products</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("Scanproduct"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Scanproduct" class="@SubmenuLinkClass("Scan Product")" Match="NavLinkMatch.All">Scan Product</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess("qr-scanner"))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/qr-scanner" class="@SubmenuLinkClass("QR Scanner")" Match="NavLinkMatch.All">QR Scanner</NavLink>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
     @if (AnySubsidyAccessible)
     {
         <div class="settings-menu-wrapper">
@@ -632,6 +703,7 @@
     private bool isSubsidyOpen = false;
     private bool isSdwaOpen = false;
     private bool isMdPortalOpen = false;
+    private bool isSchemesOpen = false;
     private bool ShowDemoDocumentationExpanded { get; set; }
     protected override void OnInitialized()
     {
@@ -639,6 +711,7 @@
         isSubsidyOpen = IsSubsidySectionActive();
         isSdwaOpen = IsSdwaSectionActive();
         isMdPortalOpen = IsMdPortalSectionActive();
+        isSchemesOpen = IsSchemesSectionActive();
         loginState.OnChange += HandleLoginStateChanged;
         SearchState.OnChange += HandleSearchChanged;
     }
@@ -696,7 +769,7 @@
 
     private void ToggleSettingsMenu()
     {
-        if (!isSettingsOpen) { isSettingsOpen = true; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
+        if (!isSettingsOpen) { isSettingsOpen = true; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSettingsOpen = false;
     }
 
@@ -736,7 +809,7 @@
 
     private void ToggleSubsidyMenu()
     {
-        if (!isSubsidyOpen) { isSubsidyOpen = true; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
+        if (!isSubsidyOpen) { isSubsidyOpen = true; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSubsidyOpen = false;
     }
 
@@ -777,7 +850,7 @@
 
     private void ToggleSdwaMenu()
     {
-        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; }
+        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSdwaOpen = false;
     }
 
@@ -821,7 +894,7 @@
 
     private void ToggleMdPortalMenu()
     {
-        if (!isMdPortalOpen) { isMdPortalOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; }
+        if (!isMdPortalOpen) { isMdPortalOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isSchemesOpen = false; }
         else isMdPortalOpen = false;
     }
 
@@ -832,6 +905,48 @@
             || uri == "create-csr-1management" || uri == "csr-1list" || uri == "csr2"
             || uri == "finalreportcsrview" || uri == "rmdvalidationqueue"
             || uri == "mosubmissionvalidation" || uri == "rmapprovalstatus";
+    }
+
+    private bool AnySchemesAccessible =>
+        loginState.CanAccess("SchemeOverview")
+        || loginState.CanAccess("AddScheme")
+        || loginState.CanAccess(PagePermission.Schemes)
+        || loginState.CanAccess("WinnerPopUp")
+        || loginState.CanAccess("WinnerDetails")
+        || loginState.CanAccess("Luckydraw")
+        || loginState.CanAccess("LuckyDrawList")
+        || loginState.CanAccess("SelectPurchasedProducts")
+        || loginState.CanAccess("Scanproduct")
+        || loginState.CanAccess("qr-scanner");
+
+    private bool AnySchemesItemMatches =>
+        SearchState.Matches("Scheme Overview")
+        || SearchState.Matches("Add Scheme")
+        || SearchState.Matches("Scheme List")
+        || SearchState.Matches("Winner PopUp")
+        || SearchState.Matches("Winner Details")
+        || SearchState.Matches("Lucky Draw")
+        || SearchState.Matches("Lucky Draw List")
+        || SearchState.Matches("Select Purchased Products")
+        || SearchState.Matches("Scan Product")
+        || SearchState.Matches("QR Scanner")
+        || SearchState.Matches("Schemes");
+
+    private bool ShowSchemesExpanded => isSchemesOpen || AnySchemesItemMatches;
+
+    private void ToggleSchemesMenu()
+    {
+        if (!isSchemesOpen) { isSchemesOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
+        else isSchemesOpen = false;
+    }
+
+    private bool IsSchemesSectionActive()
+    {
+        var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
+        return uri == "schemeoverview" || uri == "addscheme" || uri == "schemes"
+            || uri == "winnerpopup" || uri == "winnerdetails"
+            || uri == "luckydraw" || uri == "luckydrawlist"
+            || uri == "selectpurchasedproducts" || uri == "scanproduct" || uri == "qr-scanner";
     }
     private void ToggleDemoDocumentationMenu()
     {
