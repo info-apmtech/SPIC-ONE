@@ -14,5 +14,13 @@ public class RazorpayOptions
     public string KeyId { get; set; } = string.Empty;
     public string KeySecret { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Secret entered when creating the webhook in the Razorpay Dashboard; used to validate
+    /// X-Razorpay-Signature. Never committed - supplied as Razorpay__WebhookSecret.
+    /// </summary>
+    public string WebhookSecret { get; set; } = string.Empty;
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(KeyId) && !string.IsNullOrWhiteSpace(KeySecret);
+
+    public bool IsWebhookConfigured => !string.IsNullOrWhiteSpace(WebhookSecret);
 }

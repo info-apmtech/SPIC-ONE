@@ -251,6 +251,10 @@ public static class ShellNavigation
         {
             Group = GroupSdwa, Rule = IsAdminOrCorporate
         },
+        new("GuestHouseCancellations", "Cancellation Requests", "bi-x-octagon-fill", "/GuestHouseCancellations", "GuestHouseCancellations")
+        {
+            Group = GroupSdwa, Rule = IsAdminOrCorporate
+        },
         new("FrontOffice", "Front Office", "bi-door-open-fill", "/FrontOffice", nameof(PagePermission.FrontOffice)) { Group = GroupSdwa },
         new("GenerateBill", "Generate Bill", "bi-receipt", "/GenerateBill", nameof(PagePermission.GenerateBill)) { Group = GroupSdwa },
 

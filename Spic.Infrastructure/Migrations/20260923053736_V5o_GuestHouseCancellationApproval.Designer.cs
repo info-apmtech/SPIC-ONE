@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260923053736_V5o_GuestHouseCancellationApproval")]
+    partial class V5o_GuestHouseCancellationApproval
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1273,80 +1276,6 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Banks");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgram", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("April")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("August")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("December")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("February")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("FinancialYear")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("January")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("July")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("June")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("March")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("May")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("November")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("October")
-                        .HasColumnType("numeric");
-
-                    b.Property<int>("ProgramId")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("September")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("TotalBudget")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProgramId");
-
-                    b.ToTable("BudgetPrograms");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
@@ -4734,9 +4663,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<bool?>("IsSpecialityProduct")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -4965,77 +4891,6 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ProductGroups");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.ProgramMaster", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("BudgetAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("ProgramTypeId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProgramTypeId");
-
-                    b.ToTable("ProgramMasters");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.ProgramType", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsChangeAmount")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ProgramTypes");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
@@ -7742,17 +7597,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgram", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.ProgramMaster", "Program")
-                        .WithMany()
-                        .HasForeignKey("ProgramId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Program");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.Unit", "Unit")
@@ -8086,17 +7930,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("ProductGroup");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.ProgramMaster", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.ProgramType", "ProgramType")
-                        .WithMany("Programs")
-                        .HasForeignKey("ProgramTypeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ProgramType");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.District", "District")
@@ -8323,11 +8156,6 @@ namespace Spic.Infrastructure.Migrations
             modelBuilder.Entity("SPIC.Core.Entities.LibraryConversation", b =>
                 {
                     b.Navigation("Messages");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.ProgramType", b =>
-                {
-                    b.Navigation("Programs");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SampleCollection", b =>

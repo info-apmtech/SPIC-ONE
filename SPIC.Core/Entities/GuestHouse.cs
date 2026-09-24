@@ -49,6 +49,19 @@ public enum GuestHouseRefundStatus
 }
 
 /// <summary>
+/// Admin decision status for a dealer's cancellation request. Kept separate from
+/// GuestHouseRefundStatus because "Rejected" (admin declined the request, no refund
+/// was ever due) is a materially different situation from "Failed" (admin approved,
+/// but the Razorpay refund attempt itself failed) - the two must never be conflated.
+/// </summary>
+public enum GuestHouseCancellationApprovalStatus
+{
+	PendingApproval = 0,  // Dealer requested cancellation; awaiting Admin decision
+	Approved = 1,          // Admin approved the cancellation (refund may still be processing/failed)
+	Rejected = 2           // Admin rejected the cancellation; booking remains active
+}
+
+/// <summary>
 /// Master record of a guest house (e.g. T-Nagar Guest House, Tirupathi Guest House).
 /// Guest house names are data, not hard-coded.
 /// </summary>
@@ -361,6 +374,13 @@ public class GuestHouseBookingCancellation
 	public GuestHouseRefundStatus RefundStatus { get; set; } = GuestHouseRefundStatus.Pending; // Refund stage
 	public DateTime? EstimatedRefundDate { get; set; }                   // Expected refund date shown to the user
 	public string? Remarks { get; set; }                                 // Additional remarks
+
+	// Admin approval workflow (see GuestHouseCancellationApprovalStatus for why this is
+	// separate from RefundStatus).
+	public GuestHouseCancellationApprovalStatus ApprovalStatus { get; set; } = GuestHouseCancellationApprovalStatus.PendingApproval;
+	public string? AdminDecisionBy { get; set; }                         // Admin/CorporateAdmin user who approved or rejected the request
+	public DateTime? AdminDecisionAt { get; set; }                       // When the approval/rejection decision was made
+	public string? RejectionReason { get; set; }                        // Reason recorded when Admin rejects the request
 }
 
 /// <summary>
