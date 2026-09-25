@@ -1,5 +1,7 @@
 @page "/BudgetingManagements"
 @inject HttpClient Http
+@inject ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @using System.Linq
 @using System.Globalization
 @using System.Net.Http.Json
@@ -98,7 +100,7 @@
                     <div class="bm-stat-content">
                         <span class="bm-stat-value">₹ 4.85 Cr</span>
                         <span class="bm-stat-label">Total Regional Budget</span>
-                        <span class="bm-stat-sub">FY 2025-26</span>
+                        <span class="bm-stat-sub">FY GetCurrentFinancialYear()</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -162,7 +164,7 @@
         <!-- Section Header -->
         <div class="bm-section-header">
             <h2>Program-wise Budget Planning</h2>
-            <span class="bm-year-badge">FY 2023-24</span>
+            <span class="bm-year-badge">FY @GetCurrentFinancialYear()</span>
         </div>
 
         <!-- Input Table -->
@@ -208,7 +210,7 @@
                         @if (program.IsChangeAmount)
                         {
                             <input type="number"
-                                   class="bm-budget-input-sm"
+                                   class="bm-budget-input-sm bm-budget-input-editable"
                                    @bind="program.TotalBudget"
                                    @bind:event="oninput"
                                    @bind:after="() => CalculateBudget(program)" />
@@ -243,7 +245,7 @@
                     <td><input type="number" class="bm-budget-input-sm" @bind="program.OctoberCount" @bind:after="() => CalculateBudget(program)" />  </td>
                     <td><input type="number" class="bm-budget-input-sm" @bind="program.OctoberBudget" disabled /></td>
 
-                    <td><input type="number" class="bm-budget-input-sm" @bind="program.NovemberCount" @bind:after="() => CalculateBudget(program)"  />  </td>
+                    <td><input type="number" class="bm-budget-input-sm" @bind="program.NovemberCount" @bind:after="() => CalculateBudget(program)" />  </td>
                     <td><input type="number" class="bm-budget-input-sm" @bind="program.NovemberBudget" disabled /></td>
 
                     <td><input type="number" class="bm-budget-input-sm" @bind="program.DecemberCount" @bind:after="() => CalculateBudget(program)" />  </td>
@@ -327,7 +329,7 @@
                         <line x1="22" y1="2" x2="11" y2="13"></line>
                         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                     </svg>
-                    Submit for Validation
+                    Save
                 </button>
             </ActionBar>
         </div>
@@ -409,8 +411,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                   watermarks (::before/::after) that leak onto these tiles and sit on top
-                   of the label text. Neutralise them for this page only. */
+                           watermarks (::before/::after) that leak onto these tiles and sit on top
+                           of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -620,10 +622,11 @@
         color: #334155;
     }
 
+    /* Program-wise budget inputs */
     .bm-budget-input-sm {
         width: 84px;
-        background-color: #f8fafc;
-        border: 1px solid #e2e8f0;
+        background-color: #ffffff;
+        border: 1px solid #cbd5e1;
         border-radius: 8px;
         padding: 8px 10px;
         font-size: 12px;
@@ -632,10 +635,36 @@
         transition: all 0.2s;
     }
 
-        .bm-budget-input-sm:focus {
-            border-color: #cbd5e1;
-            background-color: #ffffff;
+        /* Enabled / editable input */
+        .bm-budget-input-sm:not(:disabled) {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #1e293b !important;
         }
+
+        /* Disabled calculated / fixed amount input */
+        .bm-budget-input-sm:disabled {
+            background-color: #f1f5f9 !important;
+            border-color: #e2e8f0 !important;
+            color: #64748b !important;
+            opacity: 1 !important;
+            cursor: not-allowed;
+        }
+
+        /* Focus only for editable inputs */
+        .bm-budget-input-sm:not(:disabled):focus {
+            background-color: #ffffff !important;
+            border-color: #94a3b8 !important;
+            box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.12);
+        }
+
+        /* Explicit styling for Total Budget when amount can be changed */
+        .bm-budget-input-sm.bm-budget-input-editable {
+            background-color: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            color: #1e293b !important;
+        }
+
 
     .bm-action-bar {
         display: flex;
@@ -819,7 +848,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                       on screen (it used to sit off the right edge of a 720px table). */
+                               on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -948,12 +977,15 @@
                 await Http.GetFromJsonAsync<List<ProgramWiseBudgetDto>>
                 (
                     "api/Budget/program-master-list"
-                ) ?? new();
+                )
+                ?? new();
 
 
-            // ADD THIS
-            FilteredProgramPlans = programPlans.ToList();
+            await LoadDraftBudget();
 
+
+            FilteredProgramPlans =
+                programPlans.ToList();
         }
         catch (Exception ex)
         {
@@ -982,51 +1014,198 @@
 
     private async Task HandleSaveDraft()
     {
-        foreach (var item in programPlans)
+        try
         {
-            var budget = new BudgetProgram
+            foreach (var item in FilteredProgramPlans)
             {
-                ProgramId = item.ProgramId,
 
-                TotalBudget = item.TotalBudget,
-
-                April = item.AprilBudget,
-                May = item.MayBudget,
-                June = item.JuneBudget,
-                July = item.JulyBudget,
-                August = item.AugustBudget,
-                September = item.SeptemberBudget,
-                October = item.OctoberBudget,
-                November = item.NovemberBudget,
-                December = item.DecemberBudget,
-                January = item.JanuaryBudget,
-                February = item.FebruaryBudget,
-                March = item.MarchBudget,
-
-                FinancialYear = "2025-26",
-
-                CreatedBy = "Admin",
-                CreatedAt = DateTime.Now,
-                UpdatedAt = DateTime.Now
-            };
+                var budget = new BudgetProgram
+                {
+                    ProgramId = item.ProgramId,
 
 
-            await Http.PostAsJsonAsync(
-                "api/Budget",
-                budget
-            );
+                    TotalBudget = item.IsChangeAmount
+                        ? item.TotalBudget
+                        : item.BudgetAmount,
+
+
+                    AprilCount = item.AprilCount,
+                    April = item.AprilBudget,
+
+
+                    MayCount = item.MayCount,
+                    May = item.MayBudget,
+
+
+                    JuneCount = item.JuneCount,
+                    June = item.JuneBudget,
+
+
+                    JulyCount = item.JulyCount,
+                    July = item.JulyBudget,
+
+
+                    AugustCount = item.AugustCount,
+                    August = item.AugustBudget,
+
+
+                    SeptemberCount = item.SeptemberCount,
+                    September = item.SeptemberBudget,
+
+
+                    OctoberCount = item.OctoberCount,
+                    October = item.OctoberBudget,
+
+
+                    NovemberCount = item.NovemberCount,
+                    November = item.NovemberBudget,
+
+
+                    DecemberCount = item.DecemberCount,
+                    December = item.DecemberBudget,
+
+
+                    JanuaryCount = item.JanuaryCount,
+                    January = item.JanuaryBudget,
+
+
+                    FebruaryCount = item.FebruaryCount,
+                    February = item.FebruaryBudget,
+
+
+                    MarchCount = item.MarchCount,
+                    March = item.MarchBudget,
+
+
+                    FinancialYear = GetCurrentFinancialYear(),
+
+                    Status = "Draft",
+
+                    CreatedBy = LoginState.UserId ?? "System",
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
+                };
+
+
+                await Http.PostAsJsonAsync(
+                    "api/Budget/draft",
+                    budget
+                );
+            }
+
+
+            Toast.Success("Budget draft saved successfully");
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+
+            Toast.Error("Draft save failed");
         }
     }
 
 
-    private void HandleSubmitValidation()
+    private async Task HandleSubmitValidation()
     {
+        if (!ValidateBudgetData())
+        {
+            return;
+        }
+        try
+        {
+            foreach (var item in FilteredProgramPlans)
+            {
+                var budget = new BudgetProgram
+                {
+                    ProgramId = item.ProgramId,
 
+                    TotalBudget = item.BudgetAmount,
+
+                    AprilCount = item.AprilCount,
+                    April = item.AprilBudget,
+
+                    MayCount = item.MayCount,
+                    May = item.MayBudget,
+
+                    JuneCount = item.JuneCount,
+                    June = item.JuneBudget,
+
+                    JulyCount = item.JulyCount,
+                    July = item.JulyBudget,
+
+                    AugustCount = item.AugustCount,
+                    August = item.AugustBudget,
+
+                    SeptemberCount = item.SeptemberCount,
+                    September = item.SeptemberBudget,
+
+                    OctoberCount = item.OctoberCount,
+                    October = item.OctoberBudget,
+
+                    NovemberCount = item.NovemberCount,
+                    November = item.NovemberBudget,
+
+                    DecemberCount = item.DecemberCount,
+                    December = item.DecemberBudget,
+
+                    JanuaryCount = item.JanuaryCount,
+                    January = item.JanuaryBudget,
+
+                    FebruaryCount = item.FebruaryCount,
+                    February = item.FebruaryBudget,
+
+                    MarchCount = item.MarchCount,
+                    March = item.MarchBudget,
+
+                    FinancialYear = GetCurrentFinancialYear(),
+
+                    CreatedBy = LoginState.UserId ?? "System",
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
+                };
+
+
+                await Http.PostAsJsonAsync(
+                    "api/Budget",
+                    budget
+                );
+            }
+
+
+            // ONLY ONE TIME
+            Toast.Success("Budget created successfully");
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+
+            Toast.Error("Budget creation failed");
+        }
     }
 }
 
 
 @code {
+    private string GetCurrentFinancialYear()
+    {
+        var today = DateTime.Now;
+
+        int startYear;
+
+        if (today.Month >= 4) // April to December
+        {
+            startYear = today.Year;
+        }
+        else // January to March
+        {
+            startYear = today.Year - 1;
+        }
+
+        return $"{startYear}-{(startYear + 1).ToString().Substring(2)}";
+    }
+
     private void ApplyBudgetFilter()
     {
         if (string.IsNullOrWhiteSpace(_searchText))
@@ -1104,5 +1283,225 @@
         item.JanuaryBudget = baseAmount * item.JanuaryCount;
         item.FebruaryBudget = baseAmount * item.FebruaryCount;
         item.MarchBudget = baseAmount * item.MarchCount;
+    }
+
+    public class ApiResponse
+    {
+        public string message { get; set; } = "";
+
+        public object? data { get; set; }
+    }
+    private bool ValidateBudgetData()
+    {
+        foreach (var item in FilteredProgramPlans)
+        {
+            decimal baseAmount = item.IsChangeAmount
+      ? item.TotalBudget
+      : item.BudgetAmount;
+
+
+            if (baseAmount <= 0)
+            {
+                Toast.Error(
+                    $"Budget amount missing for {item.ProgramName}"
+                );
+
+                return false;
+            }
+
+
+            var missingMonths = new List<string>();
+
+            if (item.AprilCount <= 0)
+                missingMonths.Add("April");
+
+            if (item.MayCount <= 0)
+                missingMonths.Add("May");
+
+            if (item.JuneCount <= 0)
+                missingMonths.Add("June");
+
+            if (item.JulyCount <= 0)
+                missingMonths.Add("July");
+
+            if (item.AugustCount <= 0)
+                missingMonths.Add("August");
+
+            if (item.SeptemberCount <= 0)
+                missingMonths.Add("September");
+
+            if (item.OctoberCount <= 0)
+                missingMonths.Add("October");
+
+            if (item.NovemberCount <= 0)
+                missingMonths.Add("November");
+
+            if (item.DecemberCount <= 0)
+                missingMonths.Add("December");
+
+            if (item.JanuaryCount <= 0)
+                missingMonths.Add("January");
+
+            if (item.FebruaryCount <= 0)
+                missingMonths.Add("February");
+
+            if (item.MarchCount <= 0)
+                missingMonths.Add("March");
+
+
+            if (missingMonths.Any())
+            {
+                Toast.Error(
+                    $"{item.ProgramName}: Missing count for {string.Join(", ", missingMonths)}"
+                );
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private async Task LoadDraftBudget()
+    {
+        try
+        {
+            var drafts =
+                await Http.GetFromJsonAsync<List<BudgetProgram>>
+                (
+                    "api/Budget/drafts"
+                )
+                ?? new();
+
+
+            Console.WriteLine(
+                $"Draft Count : {drafts.Count}"
+            );
+
+
+            foreach (var item in programPlans)
+            {
+
+                var draft = drafts
+                    .FirstOrDefault(x =>
+                        x.ProgramId == item.ProgramId
+                    );
+
+
+                if (draft != null)
+                {
+
+                    Console.WriteLine(
+                        $"Loading Draft Program {draft.ProgramId} April {draft.AprilCount}"
+                    );
+
+
+                    item.TotalBudget =
+                        draft.TotalBudget;
+
+
+                    item.AprilCount =
+                        draft.AprilCount;
+
+                    item.AprilBudget =
+                        draft.April;
+
+
+
+                    item.MayCount =
+                        draft.MayCount;
+
+                    item.MayBudget =
+                        draft.May;
+
+
+
+                    item.JuneCount =
+                        draft.JuneCount;
+
+                    item.JuneBudget =
+                        draft.June;
+
+
+
+                    item.JulyCount =
+                        draft.JulyCount;
+
+                    item.JulyBudget =
+                        draft.July;
+
+
+
+                    item.AugustCount =
+                        draft.AugustCount;
+
+                    item.AugustBudget =
+                        draft.August;
+
+
+
+                    item.SeptemberCount =
+                        draft.SeptemberCount;
+
+                    item.SeptemberBudget =
+                        draft.September;
+
+
+
+                    item.OctoberCount =
+                        draft.OctoberCount;
+
+                    item.OctoberBudget =
+                        draft.October;
+
+
+
+                    item.NovemberCount =
+                        draft.NovemberCount;
+
+                    item.NovemberBudget =
+                        draft.November;
+
+
+
+                    item.DecemberCount =
+                        draft.DecemberCount;
+
+                    item.DecemberBudget =
+                        draft.December;
+
+
+
+                    item.JanuaryCount =
+                        draft.JanuaryCount;
+
+                    item.JanuaryBudget =
+                        draft.January;
+
+
+
+                    item.FebruaryCount =
+                        draft.FebruaryCount;
+
+                    item.FebruaryBudget =
+                        draft.February;
+
+
+
+                    item.MarchCount =
+                        draft.MarchCount;
+
+                    item.MarchBudget =
+                        draft.March;
+                }
+            }
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"Draft Load Error : {ex.Message}"
+            );
+        }
     }
 }

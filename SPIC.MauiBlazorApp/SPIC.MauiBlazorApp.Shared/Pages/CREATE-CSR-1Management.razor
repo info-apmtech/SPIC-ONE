@@ -1,9 +1,14 @@
 @page "/CREATE-CSR-1Management"
+
 @using System.Linq
 @using System.Globalization
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+
+@inject HttpClient Http
 
 <div class="container-fluid py-4 px-0">
-    
+
     <!-- Header Section -->
     <PageHeader Title="CSR-1 Program - Wise Budget Allocation"
                 Subtitle="View Approved program - wise budget allocations and apply for CSR-1"
@@ -44,7 +49,7 @@
                 </svg>
             </div>
         </div>
-        
+
         <!-- Dealer Program Card -->
         <div class="csr-alloc-card theme-dealer">
             <div class="csr-alloc-content">
@@ -127,75 +132,286 @@
         </div>
     </div>
 
-    <!-- Budget Plan List Card -->
+    <!-- ========================= -->
+    <!-- Budget Plan Filter Section -->
+    <!-- ========================= -->
     @if (!isFormView)
     {
-        <div class="csr-section-card p-0">
-            <div class="csr-card-header-actions">
-                <h3>Budget plan list</h3>
-                <div class="csr-search-wrapper">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <input type="text" class="csr-search-input" placeholder="Search zones..." @bind="searchQuery" @bind:event="oninput" />
+        <div class="csr-filter-card">
+
+            <!-- Filter Header -->
+            <div class="csr-filter-header">
+                <div class="csr-filter-title">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         width="15"
+                         height="15"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         stroke-linecap="round"
+                         stroke-linejoin="round">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+
+                    <span>Filters</span>
                 </div>
+
+                <button type="button"
+                        class="csr-filter-collapse-btn"
+                        @onclick="ToggleFilters">
+
+                    @if (showFilters)
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             stroke-linecap="round"
+                             stroke-linejoin="round">
+                            <polyline points="18 15 12 9 6 15"></polyline>
+                        </svg>
+                    }
+                    else
+                    {
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             width="14"
+                             height="14"
+                             viewBox="0 0 24 24"
+                             fill="none"
+                             stroke="currentColor"
+                             stroke-width="2"
+                             stroke-linecap="round"
+                             stroke-linejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    }
+
+                </button>
             </div>
 
-            <div class="csr-table-container">
-                <table class="csr-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 40px; text-align: center; padding-left: 24px;">
-                                <input type="checkbox" checked="@selectAllChecked" @onchange="ToggleSelectAll" />
-                            </th>
-                            <th>Program Type</th>
-                            <th>Program Name</th>
-                            <th>Approved Budget</th>
-                            <th>Beneficiaries</th>
-                            <th>Approved Budget</th>
-                            <th style="text-align: right; padding-right: 24px;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var program in GetFilteredPrograms())
-                        {
-                            <tr>
-                                <td style="text-align: center; padding-left: 24px;">
-                                    <input type="checkbox" checked="@program.IsSelected" @onchange="(e) => ToggleProgramSelection(program, e)" />
-                                </td>
-                                <td>@program.ProgramType</td>
-                                <td>@program.ProgramName</td>
-                                <td>@program.ApprovedPrograms</td>
-                                <td>@program.Beneficiaries</td>
-                                <td>@program.ApprovedBudget.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"))</td>
-                                <td style="text-align: right; padding-right: 24px;">
-                                    <button class="csr-apply-btn" @onclick="() => PopulateFormFromProgram(program)">Apply CSR 1</button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
 
-            <!-- Table Footer / Pagination -->
-            <div class="csr-table-footer">
-                <div class="csr-items-per-page">
-                    <span>Items Per Page</span>
-                    <select class="csr-select-small">
-                        <option value="16">16</option>
-                    </select>
+            @if (showFilters)
+            {
+                <div class="csr-filter-body">
+
+                    <!-- First Row -->
+                    <div class="csr-filter-grid">
+
+                        <!-- Program Type -->
+                        <div class="csr-filter-group">
+                            <label>Program Type</label>
+
+                            <select class="csr-filter-control"
+                                    @bind="filterProgramType"
+                                    @bind:after="OnFilterProgramTypeChanged">
+
+                                <option value="">Select Program Type</option>
+
+                                @foreach (var item in ProgramTypes)
+                                {
+                                    <option value="@item">@item</option>
+                                }
+
+                            </select>
+                        </div>
+
+
+                        <!-- Program Name -->
+                        <div class="csr-filter-group">
+                            <label>Program Name</label>
+
+                            <select class="csr-filter-control"
+                                    @bind="filterProgramName"
+                                    @bind:after="OnFilterProgramNameChanged">
+
+                                <option value="">Select Program Name</option>
+
+                                @foreach (var item in ProgramNames)
+                                {
+                                    <option value="@item">@item</option>
+                                }
+
+                            </select>
+                        </div>
+
+
+                        <!-- Budget -->
+                        <div class="csr-filter-group">
+                            <label>Budget</label>
+
+                            <select class="csr-filter-control"
+                                    @bind="filterBudget">
+
+                                <option value="">Select Budget</option>
+
+                                @foreach (var budget in BudgetAmounts)
+                                {
+                                    <option value="@budget">
+                                        ₹@budget.ToString("N0", CultureInfo.CreateSpecificCulture("en-IN"))
+                                    </option>
+                                }
+
+                            </select>
+                        </div>
+
+
+                        <!-- No of Program -->
+                        <div class="csr-filter-group">
+                            <label>No of Program</label>
+
+                            <input type="number"
+                                   class="csr-filter-control"
+                                   placeholder="Enter program count"
+                                   min="0"
+                                   @bind="filterProgramCount"
+                                   @bind:event="oninput" />
+                        </div>
+
+                    </div>
+
+
+                    <!-- Bottom Row -->
+                    <div class="csr-filter-bottom">
+
+                        <!-- Status -->
+                        <div class="csr-filter-group csr-filter-status">
+                            <label>Status</label>
+
+                            <select class="csr-filter-control"
+                                    @bind="filterStatus">
+
+                                <option value="">All District</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Available">Available</option>
+                                <option value="Fully Allocated">Fully Allocated</option>
+
+                            </select>
+                        </div>
+
+
+                        <!-- Buttons -->
+                        <div class="csr-filter-actions">
+
+                            <button type="button"
+                                    class="csr-filter-clear-btn"
+                                    @onclick="ClearFilters">
+
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     width="13"
+                                     height="13"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2"
+                                     stroke-linecap="round"
+                                     stroke-linejoin="round">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+
+                                Clear All
+                            </button>
+
+
+                            <button type="button"
+                                    class="csr-filter-apply-btn"
+                                    @onclick="ApplyFilters">
+
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     width="13"
+                                     height="13"
+                                     viewBox="0 0 24 24"
+                                     fill="none"
+                                     stroke="currentColor"
+                                     stroke-width="2"
+                                     stroke-linecap="round"
+                                     stroke-linejoin="round">
+                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                                </svg>
+
+                                Apply Filters
+                            </button>
+
+                        </div>
+
+                    </div>
+
                 </div>
-                <div class="csr-pagination">
-                    <button class="csr-pag-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                    <button class="csr-pag-btn active">1</button>
-                    <button class="csr-pag-btn">2</button>
-                    <button class="csr-pag-btn">3</button>
-                    <span class="csr-pag-dots">..</span>
-                    <button class="csr-pag-btn">8</button>
-                    <button class="csr-pag-btn">9</button>
-                    <button class="csr-pag-btn">10</button>
-                    <button class="csr-pag-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-                </div>
-            </div>
+            }
+
         </div>
+    }
+
+    <!-- Budget Plan List Card - SpicDataTable -->
+    @if (!isFormView)
+    {
+        <SpicDataTable Items="FilteredBudgetPrograms"
+                       IsLoading="isBudgetDataLoading"
+                       Title="Budget plan list"
+                       FileName="CSR1_Budget_Plan"
+                       SearchText="@searchQuery"
+                       EmptyTitle="No Budget Data"
+                       EmptyMessage="No approved budget program records found."
+                       ExportColumns="GetBudgetPlanExportColumns()">
+
+            <FilterControls>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text"
+                           placeholder="Search Program..."
+                           @bind="searchQuery"
+                           @bind:event="oninput"
+                           @bind:after="OnTableSearchChanged" />
+                </div>
+            </FilterControls>
+
+            <TableHeader>
+                <th style="width:60px;">
+                    <input type="checkbox"
+                           checked="@selectAllChecked"
+                           @onchange="ToggleSelectAll" />
+                </th>
+                <th>Program Type</th>
+                <th>Program Name</th>
+                <th>Number of Programs</th>
+                <th>Beneficiaries</th>
+                <th>Approved Budget</th>
+                <th style="text-align:right;">Action</th>
+            </TableHeader>
+
+            <TableRow Context="program">
+                <td>
+                    <input type="checkbox"
+                           checked="@program.IsSelected"
+                           @onchange="(e) => ToggleProgramSelection(program, e)" />
+                </td>
+                <td>@program.ProgramType</td>
+                <td>@program.ProgramName</td>
+                <td>@program.NumberOfPrograms</td>
+                <td>
+                    @(string.IsNullOrWhiteSpace(program.Beneficiaries)
+                        ? "-"
+                        : program.Beneficiaries)
+                </td>
+                <td>
+                    ₹@program.TotalBudget.ToString(
+                                                                                                        "N0",
+                                                                                                        CultureInfo.CreateSpecificCulture("en-IN"))
+                </td>
+                <td style="text-align:right;">
+                    <button type="button"
+                            class="csr-apply-btn"
+                            @onclick="() => PopulateFormFromProgram(program)">
+                        Apply CSR 1
+                    </button>
+                </td>
+            </TableRow>
+
+        </SpicDataTable>
     }
 
     <!-- CSR-1 Form Section (shown after "Apply CSR 1" is selected) -->
@@ -219,50 +435,122 @@
         <!-- Allocate Budget Form Card -->
         <div class="csr-section-card">
             <h2 class="csr-section-title">CSR-1 Plan Details</h2>
+
             <div class="csr-form-fields-grid">
+
                 <!-- Program Type -->
                 <div class="csr-form-group">
                     <label class="csr-form-label">Program Type</label>
-                    <select class="csr-form-select" @bind="selectedProgramType">
-                        <option value="" disabled selected hidden>Select Program Type</option>
-                        <option value="Farmer Program">Farmer Program</option>
-                        <option value="Dealer Program">Dealer Program</option>
+                    <select class="csr-form-select"
+                            @bind="selectedProgramType"
+                            @bind:after="OnSelectedProgramTypeChanged">
+                        <option value="">Select program type</option>
+                        @foreach (var item in ProgramTypes)
+                        {
+                            <option value="@item">@item</option>
+                        }
                     </select>
                 </div>
 
                 <!-- Program Name -->
                 <div class="csr-form-group">
                     <label class="csr-form-label">Program Name</label>
-                    <select class="csr-form-select" @bind="selectedProgramName">
-                        <option value="" disabled selected hidden>Select Program Name</option>
-                        <option value="Crop Protection Workshop">Crop Protection Workshop</option>
-                        <option value="Farmer Meet & Training">Farmer Meet & Training</option>
+                    <select class="csr-form-select"
+                            @bind="selectedProgramName"
+                            @bind:after="OnSelectedProgramNameChanged">
+                        <option value="">Select program name</option>
+                        @foreach (var item in SelectedProgramNames)
+                        {
+                            <option value="@item">@item</option>
+                        }
                     </select>
+                </div>
+
+                <!-- Number of Programs -->
+                <div class="csr-form-group">
+                    <label class="csr-form-label">Number of Programs</label>
+                    <input type="number"
+                           class="csr-form-control"
+                           placeholder="Enter number of programs"
+                           @bind="programCount"
+                           @bind:event="oninput"
+                           min="0" />
                 </div>
 
                 <!-- Budget -->
                 <div class="csr-form-group">
                     <label class="csr-form-label">Budget</label>
-                    <select class="csr-form-select" @bind="selectedBudgetStr">
-                        <option value="" disabled selected hidden>Select Budget</option>
-                        <option value="250000">₹ 2,50,000</option>
-                        <option value="500000">₹ 5,00,000</option>
+                    <input type="number"
+                           class="csr-form-control"
+                           placeholder="Enter budget"
+                           min="0"
+                           step="0.01"
+                           @bind="selectedBudget"
+                           @bind:event="oninput" />
+                </div>
+
+                <!-- HQ -->
+                <div class="csr-form-group">
+                    <label class="csr-form-label">HQ</label>
+                    <select class="csr-form-select"
+                            @bind="selectedHQId">
+
+                        <option value="0">
+                            Select HQ
+                        </option>
+
+                        @foreach (var item in Headquarters)
+                        {
+                            <option value="@item.Id">
+                                @item.HeadquarterName
+                            </option>
+                        }
+
                     </select>
                 </div>
 
-                <!-- No of Program -->
+                <!-- Location -->
                 <div class="csr-form-group">
-                    <label class="csr-form-label">No of Program</label>
-                    <div class="csr-number-input-wrapper">
-                        <input type="number" class="csr-form-control" placeholder="Enter program count" @bind="programCount" @bind:event="oninput" min="0" />
-                    </div>
+                    <label class="csr-form-label">Location</label>
+                    <select class="csr-form-select"
+                            @bind="selectedZoneId">
+
+                        <option value="0">
+                            Select location
+                        </option>
+
+
+                        @foreach (var item in Zones)
+                        {
+                            <option value="@item.Id">
+                                @item.ZoneName
+                            </option>
+                        }
+
+                    </select>
                 </div>
 
-                <!-- Total Budget -->
+                <!-- Responsible Person -->
                 <div class="csr-form-group">
-                    <label class="csr-form-label">Total Budget</label>
-                    <input type="text" class="csr-form-control readonly-input" value="@TotalBudgetFormatted" readonly />
+                    <label class="csr-form-label">Responsible Person</label>
+                    <select class="csr-form-select"
+                            @bind="selectedEmployeeId">
+
+                        <option value="0">
+                            Select responsible person
+                        </option>
+
+
+                        @foreach (var item in Employees)
+                        {
+                            <option value="@item.Id">
+                                @item.Name
+                            </option>
+                        }
+
+                    </select>
                 </div>
+
             </div>
         </div>
 
@@ -274,9 +562,14 @@
                 <div class="csr-focus-card">
                     <div class="csr-form-group">
                         <label class="csr-form-label">Focused Crop</label>
-                        <select class="csr-form-select" @bind="focusCrop1">
+                        <select class="csr-form-select" @bind="focusCrop1Id">
                             <option value="" disabled selected hidden>Select Crop</option>
-                            <option value="Cotton">Cotton</option>
+                            @foreach (var item in Crops)
+                            {
+                                <option value="@item.Id">
+                                    @item.Name
+                                </option>
+                            }
                         </select>
                     </div>
                     <div class="csr-form-group">
@@ -284,9 +577,17 @@
                             <span>Focused Product</span>
                             <span class="csr-chip">Product 1 <i class="bi bi-x-circle-fill"></i></span>
                         </label>
-                        <select class="csr-form-select" @bind="focusProduct1">
-                            <option value="" disabled selected hidden>Select Product</option>
-                            <option value="Product 1">Product 1</option>
+                        <select class="csr-form-select" @bind="focusProduct1Id">
+                            <option value="0">
+                                Select Product
+                            </option>
+
+                            @foreach (var item in Products)
+                            {
+                                <option value="@item.Id">
+                                    @item.Name
+                                </option>
+                            }
                         </select>
                     </div>
                 </div>
@@ -295,9 +596,14 @@
                 <div class="csr-focus-card">
                     <div class="csr-form-group">
                         <label class="csr-form-label">Focused Crop</label>
-                        <select class="csr-form-select" @bind="focusCrop2">
+                        <select class="csr-form-select" @bind="focusCrop2Id">
                             <option value="" disabled selected hidden>Select Crop</option>
-                            <option value="Wheat">Wheat</option>
+                            @foreach (var item in Crops)
+                            {
+                                <option value="@item.Id">
+                                    @item.Name
+                                </option>
+                            }
                         </select>
                     </div>
                     <div class="csr-form-group">
@@ -305,9 +611,17 @@
                             <span>Focused Product</span>
                             <span class="csr-chip">Product 1 <i class="bi bi-x-circle-fill"></i></span>
                         </label>
-                        <select class="csr-form-select" @bind="focusProduct2">
-                            <option value="" disabled selected hidden>Select Product</option>
-                            <option value="Product 1">Product 1</option>
+                        <select class="csr-form-select" @bind="focusProduct2Id">
+                            <option value="0">
+                                Select Product
+                            </option>
+
+                            @foreach (var item in Products)
+                            {
+                                <option value="@item.Id">
+                                    @item.Name
+                                </option>
+                            }
                         </select>
                     </div>
                 </div>
@@ -316,9 +630,14 @@
                 <div class="csr-focus-card">
                     <div class="csr-form-group">
                         <label class="csr-form-label">Focused Crop</label>
-                        <select class="csr-form-select" @bind="focusCrop3">
+                        <select class="csr-form-select" @bind="focusCrop3Id">
                             <option value="" disabled selected hidden>Select Crop</option>
-                            <option value="Sugarcane">Sugarcane</option>
+                            @foreach (var item in Crops)
+                            {
+                                <option value="@item.Id">
+                                    @item.Name
+                                </option>
+                            }
                         </select>
                     </div>
                     <div class="csr-form-group">
@@ -326,9 +645,17 @@
                             <span>Focused Product</span>
                             <span class="csr-chip">Product 1 <i class="bi bi-x-circle-fill"></i></span>
                         </label>
-                        <select class="csr-form-select" @bind="focusProduct3">
-                            <option value="" disabled selected hidden>Select Product</option>
-                            <option value="Product 1">Product 1</option>
+                        <select class="csr-form-select" @bind="focusProduct3Id">
+                            <option value="0">
+                                Select Product
+                            </option>
+
+                            @foreach (var item in Products)
+                            {
+                                <option value="@item.Id">
+                                    @item.Name
+                                </option>
+                            }
                         </select>
                     </div>
                 </div>
@@ -437,22 +764,26 @@
         margin-bottom: 24px;
         font-family: 'Inter', sans-serif;
     }
+
     .csr-header-info h1 {
         font-size: 22px;
         font-weight: 700;
         color: #1e293b;
         margin: 0;
     }
+
     .csr-header-info p {
         font-size: 13px;
         font-weight: 500;
         color: #64748b;
         margin: 4px 0 0 0;
     }
+
     .csr-header-actions {
         display: flex;
         gap: 10px;
     }
+
     .csr-action-btn-outline {
         display: inline-flex;
         align-items: center;
@@ -467,10 +798,12 @@
         cursor: pointer;
         transition: all 0.2s;
     }
-    .csr-action-btn-outline:hover {
-        background-color: #f8fafc;
-        border-color: #cbd5e1;
-    }
+
+        .csr-action-btn-outline:hover {
+            background-color: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
     .csr-action-btn-solid {
         display: inline-flex;
         align-items: center;
@@ -485,9 +818,10 @@
         cursor: pointer;
         transition: all 0.2s;
     }
-    .csr-action-btn-solid:hover {
-        background-color: #1d4ed8;
-    }
+
+        .csr-action-btn-solid:hover {
+            background-color: #1d4ed8;
+        }
 
     .csr-stats-grid-4 {
         display: grid;
@@ -496,6 +830,7 @@
         margin-bottom: 24px;
         font-family: 'Inter', sans-serif;
     }
+
     .csr-alloc-card {
         display: flex;
         justify-content: space-between;
@@ -506,28 +841,33 @@
         background-color: #ffffff;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
+
     .csr-alloc-content {
         display: flex;
         flex-direction: column;
         gap: 4px;
         min-width: 0;
     }
+
     .csr-alloc-label {
         font-size: 13px;
         font-weight: 600;
         color: #64748b;
     }
+
     .csr-alloc-value {
         font-size: 24px;
         font-weight: 700;
         color: #0f172a;
         line-height: 1.2;
     }
+
     .csr-alloc-sub {
         font-size: 12px;
         font-weight: 500;
         color: #94a3b8;
     }
+
     .csr-alloc-icon {
         width: 46px;
         height: 46px;
@@ -539,39 +879,46 @@
         border: 1px solid #e2e8f0;
         flex-shrink: 0;
     }
-    
+
     .theme-farmers {
         background-color: #f0fdf4;
         border-color: #d1fae5;
     }
-    .theme-farmers .csr-alloc-icon {
-        color: #10b981;
-        border-color: #a7f3d0;
-    }
+
+        .theme-farmers .csr-alloc-icon {
+            color: #10b981;
+            border-color: #a7f3d0;
+        }
+
     .theme-dealer {
         background-color: #faf5ff;
         border-color: #f3e8ff;
     }
-    .theme-dealer .csr-alloc-icon {
-        color: #a855f7;
-        border-color: #e9d5ff;
-    }
+
+        .theme-dealer .csr-alloc-icon {
+            color: #a855f7;
+            border-color: #e9d5ff;
+        }
+
     .theme-approved {
         background-color: #eff6ff;
         border-color: #dbeafe;
     }
-    .theme-approved .csr-alloc-icon {
-        color: #3b82f6;
-        border-color: #bfdbfe;
-    }
+
+        .theme-approved .csr-alloc-icon {
+            color: #3b82f6;
+            border-color: #bfdbfe;
+        }
+
     .theme-remaining {
         background-color: #fffbeb;
         border-color: #fef3c7;
     }
-    .theme-remaining .csr-alloc-icon {
-        color: #f59e0b;
-        border-color: #fde68a;
-    }
+
+        .theme-remaining .csr-alloc-icon {
+            color: #f59e0b;
+            border-color: #fde68a;
+        }
 
     .csr-info-banner {
         display: flex;
@@ -585,29 +932,34 @@
         margin-bottom: 24px;
         font-family: 'Inter', sans-serif;
     }
+
     .csr-banner-left {
         display: flex;
         align-items: center;
         gap: 16px;
     }
+
     .csr-banner-icon-info {
         color: #10b981;
         display: flex;
         align-items: center;
         justify-content: center;
     }
+
     .csr-banner-text h4 {
         margin: 0;
         font-size: 14px;
         font-weight: 700;
         color: #065f46;
     }
+
     .csr-banner-text p {
         margin: 2px 0 0 0;
         font-size: 13px;
         font-weight: 500;
         color: #047857;
     }
+
     .csr-banner-right {
         display: flex;
         align-items: center;
@@ -622,17 +974,20 @@
         padding: 20px 24px;
         border-bottom: 1px solid #f1f5f9;
     }
-    .csr-card-header-actions h3 {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 700;
-        color: #1e293b;
-    }
+
+        .csr-card-header-actions h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
     .csr-search-wrapper {
         position: relative;
         display: flex;
         align-items: center;
     }
+
     .csr-search-input {
         width: 260px;
         background-color: #f8fafc;
@@ -644,43 +999,50 @@
         outline: none;
         transition: all 0.2s;
     }
-    .csr-search-input:focus {
-        background-color: #ffffff;
-        border-color: #3b82f6;
-    }
+
+        .csr-search-input:focus {
+            background-color: #ffffff;
+            border-color: #3b82f6;
+        }
+
     .csr-search-wrapper .search-icon {
         position: absolute;
         left: 12px;
         pointer-events: none;
     }
-    
+
     .csr-table-container {
         width: 100%;
         overflow-x: auto;
     }
+
     .csr-table {
         width: 100%;
         border-collapse: collapse;
         text-align: left;
         font-size: 13px;
     }
-    .csr-table th {
-        background-color: #f8fafc;
-        color: #475569;
-        font-weight: 600;
-        padding: 14px 24px;
-        border-bottom: 1px solid #e2e8f0;
-    }
-    .csr-table td {
-        padding: 16px 24px;
-        border-bottom: 1px solid #f1f5f9;
-        color: #1e293b;
-        font-weight: 500;
-        vertical-align: middle;
-    }
-    .csr-table tr:last-child td {
-        border-bottom: none;
-    }
+
+        .csr-table th {
+            background-color: #f8fafc;
+            color: #475569;
+            font-weight: 600;
+            padding: 14px 24px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .csr-table td {
+            padding: 16px 24px;
+            border-bottom: 1px solid #f1f5f9;
+            color: #1e293b;
+            font-weight: 500;
+            vertical-align: middle;
+        }
+
+        .csr-table tr:last-child td {
+            border-bottom: none;
+        }
+
     .csr-apply-btn {
         background-color: #2563eb;
         color: #ffffff;
@@ -692,10 +1054,11 @@
         cursor: pointer;
         transition: background-color 0.2s;
     }
-    .csr-apply-btn:hover {
-        background-color: #1d4ed8;
-    }
-    
+
+        .csr-apply-btn:hover {
+            background-color: #1d4ed8;
+        }
+
     .csr-table-footer {
         display: flex;
         justify-content: space-between;
@@ -705,6 +1068,7 @@
         background-color: #ffffff;
         border-radius: 0 0 12px 12px;
     }
+
     .csr-items-per-page {
         display: flex;
         align-items: center;
@@ -712,6 +1076,7 @@
         font-size: 13px;
         color: #64748b;
     }
+
     .csr-select-small {
         background-color: #f8fafc;
         border: 1px solid #e2e8f0;
@@ -721,11 +1086,13 @@
         color: #1e293b;
         outline: none;
     }
+
     .csr-pagination {
         display: flex;
         align-items: center;
         gap: 6px;
     }
+
     .csr-pag-btn {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
@@ -741,16 +1108,19 @@
         cursor: pointer;
         transition: all 0.2s;
     }
-    .csr-pag-btn:hover {
-        background-color: #f8fafc;
-        border-color: #cbd5e1;
-    }
-    .csr-pag-btn.active {
-        background-color: #e2e8f0;
-        border-color: #cbd5e1;
-        color: #0f172a;
-        font-weight: 600;
-    }
+
+        .csr-pag-btn:hover {
+            background-color: #f8fafc;
+            border-color: #cbd5e1;
+        }
+
+        .csr-pag-btn.active {
+            background-color: #e2e8f0;
+            border-color: #cbd5e1;
+            color: #0f172a;
+            font-weight: 600;
+        }
+
     .csr-pag-dots {
         font-size: 13px;
         color: #94a3b8;
@@ -759,23 +1129,25 @@
 
     .csr-form-fields-grid {
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 16px;
         margin-bottom: 20px;
         font-family: 'Inter', sans-serif;
     }
+
     .readonly-input {
         background-color: #f8fafc !important;
         color: #64748b !important;
         cursor: not-allowed;
     }
-    
+
     .csr-focus-grid-3 {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: 20px;
         font-family: 'Inter', sans-serif;
     }
+
     .csr-focus-card {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
@@ -785,6 +1157,7 @@
         flex-direction: column;
         gap: 16px;
     }
+
     .csr-chip {
         display: inline-flex;
         align-items: center;
@@ -797,13 +1170,16 @@
         border-radius: 12px;
         line-height: 1;
     }
-    .csr-chip i {
-        cursor: pointer;
-        opacity: 0.8;
-    }
-    .csr-chip i:hover {
-        opacity: 1;
-    }
+
+        .csr-chip i {
+            cursor: pointer;
+            opacity: 0.8;
+        }
+
+            .csr-chip i:hover {
+                opacity: 1;
+            }
+
     .justify-between {
         justify-content: space-between;
         width: 100%;
@@ -817,6 +1193,7 @@
         margin-bottom: 40px;
         font-family: 'Inter', sans-serif;
     }
+
     .csr-form-btn-secondary {
         display: inline-flex;
         align-items: center;
@@ -831,9 +1208,11 @@
         cursor: pointer;
         transition: background-color 0.2s;
     }
-    .csr-form-btn-secondary:hover {
-        background-color: #d1d5db;
-    }
+
+        .csr-form-btn-secondary:hover {
+            background-color: #d1d5db;
+        }
+
     .csr-form-btn-primary {
         display: inline-flex;
         align-items: center;
@@ -848,9 +1227,10 @@
         cursor: pointer;
         transition: background-color 0.2s;
     }
-    .csr-form-btn-primary:hover {
-        background-color: #1d4ed8;
-    }
+
+        .csr-form-btn-primary:hover {
+            background-color: #1d4ed8;
+        }
 
     .csr-section-card {
         background-color: #ffffff;
@@ -861,6 +1241,7 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
         font-family: 'Inter', sans-serif;
     }
+
     .csr-section-title {
         font-size: 16px;
         font-weight: 700;
@@ -881,6 +1262,7 @@
         margin-bottom: 20px;
         font-family: 'Inter', sans-serif;
     }
+
     .csr-back-btn {
         display: inline-flex;
         align-items: center;
@@ -895,48 +1277,293 @@
         cursor: pointer;
         transition: all 0.2s;
     }
-    .csr-back-btn:hover {
-        background-color: #f8fafc;
-        border-color: #cbd5e1;
-        color: #1e293b;
-    }
+
+        .csr-back-btn:hover {
+            background-color: #f8fafc;
+            border-color: #cbd5e1;
+            color: #1e293b;
+        }
+
     .csr-back-context {
         font-size: 13px;
         font-weight: 500;
         color: #64748b;
     }
-    .csr-back-context strong {
-        color: #1e293b;
-        font-weight: 700;
+
+        .csr-back-context strong {
+            color: #1e293b;
+            font-weight: 700;
+        }
+    /* =========================================================
+                           BUDGET PLAN FILTER
+                           ========================================================= */
+
+    .csr-filter-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+        font-family: 'Inter', sans-serif;
+        overflow: hidden;
+    }
+
+    /* Header */
+    .csr-filter-header {
+        min-height: 48px;
+        padding: 0 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .csr-filter-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #334155;
+    }
+
+        .csr-filter-title svg {
+            color: #64748b;
+        }
+
+    .csr-filter-collapse-btn {
+        width: 30px;
+        height: 30px;
+        border: none;
+        background: transparent;
+        color: #64748b;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+        .csr-filter-collapse-btn:hover {
+            background: #f8fafc;
+            color: #334155;
+        }
+
+
+    /* Filter Body */
+    .csr-filter-body {
+        padding: 18px;
+    }
+
+
+    /* 4 column filter layout */
+    .csr-filter-grid {
+        display: grid;
+        grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(170px, 1fr) minmax(170px, 1fr);
+        gap: 16px;
+    }
+
+
+    /* Individual Field */
+    .csr-filter-group {
+        min-width: 0;
+    }
+
+        .csr-filter-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 7px;
+        }
+
+
+    /* Select + Input */
+    .csr-filter-control {
+        width: 100%;
+        height: 38px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 0 11px;
+        background: #ffffff;
+        color: #334155;
+        font-family: 'Inter', sans-serif;
+        font-size: 12px;
+        font-weight: 400;
+        outline: none;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    select.csr-filter-control {
+        cursor: pointer;
+    }
+
+    .csr-filter-control::placeholder {
+        color: #b0b8c4;
+    }
+
+    .csr-filter-control:focus {
+        border-color: #93c5fd;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+    }
+
+
+    /* Bottom row */
+    .csr-filter-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 16px;
+        margin-top: 14px;
+    }
+
+    .csr-filter-status {
+        width: calc(25% - 12px);
+        min-width: 170px;
+    }
+
+
+    /* Actions */
+    .csr-filter-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
+
+    /* Clear */
+    .csr-filter-clear-btn {
+        height: 36px;
+        padding: 0 15px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .csr-filter-clear-btn:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+            color: #334155;
+        }
+
+
+    /* Apply */
+    .csr-filter-apply-btn {
+        height: 36px;
+        padding: 0 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        border: none;
+        border-radius: 6px;
+        background: #2563eb;
+        color: #ffffff;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+        .csr-filter-apply-btn:hover {
+            background: #1d4ed8;
+        }
+
+    @@media (max-width: 1200px) {
+
+        .csr-filter-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .csr-filter-status {
+            width: calc(50% - 8px);
+        }
+    }
+
+
+    @@media (max-width: 768px) {
+
+        .csr-filter-body {
+            padding: 14px;
+        }
+
+        .csr-filter-grid {
+            grid-template-columns: 1fr;
+            gap: 12px;
+        }
+
+        .csr-filter-bottom {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+        }
+
+        .csr-filter-status {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .csr-filter-actions {
+            width: 100%;
+        }
+
+        .csr-filter-clear-btn,
+        .csr-filter-apply-btn {
+            flex: 1;
+            min-height: 44px;
+        }
+
+        .csr-filter-control {
+            min-height: 44px;
+            font-size: 16px;
+        }
     }
 
     @@media (max-width: 1200px) {
         .csr-stats-grid-4 {
             grid-template-columns: repeat(2, 1fr);
         }
+
         .csr-form-fields-grid {
             grid-template-columns: repeat(3, 1fr);
         }
+
         .csr-focus-grid-3 {
             grid-template-columns: repeat(2, 1fr);
         }
+
         .csr-grid-4 {
             grid-template-columns: repeat(2, 1fr);
         }
     }
+
     @@media (max-width: 768px) {
         .csr-stats-grid-4 {
             grid-template-columns: 1fr;
         }
+
         .csr-form-fields-grid {
             grid-template-columns: 1fr;
         }
+
         .csr-focus-grid-3 {
             grid-template-columns: 1fr;
         }
+
         .csr-grid-4, .csr-grid-3 {
             grid-template-columns: 1fr;
         }
+
         .csr-header-wrapper {
             flex-direction: column;
             gap: 16px;
@@ -948,20 +1575,23 @@
         margin-bottom: 24px;
         font-family: 'Inter', sans-serif;
     }
-    .shell-page-header.csr-page-header .shell-page-title {
-        font-size: 22px;
-        font-weight: 700;
-        color: #1e293b;
-    }
-    .shell-page-header.csr-page-header .shell-page-subtitle {
-        font-size: 13px;
-        font-weight: 500;
-        color: #64748b;
-        margin-top: 4px;
-    }
-    .shell-page-header.csr-page-header .shell-page-actions {
-        gap: 10px;
-    }
+
+        .shell-page-header.csr-page-header .shell-page-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .shell-page-header.csr-page-header .shell-page-subtitle {
+            font-size: 13px;
+            font-weight: 500;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .shell-page-header.csr-page-header .shell-page-actions {
+            gap: 10px;
+        }
     /* ActionBar host: same row, gap and margins as the old .csr-form-actions-bottom. */
     .container-fluid .fb-actionbar.csr-actionbar {
         padding: 0;
@@ -970,9 +1600,10 @@
         margin-bottom: 40px;
         font-family: 'Inter', sans-serif;
     }
-    .container-fluid .fb-actionbar.csr-actionbar .fb-actionbar__primary {
-        gap: 12px;
-    }
+
+        .container-fluid .fb-actionbar.csr-actionbar .fb-actionbar__primary {
+            gap: 12px;
+        }
 
     /* native: phone */
     @@media (max-width: 767.98px) {
@@ -980,38 +1611,44 @@
             margin-bottom: 14px;
             flex-wrap: wrap;
         }
-        .shell-page-header.csr-page-header .shell-page-title {
-            font-size: 1.15rem;
-        }
-        .shell-page-header.csr-page-header .shell-page-subtitle {
-            font-size: 0.8rem;
-            margin-top: 2px;
-        }
-        /* Toolbar drops under the title, 2-up, 44px. */
-        .shell-page-header.csr-page-header .shell-page-actions {
-            flex: 1 1 100%;
-            gap: 8px;
-        }
-        .shell-page-header.csr-page-header .csr-action-btn-outline,
-        .shell-page-header.csr-page-header .csr-action-btn-solid {
-            flex: 1 1 calc(50% - 4px);
-            justify-content: center;
-            min-height: 44px;
-        }
+
+            .shell-page-header.csr-page-header .shell-page-title {
+                font-size: 1.15rem;
+            }
+
+            .shell-page-header.csr-page-header .shell-page-subtitle {
+                font-size: 0.8rem;
+                margin-top: 2px;
+            }
+            /* Toolbar drops under the title, 2-up, 44px. */
+            .shell-page-header.csr-page-header .shell-page-actions {
+                flex: 1 1 100%;
+                gap: 8px;
+            }
+
+            .shell-page-header.csr-page-header .csr-action-btn-outline,
+            .shell-page-header.csr-page-header .csr-action-btn-solid {
+                flex: 1 1 calc(50% - 4px);
+                justify-content: center;
+                min-height: 44px;
+            }
         /* minmax(0,…) so a long "₹ 50,00,000" cannot push the tile (and the
-           page) wider than the 392px viewport. */
+                               page) wider than the 392px viewport. */
         .csr-stats-grid-4 {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
         }
+
         .csr-alloc-card {
             padding: 14px;
             gap: 8px;
         }
+
         .csr-alloc-value {
             font-size: 16px;
             white-space: nowrap;
         }
+
         .csr-alloc-icon {
             flex-shrink: 0;
         }
@@ -1021,25 +1658,30 @@
             gap: 10px;
             padding: 14px 16px;
         }
+
         .csr-banner-left {
             gap: 12px;
             min-width: 0;
         }
+
         .csr-banner-icon-info {
             flex-shrink: 0;
         }
+
         .csr-banner-right {
             display: none; /* decorative only */
         }
         /* Program table becomes one card per program so "Apply CSR 1" and the
-           budget columns are on screen instead of off the right edge. */
+                               budget columns are on screen instead of off the right edge. */
         .csr-table-container {
             overflow: visible;
             padding: 0 12px 4px;
         }
+
         .csr-table thead {
             display: none;
         }
+
         .csr-table,
         .csr-table tbody,
         .csr-table tr,
@@ -1047,46 +1689,54 @@
             display: block;
             width: 100%;
         }
-        .csr-table tbody tr {
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            background: #ffffff;
-            padding: 6px 12px;
-            margin-bottom: 10px;
-        }
-        .csr-table td {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            text-align: right !important;
-            padding: 8px 0 !important;
-            border-bottom: 1px solid #f1f5f9;
-            white-space: normal;
-        }
-        .csr-table td::before {
-            content: attr(data-label);
-            flex: 0 0 42%;
-            text-align: left;
-            color: #64748b;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        .csr-table td:last-child {
-            border-bottom: 0;
-        }
-        .csr-table td.csr-cell-select {
-            justify-content: flex-start;
-            border-bottom: 0;
-            padding-bottom: 0 !important;
-        }
-        .csr-table td.csr-cell-select::before {
-            display: none;
-        }
+
+            .csr-table tbody tr {
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                background: #ffffff;
+                padding: 6px 12px;
+                margin-bottom: 10px;
+            }
+
+            .csr-table td {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                text-align: right !important;
+                padding: 8px 0 !important;
+                border-bottom: 1px solid #f1f5f9;
+                white-space: normal;
+            }
+
+                .csr-table td::before {
+                    content: attr(data-label);
+                    flex: 0 0 42%;
+                    text-align: left;
+                    color: #64748b;
+                    font-size: 12px;
+                    font-weight: 600;
+                }
+
+                .csr-table td:last-child {
+                    border-bottom: 0;
+                }
+
+                .csr-table td.csr-cell-select {
+                    justify-content: flex-start;
+                    border-bottom: 0;
+                    padding-bottom: 0 !important;
+                }
+
+                    .csr-table td.csr-cell-select::before {
+                        display: none;
+                    }
+
         .csr-apply-btn,
         .csr-pag-btn {
             min-height: 44px;
         }
+
         .csr-pag-btn {
             width: 44px;
         }
@@ -1097,16 +1747,19 @@
             gap: 10px;
             padding: 12px;
         }
+
         .csr-pagination {
             flex-wrap: wrap;
             justify-content: center;
         }
+
         .csr-search-input,
         .csr-form-control,
         .csr-form-select {
             min-height: 44px;
             font-size: 16px; /* prevents iOS zoom on focus; native date pickers */
         }
+
         .csr-form-btn-secondary,
         .csr-form-btn-primary {
             min-height: 44px;
@@ -1122,43 +1775,97 @@
 </style>
 
 @code {
-    // UI-only view state: which section is showing (Budget Plan List vs the CSR-1 form).
-    // Does not affect save/submit/validation/navigation logic below.
+    // =========================================================
+    // View State
+    // =========================================================
     private bool isFormView = false;
+    private bool showFilters = true;
+    private bool selectAllChecked = false;
+    private bool isBudgetDataLoading = false;
 
     private string searchQuery = "";
-    private bool selectAllChecked = false;
+    private string budgetLoadError = "";
 
+    // =========================================================
+    // Filter State
+    // =========================================================
+    private string filterProgramType = "";
+    private string filterProgramName = "";
+    private string filterBudget = "";
+    private int? filterProgramCount = null;
+    private string filterStatus = "";
+
+    private string appliedProgramType = "";
+    private string appliedProgramName = "";
+    private string appliedBudget = "";
+    private int? appliedProgramCount = null;
+    private string appliedStatus = "";
+
+    // =========================================================
+    // CSR-1 Form State
+    // =========================================================
     private string selectedProgramType = "";
     private string selectedProgramName = "";
-    private int? selectedBudget = null;
+    private decimal? selectedBudget = null;
     private int programCount = 0;
 
-    private int TotalBudget => (selectedBudget ?? 0) * programCount;
+    // Additional CSR-1 Plan Detail fields
+    private string selectedHq = "";
+    private string selectedLocation = "";
+    private int selectedEmployeeId = 0;
 
-    private string TotalBudgetFormatted => TotalBudget.ToString("C0", System.Globalization.CultureInfo.CreateSpecificCulture("en-IN"));
+    private List<EmployeeInformationDto> Employees = new();
+
+    // Bind these lists from the relevant master APIs when available.
+    private List<HeadquartersDto> Headquarters = new();
+    private int selectedHQId = 0;
+    private List<ZoneDto> Zones = new();
+
+    private int selectedZoneId = 0;
+
+    private decimal TotalBudget => (selectedBudget ?? 0m) * programCount;
+
+    private string TotalBudgetFormatted =>
+        TotalBudget.ToString("C0", CultureInfo.CreateSpecificCulture("en-IN"));
 
     private string selectedBudgetStr
     {
-        get => selectedBudget?.ToString() ?? "";
+        get => selectedBudget?.ToString(CultureInfo.InvariantCulture) ?? "";
         set
         {
-            if (int.TryParse(value, out int result))
+            if (decimal.TryParse(
+                value,
+                NumberStyles.Number,
+                CultureInfo.InvariantCulture,
+                out var result))
+            {
                 selectedBudget = result;
+            }
             else
+            {
                 selectedBudget = null;
+            }
         }
     }
 
-    // Focus fields binding
-    private string focusCrop1 = "";
-    private string focusProduct1 = "";
-    private string focusCrop2 = "";
-    private string focusProduct2 = "";
-    private string focusCrop3 = "";
-    private string focusProduct3 = "";
+    // =========================================================
+    // Focus Fields
+    // =========================================================
+    private int focusCrop1Id = 0;
+    private int focusCrop2Id = 0;
+    private int focusCrop3Id = 0;
 
-    // Expense breakdown bindings
+    private List<CropDto> Crops = new();
+
+    private List<ProductDto> Products = new();
+
+    private int focusProduct1Id = 0;
+    private int focusProduct2Id = 0;
+    private int focusProduct3Id = 0;
+
+    // =========================================================
+    // Expense Breakdown
+    // =========================================================
     private int printStationary = 0;
     private int publicityMaterial = 0;
     private int stageArrangements = 0;
@@ -1171,6 +1878,9 @@
     private int compliments = 0;
     private int othersExpense = 0;
 
+    // =========================================================
+    // Existing Budget Plan List UI Model
+    // =========================================================
     private class BudgetProgram
     {
         public string ProgramType { get; set; } = "";
@@ -1181,6 +1891,9 @@
         public bool IsSelected { get; set; }
     }
 
+    // Existing list is retained because the supplied page does not include
+    // the API/model used to build Beneficiaries and ApprovedPrograms.
+    // Filter dropdown values are no longer taken from this mock list.
     private List<BudgetProgram> programs = new()
     {
         new BudgetProgram { ProgramType = "Farmer Program", ProgramName = "Crop Protection Workshop", ApprovedPrograms = 1, Beneficiaries = "1250 Farmers", ApprovedBudget = 250000 },
@@ -1190,43 +1903,336 @@
         new BudgetProgram { ProgramType = "Farmer Programs", ProgramName = "Crop Protection Workshop", ApprovedPrograms = 1, Beneficiaries = "1250 Farmers", ApprovedBudget = 250000 }
     };
 
-    private IEnumerable<BudgetProgram> GetFilteredPrograms()
+    // =========================================================
+    // BudgetPrograms API DTO
+    // api/Budget/program-master-list must return these fields.
+    // =========================================================
+    private class BudgetProgramFilterDto
     {
-        if (string.IsNullOrWhiteSpace(searchQuery))
-            return programs;
+        public int Id { get; set; }
 
-        return programs.Where(p => 
-            p.ProgramType.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) || 
-            p.ProgramName.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) || 
-            p.Beneficiaries.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)
-        );
+        public int ProgramId { get; set; }
+
+        public string ProgramType { get; set; } = "";
+
+        public string ProgramName { get; set; } = "";
+
+        public decimal TotalBudget { get; set; }
+
+        public string Status { get; set; } = "";
+
+        public string FinancialYear { get; set; } = "";
+
+        // Monthly Program Counts
+        public int AprilCount { get; set; }
+        public int MayCount { get; set; }
+        public int JuneCount { get; set; }
+        public int JulyCount { get; set; }
+        public int AugustCount { get; set; }
+        public int SeptemberCount { get; set; }
+        public int OctoberCount { get; set; }
+        public int NovemberCount { get; set; }
+        public int DecemberCount { get; set; }
+        public int JanuaryCount { get; set; }
+        public int FebruaryCount { get; set; }
+        public int MarchCount { get; set; }
+
+        // Automatically calculate total number of programs
+        public int NumberOfPrograms =>
+            AprilCount +
+            MayCount +
+            JuneCount +
+            JulyCount +
+            AugustCount +
+            SeptemberCount +
+            OctoberCount +
+            NovemberCount +
+            DecemberCount +
+            JanuaryCount +
+            FebruaryCount +
+            MarchCount;
+
+        public string Beneficiaries { get; set; } = "";
+
+        public bool IsSelected { get; set; }
+    }
+
+    private List<BudgetProgramFilterDto> budgetPrograms = new();
+
+    // Program Type is loaded from BudgetPrograms/API data.
+    private List<string> ProgramTypes =>
+        budgetPrograms
+            .Where(x => !string.IsNullOrWhiteSpace(x.ProgramType))
+            .Select(x => x.ProgramType.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+
+    // Filter Program Name depends on the selected filter Program Type.
+    private List<string> ProgramNames =>
+        budgetPrograms
+            .Where(x =>
+                string.IsNullOrWhiteSpace(filterProgramType) ||
+                x.ProgramType.Equals(filterProgramType, StringComparison.OrdinalIgnoreCase))
+            .Where(x => !string.IsNullOrWhiteSpace(x.ProgramName))
+            .Select(x => x.ProgramName.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+
+    // Filter Budget comes from BudgetPrograms.TotalBudget and depends on
+    // Program Type + Program Name selected in the filter.
+    private List<decimal> BudgetAmounts =>
+        budgetPrograms
+            .Where(x =>
+                string.IsNullOrWhiteSpace(filterProgramType) ||
+                x.ProgramType.Equals(filterProgramType, StringComparison.OrdinalIgnoreCase))
+            .Where(x =>
+                string.IsNullOrWhiteSpace(filterProgramName) ||
+                x.ProgramName.Equals(filterProgramName, StringComparison.OrdinalIgnoreCase))
+            .Where(x => x.TotalBudget > 0)
+            .Select(x => x.TotalBudget)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+    // Program Names for the CSR-1 form depend on selectedProgramType.
+    private List<string> SelectedProgramNames =>
+        budgetPrograms
+            .Where(x =>
+                string.IsNullOrWhiteSpace(selectedProgramType) ||
+                x.ProgramType.Equals(selectedProgramType, StringComparison.OrdinalIgnoreCase))
+            .Where(x => !string.IsNullOrWhiteSpace(x.ProgramName))
+            .Select(x => x.ProgramName.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+
+    // Budget values for the CSR-1 form also come from BudgetPrograms.TotalBudget.
+    private List<decimal> SelectedBudgetAmounts =>
+        budgetPrograms
+            .Where(x =>
+                string.IsNullOrWhiteSpace(selectedProgramType) ||
+                x.ProgramType.Equals(selectedProgramType, StringComparison.OrdinalIgnoreCase))
+            .Where(x =>
+                string.IsNullOrWhiteSpace(selectedProgramName) ||
+                x.ProgramName.Equals(selectedProgramName, StringComparison.OrdinalIgnoreCase))
+            .Where(x => x.TotalBudget > 0)
+            .Select(x => x.TotalBudget)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBudgetPrograms();
+        await LoadHeadquarters();
+        await LoadZones();
+        await LoadEmployees();
+        await LoadCrops();
+        await LoadProducts();
+    }
+
+    private async Task LoadBudgetPrograms()
+    {
+        isBudgetDataLoading = true;
+        budgetLoadError = "";
+
+        try
+        {
+            budgetPrograms =
+                await Http.GetFromJsonAsync<List<BudgetProgramFilterDto>>(
+                    "api/Budget/program-master-list") ?? new();
+        }
+        catch (Exception ex)
+        {
+            budgetPrograms = new();
+            budgetLoadError = ex.Message;
+            Console.WriteLine($"Error loading BudgetPrograms: {ex.Message}");
+        }
+        finally
+        {
+            isBudgetDataLoading = false;
+        }
+    }
+
+    private IEnumerable<BudgetProgramFilterDto> FilteredBudgetPrograms
+    {
+        get
+        {
+            IEnumerable<BudgetProgramFilterDto> result = budgetPrograms;
+
+
+            // Only approved records
+            result = result.Where(x =>
+                string.IsNullOrWhiteSpace(x.Status)
+                ||
+                x.Status.Equals(
+                    "Approved",
+                    StringComparison.OrdinalIgnoreCase));
+
+
+            // Program Type
+            if (!string.IsNullOrWhiteSpace(appliedProgramType))
+            {
+                result = result.Where(x =>
+                    x.ProgramType.Equals(
+                        appliedProgramType,
+                        StringComparison.OrdinalIgnoreCase));
+            }
+
+
+            // Program Name
+            if (!string.IsNullOrWhiteSpace(appliedProgramName))
+            {
+                result = result.Where(x =>
+                    x.ProgramName.Equals(
+                        appliedProgramName,
+                        StringComparison.OrdinalIgnoreCase));
+            }
+
+
+            // Budget
+            if (!string.IsNullOrWhiteSpace(appliedBudget)
+                &&
+                decimal.TryParse(
+                    appliedBudget,
+                    NumberStyles.Any,
+                    CultureInfo.InvariantCulture,
+                    out decimal budget))
+            {
+                result = result.Where(x =>
+                    x.TotalBudget == budget);
+            }
+
+
+            // Number of Programs
+            if (appliedProgramCount.HasValue)
+            {
+                result = result.Where(x =>
+                    x.NumberOfPrograms == appliedProgramCount.Value);
+            }
+
+
+            // Status
+            if (!string.IsNullOrWhiteSpace(appliedStatus))
+            {
+                result = result.Where(x =>
+                    x.Status.Equals(
+                        appliedStatus,
+                        StringComparison.OrdinalIgnoreCase));
+            }
+
+
+            // Search
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                result = result.Where(x =>
+
+                    (!string.IsNullOrWhiteSpace(x.ProgramType) &&
+                     x.ProgramType.Contains(
+                         searchQuery,
+                         StringComparison.OrdinalIgnoreCase))
+
+                    ||
+
+                    (!string.IsNullOrWhiteSpace(x.ProgramName) &&
+                     x.ProgramName.Contains(
+                         searchQuery,
+                         StringComparison.OrdinalIgnoreCase))
+
+                    ||
+
+                    (!string.IsNullOrWhiteSpace(x.Beneficiaries) &&
+                     x.Beneficiaries.Contains(
+                         searchQuery,
+                         StringComparison.OrdinalIgnoreCase))
+
+                );
+            }
+
+
+            return result.ToList();
+        }
+    }
+
+    private void OnTableSearchChanged()
+    {
+        selectAllChecked = false;
+        StateHasChanged();
+    }
+
+    private List<ExportColumn<BudgetProgramFilterDto>> GetBudgetPlanExportColumns()
+    {
+        return new()
+        {
+            new ExportColumn<BudgetProgramFilterDto>
+            {
+                Header = "Program Type",
+                ValueSelector = x => x.ProgramType
+            },
+            new ExportColumn<BudgetProgramFilterDto>
+            {
+                Header = "Program Name",
+                ValueSelector = x => x.ProgramName
+            },
+            new ExportColumn<BudgetProgramFilterDto>
+            {
+                Header = "Number of Programs",
+                ValueSelector = x => x.NumberOfPrograms.ToString()
+            },
+            new ExportColumn<BudgetProgramFilterDto>
+            {
+                Header = "Beneficiaries",
+                ValueSelector = x => string.IsNullOrWhiteSpace(x.Beneficiaries) ? "-" : x.Beneficiaries
+            },
+            new ExportColumn<BudgetProgramFilterDto>
+            {
+                Header = "Approved Budget",
+                ValueSelector = x => x.TotalBudget.ToString(
+                    "N0",
+                    CultureInfo.CreateSpecificCulture("en-IN"))
+            }
+        };
     }
 
     private void ToggleSelectAll(ChangeEventArgs e)
     {
         selectAllChecked = (bool)(e.Value ?? false);
-        foreach (var p in GetFilteredPrograms())
+
+        foreach (var p in FilteredBudgetPrograms)
         {
             p.IsSelected = selectAllChecked;
         }
     }
 
-    private void ToggleProgramSelection(BudgetProgram program, ChangeEventArgs e)
+    private void ToggleProgramSelection(
+       BudgetProgramFilterDto program,
+       ChangeEventArgs e)
     {
         program.IsSelected = (bool)(e.Value ?? false);
-        selectAllChecked = GetFilteredPrograms().All(p => p.IsSelected);
+
+        var filtered = FilteredBudgetPrograms.ToList();
+
+        selectAllChecked =
+            filtered.Any() &&
+            filtered.All(p => p.IsSelected);
     }
 
-    private void PopulateFormFromProgram(BudgetProgram program)
+    private void PopulateFormFromProgram(
+      BudgetProgramFilterDto program)
     {
         selectedProgramType = program.ProgramType;
         selectedProgramName = program.ProgramName;
-        selectedBudget = program.ApprovedBudget;
-        programCount = program.ApprovedPrograms;
+        selectedBudget = program.TotalBudget;
+
+        programCount =
+            program.NumberOfPrograms > 0
+                ? program.NumberOfPrograms
+                : 1;
 
         isFormView = true;
     }
-
     private void BackToProgramList()
     {
         isFormView = false;
@@ -1234,11 +2240,226 @@
 
     private void HandleSaveDraft()
     {
-        // Mock save draft action
+        // Existing mock save draft action retained.
     }
 
     private void HandleSubmitValidation()
     {
-        // Mock submit validation action
+        // Existing mock submit validation action retained.
     }
+
+    private void ToggleFilters()
+    {
+        showFilters = !showFilters;
+    }
+
+    private void OnFilterProgramTypeChanged()
+    {
+        filterProgramName = "";
+        filterBudget = "";
+    }
+
+    private void OnFilterProgramNameChanged()
+    {
+        filterBudget = "";
+    }
+
+    private void OnSelectedProgramTypeChanged()
+    {
+        selectedProgramName = "";
+        selectedBudget = null;
+    }
+
+    private void OnSelectedProgramNameChanged()
+    {
+        selectedBudget = null;
+    }
+
+    private void ApplyFilters()
+    {
+        appliedProgramType = filterProgramType;
+        appliedProgramName = filterProgramName;
+        appliedBudget = filterBudget;
+        appliedProgramCount = filterProgramCount;
+        appliedStatus = filterStatus;
+
+        selectAllChecked = false;
+
+        StateHasChanged();
+    }
+
+    private void ClearFilters()
+    {
+        filterProgramType = "";
+        filterProgramName = "";
+        filterBudget = "";
+        filterProgramCount = null;
+        filterStatus = "";
+
+        appliedProgramType = "";
+        appliedProgramName = "";
+        appliedBudget = "";
+        appliedProgramCount = null;
+        appliedStatus = "";
+
+        searchQuery = "";
+        selectAllChecked = false;
+
+        StateHasChanged();
+    }
+    private class HeadquartersDto
+    {
+        public int Id { get; set; }
+
+        public string HeadquarterName { get; set; } = "";
+
+        public bool IsActive { get; set; }
+    }
+
+    private async Task LoadHeadquarters()
+    {
+        try
+        {
+            Headquarters =
+                await Http.GetFromJsonAsync<List<HeadquartersDto>>
+                (
+                    "api/Budget/headquarters"
+                )
+                ?? new();
+
+
+            Console.WriteLine(
+                $"HQ Loaded : {Headquarters.Count}"
+            );
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"HQ Load Error : {ex.Message}"
+            );
+
+            Headquarters = new();
+        }
+    }
+
+    private class ZoneDto
+    {
+        public int Id { get; set; }
+
+        public string ZoneName { get; set; } = "";
+
+        public bool IsActive { get; set; }
+    }
+
+    private async Task LoadZones()
+    {
+        try
+        {
+            Zones =
+                await Http.GetFromJsonAsync<List<ZoneDto>>
+                (
+                    "api/Budget/zones"
+                )
+                ?? new();
+
+
+            Console.WriteLine(
+                $"Zones Loaded : {Zones.Count}"
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"Zone Load Error : {ex.Message}"
+            );
+
+            Zones = new();
+        }
+    }
+
+    private class EmployeeInformationDto
+    {
+        public int Id { get; set; }
+
+        public string Name { get; set; } = "";
+    }
+
+    private async Task LoadEmployees()
+    {
+        try
+        {
+            Employees =
+                await Http.GetFromJsonAsync<List<EmployeeInformationDto>>
+                (
+                    "api/Budget/employees"
+                )
+                ?? new();
+
+
+            Console.WriteLine(
+                $"Employees Loaded : {Employees.Count}"
+            );
+
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"Employee Load Error : {ex.Message}"
+            );
+
+            Employees = new();
+        }
+    }
+    private class CropDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public bool IsActive { get; set; }
+    }
+
+    private async Task LoadCrops()
+    {
+        try
+        {
+            Crops =
+                await Http.GetFromJsonAsync<List<CropDto>>(
+                    "api/Budget/crops"
+                ) ?? new();
+
+            Console.WriteLine($"Crops Loaded : {Crops.Count}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Crop Load Error : {ex.Message}");
+            Crops = new();
+        }
+    }
+
+
+    private class ProductDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public bool IsActive { get; set; }
+    }
+
+    private async Task LoadProducts()
+    {
+        try
+        {
+            Products =
+                await Http.GetFromJsonAsync<List<ProductDto>>(
+                    "api/Budget/products"
+                ) ?? new();
+
+            Console.WriteLine($"Products Loaded : {Products.Count}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Product Load Error : {ex.Message}");
+            Products = new();
+        }
+    }
+
 }
