@@ -4,12 +4,15 @@
    Planning phase: Program -> Sales Plan -> Dealers -> Plan Review -> Tracking; completed steps
    link back to their page. Tracking phase (TrackingPhase="true"): Program -> Sales Plan ->
    Dealers -> Tracking -> Period-End Review. *@
+<div class="sas-root">
 <div class="sas-stepper @(TrackingPhase ? "sas-tracking" : "")">
     @foreach (var step in ActiveSteps)
     {
         var state = step.Number < CurrentStep ? "done" : step.Number == CurrentStep ? "active" : "pending";
 
+        @* title: on tablet/phone most labels are hidden, so the step name stays available on hover / long-press. *@
         <div class="sas-step sas-step-@state @(state == "done" && step.Href is not null ? "sas-step-link" : "")"
+             title="@step.Label" aria-current="@(state == "active" ? "step" : null)"
              @onclick="() => GoTo(step, state)">
             <span class="sas-step-circle">
                 @if (state == "done")
@@ -41,6 +44,11 @@
             <span class="sas-step-line @(lineDone ? "sas-line-done" : "")"></span>
         }
     }
+</div>
+@if (ActiveSteps.FirstOrDefault(s => s.Number == CurrentStep) is { } current)
+{
+    <p class="sas-phone-caption">Step @CurrentStep of @ActiveSteps.Count · <strong>@current.Label</strong></p>
+}
 </div>
 
 @code {

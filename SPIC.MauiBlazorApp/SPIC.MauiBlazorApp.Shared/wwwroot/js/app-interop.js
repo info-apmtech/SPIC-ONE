@@ -134,11 +134,24 @@ window.navSearch = {
     }
 };
 
-// Pages live inside the .main-content scroll container (MainLayout), which Blazor does not
-// reset on navigation, so a new page would open at the previous page's scroll offset.
-// The window is reset too for layouts where the document itself scrolls (phone).
+// Blazor does not reset scroll position on navigation, so a new page would open at the
+// previous page's scroll offset. Which element actually scrolls depends on the screen size:
+//   desktop/tablet - .main-content (MainLayout) is the scroll container;
+//   phone          - the page itself scrolls, and because Login.css (loaded globally) gives
+//                    html AND body overflow-y:auto with height:100%, it is <body> that scrolls,
+//                    which window.scrollTo() does not reach.
+// So every candidate is reset.
 window.scrollPageToTop = function () {
-    var content = document.querySelector('.main-content');
-    if (content) content.scrollTop = 0;
+    var targets = [
+        document.querySelector('.main-content'),
+        document.querySelector('.content-wrap'),
+        document.querySelector('.app-shell'),
+        document.body,
+        document.documentElement,
+        document.scrollingElement
+    ];
+    targets.forEach(function (el) {
+        if (el && el.scrollTop !== 0) el.scrollTop = 0;
+    });
     window.scrollTo(0, 0);
 };
