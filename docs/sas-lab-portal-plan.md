@@ -189,10 +189,39 @@ shared components under `Shared/Components/Lab/`.
 | 2 | coordinator | merges, `Lab.razor` dashboard switch (coordinator / analyst variant by `api/Lab/me`), role sweeps (admin, coordinator, analyst, finance, farmer, MDO at 375 / 1280), phone check, docs | release on Satham |
 | 3 | product owner | `migrate.ps1`, `deploy.ps1`, Designation grants (Lab Coordinator: LabDashboard, LabConsignments, LabAnalysis, LabReports; Lab Analyst: LabDashboard, LabTestEntry, LabReports; Finance: SasPaymentVerification; admins: SasPaymentApproval, LabTracking), fonts, fertilizer rules | production |
 
+Phase 2 reconciliation list (coordinator), collected from the workstream reports:
+- Sample display id: LabController numbers samples per batch (`SAS-SOIL-001`), the report renderer
+  uses the item id (`SAS-SOIL-043`); make the PDF's Lab Number use the batch numbering.
+- Crop suitability note wording differs between the entry preview (LabAutoResultEngine) and the
+  report detail (LabReportRules); the report must reuse the engine.
+- CORS: expose `X-Report-Language-Fallback` so the web client can tell the user a PDF fell back
+  to English.
+- `reports/stats.BatchGroups` counts every batch in scope; the analyst screen wants batches with
+  reports only (decide with the product owner).
+- Translations marked `// review` in `LabTranslationSeed.cs` need a native speaker (Telugu soil
+  labels, Marathi "Recommendations", texture terms).
+- Fonts: `SpicAPI/Fonts/` is empty until the Noto Sans files are approved and added.
+- Payments: Finance's verified amount overwrites the admin's (one `VerifiedAmount` column) and the
+  received date is folded into `FinanceVerifiedAt`; add `FinanceVerifiedAmount` and
+  `FinanceReceivedDate` in a follow-up migration (V5p) and split them in the controller/timeline.
+  "Failed" and "Amount Mismatch" both store `FinanceStatus.Mismatch`; the History "All" tab
+  guesses from the remark. Farmer status for admin-approved-but-unverified reads "Admin Approved".
+
 Rules for every agent: local database only (`spicone_dev`, local ports assigned per agent), QA
 accounts, no live API; phone-first checks at 375 px; sweeps clean; commit in the worktree; report.
 
-## 5. Principles
+## 5. Status log
+
+- 2026-09-27: phase 0 (7d89acf, b945f00); API-Lab merged (b1227c7, 486 checks); API-Reports merged
+  (4b4fd3a, 48 + 21 checks, PDFs checked against the reference); Payments merged (59657be; guard
+  fix for farmers / MOs); admin + farmer pages (b688dcb); analyst pages (fa5a487, report
+  follow-up 8ff3d21 with `ValueType` / `Options` / `IsDerived` on parameter rows); coordinator
+  pages (ed0b681, report follow-up e319ab8; coordinators may open the sample entry page
+  read-only, 10ee406 / 62e0473). Reconciliation agent running (items above); farmer verification
+  round running. Local QA users: qa.labcoord (designation 6), qa.analyst / qa.analyst2 (7),
+  qa.finance (8). Migration V5o applied to the local database only.
+
+## 6. Principles
 
 Same as v1: no live data (local PostgreSQL only), one additive migration, product owner runs
 `migrate.ps1` then `deploy.ps1`, phone <= 767.98px checked for every page, sweeps per role.
