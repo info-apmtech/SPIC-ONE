@@ -10,7 +10,12 @@ public static class LabServiceCollectionExtensions
 {
     public static IServiceCollection AddSasLab(this IServiceCollection services)
     {
-        // registrations are added by the API-Lab workstream
+        // API-Lab workstream (LabController): caller access resolved once per request, the
+        // activity writer that stamps the caller on every log row, and the stateless auto-result
+        // engine. LabCodes and LabV1Sync are static helpers.
+        services.AddScoped<LabAccess>();
+        services.AddScoped<LabActivityWriter>();
+        services.AddSingleton<LabAutoResultEngine>();
         return services;
     }
 }
