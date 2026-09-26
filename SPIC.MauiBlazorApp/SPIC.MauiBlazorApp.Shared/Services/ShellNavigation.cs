@@ -199,7 +199,7 @@ public static class ShellNavigation
         },
         new("DataExplorer", "Data Explorer", "bi-database-fill", "/DataExplorer", "DataExplorer")
         {
-            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.Admin or AppRole.SpecialAdmin
+            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.SuperAdmin
         },
         // NavMenu.razor gates the IFMS Logins link on the dynamically registered "IfmsRelaySetup" key.
         new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", "IfmsRelaySetup")

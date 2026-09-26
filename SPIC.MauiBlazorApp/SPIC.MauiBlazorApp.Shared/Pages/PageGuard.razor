@@ -73,9 +73,6 @@
     {
         if (!LoginState.IsLoggedIn) return;
 
-        // Admin and CorporateAdmin bypass everything
-        if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin) return;
-
         var path = (new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri
                 ? new Uri(url).AbsolutePath
                 : url)
@@ -87,6 +84,19 @@
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var firstSegment = segments.FirstOrDefault() ?? "";
         var secondSegment = segments.Skip(1).FirstOrDefault() ?? "";
+
+        // Data Explorer is SuperAdmin only. Admin is explicitly
+        // excluded here, even though Admin otherwise bypasses every other page
+        // check below - this must run BEFORE the general Admin bypass.
+        if (firstSegment.Equals("DataExplorer", StringComparison.OrdinalIgnoreCase)
+            && LoginState.UserRole == AppRole.Admin)
+        {
+            Nav.NavigateTo("/Dashboard", replace: true);
+            return;
+        }
+
+        // Admin, CorporateAdmin and SuperAdmin bypass everything else
+        if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return;
 
         // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
         // but must NEVER reach the SchemeApproval page.

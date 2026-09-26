@@ -17,7 +17,7 @@ namespace SpicAPI.Controllers
 	/// ad-hoc SQL, from the web portal instead of handing out database passwords.
 	///
 	/// Protection, in layers:
-	///   1. JWT login with the Admin or SpecialAdmin role.
+	///   1. JWT login with the SuperAdmin
 	///   2. The page password (DataExplorer:Password) sent as X-Explorer-Password on every call.
 	///   3. Query box: one statement only; DDL and bulk-destructive keywords are refused;
 	///      UPDATE and DELETE must carry a WHERE clause; a change is first dry-run in a
@@ -62,8 +62,8 @@ namespace SpicAPI.Controllers
 		private IActionResult? Guard()
 		{
 			var role = User.FindFirstValue(ClaimTypes.Role);
-			if (role != nameof(AppRole.Admin) && role != nameof(AppRole.SpecialAdmin))
-				return StatusCode(403, new { message = "Data Explorer is available to Admin and SpecialAdmin only." });
+			if (role != nameof(AppRole.SuperAdmin))
+				return StatusCode(403, new { message = "Data Explorer is available to SuperAdmin only." });
 
 			var expected = _config["DataExplorer:Password"];
 			if (string.IsNullOrEmpty(expected))

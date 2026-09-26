@@ -69,7 +69,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             OnChange?.Invoke();
         }
 
-        public bool IsAdmin => UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
+        public bool IsAdmin => UserRole is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
         public bool IsStateRole => UserRole is AppRole.SMD or AppRole.SMM;
         public bool IsRegionRole => UserRole is AppRole.RM or AppRole.RMD;
         public bool IsHQRole => UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
@@ -135,8 +135,10 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         // legacy bare page token). Used by the route guard and menu visibility.
         public bool CanAccess(string pageKey)
         {
-            // Admin and CorporateAdmin bypass everything
-            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
+            // Admin, CorporateAdmin and SuperAdmin bypass everything.
+            // Page-specific exclusions (e.g. Data Explorer, Admin-only) are enforced
+            // in PageGuard.razor BEFORE this bypass ever runs.
+            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return true;
             // No designation assigned => access ONLY the Welcome page (nothing else)
             if (AllowedPages.Count == 0)
                 return string.Equals(pageKey, "Welcome", StringComparison.OrdinalIgnoreCase);
@@ -152,7 +154,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         public bool Can(string pageKey, string action)
         {
-            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
+            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return true;
             if (AllowedPages.Count == 0) return false;
             // Legacy bare page token => full access to that page
             if (AllowedPages.Contains(pageKey)) return true;
