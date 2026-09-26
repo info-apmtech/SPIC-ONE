@@ -59,6 +59,7 @@ builder.Services.AddScoped<GuestHouseBookingState>();
 builder.Services.AddScoped<DigitalLibraryApi>();
 builder.Services.AddScoped<CommunityApi>();
 builder.Services.AddScoped<SasApi>();
+builder.Services.AddScoped<LabApi>();
 
 // ADD THIS
 builder.Services.AddSingleton(new PlatformService

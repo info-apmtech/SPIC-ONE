@@ -150,6 +150,41 @@
         // ApprovalDetail (and its legacy MOApproval alias) is a dedicated
         // full-page route for approval details shared by all roles;
         // it uses the same SchemeApproval permission.
+        // SAS Lab portal and Payment Approval (2026-09-27): routes live under one prefix and map
+        // to a page key by their second segment. Farmer pages under /Sas use the v1 keys.
+        if (firstSegment.Equals("Lab", StringComparison.OrdinalIgnoreCase))
+        {
+            firstSegment = secondSegment.ToLowerInvariant() switch
+            {
+                "" => "LabDashboard",
+                "consignments" => "LabConsignments",
+                "analysis" => "LabAnalysis",
+                "reports" => "LabReports",
+                "testentry" => "LabTestEntry",
+                "tracking" => "LabTracking",
+                _ => "LabDashboard"
+            };
+            // The lab dashboard opens to anyone holding any lab page (it picks the variant).
+            if (firstSegment == "LabDashboard"
+                && (LoginState.CanAccess("LabTestEntry") || LoginState.CanAccess("LabConsignments")
+                    || LoginState.CanAccess("LabAnalysis") || LoginState.CanAccess("LabReports")))
+            {
+                return;
+            }
+        }
+        else if (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase))
+        {
+            if (secondSegment.Equals("Payments", StringComparison.OrdinalIgnoreCase))
+            {
+                if (LoginState.CanAccess("SasPaymentApproval") || LoginState.CanAccess("SasPaymentVerification")) return;
+                firstSegment = "SasPaymentApproval";
+            }
+            else
+            {
+                firstSegment = "SampleCollection";   // /Sas/MySamples, /Sas/MyReports, /Sas/MyPayments (farmer)
+            }
+        }
+
         if (firstSegment.Equals("MOApproval", StringComparison.OrdinalIgnoreCase)
             || firstSegment.Equals("ApprovalDetail", StringComparison.OrdinalIgnoreCase))
         {

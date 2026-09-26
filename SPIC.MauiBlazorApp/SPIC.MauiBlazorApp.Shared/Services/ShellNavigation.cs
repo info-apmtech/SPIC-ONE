@@ -107,6 +107,57 @@ public static class ShellNavigation
             ShortLabel = "Consignments", Group = "SAS Portal"
         },
 
+        // ---- SAS Lab portal (version 2, 2026-09-27; page-permission gated) ----
+        new("LabDashboard", "Lab Dashboard", "bi-speedometer", "/Lab", nameof(PagePermission.LabDashboard))
+        {
+            ShortLabel = "Lab", Group = "SAS Lab"
+        },
+        new("LabConsignments", "Consignment Details", "bi-boxes", "/Lab/Consignments", nameof(PagePermission.LabConsignments))
+        {
+            ShortLabel = "Consignments", Group = "SAS Lab"
+        },
+        new("LabAnalysis", "Analysis Tracking", "bi-clipboard2-pulse", "/Lab/Analysis", nameof(PagePermission.LabAnalysis))
+        {
+            ShortLabel = "Analysis", Group = "SAS Lab"
+        },
+        new("LabReports", "Lab Reports", "bi-file-earmark-bar-graph", "/Lab/Reports", nameof(PagePermission.LabReports))
+        {
+            ShortLabel = "Reports", Group = "SAS Lab"
+        },
+        new("LabTestEntry", "Test Value Entry", "bi-pencil-square", "/Lab/TestEntry", nameof(PagePermission.LabTestEntry))
+        {
+            ShortLabel = "Test Entry", Group = "SAS Lab"
+        },
+        new("LabTracking", "Lab Tracking", "bi-binoculars", "/Lab/Tracking", nameof(PagePermission.LabTracking))
+        {
+            ShortLabel = "Lab Tracking", Group = "SAS Lab"
+        },
+        new("SasPaymentApproval", "Payment Approval", "bi-cash-coin", "/Sas/Payments", nameof(PagePermission.SasPaymentApproval))
+        {
+            ShortLabel = "Payments", Group = "SAS Portal"
+        },
+        new("SasPaymentVerification", "Payment Verification", "bi-patch-check", "/Sas/Payments", nameof(PagePermission.SasPaymentVerification))
+        {
+            ShortLabel = "Verification", Group = "SAS Portal"
+        },
+        new("SasPaymentHistory", "Payment History", "bi-clock-history", "/Sas/Payments/History", nameof(PagePermission.SasPaymentVerification))
+        {
+            ShortLabel = "History", Group = "SAS Portal"
+        },
+        // Farmer pages (v1 SampleCollection key; the API scopes to the farmer's own samples)
+        new("SasMySamples", "My Samples", "bi-droplet-half", "/Sas/MySamples", nameof(PagePermission.SampleCollection))
+        {
+            ShortLabel = "Samples", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+        },
+        new("SasMyReports", "My Reports", "bi-file-earmark-text", "/Sas/MyReports", nameof(PagePermission.SampleCollection))
+        {
+            ShortLabel = "Reports", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+        },
+        new("SasMyPayments", "Payments", "bi-wallet2", "/Sas/Payments", nameof(PagePermission.SampleCollection))
+        {
+            ShortLabel = "Payments", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+        },
+
         // ---- shell hubs (phone destinations; PageGuard opens them to every signed-in user with a
         //      designation because each hub only LINKS to pages the user can already open) ----
         new("Activities", "My Activities", "bi-clipboard2-pulse-fill", "/Activities", "Activities")

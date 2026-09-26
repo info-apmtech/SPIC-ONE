@@ -267,6 +267,130 @@ namespace Spic.Infrastructure.Data
                 new SasCourier { Id = 4, Name = "India Post", TrackingUrlTemplate = "https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx", IsActive = true });
         });
 
+        // ---- Lab portal (version 2) ----
+        builder.Entity<SampleBatch>(entity =>
+        {
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.AssignedToUserId);
+            entity.HasIndex(x => x.BatchDate);
+            entity.HasMany(x => x.Consignments)
+                .WithOne(c => c.Batch)
+                .HasForeignKey(c => c.BatchId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(x => x.Documents)
+                .WithOne(d => d.Batch)
+                .HasForeignKey(d => d.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Activities)
+                .WithOne(a => a.Batch)
+                .HasForeignKey(a => a.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Reports)
+                .WithOne(r => r.Batch)
+                .HasForeignKey(r => r.BatchId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.ReportCode).IsUnique();
+        });
+
+        builder.Entity<LabParameter>(entity =>
+        {
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => new { x.AppliesTo, x.SortOrder });
+            entity.Property(x => x.RangeMin).HasColumnType("numeric(12,4)");
+            entity.Property(x => x.RangeMax).HasColumnType("numeric(12,4)");
+            entity.Property(x => x.ModerateFrom).HasColumnType("numeric(12,4)");
+            entity.HasData(
+                new LabParameter { Id = 1, Code = "S-PH", Name = "pH", Unit = "-", NormalRange = "6.5 - 7.5", RangeMin = 6.5m, RangeMax = 7.5m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Soil, SortOrder = 1, IsActive = true, LowLabel = "Acidic", NormalLabel = "Neutral", HighLabel = "Alkaline", LowHint = "Apply lime to correct soil acidity", NormalHint = "Suitable for crop growth", HighHint = "Apply gypsum to reduce alkalinity", RecommendationGroup = "General" },
+                new LabParameter { Id = 2, Code = "S-EC", Name = "EC", Unit = "dS/m", NormalRange = "0 - 1.0", RangeMin = 0m, RangeMax = 1.0m, ModerateFrom = null, ReportingLimit = "0.01", AppliesTo = SampleType.Soil, SortOrder = 2, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "Saline", LowHint = "No salinity issue", NormalHint = "No salinity issue", HighHint = "Improve drainage and leach salts", RecommendationGroup = "General" },
+                new LabParameter { Id = 3, Code = "S-OC", Name = "Organic Carbon", Unit = "%", NormalRange = "0.5 - 0.75", RangeMin = 0.5m, RangeMax = 0.75m, ModerateFrom = null, ReportingLimit = "0.01", AppliesTo = SampleType.Soil, SortOrder = 3, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Add organic manure / compost", NormalHint = "Maintain organic matter", HighHint = "Organic matter is high; no addition needed", RecommendationGroup = "Organic" },
+                new LabParameter { Id = 4, Code = "S-N", Name = "Nitrogen", Unit = "kg/ha", NormalRange = "280 - 560", RangeMin = 280m, RangeMax = 560m, ModerateFrom = null, ReportingLimit = "1", AppliesTo = SampleType.Soil, SortOrder = 4, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply nitrogen fertilizer", NormalHint = "Maintain standard nitrogen dosage", HighHint = "Reduce nitrogen-based fertilizer", RecommendationGroup = "Fertilizer" },
+                new LabParameter { Id = 5, Code = "S-P", Name = "Phosphorus", Unit = "kg/ha", NormalRange = "22 - 56", RangeMin = 22m, RangeMax = 56m, ModerateFrom = null, ReportingLimit = "1", AppliesTo = SampleType.Soil, SortOrder = 5, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply phosphorus fertilizer", NormalHint = "Maintain standard phosphorus dosage", HighHint = "Reduce phosphorus-based fertilizer", RecommendationGroup = "Fertilizer" },
+                new LabParameter { Id = 6, Code = "S-K", Name = "Potassium", Unit = "kg/ha", NormalRange = "110 - 280", RangeMin = 110m, RangeMax = 280m, ModerateFrom = null, ReportingLimit = "1", AppliesTo = SampleType.Soil, SortOrder = 6, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply potassium fertilizer", NormalHint = "Maintain standard potassium dosage", HighHint = "Reduce potassium-based fertilizer", RecommendationGroup = "Fertilizer" },
+                new LabParameter { Id = 7, Code = "S-ZN", Name = "Zinc", Unit = "ppm", NormalRange = "0.6 - 1.2", RangeMin = 0.6m, RangeMax = 1.2m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Soil, SortOrder = 7, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply zinc micronutrient", NormalHint = "Zinc is adequate", HighHint = "Avoid further zinc application", RecommendationGroup = "Micronutrient" },
+                new LabParameter { Id = 8, Code = "S-FE", Name = "Iron", Unit = "ppm", NormalRange = "4.5 - 9.0", RangeMin = 4.5m, RangeMax = 9.0m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Soil, SortOrder = 8, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply iron micronutrient (ferrous sulphate)", NormalHint = "Iron is adequate", HighHint = "Avoid further iron application", RecommendationGroup = "Micronutrient" },
+                new LabParameter { Id = 9, Code = "S-MN", Name = "Manganese", Unit = "ppm", NormalRange = "2.0 - 4.0", RangeMin = 2.0m, RangeMax = 4.0m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Soil, SortOrder = 9, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply manganese micronutrient", NormalHint = "Manganese is adequate", HighHint = "Avoid further manganese application", RecommendationGroup = "Micronutrient" },
+                new LabParameter { Id = 10, Code = "S-CU", Name = "Copper", Unit = "ppm", NormalRange = "0.2 - 0.5", RangeMin = 0.2m, RangeMax = 0.5m, ModerateFrom = null, ReportingLimit = "0.01", AppliesTo = SampleType.Soil, SortOrder = 10, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply copper micronutrient", NormalHint = "Copper is adequate", HighHint = "Avoid further copper application", RecommendationGroup = "Micronutrient" },
+                new LabParameter { Id = 11, Code = "S-B", Name = "Boron", Unit = "ppm", NormalRange = "0.5 - 1.0", RangeMin = 0.5m, RangeMax = 1.0m, ModerateFrom = null, ReportingLimit = "0.01", AppliesTo = SampleType.Soil, SortOrder = 11, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply borax", NormalHint = "Boron is adequate", HighHint = "Avoid further boron application", RecommendationGroup = "Micronutrient" },
+                new LabParameter { Id = 12, Code = "S-S", Name = "Sulphur", Unit = "ppm", NormalRange = "10 - 20", RangeMin = 10m, RangeMax = 20m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Soil, SortOrder = 12, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Apply sulphur (gypsum)", NormalHint = "Sulphur is adequate", HighHint = "Avoid further sulphur application", RecommendationGroup = "Fertilizer" },
+                new LabParameter { Id = 13, Code = "W-PH", Name = "pH", Unit = "-", NormalRange = "6.5 - 8.5", RangeMin = 6.5m, RangeMax = 8.5m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 1, IsActive = true, LowLabel = "Acidic", NormalLabel = "Neutral", HighLabel = "Alkaline", LowHint = "Water is acidic; neutralise before use", NormalHint = "Suitable for irrigation", HighHint = "Water is alkaline; treat before use", RecommendationGroup = "General" },
+                new LabParameter { Id = 14, Code = "W-EC", Name = "EC", Unit = "dS/m", NormalRange = "0 - 0.75", RangeMin = 0m, RangeMax = 0.75m, ModerateFrom = null, ReportingLimit = "0.01", AppliesTo = SampleType.Water, SortOrder = 2, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "Saline", LowHint = "No salinity issue", NormalHint = "No salinity issue", HighHint = "Saline water; blend with fresh water", RecommendationGroup = "General" },
+                new LabParameter { Id = 15, Code = "W-TDS", Name = "Total Dissolved Solids", Unit = "mg/L", NormalRange = "0 - 500", RangeMin = 0m, RangeMax = 500m, ModerateFrom = null, ReportingLimit = "1", AppliesTo = SampleType.Water, SortOrder = 3, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No issue", NormalHint = "No issue", HighHint = "High dissolved solids; use with caution", RecommendationGroup = "General" },
+                new LabParameter { Id = 16, Code = "W-CL", Name = "Chloride", Unit = "meq/L", NormalRange = "0 - 4", RangeMin = 0m, RangeMax = 4m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 4, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No issue", NormalHint = "No issue", HighHint = "Chloride is high; avoid on sensitive crops", RecommendationGroup = "General" },
+                new LabParameter { Id = 17, Code = "W-SO4", Name = "Sulphate", Unit = "meq/L", NormalRange = "0 - 4", RangeMin = 0m, RangeMax = 4m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 5, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No issue", NormalHint = "No issue", HighHint = "Sulphate is high", RecommendationGroup = "General" },
+                new LabParameter { Id = 18, Code = "W-CO3", Name = "Carbonate", Unit = "meq/L", NormalRange = "0 - 0.5", RangeMin = 0m, RangeMax = 0.5m, ModerateFrom = null, ReportingLimit = "0.01", AppliesTo = SampleType.Water, SortOrder = 6, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No issue", NormalHint = "No issue", HighHint = "Carbonate is high; apply gypsum", RecommendationGroup = "General" },
+                new LabParameter { Id = 19, Code = "W-HCO3", Name = "Bicarbonate", Unit = "meq/L", NormalRange = "0 - 2.5", RangeMin = 0m, RangeMax = 2.5m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 7, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No issue", NormalHint = "No issue", HighHint = "Bicarbonate is high; apply gypsum", RecommendationGroup = "General" },
+                new LabParameter { Id = 20, Code = "W-NA", Name = "Sodium", Unit = "meq/L", NormalRange = "0 - 3", RangeMin = 0m, RangeMax = 3m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 8, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No issue", NormalHint = "No issue", HighHint = "Sodium is high; risk of sodicity", RecommendationGroup = "General" },
+                new LabParameter { Id = 21, Code = "W-CA", Name = "Calcium", Unit = "meq/L", NormalRange = "1 - 5", RangeMin = 1m, RangeMax = 5m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 9, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Calcium is low", NormalHint = "Calcium is adequate", HighHint = "Calcium is high", RecommendationGroup = "General" },
+                new LabParameter { Id = 22, Code = "W-MG", Name = "Magnesium", Unit = "meq/L", NormalRange = "0.5 - 3", RangeMin = 0.5m, RangeMax = 3m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 10, IsActive = true, LowLabel = "Low", NormalLabel = "Medium", HighLabel = "High", LowHint = "Magnesium is low", NormalHint = "Magnesium is adequate", HighHint = "Magnesium is high", RecommendationGroup = "General" },
+                new LabParameter { Id = 23, Code = "W-SAR", Name = "Sodium Adsorption Ratio", Unit = "-", NormalRange = "0 - 10", RangeMin = 0m, RangeMax = 10m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 11, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No sodicity hazard", NormalHint = "No sodicity hazard", HighHint = "Sodicity hazard; apply gypsum", RecommendationGroup = "General" },
+                new LabParameter { Id = 24, Code = "W-RSC", Name = "Residual Sodium Carbonate", Unit = "meq/L", NormalRange = "0 - 1.25", RangeMin = 0m, RangeMax = 1.25m, ModerateFrom = null, ReportingLimit = "0.01", AppliesTo = SampleType.Water, SortOrder = 12, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "Safe for irrigation", NormalHint = "Safe for irrigation", HighHint = "Unsuitable without gypsum treatment", RecommendationGroup = "General" },
+                new LabParameter { Id = 25, Code = "W-NO3", Name = "Nitrate", Unit = "mg/L", NormalRange = "0 - 10", RangeMin = 0m, RangeMax = 10m, ModerateFrom = null, ReportingLimit = "0.1", AppliesTo = SampleType.Water, SortOrder = 13, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No issue", NormalHint = "No issue", HighHint = "Nitrate is high", RecommendationGroup = "General" },
+                new LabParameter { Id = 26, Code = "W-MB", Name = "Total Coliforms", Unit = "CFU/100mL", NormalRange = "0 - 1", RangeMin = 0m, RangeMax = 1m, ModerateFrom = null, ReportingLimit = "1", AppliesTo = SampleType.Water, SortOrder = 14, IsActive = true, LowLabel = "Safe", NormalLabel = "Safe", HighLabel = "High", LowHint = "No contamination", NormalHint = "No contamination", HighHint = "Microbial contamination; disinfect before use", RecommendationGroup = "General" },
+                new LabParameter { Id = 27, Code = "S-TEX", Name = "Texture", Unit = null, NormalRange = null, RangeMin = null, RangeMax = null, ModerateFrom = null, ReportingLimit = null, AppliesTo = SampleType.Soil, SortOrder = 0, IsActive = true, LowLabel = "-", NormalLabel = "-", HighLabel = "-", LowHint = null, NormalHint = null, HighHint = null, RecommendationGroup = "General", ValueType = LabParameterValueType.Text, Options = "Sandy|Loamy Sand|Sandy Loam|Loam|Silt Loam|Clay Loam|Sandy Clay|Silty Clay|Clay|Sandy Clay Silt" },
+                new LabParameter { Id = 28, Code = "S-OM", Name = "Organic Matter", Unit = "%", NormalRange = "0.87 - 1.29", RangeMin = 0.87m, RangeMax = 1.29m, ModerateFrom = null, ReportingLimit = "0.01", AppliesTo = SampleType.Soil, SortOrder = 3, IsActive = true, LowLabel = "Low", NormalLabel = "Moderate", HighLabel = "High", LowHint = "Add organic manure / compost", NormalHint = "Maintain organic matter", HighHint = "Organic matter is high; no addition needed", RecommendationGroup = "Organic", DerivedFromCode = "S-OC", DerivedFactor = 1.724m });
+        });
+
+        builder.Entity<LabDocument>(entity =>
+        {
+            entity.HasIndex(x => x.BatchId);
+            entity.HasIndex(x => x.Kind);
+        });
+
+        builder.Entity<LabActivity>(entity =>
+        {
+            entity.HasIndex(x => new { x.BatchId, x.At });
+            entity.HasIndex(x => x.Kind);
+        });
+
+        builder.Entity<LabReport>(entity =>
+        {
+            entity.HasIndex(x => x.Code).IsUnique();
+            entity.HasIndex(x => x.GeneratedAt);
+            entity.HasIndex(x => x.FinancialYearStart);
+            entity.HasIndex(x => new { x.SampleItemId, x.SampleType }).IsUnique();
+            entity.HasOne(x => x.SampleItem)
+                .WithMany()
+                .HasForeignKey(x => x.SampleItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<LabCropRecommendation>(entity =>
+        {
+            entity.HasIndex(x => new { x.Crop, x.Stage, x.SortOrder });
+            entity.Property(x => x.KgPerAcre).HasColumnType("numeric(10,2)");
+            entity.HasData(
+                new LabCropRecommendation { Id = 1, Crop = "Banana", Stage = LabCropStage.Basal, Product = "SPIC Jyoti", KgPerAcre = 300m, SortOrder = 1, IsActive = true },
+                new LabCropRecommendation { Id = 2, Crop = "Banana", Stage = LabCropStage.Basal, Product = "SPIC Gypsum", KgPerAcre = 200m, SortOrder = 2, IsActive = true },
+                new LabCropRecommendation { Id = 3, Crop = "Banana", Stage = LabCropStage.Basal, Product = "SPIC Sangamam", KgPerAcre = 100m, SortOrder = 3, IsActive = true },
+                new LabCropRecommendation { Id = 4, Crop = "Banana", Stage = LabCropStage.Basal, Product = "SPIC DAP", KgPerAcre = 0m, SortOrder = 4, IsActive = true },
+                new LabCropRecommendation { Id = 5, Crop = "Banana", Stage = LabCropStage.Basal, Product = "SPIC Urea", KgPerAcre = 0m, SortOrder = 5, IsActive = true },
+                new LabCropRecommendation { Id = 6, Crop = "Banana", Stage = LabCropStage.Basal, Product = "Potash", KgPerAcre = 0m, SortOrder = 6, IsActive = true },
+                new LabCropRecommendation { Id = 7, Crop = "Banana", Stage = LabCropStage.Basal, Product = "SPIC Zinc Sulphate", KgPerAcre = 12m, SortOrder = 7, IsActive = true },
+                new LabCropRecommendation { Id = 8, Crop = "Banana", Stage = LabCropStage.Basal, Product = "Ferrous Sulphate", KgPerAcre = 0m, SortOrder = 8, IsActive = true },
+                new LabCropRecommendation { Id = 9, Crop = "Banana", Stage = LabCropStage.Basal, Product = "Manganese Sulphate", KgPerAcre = 0m, SortOrder = 9, IsActive = true },
+                new LabCropRecommendation { Id = 10, Crop = "Banana", Stage = LabCropStage.Basal, Product = "Copper Sulphate", KgPerAcre = 5m, SortOrder = 10, IsActive = true },
+                new LabCropRecommendation { Id = 11, Crop = "Banana", Stage = LabCropStage.TopDressing1, DayNumber = 90, Product = "SPIC DAP", KgPerAcre = 82.5m, SortOrder = 1, IsActive = true },
+                new LabCropRecommendation { Id = 12, Crop = "Banana", Stage = LabCropStage.TopDressing1, DayNumber = 90, Product = "SPIC Urea", KgPerAcre = 0m, SortOrder = 2, IsActive = true },
+                new LabCropRecommendation { Id = 13, Crop = "Banana", Stage = LabCropStage.TopDressing1, DayNumber = 90, Product = "Potash", KgPerAcre = 150m, SortOrder = 3, IsActive = true },
+                new LabCropRecommendation { Id = 14, Crop = "Banana", Stage = LabCropStage.TopDressing2, DayNumber = 150, Product = "SPIC Urea", KgPerAcre = 125m, SortOrder = 1, IsActive = true },
+                new LabCropRecommendation { Id = 15, Crop = "Banana", Stage = LabCropStage.TopDressing2, DayNumber = 150, Product = "Potash", KgPerAcre = 112.5m, SortOrder = 2, IsActive = true },
+                new LabCropRecommendation { Id = 16, Crop = "Banana", Stage = LabCropStage.TopDressing3, DayNumber = 210, Product = "SPIC Urea", KgPerAcre = 125m, SortOrder = 1, IsActive = true },
+                new LabCropRecommendation { Id = 17, Crop = "Banana", Stage = LabCropStage.TopDressing3, DayNumber = 210, Product = "Potash", KgPerAcre = 112.5m, SortOrder = 2, IsActive = true });
+        });
+
+        builder.Entity<LabTranslation>(entity =>
+        {
+            entity.HasIndex(x => new { x.Key, x.Lang }).IsUnique();
+        });
+
+        builder.Entity<SampleItem>().HasIndex(x => x.AnalysisStatus);
+        builder.Entity<SampleConsignment>().HasIndex(x => x.BatchId);
+        builder.Entity<SampleLabResult>().HasIndex(x => x.LabParameterId);
+        builder.Entity<SamplePayment>().HasIndex(x => x.Code).IsUnique();
+        builder.Entity<SamplePayment>().HasIndex(x => x.FinanceStatus);
+        builder.Entity<SamplePayment>().Property(x => x.VerifiedAmount).HasColumnType("numeric(12,2)");
+
         // ---------------------------------------------------------------- Knowledge Community
         builder.Entity<CommunityPost>(entity =>
         {
@@ -471,6 +595,13 @@ namespace Spic.Infrastructure.Data
 		public DbSet<SasStatusEvent> SasStatusEvents { get; set; }
 		public DbSet<SampleLabResult> SampleLabResults { get; set; }
 		public DbSet<SasSampleCharge> SasSampleCharges { get; set; }
+		public DbSet<SampleBatch> SampleBatches { get; set; }
+		public DbSet<LabParameter> LabParameters { get; set; }
+		public DbSet<LabDocument> LabDocuments { get; set; }
+		public DbSet<LabActivity> LabActivities { get; set; }
+		public DbSet<LabReport> LabReports { get; set; }
+		public DbSet<LabCropRecommendation> LabCropRecommendations { get; set; }
+		public DbSet<LabTranslation> LabTranslations { get; set; }
 		public DbSet<SasCourier> SasCouriers { get; set; }
 
 		//// Knowledge Community
