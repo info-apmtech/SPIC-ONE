@@ -8,6 +8,8 @@ using Microsoft.OpenApi;
 using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services;
 using Spic.Infrastructure.Services.Assistant;
+using Spic.Infrastructure.Services.Lab;
+using Spic.Infrastructure.Services.LabReports;
 using Spic.Infrastructure.Services.Payments;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
@@ -80,6 +82,9 @@ builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepositor
 builder.Services.AddScoped<IStockReportService, StockReportService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();
 builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
+// SAS Lab portal (docs/sas-lab-portal-plan.md): each workstream registers inside its own extension.
+builder.Services.AddSasLab();
+builder.Services.AddSasLabReports();
 builder.Services.AddScoped<IAckCycleService, AckCycleService>();
 builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
 builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
