@@ -64,7 +64,31 @@ namespace SPIC.Core.Entities
         // Appended at the END on purpose: ApplicationPage seed ids are enum-index based (see AppDbContext).
         [PageModule("Digital Library")] DigitalLibrary,
         [PageModule("SAS")] SampleCollection,
-        [PageModule("SAS")] ConsignmentHistory
+        [PageModule("SAS")] ConsignmentHistory,
+        IfmsRelaySetup,
+        SchemeOverview,
+        AddScheme,
+        WinnerPopUp,
+        WinnerDetails,
+        Luckydraw,
+        LuckyDrawList,
+        SelectPurchasedProducts,
+        Scanproduct,
+        QRScanner,
+        BudgetOverview,
+        BudgetingManagements,
+        CSR2,
+        FinalReportCSRView,
+        RMDValidationQueue,
+        MOSubmissionValidation,
+        RMApprovalStatus,
+        SMMApprovals,
+        AVPApprovals,
+        ReportDashboard,
+        ReportsCenter,
+        ContactUs,
+        LogisticsMaster,
+        UserProfile
 
     }
 }

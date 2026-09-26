@@ -79,12 +79,7 @@
         </NavLink>
     }
 
-    @* Dynamically registered page. The gate key is the page's URL segment
-       ("IfmsRelaySetup"); the Admin must register an ApplicationPage with the
-       SAME Key in Page Management so it appears in the Designation grid.
-       CanAccess(string) is fully generic — no enum member, constant, or
-       route mapping required (Admin/CorporateAdmin bypass via CanAccess). *@
-    @if (loginState.CanAccess("IfmsRelaySetup"))
+    @if (loginState.CanAccess(PagePermission.IfmsRelaySetup))
     {
         <NavLink class="@NavLinkClass("IFMS Logins")" href="/IfmsLogins">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
@@ -92,13 +87,84 @@
         </NavLink>
     }
 
- @*    @if (loginState.CanAccess(PagePermission.Schemes))
+ @if (AnySchemesAccessible)
     {
-        <NavLink class="@NavLinkClass("Schemes")" href="/Schemes">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
-            Schemes
-        </NavLink>
-    } *@
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowSchemesExpanded ? "active" : "") @MatchClass("Schemes")"
+               @onclick="ToggleSchemesMenu">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+                Schemes
+                <i class="bi @(ShowSchemesExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
+
+            @if (ShowSchemesExpanded)
+            {
+                <ul class="submenu-list">
+                    @if (loginState.CanAccess(PagePermission.SchemeOverview))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/SchemeOverview" class="@SubmenuLinkClass("Scheme Overview")" Match="NavLinkMatch.All">Scheme Overview</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.AddScheme))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/AddScheme" class="@SubmenuLinkClass("Add Scheme")" Match="NavLinkMatch.All">Add Scheme</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Schemes))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Schemes" class="@SubmenuLinkClass("Scheme List")" Match="NavLinkMatch.All">Scheme List</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.WinnerPopUp))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/WinnerPopUp" class="@SubmenuLinkClass("Winner PopUp")" Match="NavLinkMatch.All">Winner PopUp</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.WinnerDetails))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/WinnerDetails" class="@SubmenuLinkClass("Winner Details")" Match="NavLinkMatch.All">Winner Details</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Luckydraw))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Luckydraw" class="@SubmenuLinkClass("Lucky Draw")" Match="NavLinkMatch.All">Lucky Draw</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.LuckyDrawList))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/LuckyDrawList" class="@SubmenuLinkClass("Lucky Draw List")" Match="NavLinkMatch.All">Lucky Draw List</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.SelectPurchasedProducts))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/SelectPurchasedProducts" class="@SubmenuLinkClass("Select Purchased Products")" Match="NavLinkMatch.All">Select Purchased Products</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Scanproduct))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Scanproduct" class="@SubmenuLinkClass("Scan Product")" Match="NavLinkMatch.All">Scan Product</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.QRScanner))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/qr-scanner" class="@SubmenuLinkClass("QR Scanner")" Match="NavLinkMatch.All">QR Scanner</NavLink>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
     @if (AnySubsidyAccessible)
     {
         <div class="settings-menu-wrapper">
@@ -197,13 +263,13 @@
             @if (ShowMdPortalExpanded)
             {
                 <ul class="submenu-list">
-                    @if (loginState.CanAccess("BudgetOverview"))
+                    @if (loginState.CanAccess(PagePermission.BudgetOverview))
                     {
                         <li class="submenu-item">
                             <NavLink href="/BudgetOverview" class="@SubmenuLinkClass("Budget Overview")" Match="NavLinkMatch.All">Budget Overview</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess("BudgetingManagements"))
+                    @if (loginState.CanAccess(PagePermission.BudgetingManagements))
                     {
                         <li class="submenu-item">
                             <NavLink href="/BudgetingManagements" class="@SubmenuLinkClass("Budgeting Management")" Match="NavLinkMatch.All">Budgeting Management</NavLink>
@@ -227,31 +293,31 @@
                             <NavLink href="/CSR-1List" class="@SubmenuLinkClass("CSR-1 Management")" Match="NavLinkMatch.All">CSR-1 Management</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess("CSR2"))
+                    @if (loginState.CanAccess(PagePermission.CSR2))
                     {
                         <li class="submenu-item">
                             <NavLink href="/CSR2" class="@SubmenuLinkClass("CSR-2")" Match="NavLinkMatch.All">CSR-2</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess("FinalReportCSRView"))
+                    @if (loginState.CanAccess(PagePermission.FinalReportCSRView))
                     {
                         <li class="submenu-item">
                             <NavLink href="/FinalReportCSRView" class="@SubmenuLinkClass("Final Report CSR")" Match="NavLinkMatch.All">Final Report CSR</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess("RMDValidationQueue"))
+                    @if (loginState.CanAccess(PagePermission.RMDValidationQueue))
                     {
                         <li class="submenu-item">
                             <NavLink href="/RMDValidationQueue" class="@SubmenuLinkClass("RMD Validation Queue")" Match="NavLinkMatch.All">RMD Validation Queue</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess("MOSubmissionValidation"))
+                    @if (loginState.CanAccess(PagePermission.MOSubmissionValidation))
                     {
                         <li class="submenu-item">
                             <NavLink href="/MOSubmissionValidation" class="@SubmenuLinkClass("MO Submission Validation")" Match="NavLinkMatch.All">MO Submission Validation</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess("RMApprovalStatus"))
+                    @if (loginState.CanAccess(PagePermission.RMApprovalStatus))
                     {
                         <li class="submenu-item">
                             <NavLink href="/RMApprovalStatus" class="@SubmenuLinkClass("RM Approval Status")" Match="NavLinkMatch.All">RM Approval Status</NavLink>
@@ -377,7 +443,7 @@
             @if (ShowSdwaExpanded)
             {
                 <ul class="submenu-list">
-                    @if (loginState.CanAccess("ReportDashboard"))
+                    @if (loginState.CanAccess(PagePermission.ReportDashboard))
     {
                         <li class="submenu-item">
                             <NavLink href="/ReportDashboard" class="@SubmenuLinkClass("Report Dashboard")" Match="NavLinkMatch.All">Admin Dashboard</NavLink>
@@ -418,6 +484,12 @@
                     {
                         <li class="submenu-item">
                             <NavLink href="/SdwaCompanyMaster" class="@SubmenuLinkClass("Company Details")" Match="NavLinkMatch.All">Company Details</NavLink>
+                        </li>
+                    }
+                    @if (loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/GuestHouseCancellations" class="@SubmenuLinkClass("Cancellation Requests")" Match="NavLinkMatch.All">Cancellation Requests</NavLink>
                         </li>
                     }
                     @if (loginState.CanAccess(PagePermission.FrontOffice))
@@ -486,13 +558,7 @@
                             <NavLink href="/Designation" class="@SubmenuLinkClass("Designation")" Match="NavLinkMatch.All">Designation</NavLink>
                         </li>
                     }
-                    @if (loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
-                    {
-                        <li class="submenu-item">
-                            <NavLink href="/PageManagement" class="@SubmenuLinkClass("Page Management")" Match="NavLinkMatch.All">Page Management</NavLink>
-                        </li>
-                    }
-                  
+               
                 </ul>
             }
         </div>
@@ -594,7 +660,7 @@
         <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
         Extension Requests
     </NavLink>
-     @if (loginState.CanAccess("ContactUs"))
+     @if (loginState.CanAccess(PagePermission.ContactUs))
     {
         <NavLink class="@NavLinkClass("ContactUs")" href="/ContactUs">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
@@ -636,6 +702,7 @@
     private bool isSubsidyOpen = false;
     private bool isSdwaOpen = false;
     private bool isMdPortalOpen = false;
+    private bool isSchemesOpen = false;
     private bool ShowDemoDocumentationExpanded { get; set; }
     protected override void OnInitialized()
     {
@@ -643,6 +710,7 @@
         isSubsidyOpen = IsSubsidySectionActive();
         isSdwaOpen = IsSdwaSectionActive();
         isMdPortalOpen = IsMdPortalSectionActive();
+        isSchemesOpen = IsSchemesSectionActive();
         loginState.OnChange += HandleLoginStateChanged;
         SearchState.OnChange += HandleSearchChanged;
     }
@@ -682,8 +750,7 @@
         || loginState.CanAccess(PagePermission.Logistics)
         || loginState.CanAccess(PagePermission.Financial)
         || loginState.CanAccess(PagePermission.Relationship)
-        || loginState.CanAccess(PagePermission.Designation)
-        || loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
+        || loginState.CanAccess(PagePermission.Designation);
 
 
     private bool AnySettingsItemMatches =>
@@ -693,21 +760,20 @@
         || SearchState.Matches("Financial Master")
         || SearchState.Matches("Relationship Master")
         || SearchState.Matches("Designation")
-        || SearchState.Matches("Page Management")
         || SearchState.Matches("Settings");
 
     private bool ShowSettingsExpanded => isSettingsOpen || AnySettingsItemMatches;
 
     private void ToggleSettingsMenu()
     {
-        if (!isSettingsOpen) { isSettingsOpen = true; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
+        if (!isSettingsOpen) { isSettingsOpen = true; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSettingsOpen = false;
     }
 
     private bool IsSettingsSectionActive()
     {
         var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
-        return uri == "locationmaster" || uri == "agriculture" || uri == "logistics" || uri == "financial" || uri == "relationship" || uri == "designation" || uri == "pagemanagement";
+        return uri == "locationmaster" || uri == "agriculture" || uri == "logistics" || uri == "financial" || uri == "relationship" || uri == "designation";
     }
 
     private bool AnySubsidyAccessible =>
@@ -740,7 +806,7 @@
 
     private void ToggleSubsidyMenu()
     {
-        if (!isSubsidyOpen) { isSubsidyOpen = true; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
+        if (!isSubsidyOpen) { isSubsidyOpen = true; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSubsidyOpen = false;
     }
 
@@ -755,7 +821,7 @@
     }
 
     private bool AnySdwaAccessible =>
-        loginState.CanAccess("ReportDashboard")
+        loginState.CanAccess(PagePermission.ReportDashboard)
         || loginState.CanAccess(PagePermission.SDWADashboard)
         || (loginState.UserRole != AppRole.Dealer && (loginState.CanAccess(PagePermission.SchemeApproval) || loginState.UserRole == AppRole.Director))
         || loginState.CanAccess(PagePermission.WelfareSchemes)
@@ -772,6 +838,7 @@
         || SearchState.Matches("Sub Dealer & Employee")
         || SearchState.Matches("Guest House")
         || SearchState.Matches("Company Details")
+        || SearchState.Matches("Cancellation Requests")
         || SearchState.Matches("Front Office")
         || SearchState.Matches("Generate Bill")
         || SearchState.Matches("SDWA");
@@ -780,7 +847,7 @@
 
     private void ToggleSdwaMenu()
     {
-        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; }
+        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSdwaOpen = false;
     }
 
@@ -796,16 +863,16 @@
     }
 
     private bool AnyMdPortalAccessible =>
-        loginState.CanAccess("BudgetOverview")
-        || loginState.CanAccess("BudgetingManagements")
+        loginState.CanAccess(PagePermission.BudgetOverview)
+        || loginState.CanAccess(PagePermission.BudgetingManagements)
         || loginState.CanAccess(PagePermission.BudgetSubmissions)
         || loginState.CanAccess(PagePermission.CSR1Create)
         || loginState.CanAccess(PagePermission.CSR1Management)
-        || loginState.CanAccess("CSR2")
-        || loginState.CanAccess("FinalReportCSRView")
-        || loginState.CanAccess("RMDValidationQueue")
-        || loginState.CanAccess("MOSubmissionValidation")
-        || loginState.CanAccess("RMApprovalStatus");
+        || loginState.CanAccess(PagePermission.CSR2)
+        || loginState.CanAccess(PagePermission.FinalReportCSRView)
+        || loginState.CanAccess(PagePermission.RMDValidationQueue)
+        || loginState.CanAccess(PagePermission.MOSubmissionValidation)
+        || loginState.CanAccess(PagePermission.RMApprovalStatus);
 
     private bool AnyMdPortalItemMatches =>
         SearchState.Matches("Budget Overview")
@@ -824,7 +891,7 @@
 
     private void ToggleMdPortalMenu()
     {
-        if (!isMdPortalOpen) { isMdPortalOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; }
+        if (!isMdPortalOpen) { isMdPortalOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isSchemesOpen = false; }
         else isMdPortalOpen = false;
     }
 
@@ -835,6 +902,48 @@
             || uri == "create-csr-1management" || uri == "csr-1list" || uri == "csr2"
             || uri == "finalreportcsrview" || uri == "rmdvalidationqueue"
             || uri == "mosubmissionvalidation" || uri == "rmapprovalstatus";
+    }
+
+    private bool AnySchemesAccessible =>
+        loginState.CanAccess(PagePermission.SchemeOverview)
+        || loginState.CanAccess(PagePermission.AddScheme)
+        || loginState.CanAccess(PagePermission.Schemes)
+        || loginState.CanAccess(PagePermission.WinnerPopUp)
+        || loginState.CanAccess(PagePermission.WinnerDetails)
+        || loginState.CanAccess(PagePermission.Luckydraw)
+        || loginState.CanAccess(PagePermission.LuckyDrawList)
+        || loginState.CanAccess(PagePermission.SelectPurchasedProducts)
+        || loginState.CanAccess(PagePermission.Scanproduct)
+        || loginState.CanAccess(PagePermission.QRScanner);
+
+    private bool AnySchemesItemMatches =>
+        SearchState.Matches("Scheme Overview")
+        || SearchState.Matches("Add Scheme")
+        || SearchState.Matches("Scheme List")
+        || SearchState.Matches("Winner PopUp")
+        || SearchState.Matches("Winner Details")
+        || SearchState.Matches("Lucky Draw")
+        || SearchState.Matches("Lucky Draw List")
+        || SearchState.Matches("Select Purchased Products")
+        || SearchState.Matches("Scan Product")
+        || SearchState.Matches("QR Scanner")
+        || SearchState.Matches("Schemes");
+
+    private bool ShowSchemesExpanded => isSchemesOpen || AnySchemesItemMatches;
+
+    private void ToggleSchemesMenu()
+    {
+        if (!isSchemesOpen) { isSchemesOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
+        else isSchemesOpen = false;
+    }
+
+    private bool IsSchemesSectionActive()
+    {
+        var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
+        return uri == "schemeoverview" || uri == "addscheme" || uri == "schemes"
+            || uri == "winnerpopup" || uri == "winnerdetails"
+            || uri == "luckydraw" || uri == "luckydrawlist"
+            || uri == "selectpurchasedproducts" || uri == "scanproduct" || uri == "qr-scanner";
     }
     private void ToggleDemoDocumentationMenu()
     {

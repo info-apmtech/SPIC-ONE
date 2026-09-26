@@ -1,5 +1,6 @@
 ﻿@page "/Designation"
 @using System.Net.Http.Json
+@using System.Reflection
 @using Microsoft.AspNetCore.Components
 @using DR = SPIC.Core.Entities
 @inject HttpClient Http
@@ -15,14 +16,14 @@
     // Selected permission tokens in "Page.Action" form, e.g. "Register.View"
     private HashSet<string> _selectedTokens = new(StringComparer.OrdinalIgnoreCase);
 
-    // Page catalog loaded from the ApplicationPage table — the source of the
-    // Role Access grid (replaces the old static PagePermission enum list).
-    private List<DR.ApplicationPage> _catalogPages = new();
+    private sealed record PageCatalogItem(string Key, string DisplayName, string? Module, int SortOrder);
+
+    private List<PageCatalogItem> _catalogPages = new();
 
     // Page order for stable RoleAccess serialization = catalog SortOrder.
     private List<string> _allCatalogKeys = new();
 
-    // Module grouping built from ApplicationPage.Module (first page per module
+    // Module grouping built from PageModuleAttribute (first page per module
     // renders as the parent row, exactly like the old enum module grouping).
     private HashSet<string> _parentPages = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, string[]> _childMap = new(StringComparer.OrdinalIgnoreCase);
@@ -52,17 +53,18 @@
     {
         foreach (var page in _catalogPages)
         {
-            var displayName = string.IsNullOrWhiteSpace(page.Name) ? DisplayFor(page.Key) : page.Name;
             if (IsParent(page.Key))
-                yield return (page.Key, displayName, true, 0);
+                yield return (page.Key, page.DisplayName, true, 0);
             else if (!IsChild(page.Key))
-                yield return (page.Key, displayName, false, 0);
+                yield return (page.Key, page.DisplayName, false, 0);
         }
     }
 
-    // Prettifies "AnnualSales" -> "Annual Sales" for display only.
-    private static string DisplayFor(string key)
+    private static string DisplayFor(DR.PagePermission page)
     {
+        if (page == DR.PagePermission.QRScanner) return "QR Scanner";
+
+        var key = page.ToString();
         var sb = new System.Text.StringBuilder();
         for (int i = 0; i < key.Length; i++)
         {
@@ -170,7 +172,7 @@
         Loading.Show();
         try
         {
-            await LoadCatalog();
+            LoadCatalog();
             await LoadDesignations();
         }
         finally
@@ -179,36 +181,32 @@
         }
     }
 
-    // Loads the active ApplicationPage catalog that drives the Role Access grid.
-    private async Task LoadCatalog()
+    private void LoadCatalog()
     {
-        try
-        {
-            _catalogPages = await Http.GetFromJsonAsync<List<DR.ApplicationPage>>("api/Designation/pagecatalog") ?? new();
-            _allCatalogKeys = _catalogPages.Select(p => p.Key).ToList();
-            RebuildModuleGroups();
-        }
-        catch (Exception ex)
-        {
-            ShowMessage($"Failed to load page catalog: {ex.Message}", true);
-        }
+        _catalogPages = Enum.GetValues<DR.PagePermission>()
+            .Select((page, index) => new PageCatalogItem(
+                DR.RoleAccessPermissions.KeyFor(page),
+                DisplayFor(page),
+                typeof(DR.PagePermission).GetField(page.ToString())?.GetCustomAttribute<DR.PageModuleAttribute>()?.Module,
+                index))
+            .ToList();
+        _allCatalogKeys = _catalogPages.Select(p => p.Key).ToList();
+        RebuildModuleGroups();
     }
 
-    // First page of each Module group becomes the parent row (children collapse
-    // under it) — identical to the old enum PageModuleAttribute grouping.
     private void RebuildModuleGroups()
     {
         _parentPages.Clear();
         _childMap.Clear();
         _childSet.Clear();
 
-        var groups = new Dictionary<string, List<DR.ApplicationPage>>(StringComparer.OrdinalIgnoreCase);
+        var groups = new Dictionary<string, List<PageCatalogItem>>(StringComparer.OrdinalIgnoreCase);
         foreach (var page in _catalogPages)
         {
             if (string.IsNullOrWhiteSpace(page.Module))
                 continue;
             if (!groups.TryGetValue(page.Module!, out var list))
-                groups[page.Module!] = list = new List<DR.ApplicationPage>();
+                groups[page.Module!] = list = new List<PageCatalogItem>();
             list.Add(page);
         }
 
@@ -267,14 +265,16 @@
         {
             foreach (var raw in d.RoleAccess.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                if (raw.Contains('.'))
+                var dot = raw.IndexOf('.');
+                var page = DR.RoleAccessPermissions.NormalizePageKey(dot < 0 ? raw : raw.Substring(0, dot));
+                if (dot >= 0)
                 {
-                    _selectedTokens.Add(raw);
+                    _selectedTokens.Add($"{page}.{raw.Substring(dot + 1)}");
                 }
                 else
                 {
                     // legacy bare page name => grant all actions (re-saves as dotted)
-                    foreach (var a in _actions) _selectedTokens.Add($"{raw}.{a}");
+                    foreach (var a in _actions) _selectedTokens.Add($"{page}.{a}");
                 }
             }
         }
@@ -330,12 +330,15 @@
 
             // Preserve tokens for pages NOT in the current catalog (deactivated or
             // removed) so existing permissions are never dropped on edit-save.
-            var catalogKeys = new HashSet<string>(_allCatalogKeys, StringComparer.OrdinalIgnoreCase);
+            var catalogKeys = new HashSet<string>(
+                _allCatalogKeys.Select(DR.RoleAccessPermissions.NormalizePageKey),
+                StringComparer.OrdinalIgnoreCase);
             var preservedTokens = Enumerable.Empty<string>();
             if (!string.IsNullOrWhiteSpace(_model.RoleAccess))
             {
                 preservedTokens = DR.RoleAccessPermissions.ParseTokens(_model.RoleAccess)
-                    .Where(t => !catalogKeys.Contains(DR.RoleAccessPermissions.PagePart(t)));
+                    .Where(t => !catalogKeys.Contains(
+                        DR.RoleAccessPermissions.NormalizePageKey(DR.RoleAccessPermissions.PagePart(t))));
             }
 
             _model.RoleAccess = string.Join(",", selectedTokens.Concat(preservedTokens).Distinct(StringComparer.OrdinalIgnoreCase));
