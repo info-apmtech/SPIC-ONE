@@ -220,6 +220,14 @@ accounts, no live API; phone-first checks at 375 px; sweeps clean; commit in the
   read-only, 10ee406 / 62e0473). Reconciliation agent running (items above); farmer verification
   round running. Local QA users: qa.labcoord (designation 6), qa.analyst / qa.analyst2 (7),
   qa.finance (8). Migration V5o applied to the local database only.
+- 2026-09-27, sweeps on the merged build (67749ad) over every `/Lab*`, `/Sas/My*`, `/Sas/Payments*`
+  and `/SampleCollection*` route with ids 1, at 375 and 1280 px: qa.admin 0 of 46 flagged (largest
+  page 1,013 nodes); qa.labcoord 4 flagged (Lab Tracking is admin-only: intended redirect);
+  qa.analyst, qa.finance, qa.farmer, qa.mdo flagged only the guard's intended redirects off pages
+  their designation does not hold, plus NOTFOUND on records they may not see (finance on an
+  un-forwarded payment, farmer on another farmer's collection). Outputs in
+  `tools/ui-sweep/out/lab-<user>/`. Run the sweep from PowerShell: Git Bash rewrites the `^/Lab`
+  filter into a Windows path.
 
 ## 6. Principles
 
