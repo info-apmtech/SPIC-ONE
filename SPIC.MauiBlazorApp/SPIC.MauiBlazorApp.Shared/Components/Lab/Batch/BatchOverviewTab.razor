@@ -1,0 +1,187 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+
+@*
+    Batch Details, Overview tab (screen 5): Batch Progress stepper, Sample Type Summary, Recent
+    Samples (View All -> Samples tab); right column Batch Information and Timeline (Batch Created
+    plus the four progress steps; steps not reached yet are greyed).
+*@
+<div class="lf-two">
+    <div class="lf-stack">
+        <section class="lf-card" aria-labelledby="bo-progress">
+            <h2 id="bo-progress" class="lf-card-title bo-gap">Batch Progress</h2>
+            <BatchStepper Steps="Detail.Progress" />
+        </section>
+
+        <section class="lf-card" aria-labelledby="bo-types">
+            <h2 id="bo-types" class="lf-card-title bo-gap">Sample Type Summary</h2>
+            @if (Detail.SampleTypeSummary.Count == 0)
+            {
+                <EmptyState Icon="bi-eyedropper" Title="No samples" Compact="true" Message="This batch carries no samples." />
+            }
+            else
+            {
+                <div class="lf-table-wrap">
+                    <table class="lf-table bo-types">
+                        <thead>
+                            <tr>
+                                <th scope="col">Sample Type</th>
+                                <th scope="col">Total</th>
+                                <th scope="col">Completed</th>
+                                <th scope="col" class="bo-hide-phone">In Progress</th>
+                                <th scope="col">Not Started</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var t in Detail.SampleTypeSummary)
+                            {
+                                <tr>
+                                    <td>@LabText.SampleType(t.SampleType)</td>
+                                    <td>@t.Total</td>
+                                    <td>@t.Completed <span class="lf-muted">(@LabText.Percent(t.Completed, t.Total)%)</span></td>
+                                    <td class="bo-hide-phone">@t.InProgress <span class="lf-muted">(@LabText.Percent(t.InProgress, t.Total)%)</span></td>
+                                    <td>@t.NotStarted <span class="lf-muted">(@LabText.Percent(t.NotStarted, t.Total)%)</span></td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td>Total</td>
+                                <td>@TotalOf(t => t.Total)</td>
+                                <td>@TotalOf(t => t.Completed) <span class="lf-muted">(@LabText.Percent(TotalOf(t => t.Completed), TotalOf(t => t.Total))%)</span></td>
+                                <td class="bo-hide-phone">@TotalOf(t => t.InProgress) <span class="lf-muted">(@LabText.Percent(TotalOf(t => t.InProgress), TotalOf(t => t.Total))%)</span></td>
+                                <td>@TotalOf(t => t.NotStarted) <span class="lf-muted">(@LabText.Percent(TotalOf(t => t.NotStarted), TotalOf(t => t.Total))%)</span></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+        </section>
+
+        <section class="lf-card" aria-labelledby="bo-recent">
+            <div class="lf-card-head">
+                <h2 id="bo-recent" class="lf-card-title">Recent Samples</h2>
+                <button type="button" class="lf-viewall" @onclick="OnViewAllSamples">View All <i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+            </div>
+            @if (Detail.RecentSamples.Count == 0)
+            {
+                <EmptyState Icon="bi-eyedropper" Title="No samples yet" Compact="true" />
+            }
+            else
+            {
+                <div class="lf-table-wrap tablet-up">
+                    <table class="lf-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Sample ID</th>
+                                <th scope="col">Sample Code</th>
+                                <th scope="col">Soil</th>
+                                <th scope="col">Water</th>
+                                <th scope="col">Parameter</th>
+                                <th scope="col">Status</th>
+                                <th scope="col">Progress</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var s in Detail.RecentSamples)
+                            {
+                                <tr @key="s.SampleItemId">
+                                    <td class="lf-strong">@s.SampleId</td>
+                                    <td>@s.SampleCode</td>
+                                    <td>@LabText.SoilCount(s.SampleType)</td>
+                                    <td>@LabText.WaterCount(s.SampleType)</td>
+                                    <td>@LabText.Dash(s.CurrentParameter)</td>
+                                    <td><LabPill Text="@LabText.SampleStatus(s.Status)" Tone="@LabPill.ToneFor(s.Status)" /></td>
+                                    <td><LabProgress Percent="s.ProgressPercent" /></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="lf-cards phone-only">
+                    @foreach (var s in Detail.RecentSamples)
+                    {
+                        <article class="lf-rowcard" @key="@($"r{s.SampleItemId}")">
+                            <div class="lf-rowcard-top">
+                                <span class="lf-strong">@s.SampleId</span>
+                                <LabPill Text="@LabText.SampleStatus(s.Status)" Tone="@LabPill.ToneFor(s.Status)" />
+                            </div>
+                            <dl class="lf-facts">
+                                <dt>Sample Code</dt><dd>@s.SampleCode</dd>
+                                <dt>Type</dt><dd>@LabText.SampleType(s.SampleType)</dd>
+                                <dt>Parameter</dt><dd>@LabText.Dash(s.CurrentParameter)</dd>
+                            </dl>
+                            <div class="bo-progress"><LabProgress Percent="s.ProgressPercent" /></div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+
+    <aside class="lf-stack">
+        <section class="lf-card" aria-labelledby="bo-info">
+            <h2 id="bo-info" class="lf-card-title bo-gap">Batch Information</h2>
+            <dl class="lf-kv">
+                <dt>Batch No</dt><dd class="bo-green">@Detail.Header.Code</dd>
+                <dt>Consignment No.</dt>
+                <dd>
+                    @foreach (var cc in Detail.Header.ConsignmentCodes)
+                    {
+                        <span class="bo-block">@cc</span>
+                    }
+                </dd>
+                <dt>Batch Created Date</dt><dd>@LabText.Date(Detail.Header.BatchDate)</dd>
+                <dt>Created By</dt><dd>@LabText.Dash(Detail.CreatedByName)</dd>
+                <dt>Assigned To</dt><dd><LabPerson Name="@Detail.Header.AssignedToName" AvatarUrl="@Detail.Header.AssignedToAvatarUrl" Size="28" Empty="Not assigned" /></dd>
+                <dt>Assigned By</dt><dd>@LabText.Dash(Detail.Header.AssignedByName)</dd>
+                <dt>Priority</dt><dd><LabPill Text="@Detail.Header.Priority.ToString()" Tone="@LabPill.ToneFor(Detail.Header.Priority)" /></dd>
+                @if (!string.IsNullOrWhiteSpace(Detail.Remarks))
+                {
+                    <dt>Remarks</dt><dd>@Detail.Remarks</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(Detail.FinalRemarks))
+                {
+                    <dt>Final Remarks</dt><dd>@Detail.FinalRemarks</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(Detail.Header.ReportCode))
+                {
+                    <dt>Report No.</dt><dd>@Detail.Header.ReportCode</dd>
+                }
+            </dl>
+        </section>
+
+        <section class="lf-card" aria-labelledby="bo-timeline">
+            <h2 id="bo-timeline" class="lf-card-title bo-gap">Timeline</h2>
+            <BatchTimeline Steps="TimelineSteps" AriaLabel="Batch timeline" />
+        </section>
+    </aside>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public LabBatchDetailDto Detail { get; set; } = new();
+    [Parameter] public EventCallback OnViewAllSamples { get; set; }
+
+    private int TotalOf(Func<LabSampleTypeSummaryDto, int> pick) => Detail.SampleTypeSummary.Sum(pick);
+
+    /// <summary>"Batch Created" followed by the four progress steps.</summary>
+    private List<LabBatchStepDto> TimelineSteps
+    {
+        get
+        {
+            var created = new LabBatchStepDto
+            {
+                Status = SampleBatchStatus.Created,
+                Title = "Batch Created",
+                Description = $"{Detail.Header.SampleCount} sample{(Detail.Header.SampleCount == 1 ? "" : "s")} from {Detail.Header.ConsignmentCodes.Count} consignment{(Detail.Header.ConsignmentCodes.Count == 1 ? "" : "s")}",
+                At = Detail.CreatedAt,
+                ByName = Detail.CreatedByName,
+                IsDone = true
+            };
+            var list = new List<LabBatchStepDto> { created };
+            list.AddRange(Detail.Progress);
+            return list;
+        }
+    }
+}

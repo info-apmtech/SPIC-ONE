@@ -1,0 +1,179 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@inject ToastService Toast
+@inject FileDownloadService Downloads
+@inject IJSRuntime JS
+
+@*
+    Lab Report Details (screen 10): right-side drawer on tablet / desktop, full-height sheet on
+    phones. Report Summary, Batch Details, Consignment Details, Analysis Details, Status Timeline
+    and the sample reports of the batch. Footer: Close, Download PDF (merged batch PDF per
+    language, api/Lab/batches/{id}/report/download) and Download Excel (the sample reports'
+    workbooks per language, api/Lab/reports/{id}/xlsx).
+*@
+<BottomSheet IsOpen="IsOpen" IsOpenChanged="IsOpenChanged" Title="Lab Report Details"
+             Subtitle="@(_r?.Summary.ReportCode ?? _r?.Summary.BatchCode)" Size="BottomSheet.SheetSize.Full" CssClass="lrd">
+    <ChildContent>
+        @if (_loading)
+        {
+            <Skeleton Variant="card" Rows="3" />
+        }
+        else if (_r is null)
+        {
+            <EmptyState Icon="bi-file-earmark-text" Title="The report could not be loaded"
+                        Message="The report service did not answer. Try again once the batch report has been generated." />
+        }
+        else
+        {
+            var s = _r.Summary;
+            var b = _r.Batch;
+            <div class="lrd-body">
+                <section aria-labelledby="lrd-summary">
+                    <h3 id="lrd-summary" class="lrd-title">Report Summary</h3>
+                    <div class="lf-tiles">
+                        <div class="lf-tile"><span class="lf-tile-key">Report No.</span><span class="lf-tile-val">@LabText.Dash(s.ReportCode)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Batch No.</span><span class="lf-tile-val">@s.BatchCode</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Consignment No.</span><span class="lf-tile-val">@string.Join(", ", s.ConsignmentCodes)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Report Generated Date</span><span class="lf-tile-val">@LabText.Stamp(s.ReportGeneratedAt)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Report Status</span><span><LabPill Text="@(Ready ? "Report Ready" : "Pending")" Tone="@(Ready ? "green" : "yellow")" /></span></div>
+                    </div>
+                </section>
+
+                <section aria-labelledby="lrd-batch">
+                    <h3 id="lrd-batch" class="lrd-title">Batch Details</h3>
+                    <div class="lf-tiles">
+                        <div class="lf-tile"><span class="lf-tile-key">Batch Created Date</span><span class="lf-tile-val">@LabText.Stamp(_r.BatchCreatedAt)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Created By</span><span class="lf-tile-val">@LabText.Dash(_r.BatchCreatedByName)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">No. of Samples</span><span class="lf-tile-val">@s.TotalSamples (Soil @s.SoilSamples, Water @s.WaterSamples)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Current Status</span><span><LabPill Text="@LabText.BatchStatus(s.BatchStatus)" Tone="@LabPill.ToneFor(s.BatchStatus)" /></span></div>
+                    </div>
+                </section>
+
+                <section aria-labelledby="lrd-cons">
+                    <h3 id="lrd-cons" class="lrd-title">Consignment Details</h3>
+                    <div class="lf-tiles">
+                        <div class="lf-tile"><span class="lf-tile-key">Shipment Date</span><span class="lf-tile-val">@LabText.Date(_r.ShipmentDate)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Sample Type</span><span class="lf-tile-val">@LabText.PaymentType(s.SampleType)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">State</span><span class="lf-tile-val">@LabText.Dash(s.StateName)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Region</span><span class="lf-tile-val">@LabText.Dash(s.RegionName)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Head Quarters</span><span class="lf-tile-val">@LabText.Dash(s.HeadquarterName)</span></div>
+                    </div>
+                </section>
+
+                <section aria-labelledby="lrd-analysis">
+                    <h3 id="lrd-analysis" class="lrd-title">Analysis Details</h3>
+                    <div class="lf-tiles">
+                        <div class="lf-tile"><span class="lf-tile-key">Assigned To</span><span class="lf-tile-val"><LabPerson Name="@(b.AssignedToName ?? s.AssignedToName)" AvatarUrl="@b.AssignedToAvatarUrl" Size="26" Empty="Not assigned" /></span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Assigned Date</span><span class="lf-tile-val">@LabText.Stamp(_r.AssignedAt)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Analysis Completed Date</span><span class="lf-tile-val">@LabText.Stamp(_r.AnalysisCompletedAt)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Analysis Days</span><span class="lf-tile-val">@LabText.AnalysisDays(_r.AnalysisDays)</span></div>
+                        <div class="lf-tile"><span class="lf-tile-key">Final Completed Date</span><span class="lf-tile-val">@LabText.Stamp(_r.FinalCompletedAt)</span></div>
+                        <div class="lf-tile lrd-wide"><span class="lf-tile-key">Final Remarks</span><span class="lf-tile-val">@LabText.Dash(_r.FinalRemarks)</span></div>
+                    </div>
+                </section>
+
+                <section aria-labelledby="lrd-timeline">
+                    <h3 id="lrd-timeline" class="lrd-title">Status Timeline</h3>
+                    <BatchTimeline Steps="_r.Timeline" AriaLabel="Report status timeline" />
+                </section>
+
+                @if (_r.SampleReports.Count > 0)
+                {
+                    <section aria-labelledby="lrd-samples">
+                        <h3 id="lrd-samples" class="lrd-title">Sample Reports (@_r.SampleReports.Count)</h3>
+                        <ul class="lrd-reports" role="list">
+                            @foreach (var rep in _r.SampleReports)
+                            {
+                                <li @key="rep.Id">
+                                    <span class="lrd-rep-main">
+                                        <span class="lf-strong">@rep.Code</span>
+                                        <span class="lf-sub">@rep.SampleCode · @rep.FarmerName · @LabText.SampleType(rep.SampleType)</span>
+                                    </span>
+                                    <LabPill Text="@rep.Status.ToString()" Tone="@(rep.Status == LabReportStatus.Generated ? "blue" : "green")" />
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <div class="lf-footer lrd-footer">
+            <button type="button" class="lf-btn lf-btn--outline lrd-close" @onclick="() => IsOpenChanged.InvokeAsync(false)">Close</button>
+            <LabSplitButton Text="Download PDF" Icon="bi-file-earmark-pdf" ButtonClass="lf-btn--primary" DropUp="true"
+                            Languages="_languages" Disabled="@(!Ready || _busy)" Selected="DownloadPdfAsync" />
+            <LabSplitButton Text="Download Excel" Icon="bi-file-earmark-excel" ButtonClass="lf-btn--outline" DropUp="true"
+                            Languages="_languages" Disabled="@(!Ready || _busy || _r?.SampleReports.Count == 0)" Selected="DownloadExcelAsync" />
+        </div>
+    </Footer>
+</BottomSheet>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public int? BatchId { get; set; }
+
+    private LabBatchReportDto? _r;
+    private List<LabLanguageDto> _languages = new();
+    private bool _loading;
+    private bool _busy;
+    private int? _loadedFor;
+
+    private bool Ready => _r is { } r && (!string.IsNullOrWhiteSpace(r.Summary.ReportCode) || r.Summary.ReportsGenerated > 0);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!IsOpen || BatchId is null || _loadedFor == BatchId) return;
+        _loadedFor = BatchId;
+        _loading = true;
+        _r = null;
+        StateHasChanged();
+
+        if (_languages.Count == 0) _languages = await Api.GetLanguagesAsync() ?? new();
+        _r = await Api.GetBatchReportAsync(BatchId.Value);
+        _loading = false;
+        if (_r is null) _loadedFor = null;   // allow a retry on the next open
+    }
+
+    private async Task OpenAsync(string url)
+    {
+        try { await JS.InvokeVoidAsync("open", url, "_blank"); }
+        catch (Exception) { Toast.Error("The download could not be started. Please try again."); }
+    }
+
+    private Task DownloadPdfAsync(string lang)
+    {
+        if (_r is null) return Task.CompletedTask;
+        return OpenAsync(Api.BatchReportDownloadUrl(_r.Summary.BatchId, lang, "pdf"));
+    }
+
+    private async Task DownloadExcelAsync(string lang)
+    {
+        if (_r is null || _r.SampleReports.Count == 0) return;
+        if (_r.SampleReports.Count == 1)
+        {
+            await OpenAsync(Api.ReportXlsxUrl(_r.SampleReports[0].Id, lang));
+            return;
+        }
+
+        // One workbook per sample report: saved one after another (a row of pop-ups would be blocked).
+        _busy = true;
+        try
+        {
+            foreach (var rep in _r.SampleReports)
+            {
+                await Downloads.GetAsync($"api/Lab/reports/{rep.Id}/xlsx?lang={Uri.EscapeDataString(lang)}", $"{rep.Code}_{lang}.xlsx");
+            }
+            Toast.Success($"{_r.SampleReports.Count} Excel reports downloaded.");
+        }
+        catch (Exception)
+        {
+            Toast.Error("The Excel reports could not be downloaded. Please try again.");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

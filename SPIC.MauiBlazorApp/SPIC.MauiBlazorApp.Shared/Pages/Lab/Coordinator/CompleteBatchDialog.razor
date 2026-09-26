@@ -1,0 +1,78 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@inject ToastService Toast
+
+@*
+    Complete Batch: every sample is completed; the coordinator adds Final Remarks and closes the
+    batch (PATCH .../status?status=Completed&remarks=), which also generates the report.
+*@
+<LabDialog IsOpen="IsOpen" IsOpenChanged="IsOpenChanged" Title="Complete Batch" Subtitle="@Detail.Header.Code" Width="520">
+    <ChildContent>
+        <div class="lf-form">
+            <div class="lf-field lf-field--full">
+                <dl class="lf-kv cpl-summary">
+                    <dt>Batch No</dt><dd>@Detail.Header.Code</dd>
+                    <dt>Consignment No.</dt><dd>@string.Join(", ", Detail.Header.ConsignmentCodes)</dd>
+                    <dt>Samples</dt><dd>@Detail.Header.CompletedEntries of @Detail.Header.SampleCount completed</dd>
+                    <dt>Analyst</dt><dd>@LabText.Dash(Detail.Header.AssignedToName)</dd>
+                    <dt>Analysis Days</dt><dd>@LabText.AnalysisDays(Detail.Header.AnalysisDays)</dd>
+                </dl>
+            </div>
+            <div class="lf-field lf-field--full">
+                <label class="lf-label" for="cpl-remarks">Final Remarks</label>
+                <textarea id="cpl-remarks" class="lf-input" rows="4" maxlength="1000" placeholder="Enter final remarks for the report"
+                          @bind="_remarks" @bind:event="oninput"></textarea>
+                <span class="lf-hint">Completing locks the test values and generates the batch report.</span>
+            </div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <div class="lf-footer">
+            <button type="button" class="lf-btn lf-btn--outline" disabled="@_saving" @onclick="() => IsOpenChanged.InvokeAsync(false)">Cancel</button>
+            <button type="button" class="lf-btn lf-btn--primary" disabled="@_saving" @onclick="SaveAsync">
+                @if (_saving)
+                {
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                }
+                Complete Batch
+            </button>
+        </div>
+    </Footer>
+</LabDialog>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter, EditorRequired] public LabBatchDetailDto Detail { get; set; } = new();
+    [Parameter] public EventCallback<LabBatchDetailDto> OnSaved { get; set; }
+
+    private string _remarks = "";
+    private bool _saving;
+    private bool _wasOpen;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            _wasOpen = true;
+            _remarks = "";
+        }
+        else if (!IsOpen)
+        {
+            _wasOpen = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        var updated = await Api.SetBatchStatusAsync(Detail.Header.Id, SampleBatchStatus.Completed,
+            string.IsNullOrWhiteSpace(_remarks) ? null : _remarks.Trim());
+        _saving = false;
+        if (updated is null) return;
+
+        Toast.Success($"{updated.Header.Code} completed" + (string.IsNullOrWhiteSpace(updated.Header.ReportCode) ? "." : $"; report {updated.Header.ReportCode} generated."));
+        await IsOpenChanged.InvokeAsync(false);
+        await OnSaved.InvokeAsync(updated);
+    }
+}

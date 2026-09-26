@@ -1,0 +1,97 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@inject ToastService Toast
+
+@*
+    Assign / Reassign a batch (PATCH api/Lab/batches/{id}/assign): analyst and priority. Assigning
+    a Created batch also takes it for analysis (API rule), which the dialog says up front.
+*@
+<LabDialog IsOpen="IsOpen" IsOpenChanged="IsOpenChanged" Title="@(Reassigning ? "Reassign Batch" : "Assign Batch")"
+           Subtitle="@Batch.Code" Width="520">
+    <ChildContent>
+        <div class="lf-form">
+            <div class="lf-field lf-field--full">
+                <label class="lf-label" for="abd-analyst">Assign To <span class="lf-req">*</span></label>
+                <LabAnalystPicker Id="abd-analyst" Analysts="_analysts" @bind-Value="_assignee" AllowNone="false" />
+                @if (Reassigning && !string.IsNullOrWhiteSpace(Batch.AssignedToName))
+                {
+                    <span class="lf-hint">Currently assigned to @Batch.AssignedToName.</span>
+                }
+                else if (Batch.Status == SampleBatchStatus.Created)
+                {
+                    <span class="lf-hint">Assigning also takes the batch for analysis.</span>
+                }
+            </div>
+            <div class="lf-field lf-field--full">
+                <label class="lf-label" for="abd-priority">Priority</label>
+                <select id="abd-priority" class="lf-select" @bind="_priority">
+                    <option value="@SampleBatchPriority.Low">Low</option>
+                    <option value="@SampleBatchPriority.Medium">Medium</option>
+                    <option value="@SampleBatchPriority.High">High</option>
+                </select>
+            </div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <div class="lf-footer">
+            <button type="button" class="lf-btn lf-btn--outline" disabled="@_saving" @onclick="() => IsOpenChanged.InvokeAsync(false)">Cancel</button>
+            <button type="button" class="lf-btn lf-btn--primary" disabled="@(_saving || !Changed)" @onclick="SaveAsync">
+                @if (_saving)
+                {
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                }
+                Save
+            </button>
+        </div>
+    </Footer>
+</LabDialog>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter, EditorRequired] public LabBatchRowDto Batch { get; set; } = new();
+    [Parameter] public EventCallback<LabBatchDetailDto> OnSaved { get; set; }
+
+    private List<LabUserDto> _analysts = new();
+    private string? _assignee;
+    private SampleBatchPriority _priority;
+    private bool _saving;
+    private bool _wasOpen;
+
+    private bool Reassigning => !string.IsNullOrWhiteSpace(Batch.AssignedToUserId);
+    private bool Changed => (!string.IsNullOrWhiteSpace(_assignee) && _assignee != Batch.AssignedToUserId) || _priority != Batch.Priority;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            _wasOpen = true;
+            _assignee = Batch.AssignedToUserId;
+            _priority = Batch.Priority;
+            _analysts = await Api.GetAnalystsAsync() ?? new();
+        }
+        else if (!IsOpen)
+        {
+            _wasOpen = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        var dto = new LabBatchAssignDto
+        {
+            AssignedToUserId = _assignee != Batch.AssignedToUserId ? _assignee : null,
+            Priority = _priority != Batch.Priority ? _priority : null
+        };
+        var updated = await Api.AssignBatchAsync(Batch.Id, dto);
+        _saving = false;
+        if (updated is null) return;
+
+        Toast.Success(dto.AssignedToUserId is null
+            ? $"{Batch.Code} priority set to {_priority}."
+            : $"{Batch.Code} assigned to {updated.Header.AssignedToName}.");
+        await IsOpenChanged.InvokeAsync(false);
+        await OnSaved.InvokeAsync(updated);
+    }
+}

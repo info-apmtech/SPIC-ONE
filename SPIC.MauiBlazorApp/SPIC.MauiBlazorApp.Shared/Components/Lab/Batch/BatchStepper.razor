@@ -1,0 +1,51 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+
+@*
+    Batch Progress stepper (screen 5): Taken for Analysis, In Progress, Analysis Completed,
+    Completed, each with its date. Horizontal on tablet / desktop, vertical on phones.
+*@
+<ol class="bst @CssClass" aria-label="Batch progress">
+    @for (var i = 0; i < Steps.Count; i++)
+    {
+        var step = Steps[i];
+        var nextDone = i + 1 < Steps.Count && Steps[i + 1].IsDone;
+        <li class="bst-step @(step.IsDone ? "is-done" : "") @(step.IsCurrent ? "is-current" : "")">
+            <div class="bst-rail" aria-hidden="true">
+                <span class="bst-dot">
+                    @if (step.IsDone)
+                    {
+                        <i class="bi bi-check-lg"></i>
+                    }
+                    else
+                    {
+                        <i class="bi @Icon(step.Status)"></i>
+                    }
+                </span>
+                @if (i < Steps.Count - 1)
+                {
+                    <span class="bst-line @(nextDone ? "is-done" : "")"></span>
+                }
+            </div>
+            <div class="bst-body">
+                <span class="bst-title">@step.Title</span>
+                <span class="bst-when">@(step.At is { } at ? LabText.Stamp(at) : "Pending")</span>
+            </div>
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter] public List<LabBatchStepDto> Steps { get; set; } = new();
+    [Parameter] public string? CssClass { get; set; }
+
+    private static string Icon(SampleBatchStatus s) => s switch
+    {
+        SampleBatchStatus.TakenForAnalysis => "bi-box-arrow-in-right",
+        SampleBatchStatus.InProgress => "bi-hourglass-split",
+        SampleBatchStatus.AnalysisCompleted => "bi-clipboard-check",
+        SampleBatchStatus.Completed => "bi-patch-check",
+        _ => "bi-circle"
+    };
+}

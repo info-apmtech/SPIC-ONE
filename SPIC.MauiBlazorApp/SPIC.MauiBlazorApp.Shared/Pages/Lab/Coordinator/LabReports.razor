@@ -1,0 +1,291 @@
+﻿@page "/Lab/Reports"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@inject SasApi Sas
+@implements IDisposable
+
+@*
+    Lab Reports (screens 9-10): report KPI cards, a collapsible Filters card (Date Range, State,
+    Sample Type, Financial Year; Clear All / Apply), the batch-wise reports table from
+    api/Lab/reports/batches with search and pager; the view action opens the Lab Report Details
+    drawer. The report routes belong to the reports workstream: when they are missing the page
+    shows an empty state instead of failing.
+*@
+
+<LabFrame>
+    <PageHeader Title="Lab Reports" Subtitle="Batch reports generated when a batch is completed." />
+
+    <div class="lf-kpis">
+        <LabKpiCard Label="Total Reports" Value="@N(_stats?.TotalReports)" Icon="bi-file-earmark-text" Tone="violet" />
+        <LabKpiCard Label="This Financial Year" Value="@N(_stats?.ThisFinancialYear)" Icon="bi-calendar-check" Tone="green" />
+        <LabKpiCard Label="Previous Financial Years" Value="@N(_stats?.PreviousFinancialYears)" Icon="bi-archive" Tone="blue" />
+    </div>
+
+    <section class="lf-card">
+        <button type="button" class="lr-filters-head" aria-expanded="@(_filtersOpen ? "true" : "false")" @onclick="() => _filtersOpen = !_filtersOpen">
+            <span><i class="bi bi-funnel" aria-hidden="true"></i> Filters @(ActiveFilters > 0 ? $"({ActiveFilters})" : "")</span>
+            <i class="bi @(_filtersOpen ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+        </button>
+
+        @if (_filtersOpen)
+        {
+            <div class="lr-filters">
+                <div class="lf-field">
+                    <label class="lf-label" for="lr-from">From</label>
+                    <input id="lr-from" type="date" class="lf-input" value="@_fromText" @onchange="e => _fromText = e.Value?.ToString() ?? string.Empty" />
+                </div>
+                <div class="lf-field">
+                    <label class="lf-label" for="lr-to">To</label>
+                    <input id="lr-to" type="date" class="lf-input" value="@_toText" @onchange="e => _toText = e.Value?.ToString() ?? string.Empty" />
+                </div>
+                <div class="lf-field">
+                    <label class="lf-label" for="lr-state">State</label>
+                    <select id="lr-state" class="lf-select" @bind="_stateText">
+                        <option value="">All States</option>
+                        @foreach (var s in _states)
+                        {
+                            <option value="@s.Id">@s.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="lf-field">
+                    <label class="lf-label" for="lr-type">Sample Type</label>
+                    <select id="lr-type" class="lf-select" @bind="_typeText">
+                        <option value="">All Types</option>
+                        <option value="Paid">Paid</option>
+                        <option value="Free">Free</option>
+                        <option value="Soil">Soil</option>
+                        <option value="Water">Water</option>
+                    </select>
+                </div>
+                <div class="lf-field">
+                    <label class="lf-label" for="lr-fy">Financial Year</label>
+                    <select id="lr-fy" class="lf-select" @bind="_fyText">
+                        <option value="">All Years</option>
+                        @foreach (var y in _years)
+                        {
+                            <option value="@y">@FyLabel(y)</option>
+                        }
+                    </select>
+                </div>
+                <div class="lr-filter-actions">
+                    <button type="button" class="lf-btn lf-btn--outline" @onclick="ClearAsync"><i class="bi bi-x-lg" aria-hidden="true"></i> Clear All</button>
+                    <button type="button" class="lf-btn lf-btn--primary" @onclick="ApplyAsync"><i class="bi bi-funnel" aria-hidden="true"></i> Apply Filters</button>
+                </div>
+            </div>
+        }
+    </section>
+
+    <section class="lf-card" aria-labelledby="lr-title">
+        <div class="lf-card-head">
+            <h2 id="lr-title" class="lf-card-title">Reports</h2>
+            <div class="lf-toolbar">
+                <LabSearch Value="@_q" ValueChanged="OnSearch" Placeholder="Search batch, consignment, report..." AriaLabel="Search reports" />
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="table" Rows="6" />
+        }
+        else if (_failed)
+        {
+            <EmptyState Icon="bi-file-earmark-text" Title="Lab reports are not available yet"
+                        Message="The report service did not answer. Reports appear here once batches are completed and the report service is running.">
+                <button type="button" class="lf-btn lf-btn--outline" @onclick="() => LoadAsync(true)">Try again</button>
+            </EmptyState>
+        }
+        else if (_rows.Count == 0)
+        {
+            <EmptyState Icon="bi-file-earmark-text" Title="No reports found"
+                        Message="@(ActiveFilters > 0 || !string.IsNullOrEmpty(_q) ? "Try other filters or another search term." : "Reports are generated when a batch is completed.")" />
+        }
+        else
+        {
+            <div class="lf-table-wrap tablet-up">
+                <table class="lf-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Batch No.</th>
+                            <th scope="col">Consignment No.</th>
+                            <th scope="col">Report No.</th>
+                            <th scope="col">Samples</th>
+                            <th scope="col">State</th>
+                            <th scope="col">Generated</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="lf-th-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in _rows)
+                        {
+                            var row = r;
+                            <tr @key="row.BatchId">
+                                <td><a class="lf-link" href="@($"/Lab/Analysis/{row.BatchId}")">@row.BatchCode</a></td>
+                                <td><LabConsignmentCodes Codes="row.ConsignmentCodes" /></td>
+                                <td>@LabText.Dash(row.ReportCode)</td>
+                                <td>@row.TotalSamples<span class="lf-sub">Soil @row.SoilSamples · Water @row.WaterSamples</span></td>
+                                <td>@LabText.Dash(row.StateName)<span class="lf-sub">@row.RegionName</span></td>
+                                <td class="lf-nowrap">@LabText.Date(row.ReportGeneratedAt)</td>
+                                <td><LabPill Text="@StatusText(row)" Tone="@StatusTone(row)" /></td>
+                                <td class="lf-td-action">
+                                    <button type="button" class="lf-icon-btn" aria-label="@($"View report of {row.BatchCode}")" title="View" @onclick="() => Open(row)">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="lf-cards phone-only">
+                @foreach (var r in _rows)
+                {
+                    var row = r;
+                    <article class="lf-rowcard" @key="@($"m{row.BatchId}")">
+                        <div class="lf-rowcard-top">
+                            <a class="lf-link" href="@($"/Lab/Analysis/{row.BatchId}")">@row.BatchCode</a>
+                            <LabPill Text="@StatusText(row)" Tone="@StatusTone(row)" />
+                        </div>
+                        <dl class="lf-facts">
+                            <dt>Report No.</dt><dd>@LabText.Dash(row.ReportCode)</dd>
+                            <dt>Consignment</dt><dd><LabConsignmentCodes Codes="row.ConsignmentCodes" /></dd>
+                            <dt>Samples</dt><dd>@row.TotalSamples (Soil @row.SoilSamples, Water @row.WaterSamples)</dd>
+                            <dt>State</dt><dd>@LabText.Dash(row.StateName)</dd>
+                            <dt>Generated</dt><dd>@LabText.Date(row.ReportGeneratedAt)</dd>
+                        </dl>
+                        <div class="lf-rowcard-actions">
+                            <button type="button" class="lf-btn lf-btn--outline lf-btn--sm" @onclick="() => Open(row)"><i class="bi bi-eye" aria-hidden="true"></i> View Report</button>
+                        </div>
+                    </article>
+                }
+            </div>
+
+            <LabPager Page="_page" PageSize="_size" Total="_total" PageChanged="GoToPage" PageSizeChanged="SetSize" />
+        }
+    </section>
+
+    <LabReportDrawer @bind-IsOpen="_drawerOpen" BatchId="_drawerBatchId" />
+</LabFrame>
+
+@code {
+    private LabReportStatsDto? _stats;
+    private List<LabReportBatchRowDto> _rows = new();
+    private List<SasStateDto> _states = new();
+    private List<int> _years = new();
+    private string? _q;
+    private string _fromText = "";
+    private string _toText = "";
+    private string _stateText = "";
+    private string _typeText = "";
+    private string _fyText = "";
+    // applied filters
+    private DateTime? _from;
+    private DateTime? _to;
+    private int? _stateId;
+    private string? _type;
+    private int? _fy;
+    private int _page = 1;
+    private int _size = LabApi.DefaultPageSize;
+    private int _total;
+    private bool _loading = true;
+    private bool _failed;
+    private bool _filtersOpen = true;
+    private bool _drawerOpen;
+    private int? _drawerBatchId;
+    private CancellationTokenSource? _cts;
+
+    private int ActiveFilters => new object?[] { _from, _to, _stateId, _type, _fy }.Count(v => v is not null);
+
+    private static string N(int? value) => (value ?? 0).ToString("N0");
+    private static string FyLabel(int start) => $"{start}-{(start + 1) % 100:00}";
+
+    private static string StatusText(LabReportBatchRowDto r) =>
+        !string.IsNullOrWhiteSpace(r.ReportCode) || r.ReportsGenerated > 0
+            ? (r.PendingReports > 0 ? "Partly Ready" : "Report Ready")
+            : "Pending";
+
+    private static string StatusTone(LabReportBatchRowDto r) =>
+        !string.IsNullOrWhiteSpace(r.ReportCode) || r.ReportsGenerated > 0 ? (r.PendingReports > 0 ? "orange" : "green") : "yellow";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var lookups = Sas.GetLookupsAsync();
+        var years = Api.GetFinancialYearsAsync();
+        await LoadAsync(true);
+        _states = (await lookups)?.States ?? new();
+        _years = await years ?? new();
+    }
+
+    private async Task LoadAsync(bool withStats)
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+        var statsTask = withStats ? Api.GetReportStatsAsync(_fy, ct) : Task.FromResult(_stats);
+        var page = await Api.GetReportBatchesAsync(stateId: _stateId, sampleType: _type, financialYear: _fy, q: _q,
+            from: _from, to: _to, page: _page, pageSize: _size, ct: ct);
+        var stats = await statsTask;
+        if (ct.IsCancellationRequested) return;
+
+        _failed = page is null;
+        _rows = page?.Items ?? new();
+        _total = page?.Total ?? 0;
+        _stats = stats ?? _stats;
+        _loading = false;
+    }
+
+    private Task ApplyAsync()
+    {
+        _from = DateTime.TryParse(_fromText, out var f) ? f.Date : null;
+        _to = DateTime.TryParse(_toText, out var t) ? t.Date : null;
+        _stateId = int.TryParse(_stateText, out var s) ? s : null;
+        _type = string.IsNullOrWhiteSpace(_typeText) ? null : _typeText;
+        _fy = int.TryParse(_fyText, out var y) ? y : null;
+        _page = 1;
+        return LoadAsync(true);
+    }
+
+    private Task ClearAsync()
+    {
+        _fromText = _toText = _stateText = _typeText = _fyText = "";
+        return ApplyAsync();
+    }
+
+    private Task OnSearch(string? q)
+    {
+        _q = q;
+        _page = 1;
+        return LoadAsync(false);
+    }
+
+    private Task GoToPage(int page)
+    {
+        _page = page;
+        return LoadAsync(false);
+    }
+
+    private Task SetSize(int size)
+    {
+        _size = size;
+        _page = 1;
+        return LoadAsync(false);
+    }
+
+    private void Open(LabReportBatchRowDto row)
+    {
+        _drawerBatchId = row.BatchId;
+        _drawerOpen = true;
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

@@ -1,0 +1,237 @@
+﻿@page "/Lab/Analysis"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@inject NavigationManager Nav
+@implements IDisposable
+
+@*
+    Analysis Tracking (screen 11): six KPI cards with the icon above the label, then the Analysis
+    List with search and All Statuses (a status name, or "Delayed"), pager. State in the URL
+    (?status=&q=&page=&size=). Analysis Days pill: Pending yellow, n Days green, red when delayed.
+*@
+
+<LabFrame>
+    <PageHeader Title="Analysis Tracking" Subtitle="Follow every batch from creation to completed analysis." />
+
+    <div class="lf-kpis lf-kpis--stacked">
+        <LabKpiCard IconAbove="true" Label="Total Batches" Value="@N(_stats?.TotalBatches)" Icon="bi-collection" Tone="violet" />
+        <LabKpiCard IconAbove="true" Label="Created" Value="@N(_stats?.Created)" Icon="bi-plus-square" Tone="green" />
+        <LabKpiCard IconAbove="true" Label="Taken for Analysis" Value="@N(_stats?.TakenForAnalysis)" Icon="bi-clipboard2-pulse" Tone="orange" />
+        <LabKpiCard IconAbove="true" Label="Analysis Completed" Value="@N(_stats?.AnalysisCompleted)" Icon="bi-clipboard-check" Tone="blue" />
+        <LabKpiCard IconAbove="true" Label="Completed" Value="@N(_stats?.Completed)" Icon="bi-patch-check" Tone="teal" />
+        <LabKpiCard IconAbove="true" Label="Delayed Analysis" Value="@N(_stats?.DelayedAnalysis)" Icon="bi-exclamation-triangle" Tone="red" />
+    </div>
+
+    <section class="lf-card" aria-labelledby="at-title">
+        <div class="lf-card-head">
+            <h2 id="at-title" class="lf-card-title">Analysis List</h2>
+            <div class="lf-toolbar">
+                <LabSearch Value="@_q" ValueChanged="OnSearch" Placeholder="Search batch, consignment, analyst..." AriaLabel="Search batches" />
+                <select class="lf-select" aria-label="Status" value="@_status" @onchange="OnStatus">
+                    <option value="">All Statuses</option>
+                    @foreach (var s in LabText.BatchStatuses)
+                    {
+                        <option value="@s">@LabText.BatchStatus(s)</option>
+                    }
+                    <option value="Delayed">Delayed</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="table" Rows="6" />
+        }
+        else if (_failed)
+        {
+            <EmptyState Icon="bi-collection" Title="The batches could not be loaded" Message="Please check your connection and try again.">
+                <button type="button" class="lf-btn lf-btn--outline" @onclick="() => LoadAsync(true)">Try again</button>
+            </EmptyState>
+        }
+        else if (_rows.Count == 0)
+        {
+            <EmptyState Icon="bi-collection" Title="No batches found"
+                        Message="@(string.IsNullOrEmpty(_status) && string.IsNullOrEmpty(_q) ? "Create a batch from the Batch Pending consignments." : "Try another status or search term.")">
+                @if (!string.IsNullOrEmpty(_status) || !string.IsNullOrEmpty(_q))
+                {
+                    <button type="button" class="lf-btn lf-btn--outline" @onclick="ClearFilters">Clear filters</button>
+                }
+                else
+                {
+                    <a class="lf-btn lf-btn--outline" href="/Lab/Consignments?status=BatchPending">Go to consignments</a>
+                }
+            </EmptyState>
+        }
+        else
+        {
+            <div class="lf-table-wrap tablet-up">
+                <table class="lf-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Batch No.</th>
+                            <th scope="col">Consignment No.</th>
+                            <th scope="col">Total Samples</th>
+                            <th scope="col">Assigned To</th>
+                            <th scope="col">Assigned Date</th>
+                            <th scope="col">Current Status</th>
+                            <th scope="col">Analysis Days</th>
+                            <th scope="col" class="lf-th-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in _rows)
+                        {
+                            <tr @key="b.Id">
+                                <td>
+                                    <a class="lf-link" href="@Href(b.Id)">@b.Code</a>
+                                    <span class="lf-sub">@b.Priority priority</span>
+                                </td>
+                                <td><LabConsignmentCodes Codes="b.ConsignmentCodes" /></td>
+                                <td>@b.SampleCount</td>
+                                <td><LabPerson Name="@b.AssignedToName" AvatarUrl="@b.AssignedToAvatarUrl" Empty="Not assigned" /></td>
+                                <td class="lf-nowrap">
+                                    @if (b.AssignedAt is { } at)
+                                    {
+                                        @LabText.Date(at)<span class="lf-sub">@LabText.Time(at)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="lf-muted">-</span>
+                                    }
+                                </td>
+                                <td><LabPill Text="@LabText.BatchStatus(b.Status)" Tone="@LabPill.ToneFor(b.Status)" /></td>
+                                <td><LabPill Text="@LabText.AnalysisDays(b.AnalysisDays)" Tone="@LabText.AnalysisDaysTone(b)" /></td>
+                                <td class="lf-td-action">
+                                    <a class="lf-icon-btn" href="@Href(b.Id)" aria-label="@($"View {b.Code}")" title="View"><i class="bi bi-eye" aria-hidden="true"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="lf-cards phone-only">
+                @foreach (var b in _rows)
+                {
+                    <article class="lf-rowcard" @key="@($"m{b.Id}")">
+                        <div class="lf-rowcard-top">
+                            <a class="lf-link" href="@Href(b.Id)">@b.Code</a>
+                            <LabPill Text="@LabText.BatchStatus(b.Status)" Tone="@LabPill.ToneFor(b.Status)" />
+                        </div>
+                        <dl class="lf-facts">
+                            <dt>Consignment</dt><dd><LabConsignmentCodes Codes="b.ConsignmentCodes" /></dd>
+                            <dt>Samples</dt><dd>@b.SampleCount</dd>
+                            <dt>Assigned To</dt><dd>@(string.IsNullOrWhiteSpace(b.AssignedToName) ? "Not assigned" : b.AssignedToName)</dd>
+                            <dt>Assigned Date</dt><dd>@LabText.Date(b.AssignedAt)</dd>
+                            <dt>Analysis Days</dt><dd><LabPill Text="@LabText.AnalysisDays(b.AnalysisDays)" Tone="@LabText.AnalysisDaysTone(b)" /></dd>
+                        </dl>
+                        <div class="lf-rowcard-actions">
+                            <a class="lf-btn lf-btn--outline lf-btn--sm" href="@Href(b.Id)"><i class="bi bi-eye" aria-hidden="true"></i> View</a>
+                        </div>
+                    </article>
+                }
+            </div>
+
+            <LabPager Page="_page" PageSize="_size" Total="_total" PageChanged="p => Apply(p)" PageSizeChanged="SetSize" />
+        }
+    </section>
+</LabFrame>
+
+@code {
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "size")] public int? SizeQuery { get; set; }
+
+    private LabBatchStatsDto? _stats;
+    private List<LabBatchRowDto> _rows = new();
+    private string _status = "";
+    private string? _q;
+    private int _page = 1;
+    private int _size = LabApi.DefaultPageSize;
+    private int _total;
+    private bool _loading = true;
+    private bool _failed;
+    private string _appliedKey = "?";
+    private CancellationTokenSource? _cts;
+
+    private static string N(int? value) => (value ?? 0).ToString("N0");
+    private static string Href(int id) => $"/Lab/Analysis/{id}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _status = string.Equals(StatusQuery, "Delayed", StringComparison.OrdinalIgnoreCase) ? "Delayed"
+            : Enum.TryParse<SampleBatchStatus>(StatusQuery, true, out var s) ? s.ToString() : "";
+        _q = string.IsNullOrWhiteSpace(SearchQuery) ? null : SearchQuery;
+        _page = Math.Max(1, PageQuery ?? 1);
+        _size = SizeQuery is > 0 and <= 50 ? SizeQuery.Value : LabApi.DefaultPageSize;
+
+        var key = $"{_status}|{_q}|{_page}|{_size}";
+        if (key == _appliedKey) return;
+        _appliedKey = key;
+        await LoadAsync(_stats is null);
+    }
+
+    private async Task LoadAsync(bool withStats)
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+
+        var statsTask = withStats ? Api.GetBatchStatsAsync(ct) : Task.FromResult(_stats);
+        var page = await Api.GetBatchesAsync(status: _status, q: _q, page: _page, pageSize: _size, ct: ct);
+        var stats = await statsTask;
+        if (ct.IsCancellationRequested) return;
+
+        _failed = page is null;
+        _rows = page?.Items ?? new();
+        _total = page?.Total ?? 0;
+        _stats = stats ?? _stats;
+        _loading = false;
+    }
+
+    private void Apply(int page)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(_status)) parts.Add($"status={_status}");
+        if (!string.IsNullOrWhiteSpace(_q)) parts.Add($"q={Uri.EscapeDataString(_q)}");
+        if (page > 1) parts.Add($"page={page}");
+        if (_size != LabApi.DefaultPageSize) parts.Add($"size={_size}");
+        Nav.NavigateTo("/Lab/Analysis" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
+    }
+
+    private void OnSearch(string? q)
+    {
+        _q = q;
+        Apply(1);
+    }
+
+    private void OnStatus(ChangeEventArgs e)
+    {
+        _status = e.Value?.ToString() ?? "";
+        Apply(1);
+    }
+
+    private void ClearFilters()
+    {
+        _status = "";
+        _q = null;
+        Apply(1);
+    }
+
+    private void SetSize(int size)
+    {
+        _size = size;
+        Apply(1);
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

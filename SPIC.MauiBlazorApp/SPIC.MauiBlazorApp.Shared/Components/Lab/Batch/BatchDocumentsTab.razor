@@ -1,0 +1,452 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using System.IO
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject LabApi Api
+@inject ToastService Toast
+@inject FileDownloadService Downloads
+@inject IJSRuntime JS
+@implements IDisposable
+
+@*
+    Batch Details, Documents tab (screen 7): Document List with search, All Types, All Uploaders,
+    Date Range and (writers) Upload; columns Document Name (icon, name, "PDF · description"),
+    Document Type, Uploaded By, Uploaded On, File Size, actions download / view / delete.
+    Upload: several files at once (PDF, images, XLSX, DOCX; 20 MB each) with a kind and a
+    description, through a small dialog. View: images in a dialog, other files in a new tab.
+*@
+<section class="lf-card" aria-labelledby="bd-title">
+    <div class="lf-card-head">
+        <h2 id="bd-title" class="lf-card-title">Document List</h2>
+        <div class="lf-toolbar">
+            <LabSearch Value="@_q" ValueChanged="OnSearch" Placeholder="Search documents..." AriaLabel="Search documents" />
+            <select class="lf-select" aria-label="Document type" value="@_kind" @onchange="e => SetFilter(ref _kind, e)">
+                <option value="">All Types</option>
+                @foreach (var k in Kinds)
+                {
+                    <option value="@k">@LabText.DocumentKind(k)</option>
+                }
+            </select>
+            <select class="lf-select" aria-label="Uploaded by" value="@_uploader" @onchange="e => SetFilter(ref _uploader, e)">
+                <option value="">All Uploaders</option>
+                @foreach (var u in _uploaders)
+                {
+                    <option value="@u">@u</option>
+                }
+            </select>
+            <LabDateRange From="_from" To="_to" Changed="OnDates" />
+            @if (CanWrite)
+            {
+                <button type="button" class="lf-btn lf-btn--primary" @onclick="OpenUpload">
+                    <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Upload
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <Skeleton Variant="table" Rows="4" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="bi-folder2-open" Title="No documents"
+                    Message="@(_failed ? "The documents could not be loaded." : CanWrite ? "Upload batch sheets, sample documents or references (PDF, images, XLSX, DOCX up to 20 MB)." : "No documents have been uploaded for this batch.")">
+            @if (CanWrite && !_failed)
+            {
+                <button type="button" class="lf-btn lf-btn--outline" @onclick="OpenUpload"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> Upload</button>
+            }
+        </EmptyState>
+    }
+    else
+    {
+        <div class="lf-table-wrap tablet-up">
+            <table class="lf-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Document Name</th>
+                        <th scope="col">Document Type</th>
+                        <th scope="col">Uploaded By</th>
+                        <th scope="col">Uploaded On</th>
+                        <th scope="col">File Size</th>
+                        <th scope="col" class="lf-th-action">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in _rows)
+                    {
+                        var doc = d;
+                        <tr @key="doc.Id">
+                            <td>
+                                <span class="bd-name">
+                                    <i class="bi @LabText.DocumentIcon(doc.Extension) bd-icon" aria-hidden="true"></i>
+                                    <span class="bd-name-text">
+                                        <span class="bd-file">@doc.FileName</span>
+                                        <span class="lf-sub">@doc.Extension@(string.IsNullOrWhiteSpace(doc.Description) ? "" : $" · {doc.Description}")</span>
+                                    </span>
+                                </span>
+                            </td>
+                            <td><LabPill Text="@LabText.DocumentKind(doc.Kind)" Tone="@KindTone(doc.Kind)" /></td>
+                            <td><LabPerson Name="@doc.UploadedByName" AvatarUrl="@doc.UploadedByAvatarUrl" /></td>
+                            <td class="lf-nowrap">@LabText.Date(doc.CreatedAt)<span class="lf-sub">@LabText.Time(doc.CreatedAt)</span></td>
+                            <td class="lf-nowrap">@LabText.FileSize(doc.Size)</td>
+                            <td class="lf-td-action">@Actions(doc)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="lf-cards phone-only">
+            @foreach (var d in _rows)
+            {
+                var doc = d;
+                <article class="lf-rowcard" @key="@($"m{doc.Id}")">
+                    <div class="lf-rowcard-top">
+                        <span class="bd-name">
+                            <i class="bi @LabText.DocumentIcon(doc.Extension) bd-icon" aria-hidden="true"></i>
+                            <span class="bd-name-text">
+                                <span class="bd-file">@doc.FileName</span>
+                                <span class="lf-sub">@doc.Extension · @LabText.FileSize(doc.Size)</span>
+                            </span>
+                        </span>
+                    </div>
+                    <dl class="lf-facts">
+                        <dt>Type</dt><dd>@LabText.DocumentKind(doc.Kind)</dd>
+                        @if (!string.IsNullOrWhiteSpace(doc.Description))
+                        {
+                            <dt>Description</dt><dd>@doc.Description</dd>
+                        }
+                        <dt>Uploaded By</dt><dd>@LabText.Dash(doc.UploadedByName)</dd>
+                        <dt>Uploaded On</dt><dd>@LabText.Stamp(doc.CreatedAt)</dd>
+                    </dl>
+                    <div class="lf-rowcard-actions">@Actions(doc)</div>
+                </article>
+            }
+        </div>
+
+        <LabPager Page="_page" PageSize="_size" Total="_total" PageChanged="GoToPage" PageSizeChanged="SetSize" />
+    }
+</section>
+
+<!-- ---------------------------------------------------------------- upload dialog -->
+<LabDialog @bind-IsOpen="_uploadOpen" Title="Upload Documents" Subtitle="PDF, JPG, PNG, WEBP, XLSX or DOCX, up to 20 MB each (10 per upload)." Width="560">
+    <ChildContent>
+        <div class="lf-form">
+            <div class="lf-field lf-field--full">
+                <label class="lf-label" for="bd-files">Files <span class="lf-req">*</span></label>
+                <label class="bd-drop" for="bd-files">
+                    <i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>
+                    <span>@(_picked.Count == 0 ? "Choose files" : "Choose other files")</span>
+                    <span class="lf-hint">Max 20 MB each</span>
+                </label>
+                <InputFile id="bd-files" class="bd-input" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.docx" OnChange="OnFilesChosen" @key="_inputKey" />
+                @if (_picked.Count > 0)
+                {
+                    <ul class="bd-picked" role="list">
+                        @foreach (var f in _picked)
+                        {
+                            var file = f;
+                            <li>
+                                <i class="bi @LabText.DocumentIcon(Path.GetExtension(file.Name)) bd-icon" aria-hidden="true"></i>
+                                <span class="bd-picked-name">@file.Name</span>
+                                <span class="lf-muted">@LabText.FileSize(file.Size)</span>
+                                <button type="button" class="lf-icon-btn" aria-label="@($"Remove {file.Name}")" @onclick="() => _picked.Remove(file)"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+            <div class="lf-field">
+                <label class="lf-label" for="bd-kind">Document Type</label>
+                <select id="bd-kind" class="lf-select" @bind="_uploadKind">
+                    @foreach (var k in Kinds)
+                    {
+                        <option value="@k">@LabText.DocumentKind(k)</option>
+                    }
+                </select>
+            </div>
+            <div class="lf-field">
+                <label class="lf-label" for="bd-desc">Description</label>
+                <input id="bd-desc" class="lf-input" maxlength="300" placeholder="e.g. Batch sheet" @bind="_uploadDescription" />
+            </div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <div class="lf-footer">
+            <button type="button" class="lf-btn lf-btn--outline" disabled="@_uploading" @onclick="() => _uploadOpen = false">Cancel</button>
+            <button type="button" class="lf-btn lf-btn--primary" disabled="@(_uploading || _picked.Count == 0)" @onclick="UploadAsync">
+                @if (_uploading)
+                {
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                }
+                Upload @(_picked.Count > 0 ? $"({_picked.Count})" : "")
+            </button>
+        </div>
+    </Footer>
+</LabDialog>
+
+<!-- ---------------------------------------------------------------- image viewer -->
+<LabDialog @bind-IsOpen="_viewOpen" Title="@(_viewing?.FileName ?? "Document")" Subtitle="@_viewing?.Description" Width="900">
+    <ChildContent>
+        @if (_viewing is not null)
+        {
+            <div class="bd-viewer">
+                <img src="@Api.FileUrl(_viewing.Url)" alt="@_viewing.FileName" />
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <div class="lf-footer">
+            @if (_viewing is not null)
+            {
+                var v = _viewing;
+                <button type="button" class="lf-btn lf-btn--outline" @onclick="() => DownloadAsync(v)"><i class="bi bi-download" aria-hidden="true"></i> Download</button>
+            }
+            <button type="button" class="lf-btn lf-btn--primary" @onclick="() => _viewOpen = false">Close</button>
+        </div>
+    </Footer>
+</LabDialog>
+
+@code {
+    [Parameter, EditorRequired] public int BatchId { get; set; }
+    [Parameter] public bool CanWrite { get; set; }
+    /// <summary>Raised after an upload or a delete so the page can refresh its counts.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private static readonly LabDocumentKind[] Kinds = { LabDocumentKind.Batch, LabDocumentKind.Sample, LabDocumentKind.Reference };
+    private const int MaxFiles = 10;
+
+    private List<LabDocumentDto> _rows = new();
+    private readonly SortedSet<string> _uploaders = new(StringComparer.OrdinalIgnoreCase);
+    private string _kind = "";
+    private string _uploader = "";
+    private string? _q;
+    private DateTime? _from;
+    private DateTime? _to;
+    private int _page = 1;
+    private int _size = LabApi.DefaultPageSize;
+    private int _total;
+    private bool _loading = true;
+    private bool _failed;
+    private int _loadedFor = -1;
+    private int? _busyId;
+    private CancellationTokenSource? _cts;
+
+    private bool _uploadOpen;
+    private bool _uploading;
+    private readonly List<IBrowserFile> _picked = new();
+    private LabDocumentKind _uploadKind = LabDocumentKind.Batch;
+    private string? _uploadDescription;
+    private int _inputKey;
+
+    private bool _viewOpen;
+    private LabDocumentDto? _viewing;
+
+    private static string KindTone(LabDocumentKind k) => k switch
+    {
+        LabDocumentKind.Batch => "violet",
+        LabDocumentKind.Sample => "blue",
+        _ => "teal"
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == BatchId) return;
+        _loadedFor = BatchId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+        var page = await Api.GetDocumentsAsync(BatchId, kind: _kind, uploader: _uploader, q: _q, from: _from, to: _to,
+            page: _page, pageSize: _size, ct: ct);
+        if (ct.IsCancellationRequested) return;
+        _failed = page is null;
+        _rows = page?.Items ?? new();
+        _total = page?.Total ?? 0;
+        foreach (var name in _rows.Select(r => r.UploadedByName).Where(n => !string.IsNullOrWhiteSpace(n))) _uploaders.Add(name!);
+        _loading = false;
+    }
+
+    private RenderFragment Actions(LabDocumentDto doc) => @<span class="bd-actions">
+        <button type="button" class="lf-icon-btn" title="Download" aria-label="@($"Download {doc.FileName}")" disabled="@(_busyId == doc.Id)"
+                @onclick="() => DownloadAsync(doc)"><i class="bi bi-download" aria-hidden="true"></i></button>
+        <button type="button" class="lf-icon-btn" title="View" aria-label="@($"View {doc.FileName}")"
+                @onclick="() => ViewAsync(doc)"><i class="bi bi-eye" aria-hidden="true"></i></button>
+        @if (CanWrite)
+        {
+            <button type="button" class="lf-icon-btn lf-icon-btn--danger" title="Delete" aria-label="@($"Delete {doc.FileName}")" disabled="@(_busyId == doc.Id)"
+                    @onclick="() => DeleteAsync(doc)"><i class="bi bi-trash" aria-hidden="true"></i></button>
+        }
+    </span>;
+
+    // ---------------- filters
+
+    private Task SetFilter(ref string field, ChangeEventArgs e)
+    {
+        field = e.Value?.ToString() ?? "";
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task OnSearch(string? q)
+    {
+        _q = q;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task OnDates((DateTime? From, DateTime? To) range)
+    {
+        (_from, _to) = range;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task GoToPage(int page)
+    {
+        _page = page;
+        return LoadAsync();
+    }
+
+    private Task SetSize(int size)
+    {
+        _size = size;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    // ---------------- actions
+
+    private async Task DownloadAsync(LabDocumentDto doc)
+    {
+        _busyId = doc.Id;
+        try
+        {
+            await Downloads.GetAsync(doc.Url, doc.FileName);
+        }
+        catch (Exception)
+        {
+            Toast.Error($"{doc.FileName} could not be downloaded. Please try again.");
+        }
+        finally
+        {
+            _busyId = null;
+        }
+    }
+
+    private async Task ViewAsync(LabDocumentDto doc)
+    {
+        if (LabText.IsImage(doc))
+        {
+            _viewing = doc;
+            _viewOpen = true;
+            return;
+        }
+
+        try { await JS.InvokeVoidAsync("open", Api.FileUrl(doc.Url), "_blank"); }
+        catch (Exception) { Toast.Error("The document could not be opened. Try Download instead."); }
+    }
+
+    private async Task DeleteAsync(LabDocumentDto doc)
+    {
+        if (!await Toast.ConfirmAsync("Delete document", $"Delete \"{doc.FileName}\" from this batch? The deletion is recorded in the activity log.",
+                "Delete", danger: true)) return;
+
+        _busyId = doc.Id;
+        var ok = await Api.DeleteDocumentAsync(doc.Id);
+        _busyId = null;
+        if (!ok) return;
+
+        Toast.Success($"{doc.FileName} deleted.");
+        if (_rows.Count == 1 && _page > 1) _page--;
+        await LoadAsync();
+        await OnChanged.InvokeAsync();
+    }
+
+    // ---------------- upload
+
+    private void OpenUpload()
+    {
+        _picked.Clear();
+        _uploadKind = LabDocumentKind.Batch;
+        _uploadDescription = null;
+        _inputKey++;
+        _uploadOpen = true;
+    }
+
+    private void OnFilesChosen(InputFileChangeEventArgs e)
+    {
+        // A new pick replaces the list: InputFile can only read the files of its latest selection.
+        _picked.Clear();
+        var rejected = new List<string>();
+        foreach (var file in e.GetMultipleFiles(50))
+        {
+            if (file.Size > LabApi.MaxDocumentBytes)
+            {
+                rejected.Add($"{file.Name} is larger than 20 MB");
+                continue;
+            }
+            if (_picked.Count >= MaxFiles)
+            {
+                rejected.Add($"only {MaxFiles} files per upload");
+                break;
+            }
+            if (_picked.All(p => p.Name != file.Name || p.Size != file.Size)) _picked.Add(file);
+        }
+
+        if (rejected.Count > 0) Toast.Warning("Not added: " + string.Join("; ", rejected.Distinct()) + ".");
+    }
+
+    private async Task UploadAsync()
+    {
+        if (_picked.Count == 0) return;
+        _uploading = true;
+
+        var streams = new List<Stream>();
+        try
+        {
+            var parts = new List<(string, string, Stream)>();
+            foreach (var file in _picked)
+            {
+                var stream = file.OpenReadStream(LabApi.MaxDocumentBytes);
+                streams.Add(stream);
+                parts.Add((file.Name, file.ContentType, stream));
+            }
+
+            var saved = await Api.UploadDocumentsAsync(BatchId, _uploadKind,
+                string.IsNullOrWhiteSpace(_uploadDescription) ? null : _uploadDescription.Trim(), parts);
+            if (saved is null) return;   // LabApi showed the reason
+
+            Toast.Success(saved.Count == 1 ? $"{saved[0].FileName} uploaded." : $"{saved.Count} documents uploaded.");
+            _uploadOpen = false;
+            _page = 1;
+            await LoadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            Toast.Error("The files could not be read. Please choose them again.");
+        }
+        finally
+        {
+            foreach (var s in streams) await s.DisposeAsync();
+            _uploading = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

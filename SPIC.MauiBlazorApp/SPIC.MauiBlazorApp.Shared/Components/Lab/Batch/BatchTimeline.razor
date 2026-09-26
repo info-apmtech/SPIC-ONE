@@ -1,0 +1,37 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.Core.DTOs
+
+@*
+    Vertical status timeline (screen 5 right column, screen 10 Status Timeline): each step with
+    its description, date-time and "By: name"; steps not reached yet are greyed.
+*@
+<ol class="btl @CssClass" aria-label="@AriaLabel">
+    @foreach (var step in Steps)
+    {
+        <li class="btl-step @(step.IsDone ? "is-done" : "is-pending")">
+            <span class="btl-dot" aria-hidden="true">
+                <i class="bi @(step.IsDone ? "bi-check-lg" : "bi-circle")"></i>
+            </span>
+            <div class="btl-body">
+                <span class="btl-title">@step.Title</span>
+                @if (!string.IsNullOrWhiteSpace(step.Description))
+                {
+                    <span class="btl-desc">@step.Description</span>
+                }
+                <span class="btl-meta">
+                    @(step.At is { } at ? LabText.Stamp(at) : "Pending")
+                    @if (!string.IsNullOrWhiteSpace(step.ByName))
+                    {
+                        <span class="btl-by">By: @step.ByName</span>
+                    }
+                </span>
+            </div>
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter] public List<LabBatchStepDto> Steps { get; set; } = new();
+    [Parameter] public string AriaLabel { get; set; } = "Timeline";
+    [Parameter] public string? CssClass { get; set; }
+}

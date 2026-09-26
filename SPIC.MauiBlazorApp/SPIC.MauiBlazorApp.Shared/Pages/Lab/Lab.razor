@@ -1,0 +1,66 @@
+﻿@page "/Lab"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@using SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@inject LabApi Api
+@inject NavigationManager Nav
+
+@*
+    /Lab: the lab portal home. api/Lab/me decides the variant: an analyst who is not a
+    coordinator goes to the analyst dashboard (/Lab/Analyst, owned by the analyst pages);
+    everyone else (coordinators and admins) gets the Lab Coordinator Dashboard (screen 1).
+*@
+
+@if (_state == State.Coordinator)
+{
+    <CoordinatorDashboard />
+}
+else if (_state == State.Failed)
+{
+    <LabFrame>
+        <PageHeader Title="Lab Dashboard" />
+        <EmptyState Icon="bi-clipboard2-pulse" Title="The lab portal could not be opened"
+                    Message="Please check your connection and try again.">
+            <button type="button" class="lf-btn lf-btn--outline" @onclick="RetryAsync">Try again</button>
+        </EmptyState>
+    </LabFrame>
+}
+else
+{
+    <LabFrame>
+        <PageHeader Title="Lab Dashboard" />
+        <Skeleton Variant="card" Rows="2" />
+    </LabFrame>
+}
+
+@code {
+    private enum State { Loading, Coordinator, Failed }
+
+    private State _state = State.Loading;
+
+    protected override Task OnInitializedAsync() => ResolveAsync();
+
+    private async Task ResolveAsync()
+    {
+        var me = await Api.GetMeAsync();
+        if (me is null)
+        {
+            _state = State.Failed;
+            return;
+        }
+
+        if (me.IsAnalyst && !me.IsCoordinator)
+        {
+            Nav.NavigateTo("/Lab/Analyst", replace: true);
+            return;
+        }
+
+        _state = State.Coordinator;
+    }
+
+    private async Task RetryAsync()
+    {
+        Api.ForgetMe();
+        _state = State.Loading;
+        await ResolveAsync();
+    }
+}
