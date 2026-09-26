@@ -1,0 +1,166 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject LabApi Api
+@implements IDisposable
+
+@*
+    Batch Details, Activity Log tab (screen 8): a vertical timeline with an icon per activity kind;
+    Date & Time, Activity pill, Description, Performed By (avatar, name, role). Filters: search,
+    All Types (activity kind), All Users (performer), Date Range; pager. The log is written by the
+    system, so there is no upload here.
+*@
+<section class="lf-card" aria-labelledby="ba-title">
+    <div class="lf-card-head">
+        <h2 id="ba-title" class="lf-card-title">Activity Log</h2>
+        <div class="lf-toolbar">
+            <LabSearch Value="@_q" ValueChanged="OnSearch" Placeholder="Search activity..." AriaLabel="Search activity" />
+            <select class="lf-select" aria-label="Activity type" value="@_kind" @onchange="e => SetFilter(ref _kind, e)">
+                <option value="">All Types</option>
+                @foreach (var k in LabText.ActivityKinds)
+                {
+                    <option value="@k">@LabText.ActivityKind(k)</option>
+                }
+            </select>
+            <select class="lf-select" aria-label="Performed by" value="@_by" @onchange="e => SetFilter(ref _by, e)">
+                <option value="">All Users</option>
+                @foreach (var u in _people)
+                {
+                    <option value="@u">@u</option>
+                }
+            </select>
+            <LabDateRange From="_from" To="_to" Changed="OnDates" />
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <Skeleton Variant="table" Rows="6" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="bi-clock-history" Title="No activity found" Message="@(_failed ? "The activity log could not be loaded." : "Try another filter or search term.")" />
+    }
+    else
+    {
+        <div class="ba-head tablet-up" aria-hidden="true">
+            <span></span>
+            <span>Date &amp; Time</span>
+            <span>Activity</span>
+            <span>Description</span>
+            <span>Performed By</span>
+        </div>
+        <ol class="ba-list" aria-label="Activities">
+            @foreach (var a in _rows)
+            {
+                <li class="ba-row" @key="a.Id">
+                    <span class="ba-rail" aria-hidden="true">
+                        <span class="ba-dot ba-dot--@LabText.ActivityTone(a.Kind)"><i class="bi @LabText.ActivityIcon(a.Kind)"></i></span>
+                    </span>
+                    <span class="ba-when">
+                        <span class="ba-date">@LabText.Date(a.At)</span>
+                        <span class="lf-sub">@LabText.Time(a.At)</span>
+                    </span>
+                    <span class="ba-kind"><LabPill Text="@LabText.ActivityKind(a.Kind)" Tone="@LabText.ActivityTone(a.Kind)" /></span>
+                    <span class="ba-desc">@LabText.Dash(a.Description ?? a.Title)</span>
+                    <span class="ba-by"><LabPerson Name="@a.ByName" AvatarUrl="@a.ByAvatarUrl" Sub="@a.ByRole" Empty="System" /></span>
+                </li>
+            }
+        </ol>
+
+        <LabPager Page="_page" PageSize="_size" Total="_total" PageChanged="GoToPage" PageSizeChanged="SetSize" />
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public int BatchId { get; set; }
+
+    private List<LabActivityDto> _rows = new();
+    private readonly SortedSet<string> _people = new(StringComparer.OrdinalIgnoreCase);
+    private string _kind = "";
+    private string _by = "";
+    private string? _q;
+    private DateTime? _from;
+    private DateTime? _to;
+    private int _page = 1;
+    private int _size = LabApi.DefaultPageSize;
+    private int _total;
+    private bool _loading = true;
+    private bool _failed;
+    private int _loadedFor = -1;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == BatchId) return;
+        _loadedFor = BatchId;
+        await LoadAsync();
+    }
+
+    /// <summary>Reload from page 1 (the page calls this after a status change or an upload).</summary>
+    public Task RefreshAsync()
+    {
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+        var page = await Api.GetActivitiesAsync(BatchId, kind: _kind, by: _by, q: _q, from: _from, to: _to,
+            page: _page, pageSize: _size, ct: ct);
+        if (ct.IsCancellationRequested) return;
+        _failed = page is null;
+        _rows = page?.Items ?? new();
+        _total = page?.Total ?? 0;
+        foreach (var name in _rows.Select(r => r.ByName).Where(n => !string.IsNullOrWhiteSpace(n))) _people.Add(name!);
+        _loading = false;
+    }
+
+    private Task SetFilter(ref string field, ChangeEventArgs e)
+    {
+        field = e.Value?.ToString() ?? "";
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task OnSearch(string? q)
+    {
+        _q = q;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task OnDates((DateTime? From, DateTime? To) range)
+    {
+        (_from, _to) = range;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    private Task GoToPage(int page)
+    {
+        _page = page;
+        return LoadAsync();
+    }
+
+    private Task SetSize(int size)
+    {
+        _size = size;
+        _page = 1;
+        return LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

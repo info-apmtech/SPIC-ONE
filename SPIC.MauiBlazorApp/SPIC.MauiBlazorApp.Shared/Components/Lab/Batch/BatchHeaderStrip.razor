@@ -1,0 +1,47 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.Core.DTOs
+
+@*
+    Batch Details header strip (screen 5): Batch No., Consignment No. ("+n" lists all codes),
+    Total Samples, Assigned Date, Current Status, Analysis Days. Two columns on phones.
+*@
+<section class="bhs @CssClass" aria-label="Batch summary">
+    <div class="bhs-item">
+        <span class="bhs-key">Batch No.</span>
+        <span class="bhs-val bhs-val--code">@Batch.Code</span>
+        <LabPill Text="@($"{Batch.Priority} priority")" Tone="@LabPill.ToneFor(Batch.Priority)" CssClass="bhs-prio" />
+    </div>
+    <div class="bhs-item">
+        <span class="bhs-key">Consignment No.</span>
+        <span class="bhs-val"><LabConsignmentCodes Codes="Batch.ConsignmentCodes" /></span>
+    </div>
+    <div class="bhs-item">
+        <span class="bhs-key">Total Samples</span>
+        <span class="bhs-val">@Batch.SampleCount</span>
+    </div>
+    <div class="bhs-item">
+        <span class="bhs-key">Assigned Date</span>
+        <span class="bhs-val">@(Batch.AssignedAt is { } at ? LabText.Date(at) : "Not assigned")</span>
+        @if (Batch.AssignedAt is { } t)
+        {
+            <span class="bhs-sub">@LabText.Time(t)</span>
+        }
+    </div>
+    <div class="bhs-item">
+        <span class="bhs-key">Current Status</span>
+        <span><LabPill Text="@LabText.BatchStatus(Batch.Status)" Tone="@LabPill.ToneFor(Batch.Status)" /></span>
+    </div>
+    <div class="bhs-item">
+        <span class="bhs-key">Analysis Days</span>
+        <span><LabPill Text="@LabText.AnalysisDays(Batch.AnalysisDays)" Tone="@LabText.AnalysisDaysTone(Batch)" /></span>
+        @if (Batch.IsDelayed)
+        {
+            <span class="bhs-sub bhs-sub--red">Delayed</span>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public LabBatchRowDto Batch { get; set; } = new();
+    [Parameter] public string? CssClass { get; set; }
+}

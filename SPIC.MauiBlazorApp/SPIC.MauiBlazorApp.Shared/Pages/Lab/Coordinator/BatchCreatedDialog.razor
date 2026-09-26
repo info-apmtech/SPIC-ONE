@@ -1,0 +1,58 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject NavigationManager Nav
+
+@*
+    Batch Created Successfully (screen 4): green tick, the batch number, every consignment code,
+    the batch date and the analyst, with View Batch Details and Go To Analysis Tracking.
+*@
+
+<LabDialog IsOpen="IsOpen" IsOpenChanged="IsOpenChanged" Title="Batch Created" Width="480">
+    <ChildContent>
+        @if (Batch is { } b)
+        {
+            <div class="bcd">
+                <span class="bcd-tick" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                <h3 class="bcd-title">Batch Created Successfully</h3>
+                <p class="bcd-text">Batch has been created successfully and moved to Analysis Tracking.</p>
+
+                <dl class="lf-kv bcd-rows">
+                    <dt>Batch No</dt>
+                    <dd class="bcd-code">@b.Header.Code</dd>
+                    <dt>Consignment No@(b.Header.ConsignmentCodes.Count > 1 ? "s" : "").</dt>
+                    <dd>
+                        @foreach (var cc in b.Header.ConsignmentCodes)
+                        {
+                            <span class="bcd-cons">@cc</span>
+                        }
+                    </dd>
+                    <dt>Batch Created Date</dt>
+                    <dd>@LabText.Date(b.Header.BatchDate)</dd>
+                    <dt>Assigned To</dt>
+                    <dd>@(string.IsNullOrWhiteSpace(b.Header.AssignedToName) ? "Not assigned yet" : b.Header.AssignedToName)</dd>
+                    <dt>Priority</dt>
+                    <dd><LabPill Text="@b.Header.Priority.ToString()" Tone="@LabPill.ToneFor(b.Header.Priority)" /></dd>
+                </dl>
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <div class="lf-footer bcd-footer">
+            <button type="button" class="lf-btn lf-btn--outline" @onclick="GoToTracking">Go To Analysis Tracking</button>
+            <button type="button" class="lf-btn lf-btn--primary" @onclick="ViewBatch" disabled="@(Batch is null)">View Batch Details</button>
+        </div>
+    </Footer>
+</LabDialog>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    [Parameter] public LabBatchDetailDto? Batch { get; set; }
+
+    private void ViewBatch()
+    {
+        if (Batch is null) return;
+        Nav.NavigateTo($"/Lab/Analysis/{Batch.Header.Id}");
+    }
+
+    private void GoToTracking() => Nav.NavigateTo("/Lab/Analysis");
+}

@@ -1,0 +1,211 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@implements IDisposable
+
+@*
+    Lab Coordinator Dashboard (screen 1), rendered by /Lab (Lab.razor) for coordinators and
+    admins: seven KPI cards, Recent Consignments (5) and Recently Created Batches (5), each with
+    View All. Tables on tablet / desktop, row cards on phones.
+*@
+
+<LabFrame>
+    <PageHeader Title="Lab Coordinator Dashboard"
+                Subtitle="Track consignments received at the lab, batch creation and analysis progress." />
+
+    <div class="lf-kpis">
+        <LabKpiCard Label="Total Consignments Received" Value="@N(_d?.TotalConsignmentsReceived)" Icon="bi-box-seam" Tone="violet" />
+        <LabKpiCard Label="Pending Batch Creation" Value="@N(_d?.PendingBatchCreation)" Icon="bi-hourglass-split" Tone="orange" />
+        <LabKpiCard Label="Total Batches Created" Value="@N(_d?.TotalBatchesCreated)" Icon="bi-collection" Tone="green" />
+        <LabKpiCard Label="Taken for Analysis" Value="@N(_d?.TakenForAnalysis)" Icon="bi-clipboard2-pulse" Tone="blue" />
+        <LabKpiCard Label="Analysis Completed" Value="@N(_d?.AnalysisCompleted)" Icon="bi-clipboard-check" Tone="pink" />
+        <LabKpiCard Label="Completed Batches" Value="@N(_d?.CompletedBatches)" Icon="bi-patch-check" Tone="teal" />
+        <LabKpiCard Label="Reports Generated" Value="@N(_d?.ReportsGenerated)" Icon="bi-file-earmark-text" Tone="yellow" />
+    </div>
+
+    @if (_loading)
+    {
+        <section class="lf-card"><Skeleton Variant="table" Rows="5" /></section>
+        <section class="lf-card"><Skeleton Variant="table" Rows="5" /></section>
+    }
+    else if (_d is null)
+    {
+        <section class="lf-card">
+            <EmptyState Icon="bi-clipboard2-pulse" Title="The dashboard could not be loaded"
+                        Message="Please check your connection and try again.">
+                <button type="button" class="lf-btn lf-btn--outline" @onclick="LoadAsync">Try again</button>
+            </EmptyState>
+        </section>
+    }
+    else
+    {
+        <!-- ---------------------------------------------------------- recent consignments -->
+        <section class="lf-card" aria-labelledby="cd-recent-cons">
+            <div class="lf-card-head">
+                <h2 id="cd-recent-cons" class="lf-card-title">Recent Consignments</h2>
+                <a class="lf-viewall" href="/Lab/Consignments">View All <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+            </div>
+
+            @if (_d.RecentConsignments.Count == 0)
+            {
+                <EmptyState Icon="bi-truck" Title="No consignments yet" Compact="true"
+                            Message="Consignments dispatched by the field staff appear here." />
+            }
+            else
+            {
+                <div class="lf-table-wrap tablet-up">
+                    <table class="lf-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Consignment No.</th>
+                                <th scope="col">Shipment Date</th>
+                                <th scope="col">Sample Type</th>
+                                <th scope="col">No. of Samples</th>
+                                <th scope="col">State</th>
+                                <th scope="col">Region</th>
+                                <th scope="col">Status</th>
+                                <th scope="col" class="lf-th-action">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in _d.RecentConsignments)
+                            {
+                                <tr @key="c.Id">
+                                    <td><a class="lf-link" href="@ConsHref(c.Id)">@c.Code</a></td>
+                                    <td class="lf-nowrap">@LabText.Date(c.ShipmentDate)</td>
+                                    <td><LabPill Text="@LabText.PaymentType(c.SampleType)" Tone="@LabText.PaymentTone(c.SampleType)" /></td>
+                                    <td>@c.TotalSamples</td>
+                                    <td>@LabText.Dash(c.StateName)</td>
+                                    <td>@LabText.Dash(c.RegionName)</td>
+                                    <td><LabPill Text="@LabText.ConsignmentStatus(c.LabStatus)" Tone="@LabText.ConsignmentTone(c.LabStatus)" /></td>
+                                    <td class="lf-td-action">
+                                        <a class="lf-icon-btn" href="@ConsHref(c.Id)" aria-label="@($"View {c.Code}")" title="View"><i class="bi bi-eye" aria-hidden="true"></i></a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="lf-cards phone-only">
+                    @foreach (var c in _d.RecentConsignments)
+                    {
+                        <article class="lf-rowcard" @key="@($"c{c.Id}")">
+                            <div class="lf-rowcard-top">
+                                <a class="lf-link" href="@ConsHref(c.Id)">@c.Code</a>
+                                <LabPill Text="@LabText.ConsignmentStatus(c.LabStatus)" Tone="@LabText.ConsignmentTone(c.LabStatus)" />
+                            </div>
+                            <dl class="lf-facts">
+                                <dt>Shipment Date</dt><dd>@LabText.Date(c.ShipmentDate)</dd>
+                                <dt>Sample Type</dt><dd>@LabText.PaymentType(c.SampleType)</dd>
+                                <dt>Samples</dt><dd>@c.TotalSamples</dd>
+                                <dt>State / Region</dt><dd>@LabText.Dash(c.StateName) / @LabText.Dash(c.RegionName)</dd>
+                            </dl>
+                            <div class="lf-rowcard-actions">
+                                <a class="lf-btn lf-btn--outline lf-btn--sm" href="@ConsHref(c.Id)"><i class="bi bi-eye" aria-hidden="true"></i> View</a>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+
+        <!-- ---------------------------------------------------------- recent batches -->
+        <section class="lf-card" aria-labelledby="cd-recent-batches">
+            <div class="lf-card-head">
+                <h2 id="cd-recent-batches" class="lf-card-title">Recently Created Batches</h2>
+                <a class="lf-viewall" href="/Lab/Analysis">View All <i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+            </div>
+
+            @if (_d.RecentBatches.Count == 0)
+            {
+                <EmptyState Icon="bi-collection" Title="No batches yet" Compact="true"
+                            Message="Create a batch from the Batch Pending consignments." >
+                    <a class="lf-btn lf-btn--outline" href="/Lab/Consignments?status=BatchPending">Go to consignments</a>
+                </EmptyState>
+            }
+            else
+            {
+                <div class="lf-table-wrap tablet-up">
+                    <table class="lf-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Batch No.</th>
+                                <th scope="col">Consignment No.</th>
+                                <th scope="col">No. of Samples</th>
+                                <th scope="col">Assigned To</th>
+                                <th scope="col">Current Status</th>
+                                <th scope="col">Analysis Days</th>
+                                <th scope="col" class="lf-th-action">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var b in _d.RecentBatches)
+                            {
+                                <tr @key="b.Id">
+                                    <td><a class="lf-link" href="@BatchHref(b.Id)">@b.Code</a></td>
+                                    <td><LabConsignmentCodes Codes="b.ConsignmentCodes" /></td>
+                                    <td>@b.SampleCount</td>
+                                    <td><LabPerson Name="@b.AssignedToName" AvatarUrl="@b.AssignedToAvatarUrl" Empty="Not assigned" /></td>
+                                    <td><LabPill Text="@LabText.BatchStatus(b.Status)" Tone="@LabPill.ToneFor(b.Status)" /></td>
+                                    <td><LabPill Text="@LabText.AnalysisDays(b.AnalysisDays)" Tone="@LabText.AnalysisDaysTone(b)" /></td>
+                                    <td class="lf-td-action">
+                                        <a class="lf-icon-btn" href="@BatchHref(b.Id)" aria-label="@($"View {b.Code}")" title="View"><i class="bi bi-eye" aria-hidden="true"></i></a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="lf-cards phone-only">
+                    @foreach (var b in _d.RecentBatches)
+                    {
+                        <article class="lf-rowcard" @key="@($"b{b.Id}")">
+                            <div class="lf-rowcard-top">
+                                <a class="lf-link" href="@BatchHref(b.Id)">@b.Code</a>
+                                <LabPill Text="@LabText.BatchStatus(b.Status)" Tone="@LabPill.ToneFor(b.Status)" />
+                            </div>
+                            <dl class="lf-facts">
+                                <dt>Consignment</dt><dd><LabConsignmentCodes Codes="b.ConsignmentCodes" /></dd>
+                                <dt>Samples</dt><dd>@b.SampleCount</dd>
+                                <dt>Assigned To</dt><dd>@LabText.Dash(b.AssignedToName)</dd>
+                                <dt>Analysis Days</dt><dd><LabPill Text="@LabText.AnalysisDays(b.AnalysisDays)" Tone="@LabText.AnalysisDaysTone(b)" /></dd>
+                            </dl>
+                            <div class="lf-rowcard-actions">
+                                <a class="lf-btn lf-btn--outline lf-btn--sm" href="@BatchHref(b.Id)"><i class="bi bi-eye" aria-hidden="true"></i> View</a>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+        </section>
+    }
+</LabFrame>
+
+@code {
+    private LabDashboardDto? _d;
+    private bool _loading = true;
+    private CancellationTokenSource? _cts;
+
+    private static string N(int? value) => (value ?? 0).ToString("N0");
+    private static string ConsHref(int id) => $"/Lab/Consignments/{id}";
+    private static string BatchHref(int id) => $"/Lab/Analysis/{id}";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        _loading = true;
+        _d = await Api.GetDashboardAsync(_cts.Token);
+        _loading = false;
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

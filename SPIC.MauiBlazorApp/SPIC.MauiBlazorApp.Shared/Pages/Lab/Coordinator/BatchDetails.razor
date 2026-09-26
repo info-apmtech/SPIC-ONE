@@ -1,0 +1,210 @@
+﻿@page "/Lab/Analysis/{Id:int}"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@implements IDisposable
+
+@*
+    Batch Details (screens 5-8 and 12): header strip and the tabs Overview / Samples (n) /
+    Parameters (n) / Documents (n) / Activity Log, kept in the URL as ?tab=. Coordinator actions
+    (writers only): Assign / Reassign, Take for Analysis (Created and assigned), Complete Batch
+    (every sample completed; Final Remarks). Actions sit in the page header on tablet / desktop
+    and in a sticky action bar on phones.
+*@
+
+<LabFrame>
+    <PageHeader Title="Batch Details" Subtitle="@(_d is null ? null : $"{_d.Header.Code} · created {LabText.Date(_d.CreatedAt)} by {LabText.Dash(_d.CreatedByName)}")"
+                BackHref="/Lab/Analysis">
+        <Actions>
+            @if (_d is not null && HasActions)
+            {
+                <div class="lf-toolbar tablet-up">@ActionButtons</div>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <section class="lf-card"><Skeleton Rows="2" Height="18px" /></section>
+        <section class="lf-card"><Skeleton Variant="card" Rows="2" /></section>
+    }
+    else if (_d is null)
+    {
+        <section class="lf-card">
+            <EmptyState Icon="bi-collection" Title="The batch could not be loaded"
+                        Message="It may no longer exist, or your connection dropped.">
+                <a class="lf-btn lf-btn--outline" href="/Lab/Analysis">Back to Analysis Tracking</a>
+            </EmptyState>
+        </section>
+    }
+    else
+    {
+        <BatchHeaderStrip Batch="_d.Header" />
+
+        @if (CanWrite && CanComplete)
+        {
+            <div class="bdt-note" role="status">
+                <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                Every sample is completed. Complete the batch to generate the report.
+            </div>
+        }
+
+        <nav class="lf-tabs" aria-label="Batch sections" role="tablist">
+            @foreach (var t in Tabs)
+            {
+                var key = t.Key;
+                <button type="button" role="tab" class="lf-tab @(Tab == key ? "is-active" : "")" aria-selected="@(Tab == key ? "true" : "false")"
+                        @onclick="() => GoToTab(key)">@t.Label</button>
+            }
+        </nav>
+
+        <div class="bdt-body" role="tabpanel" @key="@($"{Tab}-{_version}")">
+            @switch (Tab)
+            {
+                case "samples":
+                    <BatchSamplesTab BatchId="Id" />
+                    break;
+                case "parameters":
+                    <BatchParametersTab BatchId="Id" />
+                    break;
+                case "documents":
+                    <BatchDocumentsTab BatchId="Id" CanWrite="CanWrite" OnChanged="ReloadDetailAsync" />
+                    break;
+                case "activity":
+                    <BatchActivityTab BatchId="Id" />
+                    break;
+                default:
+                    <BatchOverviewTab Detail="_d" OnViewAllSamples="() => GoToTab(TabSamples)" />
+                    break;
+            }
+        </div>
+
+        @if (HasActions)
+        {
+            <div class="phone-only">
+                <ActionBar AriaLabel="Batch actions">@ActionButtons</ActionBar>
+            </div>
+        }
+
+        <AssignBatchDialog @bind-IsOpen="_assignOpen" Batch="_d.Header" OnSaved="OnSavedAsync" />
+        <CompleteBatchDialog @bind-IsOpen="_completeOpen" Detail="_d" OnSaved="OnSavedAsync" />
+    }
+</LabFrame>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabQuery { get; set; }
+
+    private const string TabOverview = "overview";
+    private const string TabSamples = "samples";
+
+    private LabMeDto? _me;
+    private LabBatchDetailDto? _d;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _assignOpen;
+    private bool _completeOpen;
+    private int _version;
+    private int _loadedId = -1;
+    private CancellationTokenSource? _cts;
+
+    private string Tab => TabQuery?.ToLowerInvariant() switch
+    {
+        "samples" or "parameters" or "documents" or "activity" => TabQuery!.ToLowerInvariant(),
+        _ => TabOverview
+    };
+
+    private IEnumerable<(string Key, string Label)> Tabs => new[]
+    {
+        (TabOverview, "Overview"),
+        (TabSamples, $"Samples ({_d?.Header.SampleCount ?? 0})"),
+        ("parameters", $"Parameters ({_d?.ParameterRowCount ?? 0})"),
+        ("documents", $"Documents ({_d?.DocumentCount ?? 0})"),
+        ("activity", "Activity Log")
+    };
+
+    private bool CanWrite => _me?.CanWrite == true;
+    private bool IsCompleted => _d?.Header.Status == SampleBatchStatus.Completed;
+    private bool CanTake => _d is { } d && d.Header.Status == SampleBatchStatus.Created && !string.IsNullOrWhiteSpace(d.Header.AssignedToUserId);
+    private bool CanComplete => _d is { } d && !IsCompleted && d.Header.SampleCount > 0
+                                && d.Header.CompletedEntries >= d.Header.SampleCount && d.Header.PendingEntries == 0;
+    private bool HasActions => CanWrite && !IsCompleted;
+
+    private RenderFragment ActionButtons => @<text>
+        <button type="button" class="lf-btn lf-btn--outline" disabled="@_busy" @onclick="() => _assignOpen = true">
+            <i class="bi bi-person-check" aria-hidden="true"></i> @(string.IsNullOrWhiteSpace(_d?.Header.AssignedToUserId) ? "Assign" : "Reassign")
+        </button>
+        @if (CanTake)
+        {
+            <button type="button" class="lf-btn lf-btn--primary" disabled="@_busy" @onclick="TakeAsync">
+                <i class="bi bi-play-circle" aria-hidden="true"></i> Take for Analysis
+            </button>
+        }
+        @if (CanComplete)
+        {
+            <button type="button" class="lf-btn lf-btn--primary" disabled="@_busy" @onclick="() => _completeOpen = true">
+                <i class="bi bi-patch-check" aria-hidden="true"></i> Complete Batch
+            </button>
+        }
+    </text>;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id) return;
+        _loadedId = Id;
+        _me ??= await Api.GetMeAsync();
+        _loading = true;
+        await ReloadDetailAsync();
+        _loading = false;
+    }
+
+    private async Task ReloadDetailAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+        var d = await Api.GetBatchAsync(Id, ct);
+        if (ct.IsCancellationRequested) return;
+        if (d is not null || _d is null) _d = d;
+    }
+
+    private void GoToTab(string key)
+    {
+        var url = key == TabOverview ? $"/Lab/Analysis/{Id}" : $"/Lab/Analysis/{Id}?tab={key}";
+        Nav.NavigateTo(url, replace: true);
+    }
+
+    private async Task TakeAsync()
+    {
+        if (_d is null) return;
+        if (!await Toast.ConfirmAsync("Take for analysis",
+                $"Send {_d.Header.Code} to {_d.Header.AssignedToName} for analysis now?", "Take for Analysis")) return;
+
+        _busy = true;
+        var updated = await Api.SetBatchStatusAsync(Id, SampleBatchStatus.TakenForAnalysis);
+        _busy = false;
+        if (updated is null) return;
+        Toast.Success($"{updated.Header.Code} taken for analysis.");
+        Apply(updated);
+    }
+
+    private Task OnSavedAsync(LabBatchDetailDto updated)
+    {
+        Apply(updated);
+        return Task.CompletedTask;
+    }
+
+    private void Apply(LabBatchDetailDto updated)
+    {
+        _d = updated;
+        _version++;   // re-create the open tab so its lists and counts reload
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}
