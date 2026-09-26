@@ -11,6 +11,7 @@
 @inject IJSRuntime JS
 @inject LoginState Login
 @inject LabApi Lab
+@inject SasPaymentApi PayApi
 
 @*
     Sample Collection Details (Figma frame 14). One page for every role:
@@ -42,9 +43,14 @@
     <Actions>
         @if (Detail is not null)
         {
-            @if (IsFarmer && SelectedReport is { } headerReport)
+            @if (IsFarmer)
             {
-                <ReportDownloadButton ReportId="headerReport.Id" Languages="_languages" />
+                var headerReports = SelectedReports;
+                @foreach (var headerReport in headerReports)
+                {
+                    <ReportDownloadButton ReportId="headerReport.Id" Languages="_languages"
+                                          Label="@FarmerSamples.ReportLabel(headerReport, headerReports.Count)" />
+                }
             }
             @if (Detail.Status == SampleCollectionStatus.Draft && Detail.CanEdit)
             {
@@ -534,8 +540,10 @@ else
         // Second, optional call: the page is already usable without it.
         await LoadConsignmentAsync();
 
-        // Farmer: the sample report (exists only once the lab completed the batch).
+        // Farmer: the sample report (exists only once the lab completed the batch) and the
+        // payment's mode / transaction date / finance status (payments API, farmer-scoped).
         await LoadFarmerReportsAsync();
+        await LoadFarmerPaymentAsync();
     }
 
     private async Task LoadConsignmentAsync()
@@ -645,10 +653,13 @@ else
     private List<SampleItemDto> ItemsFor(SampleCollectionDetailDto d) =>
         IsFarmer ? FarmerSamples.OwnItems(d, Login.UserId) : d.Items;
 
-    private LabReportRowDto? SelectedReport =>
+    /// <summary>The selected sample's reports, newest first (a Soil + Water sample has a soil and a water report).</summary>
+    private List<LabReportRowDto> SelectedReports =>
         SelectedItem is { } item
-            ? _farmerReports.Where(r => r.SampleItemId == item.Id).OrderByDescending(r => r.GeneratedAt).FirstOrDefault()
-            : null;
+            ? _farmerReports.Where(r => r.SampleItemId == item.Id).OrderByDescending(r => r.GeneratedAt).ThenByDescending(r => r.Id).ToList()
+            : new List<LabReportRowDto>();
+
+    private LabReportRowDto? SelectedReport => SelectedReports.FirstOrDefault();
 
     private async Task LoadFarmerReportsAsync()
     {
@@ -662,7 +673,20 @@ else
         StateHasChanged();
     }
 
-    /// <summary>Reads a payment field the Payments workstream adds to the v1 DTO, when it exists.</summary>
+    /// <summary>The farmer's read-only payment record (GET api/Sas/payments/{id}); null until loaded or when unavailable.</summary>
+    private SasPaymentDetailDto? _paymentDetail;
+
+    private async Task LoadFarmerPaymentAsync()
+    {
+        if (!IsFarmer || Detail?.Payment is not { } payment) return;
+        if (_paymentDetail?.Summary.Id == payment.Id) return;
+
+        var (item, _) = await PayApi.GetPaymentAsync(payment.Id);
+        _paymentDetail = item;
+        StateHasChanged();
+    }
+
+    /// <summary>Reads a payment field from the v1 DTO by name when it exists (fallback when the payments API is unavailable).</summary>
     private static object? PaymentField(SamplePaymentDto? payment, string name) =>
         payment?.GetType().GetProperty(name)?.GetValue(payment);
 
@@ -682,6 +706,10 @@ else
         SamplePaymentMode.Cash => "Cash",
         _ => "UPI"
     };
+
+    /// <summary>The MO enters the transaction date without a time: print the time only when there is one.</summary>
+    private static string TransactionDateText(DateTime d) =>
+        d.TimeOfDay == TimeSpan.Zero ? SasLabels.LongDate(d) : SasLabels.DateTimeText(d);
 
     private static DateTime PaymentDate(SamplePaymentDto p) =>
         PaymentField(p, "TransactionDate") is DateTime d ? d : p.CreatedAt;
@@ -861,13 +889,14 @@ else
                 }
                 else
                 {
-                    var admin = AdminStatus(p.Status);
-                    var finance = FinanceStatus(p);
+                    var pd = _paymentDetail?.Summary.Id == p.Id ? _paymentDetail : null;
+                    var admin = AdminStatus(pd?.Summary.AdminStatus ?? p.Status);
+                    var finance = pd is not null ? FinanceStatusOf(pd.Summary.FinanceStatus) : FinanceStatus(p);
                     <dl class="scd-f-defs">
                         <div><dt>Payment Amount</dt><dd>@SasLabels.Money(p.Amount)</dd></div>
-                        <div><dt>Mode</dt><dd>@PaymentModeText(p)</dd></div>
+                        <div><dt>Mode</dt><dd>@(pd is not null ? PaymentModeText(pd.Summary.PaymentMode) : PaymentModeText(p))</dd></div>
                         <div><dt>Transaction ID</dt><dd>@Dash(p.TransactionId)</dd></div>
-                        <div><dt>Transaction Date</dt><dd>@SasLabels.DateTimeText(PaymentDate(p))</dd></div>
+                        <div><dt>Transaction Date</dt><dd>@TransactionDateText(pd?.TransactionDate ?? PaymentDate(p))</dd></div>
                         <div><dt>Admin Status</dt><dd><LabPill Text="@admin.Text" Tone="@admin.Tone" /></dd></div>
                         <div>
                             <dt>Finance Status</dt>

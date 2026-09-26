@@ -114,9 +114,11 @@
                             <a class="ms-btn ms-btn-outline" href="@($"/SampleCollection/view/{r.CollectionId}?sample={r.ItemId}")">
                                 <i class="bi bi-eye" aria-hidden="true"></i> View Details
                             </a>
-                            @if (r.Report is { } report)
+                            @foreach (var report in r.Reports)
                             {
-                                <ReportDownloadButton ReportId="report.Id" Languages="_languages" OnDownloaded="_ => MarkDownloaded(report)" />
+                                <ReportDownloadButton ReportId="report.Id" Languages="_languages"
+                                                      Label="@FarmerSamples.ReportLabel(report, r.Reports.Count)"
+                                                      OnDownloaded="_ => MarkDownloaded(report)" />
                             }
                         </div>
                     </div>
@@ -170,7 +172,8 @@
             var reports = await reportsTask ?? new();
             _languages = await languagesTask;
             foreach (var r in rows)
-                r.Report = reports.Where(x => x.SampleItemId == r.ItemId).OrderByDescending(x => x.GeneratedAt).FirstOrDefault();
+                r.Reports = reports.Where(x => x.SampleItemId == r.ItemId)
+                    .OrderByDescending(x => x.GeneratedAt).ThenByDescending(x => x.Id).ToList();
         }
 
         _rows = rows;

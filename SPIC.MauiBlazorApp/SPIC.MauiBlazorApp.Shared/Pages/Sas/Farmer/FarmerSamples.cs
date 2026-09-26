@@ -18,7 +18,9 @@ public sealed class FarmerSampleRow
     public SampleType SampleType { get; init; }
     public SamplePaymentType PaymentType { get; init; }
     public SampleCollectionStatus CollectionStatus { get; init; }
-    public LabReportRowDto? Report { get; set; }
+    /// <summary>The sample's reports, newest first (a Soil + Water sample gets a soil and a water report).</summary>
+    public List<LabReportRowDto> Reports { get; set; } = new();
+    public LabReportRowDto? Report => Reports.FirstOrDefault();
 
     public FarmerStatus Status => FarmerSamples.StatusOf(CollectionStatus, Report is not null);
 }
@@ -86,6 +88,9 @@ public static class FarmerSamples
         LabReportStatus.Printed => "violet",
         _ => "grey"
     };
+
+    /// <summary>"Download PDF" for a single report, "Soil PDF" / "Water PDF" when a sample has several.</summary>
+    public static string ReportLabel(LabReportRowDto r, int count) => count > 1 ? $"{SampleTypeName(r.SampleType)} PDF" : "Download PDF";
 
     public static string SampleTypeName(SampleType t) => t switch
     {
