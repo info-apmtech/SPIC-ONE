@@ -1,0 +1,329 @@
+@page "/Lab/TestEntry"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
+@inject LabApi Api
+@inject NavigationManager Nav
+@implements IDisposable
+
+@*
+    Test Value Entry, Batch List (screen 14). Four KPI cards (analyst dashboard counts), a
+    collapsible Filters card and the Assigned Batch List (GET api/Lab/batches; an analyst sees
+    only their own batches). Every filter lives in the URL query (status, sampleType, priority,
+    fy, assignedBy, from, to, q, page, size) with replace:true, so the dashboard links
+    (?status=TakenForAnalysis, ?status=AnalysisCompleted), back and refresh all agree.
+    Phone: the table becomes one card per batch.
+*@
+
+<LabEntryFrame CssClass="bl">
+    <PageHeader Title="Test Value Entry" Subtitle="View assigned lab batches and start sample-wise test value entry." BackHref="/Lab/Analyst" />
+
+    <div class="la-kpis" style="--la-kpi-cols:4">
+        <LabKpiCard Label="Assigned Batches" Value="@Kpi(_dash?.AssignedBatches)" Caption="Batches assigned to you" Icon="bi-collection" Tone="violet" />
+        <LabKpiCard Label="Pending Value Entry" Value="@Kpi(_dash?.PendingEntryBatches)" Caption="Batches waiting for values" Icon="bi-pencil-square" Tone="orange" />
+        <LabKpiCard Label="Auto Result Ready" Value="@Kpi(_dash?.AutoResultReadyBatches)" Caption="Batches ready for result preview" Icon="bi-cpu" Tone="blue" />
+        <LabKpiCard Label="Report Generated" Value="@Kpi(_dash?.ReportsToDownload)" Caption="Batches with reports" Icon="bi-file-earmark-check" Tone="green" />
+    </div>
+
+    <LabFilterCard ActiveCount="ActiveFilters" OnClear="ClearAsync" OnApply="ApplyAsync">
+        <div class="la-field">
+            <label class="la-label" for="bl-from">Date Range</label>
+            <div class="la-dates">
+                <input id="bl-from" class="la-input" type="date" aria-label="From date" @bind="_fFrom" />
+                <span class="la-dates-sep">to</span>
+                <input class="la-input" type="date" aria-label="To date" @bind="_fTo" />
+            </div>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="bl-type">Sample Type</label>
+            <select id="bl-type" class="la-input" @bind="_fType">
+                <option value="">All Types</option>
+                <option value="Free">Free</option>
+                <option value="Paid">Paid</option>
+                <option value="Soil">Soil</option>
+                <option value="Water">Water</option>
+                <option value="SoilAndWater">Soil &amp; Water</option>
+            </select>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="bl-status">Status</label>
+            <select id="bl-status" class="la-input" @bind="_fStatus">
+                <option value="">All Status</option>
+                @foreach (var (value, label) in AnalystText.BatchStatusOptions)
+                {
+                    <option value="@value">@label</option>
+                }
+            </select>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="bl-priority">Priority</label>
+            <select id="bl-priority" class="la-input" @bind="_fPriority">
+                <option value="">All Priority</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+            </select>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="bl-fy">Financial Year</label>
+            <select id="bl-fy" class="la-input" @bind="_fFy">
+                <option value="">All Years</option>
+                @foreach (var y in _years)
+                {
+                    <option value="@y">@AnalystText.FinancialYear(y)</option>
+                }
+            </select>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="bl-by">Assigned By</label>
+            <input id="bl-by" class="la-input" type="text" placeholder="Coordinator name" autocomplete="off" @bind="_fBy" />
+        </div>
+    </LabFilterCard>
+
+    <section class="la-card" aria-labelledby="bl-list-title">
+        <div class="la-card-head">
+            <h2 class="la-card-title" id="bl-list-title">Assigned Batch List</h2>
+            <div class="la-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input class="la-input" type="search" placeholder="Search batch or consignment..." aria-label="Search batches"
+                       value="@Q" @onchange="e => SearchAsync(e.Value?.ToString())" />
+            </div>
+        </div>
+
+        @if (_loading && _page is null)
+        {
+            <Skeleton Variant="table" Rows="6" />
+        }
+        else if (_page is null)
+        {
+            <EmptyState Icon="bi-wifi-off" Title="Batches could not be loaded" Message="The lab service did not answer. Please try again.">
+                <button type="button" class="la-btn la-btn-outline" @onclick="LoadListAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (_page.Items.Count == 0)
+        {
+            <EmptyState Icon="bi-inboxes" Title="No batches found"
+                        Message="@(ActiveFilters > 0 || !string.IsNullOrWhiteSpace(Q) ? "No batch matches these filters." : "No batch has been assigned to you yet.")">
+                @if (ActiveFilters > 0 || !string.IsNullOrWhiteSpace(Q))
+                {
+                    <button type="button" class="la-btn la-btn-outline" @onclick="ClearAsync">Clear filters</button>
+                }
+            </EmptyState>
+        }
+        else
+        {
+            <div class="la-table-wrap tablet-up">
+                <table class="la-table bl-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Batch No.</th>
+                            <th scope="col">Consignment No.</th>
+                            <th scope="col">Sample Type</th>
+                            <th scope="col" class="la-num">No. of Samples</th>
+                            <th scope="col" class="la-num">Pending Entries</th>
+                            <th scope="col" class="la-num">Completed Entries</th>
+                            <th scope="col">Assigned On</th>
+                            <th scope="col">Priority</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="la-th-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in _page.Items)
+                        {
+                            <tr @key="b.Id" class="is-clickable" @onclick="() => Open(b.Id)">
+                                <td><a class="la-row-link" href="@Href(b.Id)" @onclick:stopPropagation="true">@b.Code</a></td>
+                                <td title="@string.Join(", ", b.ConsignmentCodes)">@AnalystText.Dash(b.ConsignmentCode)</td>
+                                <td>@AnalystText.PaymentTypeText(b.SampleType)</td>
+                                <td class="la-num">@b.SampleCount</td>
+                                <td class="la-num">@b.PendingEntries</td>
+                                <td class="la-num">@b.CompletedEntries</td>
+                                <td>
+                                    @AnalystText.Date(b.AssignedAt ?? b.BatchDate)
+                                    <span class="la-sub">@AnalystText.Time(b.AssignedAt)</span>
+                                </td>
+                                <td><LabPill Text="@AnalystText.PriorityText(b.Priority)" Tone="@LabPill.ToneFor(b.Priority)" /></td>
+                                <td><LabPill Text="@AnalystText.BatchStatusText(b.Status)" Tone="@LabPill.ToneFor(b.Status)" /></td>
+                                <td class="la-td-action">
+                                    <a class="la-icon-btn" href="@Href(b.Id)" title="@ActionLabel(b)" aria-label="@($"{ActionLabel(b)} {b.Code}")"
+                                       @onclick:stopPropagation="true">
+                                        <i class="bi @ActionIcon(b)" aria-hidden="true"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="la-rcards phone-only">
+                @foreach (var b in _page.Items)
+                {
+                    <a class="la-rcard" @key="b.Id" href="@Href(b.Id)" aria-label="@($"{ActionLabel(b)} {b.Code}")">
+                        <div class="la-rcard-top">
+                            <span class="la-code">@b.Code</span>
+                            <LabPill Text="@AnalystText.BatchStatusText(b.Status)" Tone="@LabPill.ToneFor(b.Status)" />
+                        </div>
+                        <dl class="la-rcard-grid">
+                            <div><dt>Consignment No.</dt><dd>@AnalystText.Dash(b.ConsignmentCode)</dd></div>
+                            <div><dt>Sample Type</dt><dd>@AnalystText.PaymentTypeText(b.SampleType)</dd></div>
+                            <div><dt>Samples</dt><dd>@b.SampleCount</dd></div>
+                            <div><dt>Pending / Completed</dt><dd>@b.PendingEntries / @b.CompletedEntries</dd></div>
+                            <div><dt>Assigned On</dt><dd>@AnalystText.DateTimeText(b.AssignedAt ?? b.BatchDate)</dd></div>
+                            <div><dt>Priority</dt><dd><LabPill Text="@AnalystText.PriorityText(b.Priority)" Tone="@LabPill.ToneFor(b.Priority)" /></dd></div>
+                        </dl>
+                        <div class="la-rcard-foot">
+                            <span class="bl-card-action"><i class="bi @ActionIcon(b)" aria-hidden="true"></i> @ActionLabel(b)</span>
+                            <i class="bi bi-chevron-right" aria-hidden="true"></i>
+                        </div>
+                    </a>
+                }
+            </div>
+
+            <LabPager Page="_page.Page" PageSize="_page.PageSize" Total="_page.Total"
+                      PageChanged="p => GoAsync(page: p)" PageSizeChanged="s => GoAsync(size: s, page: 1)" CssClass="bl-pager" />
+        }
+    </section>
+</LabEntryFrame>
+
+@code {
+    // ---- applied filters (URL query) ----
+    [SupplyParameterFromQuery(Name = "status")] public string? Status { get; set; }
+    [SupplyParameterFromQuery(Name = "sampleType")] public string? SampleType { get; set; }
+    [SupplyParameterFromQuery(Name = "priority")] public string? Priority { get; set; }
+    [SupplyParameterFromQuery(Name = "fy")] public int? Fy { get; set; }
+    [SupplyParameterFromQuery(Name = "assignedBy")] public string? AssignedBy { get; set; }
+    [SupplyParameterFromQuery(Name = "from")] public string? From { get; set; }
+    [SupplyParameterFromQuery(Name = "to")] public string? To { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? Q { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageNo { get; set; }
+    [SupplyParameterFromQuery(Name = "size")] public int? Size { get; set; }
+
+    // ---- filter form (draft until Apply) ----
+    private DateTime? _fFrom, _fTo;
+    private string _fType = "", _fStatus = "", _fPriority = "", _fFy = "", _fBy = "";
+
+    private LabAnalystDashboardDto? _dash;
+    private PageResult<LabBatchRowDto>? _page;
+    private List<int> _years = new();
+    private bool _loading = true;
+    private string? _lastQuery;
+    private readonly CancellationTokenSource _cts = new();
+
+    private int ActiveFilters =>
+        new[] { Status, SampleType, Priority, AssignedBy, From, To }.Count(v => !string.IsNullOrWhiteSpace(v)) + (Fy is > 0 ? 1 : 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var dash = Api.GetAnalystDashboardAsync(_cts.Token);
+        var years = Api.GetFinancialYearsAsync(_cts.Token);
+        _dash = await dash;
+        _years = await years ?? new List<int>();
+        if (!_years.Contains(AnalystText.CurrentFinancialYear)) _years.Insert(0, AnalystText.CurrentFinancialYear);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var query = Nav.Uri.Contains('?') ? Nav.Uri[Nav.Uri.IndexOf('?')..] : "";
+        if (query == _lastQuery && _page is not null) return;
+        _lastQuery = query;
+
+        // the form shows what is applied
+        _fStatus = Status ?? "";
+        _fType = SampleType ?? "";
+        _fPriority = Priority ?? "";
+        _fFy = Fy is > 0 ? Fy.Value.ToString() : "";
+        _fBy = AssignedBy ?? "";
+        _fFrom = ParseDate(From);
+        _fTo = ParseDate(To);
+
+        await LoadListAsync();
+    }
+
+    private async Task LoadListAsync()
+    {
+        _loading = true;
+        _page = await Api.GetAnalystBatchesAsync(
+            status: Status, priority: Priority, sampleType: SampleType, financialYear: Fy is > 0 ? Fy : null,
+            assignedBy: AssignedBy, q: Q, from: ParseDate(From), to: ParseDate(To),
+            page: Math.Max(1, PageNo ?? 1), pageSize: Size is > 0 ? Size.Value : LabApi.DefaultPageSize,
+            ct: _cts.Token);
+        _loading = false;
+    }
+
+    private Task ApplyAsync()
+    {
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["status"] = Blank(_fStatus),
+            ["sampleType"] = Blank(_fType),
+            ["priority"] = Blank(_fPriority),
+            ["fy"] = int.TryParse(_fFy, out var fy) ? fy : null,
+            ["assignedBy"] = Blank(_fBy?.Trim()),
+            ["from"] = _fFrom?.ToString("yyyy-MM-dd"),
+            ["to"] = _fTo?.ToString("yyyy-MM-dd"),
+            ["page"] = null
+        }), replace: true);
+        return Task.CompletedTask;
+    }
+
+    private Task ClearAsync()
+    {
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["status"] = null, ["sampleType"] = null, ["priority"] = null, ["fy"] = null, ["assignedBy"] = null,
+            ["from"] = null, ["to"] = null, ["q"] = null, ["page"] = null
+        }), replace: true);
+        return Task.CompletedTask;
+    }
+
+    private Task SearchAsync(string? q)
+    {
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["q"] = Blank(q?.Trim()),
+            ["page"] = null
+        }), replace: true);
+        return Task.CompletedTask;
+    }
+
+    private Task GoAsync(int? page = null, int? size = null)
+    {
+        var values = new Dictionary<string, object?>();
+        if (page is not null) values["page"] = page <= 1 ? null : page;
+        if (size is not null) values["size"] = size;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameters(values), replace: true);
+        return Task.CompletedTask;
+    }
+
+    private void Open(int id) => Nav.NavigateTo(Href(id));
+
+    private static string Href(int id) => $"/Lab/TestEntry/{id}";
+
+    private static string ActionLabel(LabBatchRowDto b) => b.Status switch
+    {
+        SampleBatchStatus.TakenForAnalysis => "Start entry",
+        SampleBatchStatus.InProgress => "Continue entry",
+        SampleBatchStatus.AnalysisCompleted => "Preview results",
+        SampleBatchStatus.Completed => "View",
+        _ => "Open"
+    };
+
+    private static string ActionIcon(LabBatchRowDto b) => b.Status switch
+    {
+        SampleBatchStatus.TakenForAnalysis => "bi-pencil-square",
+        SampleBatchStatus.InProgress => "bi-arrow-right-circle",
+        SampleBatchStatus.AnalysisCompleted => "bi-clipboard-check",
+        _ => "bi-eye"
+    };
+
+    private static string Kpi(int? v) => v?.ToString() ?? "-";
+    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s;
+
+    private static DateTime? ParseDate(string? s) =>
+        DateTime.TryParseExact(s, "yyyy-MM-dd", AnalystText.Invariant, System.Globalization.DateTimeStyles.None, out var d) ? d : null;
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

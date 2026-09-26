@@ -261,7 +261,7 @@ public sealed class LabApi
     /// SAS lookups carry states and districts only. Rows use the shared LocationItemDto shape
     /// (Id, RegionName, StateId).
     /// </summary>
-    public Task<List<LocationItemDto>?> GetRegionsAsync(CancellationToken ct = default)
+    public Task<List<LocationItemDto>?> GetAllRegionsAsync(CancellationToken ct = default)
         => GetAsync<List<LocationItemDto>>("api/Region/all", "the regions", ct);
 
     /// <summary>Avatar URL from a lab DTO (relative API path) made loadable by &lt;img&gt;; null stays null.</summary>
@@ -269,6 +269,54 @@ public sealed class LabApi
         => string.IsNullOrWhiteSpace(relativeUrl) ? null
             : relativeUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? relativeUrl
             : AuthorizedUrl(relativeUrl);
+
+    // ---------------------------------------------------------------- analyst additions (phase 1e, Client-Analyst)
+
+    /// <summary>Id + name of a location master row (State / Region / Head Quarters filters of the report pages).</summary>
+    public sealed record LookupItem(int Id, string Name);
+
+    /// <summary>Batch List (screen 14): GET api/Lab/batches with the analyst filters, including assignedBy
+    /// (contains-match on the coordinator's name), which GetBatchesAsync does not pass.</summary>
+    public Task<PageResult<LabBatchRowDto>?> GetAnalystBatchesAsync(
+        string? status = null, string? priority = null, string? sampleType = null, int? financialYear = null,
+        string? assignedBy = null, string? q = null, DateTime? from = null, DateTime? to = null,
+        int page = 1, int pageSize = DefaultPageSize, CancellationToken ct = default)
+        => GetAsync<PageResult<LabBatchRowDto>>(
+            Url($"{Root}/batches", ("status", status), ("priority", priority), ("sampleType", sampleType),
+                ("financialYear", financialYear), ("assignedBy", assignedBy), ("q", q), ("from", from), ("to", to),
+                ("page", page), ("pageSize", pageSize)),
+            "the batches", ct);
+
+    /// <summary>Active states (GET api/State/all), by name.</summary>
+    public Task<List<LookupItem>?> GetStatesAsync(CancellationToken ct = default)
+        => GetLookupAsync("api/State/all", "stateName", "the states", ct);
+
+    /// <summary>Regions of a state (api/Region/byState/{id}) or all regions.</summary>
+    public Task<List<LookupItem>?> GetRegionsAsync(int? stateId = null, CancellationToken ct = default)
+        => GetLookupAsync(stateId is > 0 ? $"api/Region/byState/{stateId}" : "api/Region/all", "regionName", "the regions", ct);
+
+    /// <summary>Head quarters of a region (api/Headquarter/byRegion/{id}) or all head quarters.</summary>
+    public Task<List<LookupItem>?> GetHeadquartersAsync(int? regionId = null, CancellationToken ct = default)
+        => GetLookupAsync(regionId is > 0 ? $"api/Headquarter/byRegion/{regionId}" : "api/Headquarter/all", "headquarterName", "the head quarters", ct);
+
+    private async Task<List<LookupItem>?> GetLookupAsync(string url, string nameProperty, string what, CancellationToken ct)
+    {
+        var rows = await GetAsync<List<JsonElement>>(url, what, ct);
+        if (rows is null) return null;
+
+        var items = new List<LookupItem>();
+        foreach (var row in rows)
+        {
+            if (row.ValueKind != JsonValueKind.Object) continue;
+            if (!row.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.Number) continue;
+            if (row.TryGetProperty("isActive", out var active) && active.ValueKind == JsonValueKind.False) continue;
+            var name = row.TryGetProperty(nameProperty, out var n) ? n.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(name)) items.Add(new LookupItem(id.GetInt32(), name.Trim()));
+        }
+        return items.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    // ---------------------------------------------------------------- end of analyst additions
 
     // ---------------------------------------------------------------- plumbing
 

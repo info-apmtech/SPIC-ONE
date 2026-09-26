@@ -1,0 +1,764 @@
+@page "/Lab/TestEntry/{BatchId:int}"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
+@inject LabApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@implements IDisposable
+
+@*
+    Test Value Entry, Sample-wise Entry (screen 15) with the Submit (16) and Submitted (17) dialogs.
+
+    ?sample={sampleItemId} picks the sample; without it the first sample still waiting for values
+    opens. GET api/Lab/samples/{id} brings the batch summary, the samples of the batch, the
+    selected sample and its parameter rows. The analyst types only the values: 400 ms after the
+    last change POST api/Lab/samples/preview returns the result word, status, hint, overall status
+    and recommendations for every row (nothing is saved). Save Draft = PUT values Submit=false
+    (sample In Progress), Submit Values = Submit=true (sample Auto Result Ready; the API refuses it
+    until every enterable parameter has a value). Derived rows (Organic Matter) are computed and
+    read-only; Texture is chosen from its options. A submitted sample shows its values read-only
+    with Edit Values until the batch report is generated; once the batch is Completed everything
+    is locked. After a submit the batch summary and the samples table refresh from the response,
+    so the next sample can be picked without leaving the page.
+    Phone: the tables become cards (one per sample, one per parameter) and the footer is a sticky
+    ActionBar.
+*@
+
+<LabEntryFrame CssClass="se">
+    <PageHeader Title="Sample-wise Entry" BackHref="/Lab/TestEntry"
+                Subtitle="Enter sample test values, compare with normal range, and preview recommendations." />
+
+    @if (_loading && _entry is null)
+    {
+        <Skeleton Variant="card" Rows="3" />
+    }
+    else if (_entry is null)
+    {
+        <EmptyState Icon="@(_emptyBatch ? "bi-inboxes" : "bi-wifi-off")"
+                    Title="@(_emptyBatch ? "No samples in this batch" : "This batch could not be opened")"
+                    Message="@(_emptyBatch ? "The batch has no samples to enter values for." : "It may not be assigned to you, or the lab service did not answer.")">
+            <a class="la-btn la-btn-outline" href="/Lab/TestEntry">Back to Batch List</a>
+            @if (!_emptyBatch)
+            {
+                <button type="button" class="la-btn la-btn-primary" @onclick="ReloadAsync">Try again</button>
+            }
+        </EmptyState>
+    }
+    else
+    {
+        var batch = _entry.Batch;
+        var sample = _entry.Sample;
+
+        @* ---------------------------------------------------------------- batch summary *@
+        <section class="la-card" aria-labelledby="se-batch-title">
+            <div class="la-card-head">
+                <h2 class="la-card-title" id="se-batch-title"><i class="bi bi-collection" aria-hidden="true"></i> Batch Summary</h2>
+                @if (_entry.IsLocked)
+                {
+                    <a class="la-btn la-btn-soft la-btn-sm" href="@($"/Lab/TestEntry/Reports/{batch.Id}")">
+                        <i class="bi bi-file-earmark-text" aria-hidden="true"></i> View Batch Report
+                    </a>
+                }
+            </div>
+            <div class="la-tiles se-batch-tiles">
+                <div class="la-tile"><span class="la-tile-label">Batch No.</span><span class="la-tile-value">@batch.Code</span></div>
+                <div class="la-tile"><span class="la-tile-label">Consignment No.</span><span class="la-tile-value" title="@string.Join(", ", batch.ConsignmentCodes)">@AnalystText.Dash(batch.ConsignmentCode)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Sample Type</span><span class="la-tile-value">@AnalystText.PaymentTypeText(batch.SampleType)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Total Samples</span><span class="la-tile-value">@batch.SampleCount</span></div>
+                <div class="la-tile"><span class="la-tile-label">Assigned On</span><span class="la-tile-value">@AnalystText.DateTimeText(batch.AssignedAt ?? batch.BatchDate)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Pending</span><span class="la-tile-value se-num-pending">@_entry.PendingInBatch</span></div>
+                <div class="la-tile"><span class="la-tile-label">Completed</span><span class="la-tile-value se-num-done">@_entry.CompletedInBatch</span></div>
+                <div class="la-tile"><span class="la-tile-label">Priority</span><span class="la-tile-value"><LabPill Text="@AnalystText.PriorityText(batch.Priority)" Tone="@LabPill.ToneFor(batch.Priority)" /></span></div>
+                <div class="la-tile"><span class="la-tile-label">Status</span><span class="la-tile-value"><LabPill Text="@AnalystText.BatchStatusText(batch.Status)" Tone="@LabPill.ToneFor(batch.Status)" /></span></div>
+            </div>
+        </section>
+
+        @* ---------------------------------------------------------------- samples in this batch *@
+        <section class="la-card" aria-labelledby="se-samples-title">
+            <div class="la-card-head">
+                <div>
+                    <h2 class="la-card-title" id="se-samples-title"><i class="bi bi-eyedropper" aria-hidden="true"></i> Samples in this Batch</h2>
+                    <p class="la-card-sub">@_entry.SamplesInBatch.Count samples &middot; @_entry.CompletedInBatch submitted</p>
+                </div>
+                @if (NextPending is { } next)
+                {
+                    <button type="button" class="la-btn la-btn-soft la-btn-sm" @onclick="() => SelectAsync(next.SampleItemId)">
+                        Next pending sample <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    </button>
+                }
+            </div>
+
+            <div class="la-table-wrap tablet-up">
+                <table class="la-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Sample No.</th>
+                            <th scope="col">Farmer Name</th>
+                            <th scope="col">Crop</th>
+                            <th scope="col">Village</th>
+                            <th scope="col">Sample Type</th>
+                            <th scope="col">Entry Status</th>
+                            <th scope="col" class="la-th-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in _entry.SamplesInBatch)
+                        {
+                            var selected = s.SampleItemId == sample.SampleItemId;
+                            var (icon, label) = AnalystText.SampleAction(s);
+                            <tr @key="s.SampleItemId" class="is-clickable @(selected ? "is-selected" : "")" aria-current="@(selected ? "true" : null)"
+                                @onclick="() => SelectAsync(s.SampleItemId)">
+                                <td><span class="la-code">@s.SampleId</span><span class="la-sub">@s.SampleCode</span></td>
+                                <td>
+                                    <span class="la-person">
+                                        <MemberAvatar Member="AnalystText.Person(s.FarmerName)" Size="30" />
+                                        <span>@s.FarmerName</span>
+                                    </span>
+                                </td>
+                                <td>@AnalystText.Dash(s.Crop)</td>
+                                <td>@AnalystText.Dash(s.Village)</td>
+                                <td>@AnalystText.SampleTypeText(s.SampleType)</td>
+                                <td><LabPill Text="@AnalystText.SampleStatusText(s)" Tone="@AnalystText.SampleTone(s)" /></td>
+                                <td class="la-td-action">
+                                    <button type="button" class="la-icon-btn" title="@label" aria-label="@($"{label} {s.SampleId}")"
+                                            @onclick="() => SelectAsync(s.SampleItemId)" @onclick:stopPropagation="true">
+                                        <i class="bi @icon" aria-hidden="true"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="la-rcards phone-only">
+                @foreach (var s in _entry.SamplesInBatch)
+                {
+                    var selected = s.SampleItemId == sample.SampleItemId;
+                    var (icon, label) = AnalystText.SampleAction(s);
+                    <button type="button" @key="s.SampleItemId" class="la-rcard @(selected ? "is-selected" : "")" aria-current="@(selected ? "true" : null)"
+                            aria-label="@($"{label} {s.SampleId}, {s.FarmerName}")" @onclick="() => SelectAsync(s.SampleItemId)">
+                        <div class="la-rcard-top">
+                            <span class="la-code">@s.SampleId</span>
+                            <LabPill Text="@AnalystText.SampleStatusText(s)" Tone="@AnalystText.SampleTone(s)" />
+                        </div>
+                        <span class="la-person se-card-person">
+                            <MemberAvatar Member="AnalystText.Person(s.FarmerName)" Size="30" />
+                            <span>@s.FarmerName</span>
+                        </span>
+                        <div class="la-rcard-foot">
+                            <span class="la-sub">@AnalystText.Dash(s.Crop) &middot; @AnalystText.Dash(s.Village) &middot; @AnalystText.SampleTypeText(s.SampleType)</span>
+                            <span class="se-card-action"><i class="bi @icon" aria-hidden="true"></i> @label</span>
+                        </div>
+                    </button>
+                }
+            </div>
+        </section>
+
+        @* ---------------------------------------------------------------- selected sample *@
+        <section class="la-card" aria-labelledby="se-sample-title">
+            <div class="la-card-head">
+                <h2 class="la-card-title" id="se-sample-title"><i class="bi bi-person-vcard" aria-hidden="true"></i> Selected Sample: @sample.SampleId</h2>
+                @if (_switching)
+                {
+                    <span class="spinner-border spinner-border-sm text-success" role="status"><span class="visually-hidden">Loading</span></span>
+                }
+            </div>
+            <div class="la-tiles se-sample-tiles">
+                <div class="la-tile"><span class="la-tile-label">Farmer Name</span><span class="la-tile-value">@sample.FarmerName</span></div>
+                <div class="la-tile"><span class="la-tile-label">Mobile No</span><span class="la-tile-value">@AnalystText.Dash(_entry.FarmerMobile)</span></div>
+                <div class="la-tile"><span class="la-tile-label">District</span><span class="la-tile-value">@AnalystText.Dash(sample.District)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Village</span><span class="la-tile-value">@AnalystText.Dash(sample.Village)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Crop</span><span class="la-tile-value">@AnalystText.Dash(sample.Crop)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Sample Type</span><span class="la-tile-value">@AnalystText.SampleTypeText(sample.SampleType)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Collected On</span><span class="la-tile-value">@AnalystText.Date(_entry.CollectedOn)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Entry Status</span><span class="la-tile-value"><LabPill Text="@AnalystText.SampleStatusText(sample)" Tone="@AnalystText.SampleTone(sample)" /></span></div>
+            </div>
+        </section>
+
+        @if (_entry.IsLocked)
+        {
+            <p class="la-note se-note"><i class="bi bi-lock" aria-hidden="true"></i> This batch is completed and its report generated; the values are locked.</p>
+        }
+        else if (!_editing)
+        {
+            <p class="la-note se-note"><i class="bi bi-lock" aria-hidden="true"></i> Values are submitted and locked for report preview. Use Edit Values to change them before the report is generated.</p>
+        }
+        else
+        {
+            <p class="la-note se-note"><i class="bi bi-info-circle" aria-hidden="true"></i> Enter only the test values. Normal range, result, status, and recommendation will be auto-calculated by the system.</p>
+        }
+
+        @* ---------------------------------------------------------------- value entry table *@
+        <section class="la-card" aria-labelledby="se-values-title">
+            <div class="la-card-head">
+                <div>
+                    <h2 class="la-card-title" id="se-values-title"><i class="bi bi-table" aria-hidden="true"></i> Test Value Entry Table</h2>
+                    <p class="la-card-sub">
+                        <span>@EnteredCount of @EnterableCount values entered</span>
+                        @if (_previewing)
+                        {
+                            <span class="se-updating">&middot; updating result...</span>
+                        }
+                    </p>
+                </div>
+            </div>
+
+            <div class="la-table-wrap tablet-up">
+                <table class="la-table se-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Test Parameter</th>
+                            <th scope="col">Normal Range</th>
+                            <th scope="col" class="se-th-value">Test Value</th>
+                            <th scope="col">Unit</th>
+                            <th scope="col">Result</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Recommendation Hint</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in Rows)
+                        {
+                            <tr @key="p.LabParameterId">
+                                <th scope="row" class="se-param">@p.Name</th>
+                                <td>@AnalystText.Dash(p.NormalRange)</td>
+                                <td class="se-td-value">@ValueCell(p, "d")</td>
+                                <td>@AnalystText.Dash(p.Unit)</td>
+                                <td class="se-result se-result--@Slug(p.Status)">@AnalystText.Dash(p.ResultLabel)</td>
+                                <td>
+                                    @if (p.Status is { } st)
+                                    {
+                                        <LabPill Text="@AnalystText.ResultStatusText(st)" Tone="@LabPill.ToneFor(st)" />
+                                    }
+                                    else
+                                    {
+                                        <span class="la-sub">-</span>
+                                    }
+                                </td>
+                                <td class="se-hint">@AnalystText.Dash(p.Hint)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="se-pcards phone-only">
+                @foreach (var p in Rows)
+                {
+                    <div class="se-pcard" @key="p.LabParameterId">
+                        <div class="se-pcard-head">
+                            <span class="se-pcard-name">@p.Name</span>
+                            @if (p.Status is { } st)
+                            {
+                                <LabPill Text="@AnalystText.ResultStatusText(st)" Tone="@LabPill.ToneFor(st)" />
+                            }
+                        </div>
+                        <div class="se-pcard-range">Normal range: @AnalystText.Dash(p.NormalRange)@(string.IsNullOrWhiteSpace(p.Unit) || p.Unit == "-" ? "" : $" {p.Unit}")</div>
+                        <div class="se-pcard-input">@ValueCell(p, "m")</div>
+                        @if (!string.IsNullOrWhiteSpace(p.ResultLabel) && p.Status is not null)
+                        {
+                            <div class="se-pcard-result">Result: <span class="se-result se-result--@Slug(p.Status)">@p.ResultLabel</span></div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(p.Hint))
+                        {
+                            <p class="se-pcard-hint"><i class="bi bi-lightbulb" aria-hidden="true"></i> @p.Hint</p>
+                        }
+                    </div>
+                }
+            </div>
+        </section>
+
+        @* ---------------------------------------------------------------- summary + recommendations *@
+        <div class="se-grid">
+            <section class="la-card se-summary" aria-labelledby="se-summary-title">
+                <div class="la-card-head">
+                    <h2 class="la-card-title" id="se-summary-title" tabindex="-1" @ref="_summaryHeading">
+                        <i class="bi bi-cpu" aria-hidden="true"></i> Auto Result Summary
+                    </h2>
+                </div>
+                @if (Evaluated.Count == 0)
+                {
+                    <p class="se-empty">Enter test values to see the auto result.</p>
+                }
+                else
+                {
+                    <ul class="se-results">
+                        @foreach (var p in Evaluated)
+                        {
+                            <li class="se-results-row">
+                                <span class="se-results-name">@p.Name</span>
+                                <span class="se-result se-result--@Slug(p.Status)">@AnalystText.Dash(p.ResultLabel)</span>
+                            </li>
+                        }
+                    </ul>
+                    <div class="se-overall">
+                        <span class="se-overall-label">@AnalystText.OverallLabel(sample.SampleType)</span>
+                        <LabPill Text="@Result.OverallStatusText" Tone="@AnalystText.OverallTone(Result.OverallStatus)" CssClass="se-overall-pill" />
+                    </div>
+                }
+            </section>
+
+            <section class="la-card se-recos" aria-labelledby="se-recos-title">
+                <div class="la-card-head">
+                    <h2 class="la-card-title" id="se-recos-title"><i class="bi bi-clipboard2-pulse" aria-hidden="true"></i> Recommendation Preview</h2>
+                </div>
+                @if (Evaluated.Count == 0)
+                {
+                    <p class="se-empty">Recommendations appear once values are entered.</p>
+                }
+                else
+                {
+                    @if (Result.Recommendations.Count == 0)
+                    {
+                        <p class="se-empty">No corrective action: every entered parameter is within its normal range.</p>
+                    }
+                    @foreach (var g in Result.Recommendations)
+                    {
+                        <div class="se-reco">
+                            <h3 class="se-reco-title"><i class="bi @AnalystText.RecommendationIcon(g.Group)" aria-hidden="true"></i> @AnalystText.RecommendationTitle(g.Group)</h3>
+                            <ul class="se-reco-lines">
+                                @foreach (var line in g.Lines)
+                                {
+                                    <li>@line</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Result.CropSuitabilityNote))
+                    {
+                        <div class="se-crop">
+                            <span class="se-crop-title"><i class="bi bi-flower2" aria-hidden="true"></i> Crop Suitability Note</span>
+                            <p>@Result.CropSuitabilityNote</p>
+                        </div>
+                    }
+                }
+            </section>
+        </div>
+
+        @* ---------------------------------------------------------------- footer *@
+        <div class="se-footer">
+        <ActionBar Align="ActionBar.BarAlign.Between" AriaLabel="Sample actions" CssClass="se-actions">
+            <Secondary>
+                <a class="la-btn la-btn-outline se-back" href="/Lab/TestEntry" title="Back to Batch List" aria-label="Back to Batch List">
+                    <i class="bi bi-arrow-left" aria-hidden="true"></i><span class="tablet-up">Back to Batch List</span>
+                </a>
+            </Secondary>
+            <ChildContent>
+                @if (_entry.IsLocked)
+                {
+                    <a class="la-btn la-btn-primary" href="@($"/Lab/TestEntry/Reports/{batch.Id}")">
+                        <i class="bi bi-file-earmark-text" aria-hidden="true"></i> View Report
+                    </a>
+                }
+                else if (!_editing)
+                {
+                    <button type="button" class="la-btn la-btn-soft se-preview" @onclick="PreviewResultAsync" title="Preview Result" aria-label="Preview Result">
+                        <i class="bi bi-eye" aria-hidden="true"></i><span class="tablet-up">Preview Result</span>
+                    </button>
+                    <button type="button" class="la-btn la-btn-outline" @onclick="StartEditing">
+                        <i class="bi bi-pencil" aria-hidden="true"></i> Edit Values
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="la-btn la-btn-outline" @onclick="SaveDraftAsync" disabled="@(_saving || _submitting)">
+                        @if (_saving)
+                        {
+                            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-floppy" aria-hidden="true"></i>
+                        }
+                        <span class="tablet-up">Save Draft</span><span class="phone-only">Save</span>
+                    </button>
+                    <button type="button" class="la-btn la-btn-soft se-preview" @onclick="PreviewResultAsync" title="Preview Result" aria-label="Preview Result">
+                        <i class="bi bi-eye" aria-hidden="true"></i><span class="tablet-up">Preview Result</span>
+                    </button>
+                    <button type="button" class="la-btn la-btn-primary" @onclick="AskSubmitAsync" disabled="@(_saving || _submitting)">
+                        <i class="bi bi-send" aria-hidden="true"></i><span class="tablet-up">Submit Values</span><span class="phone-only">Submit</span>
+                    </button>
+                }
+            </ChildContent>
+        </ActionBar>
+        </div>
+
+        <SubmitValuesDialog IsOpen="_submitOpen" Busy="_submitting"
+                            SampleNo="@sample.SampleId" FarmerName="@sample.FarmerName" SampleType="@AnalystText.SampleTypeText(sample.SampleType)"
+                            OverallLabel="@AnalystText.OverallLabel(sample.SampleType)" OverallText="@Result.OverallStatusText" OverallTone="@AnalystText.OverallTone(Result.OverallStatus)"
+                            OnCancel="() => _submitOpen = false" OnSubmit="SubmitAsync" />
+
+        <SubmittedDialog IsOpen="_submittedOpen"
+                         SampleNo="@sample.SampleId" FarmerName="@sample.FarmerName" SampleType="@AnalystText.SampleTypeText(sample.SampleType)"
+                         OverallLabel="@AnalystText.OverallLabel(sample.SampleType)" OverallText="@Result.OverallStatusText" OverallTone="@AnalystText.OverallTone(Result.OverallStatus)"
+                         NextNote="@SubmittedNote" OnCancel="() => _submittedOpen = false" OnPreviewReport="PreviewReportAsync" />
+    }
+</LabEntryFrame>
+
+@code {
+    [Parameter] public int BatchId { get; set; }
+    [SupplyParameterFromQuery(Name = "sample")] public int? SampleParam { get; set; }
+
+    private const int DebounceMs = 400;
+
+    private LabSampleEntryDto? _entry;
+    private LabAutoResultDto? _preview;
+    private readonly Dictionary<int, string> _values = new();
+    private readonly HashSet<int> _derived = new();
+    private readonly HashSet<int> _invalid = new();
+    private bool _loading = true;
+    private bool _switching;
+    private bool _emptyBatch;
+    private bool _editing;
+    private bool _dirty;
+    private bool _saving;
+    private bool _submitting;
+    private bool _previewing;
+    private bool _submitOpen;
+    private bool _submittedOpen;
+    private int _previewVersion;
+    private (int BatchId, int? Sample)? _loadedFor;
+    private ElementReference _summaryHeading;
+    private CancellationTokenSource? _debounce;
+    private readonly CancellationTokenSource _cts = new();
+
+    // ---------------------------------------------------------------- derived view state
+
+    private LabAutoResultDto Result => _preview ?? _entry?.Result ?? new LabAutoResultDto();
+
+    private List<LabParameterRowDto> Rows => Result.Parameters;
+
+    private List<LabParameterRowDto> Evaluated => Rows.Where(r => r.Status is not null).ToList();
+
+    private bool IsDerived(LabParameterRowDto p) => _derived.Contains(p.LabParameterId);
+
+    private int EnterableCount => Rows.Count(r => !IsDerived(r));
+
+    private int EnteredCount => Rows.Count(r => !IsDerived(r) && !string.IsNullOrWhiteSpace(Value(r.LabParameterId)));
+
+    private LabSampleRowDto? NextPending => _entry?.SamplesInBatch
+        .Where(s => s.SampleItemId != _entry.Sample.SampleItemId && !s.ReportGenerated && s.Status != SampleAnalysisStatus.Completed)
+        .FirstOrDefault();
+
+    private string? SubmittedNote => _entry is null ? null
+        : _entry.PendingInBatch == 0 ? "Every sample of this batch is submitted; the batch is ready for result review."
+        : $"{_entry.PendingInBatch} sample{(_entry.PendingInBatch == 1 ? "" : "s")} still waiting for values in this batch.";
+
+    private string Value(int id) => _values.TryGetValue(id, out var v) ? v : "";
+
+    private static string Slug(LabResultStatus? s) => s?.ToString().ToLowerInvariant() ?? "none";
+
+    // ---------------------------------------------------------------- loading
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = (BatchId, SampleParam);
+        if (_loadedFor == key) return;
+        _loadedFor = key;
+        await LoadAsync(SampleParam);
+    }
+
+    private Task ReloadAsync()
+    {
+        _loadedFor = null;
+        return LoadAsync(SampleParam);
+    }
+
+    private async Task LoadAsync(int? itemId)
+    {
+        _emptyBatch = false;
+        if (_entry is null) _loading = true; else _switching = true;
+        StateHasChanged();
+
+        try
+        {
+            if (itemId is null)
+            {
+                // No sample chosen: the first one still waiting for values, else the first.
+                var samples = await Api.GetSamplesAsync(BatchId, pageSize: 50, ct: _cts.Token);
+                if (samples is null) { _entry = null; return; }
+                if (samples.Items.Count == 0) { _entry = null; _emptyBatch = true; return; }
+                itemId = (samples.Items.FirstOrDefault(s => s.Status != SampleAnalysisStatus.Completed && !s.ReportGenerated)
+                          ?? samples.Items[0]).SampleItemId;
+            }
+
+            var entry = await Api.GetSampleEntryAsync(itemId.Value, _cts.Token);
+            if (entry is null)
+            {
+                if (_entry?.Batch.Id != BatchId) _entry = null;
+                return;
+            }
+
+            if (entry.Batch.Id != BatchId)
+            {
+                // a sample of another batch: follow it so the URL and the page agree
+                _loadedFor = (entry.Batch.Id, itemId);
+                Nav.NavigateTo($"/Lab/TestEntry/{entry.Batch.Id}?sample={itemId}", replace: true);
+            }
+
+            ApplyEntry(entry);
+        }
+        finally
+        {
+            _loading = false;
+            _switching = false;
+        }
+    }
+
+    private void ApplyEntry(LabSampleEntryDto entry)
+    {
+        CancelPreview();
+        _entry = entry;
+        _preview = null;
+        _values.Clear();
+        _derived.Clear();
+        _invalid.Clear();
+
+        foreach (var p in entry.Result.Parameters)
+        {
+            if (AnalystParameters.IsDerivedCode(p.Code))
+            {
+                _derived.Add(p.LabParameterId);
+                continue;
+            }
+            _values[p.LabParameterId] = p.EnteredValue ?? "";
+        }
+
+        _editing = !entry.IsLocked && !entry.Sample.ReportGenerated && entry.Sample.Status != SampleAnalysisStatus.Completed;
+        _dirty = false;
+    }
+
+    private async Task SelectAsync(int sampleItemId)
+    {
+        if (_entry is null || sampleItemId == _entry.Sample.SampleItemId) return;
+        if (_dirty && _editing)
+        {
+            var leave = await Toast.ConfirmAsync("Leave this sample?",
+                $"The values entered for {_entry.Sample.SampleId} are not saved. Leave without saving?", "Leave", danger: true, cancelText: "Stay");
+            if (!leave) return;
+        }
+        Nav.NavigateTo($"/Lab/TestEntry/{BatchId}?sample={sampleItemId}", replace: true);
+    }
+
+    // ---------------------------------------------------------------- value entry + live preview
+
+    private RenderFragment ValueCell(LabParameterRowDto p, string prefix) => __builder =>
+    {
+        var id = p.LabParameterId;
+        var inputId = $"se-{prefix}-{id}";
+        if (IsDerived(p))
+        {
+            <span class="se-derived" title="Calculated by the system">
+                <span class="se-derived-value">@AnalystText.Dash(p.EnteredValue)</span>
+                <span class="se-derived-note"><i class="bi bi-calculator" aria-hidden="true"></i> Auto: @(AnalystParameters.DerivedNote(p.Code) ?? "calculated")</span>
+            </span>
+        }
+        else if (!_editing)
+        {
+            <span class="se-locked-value">@AnalystText.Dash(Value(id))</span>
+        }
+        else if (AnalystParameters.IsText(p))
+        {
+            <select id="@inputId" class="la-input se-input" aria-label="@($"{p.Name} value")"
+                    value="@Value(id)" @onchange="e => OnValueChanged(id, e.Value?.ToString())">
+                <option value="">Select</option>
+                @foreach (var option in AnalystParameters.OptionsFor(p))
+                {
+                    <option value="@option">@option</option>
+                }
+                @if (!string.IsNullOrWhiteSpace(Value(id)) && !AnalystParameters.OptionsFor(p).Contains(Value(id), StringComparer.OrdinalIgnoreCase))
+                {
+                    <option value="@Value(id)">@Value(id)</option>
+                }
+            </select>
+        }
+        else
+        {
+            var invalid = _invalid.Contains(id);
+            <input id="@inputId" class="la-input se-input @(invalid ? "is-invalid" : "")" type="text" inputmode="decimal" autocomplete="off"
+                   placeholder="Enter value" aria-label="@($"{p.Name} value{(string.IsNullOrWhiteSpace(p.Unit) || p.Unit == "-" ? "" : $" in {p.Unit}")}")"
+                   aria-invalid="@(invalid ? "true" : null)" value="@Value(id)" @oninput="e => OnValueChanged(id, e.Value?.ToString())" />
+            @if (invalid)
+            {
+                <span class="se-invalid">Enter a number</span>
+            }
+        }
+    };
+
+    private void OnValueChanged(int id, string? raw)
+    {
+        var value = raw ?? "";
+        _values[id] = value;
+        _dirty = true;
+
+        var row = Rows.FirstOrDefault(r => r.LabParameterId == id);
+        if (row is not null && !AnalystParameters.IsText(row) && !string.IsNullOrWhiteSpace(value) && !AnalystParameters.TryNumber(value, out _))
+            _invalid.Add(id);
+        else
+            _invalid.Remove(id);
+
+        SchedulePreview();
+    }
+
+    private void SchedulePreview()
+    {
+        CancelPreview();
+        var cts = new CancellationTokenSource();
+        _debounce = cts;
+        _ = DebouncedPreviewAsync(cts.Token);
+    }
+
+    private void CancelPreview()
+    {
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+        _debounce = null;
+        _previewVersion++;
+        _previewing = false;
+    }
+
+    private async Task DebouncedPreviewAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(DebounceMs, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+        if (token.IsCancellationRequested) return;
+        await InvokeAsync(RunPreviewAsync);
+    }
+
+    private async Task RunPreviewAsync()
+    {
+        if (_entry is null) return;
+        var version = ++_previewVersion;
+        var dto = BuildValues(submit: false, validOnly: true);
+        var sent = dto.Values.Select(v => v.LabParameterId).ToHashSet();
+
+        _previewing = true;
+        StateHasChanged();
+        var result = await Api.PreviewSampleAsync(dto, _cts.Token);
+        if (version != _previewVersion) return;   // a newer change is on its way
+        _previewing = false;
+
+        if (result is not null)
+        {
+            _preview = result;
+            // any row the engine filled in without a value from us is derived (read-only)
+            foreach (var row in result.Parameters.Where(r => r.EnteredValue is not null && !sent.Contains(r.LabParameterId)))
+                _derived.Add(row.LabParameterId);
+        }
+        StateHasChanged();
+    }
+
+    private LabSampleValuesDto BuildValues(bool submit, bool validOnly)
+    {
+        var dto = new LabSampleValuesDto { SampleItemId = _entry!.Sample.SampleItemId, Submit = submit };
+        foreach (var row in Rows)
+        {
+            if (IsDerived(row)) continue;
+            var value = Value(row.LabParameterId).Trim();
+            if (value.Length == 0) continue;
+            if (validOnly && _invalid.Contains(row.LabParameterId)) continue;
+            dto.Values.Add(new LabSampleValueDto { LabParameterId = row.LabParameterId, Value = value });
+        }
+        return dto;
+    }
+
+    private async Task PreviewResultAsync()
+    {
+        CancelPreview();
+        if (_editing) await RunPreviewAsync();
+        try { await _summaryHeading.FocusAsync(); }
+        catch (Exception) { /* scrolling is a nicety */ }
+    }
+
+    // ---------------------------------------------------------------- save / submit
+
+    private void StartEditing()
+    {
+        if (_entry is null || _entry.IsLocked) return;
+        _editing = true;
+    }
+
+    private bool CheckNumbers()
+    {
+        if (_invalid.Count == 0) return true;
+        var names = Rows.Where(r => _invalid.Contains(r.LabParameterId)).Select(r => r.Name);
+        Toast.Error($"Fix the values that are not numbers: {string.Join(", ", names)}.");
+        return false;
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        if (_entry is null || _saving || !CheckNumbers()) return;
+        CancelPreview();
+        _saving = true;
+        try
+        {
+            var saved = await Api.SaveSampleValuesAsync(BuildValues(submit: false, validOnly: false), _cts.Token);
+            if (saved is null) return;
+            ApplyEntry(saved);
+            Toast.Success($"Draft saved for {saved.Sample.SampleId}.");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task AskSubmitAsync()
+    {
+        if (_entry is null || !CheckNumbers()) return;
+        var missing = Rows.Where(r => !IsDerived(r) && string.IsNullOrWhiteSpace(Value(r.LabParameterId))).Select(r => r.Name).ToList();
+        if (missing.Count > 0)
+        {
+            Toast.Warning($"Enter every parameter before submitting. Missing: {string.Join(", ", missing)}.");
+            return;
+        }
+
+        CancelPreview();
+        await RunPreviewAsync();   // the dialog shows the current overall status
+        _submitOpen = true;
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_entry is null || _submitting) return;
+        _submitting = true;
+        try
+        {
+            var saved = await Api.SaveSampleValuesAsync(BuildValues(submit: true, validOnly: false), _cts.Token);
+            if (saved is null) return;
+            ApplyEntry(saved);   // batch summary, samples table and the now read-only values
+            _submitOpen = false;
+            _submittedOpen = true;
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private async Task PreviewReportAsync()
+    {
+        _submittedOpen = false;
+        if (_entry?.Batch.Status == SampleBatchStatus.Completed)
+        {
+            Nav.NavigateTo($"/Lab/TestEntry/Reports/{_entry.Batch.Id}");
+            return;
+        }
+        // report not generated yet: stay on the locked values and their result
+        await PreviewResultAsync();
+    }
+
+    public void Dispose()
+    {
+        CancelPreview();
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

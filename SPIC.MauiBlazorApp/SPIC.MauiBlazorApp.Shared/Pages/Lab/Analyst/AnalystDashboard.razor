@@ -1,0 +1,146 @@
+@page "/Lab/Analyst"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
+@inject LabApi Api
+@inject NavigationManager Nav
+@implements IDisposable
+
+@*
+    Lab Analyst dashboard (screen 13): five KPI cards, Today's Work Priority and Quick Actions,
+    all from GET api/Lab/analyst/dashboard (an analyst's own batches; admins and coordinators see
+    every batch). The /Lab page sends analysts here.
+*@
+
+<LabEntryFrame CssClass="ad">
+    <PageHeader Title="Lab Analyst Dashboard"
+                Subtitle="Manage assigned lab batches, enter test values, preview results, and generate reports.">
+        <Actions>
+            <button type="button" class="la-btn la-btn-outline" @onclick="LoadAsync" disabled="@_loading"
+                    aria-label="Refresh" title="Refresh">
+                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i><span class="tablet-up">Refresh</span>
+            </button>
+        </Actions>
+    </PageHeader>
+
+    @if (_loading && _dash is null)
+    {
+        <Skeleton Variant="card" Rows="3" />
+    }
+    else if (_dash is null)
+    {
+        <EmptyState Icon="bi-wifi-off" Title="Your dashboard could not be loaded"
+                    Message="The lab service did not answer. Please try again.">
+            <button type="button" class="la-btn la-btn-outline" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="la-kpis" style="--la-kpi-cols:5">
+            <LabKpiCard Label="Assigned Batches" Value="@_dash.AssignedBatches.ToString()" Caption="Batches assigned to you"
+                        Icon="bi-collection" Tone="violet" />
+            <LabKpiCard Label="Pending Value Entry" Value="@_dash.PendingValueEntry.ToString()" Caption="Samples waiting for value entry"
+                        Icon="bi-pencil-square" Tone="orange" />
+            <LabKpiCard Label="Auto Result Ready" Value="@_dash.AutoResultReady.ToString()" Caption="Range-based result generated"
+                        Icon="bi-cpu" Tone="blue" />
+            <LabKpiCard Label="Reports Generated" Value="@_dash.ReportsGeneratedThisFy.ToString()" Caption="@($"This FY {AnalystText.FinancialYear(AnalystText.CurrentFinancialYear)}")"
+                        Icon="bi-file-earmark-check" Tone="green" />
+            <LabKpiCard Label="Previous FY Reports" Value="@_dash.PreviousFyReports.ToString()" Caption="Reports of earlier years"
+                        Icon="bi-archive" Tone="pink" />
+        </div>
+
+        <div class="ad-grid">
+            <section class="la-card ad-priority" aria-labelledby="ad-priority-title">
+                <div class="la-card-head">
+                    <div>
+                        <h2 class="la-card-title" id="ad-priority-title"><i class="bi bi-list-check" aria-hidden="true"></i> Today's Work Priority</h2>
+                        <p class="la-card-sub">What needs your attention first</p>
+                    </div>
+                </div>
+
+                <ul class="ad-work">
+                    @foreach (var item in WorkItems)
+                    {
+                        <li class="ad-work-row">
+                            <span class="ad-work-icon ad-work-icon--@item.Tone" aria-hidden="true"><i class="bi @item.Icon"></i></span>
+                            <div class="ad-work-text">
+                                <div class="ad-work-title">
+                                    <span>@item.Title</span>
+                                    <LabPill Text="@item.Priority" Tone="@item.PriorityTone" />
+                                </div>
+                                <span class="ad-work-count">@item.Count @(item.Count == 1 ? "item" : "items")</span>
+                            </div>
+                            <a class="la-btn @item.ButtonClass ad-work-btn" href="@item.Href">@item.Button</a>
+                        </li>
+                    }
+                </ul>
+            </section>
+
+            <section class="la-card ad-quick" aria-labelledby="ad-quick-title">
+                <div class="la-card-head">
+                    <div>
+                        <h2 class="la-card-title" id="ad-quick-title"><i class="bi bi-lightning-charge" aria-hidden="true"></i> Quick Actions</h2>
+                        <p class="la-card-sub">Jump straight into your work</p>
+                    </div>
+                </div>
+
+                <div class="ad-tiles">
+                    <a class="ad-tile ad-tile--violet" href="/Lab/TestEntry">
+                        <span class="ad-tile-icon" aria-hidden="true"><i class="bi bi-list-ul"></i></span>
+                        <span class="ad-tile-label">Go to Batch List</span>
+                        <span class="ad-tile-hint">All batches assigned to you</span>
+                    </a>
+                    <a class="ad-tile ad-tile--orange" href="@ContinueHref">
+                        <span class="ad-tile-icon" aria-hidden="true"><i class="bi bi-pencil-square"></i></span>
+                        <span class="ad-tile-label">Continue Test Entry</span>
+                        <span class="ad-tile-hint">@(_dash.ContinueBatchId is null ? "Pick a batch to start" : "Resume your last batch")</span>
+                    </a>
+                    <a class="ad-tile ad-tile--green" href="/Lab/TestEntry/Reports">
+                        <span class="ad-tile-icon" aria-hidden="true"><i class="bi bi-file-earmark-text"></i></span>
+                        <span class="ad-tile-label">View Test Reports</span>
+                        <span class="ad-tile-hint">This financial year</span>
+                    </a>
+                    <a class="ad-tile ad-tile--pink" href="/Lab/TestEntry/Reports/Previous">
+                        <span class="ad-tile-icon" aria-hidden="true"><i class="bi bi-archive"></i></span>
+                        <span class="ad-tile-label">View Previous FY Reports</span>
+                        <span class="ad-tile-hint">Earlier financial years</span>
+                    </a>
+                </div>
+            </section>
+        </div>
+    }
+</LabEntryFrame>
+
+@code {
+    private LabAnalystDashboardDto? _dash;
+    private bool _loading = true;
+    private readonly CancellationTokenSource _cts = new();
+
+    private sealed record WorkItem(string Title, string Priority, string PriorityTone, int Count, string Button, string ButtonClass,
+        string Href, string Icon, string Tone);
+
+    private IEnumerable<WorkItem> WorkItems => _dash is null ? Array.Empty<WorkItem>() : new[]
+    {
+        new WorkItem("Pending value entry batches", "High", "red", _dash.PendingEntryBatches, "Entry Now", "la-btn-primary",
+            "/Lab/TestEntry?status=TakenForAnalysis", "bi-hourglass-split", "red"),
+        new WorkItem("Auto result ready for review", "Medium", "orange", _dash.AutoResultReadyBatches, "Preview", "la-btn-soft",
+            "/Lab/TestEntry?status=AnalysisCompleted", "bi-clipboard-check", "orange"),
+        new WorkItem("Generated reports for download", "Low", "green", _dash.ReportsToDownload, "View Reports", "la-btn-outline",
+            "/Lab/TestEntry/Reports", "bi-download", "green")
+    };
+
+    private string ContinueHref => _dash?.ContinueBatchId is int id ? $"/Lab/TestEntry/{id}" : "/Lab/TestEntry";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _dash = await Api.GetAnalystDashboardAsync(_cts.Token) ?? _dash;
+        _loading = false;
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
