@@ -1,0 +1,403 @@
+@page "/Lab/TestEntry/Reports"
+@page "/Lab/TestEntry/Reports/Previous"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
+@inject LabApi Api
+@inject NavigationManager Nav
+@implements IDisposable
+
+@*
+    Reports, Test Reports (screen 18) and its Previous FY variant. Batch-wise Report Summary from
+    GET api/Lab/reports/batches (an analyst's own batches); a row opens Batch Report Details.
+    Current: the financial year filter starts at the current FY (April to March). Previous: only
+    the years before it; with no year picked the list is capped at 31 March of the current FY's
+    start year. KPI cards: Total Batches and Downloads Completed from the filtered batch summary
+    (first 50 rows), Total Sample Reports from GET api/Lab/reports/stats, Reports Generated Today
+    from GET api/Lab/reports?from=today&to=today.
+    The report routes belong to the reports workstream (1b); until they answer, the page shows
+    an EmptyState instead of the table.
+*@
+
+<LabEntryFrame CssClass="tr">
+    <PageHeader Title="@(_previous ? "Previous FY Reports" : "Test Reports")" BackHref="/Lab/Analyst"
+                Subtitle="@(_previous ? "View batch-wise report summaries of earlier financial years." : "View batch-wise report summaries and open sample-wise reports.")">
+        <Actions>
+            @if (_previous)
+            {
+                <a class="la-btn la-btn-outline" href="/Lab/TestEntry/Reports">
+                    <i class="bi bi-calendar-check" aria-hidden="true"></i> Current FY Reports
+                </a>
+            }
+            else
+            {
+                <a class="la-btn la-btn-outline" href="/Lab/TestEntry/Reports/Previous">
+                    <i class="bi bi-archive" aria-hidden="true"></i> Previous FY Reports
+                </a>
+            }
+        </Actions>
+    </PageHeader>
+
+    <div class="la-kpis" style="--la-kpi-cols:4">
+        <LabKpiCard Label="Total Batches" Value="@Kpi(_kpiBatches)" Caption="Batch-wise report groups" Icon="bi-collection" Tone="violet" />
+        <LabKpiCard Label="Total Sample Reports" Value="@Kpi(_kpiSampleReports)" Caption="Individual sample reports" Icon="bi-file-earmark-text" Tone="blue" />
+        <LabKpiCard Label="Reports Generated Today" Value="@Kpi(_kpiToday)" Caption="@AnalystText.Date(DateTime.Today)" Icon="bi-calendar-day" Tone="green" />
+        <LabKpiCard Label="Downloads Completed" Value="@Kpi(_kpiDownloads)" Caption="PDF downloads" Icon="bi-download" Tone="orange" />
+    </div>
+
+    <LabFilterCard ActiveCount="ActiveFilters" OnClear="ClearAsync" OnApply="ApplyAsync">
+        <div class="la-field">
+            <label class="la-label" for="tr-fy">Financial Year</label>
+            <select id="tr-fy" class="la-input" @bind="_fFy">
+                <option value="">@(_previous ? "All previous years" : "All years")</option>
+                @foreach (var y in YearOptions)
+                {
+                    <option value="@y">@AnalystText.FinancialYear(y)</option>
+                }
+            </select>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="tr-from">Date Range</label>
+            <div class="la-dates">
+                <input id="tr-from" class="la-input" type="date" aria-label="From date" @bind="_fFrom" />
+                <span class="la-dates-sep">to</span>
+                <input class="la-input" type="date" aria-label="To date" @bind="_fTo" />
+            </div>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="tr-type">Sample Type</label>
+            <select id="tr-type" class="la-input" @bind="_fType">
+                <option value="">All Types</option>
+                <option value="Free">Free</option>
+                <option value="Paid">Paid</option>
+                <option value="Soil">Soil</option>
+                <option value="Water">Water</option>
+                <option value="SoilAndWater">Soil &amp; Water</option>
+            </select>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="tr-state">State</label>
+            <select id="tr-state" class="la-input" value="@_fState" @onchange="e => StateChangedAsync(e.Value?.ToString())">
+                <option value="">All States</option>
+                @foreach (var s in _states)
+                {
+                    <option value="@s.Id">@s.Name</option>
+                }
+            </select>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="tr-region">Region</label>
+            <select id="tr-region" class="la-input" value="@_fRegion" @onchange="e => RegionChangedAsync(e.Value?.ToString())">
+                <option value="">All Regions</option>
+                @foreach (var r in _regions)
+                {
+                    <option value="@r.Id">@r.Name</option>
+                }
+            </select>
+        </div>
+        <div class="la-field">
+            <label class="la-label" for="tr-hq">Head Quarters</label>
+            <select id="tr-hq" class="la-input" @bind="_fHq">
+                <option value="">All Head Quarters</option>
+                @foreach (var h in _hqs)
+                {
+                    <option value="@h.Id">@h.Name</option>
+                }
+            </select>
+        </div>
+    </LabFilterCard>
+
+    <section class="la-card" aria-labelledby="tr-list-title">
+        <div class="la-card-head">
+            <h2 class="la-card-title" id="tr-list-title">Batch-wise Report Summary</h2>
+            <div class="la-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input class="la-input" type="search" placeholder="Search batch or report..." aria-label="Search batch reports"
+                       value="@_q" @onchange="e => SearchAsync(e.Value?.ToString())" />
+            </div>
+        </div>
+
+        @if (_loading && _page is null)
+        {
+            <Skeleton Variant="table" Rows="6" />
+        }
+        else if (_page is null)
+        {
+            <EmptyState Icon="bi-file-earmark-x" Title="Reports are not available"
+                        Message="The report summary could not be loaded. Reports appear here once the lab report service is ready.">
+                <button type="button" class="la-btn la-btn-outline" @onclick="LoadAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (_page.Items.Count == 0)
+        {
+            <EmptyState Icon="bi-file-earmark-text" Title="No batch reports found"
+                        Message="@(_previous ? "No report of an earlier financial year matches these filters." : "No batch report matches these filters yet.")">
+                @if (ActiveFilters > 0 || !string.IsNullOrWhiteSpace(_q))
+                {
+                    <button type="button" class="la-btn la-btn-outline" @onclick="ClearAsync">Clear filters</button>
+                }
+            </EmptyState>
+        }
+        else
+        {
+            <div class="la-table-wrap tablet-up">
+                <table class="la-table tr-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Batch No.</th>
+                            <th scope="col">Soil Type</th>
+                            <th scope="col" class="la-num">Soil Samples</th>
+                            <th scope="col" class="la-num">Water Samples</th>
+                            <th scope="col" class="la-num">Total Samples</th>
+                            <th scope="col" class="la-num">Reports Generated</th>
+                            <th scope="col" class="la-num">Pending Reports</th>
+                            <th scope="col">State</th>
+                            <th scope="col">Region</th>
+                            <th scope="col" class="la-th-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in _page.Items)
+                        {
+                            <tr @key="b.BatchId" class="is-clickable" @onclick="() => Open(b.BatchId)">
+                                <td>
+                                    <a class="la-row-link" href="@Href(b.BatchId)" @onclick:stopPropagation="true">@b.BatchCode</a>
+                                    <span class="la-sub">@AnalystText.FinancialYear(b.FinancialYearStart)</span>
+                                </td>
+                                <td><LabPill Text="@AnalystText.PaymentTypeText(b.SampleType)" Tone="@(b.SampleType == SamplePaymentType.Paid ? "blue" : "green")" /></td>
+                                <td class="la-num">@b.SoilSamples</td>
+                                <td class="la-num">@b.WaterSamples</td>
+                                <td class="la-num">@b.TotalSamples</td>
+                                <td class="la-num tr-generated">@b.ReportsGenerated</td>
+                                <td class="la-num tr-pending">@b.PendingReports</td>
+                                <td>@AnalystText.Dash(b.StateName)</td>
+                                <td>@AnalystText.Dash(b.RegionName)</td>
+                                <td class="la-td-action">
+                                    <a class="la-icon-btn" href="@Href(b.BatchId)" title="View reports" aria-label="@($"View reports of {b.BatchCode}")"
+                                       @onclick:stopPropagation="true">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="la-rcards phone-only">
+                @foreach (var b in _page.Items)
+                {
+                    <a class="la-rcard" @key="b.BatchId" href="@Href(b.BatchId)" aria-label="@($"View reports of {b.BatchCode}")">
+                        <div class="la-rcard-top">
+                            <span class="la-code">@b.BatchCode</span>
+                            <LabPill Text="@AnalystText.PaymentTypeText(b.SampleType)" Tone="@(b.SampleType == SamplePaymentType.Paid ? "blue" : "green")" />
+                        </div>
+                        <dl class="la-rcard-grid">
+                            <div><dt>Soil / Water</dt><dd>@b.SoilSamples / @b.WaterSamples</dd></div>
+                            <div><dt>Total Samples</dt><dd>@b.TotalSamples</dd></div>
+                            <div><dt>Reports Generated</dt><dd class="tr-generated">@b.ReportsGenerated</dd></div>
+                            <div><dt>Pending Reports</dt><dd class="tr-pending">@b.PendingReports</dd></div>
+                            <div><dt>State</dt><dd>@AnalystText.Dash(b.StateName)</dd></div>
+                            <div><dt>Region</dt><dd>@AnalystText.Dash(b.RegionName)</dd></div>
+                        </dl>
+                        <div class="la-rcard-foot">
+                            <span class="la-sub">FY @AnalystText.FinancialYear(b.FinancialYearStart)</span>
+                            <span class="tr-card-action">View reports <i class="bi bi-chevron-right" aria-hidden="true"></i></span>
+                        </div>
+                    </a>
+                }
+            </div>
+
+            <LabPager Page="_page.Page" PageSize="_page.PageSize" Total="_page.Total"
+                      PageChanged="p => GoAsync(p, null)" PageSizeChanged="s => GoAsync(1, s)" CssClass="tr-pager" />
+        }
+    </section>
+</LabEntryFrame>
+
+@code {
+    private bool _previous;
+
+    // applied filters
+    private int? _fyApplied;
+    private DateTime? _fromApplied, _toApplied;
+    private string? _typeApplied;
+    private int? _stateApplied, _regionApplied, _hqApplied;
+    private string? _q;
+    private int _pageNo = 1;
+    private int _pageSize = LabApi.DefaultPageSize;
+
+    // form
+    private string _fFy = "", _fType = "", _fState = "", _fRegion = "", _fHq = "";
+    private DateTime? _fFrom, _fTo;
+
+    private List<int> _years = new();
+    private List<LabApi.LookupItem> _states = new(), _regions = new(), _hqs = new();
+
+    private PageResult<LabReportBatchRowDto>? _page;
+    private int? _kpiBatches, _kpiSampleReports, _kpiToday, _kpiDownloads;
+    private bool _loading = true;
+    private string? _loadedPath;
+    private readonly CancellationTokenSource _cts = new();
+
+    private static int CurrentFy => AnalystText.CurrentFinancialYear;
+
+    private IEnumerable<int> YearOptions => _previous ? _years.Where(y => y < CurrentFy) : _years;
+
+    private int ActiveFilters =>
+        (_fyApplied is not null && !(!_previous && _fyApplied == CurrentFy) ? 1 : 0)
+        + (_fromApplied is not null ? 1 : 0) + (_toApplied is not null ? 1 : 0)
+        + (string.IsNullOrWhiteSpace(_typeApplied) ? 0 : 1)
+        + (_stateApplied is not null ? 1 : 0) + (_regionApplied is not null ? 1 : 0) + (_hqApplied is not null ? 1 : 0);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
+        if (path == _loadedPath) return;
+        _loadedPath = path;
+        _previous = path.EndsWith("/Previous", StringComparison.OrdinalIgnoreCase);
+
+        if (_years.Count == 0)
+        {
+            var years = Api.GetFinancialYearsAsync(_cts.Token);
+            var states = Api.GetStatesAsync(_cts.Token);
+            _years = await years ?? new List<int>();
+            if (!_years.Contains(CurrentFy)) _years.Insert(0, CurrentFy);
+            _states = await states ?? new List<LabApi.LookupItem>();
+        }
+
+        ResetFilters();
+        await LoadAsync();
+    }
+
+    private void ResetFilters()
+    {
+        _fyApplied = _previous ? null : CurrentFy;
+        _fromApplied = _toApplied = null;
+        _typeApplied = null;
+        _stateApplied = _regionApplied = _hqApplied = null;
+        _q = null;
+        _pageNo = 1;
+        _regions = new();
+        _hqs = new();
+        SyncForm();
+    }
+
+    private void SyncForm()
+    {
+        _fFy = _fyApplied?.ToString() ?? "";
+        _fFrom = _fromApplied;
+        _fTo = _toApplied;
+        _fType = _typeApplied ?? "";
+        _fState = _stateApplied?.ToString() ?? "";
+        _fRegion = _regionApplied?.ToString() ?? "";
+        _fHq = _hqApplied?.ToString() ?? "";
+    }
+
+    /// <summary>Previous mode without a year: nothing after the current FY started.</summary>
+    private DateTime? EffectiveTo()
+    {
+        if (!_previous || _fyApplied is not null) return _toApplied;
+        var cap = new DateTime(CurrentFy, 3, 31);
+        return _toApplied is { } to && to < cap ? to : cap;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var to = EffectiveTo();
+        _page = await Api.GetReportBatchesAsync(_stateApplied, _regionApplied, _hqApplied, _typeApplied, _fyApplied,
+            _q, _fromApplied, to, _pageNo, _pageSize, _cts.Token);
+        _loading = false;
+
+        if (_page is null)
+        {
+            _kpiBatches = _kpiSampleReports = _kpiToday = _kpiDownloads = null;
+            return;
+        }
+
+        // KPIs (skipped when the list itself failed, so a missing route toasts once)
+        var kpiRows = _page.Total <= _page.Items.Count
+            ? Task.FromResult<PageResult<LabReportBatchRowDto>?>(_page)
+            : Api.GetReportBatchesAsync(_stateApplied, _regionApplied, _hqApplied, _typeApplied, _fyApplied,
+                _q, _fromApplied, to, 1, 50, _cts.Token);
+        var stats = Api.GetReportStatsAsync(_fyApplied, _cts.Token);
+        var today = Api.GetReportsAsync(sampleType: _typeApplied, financialYear: _fyApplied, from: DateTime.Today, to: DateTime.Today,
+            pageSize: 1, ct: _cts.Token);
+
+        var rows = await kpiRows;
+        var s = await stats;
+        var t = await today;
+
+        _kpiBatches = _page.Total;
+        _kpiDownloads = rows?.Items.Sum(r => r.DownloadsCompleted);
+        _kpiSampleReports = s is null ? null
+            : _fyApplied is not null ? s.TotalReports
+            : _previous ? s.PreviousFinancialYears
+            : s.TotalReports;
+        _kpiToday = _previous && _fyApplied is null ? 0 : t?.Total;
+    }
+
+    private async Task ApplyAsync()
+    {
+        _fyApplied = int.TryParse(_fFy, out var fy) ? fy : null;
+        _fromApplied = _fFrom;
+        _toApplied = _fTo;
+        _typeApplied = string.IsNullOrWhiteSpace(_fType) ? null : _fType;
+        _stateApplied = int.TryParse(_fState, out var st) ? st : null;
+        _regionApplied = int.TryParse(_fRegion, out var rg) ? rg : null;
+        _hqApplied = int.TryParse(_fHq, out var hq) ? hq : null;
+        _pageNo = 1;
+        await LoadAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        ResetFilters();
+        await LoadAsync();
+    }
+
+    private async Task SearchAsync(string? q)
+    {
+        _q = string.IsNullOrWhiteSpace(q) ? null : q.Trim();
+        _pageNo = 1;
+        await LoadAsync();
+    }
+
+    private async Task GoAsync(int page, int? size)
+    {
+        _pageNo = page;
+        if (size is > 0) _pageSize = size.Value;
+        await LoadAsync();
+    }
+
+    private async Task StateChangedAsync(string? value)
+    {
+        _fState = value ?? "";
+        _fRegion = _fHq = "";
+        _hqs = new();
+        _regions = int.TryParse(_fState, out var id)
+            ? await Api.GetRegionsAsync(id, _cts.Token) ?? new List<LabApi.LookupItem>()
+            : new List<LabApi.LookupItem>();
+    }
+
+    private async Task RegionChangedAsync(string? value)
+    {
+        _fRegion = value ?? "";
+        _fHq = "";
+        _hqs = int.TryParse(_fRegion, out var id)
+            ? await Api.GetHeadquartersAsync(id, _cts.Token) ?? new List<LabApi.LookupItem>()
+            : new List<LabApi.LookupItem>();
+    }
+
+    private void Open(int batchId) => Nav.NavigateTo(Href(batchId));
+
+    private static string Href(int batchId) => $"/Lab/TestEntry/Reports/{batchId}";
+
+    private static string Kpi(int? v) => v?.ToString() ?? "-";
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

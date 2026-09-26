@@ -1,0 +1,187 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
+@inject LabApi Api
+@implements IDisposable
+
+@*
+    One sample report (GET api/Lab/reports/{id}) in a sheet: right-side drawer on desktop, full
+    height sheet on phones. Opened by Batch Report Details through ?report={id}. Body follows the
+    reference PDF: farmer / sample block, Parameters / Result / Response / Optimum Range table,
+    overall status, recommendations and the crop / irrigation note. Footer: Mark printed and the
+    Download PDF split button (language).
+*@
+<BottomSheet IsOpen="ReportId is not null" IsOpenChanged="OnOpenChanged" Size="BottomSheet.SheetSize.Full"
+             Title="@(_detail?.Summary.Code ?? "Sample Report")"
+             Subtitle="@(_detail is null ? null : $"{_detail.Summary.SampleCode} {MiddleDot} {_detail.Summary.FarmerName}")"
+             CssClass="rv-sheet">
+    <ChildContent>
+        @if (_loading)
+        {
+            <Skeleton Variant="card" Rows="2" />
+        }
+        else if (_detail is null)
+        {
+            <EmptyState Icon="bi-file-earmark-x" Title="Report not available" Message="This sample report could not be loaded." Compact="true" />
+        }
+        else
+        {
+            var s = _detail.Summary;
+            var sample = _detail.Sample;
+            <div class="rv">
+                <div class="rv-head">
+                    <LabPill Text="@AnalystText.ReportStatusText(s.Status)" Tone="@AnalystText.ReportTone(s.Status)" />
+                    <span class="rv-generated">Generated @AnalystText.DateTimeText(s.GeneratedAt)</span>
+                </div>
+
+                <dl class="rv-grid">
+                    <div><dt>Farmer Name</dt><dd>@s.FarmerName</dd></div>
+                    <div><dt>Mobile Number</dt><dd>@AnalystText.Dash(sample.FarmerMobile)</dd></div>
+                    <div><dt>Village</dt><dd>@AnalystText.Dash(s.Village)</dd></div>
+                    <div><dt>Crop</dt><dd>@AnalystText.Dash(s.Crop)</dd></div>
+                    <div><dt>Sample Number</dt><dd>@s.SampleCode</dd></div>
+                    <div><dt>Sample Type</dt><dd>@AnalystText.SampleTypeText(s.SampleType)</dd></div>
+                    <div><dt>Batch Number</dt><dd>@s.BatchCode</dd></div>
+                    <div><dt>Downloads</dt><dd>@s.DownloadCount</dd></div>
+                </dl>
+
+                <h3 class="rv-title">@(s.SampleType == SampleType.Water ? "Irrigation Water Analysis" : "Soil Sample Analysis")</h3>
+                @if (sample.Parameters.Count == 0)
+                {
+                    <p class="rv-empty">No parameter results on this report.</p>
+                }
+                else
+                {
+                    <div class="rv-table-wrap">
+                        <table class="rv-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Parameters</th>
+                                    <th scope="col">Result</th>
+                                    <th scope="col">Response</th>
+                                    <th scope="col">Optimum Range</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var p in sample.Parameters)
+                                {
+                                    <tr>
+                                        <th scope="row">@p.Name@(string.IsNullOrWhiteSpace(p.Unit) || p.Unit == "-" ? "" : $" ({p.Unit})")</th>
+                                        <td class="rv-value">@AnalystText.Dash(p.EnteredValue)</td>
+                                        <td class="rv-resp rv-resp--@(p.Status?.ToString().ToLowerInvariant() ?? "none")">@AnalystText.Dash(p.ResultLabel)</td>
+                                        <td>@AnalystText.Dash(p.NormalRange)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(sample.OverallStatusText))
+                {
+                    <div class="rv-overall">
+                        <span>@AnalystText.OverallLabel(s.SampleType)</span>
+                        <LabPill Text="@sample.OverallStatusText" Tone="@AnalystText.OverallTone(sample.OverallStatus)" />
+                    </div>
+                }
+
+                @if (sample.Recommendations.Count > 0)
+                {
+                    <h3 class="rv-title">Recommendations</h3>
+                    @foreach (var g in sample.Recommendations)
+                    {
+                        <div class="rv-reco">
+                            <span class="rv-reco-title">@AnalystText.RecommendationTitle(g.Group)</span>
+                            <ul>
+                                @foreach (var line in g.Lines)
+                                {
+                                    <li>@line</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                }
+
+                @if (!string.IsNullOrWhiteSpace(sample.CropSuitabilityNote))
+                {
+                    <p class="rv-note"><strong>Note:</strong> @sample.CropSuitabilityNote</p>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        @if (_detail is not null)
+        {
+            <div class="rv-foot">
+                <button type="button" class="rv-btn" disabled="@(_printing || _detail.Summary.Status == LabReportStatus.Printed)" @onclick="MarkPrintedAsync">
+                    <i class="bi bi-printer" aria-hidden="true"></i> @(_detail.Summary.Status == LabReportStatus.Printed ? "Printed" : "Mark printed")
+                </button>
+                <LabSplitButton Label="Download PDF" Languages="LanguagesFor" Busy="DownloadingId == _detail.Summary.Id"
+                                OnPick="lang => OnDownload.InvokeAsync((_detail.Summary.Id, _detail.Summary.Code, lang))" />
+            </div>
+        }
+    </Footer>
+</BottomSheet>
+
+@code {
+    [Parameter] public int? ReportId { get; set; }
+    [Parameter] public List<LabLanguageDto>? Languages { get; set; }
+    [Parameter] public int? DownloadingId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<(int ReportId, string Code, string Lang)> OnDownload { get; set; }
+    [Parameter] public EventCallback<LabReportRowDto> OnPrinted { get; set; }
+
+    private const char MiddleDot = (char)0xB7;
+
+    private LabReportDetailDto? _detail;
+    private int? _loadedId;
+    private bool _loading;
+    private bool _printing;
+    private readonly CancellationTokenSource _cts = new();
+
+    /// <summary>The report's own language list when it sends one, else the configured languages.</summary>
+    private List<LabLanguageDto>? LanguagesFor
+    {
+        get
+        {
+            if (_detail?.Languages is not { Count: > 0 } codes || Languages is null) return Languages;
+            var offered = Languages.Where(l => codes.Contains(l.Code, StringComparer.OrdinalIgnoreCase)).ToList();
+            return offered.Count > 0 ? offered : Languages;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReportId == _loadedId) return;
+        _loadedId = ReportId;
+        _detail = null;
+        if (ReportId is not int id) return;
+
+        _loading = true;
+        _detail = await Api.GetReportAsync(id, _cts.Token);
+        _loading = false;
+    }
+
+    private Task OnOpenChanged(bool open) => open ? Task.CompletedTask : OnClose.InvokeAsync();
+
+    private async Task MarkPrintedAsync()
+    {
+        if (_detail is null || _printing) return;
+        _printing = true;
+        try
+        {
+            var updated = await Api.MarkReportPrintedAsync(_detail.Summary.Id, _cts.Token);
+            if (updated is null) return;
+            _detail.Summary = updated;
+            await OnPrinted.InvokeAsync(updated);
+        }
+        finally
+        {
+            _printing = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

@@ -1,0 +1,392 @@
+@page "/Lab/TestEntry/Reports/{BatchId:int}"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
+@inject LabApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject FileDownloadService Downloads
+@implements IDisposable
+
+@*
+    Batch Report Details (screen 19). GET api/Lab/batches/{id}/report: batch information, KPIs
+    and every sample report of the batch; the Filters card (Sample Type, Status, Crops, Villages)
+    and the pager work on that list. Download All Reports = GET .../report/download?lang=, one
+    sample's PDF = GET api/Lab/reports/{id}/pdf?lang= (both fetched with the bearer token through
+    FileDownloadService, so they also work in the phone app). View opens the sample report in a
+    sheet (?report={id}, GET api/Lab/reports/{id}); Mark printed = POST .../printed.
+    The routes belong to the reports workstream (1b); until they answer, an EmptyState shows.
+*@
+
+<LabEntryFrame CssClass="br">
+    <PageHeader Title="@Title" BackHref="@BackHref"
+                Subtitle="View all sample-wise reports generated inside this selected batch.">
+        <Actions>
+            @if (_report is not null)
+            {
+                <div class="br-dl">
+                    <LabSplitButton Label="Download All Reports" Icon="bi-download" Languages="_languages" Busy="_downloadingAll"
+                                    OnPick="DownloadAllAsync" CssClass="br-download-all" />
+                </div>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_loading && _report is null)
+    {
+        <Skeleton Variant="card" Rows="3" />
+    }
+    else if (_report is null)
+    {
+        <EmptyState Icon="bi-file-earmark-x" Title="This batch report is not available"
+                    Message="The report is generated when the batch is completed. It may not exist yet, or the lab report service did not answer.">
+            <a class="la-btn la-btn-outline" href="@BackHref">Back to Test Reports</a>
+            <a class="la-btn la-btn-outline" href="@($"/Lab/TestEntry/{BatchId}")">Open the batch</a>
+            <button type="button" class="la-btn la-btn-primary" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else
+    {
+        var summary = _report.Summary;
+
+        <div class="la-kpis br-kpis" style="--la-kpi-cols:5">
+            <LabKpiCard IconAbove="true" Label="Total Samples" Value="@summary.TotalSamples.ToString()" Icon="bi-collection" Tone="violet" />
+            <LabKpiCard IconAbove="true" Label="Soil Samples" Value="@summary.SoilSamples.ToString()" Icon="bi-globe-asia-australia" Tone="orange" />
+            <LabKpiCard IconAbove="true" Label="Water Samples" Value="@summary.WaterSamples.ToString()" Icon="bi-droplet" Tone="blue" />
+            <LabKpiCard IconAbove="true" Label="Reports Generated" Value="@summary.ReportsGenerated.ToString()" Icon="bi-file-earmark-check" Tone="green" />
+            <LabKpiCard IconAbove="true" Label="Downloads Completed" Value="@summary.DownloadsCompleted.ToString()" Icon="bi-download" Tone="pink" />
+        </div>
+
+        <section class="la-card" aria-labelledby="br-info-title">
+            <div class="la-card-head">
+                <h2 class="la-card-title" id="br-info-title"><i class="bi bi-info-square" aria-hidden="true"></i> Batch Information</h2>
+                @if (!string.IsNullOrWhiteSpace(summary.ReportCode))
+                {
+                    <span class="br-report-code">@summary.ReportCode</span>
+                }
+            </div>
+            <div class="la-tiles br-tiles">
+                <div class="la-tile"><span class="la-tile-label">Batch No.</span><span class="la-tile-value">@summary.BatchCode</span></div>
+                <div class="la-tile"><span class="la-tile-label">Consignment No.</span><span class="la-tile-value" title="@string.Join(", ", summary.ConsignmentCodes)">@AnalystText.Dash(summary.ConsignmentCode)</span></div>
+                <div class="la-tile"><span class="la-tile-label">State</span><span class="la-tile-value">@AnalystText.Dash(summary.StateName)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Region</span><span class="la-tile-value">@AnalystText.Dash(summary.RegionName)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Head Quarters</span><span class="la-tile-value">@AnalystText.Dash(summary.HeadquarterName)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Date of Dispatch</span><span class="la-tile-value">@AnalystText.Date(_report.ShipmentDate)</span></div>
+                <div class="la-tile"><span class="la-tile-label">Financial Year</span><span class="la-tile-value">@AnalystText.FinancialYear(summary.FinancialYearStart)</span></div>
+            </div>
+        </section>
+
+        <p class="la-banner">
+            <i class="bi bi-info-circle" aria-hidden="true"></i>
+            <span>Each sample in this batch has its own individual report. Use View to open a sample report, or Download PDF to save it in the language you need.</span>
+        </p>
+
+        <LabFilterCard ActiveCount="ActiveFilters" Columns="4" OnClear="ClearFilters" OnApply="ApplyFilters">
+            <div class="la-field">
+                <label class="la-label" for="br-type">Sample Type</label>
+                <select id="br-type" class="la-input" @bind="_fType">
+                    <option value="">All Types</option>
+                    <option value="@((int)SampleType.Soil)">Soil</option>
+                    <option value="@((int)SampleType.Water)">Water</option>
+                    <option value="@((int)SampleType.SoilAndWater)">Soil &amp; Water</option>
+                </select>
+            </div>
+            <div class="la-field">
+                <label class="la-label" for="br-status">Status</label>
+                <select id="br-status" class="la-input" @bind="_fStatus">
+                    <option value="">All Status</option>
+                    @foreach (var s in Enum.GetValues<LabReportStatus>())
+                    {
+                        <option value="@((int)s)">@AnalystText.ReportStatusText(s)</option>
+                    }
+                </select>
+            </div>
+            <div class="la-field">
+                <label class="la-label" for="br-crop">Crops</label>
+                <select id="br-crop" class="la-input" @bind="_fCrop">
+                    <option value="">All Crops</option>
+                    @foreach (var c in Crops)
+                    {
+                        <option value="@c">@c</option>
+                    }
+                </select>
+            </div>
+            <div class="la-field">
+                <label class="la-label" for="br-village">Villages</label>
+                <select id="br-village" class="la-input" @bind="_fVillage">
+                    <option value="">All Villages</option>
+                    @foreach (var v in Villages)
+                    {
+                        <option value="@v">@v</option>
+                    }
+                </select>
+            </div>
+        </LabFilterCard>
+
+        <section class="la-card" aria-labelledby="br-list-title">
+            <div class="la-card-head">
+                <h2 class="la-card-title" id="br-list-title">Sample-wise Reports</h2>
+                <span class="la-card-sub">@Filtered.Count of @_report.SampleReports.Count reports</span>
+            </div>
+
+            @if (Filtered.Count == 0)
+            {
+                <EmptyState Icon="bi-file-earmark-text" Title="No sample reports"
+                            Message="@(_report.SampleReports.Count == 0 ? "No sample report has been generated for this batch yet." : "No sample report matches these filters.")">
+                    @if (ActiveFilters > 0)
+                    {
+                        <button type="button" class="la-btn la-btn-outline" @onclick="ClearFilters">Clear filters</button>
+                    }
+                </EmptyState>
+            }
+            else
+            {
+                <div class="la-table-wrap tablet-up">
+                    <table class="la-table br-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Sample No.</th>
+                                <th scope="col">Farmer Name</th>
+                                <th scope="col">Crop</th>
+                                <th scope="col">Village</th>
+                                <th scope="col">Sample Type</th>
+                                <th scope="col">Reports No.</th>
+                                <th scope="col">Generated Date</th>
+                                <th scope="col">Report Status</th>
+                                <th scope="col" class="la-th-action">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in PageRows)
+                            {
+                                <tr @key="r.Id">
+                                    <td class="la-code">@r.SampleCode</td>
+                                    <td>
+                                        <span class="la-person">
+                                            <MemberAvatar Member="AnalystText.Person(r.FarmerName, r.FarmerAvatarUrl)" Size="30" />
+                                            <span>@r.FarmerName</span>
+                                        </span>
+                                    </td>
+                                    <td>@AnalystText.Dash(r.Crop)</td>
+                                    <td>@AnalystText.Dash(r.Village)</td>
+                                    <td>@AnalystText.SampleTypeText(r.SampleType)</td>
+                                    <td>@r.Code</td>
+                                    <td>@AnalystText.Date(r.GeneratedAt)<span class="la-sub">@AnalystText.Time(r.GeneratedAt)</span></td>
+                                    <td><LabPill Text="@AnalystText.ReportStatusText(r.Status)" Tone="@AnalystText.ReportTone(r.Status)" /></td>
+                                    <td class="la-td-action">
+                                        <div class="br-actions">
+                                            <button type="button" class="la-btn la-btn-outline la-btn-sm" @onclick="() => View(r.Id)" aria-label="@($"View report {r.Code}")">
+                                                <i class="bi bi-eye" aria-hidden="true"></i> View
+                                            </button>
+                                            <LabSplitButton Label="Download PDF" Small="true" Languages="_languages" Busy="_downloading == r.Id"
+                                                            OnPick="lang => DownloadAsync(r, lang)" />
+                                            <button type="button" class="la-icon-btn" title="Mark printed" aria-label="@($"Mark {r.Code} printed")"
+                                                    disabled="@(r.Status == LabReportStatus.Printed || _printing == r.Id)" @onclick="() => MarkPrintedAsync(r)">
+                                                <i class="bi bi-printer" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="la-rcards phone-only">
+                    @foreach (var r in PageRows)
+                    {
+                        <div class="la-rcard" @key="r.Id">
+                            <div class="la-rcard-top">
+                                <span class="la-code">@r.SampleCode</span>
+                                <LabPill Text="@AnalystText.ReportStatusText(r.Status)" Tone="@AnalystText.ReportTone(r.Status)" />
+                            </div>
+                            <span class="la-person br-card-person">
+                                <MemberAvatar Member="AnalystText.Person(r.FarmerName, r.FarmerAvatarUrl)" Size="30" />
+                                <span>@r.FarmerName</span>
+                            </span>
+                            <dl class="la-rcard-grid">
+                                <div><dt>Reports No.</dt><dd>@r.Code</dd></div>
+                                <div><dt>Generated</dt><dd>@AnalystText.Date(r.GeneratedAt)</dd></div>
+                                <div><dt>Crop</dt><dd>@AnalystText.Dash(r.Crop)</dd></div>
+                                <div><dt>Village</dt><dd>@AnalystText.Dash(r.Village)</dd></div>
+                                <div><dt>Sample Type</dt><dd>@AnalystText.SampleTypeText(r.SampleType)</dd></div>
+                            </dl>
+                            <div class="la-rcard-foot br-card-foot">
+                                <button type="button" class="la-btn la-btn-outline" @onclick="() => View(r.Id)" aria-label="@($"View report {r.Code}")">
+                                    <i class="bi bi-eye" aria-hidden="true"></i> View
+                                </button>
+                                <button type="button" class="la-icon-btn" title="Mark printed" aria-label="@($"Mark {r.Code} printed")"
+                                        disabled="@(r.Status == LabReportStatus.Printed || _printing == r.Id)" @onclick="() => MarkPrintedAsync(r)">
+                                    <i class="bi bi-printer" aria-hidden="true"></i>
+                                </button>
+                                <LabSplitButton Label="Download PDF" Languages="_languages" Busy="_downloading == r.Id"
+                                                OnPick="lang => DownloadAsync(r, lang)" CssClass="br-card-download" />
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <LabPager Page="_pageNo" PageSize="_pageSize" Total="Filtered.Count"
+                          PageChanged="p => _pageNo = p" PageSizeChanged="s => { _pageSize = s; _pageNo = 1; }" CssClass="br-pager" />
+            }
+        </section>
+    }
+
+    <ReportViewSheet ReportId="ReportParam" Languages="_languages" DownloadingId="_downloading"
+                     OnClose="CloseReport" OnDownload="DownloadFromSheetAsync" OnPrinted="OnPrintedFromSheet" />
+</LabEntryFrame>
+
+@code {
+    [Parameter] public int BatchId { get; set; }
+    [SupplyParameterFromQuery(Name = "report")] public int? ReportParam { get; set; }
+
+    private LabBatchReportDto? _report;
+    private List<LabLanguageDto> _languages = new();
+    private bool _loading = true;
+    private bool _downloadingAll;
+    private int? _downloading;
+    private int? _printing;
+    private int? _loadedBatch;
+
+    // filters (applied / form)
+    private string _fType = "", _fStatus = "", _fCrop = "", _fVillage = "";
+    private string _aType = "", _aStatus = "", _aCrop = "", _aVillage = "";
+    private int _pageNo = 1;
+    private int _pageSize = LabApi.DefaultPageSize;
+
+    private readonly CancellationTokenSource _cts = new();
+
+    private string Title => _report is null ? "Batch Report Details" : $"Batch Report Details {AnalystText.EnDash} {_report.Summary.BatchCode}";
+
+    private static string BackHref => "/Lab/TestEntry/Reports";
+
+    private IEnumerable<string> Crops => (_report?.SampleReports ?? new()).Select(r => r.Crop).Where(c => !string.IsNullOrWhiteSpace(c))
+        .Select(c => c!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(c => c);
+
+    private IEnumerable<string> Villages => (_report?.SampleReports ?? new()).Select(r => r.Village).Where(v => !string.IsNullOrWhiteSpace(v))
+        .Select(v => v!).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v);
+
+    private int ActiveFilters => new[] { _aType, _aStatus, _aCrop, _aVillage }.Count(v => v.Length > 0);
+
+    private List<LabReportRowDto> Filtered => (_report?.SampleReports ?? new())
+        .Where(r => _aType.Length == 0 || ((int)r.SampleType).ToString() == _aType)
+        .Where(r => _aStatus.Length == 0 || ((int)r.Status).ToString() == _aStatus)
+        .Where(r => _aCrop.Length == 0 || string.Equals(r.Crop, _aCrop, StringComparison.OrdinalIgnoreCase))
+        .Where(r => _aVillage.Length == 0 || string.Equals(r.Village, _aVillage, StringComparison.OrdinalIgnoreCase))
+        .ToList();
+
+    private IEnumerable<LabReportRowDto> PageRows => Filtered.Skip((Math.Max(1, _pageNo) - 1) * _pageSize).Take(_pageSize);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedBatch == BatchId) return;
+        _loadedBatch = BatchId;
+        if (_languages.Count == 0) _languages = await Api.GetLanguagesAsync(_cts.Token) ?? new List<LabLanguageDto>();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+        _report = await Api.GetBatchReportAsync(BatchId, _cts.Token) ?? _report;
+        _loading = false;
+    }
+
+    private void ApplyFilters()
+    {
+        (_aType, _aStatus, _aCrop, _aVillage) = (_fType, _fStatus, _fCrop, _fVillage);
+        _pageNo = 1;
+    }
+
+    private void ClearFilters()
+    {
+        _fType = _fStatus = _fCrop = _fVillage = "";
+        ApplyFilters();
+    }
+
+    // ---------------------------------------------------------------- report sheet
+
+    private void View(int reportId) =>
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("report", reportId));
+
+    private void CloseReport() =>
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("report", (int?)null), replace: true);
+
+    private Task DownloadFromSheetAsync((int ReportId, string Code, string Lang) pick)
+    {
+        var row = _report?.SampleReports.FirstOrDefault(r => r.Id == pick.ReportId)
+                  ?? new LabReportRowDto { Id = pick.ReportId, Code = pick.Code };
+        return DownloadAsync(row, pick.Lang);
+    }
+
+    private void OnPrintedFromSheet(LabReportRowDto updated) => ReplaceRow(updated);
+
+    // ---------------------------------------------------------------- downloads / printed
+
+    private async Task DownloadAllAsync(string lang)
+    {
+        if (_report is null || _downloadingAll) return;
+        _downloadingAll = true;
+        try
+        {
+            await Downloads.GetAsync(Api.BatchReportDownloadUrl(BatchId, lang), $"{_report.Summary.BatchCode}-reports-{lang}.pdf");
+            await LoadAsync();   // download counts / statuses
+        }
+        catch (Exception)
+        {
+            Toast.Error("Could not download the batch reports. Please try again.");
+        }
+        finally
+        {
+            _downloadingAll = false;
+        }
+    }
+
+    private async Task DownloadAsync(LabReportRowDto row, string lang)
+    {
+        if (_downloading is not null) return;
+        _downloading = row.Id;
+        try
+        {
+            await Downloads.GetAsync(Api.ReportPdfUrl(row.Id, lang), $"{row.Code}-{lang}.pdf");
+            await LoadAsync();
+        }
+        catch (Exception)
+        {
+            Toast.Error($"Could not download {row.Code}. Please try again.");
+        }
+        finally
+        {
+            _downloading = null;
+        }
+    }
+
+    private async Task MarkPrintedAsync(LabReportRowDto row)
+    {
+        if (_printing is not null) return;
+        _printing = row.Id;
+        try
+        {
+            var updated = await Api.MarkReportPrintedAsync(row.Id, _cts.Token);
+            if (updated is null) return;
+            ReplaceRow(updated);
+            Toast.Success($"{updated.Code} marked printed.");
+        }
+        finally
+        {
+            _printing = null;
+        }
+    }
+
+    private void ReplaceRow(LabReportRowDto updated)
+    {
+        if (_report is null) return;
+        var i = _report.SampleReports.FindIndex(r => r.Id == updated.Id);
+        if (i >= 0) _report.SampleReports[i] = updated;
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

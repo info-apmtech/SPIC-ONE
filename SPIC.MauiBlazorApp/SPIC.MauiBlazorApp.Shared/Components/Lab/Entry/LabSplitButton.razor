@@ -1,0 +1,70 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Entry
+@using SPIC.Core.DTOs
+
+@*
+    Split button with a language menu (Figma: "Download All Reports | v", "Download PDF | v").
+    The main part downloads in the first language (English); the chevron opens the list of
+    languages (GET api/Lab/languages). OnPick receives the language code.
+
+        <LabSplitButton Label="Download PDF" Languages="_languages" OnPick="code => DownloadAsync(row, code)" />
+*@
+<div class="lsb @(Small ? "lsb--sm" : "") @(Outline ? "lsb--outline" : "") @(_open ? "is-open" : "") @CssClass">
+    <button type="button" class="lsb-main" disabled="@(Busy || Languages is not { Count: > 0 })"
+            title="@($"{Label} ({DefaultName})")" @onclick="() => PickAsync(DefaultCode)">
+        @if (Busy)
+        {
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        }
+        else
+        {
+            <i class="bi @Icon" aria-hidden="true"></i>
+        }
+        <span class="lsb-label">@Label</span>
+    </button>
+    <button type="button" class="lsb-toggle" aria-haspopup="menu" aria-expanded="@(_open ? "true" : "false")"
+            aria-label="@($"{Label}: choose a language")" disabled="@(Busy || Languages is not { Count: > 0 })"
+            @onclick="() => _open = !_open">
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </button>
+
+    @if (_open)
+    {
+        <div class="lsb-backdrop" @onclick="() => _open = false"></div>
+        <div class="lsb-menu" role="menu">
+            @foreach (var lang in Languages!)
+            {
+                <button type="button" role="menuitem" class="lsb-item" @onclick="() => PickAsync(lang.Code)">
+                    <span>@lang.Name</span>
+                    @if (!string.Equals(lang.Name, lang.NativeName, StringComparison.Ordinal))
+                    {
+                        <span class="lsb-native">@lang.NativeName</span>
+                    }
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Download PDF";
+    [Parameter] public string Icon { get; set; } = "bi-download";
+    [Parameter] public List<LabLanguageDto>? Languages { get; set; }
+    [Parameter] public EventCallback<string> OnPick { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    /// <summary>Compact height for table rows.</summary>
+    [Parameter] public bool Small { get; set; }
+    /// <summary>Outlined (secondary) look instead of the filled green.</summary>
+    [Parameter] public bool Outline { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _open;
+
+    private string DefaultCode => Languages is { Count: > 0 } ? Languages[0].Code : "en";
+    private string DefaultName => Languages is { Count: > 0 } ? Languages[0].Name : "English";
+
+    private async Task PickAsync(string code)
+    {
+        _open = false;
+        await OnPick.InvokeAsync(code);
+    }
+}
