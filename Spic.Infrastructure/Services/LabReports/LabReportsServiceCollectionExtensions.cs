@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Spic.Infrastructure.Services.Lab;
 using Microsoft.Extensions.Logging;
 using SPIC.Core.Interfaces;
 
@@ -15,6 +17,8 @@ public static class LabReportsServiceCollectionExtensions
     {
         services.AddScoped<ILabReportService, LabReportService>();
         services.AddScoped<LabReportReader>();
+        // The reader evaluates with the lab's one result engine (also registered by AddSasLab()).
+        services.TryAddSingleton<LabAutoResultEngine>();
         services.AddScoped<LabReportFiles>();
         services.AddSingleton<LabTranslations>();
         services.AddSingleton<LabFonts>();

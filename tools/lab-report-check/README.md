@@ -9,7 +9,13 @@ report (which counts downloads) and marks one report Printed.
 
 1. Generates the reports of the batch by calling the generation route twice (default
    `PATCH api/Lab/batches/{id}/status?status=Completed`, the LabController route that calls
-   `ILabReportService.GenerateForBatchAsync`) and asserts the second call creates nothing.
+   `ILabReportService.GenerateForBatchAsync`) and asserts the second call creates nothing and
+   answers 409 "Batch is already completed and its reports exist".
+   Also: `reports/stats.BatchGroups` = batches with at least one report; the report list's and the
+   detail's `SampleId` (the PDF's Lab Number) equal `batches/{id}/samples`; no recommendation line
+   repeats its parameter ("Sodium is high ... because sodium is ..."); PDF file names carry the
+   requested language, or `-en` together with `X-Report-Language-Fallback`; the CORS response
+   exposes that header.
 2. One report per sample, two for Soil & Water samples; no pending reports in the batch summary.
 3. Codes `RPT-SAS-yyyy-nnn` (unique), batch code `REP-SAS-yyyy-nnn`, `FinancialYearStart`
    = April-March year of `GeneratedAt`.

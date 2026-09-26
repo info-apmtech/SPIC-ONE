@@ -768,7 +768,17 @@ namespace SpicAPI.Controllers
 				return NotFound(new { Success = false, Message = "Batch not found." });
 
 			if (batch.Status == SampleBatchStatus.Completed)
-				return Conflict(new { Success = false, Message = $"{batch.Code} is already completed." });
+			{
+				// Completing again is idempotent: a completed batch whose reports were never generated
+				// (generation failed after the status was saved) gets them now.
+				if (target != SampleBatchStatus.Completed)
+					return Conflict(new { Success = false, Message = $"{batch.Code} is already completed." });
+				if (await _db.LabReports.AnyAsync(r => r.BatchId == id))
+					return Conflict(new { Success = false, Message = "Batch is already completed and its reports exist" });
+
+				await GenerateReportsAsync(id);
+				return Ok(await BuildBatchDetailAsync(id));
+			}
 
 			var now = DateTime.Now;
 
@@ -814,6 +824,14 @@ namespace SpicAPI.Controllers
 				await tx.CommitAsync();
 			}
 
+			await GenerateReportsAsync(id);
+			return Ok(await BuildBatchDetailAsync(id));
+		}
+
+		/// <summary>Generates the reports of a completed batch through the report service (which
+		/// writes the Report Generated activity), then logs that step here only if the service did not.</summary>
+		private async Task GenerateReportsAsync(int id)
+		{
 			try
 			{
 				await _reports.GenerateForBatchAsync(id, _access.UserId, _access.Name, HttpContext.RequestAborted);
@@ -833,8 +851,6 @@ namespace SpicAPI.Controllers
 				_activities.ReportGenerated(reloaded, reloaded.ReportCode, sampleReports, reloaded.ReportGeneratedAt ?? DateTime.Now);
 				await _db.SaveChangesAsync();
 			}
-
-			return Ok(await BuildBatchDetailAsync(id));
 		}
 
 		// ================================================================ samples and parameters
@@ -1454,12 +1470,11 @@ namespace SpicAPI.Controllers
 				.OrderBy(r => r.SortOrder).ThenBy(r => r.Id)
 				.ToListAsync();
 
-			var counters = new Dictionary<SampleType, int>();
+			var displayIds = LabSampleIds.Number(items.Select(i => (i.Id, i.SampleType, (string?)i.CollectionCode)));
 			var list = new List<SampleContext>();
 
 			foreach (var i in items)
 			{
-				counters[i.SampleType] = counters.TryGetValue(i.SampleType, out var n) ? n + 1 : 1;
 				var applicable = _engine.ParametersFor(i.SampleType, parameters);
 				var own = results.Where(r => r.SampleItemId == i.Id).ToList();
 				var enteredIds = EnteredParameterIds(applicable, own);
@@ -1475,7 +1490,7 @@ namespace SpicAPI.Controllers
 					{
 						SampleItemId = i.Id,
 						CollectionId = i.CollectionId,
-						SampleId = $"SAS-{TypeToken(i.SampleType)}-{counters[i.SampleType]:000}",
+						SampleId = displayIds[i.Id],
 						SampleCode = i.Code,
 						SampleType = i.SampleType,
 						PaymentType = i.PaymentType,
@@ -2005,16 +2020,8 @@ namespace SpicAPI.Controllers
 				.Select(i => i.Collection!.Consignment!.BatchId)
 				.FirstOrDefaultAsync();
 
-		private async Task<string> DisplayIdAsync(int batchId, SampleItem item)
-		{
-			var sameType = await ItemsOfBatches(new List<int> { batchId })
-				.Where(i => i.SampleType == item.SampleType)
-				.Select(i => new { i.Id, i.Collection!.Code })
-				.ToListAsync();
-
-			var index = sameType.OrderBy(i => i.Code, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Id).ToList().FindIndex(i => i.Id == item.Id) + 1;
-			return $"SAS-{TypeToken(item.SampleType)}-{Math.Max(index, 1):000}";
-		}
+		private Task<string> DisplayIdAsync(int batchId, SampleItem item) =>
+			LabSampleIds.ForItemAsync(_db, batchId, item.Id, item.SampleType);
 
 		private List<LabParameter>? _parameters;
 
@@ -2056,13 +2063,6 @@ namespace SpicAPI.Controllers
 			if (status == ConsignmentStatus.Delivered) return LabConsignmentStatus.BatchPending;
 			return LabConsignmentStatus.InTransit;
 		}
-
-		private static string TypeToken(SampleType type) => type switch
-		{
-			SampleType.Soil => "SOIL",
-			SampleType.Water => "WATER",
-			_ => "SW"
-		};
 
 		private static string SampleStatusText(SampleAnalysisStatus status) => status switch
 		{

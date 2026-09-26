@@ -1,22 +1,19 @@
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
+using Spic.Infrastructure.Services.Lab;
 
 namespace Spic.Infrastructure.Services.LabReports;
 
 /// <summary>
-/// Pure rules shared by report generation, the report DTOs and the PDF / Excel layouts
-/// (docs/sas-lab-portal-plan.md, "Reports model" and the auto-result paragraph):
-///   * Financial year = April to March, identified by its start year (2026 = FY 2026-27).
-///   * Overall status: Good when no parameter is Deficient / Excess, Needs Improvement when
-///     one or two are, Poor when three or more are.
-///   * Recommendations: the hint of every out-of-range row (Deficient / Moderate / Excess),
-///     grouped by LabParameter.RecommendationGroup (Fertilizer, Organic, Micronutrient, General).
-///   * Crop suitability note: composed from the crop and the out-of-range parameters.
+/// Report helpers the lab's result engine does not cover (docs/sas-lab-portal-plan.md, "Reports
+/// model"): the financial year (April to March, identified by its start year: 2026 = FY 2026-27),
+/// the layouts a sample needs, the translation template of the crop note and value / range
+/// formatting for the layouts. Overall status, recommendations and the crop suitability note
+/// come from <see cref="LabAutoResultEngine"/> (LabReportReader), and the Lab Number from
+/// <see cref="LabSampleIds"/>, so the entry page, the stored results and the report agree.
 /// </summary>
 public static class LabReportRules
 {
-    public static readonly string[] GroupOrder = { "Fertilizer", "Organic", "Micronutrient", "General" };
-
     public static int FinancialYearStart(DateTime date) => date.Month >= 4 ? date.Year : date.Year - 1;
 
     /// <summary>[from, to) of a financial year.</summary>
@@ -24,10 +21,6 @@ public static class LabReportRules
         (new DateTime(startYear, 4, 1), new DateTime(startYear + 1, 4, 1));
 
     public static string FinancialYearLabel(int startYear) => $"{startYear}-{(startYear + 1) % 100:00}";
-
-    /// <summary>Display id of a sample inside the lab ("Lab Number"): SAS-SOIL-001 / SAS-WATER-001.</summary>
-    public static string SampleDisplayId(int sampleItemId, SampleType type) =>
-        $"SAS-{(type == SampleType.Water ? "WATER" : "SOIL")}-{sampleItemId:000}";
 
     /// <summary>The layouts a sample needs: SoilAndWater gets a Soil and a Water report.</summary>
     public static IEnumerable<SampleType> ReportTypesFor(SampleType type) => type switch
@@ -37,75 +30,21 @@ public static class LabReportRules
         _ => new[] { SampleType.Soil }
     };
 
-    public static bool IsOutOfRange(LabResultStatus? status) =>
-        status == LabResultStatus.Deficient || status == LabResultStatus.Excess;
-
-    public static bool NeedsAction(LabResultStatus? status) =>
-        status == LabResultStatus.Deficient || status == LabResultStatus.Excess || status == LabResultStatus.Moderate;
-
-    public static LabOverallStatus Overall(IEnumerable<LabReportRow> rows)
-    {
-        var count = rows.Count(r => !r.IsText && r.HasValue && IsOutOfRange(r.Status));
-        return count == 0 ? LabOverallStatus.Good : count <= 2 ? LabOverallStatus.NeedsImprovement : LabOverallStatus.Poor;
-    }
-
-    public static string OverallText(LabOverallStatus status) => status switch
-    {
-        LabOverallStatus.Good => "Good",
-        LabOverallStatus.NeedsImprovement => "Needs Improvement",
-        _ => "Poor"
-    };
-
-    public static List<LabRecommendationGroupDto> Group(IEnumerable<LabReportRow> rows)
-    {
-        var groups = new List<LabRecommendationGroupDto>();
-        foreach (var row in rows.Where(r => !r.IsText && r.HasValue && NeedsAction(r.Status) && !string.IsNullOrWhiteSpace(r.Hint)))
-        {
-            var name = NormalizeGroup(row.Group);
-            var group = groups.FirstOrDefault(g => g.Group == name);
-            if (group == null)
-            {
-                group = new LabRecommendationGroupDto { Group = name };
-                groups.Add(group);
-            }
-            var line = row.Hint!.Trim();
-            if (!group.Lines.Contains(line, StringComparer.OrdinalIgnoreCase)) group.Lines.Add(line);
-        }
-
-        return groups
-            .OrderBy(g => Array.IndexOf(GroupOrder, g.Group) is var i && i >= 0 ? i : GroupOrder.Length)
-            .ThenBy(g => g.Group)
-            .ToList();
-    }
-
-    public static string NormalizeGroup(string? group)
-    {
-        if (string.IsNullOrWhiteSpace(group)) return "General";
-        var match = GroupOrder.FirstOrDefault(g => string.Equals(g, group.Trim(), StringComparison.OrdinalIgnoreCase));
-        return match ?? group.Trim();
-    }
-
-    /// <summary>Kind of crop note, so the layouts can translate it: the caller formats it with the
-    /// crop name and the (translated) parameter list.</summary>
+    /// <summary>Translation template of the crop note (note.* keys): the translated layouts fill
+    /// {crop} and {params}; English prints the engine's sentence as it is. SoilPoor is kept for
+    /// its seed rows only (the engine has one "after correcting" sentence).</summary>
     public enum CropNoteKind { SoilGood, SoilCorrect, SoilPoor, WaterGood, WaterCaution }
 
-    public static (CropNoteKind Kind, List<LabReportRow> OutOfRange) CropNote(SampleType layout, IEnumerable<LabReportRow> rows)
+    /// <summary>The template kind of the engine's note for a layout, with the parameters it names.</summary>
+    public static (CropNoteKind Kind, List<LabSuitabilityProblem> Problems) CropNote(SampleType layout, LabSuitability? note)
     {
-        var bad = rows.Where(r => !r.IsText && r.HasValue && IsOutOfRange(r.Status)).ToList();
         if (layout == SampleType.Water)
-            return (bad.Count == 0 ? CropNoteKind.WaterGood : CropNoteKind.WaterCaution, bad);
-        return (bad.Count == 0 ? CropNoteKind.SoilGood : bad.Count <= 2 ? CropNoteKind.SoilCorrect : CropNoteKind.SoilPoor, bad);
-    }
-
-    /// <summary>English crop note (the DTOs are English; the layouts use the translated keys).</summary>
-    public static string CropNoteEnglish(SampleType layout, string? crop, IEnumerable<LabReportRow> rows)
-    {
-        var (kind, bad) = CropNote(layout, rows);
-        var list = string.Join(", ", bad.Select(b => b.Name));
-        var cropName = string.IsNullOrWhiteSpace(crop) ? "the proposed crop" : crop!;
-        return LabTranslationSeed.CropNoteTemplate(kind)
-            .Replace("{crop}", cropName)
-            .Replace("{params}", list);
+        {
+            var water = note?.Water ?? new List<LabSuitabilityProblem>();
+            return (water.Count == 0 ? CropNoteKind.WaterGood : CropNoteKind.WaterCaution, water);
+        }
+        var soil = note?.Soil ?? new List<LabSuitabilityProblem>();
+        return (soil.Count == 0 ? CropNoteKind.SoilGood : CropNoteKind.SoilCorrect, soil);
     }
 
     public static string FormatValue(string? value)
@@ -170,7 +109,7 @@ public sealed class LabReportModel
     public int SampleItemId { get; set; }
     public int CollectionId { get; set; }
     public string SampleNumber { get; set; } = "";     // v1 item code
-    public string LabNumber { get; set; } = "";        // SAS-SOIL-001
+    public string LabNumber { get; set; } = "";        // SAS-SOIL-001 (LabSampleIds, numbered per batch)
     public SampleType ItemType { get; set; }
     public SamplePaymentType PaymentType { get; set; }
     public SampleAnalysisStatus AnalysisStatus { get; set; }
@@ -192,6 +131,10 @@ public sealed class LabReportModel
     public LabOverallStatus OverallStatus { get; set; }
     public List<LabRecommendationGroupDto> Recommendations { get; set; } = new();
     public string CropSuitabilityNote { get; set; } = "";
+    /// <summary>The engine's recommendation lines in parts (for the translated layouts).</summary>
+    public List<LabRecommendationLine> RecommendationLines { get; set; } = new();
+    /// <summary>The engine's crop note in parts (for the translated layouts).</summary>
+    public LabSuitability? Suitability { get; set; }
 
     /// <summary>Fertilizer schedule columns (Crop1, Crop2 or Crop1 twice like the reference).</summary>
     public List<LabScheduleColumn> Schedule { get; set; } = new();

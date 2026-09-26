@@ -158,7 +158,7 @@
                         <div class="spd-row"><dt>Admin Status</dt><dd><LabPill Text="@PaymentLabels.AdminStatusName(s.AdminStatus)" Tone="@PaymentLabels.AdminStatusTone(s.AdminStatus)" /></dd></div>
                         <div class="spd-row"><dt>Verified By</dt><dd>@PaymentLabels.Dash(d.ReviewedByName)</dd></div>
                         <div class="spd-row"><dt>Verified Date &amp; Time</dt><dd>@PaymentLabels.DateTime(d.ReviewedAt)</dd></div>
-                        <div class="spd-row"><dt>Verified Amount</dt><dd>@(d.VerifiedAmount is { } va ? PaymentLabels.Money(va) : "-")</dd></div>
+                        <div class="spd-row"><dt>Admin Verified Amount</dt><dd>@(d.VerifiedAmount is { } va ? PaymentLabels.Money(va) : "-")</dd></div>
                         <div class="spd-row"><dt>Admin Remarks</dt><dd>@PaymentLabels.Dash(d.AdminRemarks)</dd></div>
                         <div class="spd-row"><dt>Forwarded to Finance</dt><dd>@PaymentLabels.DateTime(d.ForwardedAt)</dd></div>
                     }
@@ -166,6 +166,10 @@
                     {
                         <div class="spd-row"><dt>Current Status</dt><dd><LabPill Text="@AdminPill(d)" Tone="@PaymentLabels.AdminStatusTone(s.AdminStatus)" /></dd></div>
                         <div class="spd-row"><dt>Reviewed By</dt><dd>@PaymentLabels.Dash(d.ReviewedByName)@(d.ReviewedAt is { } ra ? $" · {PaymentLabels.DateTime(ra)}" : "")</dd></div>
+                        @if (d.VerifiedAmount is { } approved)
+                        {
+                            <div class="spd-row"><dt>Approved Amount</dt><dd>@PaymentLabels.Money(approved)</dd></div>
+                        }
                         <div class="spd-row"><dt>Verification Note</dt><dd>@PaymentLabels.Dash(s.AdminStatus == SamplePaymentStatus.Rejected ? d.RejectReason : d.AdminRemarks)</dd></div>
                         <div class="spd-row"><dt>Forward To</dt><dd>@PaymentLabels.Dash(d.ForwardedToName ?? (s.AdminStatus == SamplePaymentStatus.Pending ? "Finance Team" : null))</dd></div>
                         <div class="spd-row"><dt>Finance Status</dt><dd><LabPill Text="@FinancePill(d)" Tone="@PaymentLabels.FinanceStatusTone(s.FinanceStatus)" /></dd></div>
@@ -173,6 +177,7 @@
                     @if (s.FinanceStatus is SampleFinanceStatus.Verified or SampleFinanceStatus.Mismatch)
                     {
                         <div class="spd-row"><dt>Finance Verified By</dt><dd>@PaymentLabels.Dash(s.FinanceVerifiedByName)</dd></div>
+                        <div class="spd-row"><dt>Amount Received</dt><dd>@(d.FinanceVerifiedAmount is { } fa ? PaymentLabels.Money(fa) : "-")</dd></div>
                         <div class="spd-row"><dt>Received Date</dt><dd>@PaymentLabels.Date(d.FinanceReceivedDate)</dd></div>
                         <div class="spd-row"><dt>Finance Remarks</dt><dd>@PaymentLabels.Dash(s.FinanceRemarks)</dd></div>
                     }
@@ -284,7 +289,7 @@
         SampleFinanceStatus.NotForwarded => "Not Forwarded",
         SampleFinanceStatus.AwaitingVerification => "Pending Verification",
         SampleFinanceStatus.Verified => "Verified",
-        _ => d.VerifiedAmount is { } v && v < d.Summary.PaidAmount ? "Amount Mismatch" : "Failed"
+        _ => PaymentLabels.MismatchName(d.Summary)
     };
 
     protected override async Task OnParametersSetAsync()

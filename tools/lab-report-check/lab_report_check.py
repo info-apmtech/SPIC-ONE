@@ -155,6 +155,10 @@ def main():
         after = all_reports(api, bid)
         check(s1 < 300 or before, "generate call", f"HTTP {s1}" + ("" if s1 < 300 else f" {str(b1)[:120]}; reports already exist"))
         check(len(before) == len(after), "generation is idempotent", f"{len(before)} -> {len(after)} reports (second call HTTP {s2})")
+        if before and "status=Completed" in route:
+            msg = b2.get("message") if isinstance(b2, dict) else None
+            check(s2 == 409 and msg == "Batch is already completed and its reports exist",
+                  "completing again with reports -> 409", f"HTTP {s2} {msg}")
 
     # ---------------------------------------------------------------- batch summary and codes
     status, _, batch = api.get(f"api/Lab/batches/{bid}/report")
@@ -177,6 +181,31 @@ def main():
 
     status, _, stats = api.get("api/Lab/reports/stats")
     check(status == 200 and stats["totalReports"] >= len(reports), "GET reports/stats", json.dumps(stats))
+    with_reports, page = 0, 1
+    while True:
+        s, _, body = api.get(f"api/Lab/reports/batches?page={page}&pageSize=50")
+        if s != 200:
+            break
+        with_reports += sum(1 for b in body["items"] if b["reportsGenerated"] > 0)
+        if not body.get("hasMore"):
+            break
+        page += 1
+    check(stats["batchGroups"] == with_reports, "reports/stats BatchGroups = batches with at least one report",
+          f"{stats['batchGroups']} vs {with_reports}")
+
+    # display ids: the batch's samples list, the report list and the report detail agree
+    sample_ids, page = {}, 1
+    while True:
+        s, _, body = api.get(f"api/Lab/batches/{bid}/samples?page={page}&pageSize=50")
+        if s != 200:
+            break
+        sample_ids.update({x["sampleItemId"]: x["sampleId"] for x in body["items"]})
+        if not body.get("hasMore"):
+            break
+        page += 1
+    if sample_ids:
+        bad = [r["code"] for r in reports if r.get("sampleId") != sample_ids.get(r["sampleItemId"])]
+        check(not bad, "report list SampleId = batch samples SampleId", ", ".join(bad) or f"{len(reports)} reports")
     status, _, rb = api.get(f"api/Lab/reports/batches?q={urllib.parse.quote(summary['batchCode'])}")
     check(status == 200 and any(r["batchId"] == bid for r in rb["items"]), "batch in reports/batches")
 
@@ -188,12 +217,23 @@ def main():
         status, _, detail = api.get(f"api/Lab/reports/{r['id']}")
         check(status == 200 and detail["sample"]["parameters"], f"detail {r['code']}",
               f"{len(detail['sample']['parameters'])} rows, overall {detail['sample']['overallStatusText']}")
+        if sample_ids:
+            check(detail["sample"]["sample"]["sampleId"] == sample_ids.get(r["sampleItemId"]), f"detail SampleId (Lab Number) {r['code']}",
+                  detail["sample"]["sample"]["sampleId"])
+        lines = [l for g in detail["sample"]["recommendations"] for l in g["lines"]]
+        doubled = [l for l in lines if re.match(r"^(\w[\w ]*?) is (high|low)\b.* because \1 is ", l, re.I)]
+        check(not doubled, f"recommendation wording {r['code']}", "; ".join(doubled) or f"{len(lines)} lines")
         before_count = detail["summary"]["downloadCount"]
         for lang in detail["languages"]:
             s, h, content = api.get(f"api/Lab/reports/{r['id']}/pdf?lang={lang}", raw=True)
             fb = header(h, "X-Report-Language-Fallback")
             check(s == 200 and ctype(h) == PDF and content[:4] == b"%PDF", f"pdf {r['code']} {lang}",
                   f"{len(content)} bytes" + (f", fallback from {fb}" if fb else ""))
+            # file name: the requested language when the PDF is in it, else -en with the fallback header
+            name = re.search(r'filename="?([^";]+)', header(h, "Content-Disposition") or "")
+            want = f"{r['code']}-{'en' if fb else lang}.pdf"
+            check(name and name.group(1) == want and (fb is None or (fb == lang and lang != "en")),
+                  f"pdf file name {r['code']} {lang}", name.group(1) if name else "no Content-Disposition")
             if out and s == 200:
                 open(os.path.join(out, f"{r['code']}-{lang}.pdf"), "wb").write(content)
         s, h, content = api.get(f"api/Lab/reports/{r['id']}/xlsx?lang=en", raw=True)
@@ -205,8 +245,18 @@ def main():
         check(again["summary"]["downloadCount"] == before_count + downloads and again["summary"]["status"] in (1, 2),
               f"download counted {r['code']}", f"{before_count} -> {again['summary']['downloadCount']}, status {again['summary']['status']}")
 
-    # ---------------------------------------------------------------- access_token on file routes
+    # ---------------------------------------------------------------- CORS: the web client can read the fallback header
     first = reports[0]
+    req = urllib.request.Request(api.base + f"api/Lab/reports/{first['id']}/pdf?lang=en", method="GET",
+                                 headers={"Authorization": "Bearer " + api.token, "Origin": "http://localhost:5031"})
+    try:
+        with urllib.request.urlopen(req, timeout=180) as resp:
+            exposed = resp.headers.get("Access-Control-Expose-Headers") or ""
+    except urllib.error.HTTPError as e:
+        exposed = e.headers.get("Access-Control-Expose-Headers") or ""
+    check("x-report-language-fallback" in exposed.lower(), "CORS exposes X-Report-Language-Fallback", exposed)
+
+    # ---------------------------------------------------------------- access_token on file routes
     s, h, content = Api(args.base).get(f"api/Lab/reports/{first['id']}/pdf?lang=en&access_token={api.token}", auth=False, raw=True)
     check(s == 200 and ctype(h) == PDF, "pdf with ?access_token=", f"HTTP {s}")
 

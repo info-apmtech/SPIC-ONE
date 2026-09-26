@@ -246,7 +246,10 @@ builder.Services.AddCors(options =>
         policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials();
+              .AllowCredentials()
+              // Lab report downloads: the web client reads the file name and whether the PDF
+              // fell back to English (LabReportsController).
+              .WithExposedHeaders("X-Report-Language-Fallback", "Content-Disposition");
     });
 });
 

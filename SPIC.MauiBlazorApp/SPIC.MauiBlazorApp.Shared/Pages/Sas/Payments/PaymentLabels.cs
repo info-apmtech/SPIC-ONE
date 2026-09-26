@@ -43,15 +43,18 @@ public static class PaymentLabels
 
     // ---------------------------------------------------------------- finance status
 
-    /// <summary>Is a Mismatch a short amount (Amount Mismatch) rather than a failed payment?</summary>
-    public static bool IsShort(SasPaymentRowDto row, decimal? verifiedAmount = null) =>
+    /// <summary>Amount Mismatch: Finance received less than the paid amount (FinanceVerifiedAmount &lt; Amount).</summary>
+    public static bool IsShort(SasPaymentRowDto row) =>
         row.FinanceStatus == SampleFinanceStatus.Mismatch &&
-        (verifiedAmount ?? ShortFromRemarks(row)) is { } v && v < row.PaidAmount;
+        row.FinanceVerifiedAmount is { } received && received < row.PaidAmount;
 
-    // The list row has no verified amount; a Finance "₹n short" remark (or any remark with
-    // "short") marks the amount mismatch, everything else reads as Failed.
-    private static decimal? ShortFromRemarks(SasPaymentRowDto row) =>
-        row.FinanceRemarks?.Contains("short", StringComparison.OrdinalIgnoreCase) == true ? 0m : null;
+    /// <summary>Failed: Finance marked the payment through "Mark Mismatch" (no amount received).</summary>
+    public static bool IsFailed(SasPaymentRowDto row) =>
+        row.FinanceStatus == SampleFinanceStatus.Mismatch && row.FinanceVerifiedAmount is null;
+
+    /// <summary>Finance wording of a Mismatch: Amount Mismatch / Failed (Mismatch otherwise).</summary>
+    public static string MismatchName(SasPaymentRowDto row) =>
+        IsShort(row) ? "Amount Mismatch" : IsFailed(row) ? "Failed" : "Mismatch";
 
     /// <summary>Admin list wording: Not Forwarded / Pending / Verified / Mismatch.</summary>
     public static string FinanceStatusName(SampleFinanceStatus status) => status switch
@@ -76,7 +79,7 @@ public static class PaymentLabels
     public static string HistoryStatusName(SasPaymentRowDto row) => row.FinanceStatus switch
     {
         SampleFinanceStatus.Verified => "Payment Verified",
-        SampleFinanceStatus.Mismatch => IsShort(row) ? "Amount Mismatch" : "Failed",
+        SampleFinanceStatus.Mismatch => MismatchName(row),
         SampleFinanceStatus.AwaitingVerification => "Pending",
         _ => "Not Forwarded"
     };
@@ -84,14 +87,17 @@ public static class PaymentLabels
     public static string HistoryStatusTone(SasPaymentRowDto row) => row.FinanceStatus switch
     {
         SampleFinanceStatus.Verified => "green",
-        SampleFinanceStatus.Mismatch => IsShort(row) ? "orange" : "red",
+        SampleFinanceStatus.Mismatch => IsShort(row) ? "orange" : "red",   // Amount Mismatch / Failed
         SampleFinanceStatus.AwaitingVerification => "yellow",
         _ => "grey"
     };
 
     // ---------------------------------------------------------------- farmer
 
-    /// <summary>Farmer wording (screen 34): Finance Verified / Admin Approval Pending / Payment Issue.</summary>
+    /// <summary>Farmer wording (screen 34): Finance Verified / Payment Issue / Admin Approval Pending
+    /// (awaiting the admin) / Admin Approved (approved, not yet processed by Finance, including v1
+    /// approvals from before Finance verification). The "Approval Pending" KPI
+    /// and filter (SasPaymentStatsDto.ApprovalPending, tab approvalPending) count both of the last two.</summary>
     public static string FarmerStatusName(SamplePaymentStatus admin, SampleFinanceStatus finance) =>
         finance == SampleFinanceStatus.Verified ? "Finance Verified"
         : admin == SamplePaymentStatus.Rejected || finance == SampleFinanceStatus.Mismatch ? "Payment Issue"

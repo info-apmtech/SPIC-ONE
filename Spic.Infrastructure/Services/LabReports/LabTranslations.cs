@@ -186,12 +186,26 @@ public sealed class LabTranslator
     public string Crop(string crop) => T($"crop.{crop}", crop);
     public string Texture(string? value) => string.IsNullOrWhiteSpace(value) ? "" : T($"texture.{value.Trim()}", value.Trim());
 
+    /// <summary>A recommendation line of the report. English prints the engine's line as it is;
+    /// another language prints the translated hint of that line (hint.{hint}), else the English line.</summary>
+    public string Line(LabReportModel model, string line)
+    {
+        if (IsEnglish) return line;
+        var part = model.RecommendationLines.FirstOrDefault(l => l.Text == line);
+        return (part == null ? null : TryOwn($"hint.{part.Hint}")) ?? TryOwn($"hint.{line.Trim()}") ?? line;
+    }
+
+    /// <summary>The crop suitability note. English prints the engine's sentence as it is; another
+    /// language fills its note.* template with the crop and the translated parameter names the
+    /// engine's note lists.</summary>
     public string CropNote(LabReportModel model)
     {
-        var (kind, bad) = LabReportRules.CropNote(model.Layout, model.Rows);
+        if (IsEnglish && !string.IsNullOrWhiteSpace(model.CropSuitabilityNote)) return model.CropSuitabilityNote;
+
+        var (kind, problems) = LabReportRules.CropNote(model.Layout, model.Suitability);
         var template = T(LabTranslationSeed.CropNoteKey(kind), LabTranslationSeed.CropNoteTemplate(kind));
         var crop = string.IsNullOrWhiteSpace(model.Crop1) ? T("text.proposedCrop", "the proposed crop") : Crop(model.Crop1!);
-        var list = string.Join(", ", bad.Select(b => Param(b.Code, b.Name)));
+        var list = string.Join(", ", problems.Select(b => Param(b.Code, b.Name)));
         return template.Replace("{crop}", crop).Replace("{params}", list);
     }
 }

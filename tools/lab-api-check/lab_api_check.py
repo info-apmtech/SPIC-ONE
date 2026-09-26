@@ -163,6 +163,7 @@ cstats0 = coord.j("GET", "api/Lab/consignments/stats")
 bstats0 = coord.j("GET", "api/Lab/batches/stats")
 adash0 = analyst.j("GET", "api/Lab/analyst/dashboard")
 a2dash0 = analyst2.j("GET", "api/Lab/analyst/dashboard")
+rstats0 = coord.j("GET", "api/Lab/reports/stats")
 
 # ------------------------------------------------------------------------------------------ v1 data
 section("v1 data as qa.mdo (farmers, collections, payment, consignments)")
@@ -374,7 +375,8 @@ eq((rows["S-OM"]["enteredValue"], rows["S-OM"]["status"]), ("0.72", R_DEFICIENT)
 eq((rows["S-TEX"]["enteredValue"], rows["S-TEX"]["status"], rows["S-TEX"]["resultLabel"]), ("Sandy Clay Silt", None, None), "Texture stored as text, no status")
 eq((prev["overallStatus"], prev["overallStatusText"]), (O_NEEDS, "Needs Improvement"), "two problems -> Needs Improvement")
 groups = {g["group"]: g["lines"] for g in prev["recommendations"]}
-eq(groups.get("Fertilizer"), ["Apply nitrogen fertilizer because nitrogen is below normal range."], "Fertilizer recommendation")
+# the hint names its parameter (nitrogen) -> printed as it is; "Add organic manure" does not name Organic Carbon -> reason appended
+eq(groups.get("Fertilizer"), ["Apply nitrogen fertilizer"], "Fertilizer recommendation")
 eq(groups.get("Organic"), ["Add organic manure / compost because organic carbon is below normal range."], "Organic recommendation")
 eq(prev["cropSuitabilityNote"], "Soil is suitable for Paddy after correcting low organic carbon and low nitrogen.", "crop suitability note")
 e = entry(analyst, s_soil1)
@@ -423,6 +425,9 @@ sw_values = values_for(e, dict(SOIL_OK, **WATER_NA))
 sw = analyst.j("PUT", f"api/Lab/samples/{s_sw['sampleItemId']}/values", json={"sampleItemId": s_sw["sampleItemId"], "values": sw_values, "submit": True})
 eq(sw["result"]["overallStatus"], O_NEEDS, "SoilAndWater with high sodium -> Needs Improvement")
 eq(sw["result"]["cropSuitabilityNote"], "Soil is suitable for Sugarcane. Water: Use with caution: high sodium.", "SoilAndWater note")
+# a hint that already names its parameter is printed as it is (no "because sodium is above normal range")
+eq({g["group"]: g["lines"] for g in sw["result"]["recommendations"]}.get("General"), ["Sodium is high; risk of sodicity"],
+   "hint naming its parameter printed as it is")
 eq(sw["batch"]["status"], B_ANALYSED, "all samples submitted -> batch AnalysisCompleted")
 
 # reopen and resubmit (still editable until the report is generated)
@@ -507,7 +512,9 @@ eq(done["progress"][3]["byName"], "QA Lab Coordinator", "completed by the coordi
 ok(any(t["kind"] == K["StatusUpdated"] and t["description"].startswith("Status updated to Completed") for t in done["timeline"]), "timeline has Completed")
 report_made = bool(done["header"]["reportCode"] or done["header"]["reportId"])
 eq(K["ReportGenerated"] in [t["kind"] for t in done["timeline"]], report_made, "ReportGenerated timeline step iff the report service produced reports")
-coord.call("PATCH", f"api/Lab/batches/{B1}/status?status=Completed", expect=409)
+again = coord.call("PATCH", f"api/Lab/batches/{B1}/status?status=Completed", expect=409)
+eq(again.json().get("message"), "Batch is already completed and its reports exist", "completing again with reports -> 409 message")
+coord.call("PATCH", f"api/Lab/batches/{B1}/status?status=TakenForAnalysis", expect=409)
 coord.call("PATCH", f"api/Lab/batches/{B1}/assign", expect=409, json={"priority": 0})
 analyst.call("PUT", f"api/Lab/samples/{s_soil1['sampleItemId']}/values", expect=409,
              json={"sampleItemId": s_soil1["sampleItemId"], "values": values_for(entry(analyst, s_soil1), SOIL_NI), "submit": True})
@@ -532,6 +539,129 @@ eq(adash["reportsToDownload"] - adash0["reportsToDownload"], 1, "analyst Reports
 eq(adash["autoResultReady"], adash0["autoResultReady"], "analyst AutoResultReady back to baseline")
 cstats = coord.j("GET", "api/Lab/consignments/stats")
 eq(cstats["batchedConsignments"] - cstats0["batchedConsignments"], 3, "consignment stats Batched +3")
+
+# ------------------------------------------------------------------------------------------ reports agree with the lab pages
+section("reports: display ids, one result engine, batch groups")
+
+
+def all_pages(client, path):
+    items, page = [], 1
+    while True:
+        sep = "&" if "?" in path else "?"
+        body = client.j("GET", f"{path}{sep}page={page}&pageSize=50")
+        items += body["items"]
+        if not body.get("hasMore"):
+            return items
+        page += 1
+
+
+need(report_made, "B1 reports generated")
+by_item = {s["sampleItemId"]: s["sampleId"] for s in coord.j("GET", f"api/Lab/batches/{B1}/samples")["items"]}
+reps = all_pages(coord, f"api/Lab/reports?batchId={B1}")
+eq(len(reps), 5, "B1 reports: 4 samples, two for Soil & Water")
+eq({(r["sampleItemId"], r["sampleId"]) for r in reps}, {(r["sampleItemId"], by_item[r["sampleItemId"]]) for r in reps},
+   "report list SampleId = batch samples SampleId")
+for r in reps:
+    rd = coord.j("GET", f"api/Lab/reports/{r['id']}")
+    eq(rd["sample"]["sample"]["sampleId"], by_item[r["sampleItemId"]], f"report {r['code']} detail SampleId (Lab Number)")
+for s in (s_soil1, s_water1, s_soil2):
+    res = entry(analyst, s)["result"]
+    rep = next(r for r in reps if r["sampleItemId"] == s["sampleItemId"])
+    rd = coord.j("GET", f"api/Lab/reports/{rep['id']}")["sample"]
+    eq((rd["overallStatus"], rd["overallStatusText"], rd["recommendations"], rd["cropSuitabilityNote"]),
+       (res["overallStatus"], res["overallStatusText"], res["recommendations"], res["cropSuitabilityNote"]),
+       f"report {rep['code']} = entry page result ({s['sampleId']})")
+sw_water = next(r for r in reps if r["sampleItemId"] == s_sw["sampleItemId"] and r["sampleType"] == WATER)
+rd = coord.j("GET", f"api/Lab/reports/{sw_water['id']}")["sample"]
+eq((rd["cropSuitabilityNote"], rd["recommendations"]), ("Use with caution: high sodium.", [{"group": "General", "lines": ["Sodium is high; risk of sodicity"]}]),
+   "Soil & Water sample, water report: the engine's water note and line")
+rstats = coord.j("GET", "api/Lab/reports/stats")
+eq(rstats["batchGroups"] - rstats0["batchGroups"], 1, "reports/stats BatchGroups +1 (B1 has reports, B2 has none)")
+with_reports = [b for b in all_pages(coord, "api/Lab/reports/batches") if b["reportsGenerated"] > 0]
+eq(rstats["batchGroups"], len(with_reports), "BatchGroups = batches with at least one report")
+
+if not ARGS.no_db:
+    try:
+        import psycopg2
+        # A completed batch whose reports are missing (generation failed after the status was saved).
+        with psycopg2.connect(ARGS.db) as conn, conn.cursor() as cur:
+            cur.execute('DELETE FROM "LabReports" WHERE "BatchId" = %s', (B1,))
+        eq(len(all_pages(coord, f"api/Lab/reports?batchId={B1}")), 0, "B1 reports removed in the local database")
+        regen = coord.j("PATCH", f"api/Lab/batches/{B1}/status?status=Completed")
+        eq(regen["header"]["status"], B_COMPLETED, "completing a completed batch without reports -> 200")
+        eq(len(all_pages(coord, f"api/Lab/reports?batchId={B1}")), 5, "its reports are generated again")
+        kinds, _ = activity_kinds(coord, B1)
+        eq(kinds.count(K["ReportGenerated"]), 2, "ReportGenerated logged again by the report service")
+        again = coord.call("PATCH", f"api/Lab/batches/{B1}/status?status=Completed", expect=409)
+        eq(again.json().get("message"), "Batch is already completed and its reports exist", "then 409 again")
+    except ImportError:
+        print("  (psycopg2 not installed: idempotent completion step skipped)")
+
+# ------------------------------------------------------------------------------------------ payments: finance amounts
+section("payments: admin amount vs Finance amount, Failed vs Amount Mismatch")
+fin_stats0 = finance.j("GET", "api/Sas/payments/stats")
+adm_stats0 = admin.j("GET", "api/Sas/payments/stats")
+pays = []
+for n in (4, 5, 6):
+    col = collection(PAID, [{"farmerId": fc["id"], "sampleType": SOIL, "crop1": "Banana"}], f"paid payment check {n}")
+    pays.append(mdo.j("POST", f"api/Sas/collections/{col['id']}/payment",
+                      json={"transactionId": f"QA-LAB-TXN-{RUN}-{n}", "paidByName": "QA-LAB Payer", "bankGateway": "UPI"}))
+p_short, p_failed, p_ok = pays
+paid = admin.j("GET", f"api/Sas/payments/{p_short['id']}")["summary"]["paidAmount"]
+ok(paid > 50, f"paid amount {paid}")
+for p in pays:
+    d = admin.j("POST", f"api/Sas/payments/{p['id']}/approve", json={"verifiedAmount": paid, "confirmed": True, "remarks": "QA-LAB approved"})
+    eq((d["summary"]["adminStatus"], d["summary"]["financeStatus"], d["verifiedAmount"], d["financeVerifiedAmount"]), (1, 1, paid, None),
+       "approved: Admin Approved, awaiting Finance, admin amount, no Finance amount")
+adm_stats = admin.j("GET", "api/Sas/payments/stats")
+eq(adm_stats["approvalPending"] - adm_stats0["approvalPending"], 3, "ApprovalPending counts admin-approved payments awaiting Finance")
+pending_ids = {r["id"] for r in all_pages(admin, "api/Sas/payments?tab=approvalPending")}
+ok({p["id"] for p in pays} <= pending_ids, "approvalPending tab lists admin-approved payments awaiting Finance")
+
+yesterday = (dt.date.today() - dt.timedelta(days=1)).isoformat()
+d = finance.j("POST", f"api/Sas/payments/{p_short['id']}/verify", json={"verifiedAmount": paid - 50, "receivedDate": yesterday, "confirmed": True})
+eq((d["summary"]["financeStatus"], d["verifiedAmount"], d["financeVerifiedAmount"], (d["financeReceivedDate"] or "")[:10]),
+   (3, paid, paid - 50, yesterday), "short verify: Mismatch, admin amount kept, Finance amount + received date stored")
+eq((d["summary"]["verifiedAmount"], d["summary"]["financeVerifiedAmount"], (d["summary"]["financeReceivedDate"] or "")[:10]),
+   (paid, paid - 50, yesterday), "row DTO carries both amounts and the received date")
+titles = [t["title"] for t in d["timeline"]]
+ok("Finance — Amount Mismatch" in titles, f"timeline Amount Mismatch {titles}")
+ok(any("Approved amount" in (t["description"] or "") for t in d["timeline"]) and
+   any((t["description"] or "").startswith(f"Received ₹") for t in d["timeline"]), "timeline shows the admin's and Finance's amounts separately")
+
+d = finance.j("POST", f"api/Sas/payments/{p_failed['id']}/mismatch", json={"reason": "QA-LAB transaction not found"})
+eq((d["summary"]["financeStatus"], d["verifiedAmount"], d["financeVerifiedAmount"], d["financeReceivedDate"]), (3, paid, None, None),
+   "mismatch route: Failed, Finance amount and received date empty, admin amount kept")
+ok("Finance — Payment Failed" in [t["title"] for t in d["timeline"]], "timeline Payment Failed")
+
+d = finance.j("POST", f"api/Sas/payments/{p_ok['id']}/verify", json={"verifiedAmount": paid, "receivedDate": yesterday, "confirmed": True, "remarks": "QA-LAB ok"})
+eq((d["summary"]["financeStatus"], d["verifiedAmount"], d["financeVerifiedAmount"], (d["financeReceivedDate"] or "")[:10]),
+   (2, paid, paid, yesterday), "full verify: Verified with Finance amount and received date")
+
+fin_stats = finance.j("GET", "api/Sas/payments/stats")
+eq((fin_stats["mismatch"] - fin_stats0["mismatch"], fin_stats["failed"] - fin_stats0["failed"], fin_stats["verifiedPayments"] - fin_stats0["verifiedPayments"]),
+   (1, 1, 1), "Finance stats: Mismatch +1, Failed +1, Verified +1")
+mism = {r["id"] for r in all_pages(finance, "api/Sas/payments?tab=mismatch")}
+failed = {r["id"] for r in all_pages(finance, "api/Sas/payments?tab=failedOnly")}
+ok(p_short["id"] in mism and p_short["id"] not in failed, "short payment in History Mismatch, not Failed")
+ok(p_failed["id"] in failed and p_failed["id"] not in mism, "failed payment in History Failed, not Mismatch")
+
+if not ARGS.no_db:
+    try:
+        import psycopg2
+        # A v1 approval from before Finance verification (Approved, NotForwarded) also reads "Admin Approved"
+        # for the farmer, so the Approval Pending KPI and filter count it too.
+        col = collection(PAID, [{"farmerId": fc["id"], "sampleType": SOIL, "crop1": "Banana"}], "paid legacy approval")
+        p_legacy = mdo.j("POST", f"api/Sas/collections/{col['id']}/payment",
+                         json={"transactionId": f"QA-LAB-TXN-{RUN}-7", "paidByName": "QA-LAB Payer", "bankGateway": "UPI"})
+        admin.j("POST", f"api/Sas/payments/{p_legacy['id']}/approve", json={"verifiedAmount": paid, "confirmed": True})
+        before = admin.j("GET", "api/Sas/payments/stats")["approvalPending"]
+        with psycopg2.connect(ARGS.db) as conn, conn.cursor() as cur:
+            cur.execute('UPDATE "SamplePayments" SET "FinanceStatus" = 0, "ForwardedAt" = NULL WHERE "Id" = %s', (p_legacy["id"],))
+        eq(admin.j("GET", "api/Sas/payments/stats")["approvalPending"], before, "v1 approval (not forwarded) still counted in ApprovalPending")
+        ok(p_legacy["id"] in {r["id"] for r in all_pages(admin, "api/Sas/payments?tab=approvalPending")}, "and listed by the approvalPending filter")
+    except ImportError:
+        print("  (psycopg2 not installed: legacy approval step skipped)")
 
 # ------------------------------------------------------------------------------------------ second analyst, continue, delayed
 section("second analyst: continue batch, delayed analysis")
