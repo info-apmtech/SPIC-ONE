@@ -1,0 +1,67 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Farmer
+@using SPIC.Core.DTOs
+@inject LabApi Lab
+
+@*
+    "Download PDF" split button for one sample report (farmer screens 31-33): the main part
+    downloads in the first offered language (English), the caret lists every language the API
+    offers the caller (GET api/Lab/languages; farmers get Tamil and English). Links go to
+    api/Lab/reports/{id}/pdf?lang=..&access_token=.. so they work from both hosts; the API counts
+    the download and moves the report to Downloaded, reported back through OnDownloaded.
+*@
+<div class="rdb @(_open ? "is-open" : "") @(Compact ? "rdb--compact" : "")">
+    <a class="rdb-main" href="@Lab.ReportPdfUrl(ReportId, Primary.Code)" target="_blank" rel="noopener" download
+       @onclick="() => Downloaded(Primary.Code)" aria-label="@($"Download PDF in {Primary.Name}")">
+        <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i>
+        <span>Download PDF</span>
+    </a>
+    @if (Options.Count > 1)
+    {
+        <button type="button" class="rdb-caret" aria-haspopup="menu" aria-expanded="@(_open ? "true" : "false")"
+                aria-label="Choose the report language" @onclick="() => _open = !_open">
+            <i class="bi bi-chevron-down" aria-hidden="true"></i>
+        </button>
+    }
+
+    @if (_open)
+    {
+        <div class="rdb-backdrop" @onclick="() => _open = false"></div>
+        <ul class="rdb-menu" role="menu">
+            @foreach (var l in Options)
+            {
+                <li role="none">
+                    <a role="menuitem" class="rdb-item" href="@Lab.ReportPdfUrl(ReportId, l.Code)" target="_blank" rel="noopener" download
+                       @onclick="() => Downloaded(l.Code)">
+                        <span>@l.Name</span>
+                        @if (!string.Equals(l.Name, l.NativeName, StringComparison.Ordinal))
+                        {
+                            <span class="rdb-native" lang="@l.Code">@l.NativeName</span>
+                        }
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int ReportId { get; set; }
+    /// <summary>Languages from GET api/Lab/languages; null / empty = English only.</summary>
+    [Parameter] public List<LabLanguageDto>? Languages { get; set; }
+    [Parameter] public EventCallback<string> OnDownloaded { get; set; }
+    [Parameter] public bool Compact { get; set; }
+
+    private static readonly LabLanguageDto English = new() { Code = "en", Name = "English", NativeName = "English" };
+
+    private bool _open;
+
+    private List<LabLanguageDto> Options => Languages is { Count: > 0 } ? Languages : new List<LabLanguageDto> { English };
+
+    private LabLanguageDto Primary => Options.FirstOrDefault(l => l.Code == "en") ?? Options[0];
+
+    private async Task Downloaded(string lang)
+    {
+        _open = false;
+        await OnDownloaded.InvokeAsync(lang);
+    }
+}

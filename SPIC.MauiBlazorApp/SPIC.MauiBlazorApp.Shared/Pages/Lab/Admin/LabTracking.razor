@@ -1,0 +1,519 @@
+﻿@page "/Lab/Tracking"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Admin
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject LabApi Lab
+@inject SasApi Sas
+@inject NavigationManager Nav
+@implements IDisposable
+
+@*
+    Lab Tracking (admin, screen 21; docs/sas-lab-portal-plan.md). Read-only view over
+    GET api/Lab/batches and api/Lab/batches/stats for holders of the LabTracking page key.
+
+      * 4 KPI cards and the status tabs come from the stats call (tabs: All, Batch Created,
+        Taken for Analysis = TakenForAnalysis + InProgress, Analysis Completed = AnalysisCompleted
+        + Completed);
+      * the tabs and the "Current Stage" filter both narrow the status list sent as status=a,b;
+      * Soil / Water / Last Updated are not on the list row, so each visible row's detail
+        (GET api/Lab/batches/{id}) is read in the background and fills those cells;
+      * the eye opens the read-only Batch View (/Lab/Tracking/{id}).
+    Phone (<= 767.98px): the table becomes cards, filters start collapsed, tabs scroll sideways.
+*@
+
+<div class="lt-page">
+    <PageHeader Title="Lab Tracking"
+                Subtitle="Admin view to monitor consignments, batches and analysis progress across the lab workflow." />
+
+    @* ------------------------------------------------------------ KPIs *@
+    <div class="lt-kpis">
+        <LabKpiCard Label="Total Batches" Value="@Num(_stats?.TotalBatches)" Caption="All batches in system" Icon="bi-stack" Tone="violet" />
+        <LabKpiCard Label="Batch Created" Value="@Num(_stats?.Created)" Caption="Batch created in lab" Icon="bi-box-seam" Tone="green" />
+        <LabKpiCard Label="Taken for analysis" Value="@Num(_stats is null ? null : _stats.TakenForAnalysis)" Caption="Analysis in progress" Icon="bi-hourglass-split" Tone="orange" />
+        <LabKpiCard Label="Analysis Completed" Value="@Num(_stats is null ? null : _stats.AnalysisCompleted + _stats.Completed)" Caption="Completed batches" Icon="bi-patch-check" Tone="blue" />
+    </div>
+
+    @* ------------------------------------------------------------ tabs *@
+    <div class="lt-tabs" role="tablist" aria-label="Batch status">
+        @foreach (var t in Tabs)
+        {
+            var active = _tab == t.Key;
+            <button type="button" role="tab" class="lt-tab @(active ? "is-active" : "")"
+                    aria-selected="@(active ? "true" : "false")" @onclick="() => SelectTabAsync(t.Key)">
+                <span>@t.Label</span>
+                <span class="lt-tab-count">@Num(t.Count(_stats))</span>
+            </button>
+        }
+    </div>
+
+    @* ------------------------------------------------------------ filters *@
+    <section class="lt-filters @(_filtersToggled ? "is-toggled" : "")">
+        <button type="button" class="lt-filters-head" aria-controls="lt-filter-body"
+                aria-expanded="@(_filtersToggled ? "false" : "true")"
+                @onclick="() => _filtersToggled = !_filtersToggled">
+            <span class="lt-filters-title"><i class="bi bi-funnel" aria-hidden="true"></i> Filters
+                @if (ActiveFilterCount > 0)
+                {
+                    <span class="lt-filters-badge">@ActiveFilterCount</span>
+                }
+            </span>
+            <i class="bi bi-chevron-down lt-filters-chevron" aria-hidden="true"></i>
+        </button>
+
+        <div class="lt-filter-body" id="lt-filter-body">
+            <div class="lt-field lt-field--dates">
+                <label class="lt-label" for="lt-from">Date Range</label>
+                <div class="lt-dates">
+                    <div class="lt-datefield @(string.IsNullOrWhiteSpace(_draft.From) ? "is-empty" : null)">
+                        <input id="lt-from" class="lt-input" type="date" aria-label="From date"
+                               value="@_draft.From" @onchange="e => _draft.From = e.Value?.ToString()" />
+                        <span class="lt-datefield-ph" aria-hidden="true">From date</span>
+                    </div>
+                    <span class="lt-dates-sep">to</span>
+                    <div class="lt-datefield @(string.IsNullOrWhiteSpace(_draft.To) ? "is-empty" : null)">
+                        <input class="lt-input" type="date" aria-label="To date"
+                               value="@_draft.To" @onchange="e => _draft.To = e.Value?.ToString()" />
+                        <span class="lt-datefield-ph" aria-hidden="true">To date</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lt-field">
+                <label class="lt-label" for="lt-batch">Batch No.</label>
+                <LabSearchSelect InputId="lt-batch" Options="_batchOptions" @bind-Value="_draft.BatchId"
+                                 Placeholder="Search batch no." AllLabel="All batches" AriaLabel="Batch No." />
+            </div>
+
+            <div class="lt-field">
+                <label class="lt-label" for="lt-cons">Consignment No.</label>
+                <LabSearchSelect InputId="lt-cons" Options="_consignmentOptions" @bind-Value="_draft.ConsignmentId"
+                                 Placeholder="Search consignment no." AllLabel="All consignments" AriaLabel="Consignment No." />
+            </div>
+
+            <div class="lt-field">
+                <label class="lt-label" for="lt-assigned">Assigned To</label>
+                <select id="lt-assigned" class="lt-input" @bind="_draft.AssignedTo">
+                    <option value="">All analysts</option>
+                    @foreach (var a in _analysts)
+                    {
+                        <option value="@a.UserId">@a.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="lt-field">
+                <label class="lt-label" for="lt-state">State</label>
+                <select id="lt-state" class="lt-input" value="@_draft.StateId" @onchange="OnStateChanged">
+                    <option value="">All states</option>
+                    @foreach (var s in _states)
+                    {
+                        <option value="@s.Id">@s.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div class="lt-field">
+                <label class="lt-label" for="lt-region">Region</label>
+                <select id="lt-region" class="lt-input" @bind="_draft.RegionId">
+                    <option value="">All regions</option>
+                    @foreach (var r in RegionOptions)
+                    {
+                        <option value="@r.Id">@r.RegionName</option>
+                    }
+                </select>
+            </div>
+
+            <div class="lt-field">
+                <label class="lt-label" for="lt-stage">Current Stage</label>
+                <select id="lt-stage" class="lt-input" @bind="_draft.Stage">
+                    <option value="">All stages</option>
+                    @foreach (var s in Enum.GetValues<SampleBatchStatus>())
+                    {
+                        <option value="@s">@LabAdminText.Status(s)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="lt-filter-actions">
+                <button type="button" class="lt-btn lt-btn-outline" @onclick="ClearFiltersAsync">
+                    <span aria-hidden="true">&times;</span> Clear All
+                </button>
+                <button type="button" class="lt-btn lt-btn-primary" @onclick="ApplyFiltersAsync">
+                    <i class="bi bi-funnel" aria-hidden="true"></i> Apply Filters
+                </button>
+            </div>
+        </div>
+    </section>
+
+    @* ------------------------------------------------------------ list *@
+    <section class="lt-card" aria-labelledby="lt-list-title">
+        <div class="lt-card-head">
+            <h2 class="lt-card-title" id="lt-list-title">Lab Tracking List</h2>
+            <div class="lt-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" class="lt-search-input" placeholder="Search batch, consignment, analyst"
+                       aria-label="Search the lab tracking list" value="@_q" @oninput="OnSearchInput" />
+            </div>
+        </div>
+
+        @if (_loading && _result is null)
+        {
+            <Skeleton Variant="table" Rows="6" />
+        }
+        else if (_result is null)
+        {
+            <EmptyState Icon="bi-cloud-slash" Title="The batches could not be loaded" Message="Check the connection and try again." Compact="true">
+                <button type="button" class="lt-btn lt-btn-outline" @onclick="LoadListAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (_result.Items.Count == 0)
+        {
+            <EmptyState Icon="bi-binoculars" Title="No batches found"
+                        Message="@(HasAnyFilter ? "No batch matches these filters. Clear them to see every batch." : "Batches appear here once the lab coordinator creates them.")"
+                        Compact="true">
+                @if (HasAnyFilter)
+                {
+                    <button type="button" class="lt-btn lt-btn-outline" @onclick="ClearFiltersAsync">Clear filters</button>
+                }
+            </EmptyState>
+        }
+        else
+        {
+            <div class="lt-table-wrap tablet-up @(_loading ? "is-busy" : "")">
+                <table class="lt-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Batch No.</th>
+                            <th scope="col">Consignment No.</th>
+                            <th scope="col">Sample Type</th>
+                            <th scope="col" class="num">No. of Samples</th>
+                            <th scope="col" class="num">Soil</th>
+                            <th scope="col" class="num">Water</th>
+                            <th scope="col">Assigned To</th>
+                            <th scope="col">Current Status</th>
+                            <th scope="col">Analysis Days</th>
+                            <th scope="col">Last Updated</th>
+                            <th scope="col" class="act"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _result.Items)
+                        {
+                            var detail = DetailOf(row.Id);
+                            var days = LabAdminText.AnalysisDays(row);
+                            <tr>
+                                <td><a class="lt-code" href="@($"/Lab/Tracking/{row.Id}")">@row.Code</a></td>
+                                <td class="wrap" title="@string.Join(", ", row.ConsignmentCodes)">@LabAdminText.Dash(row.ConsignmentCode)</td>
+                                <td>@LabAdminText.PaymentTypeName(row.SampleType)</td>
+                                <td class="num">@row.SampleCount</td>
+                                <td class="num">@(detail is null ? "…" : LabAdminText.SoilWater(detail).Soil.ToString())</td>
+                                <td class="num">@(detail is null ? "…" : LabAdminText.SoilWater(detail).Water.ToString())</td>
+                                <td class="wrap">@AssignedTo(row)</td>
+                                <td><LabPill Text="@LabAdminText.Status(row.Status)" Tone="@LabPill.ToneFor(row.Status)" /></td>
+                                <td><LabPill Text="@days.Text" Tone="@days.Tone" /></td>
+                                <td>
+                                    @if (detail is null)
+                                    {
+                                        <span class="lt-muted">…</span>
+                                    }
+                                    else
+                                    {
+                                        var at = LabAdminText.LastUpdated(detail);
+                                        <span class="lt-when">@LabAdminText.Date(at)</span>
+                                        <span class="lt-when-sub">@LabAdminText.Time(at)</span>
+                                    }
+                                </td>
+                                <td class="act">
+                                    <a class="lt-eye" href="@($"/Lab/Tracking/{row.Id}")" aria-label="@($"View {row.Code}")" title="View batch">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="lt-mcards phone-only">
+                @foreach (var row in _result.Items)
+                {
+                    var detail = DetailOf(row.Id);
+                    var days = LabAdminText.AnalysisDays(row);
+                    <article class="lt-mcard">
+                        <header class="lt-mcard-head">
+                            <a class="lt-code" href="@($"/Lab/Tracking/{row.Id}")">@row.Code</a>
+                            <LabPill Text="@LabAdminText.Status(row.Status)" Tone="@LabPill.ToneFor(row.Status)" />
+                        </header>
+                        <p class="lt-mcard-sub">
+                            <span>@LabAdminText.Dash(row.ConsignmentCode)</span>
+                            <span aria-hidden="true">&middot;</span>
+                            <span>@LabAdminText.PaymentTypeName(row.SampleType)</span>
+                        </p>
+                        <dl class="lt-mcard-nums">
+                            <div><dt>Samples</dt><dd>@row.SampleCount</dd></div>
+                            <div><dt>Soil</dt><dd>@(detail is null ? "…" : LabAdminText.SoilWater(detail).Soil.ToString())</dd></div>
+                            <div><dt>Water</dt><dd>@(detail is null ? "…" : LabAdminText.SoilWater(detail).Water.ToString())</dd></div>
+                        </dl>
+                        <div class="lt-mcard-row">
+                            @AssignedTo(row)
+                            <LabPill Text="@days.Text" Tone="@days.Tone" />
+                        </div>
+                        <footer class="lt-mcard-foot">
+                            <span class="lt-muted">
+                                Updated @(detail is null ? "…" : LabAdminText.Stamp(LabAdminText.LastUpdated(detail)))
+                            </span>
+                            <a class="lt-btn lt-btn-outline lt-btn-sm" href="@($"/Lab/Tracking/{row.Id}")">
+                                <i class="bi bi-eye" aria-hidden="true"></i> View
+                            </a>
+                        </footer>
+                    </article>
+                }
+            </div>
+
+            <LabPager Page="_page" PageSize="_pageSize" Total="_result.Total"
+                      PageChanged="GoToPageAsync" PageSizeChanged="ChangePageSizeAsync" />
+        }
+    </section>
+</div>
+
+@code {
+    private sealed record Tab(string Key, string Label, SampleBatchStatus[] Statuses, Func<LabBatchStatsDto?, int?> Count);
+
+    private static readonly Tab[] Tabs =
+    {
+        new("all", "All Batches", Enum.GetValues<SampleBatchStatus>(), s => s?.TotalBatches),
+        new("created", "Batch Created", new[] { SampleBatchStatus.Created }, s => s?.Created),
+        new("taken", "Taken for Analysis", new[] { SampleBatchStatus.TakenForAnalysis, SampleBatchStatus.InProgress }, s => s?.TakenForAnalysis),
+        new("completed", "Analysis Completed", new[] { SampleBatchStatus.AnalysisCompleted, SampleBatchStatus.Completed }, s => s is null ? null : s.AnalysisCompleted + s.Completed)
+    };
+
+    private sealed class FilterSet
+    {
+        public string? From { get; set; }
+        public string? To { get; set; }
+        public string? BatchId { get; set; }
+        public string? ConsignmentId { get; set; }
+        public string? AssignedTo { get; set; }
+        public string? StateId { get; set; }
+        public string? RegionId { get; set; }
+        public string? Stage { get; set; }
+
+        public FilterSet Copy() => (FilterSet)MemberwiseClone();
+
+        public int Count => new[] { From ?? To, BatchId, ConsignmentId, AssignedTo, StateId, RegionId, Stage }
+            .Count(v => !string.IsNullOrWhiteSpace(v));
+    }
+
+    private LabBatchStatsDto? _stats;
+    private string _tab = "all";
+    private bool _filtersToggled;
+    private FilterSet _draft = new();
+    private FilterSet _applied = new();
+    private string _q = "";
+    private int _page = 1;
+    private int _pageSize = LabApi.DefaultPageSize;
+
+    private PageResult<LabBatchRowDto>? _result;
+    private readonly Dictionary<int, LabBatchDetailDto> _details = new();
+    private bool _loading = true;
+    private int _version;
+
+    private IReadOnlyList<LabSearchSelect.Option> _batchOptions = Array.Empty<LabSearchSelect.Option>();
+    private IReadOnlyList<LabSearchSelect.Option> _consignmentOptions = Array.Empty<LabSearchSelect.Option>();
+    private List<LabUserDto> _analysts = new();
+    private List<SasStateDto> _states = new();
+    private List<LocationItemDto> _regions = new();
+
+    private System.Threading.Timer? _debounce;
+    private CancellationTokenSource _cts = new();
+
+    private int ActiveFilterCount => _applied.Count;
+    private bool HasAnyFilter => _applied.Count > 0 || !string.IsNullOrWhiteSpace(_q) || _tab != "all";
+
+    private IEnumerable<LocationItemDto> RegionOptions =>
+        int.TryParse(_draft.StateId, out var state) && _regions.Any(r => r.StateId == state)
+            ? _regions.Where(r => r.StateId == state).OrderBy(r => r.RegionName)
+            : _regions.OrderBy(r => r.RegionName);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var statsTask = Lab.GetBatchStatsAsync(_cts.Token);
+        var listTask = LoadListAsync();
+        _ = LoadFilterOptionsAsync();
+        _stats = await statsTask;
+        await listTask;
+    }
+
+    private async Task LoadFilterOptionsAsync()
+    {
+        var batchesTask = Lab.GetBatchesAsync(pageSize: 50, ct: _cts.Token);
+        var consTask = Lab.GetConsignmentsAsync(pageSize: 50, ct: _cts.Token);
+        var analystsTask = Lab.GetAnalystsAsync(_cts.Token);
+        var lookupsTask = Sas.GetLookupsAsync(_cts.Token);
+        var regionsTask = Lab.GetRegionsAsync(_cts.Token);
+
+        _batchOptions = (await batchesTask)?.Items
+            .Select(b => new LabSearchSelect.Option(b.Id.ToString(), b.Code)).ToList()
+            ?? new List<LabSearchSelect.Option>();
+        _consignmentOptions = (await consTask)?.Items
+            .Where(c => c.BatchId != null)
+            .Select(c => new LabSearchSelect.Option(c.Id.ToString(), c.Code)).ToList()
+            ?? new List<LabSearchSelect.Option>();
+        _analysts = await analystsTask ?? new();
+        _states = (await lookupsTask)?.States ?? new();
+        _regions = await regionsTask ?? new();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadListAsync()
+    {
+        var version = ++_version;
+        _loading = true;
+        StateHasChanged();
+
+        var statuses = Tabs.First(t => t.Key == _tab).Statuses.AsEnumerable();
+        if (Enum.TryParse<SampleBatchStatus>(_applied.Stage, out var stage))
+            statuses = statuses.Where(s => s == stage);
+        var list = statuses.ToList();
+
+        PageResult<LabBatchRowDto>? result;
+        if (list.Count == 0)
+        {
+            // the tab and the stage filter exclude each other: nothing to ask the API for
+            result = new PageResult<LabBatchRowDto> { Items = new(), Total = 0, Page = 1, PageSize = _pageSize };
+        }
+        else
+        {
+            var status = list.Count == Enum.GetValues<SampleBatchStatus>().Length ? null : string.Join(",", list);
+            result = await Lab.GetBatchesAsync(
+                status: status,
+                assignedTo: Blank(_applied.AssignedTo),
+                q: Blank(_q),
+                from: ParseDate(_applied.From),
+                to: ParseDate(_applied.To),
+                batchId: ParseInt(_applied.BatchId),
+                consignmentId: ParseInt(_applied.ConsignmentId),
+                stateId: ParseInt(_applied.StateId),
+                regionId: ParseInt(_applied.RegionId),
+                page: _page, pageSize: _pageSize, ct: _cts.Token);
+        }
+
+        if (version != _version) return;   // a newer request superseded this one
+        _result = result;
+        _loading = false;
+        StateHasChanged();
+
+        if (result is not null)
+            await LoadDetailsAsync(result.Items.Select(r => r.Id).Where(id => !_details.ContainsKey(id)).ToList(), version);
+    }
+
+    /// <summary>Soil / Water / Last Updated per row: GET api/Lab/batches/{id}, six at a time.</summary>
+    private async Task LoadDetailsAsync(List<int> ids, int version)
+    {
+        if (ids.Count == 0) return;
+        using var gate = new SemaphoreSlim(6);
+        var tasks = ids.Select(async id =>
+        {
+            await gate.WaitAsync();
+            try
+            {
+                var d = await Lab.GetBatchAsync(id, _cts.Token);
+                if (d is not null) _details[id] = d;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+        await Task.WhenAll(tasks);
+        if (version == _version) await InvokeAsync(StateHasChanged);
+    }
+
+    private LabBatchDetailDto? DetailOf(int id) => _details.TryGetValue(id, out var d) ? d : null;
+
+    private async Task SelectTabAsync(string key)
+    {
+        if (_tab == key) return;
+        _tab = key;
+        _page = 1;
+        await LoadListAsync();
+    }
+
+    private async Task ApplyFiltersAsync()
+    {
+        _applied = _draft.Copy();
+        _page = 1;
+        await LoadListAsync();
+    }
+
+    private async Task ClearFiltersAsync()
+    {
+        _draft = new FilterSet();
+        _applied = new FilterSet();
+        _q = "";
+        _tab = "all";
+        _page = 1;
+        await LoadListAsync();
+    }
+
+    private void OnStateChanged(ChangeEventArgs e)
+    {
+        _draft.StateId = e.Value?.ToString();
+        // a region of another state would silently return nothing
+        if (int.TryParse(_draft.StateId, out var state) && int.TryParse(_draft.RegionId, out var region)
+            && _regions.FirstOrDefault(r => r.Id == region) is { } r && r.StateId != state)
+        {
+            _draft.RegionId = null;
+        }
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        _q = e.Value?.ToString() ?? "";
+        _debounce?.Dispose();
+        _debounce = new System.Threading.Timer(_ => InvokeAsync(async () =>
+        {
+            _page = 1;
+            await LoadListAsync();
+        }), null, 350, Timeout.Infinite);
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _page = page;
+        await LoadListAsync();
+    }
+
+    private async Task ChangePageSizeAsync(int size)
+    {
+        _pageSize = size;
+        _page = 1;
+        await LoadListAsync();
+    }
+
+    private RenderFragment AssignedTo(LabBatchRowDto row) => __builder =>
+    {
+        if (string.IsNullOrWhiteSpace(row.AssignedToName))
+        {
+            <span class="lt-muted">Not assigned</span>
+        }
+        else
+        {
+            <span class="lt-person">
+                <MemberAvatar Member="@(new CommunityMember { UserId = row.AssignedToUserId ?? "", Name = row.AssignedToName, Avatar = Lab.AvatarSrc(row.AssignedToAvatarUrl) })" Size="28" />
+                <span class="lt-person-name">@row.AssignedToName</span>
+            </span>
+        }
+    };
+
+    private static string Num(int? n) => n?.ToString() ?? "–";
+    private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+    private static int? ParseInt(string? s) => int.TryParse(s, out var v) && v > 0 ? v : null;
+    private static DateTime? ParseDate(string? s) => DateTime.TryParse(s, out var d) ? d : null;
+
+    public void Dispose()
+    {
+        _debounce?.Dispose();
+        _cts.Cancel();   // not disposed: background detail loads may still read the token
+    }
+}

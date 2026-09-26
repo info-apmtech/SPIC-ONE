@@ -3,11 +3,14 @@
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Components.Sas
+@using SPIC.MauiBlazorApp.Shared.Pages.Sas.Farmer
 @inject SasApi Api
 @inject NavigationManager Nav
 @inject ToastService Toast
 @inject FileDownloadService Downloads
 @inject IJSRuntime JS
+@inject LoginState Login
+@inject LabApi Lab
 
 @*
     Sample Collection Details (Figma frame 14). One page for every role:
@@ -23,12 +26,26 @@
 
     Before results exist the Result Comparison card reads "Awaiting lab results" plus the status.
     A collection with several samples gets a selector above the result table.
+
+    Farmer view (SAS Lab portal v2, screen 32; LoginState.UserRole == Farmer only): header pills
+    (lab status / Paid or Free Sample / Report: Ready or Not Ready), Sample / Farmer / Payment
+    Details cards, Payment Proof Preview and a farmer-worded timeline replace the staff sections;
+    the Result Comparison table stays shared. Only the farmer's own samples are listed
+    (SasFarmer.UserId), ?sample={itemId} preselects one (links from My Samples), and the
+    farmer's report (api/Lab/reports, farmer-scoped) drives the report pill, the last timeline
+    step and the Download PDF button. Payment fields added by the Payments workstream
+    (PaymentMode, TransactionDate, FinanceStatus) are read by name so the page works with and
+    without them.
 *@
 
-<PageHeader Title="Sample Collection Details" BackHref="/SampleCollection">
+<PageHeader Title="Sample Collection Details" BackHref="@(IsFarmer ? "/Sas/MySamples" : "/SampleCollection")">
     <Actions>
         @if (Detail is not null)
         {
+            @if (IsFarmer && SelectedReport is { } headerReport)
+            {
+                <ReportDownloadButton ReportId="headerReport.Id" Languages="_languages" />
+            }
             @if (Detail.Status == SampleCollectionStatus.Draft && Detail.CanEdit)
             {
                 <button type="button" class="scd-btn scd-btn-primary" @onclick="@(() => Nav.NavigateTo($"/SampleCollection/new?id={Detail!.Id}"))">
@@ -78,6 +95,12 @@ else
 
     <div class="scd-page">
 
+        @if (IsFarmer)
+        {
+            @FarmerView(d)
+        }
+        else
+        {
         @* --------------------------------------------------------- chips *@
         <div class="scd-chips">
             <span class="scd-chip scd-chip-code"># @d.Code</span>
@@ -249,6 +272,7 @@ else
                 </div>
             </section>
         </div>
+        }
 
         @* --------------------------------------------------------- payment review *@
         @if (ShowPaymentReview)
@@ -324,10 +348,10 @@ else
         <section class="scd-card scd-results">
             <h2 class="scd-card-title">Result Comparison</h2>
 
-            @if (d.Items.Count > 1)
+            @if (VisibleItems.Count > 1)
             {
                 <div class="scd-tabs" role="tablist" aria-label="Samples">
-                    @foreach (var item in d.Items)
+                    @foreach (var item in VisibleItems)
                     {
                         var active = item.Id == SelectedItemId;
                         <button type="button" role="tab" aria-selected="@active.ToString().ToLowerInvariant()"
@@ -359,6 +383,12 @@ else
             }
         </section>
 
+        @if (IsFarmer)
+        {
+            @FarmerTimeline(d)
+        }
+        else
+        {
         @* --------------------------------------------------------- consignment + amount *@
         <div class="scd-row">
             <section class="scd-card scd-consignment">
@@ -425,6 +455,7 @@ else
             <h2 class="scd-card-title">History / Timeline</h2>
             <StatusTimeline Events="d.Timeline" Current="d.Status" />
         </section>
+        }
     </div>
 
     @* --------------------------------------------------------- proof lightbox *@
@@ -442,6 +473,9 @@ else
 
 @code {
     [Parameter] public int Id { get; set; }
+
+    /// <summary>?sample={itemId}: the sample to open first (links from the farmer's My Samples).</summary>
+    [SupplyParameterFromQuery(Name = "sample")] public int? SampleParam { get; set; }
 
     private SampleCollectionDetailDto? Detail { get; set; }
     private SasLookupsDto? _lookups;
@@ -484,8 +518,11 @@ else
         if (item is not null)
         {
             _loadedId = Id;
-            if (_selectedItemId is null || item.Items.All(i => i.Id != _selectedItemId))
-                _selectedItemId = item.Items.FirstOrDefault()?.Id;
+            var visible = ItemsFor(item);
+            if (_selectedItemId is null || visible.All(i => i.Id != _selectedItemId))
+                _selectedItemId = SampleParam is { } wanted && visible.Any(i => i.Id == wanted)
+                    ? wanted
+                    : visible.FirstOrDefault()?.Id;
 
             // Only review roles need the default parameter list for a blank result form.
             if (_lookups is null && item.CanReview) _lookups = await Api.GetLookupsAsync();
@@ -496,6 +533,9 @@ else
 
         // Second, optional call: the page is already usable without it.
         await LoadConsignmentAsync();
+
+        // Farmer: the sample report (exists only once the lab completed the batch).
+        await LoadFarmerReportsAsync();
     }
 
     private async Task LoadConsignmentAsync()
@@ -526,10 +566,10 @@ else
             .Select(g => new SampleGroup(SasLabels.SampleTypeName(g.Key), g.Count(), g.Sum(i => i.NoOfTests)))
             .ToList();
 
-    private int? SelectedItemId => _selectedItemId ?? Detail?.Items.FirstOrDefault()?.Id;
+    private int? SelectedItemId => _selectedItemId ?? VisibleItems.FirstOrDefault()?.Id;
 
     private SampleItemDto? SelectedItem =>
-        Detail?.Items.FirstOrDefault(i => i.Id == SelectedItemId) ?? Detail?.Items.FirstOrDefault();
+        VisibleItems.FirstOrDefault(i => i.Id == SelectedItemId) ?? VisibleItems.FirstOrDefault();
 
     private void SelectItem(int itemId)
     {
@@ -588,6 +628,331 @@ else
                 : $"The lab has not published the results yet. Current status: {SasLabels.Status(Detail.Status)}.";
 
     private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    // ------------------------------------------------------------------ farmer view (screen 32)
+
+    /// <summary>Lab analysis is expected to take this many days (Sas:Lab:DelayedAfterDays default).</summary>
+    private const int ExpectedAnalysisDays = 5;
+
+    private bool IsFarmer => Login.UserRole == AppRole.Farmer;
+
+    private List<LabReportRowDto> _farmerReports = new();
+    private List<LabLanguageDto>? _languages;
+
+    /// <summary>Every sample for staff; the farmer's own samples (SasFarmer.UserId) for a farmer.</summary>
+    private List<SampleItemDto> VisibleItems => Detail is null ? new List<SampleItemDto>() : ItemsFor(Detail);
+
+    private List<SampleItemDto> ItemsFor(SampleCollectionDetailDto d) =>
+        IsFarmer ? FarmerSamples.OwnItems(d, Login.UserId) : d.Items;
+
+    private LabReportRowDto? SelectedReport =>
+        SelectedItem is { } item
+            ? _farmerReports.Where(r => r.SampleItemId == item.Id).OrderByDescending(r => r.GeneratedAt).FirstOrDefault()
+            : null;
+
+    private async Task LoadFarmerReportsAsync()
+    {
+        if (!IsFarmer || Detail is not { Status: SampleCollectionStatus.Completed }) return;
+
+        var reportsTask = FarmerSamples.ReportsAsync(Lab, CancellationToken.None);
+        var languagesTask = Lab.GetLanguagesAsync();
+        var ids = Detail.Items.Select(i => i.Id).ToHashSet();
+        _farmerReports = (await reportsTask ?? new()).Where(r => ids.Contains(r.SampleItemId)).ToList();
+        _languages = await languagesTask;
+        StateHasChanged();
+    }
+
+    /// <summary>Reads a payment field the Payments workstream adds to the v1 DTO, when it exists.</summary>
+    private static object? PaymentField(SamplePaymentDto? payment, string name) =>
+        payment?.GetType().GetProperty(name)?.GetValue(payment);
+
+    private static string PaymentModeText(SamplePaymentDto p) => PaymentField(p, "PaymentMode") switch
+    {
+        SamplePaymentMode.Upi => "UPI",
+        SamplePaymentMode.BankTransfer => "Bank Transfer",
+        SamplePaymentMode.Cash => "Cash",
+        int i when Enum.IsDefined(typeof(SamplePaymentMode), i) => PaymentModeText((SamplePaymentMode)i),
+        string s when !string.IsNullOrWhiteSpace(s) => s,
+        _ => string.IsNullOrWhiteSpace(p.BankGateway) ? "UPI" : p.BankGateway!
+    };
+
+    private static string PaymentModeText(SamplePaymentMode m) => m switch
+    {
+        SamplePaymentMode.BankTransfer => "Bank Transfer",
+        SamplePaymentMode.Cash => "Cash",
+        _ => "UPI"
+    };
+
+    private static DateTime PaymentDate(SamplePaymentDto p) =>
+        PaymentField(p, "TransactionDate") is DateTime d ? d : p.CreatedAt;
+
+    private static (string Text, string Tone) AdminStatus(SamplePaymentStatus s) => s switch
+    {
+        SamplePaymentStatus.Approved => ("Admin Approved", "green"),
+        SamplePaymentStatus.Rejected => ("Returned to MO", "red"),
+        _ => ("Pending Review", "orange")
+    };
+
+    private static (string Text, string Tone)? FinanceStatus(SamplePaymentDto p) => PaymentField(p, "FinanceStatus") switch
+    {
+        SampleFinanceStatus f => FinanceStatusOf(f),
+        int i when Enum.IsDefined(typeof(SampleFinanceStatus), i) => FinanceStatusOf((SampleFinanceStatus)i),
+        _ => null
+    };
+
+    private static (string Text, string Tone) FinanceStatusOf(SampleFinanceStatus f) => f switch
+    {
+        SampleFinanceStatus.AwaitingVerification => ("Pending", "orange"),
+        SampleFinanceStatus.Verified => ("Verified", "green"),
+        SampleFinanceStatus.Mismatch => ("Mismatch", "red"),
+        _ => ("Not Forwarded", "grey")
+    };
+
+    private SasStatusEventDto? EventOf(params string[] statuses) =>
+        Detail?.Timeline
+            .Where(e => statuses.Any(s => string.Equals(s, e.Status, StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(e => e.At)
+            .FirstOrDefault();
+
+    private sealed record FarmerStep(string Title, string Icon, bool Done, bool Current, DateTime? At, string? By, string? Note);
+
+    /// <summary>The farmer-worded seven steps, from the v1 status events plus the sample report.</summary>
+    private List<FarmerStep> FarmerSteps(SampleCollectionDetailDto d)
+    {
+        var s = d.Status;
+        var collected = EventOf("Collected", "Submitted", "PendingPayment", "PendingApproval", "ReadyForConsignment");
+        var dispatched = EventOf("Dispatched");
+        var delivered = EventOf("DeliveredToLab", "Delivered");
+        var testing = EventOf("TestInProgress");
+        var completed = EventOf("Completed");
+        var report = SelectedReport;
+
+        string? courier = null;
+        if (d.Consignment is { } c)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(c.CourierService)) parts.Add(c.CourierService);
+            if (!string.IsNullOrWhiteSpace(c.TrackingNumber)) parts.Add($"AWB {c.TrackingNumber}");
+            courier = parts.Count == 0 ? null : string.Join(" · ", parts);
+        }
+
+        string? analysisNote = null;
+        if (s == SampleCollectionStatus.TestInProgress)
+        {
+            var started = testing?.At ?? DateTime.Now;
+            var left = ExpectedAnalysisDays - (int)(DateTime.Now.Date - started.Date).TotalDays;
+            analysisNote = left >= 1
+                ? $"Results expected within {left} day{(left == 1 ? "" : "s")}"
+                : "Taking a little longer than usual; results expected soon";
+        }
+        else if (s < SampleCollectionStatus.TestInProgress)
+        {
+            analysisNote = $"Results expected within {ExpectedAnalysisDays} days of testing";
+        }
+
+        var steps = new List<FarmerStep>
+        {
+            new("Sample Collected by MO", "bi-eyedropper", s >= SampleCollectionStatus.Collected, false,
+                collected?.At ?? d.SubmittedAt ?? d.CollectionDate, collected?.ByName ?? d.CollectedByName, null),
+            new("Sent to Lab", "bi-truck", s >= SampleCollectionStatus.Dispatched, false,
+                dispatched?.At ?? d.Consignment?.DispatchedAt, dispatched?.ByName ?? d.Consignment?.DispatchedByName, courier),
+            new("Lab Received", "bi-buildings", s >= SampleCollectionStatus.DeliveredToLab, false,
+                delivered?.At, delivered?.ByName, null),
+            new("Assigned for Testing", "bi-person-check", s >= SampleCollectionStatus.TestInProgress, false,
+                testing?.At, testing?.ByName, testing?.Note),
+            new("Under Lab Analysis", "bi-clipboard-pulse", s >= SampleCollectionStatus.Completed, false,
+                completed?.At ?? d.CompletedAt, null, s >= SampleCollectionStatus.Completed ? "Analysis completed" : analysisNote),
+            new("Report Generated", "bi-file-earmark-text", s >= SampleCollectionStatus.Completed, false,
+                report?.GeneratedAt ?? completed?.At ?? d.CompletedAt, completed?.ByName, report?.Code),
+            new("Report Ready for Download", "bi-cloud-arrow-down", report is not null, false,
+                report?.GeneratedAt, null, report is null ? null : "Download it in Tamil or English")
+        };
+
+        var current = steps.FindIndex(x => !x.Done);
+        if (current >= 0) steps[current] = steps[current] with { Current = true };
+        return steps;
+    }
+
+    private RenderFragment FarmerView(SampleCollectionDetailDto d) => __builder =>
+    {
+        var item = SelectedItem;
+        var own = VisibleItems;
+        var status = FarmerSamples.StatusOf(d.Status, SelectedReport is not null);
+        var paid = d.PaymentType == SamplePaymentType.Paid;
+        var farmer = item?.Farmer;
+        var p = d.Payment;
+
+        <div class="scd-chips">
+            <span class="scd-chip scd-chip-code"># @(item?.Code ?? d.Code)</span>
+            <LabPill Text="@FarmerSamples.Text(status)" Tone="@FarmerSamples.Tone(status)" />
+            <LabPill Text="@(paid ? "Paid Sample" : "Free Sample")" Tone="@(paid ? "blue" : "teal")" />
+            <LabPill Text="@(SelectedReport is null ? "Report: Not Ready" : "Report: Ready")" Tone="@(SelectedReport is null ? "grey" : "green")" />
+            <span class="scd-chip-when">@HeadlineWhen</span>
+        </div>
+
+        <div class="scd-row">
+            <section class="scd-card">
+                <h2 class="scd-card-title scd-f-title"><span class="scd-f-icon scd-f-ic-green"><i class="bi bi-eyedropper" aria-hidden="true"></i></span> Sample Details</h2>
+                <dl class="scd-f-defs">
+                    <div><dt>Sample No.</dt><dd>@(item?.Code ?? "-")</dd></div>
+                    <div><dt>Total Samples</dt><dd>@own.Count</dd></div>
+                    <div><dt>Soil Sample</dt><dd>@own.Count(i => i.SampleType != SampleType.Water)</dd></div>
+                    <div><dt>Rate per Sample</dt><dd>@(paid && item is not null ? SasLabels.Money(item.Amount) : "Free")</dd></div>
+                    <div><dt>Total Payable Amount</dt><dd>@(paid ? SasLabels.Money(own.Sum(i => i.Amount)) : "Free")</dd></div>
+                    <div><dt>Crop</dt><dd>@Dash(item is null ? null : FarmerSamples.Crop(item))</dd></div>
+                    <div>
+                        <dt>Collected By</dt>
+                        <dd>@Dash(d.CollectedByName) <span class="scd-sub">(@(string.IsNullOrWhiteSpace(d.CollectedByRole) ? "MO" : d.CollectedByRole))</span></dd>
+                    </div>
+                    <div><dt>Collection Date</dt><dd>@SasLabels.LongDate(d.CollectionDate)</dd></div>
+                    <div><dt>Consignment Created</dt><dd>@(d.Consignment is { } cc ? $"{SasLabels.DateTimeText(cc.DispatchedAt)} ({cc.Code})" : "Not dispatched yet")</dd></div>
+                    <div>
+                        <dt>AWB / Tracking No</dt>
+                        <dd>
+                            @if (string.IsNullOrWhiteSpace(d.Consignment?.TrackingNumber))
+                            {
+                                <span>-</span>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(d.Consignment.TrackingLink))
+                            {
+                                <a class="scd-link" href="@d.Consignment.TrackingLink" target="_blank" rel="noopener">@d.Consignment.TrackingNumber</a>
+                            }
+                            else
+                            {
+                                <span class="scd-link-plain">@d.Consignment.TrackingNumber</span>
+                            }
+                        </dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="scd-card">
+                <h2 class="scd-card-title scd-f-title"><span class="scd-f-icon scd-f-ic-blue"><i class="bi bi-person" aria-hidden="true"></i></span> Farmer Details</h2>
+                @if (farmer is null)
+                {
+                    <p class="scd-f-empty">No farmer on this sample.</p>
+                }
+                else
+                {
+                    <dl class="scd-f-defs">
+                        <div><dt>Farmer Name</dt><dd>@Dash(farmer.Name)</dd></div>
+                        <div><dt>Mobile No.</dt><dd>@Dash(farmer.Mobile)</dd></div>
+                        <div><dt>Village</dt><dd>@Dash(farmer.Village)</dd></div>
+                        <div><dt>Taluk</dt><dd>@Dash(farmer.Taluk)</dd></div>
+                        <div><dt>District</dt><dd>@Dash(farmer.DistrictName)</dd></div>
+                        <div><dt>State</dt><dd>@Dash(farmer.StateName)</dd></div>
+                        <div><dt>Address</dt><dd>@Dash(string.Join(", ", new[] { farmer.Address1, farmer.Address2, farmer.PinCode }.Where(x => !string.IsNullOrWhiteSpace(x))))</dd></div>
+                        <div><dt>Survey No.</dt><dd>@Dash(farmer.SurveyNumber)</dd></div>
+                    </dl>
+                }
+            </section>
+        </div>
+
+        <div class="scd-row">
+            <section class="scd-card">
+                <h2 class="scd-card-title scd-f-title"><span class="scd-f-icon scd-f-ic-violet"><i class="bi bi-credit-card" aria-hidden="true"></i></span> Payment Details</h2>
+                @if (!paid)
+                {
+                    <p class="scd-f-empty">This is a free sample: there is nothing to pay.</p>
+                }
+                else if (p is null)
+                {
+                    <p class="scd-f-empty">Your MO officer has not recorded the payment yet.</p>
+                }
+                else
+                {
+                    var admin = AdminStatus(p.Status);
+                    var finance = FinanceStatus(p);
+                    <dl class="scd-f-defs">
+                        <div><dt>Payment Amount</dt><dd>@SasLabels.Money(p.Amount)</dd></div>
+                        <div><dt>Mode</dt><dd>@PaymentModeText(p)</dd></div>
+                        <div><dt>Transaction ID</dt><dd>@Dash(p.TransactionId)</dd></div>
+                        <div><dt>Transaction Date</dt><dd>@SasLabels.DateTimeText(PaymentDate(p))</dd></div>
+                        <div><dt>Admin Status</dt><dd><LabPill Text="@admin.Text" Tone="@admin.Tone" /></dd></div>
+                        <div>
+                            <dt>Finance Status</dt>
+                            <dd>
+                                @if (finance is { } f)
+                                {
+                                    <LabPill Text="@f.Text" Tone="@f.Tone" />
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
+                            </dd>
+                        </div>
+                    </dl>
+                }
+            </section>
+
+            <section class="scd-card">
+                <h2 class="scd-card-title scd-f-title"><span class="scd-f-icon scd-f-ic-amber"><i class="bi bi-receipt" aria-hidden="true"></i></span> Payment Proof Preview</h2>
+                @if (!string.IsNullOrWhiteSpace(p?.ProofPath))
+                {
+                    <button type="button" class="scd-proof scd-f-proof" @onclick="OpenProof" aria-label="Open the payment proof">
+                        <img src="@Api.FileUrl(p!.ProofPath)" alt="Payment proof" loading="lazy"
+                             onerror="this.onerror=null;this.style.display='none';this.nextElementSibling.textContent='The receipt image could not be loaded.'" />
+                        <span class="scd-proof-cap"><i class="bi bi-zoom-in" aria-hidden="true"></i> View full size</span>
+                    </button>
+                }
+                else
+                {
+                    <div class="scd-proof scd-proof--none scd-f-proof"><i class="bi bi-image" aria-hidden="true"></i> @(paid ? "No proof uploaded" : "Not needed for a free sample")</div>
+                }
+            </section>
+        </div>
+    };
+
+    private RenderFragment FarmerTimeline(SampleCollectionDetailDto d) => __builder =>
+    {
+        var steps = FarmerSteps(d);
+        <section class="scd-card scd-timeline">
+            <h2 class="scd-card-title">Sample Journey</h2>
+            <ol class="scd-ftl" aria-label="Sample journey">
+                @for (var i = 0; i < steps.Count; i++)
+                {
+                    var st = steps[i];
+                    <li class="scd-ftl-step @(st.Done ? "is-done" : "") @(st.Current ? "is-current" : "")">
+                        <div class="scd-ftl-rail" aria-hidden="true">
+                            <span class="scd-ftl-dot"><i class="bi @(st.Done ? "bi-check-lg" : st.Icon)"></i></span>
+                            @if (i < steps.Count - 1)
+                            {
+                                <span class="scd-ftl-line @(steps[i + 1].Done ? "is-done" : "")"></span>
+                            }
+                        </div>
+                        <div class="scd-ftl-body">
+                            <span class="scd-ftl-title">@st.Title</span>
+                            @if (st.Done && st.At is { } at)
+                            {
+                                <span class="scd-ftl-when">@at.ToString("dd MMM yyyy, hh:mm tt")</span>
+                            }
+                            else if (st.Done)
+                            {
+                                <span class="scd-ftl-when">Completed</span>
+                            }
+                            else if (st.Current)
+                            {
+                                <span class="scd-ftl-when scd-ftl-now">@(st.Title == "Under Lab Analysis" ? "In progress" : "Next step")</span>
+                            }
+                            else
+                            {
+                                <span class="scd-ftl-when scd-ftl-pending">Pending</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(st.Note) && (st.Done || st.Current))
+                            {
+                                <span class="scd-ftl-note">@st.Note</span>
+                            }
+                            @if (st.Done && !string.IsNullOrWhiteSpace(st.By))
+                            {
+                                <span class="scd-ftl-by">by @st.By</span>
+                            }
+                        </div>
+                    </li>
+                }
+            </ol>
+        </section>
+    };
 
     // ------------------------------------------------------------------ payment review
 

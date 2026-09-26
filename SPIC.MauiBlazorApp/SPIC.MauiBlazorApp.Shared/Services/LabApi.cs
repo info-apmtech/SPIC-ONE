@@ -254,6 +254,22 @@ public sealed class LabApi
     /// <summary>Document / image served by the v1 file route (LabDocumentDto.Url is already relative to the API).</summary>
     public string FileUrl(string relativeUrl) => AuthorizedUrl(relativeUrl);
 
+    // ---------------------------------------------------------------- admin + farmer (phase 1f, append-only)
+
+    /// <summary>
+    /// Region master (<c>api/Region/all</c>) for the admin Lab Tracking "Region" filter: the v1
+    /// SAS lookups carry states and districts only. Rows use the shared LocationItemDto shape
+    /// (Id, RegionName, StateId).
+    /// </summary>
+    public Task<List<LocationItemDto>?> GetRegionsAsync(CancellationToken ct = default)
+        => GetAsync<List<LocationItemDto>>("api/Region/all", "the regions", ct);
+
+    /// <summary>Avatar URL from a lab DTO (relative API path) made loadable by &lt;img&gt;; null stays null.</summary>
+    public string? AvatarSrc(string? relativeUrl)
+        => string.IsNullOrWhiteSpace(relativeUrl) ? null
+            : relativeUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? relativeUrl
+            : AuthorizedUrl(relativeUrl);
+
     // ---------------------------------------------------------------- plumbing
 
     private static string Url(string path, params (string Key, object? Value)[] query)

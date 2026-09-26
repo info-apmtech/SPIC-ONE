@@ -1,0 +1,240 @@
+﻿@page "/Sas/MySamples"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Farmer
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject SasApi Sas
+@inject LabApi Lab
+@inject LoginState Login
+@implements IDisposable
+
+@*
+    My Samples (farmer, screen 31). One card per SAMPLE (not per collection): the farmer's
+    collections (GET api/Sas/collections, scoped to the farmer by the API) are opened one by one
+    (GET api/Sas/collections/{id}) for their items and crops, and joined with the farmer's sample
+    reports (GET api/Lab/reports) once anything is Completed. Filters and paging run in the
+    browser: a farmer has a handful of samples. View Details opens the v1 details page on that
+    sample; Download PDF appears once the sample's report exists.
+*@
+
+<div class="ms-page">
+    <PageHeader Title="My Samples" Subtitle="All soil samples submitted through your MO officer." />
+
+    <section class="ms-toolbar" aria-label="Filter samples">
+        <div class="ms-search">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" class="ms-search-input" placeholder="Search sample, consignment, crop"
+                   aria-label="Search samples" value="@_q" @oninput="OnSearch" />
+        </div>
+        <div class="ms-dates">
+            <div class="ms-datefield @(string.IsNullOrWhiteSpace(_from) ? "is-empty" : null)">
+                <input class="ms-input" type="date" aria-label="From date" value="@_from" @onchange="e => SetFrom(e.Value?.ToString())" />
+                <span class="ms-datefield-ph" aria-hidden="true">From date</span>
+            </div>
+            <span class="ms-dates-sep">to</span>
+            <div class="ms-datefield @(string.IsNullOrWhiteSpace(_to) ? "is-empty" : null)">
+                <input class="ms-input" type="date" aria-label="To date" value="@_to" @onchange="e => SetTo(e.Value?.ToString())" />
+                <span class="ms-datefield-ph" aria-hidden="true">To date</span>
+            </div>
+        </div>
+        <select class="ms-input" aria-label="Sample type" value="@_type" @onchange="e => SetType(e.Value?.ToString())">
+            <option value="">All Types</option>
+            @foreach (var t in Enum.GetValues<SampleType>())
+            {
+                <option value="@t">@FarmerSamples.SampleTypeName(t)</option>
+            }
+        </select>
+        <select class="ms-input" aria-label="Status" value="@_status" @onchange="e => SetStatus(e.Value?.ToString())">
+            <option value="">All Statuses</option>
+            @foreach (var s in Enum.GetValues<FarmerStatus>())
+            {
+                <option value="@s">@FarmerSamples.Text(s)</option>
+            }
+        </select>
+        <select class="ms-input" aria-label="Crop" value="@_crop" @onchange="e => SetCrop(e.Value?.ToString())">
+            <option value="">All Crops</option>
+            @foreach (var c in Crops)
+            {
+                <option value="@c">@c</option>
+            }
+        </select>
+    </section>
+
+    @if (_loading)
+    {
+        <Skeleton Variant="card" Rows="3" />
+    }
+    else if (_rows is null)
+    {
+        <EmptyState Icon="bi-cloud-slash" Title="Your samples could not be loaded" Message="Check the connection and try again.">
+            <button type="button" class="ms-btn ms-btn-outline" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="bi-droplet-half" Title="No samples yet"
+                    Message="Samples your MO officer collects from your land or water source appear here." />
+    }
+    else if (Filtered.Count == 0)
+    {
+        <EmptyState Icon="bi-search" Title="No sample matches" Message="Change or clear the filters to see your samples." Compact="true">
+            <button type="button" class="ms-btn ms-btn-outline" @onclick="ClearFilters">Clear filters</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="ms-list">
+            @foreach (var r in PageRows)
+            {
+                <article class="ms-card">
+                    <div class="ms-card-top">
+                        <span class="ms-card-icon" aria-hidden="true"><i class="bi @(r.SampleType == SampleType.Water ? "bi-droplet" : "bi-flower1")"></i></span>
+                        <div class="ms-card-id">
+                            <h2 class="ms-card-code">@r.SampleCode</h2>
+                            <p class="ms-card-meta">
+                                <span>Consignment: @(string.IsNullOrWhiteSpace(r.ConsignmentCode) ? "Not dispatched" : r.ConsignmentCode)</span>
+                                <span class="ms-dot" aria-hidden="true">&middot;</span>
+                                <span>Collected by MO @r.CollectedByName</span>
+                                <span class="ms-dot" aria-hidden="true">&middot;</span>
+                                <span>@r.CollectionDate.ToString("dd MMM yyyy")</span>
+                            </p>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(r.Crop))
+                        {
+                            <span class="ms-crop"><i class="bi bi-flower2" aria-hidden="true"></i> @r.Crop</span>
+                        }
+                    </div>
+                    <div class="ms-card-bottom">
+                        <div class="ms-pills">
+                            <LabPill Text="@(r.PaymentType == SamplePaymentType.Paid ? "Paid" : "Free")" Tone="@(r.PaymentType == SamplePaymentType.Paid ? "blue" : "teal")" />
+                            <LabPill Text="@FarmerSamples.Text(r.Status)" Tone="@FarmerSamples.Tone(r.Status)" />
+                            <LabPill Text="@(r.Report is null ? "Report: Not Ready" : "Report: Ready")" Tone="@(r.Report is null ? "grey" : "green")" />
+                            <span class="ms-type">@FarmerSamples.SampleTypeName(r.SampleType)</span>
+                        </div>
+                        <div class="ms-actions">
+                            <a class="ms-btn ms-btn-outline" href="@($"/SampleCollection/view/{r.CollectionId}?sample={r.ItemId}")">
+                                <i class="bi bi-eye" aria-hidden="true"></i> View Details
+                            </a>
+                            @if (r.Report is { } report)
+                            {
+                                <ReportDownloadButton ReportId="report.Id" Languages="_languages" OnDownloaded="_ => MarkDownloaded(report)" />
+                            }
+                        </div>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <LabPager Page="_page" PageSize="_pageSize" Total="Filtered.Count"
+                  PageChanged="p => _page = p" PageSizeChanged="SetPageSize" />
+    }
+</div>
+
+@code {
+    private List<FarmerSampleRow>? _rows;
+    private List<LabLanguageDto>? _languages;
+    private bool _loading = true;
+
+    private string _q = "";
+    private string? _from;
+    private string? _to;
+    private string? _type;
+    private string? _status;
+    private string? _crop;
+    private int _page = 1;
+    private int _pageSize = LabApi.DefaultPageSize;
+
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var collections = await FarmerSamples.CollectionsAsync(Sas, _cts.Token);
+        if (collections is null)
+        {
+            _rows = null;
+            _loading = false;
+            return;
+        }
+
+        var rows = await FarmerSamples.SamplesAsync(Sas, collections, Login.UserId, _cts.Token);
+
+        // Reports exist only for completed samples: skip the call until one is completed.
+        if (rows.Any(r => r.CollectionStatus == SampleCollectionStatus.Completed))
+        {
+            var reportsTask = FarmerSamples.ReportsAsync(Lab, _cts.Token);
+            var languagesTask = Lab.GetLanguagesAsync(_cts.Token);
+            var reports = await reportsTask ?? new();
+            _languages = await languagesTask;
+            foreach (var r in rows)
+                r.Report = reports.Where(x => x.SampleItemId == r.ItemId).OrderByDescending(x => x.GeneratedAt).FirstOrDefault();
+        }
+
+        _rows = rows;
+        _loading = false;
+    }
+
+    private IEnumerable<string> Crops =>
+        (_rows ?? new()).SelectMany(r => (r.Crop ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c);
+
+    private List<FarmerSampleRow> Filtered
+    {
+        get
+        {
+            IEnumerable<FarmerSampleRow> q = _rows ?? new();
+            var term = _q.Trim();
+            if (term.Length > 0)
+                q = q.Where(r => r.SampleCode.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || r.CollectionCode.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || (r.ConsignmentCode ?? "").Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || (r.Crop ?? "").Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || r.CollectedByName.Contains(term, StringComparison.OrdinalIgnoreCase));
+            if (DateTime.TryParse(_from, out var from)) q = q.Where(r => r.CollectionDate.Date >= from.Date);
+            if (DateTime.TryParse(_to, out var to)) q = q.Where(r => r.CollectionDate.Date <= to.Date);
+            if (Enum.TryParse<SampleType>(_type, out var type)) q = q.Where(r => r.SampleType == type);
+            if (Enum.TryParse<FarmerStatus>(_status, out var status)) q = q.Where(r => r.Status == status);
+            if (!string.IsNullOrWhiteSpace(_crop))
+                q = q.Where(r => (r.Crop ?? "").Split(',', StringSplitOptions.TrimEntries).Contains(_crop, StringComparer.OrdinalIgnoreCase));
+            return q.ToList();
+        }
+    }
+
+    private IEnumerable<FarmerSampleRow> PageRows
+    {
+        get
+        {
+            var all = Filtered;
+            var pages = Math.Max(1, (int)Math.Ceiling(all.Count / (double)_pageSize));
+            if (_page > pages) _page = pages;
+            return all.Skip((_page - 1) * _pageSize).Take(_pageSize);
+        }
+    }
+
+    private void OnSearch(ChangeEventArgs e) { _q = e.Value?.ToString() ?? ""; _page = 1; }
+    private void SetFrom(string? v) { _from = v; _page = 1; }
+    private void SetTo(string? v) { _to = v; _page = 1; }
+    private void SetType(string? v) { _type = v; _page = 1; }
+    private void SetStatus(string? v) { _status = v; _page = 1; }
+    private void SetCrop(string? v) { _crop = v; _page = 1; }
+    private void SetPageSize(int size) { _pageSize = size; _page = 1; }
+
+    private void ClearFilters()
+    {
+        _q = "";
+        _from = _to = _type = _status = _crop = null;
+        _page = 1;
+    }
+
+    private static void MarkDownloaded(LabReportRowDto report)
+    {
+        if (report.Status == LabReportStatus.Generated) report.Status = LabReportStatus.Downloaded;
+        report.DownloadCount++;
+    }
+
+    public void Dispose() => _cts.Cancel();
+}
