@@ -138,7 +138,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             pageKey = RoleAccessPermissions.NormalizePageKey(pageKey);
 
             // Admin and CorporateAdmin bypass everything
-            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
+            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return true;
             // No designation assigned => access ONLY the Welcome page (nothing else)
             if (AllowedPages.Count == 0)
                 return string.Equals(pageKey, "Welcome", StringComparison.OrdinalIgnoreCase);
@@ -155,7 +155,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool Can(string pageKey, string action)
         {
             pageKey = RoleAccessPermissions.NormalizePageKey(pageKey);
-            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
+            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return true;
             if (AllowedPages.Count == 0) return false;
             return AllowedPages.Any(t =>
             {
