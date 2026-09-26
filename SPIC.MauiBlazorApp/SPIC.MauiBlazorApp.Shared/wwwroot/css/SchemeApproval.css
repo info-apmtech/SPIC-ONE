@@ -809,65 +809,112 @@
             display: none;
         }
 
+    /* Two columns genuinely fit: at 360px each card is ~160px, enough for a
+       wrapped title and a 21px value. */
     .ap-stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
     }
 
     .ap-stat-card {
-        padding: 12px 14px;
-        min-height: 72px;
+        padding: 12px;
+        min-height: 68px;
+        border-radius: 10px;
+    }
+
+    /* The stat icon is absolutely positioned, so the text column has to
+       reserve its gutter. Without this a title like "Pending SDWA Admin"
+       (~105px) runs under the 32px icon box and is visually clipped. */
+    .ap-stat-left {
+        min-width: 0;
+        padding-right: 32px;
     }
 
     .ap-stat-title {
-        font-size: 12px;
+        font-size: 11.5px;
+        line-height: 1.25;
+        margin-bottom: 4px;
+        overflow-wrap: anywhere;
     }
 
     .ap-stat-value {
-        font-size: 20px;
+        font-size: 21px;
     }
 
     .ap-stat-icon {
-        width: 34px;
-        height: 34px;
-        right: 12px;
+        width: 32px;
+        height: 32px;
+        right: 10px;
+        border-radius: 8px;
     }
 
         .ap-stat-icon svg {
-            width: 16px;
-            height: 16px;
+            width: 15px;
+            height: 15px;
         }
 
     /* All seven approval tabs stay visible: they wrap onto further rows
-       instead of running off the right edge of a scroller with no affordance. */
+       instead of running off the right edge of a scroller with no affordance.
+       `min-width: 0` lets the labels wrap so more tabs fit per row, and
+       `flex: 1 1 auto` makes the tabs on each row share the width evenly
+       rather than leaving a ragged right edge. */
     .ap-tabs-row {
         width: 100%;
         max-width: 100%;
         overflow-x: visible;
         flex-wrap: wrap;
-        row-gap: 4px;
+        gap: 4px;
+        margin-top: 14px;
+        margin-bottom: 14px;
+        padding: 5px;
     }
 
     .ap-tab {
-        min-height: 44px;
         flex: 1 1 auto;
+        min-width: 0;
+        min-height: 44px;
+        padding: 8px 10px;
+        font-size: 12.5px;
         white-space: normal;
-        padding: 8px 12px;
         text-align: center;
     }
 
     .ap-table-card {
         padding: 14px;
+        border-radius: 12px;
+    }
+
+    .ap-table-header {
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    /* Search and filter stack full width on every phone width. Left to the
+       tablet rules they sat side by side at 430px but stacked at 360px
+       (200px + 130px min-widths no longer fit), so the control layout
+       changed shape depending on the device. */
+    .ap-table-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .ap-search-wrap {
+        flex: none;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .ap-select {
+        flex: none;
+        width: 100%;
+        min-width: 0;
     }
 
     .ap-search-wrap input,
     .ap-select {
         height: 44px;
         font-size: 16px; /* prevents iOS zoom on focus */
-    }
-
-    .ap-select {
-        width: 100%;
     }
 
     /* Table is replaced by the card list on phones. */
@@ -878,22 +925,23 @@
     .ap-cards {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 10px;
     }
 
     .ap-card {
         background: #ffffff;
         border: 1px solid #e2e8f0;
         border-radius: 12px;
-        padding: 14px;
-        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        padding: 13px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
     }
 
     .ap-card-head {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        gap: 10px;
+        gap: 8px;
+        flex-wrap: wrap;
     }
 
     .ap-card-titles {
@@ -917,22 +965,29 @@
         overflow-wrap: anywhere;
     }
 
+    /* Long labels such as "Approved by SDWA Admin" are ~130px, which used to
+       squeeze the dealer name into a narrow column. The badge now wraps to
+       its own line, still right-aligned, and its text can break. */
     .ap-card-head .ap-status {
         flex-shrink: 0;
-        white-space: nowrap;
+        margin-left: auto;
+        max-width: 100%;
+        white-space: normal;
+        text-align: right;
     }
 
     .ap-card-rows {
         margin: 10px 0 0;
         display: grid;
-        gap: 6px;
+        gap: 7px;
     }
 
     .ap-card-row {
         display: flex;
         justify-content: space-between;
         gap: 12px;
-        font-size: 13px;
+        font-size: 12.5px;
+        line-height: 1.4;
     }
 
         .ap-card-row dt {
@@ -949,39 +1004,179 @@
             overflow-wrap: anywhere;
         }
 
+    /* Approval flow (MO → RM → SM → SDWA → SDWA Admin) as a soft inset
+       panel. The five nodes and their labels fit inside the card width, so
+       the stepper is centred as one unit rather than spread with
+       space-between, which would pull the 14px connector lines away from the
+       nodes they join. The scroller stays as a safety net for longer labels. */
     .ap-card-flow {
-        margin-top: 10px;
-        padding-top: 10px;
-        border-top: 1px dashed #e2e8f0;
+        margin-top: 12px;
+        padding: 10px 8px;
+        border-top: none;
+        background: #f8fafc;
+        border: 1px solid #f1f5f9;
+        border-radius: 8px;
         overflow-x: auto;
         scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
     }
+
+        .ap-card-flow .ap-flow {
+            display: flex;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .ap-card-flow .ap-flow-label {
+            font-size: 0.6rem;
+        }
 
     .ap-card-actions {
         display: flex;
-        margin-top: 12px;
+        margin-top: 10px;
     }
 
+    /* Scoped to .ap-card-btn rather than .ap-btn-outline: the base class is
+       also used by ApprovalDetail's top bar, which overrides it with a
+       higher-specificity .mo-approval-topbar rule. */
     .ap-card-btn {
         flex: 1 1 auto;
+        width: 100%;
         justify-content: center;
-        min-height: 44px;
+        min-height: 46px;
         font-size: 14px;
+        font-weight: 600;
+        border-radius: 8px;
     }
 
+    /* Stacked, not side by side: "Items Per Page" + select and the two 44px
+       arrows + page label together need ~350px, which overflows a 360px
+       screen and used to wrap into two ragged rows. */
     .ap-pagination {
-        flex-direction: row;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 12px;
+        margin-top: 14px;
+        padding-top: 14px;
+    }
+
+    .ap-page-size {
         justify-content: space-between;
-        align-items: center;
+        font-size: 12.5px;
+    }
+
+    .ap-page-nav {
+        justify-content: center;
+        gap: 6px;
     }
 
     .ap-page-btn {
         min-width: 44px;
         height: 44px;
+        border-radius: 8px;
+    }
+
+    .ap-page-dots {
+        font-size: 13px;
     }
 
     .ap-select-sm {
         height: 44px;
+    }
+
+    /* .ap-error-state carries no stylesheet rule at all, so on a phone the
+       message and Retry button rendered as bare inline text. Scoped to the
+       phone breakpoint to leave the desktop rendering exactly as it is. */
+    .ap-error-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 20px 16px;
+        text-align: center;
+        font-size: 13px;
+        line-height: 1.5;
+        color: #991b1b;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 12px;
+    }
+
+    .ap-error-state .ap-btn-outline {
+        width: 100%;
+        min-height: 44px;
+        justify-content: center;
+    }
+}
+
+/* Small phones (≈320-360px). The 2-up stat grid and the wrapped tab rows are
+   kept — at 360px a stat card is still ~150px, which fits the icon, a wrapped
+   title and the value. Only padding and the type scale come down a step. */
+@media (max-width: 380px) {
+    .shell-page-header.ap-page-header {
+        margin-bottom: 12px;
+    }
+
+    .ap-stat-card {
+        padding: 10px;
+        min-height: 62px;
+    }
+
+    /* Gutter shrinks with the icon box so the title keeps its room. */
+    .ap-stat-left {
+        padding-right: 28px;
+    }
+
+    .ap-stat-title {
+        font-size: 11px;
+    }
+
+    .ap-stat-value {
+        font-size: 19px;
+    }
+
+    .ap-stat-icon {
+        width: 28px;
+        height: 28px;
+        right: 8px;
+    }
+
+        .ap-stat-icon svg {
+            width: 14px;
+            height: 14px;
+        }
+
+    .ap-tabs-row {
+        margin-top: 12px;
+        margin-bottom: 12px;
+        padding: 4px;
+        gap: 4px;
+    }
+
+    .ap-tab {
+        padding: 8px;
+        font-size: 12px;
+    }
+
+    .ap-table-card {
+        padding: 12px;
+    }
+
+    .ap-card {
+        padding: 11px;
+    }
+
+    .ap-card-title {
+        font-size: 14px;
+    }
+
+    .ap-card-rows {
+        gap: 6px;
+    }
+
+    .ap-card-row {
+        font-size: 12px;
     }
 }
 
