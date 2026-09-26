@@ -20,7 +20,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public string LandingPage => UserRole switch
         {
             AppRole.Dealer => "/SDWADashboard",
-            AppRole.SpecialAdmin => CanAccess("Logistics") ? "/Logistics" : "/Welcome",
+            AppRole.SpecialAdmin => CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome",
             _ => "/Dashboard"
         };
         public event Action? OnChange;
@@ -128,13 +128,15 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             return result;
         }
 
-        public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
+        public bool CanAccess(PagePermission page) => CanAccess(RoleAccessPermissions.KeyFor(page));
 
         // Page-level: can the user REACH this page at all?
         // True if they hold any permission token for that page (any action, or a
         // legacy bare page token). Used by the route guard and menu visibility.
         public bool CanAccess(string pageKey)
         {
+            pageKey = RoleAccessPermissions.NormalizePageKey(pageKey);
+
             // Admin and CorporateAdmin bypass everything
             if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
             // No designation assigned => access ONLY the Welcome page (nothing else)
@@ -142,21 +144,31 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                 return string.Equals(pageKey, "Welcome", StringComparison.OrdinalIgnoreCase);
 
             return AllowedPages.Any(t =>
-                string.Equals(PagePart(t), pageKey, StringComparison.OrdinalIgnoreCase));
+                string.Equals(RoleAccessPermissions.NormalizePageKey(PagePart(t)), pageKey, StringComparison.OrdinalIgnoreCase));
         }
 
         // Action-level: can the user perform a specific action on a page?
         // Use inside pages to show/hide Add / Edit / Delete buttons.
         // e.g. LoginState.Can("Register", "Update")
-        public bool Can(PagePermission page, string action) => Can(page.ToString(), action);
+        public bool Can(PagePermission page, string action) => Can(RoleAccessPermissions.KeyFor(page), action);
 
         public bool Can(string pageKey, string action)
         {
+            pageKey = RoleAccessPermissions.NormalizePageKey(pageKey);
             if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
             if (AllowedPages.Count == 0) return false;
-            // Legacy bare page token => full access to that page
-            if (AllowedPages.Contains(pageKey)) return true;
-            return AllowedPages.Contains($"{pageKey}.{action}");
+            return AllowedPages.Any(t =>
+            {
+                var dot = t.IndexOf('.');
+                var tokenPage = dot < 0 ? t : t.Substring(0, dot);
+                if (!string.Equals(
+                        RoleAccessPermissions.NormalizePageKey(tokenPage),
+                        pageKey,
+                        StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                return dot < 0 || string.Equals(t.Substring(dot + 1), action, StringComparison.OrdinalIgnoreCase);
+            });
         }
 
         // -------------------------------------------------------------------------------------

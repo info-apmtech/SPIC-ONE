@@ -114,23 +114,24 @@ namespace Spic.Infrastructure.Data
         // PageModuleAttribute metadata, preserving every exact existing key and
         // the existing display/grouping behavior. Future enum changes surface
         // as model diffs in later EF migrations.
-        builder.Entity<ApplicationPage>().HasData(
-            Enum.GetNames(typeof(PagePermission))
-                .Select((key, index) => new ApplicationPage
-                {
-                    Id = index + 1,
-                    Key = key,
-                    Name = PageDisplayName(key),
-                    Module = PageModuleName(key),
-                    SortOrder = index,
-                    HasActions = true,
-                    IsActive = true,
-                    CreatedBy = "System",
-                    CreatedAt = staticDate,
-                    UpdatedBy = "System",
-                    UpdatedAt = staticDate
-                })
-                .ToArray());
+            builder.Entity<ApplicationPage>().HasData(
+                Enum.GetValues<PagePermission>()
+                    .Select((page, index) => new ApplicationPage
+                    {
+                        Id = index + 1,
+                        Key = RoleAccessPermissions.KeyFor(page),
+                        Name = PageDisplayName(page.ToString()),
+                        Module = PageModuleName(page.ToString()),
+                        SortOrder = index,
+                        HasActions = true,
+                        IsActive = true,
+                        CreatedBy = "System",
+                        CreatedAt = staticDate,
+                        UpdatedBy = "System",
+                        UpdatedAt = staticDate
+                    })
+                    .ToArray());
+
 
         // ---------------------------------------------------------------- Digital Library
         builder.Entity<LibraryContent>(entity =>
@@ -322,6 +323,9 @@ namespace Spic.Infrastructure.Data
         // "dealerreviewlist" are left as-is, matching that UI exactly.
         private static string PageDisplayName(string key)
         {
+            if (string.Equals(key, nameof(PagePermission.QRScanner), StringComparison.OrdinalIgnoreCase))
+                return "QR Scanner";
+
             var sb = new System.Text.StringBuilder();
             for (int i = 0; i < key.Length; i++)
             {

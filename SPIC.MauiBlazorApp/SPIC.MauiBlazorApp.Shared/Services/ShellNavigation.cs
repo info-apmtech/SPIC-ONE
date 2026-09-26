@@ -164,19 +164,19 @@ public static class ShellNavigation
             Rule = s => s.UserRole != AppRole.Dealer
                         && (s.CanAccess(nameof(PagePermission.SchemeApproval)) || s.UserRole == AppRole.Director)
         },
-        new("SMMApprovals", "SMM Approvals", "bi-clipboard2-check-fill", "/SMMApprovals", "SMMApprovals")
+        new("SMMApprovals", "SMM Approvals", "bi-clipboard2-check-fill", "/SMMApprovals", nameof(PagePermission.SMMApprovals))
         {
             ShortLabel = "Approvals", Group = GroupApprovals
         },
-        new("AVPApprovals", "AVP Approvals", "bi-patch-check-fill", "/AVPApprovals", "AVPApprovals")
+        new("AVPApprovals", "AVP Approvals", "bi-patch-check-fill", "/AVPApprovals", nameof(PagePermission.AVPApprovals))
         {
             ShortLabel = "Approvals", Group = GroupApprovals
         },
-        new("RMDValidationQueue", "RMD Validation Queue", "bi-list-check", "/RMDValidationQueue", "RMDValidationQueue")
+        new("RMDValidationQueue", "RMD Validation Queue", "bi-list-check", "/RMDValidationQueue", nameof(PagePermission.RMDValidationQueue))
         {
             ShortLabel = "Queue", Group = GroupMdPortal
         },
-        new("ReportsCenter", "Reports Center", "bi-bar-chart-fill", "/ReportsCenter", "ReportsCenter")
+        new("ReportsCenter", "Reports Center", "bi-bar-chart-fill", "/ReportsCenter", nameof(PagePermission.ReportsCenter))
         {
             ShortLabel = "Reports", Group = GroupApprovals
         },
@@ -184,7 +184,7 @@ public static class ShellNavigation
         {
             ShortLabel = "Logistics", Group = GroupSettings
         },
-        new("LogisticsMaster", "Logistics Master", "bi-box-seam-fill", "/LogisticsMaster", "LogisticsMaster")
+        new("LogisticsMaster", "Logistics Master", "bi-box-seam-fill", "/LogisticsMaster", nameof(PagePermission.LogisticsMaster))
         {
             ShortLabel = "Master", Group = GroupSettings
         },
@@ -192,7 +192,7 @@ public static class ShellNavigation
         {
             ShortLabel = "Reports", Group = GroupApprovals
         },
-        new("UserProfile", "User Profile", "bi-person-fill", "/UserProfile", "UserProfile")
+        new("UserProfile", "User Profile", "bi-person-fill", "/UserProfile", nameof(PagePermission.UserProfile))
         {
             ShortLabel = "Profile"
         },
@@ -210,8 +210,7 @@ public static class ShellNavigation
         {
             Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.Admin or AppRole.SpecialAdmin
         },
-        // NavMenu.razor gates the IFMS Logins link on the dynamically registered "IfmsRelaySetup" key.
-        new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", "IfmsRelaySetup")
+        new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", nameof(PagePermission.IfmsRelaySetup))
         {
             Group = GroupAdminTools
         },
@@ -233,15 +232,15 @@ public static class ShellNavigation
         },
 
         // ---- MD Portal accordion ----
-        new("BudgetOverview", "Budget Overview", "bi-wallet2", "/BudgetOverview", "BudgetOverview") { Group = GroupMdPortal },
-        new("BudgetingManagements", "Budgeting Management", "bi-cash-stack", "/BudgetingManagements", "BudgetingManagements") { Group = GroupMdPortal },
+        new("BudgetOverview", "Budget Overview", "bi-wallet2", "/BudgetOverview", nameof(PagePermission.BudgetOverview)) { Group = GroupMdPortal },
+        new("BudgetingManagements", "Budgeting Management", "bi-cash-stack", "/BudgetingManagements", nameof(PagePermission.BudgetingManagements)) { Group = GroupMdPortal },
         new("BudgetSubmissions", "Budget Submissions", "bi-journal-text", "/BudgetSubmissions", nameof(PagePermission.BudgetSubmissions)) { Group = GroupMdPortal },
         new("CREATE-CSR-1Management", "CSR-1 Create", "bi-file-earmark-text", "/CREATE-CSR-1Management", nameof(PagePermission.CSR1Create)) { Group = GroupMdPortal },
         new("CSR-1List", "CSR-1 Management", "bi-kanban-fill", "/CSR-1List", nameof(PagePermission.CSR1Management)) { Group = GroupMdPortal },
-        new("CSR2", "CSR-2", "bi-layout-text-window-reverse", "/CSR2", "CSR2") { Group = GroupMdPortal },
-        new("FinalReportCSRView", "Final Report CSR", "bi-file-earmark-text", "/FinalReportCSRView", "FinalReportCSRView") { Group = GroupMdPortal },
-        new("MOSubmissionValidation", "MO Submission Validation", "bi-ui-checks-grid", "/MOSubmissionValidation", "MOSubmissionValidation") { Group = GroupMdPortal },
-        new("RMApprovalStatus", "RM Approval Status", "bi-diagram-3", "/RMApprovalStatus", "RMApprovalStatus") { Group = GroupMdPortal },
+        new("CSR2", "CSR-2", "bi-layout-text-window-reverse", "/CSR2", nameof(PagePermission.CSR2)) { Group = GroupMdPortal },
+        new("FinalReportCSRView", "Final Report CSR", "bi-file-earmark-text", "/FinalReportCSRView", nameof(PagePermission.FinalReportCSRView)) { Group = GroupMdPortal },
+        new("MOSubmissionValidation", "MO Submission Validation", "bi-ui-checks-grid", "/MOSubmissionValidation", nameof(PagePermission.MOSubmissionValidation)) { Group = GroupMdPortal },
+        new("RMApprovalStatus", "RM Approval Status", "bi-diagram-3", "/RMApprovalStatus", nameof(PagePermission.RMApprovalStatus)) { Group = GroupMdPortal },
 
         // ---- top level, continued (mirrors NavMenu.razor) ----
         new("Profile", "Profile", "bi-person-circle", "/Profile", nameof(PagePermission.Profile)),
@@ -251,19 +250,19 @@ public static class ShellNavigation
 
         // ---- Schemes parent menu (10 pages that previously had no menu entry). MoreOnly: these
         //      must never auto-fill the phone bottom tab bar or tablet rail, only the More sheet. ----
-        new("SchemeOverview", "Scheme Overview", "bi-clipboard-data-fill", "/SchemeOverview", "SchemeOverview") { Group = GroupSchemes, MoreOnly = true },
-        new("AddScheme", "Add Scheme", "bi-plus-square-fill", "/AddScheme", "AddScheme") { Group = GroupSchemes, MoreOnly = true },
-        new("Schemes", "Scheme List", "bi-collection-fill", "/Schemes", "Schemes") { Group = GroupSchemes, MoreOnly = true },
-        new("WinnerPopUp", "Winner PopUp", "bi-gift-fill", "/WinnerPopUp", "WinnerPopUp") { Group = GroupSchemes, MoreOnly = true },
-        new("WinnerDetails", "Winner Details", "bi-trophy-fill", "/WinnerDetails", "WinnerDetails") { Group = GroupSchemes, MoreOnly = true },
-        new("Luckydraw", "Lucky Draw", "bi-dice-6-fill", "/Luckydraw", "Luckydraw") { Group = GroupSchemes, MoreOnly = true },
-        new("LuckyDrawList", "Lucky Draw List", "bi-file-earmark-text-fill", "/LuckyDrawList", "LuckyDrawList") { Group = GroupSchemes, MoreOnly = true },
-        new("SelectPurchasedProducts", "Select Purchased Products", "bi-bag-check-fill", "/SelectPurchasedProducts", "SelectPurchasedProducts") { Group = GroupSchemes, MoreOnly = true },
-        new("Scanproduct", "Scan Product", "bi-upc-scan", "/Scanproduct", "Scanproduct") { Group = GroupSchemes, MoreOnly = true },
-        new("qr-scanner", "QR Scanner", "bi-qr-code-scan", "/qr-scanner", "qr-scanner") { Group = GroupSchemes, MoreOnly = true },
+        new("SchemeOverview", "Scheme Overview", "bi-clipboard-data-fill", "/SchemeOverview", nameof(PagePermission.SchemeOverview)) { Group = GroupSchemes, MoreOnly = true },
+        new("AddScheme", "Add Scheme", "bi-plus-square-fill", "/AddScheme", nameof(PagePermission.AddScheme)) { Group = GroupSchemes, MoreOnly = true },
+        new("Schemes", "Scheme List", "bi-collection-fill", "/Schemes", nameof(PagePermission.Schemes)) { Group = GroupSchemes, MoreOnly = true },
+        new("WinnerPopUp", "Winner PopUp", "bi-gift-fill", "/WinnerPopUp", nameof(PagePermission.WinnerPopUp)) { Group = GroupSchemes, MoreOnly = true },
+        new("WinnerDetails", "Winner Details", "bi-trophy-fill", "/WinnerDetails", nameof(PagePermission.WinnerDetails)) { Group = GroupSchemes, MoreOnly = true },
+        new("Luckydraw", "Lucky Draw", "bi-dice-6-fill", "/Luckydraw", nameof(PagePermission.Luckydraw)) { Group = GroupSchemes, MoreOnly = true },
+        new("LuckyDrawList", "Lucky Draw List", "bi-file-earmark-text-fill", "/LuckyDrawList", nameof(PagePermission.LuckyDrawList)) { Group = GroupSchemes, MoreOnly = true },
+        new("SelectPurchasedProducts", "Select Purchased Products", "bi-bag-check-fill", "/SelectPurchasedProducts", nameof(PagePermission.SelectPurchasedProducts)) { Group = GroupSchemes, MoreOnly = true },
+        new("Scanproduct", "Scan Product", "bi-upc-scan", "/Scanproduct", nameof(PagePermission.Scanproduct)) { Group = GroupSchemes, MoreOnly = true },
+        new("qr-scanner", "QR Scanner", "bi-qr-code-scan", "/qr-scanner", nameof(PagePermission.QRScanner)) { Group = GroupSchemes, MoreOnly = true },
 
         // ---- SDWA accordion (remaining items) ----
-        new("ReportDashboard", "Admin Dashboard", "bi-grid-fill", "/ReportDashboard", "ReportDashboard") { Group = GroupSdwa },
+        new("ReportDashboard", "Admin Dashboard", "bi-grid-fill", "/ReportDashboard", nameof(PagePermission.ReportDashboard)) { Group = GroupSdwa },
         new("SubDealerEmployeeMaster", "Sub Dealer & Employee", "bi-people-fill", "/SubDealerEmployeeMaster", nameof(PagePermission.SubDealerEmployeeMaster)) { Group = GroupSdwa },
         new("GuestHouseMaster", "Guest House Master", "bi-building-fill", "/GuestHouseMaster", "GuestHouseMaster")
         {
@@ -285,13 +284,8 @@ public static class ShellNavigation
         new("Agriculture", "Agriculture & Products", "bi-flower1", "/Agriculture", nameof(PagePermission.Agriculture)) { Group = GroupSettings },
         new("Financial", "Financial Master", "bi-bank", "/Financial", nameof(PagePermission.Financial)) { Group = GroupSettings },
         new("Relationship", "Relationship Master", "bi-link-45deg", "/Relationship", nameof(PagePermission.Relationship)) { Group = GroupSettings },
-        new("PageManagement", "Page Management", "bi-sliders", "/PageManagement", "PageManagement")
-        {
-            Group = GroupSettings, Rule = IsAdminOrCorporate
-        },
-
         // ---- Contact ----
-        new("ContactUs", "Contact Us", "bi-headset", "/ContactUs", "ContactUs"),
+        new("ContactUs", "Contact Us", "bi-headset", "/ContactUs", nameof(PagePermission.ContactUs)),
     };
 
     // ---------------------------------------------------------------------------------------------

@@ -21,6 +21,13 @@ namespace SPIC.Core.Entities
             return dot < 0 ? token : token.Substring(0, dot);
         }
 
+        public static string NormalizePageKey(string pageKey) =>
+            string.Equals(pageKey, nameof(PagePermission.QRScanner), StringComparison.OrdinalIgnoreCase)
+                ? "qr-scanner"
+                : pageKey;
+
+        public static string KeyFor(PagePermission page) => NormalizePageKey(page.ToString());
+
         public static HashSet<string> ParseTokens(string? roleAccessCsv) =>
             string.IsNullOrWhiteSpace(roleAccessCsv)
                 ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -32,12 +39,13 @@ namespace SPIC.Core.Entities
         public static bool HasPage(string? roleAccessCsv, string pageKey)
         {
             var tokens = ParseTokens(roleAccessCsv);
+            var normalizedPageKey = NormalizePageKey(pageKey);
             return tokens.Count > 0 &&
-                   tokens.Any(t => string.Equals(PagePart(t), pageKey, StringComparison.OrdinalIgnoreCase));
+                   tokens.Any(t => string.Equals(NormalizePageKey(PagePart(t)), normalizedPageKey, StringComparison.OrdinalIgnoreCase));
         }
 
         public static bool HasPage(string? roleAccessCsv, PagePermission page) =>
-            HasPage(roleAccessCsv, page.ToString());
+            HasPage(roleAccessCsv, KeyFor(page));
 
         // G1 runtime enforcement: drops tokens whose page is registered in the
         // ApplicationPage catalog but currently INACTIVE, so a deactivated page
@@ -53,13 +61,13 @@ namespace SPIC.Core.Entities
         {
             if (string.IsNullOrWhiteSpace(roleAccessCsv)) return string.Empty;
 
-            var registered = new HashSet<string>(registeredPageKeys, StringComparer.OrdinalIgnoreCase);
-            var active = new HashSet<string>(activePageKeys, StringComparer.OrdinalIgnoreCase);
+            var registered = new HashSet<string>(registeredPageKeys.Select(NormalizePageKey), StringComparer.OrdinalIgnoreCase);
+            var active = new HashSet<string>(activePageKeys.Select(NormalizePageKey), StringComparer.OrdinalIgnoreCase);
 
             var kept = new List<string>();
             foreach (var raw in roleAccessCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                var page = PagePart(raw);
+                var page = NormalizePageKey(PagePart(raw));
                 // Keep: page not in the catalog at all (legacy) OR page is active.
                 if (!registered.Contains(page) || active.Contains(page))
                     kept.Add(raw);
