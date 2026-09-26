@@ -228,6 +228,15 @@ accounts, no live API; phone-first checks at 375 px; sweeps clean; commit in the
   un-forwarded payment, farmer on another farmer's collection). Outputs in
   `tools/ui-sweep/out/lab-<user>/`. Run the sweep from PowerShell: Git Bash rewrites the `^/Lab`
   filter into a Windows path.
+- 2026-09-27, reconciliation merged (84748a2): one sample numbering (`LabSampleIds`), one result
+  engine for entry preview and reports, hint wording rule, CORS exposes
+  `X-Report-Language-Fallback`, idempotent batch completion, `BatchGroups` = batches with reports,
+  migration `V5p_SasPaymentFinanceFields` (`FinanceVerifiedAmount`, `FinanceReceivedDate`; applied
+  locally only), pre-Finance approvals not counted as Approval Pending. Final checks on that build:
+  `lab_api_check.py` 621 / 621, `lab_report_check.py` 91 / 91 (agent run), sweeps for admin (0 of
+  46 flagged, largest page 1,183 nodes), coordinator, analyst, finance and farmer (only intended
+  redirects and 404s on records the role may not see). Outputs in `tools/ui-sweep/out/final-*`.
+  Production still needs: `migrate.ps1` (V5o + V5p), `deploy.ps1`, designation grants, fonts.
 
 ## 6. Principles
 
