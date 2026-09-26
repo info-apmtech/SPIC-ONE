@@ -382,52 +382,290 @@
     }
 
     @@media (max-width: 420px) {
-        .mo-approval-content .apd-fields-grid {
-            grid-template-columns: 1fr;
-        }
-
-        .mo-approval-content .apd-body {
-            padding: 12px;
-        }
-
+        /* The field grids and body padding that used to live here are now stated for
+           every phone width in the 767.98px block below, so 360 / 390 / 430 all get the
+           same layout. */
         .mo-approval-content .rm-container {
             margin: 12px;
             padding: 20px;
         }
     }
 
-    /* native: phone */
+    /* native: phone — the shell's phone breakpoint (see css/tokens.css), so this is the
+       single source of truth for 360 / 390 / 430 and nothing below 768px can disagree. */
     @@media (max-width: 767.98px) {
         .mo-approval-page {
-            padding: 8px 0 24px;
+            padding: 8px 0 20px;
             background-color: transparent;
         }
 
         .mo-approval-content {
-            /* overflow must be visible for the sticky footer to follow the viewport */
+            /* overflow must stay visible so the fixed action bar is not clipped */
             overflow: visible;
             border-radius: 12px;
         }
 
+        /* ---- Card header ----
+           PageHeader already shows "Application Details" on the phone, so the card
+           header drops the duplicated title and keeps the two things the approver
+           needs at a glance: the status badge and the application number. */
             .mo-approval-content .apd-header {
+                padding: 12px 14px;
                 border-radius: 12px 12px 0 0;
             }
 
-            /* The hidden ApprovalDetail title row is replaced by the PageHeader; the body
-               header keeps the status badge + application number. */
-            .mo-approval-content .apd-header-titles h2 {
-                font-size: 15px;
+            .mo-approval-content .apd-header-titles {
+                gap: 6px;
             }
 
-            /* Submit stays reachable while the approver scrolls the remarks / documents. */
-            .mo-approval-content .apd-footer {
-                position: sticky;
-                bottom: var(--shell-bottom-offset, 0px);
-                z-index: 5;
-                padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
-                border-radius: 0 0 12px 12px;
-                box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.10);
+            .mo-approval-content .apd-header-titles h2 {
+                display: none;
             }
+
+            .mo-approval-content .apd-header-titles p {
+                font-size: 12.5px;
+            }
+
+            .mo-approval-content .apd-header .apd-badge {
+                padding: 5px 12px;
+                font-size: 12px;
+            }
+
+        /* ---- Body / sections ---- */
+        .mo-approval-content .apd-body {
+            padding: 12px;
+            gap: 12px;
+        }
+
+        .mo-approval-content .apd-section {
+            padding: 12px;
+            gap: 10px;
+        }
+
+        /* ---- Fields: 2-up label/value pairs instead of one tall column.
+               auto-fit keeps a lone card in the last row full width and falls back to
+               a single column on the narrowest phones, so no value is ever clipped. */
+        .mo-approval-content .apd-fields-grid,
+        .mo-approval-content .apd-fields-grid.apd-fields-3 {
+            grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+            gap: 8px;
+        }
+
+        .mo-approval-content .apd-field {
+            min-width: 0;
+            padding: 9px 11px;
+        }
+
+            .mo-approval-content .apd-field label {
+                font-size: 10.5px;
+            }
+
+        .mo-approval-content .apd-field-value {
+            font-size: 12.5px;
+            line-height: 1.35;
+            overflow-wrap: break-word;
+        }
+
+        /* ---- Summary boxes / remarks ---- */
+        .mo-approval-content .apd-summary-grid {
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+        }
+
+        .mo-approval-content .apd-summary-box,
+        .mo-approval-content .apd-remarks-container {
+            padding: 12px 14px;
+        }
+
+        .mo-approval-content .apd-remarks-container {
+            gap: 10px;
+        }
+
+        .mo-approval-content .apd-alert {
+            padding: 10px 12px;
+            font-size: 12.5px;
+        }
+
+        /* ---- Workflow rail ----
+           The 640px block above wraps the stepper into 2-3 centred rows, which breaks
+           the connector line that shows the order of the five stages. On the phone the
+           rail stays one row and scrolls sideways, so the flow still reads left to
+           right and the cut-off next stage is the scroll affordance. */
+        .mo-approval-content .apd-stepper {
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            gap: 0;
+            margin: 0 -4px;
+            padding: 6px 4px 10px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scroll-snap-type: x proximity;
+            scrollbar-width: none;
+        }
+
+            .mo-approval-content .apd-stepper::-webkit-scrollbar {
+                display: none;
+            }
+
+        .mo-approval-content .apd-step {
+            gap: 8px;
+            scroll-snap-align: center;
+        }
+
+        .mo-approval-content .apd-step-circle {
+            width: 38px;
+            height: 38px;
+            font-size: 11px;
+        }
+
+            .mo-approval-content .apd-step-circle svg {
+                width: 15px;
+                height: 15px;
+            }
+
+        .mo-approval-content .apd-step-name {
+            font-size: 12.5px;
+        }
+
+        .mo-approval-content .apd-step-status {
+            font-size: 10.5px;
+        }
+
+        .mo-approval-content .apd-step-connector {
+            min-width: 20px;
+            margin: 0 4px;
+        }
+
+        /* ---- Documents: name on the first row, full-width actions below ---- */
+        .mo-approval-content .apd-doc-item {
+            padding: 10px;
+            gap: 10px;
+        }
+
+        .mo-approval-content .apd-doc-actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+            gap: 8px;
+            width: 100%;
+            margin-left: 0;
+        }
+
+            .mo-approval-content .apd-doc-actions .apd-btn-download,
+            .mo-approval-content .apd-doc-actions .apd-btn-replace {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                width: 100%;
+                min-height: 44px;
+                padding: 0 10px;
+                font-size: 12.5px;
+                font-weight: 600;
+                white-space: nowrap;
+            }
+
+            /* The Replace control has no styling of its own on tablet/desktop (it is
+               left exactly as it was there); on the phone it needs a real 44px target
+               so it reads as the same control as View / Download. */
+            .mo-approval-content .apd-btn-replace {
+                color: #4f46e5;
+                border: 1px solid #c7d2fe;
+                border-radius: 8px;
+            }
+
+        /* ---- Sales table: sideways scroll with a pinned Year column ---- */
+        .mo-approval-content .mo-sales-wrap {
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .mo-approval-content .mo-sales-table {
+            min-width: 520px;
+            font-size: 11.5px;
+        }
+
+            .mo-approval-content .mo-sales-table th,
+            .mo-approval-content .mo-sales-table td {
+                padding: 8px 10px;
+                white-space: nowrap;
+            }
+
+            /* The year is the row key, so it stays put while the products scroll. */
+            .mo-approval-content .mo-sales-table th:first-child,
+            .mo-approval-content .mo-sales-table td:first-child {
+                position: sticky;
+                left: 0;
+                z-index: 1;
+                background-color: #ffffff;
+                box-shadow: 1px 0 0 #e5e7eb;
+            }
+
+            .mo-approval-content .mo-sales-table th:first-child {
+                background-color: #f1f5f9;
+            }
+
+            .mo-approval-content .mo-sales-table tbody tr:hover td:first-child {
+                background-color: #f9fafb;
+            }
+
+        .mo-approval-content .mo-sales-note {
+            margin-top: 10px;
+            padding: 10px 12px;
+            font-size: 11.5px;
+            line-height: 1.5;
+        }
+
+        /* ---- Footer: the fields scroll, only the action row is pinned ----
+           The whole footer used to be sticky, which covered the bottom fifth of a
+           phone with the Comments / Recommendation selects while the approver reads.
+           Now the form fields stay in the flow and the Submit button becomes a compact
+           fixed bar — the same geometry the shared ActionBar component uses on every
+           other phone page. */
+        .mo-approval-content .apd-footer {
+            position: static;
+            padding: 12px;
+            border-radius: 0 0 12px 12px;
+            box-shadow: none;
+        }
+
+        /* Read-only application: this page passes no OnClose, so the body renders an
+           empty footer — drop the empty strip instead of pinning a blank bar. */
+        .mo-approval-content .apd-footer:not(:has(> *)) {
+            display: none;
+        }
+
+        .mo-approval-content .apd-footer-grid {
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 10px;
+        }
+
+        .mo-approval-content .apd-footer-stack {
+            gap: 12px;
+        }
+
+        .mo-approval-content .apd-footer .apd-footer-actions {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: var(--shell-bottom-offset, 0px);
+            z-index: var(--fb-z-actionbar, 1030);
+            margin: 0;
+            padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+            background-color: #ffffff;
+            border-top: 1px solid #eef0f3;
+            box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.10);
+        }
+
+        /* A failed submit renders its message just above the action row. With the row
+           pinned, the message is pinned with it, so the reason is visible wherever the
+           approver happens to be scrolled. */
+        .mo-approval-content .apd-footer .apd-footer-stack > .apd-alert-danger {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: calc(var(--shell-bottom-offset, 0px) + 74px + env(safe-area-inset-bottom, 0px));
+            z-index: var(--fb-z-actionbar, 1030);
+        }
 
             .mo-approval-content .apd-btn-action,
             .mo-approval-content .apd-btn-outline {
