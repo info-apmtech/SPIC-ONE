@@ -152,32 +152,17 @@ public static class AnalystText
 }
 
 /// <summary>
-/// How a parameter row is entered. LabParameterRowDto (the fixed contract) does not carry the
-/// master's ValueType / Options / DerivedFromCode, so the page recognises the two special rows of
-/// the seeded master by code (S-TEX is a text parameter with options, S-OM = S-OC x 1.724 is
-/// derived) and falls back to "numeric" for everything else. Any row the preview fills in that
-/// the analyst did not send is treated as derived as well (see SampleEntry.razor).
+/// How a parameter row is entered, from the master fields LabController stamps on every row:
+/// ValueType Text -> a select of Options (Texture); IsDerived -> read-only, computed by the engine
+/// (Organic Matter = Organic Carbon x factor); everything else is a numeric input.
 /// </summary>
 public static class AnalystParameters
 {
-    private static readonly Dictionary<string, string[]> TextOptions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["S-TEX"] = new[] { "Sandy", "Loamy Sand", "Sandy Loam", "Loam", "Silt Loam", "Clay Loam", "Sandy Clay", "Silty Clay", "Clay", "Sandy Clay Silt" }
-    };
+    public static bool IsText(LabParameterRowDto p) => p.ValueType == LabParameterValueType.Text;
 
-    private static readonly Dictionary<string, string> Derived = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["S-OM"] = "Organic Carbon x 1.724"
-    };
+    public static IReadOnlyList<string> OptionsFor(LabParameterRowDto p) => p.Options;
 
-    public static bool IsText(LabParameterRowDto p) => TextOptions.ContainsKey(p.Code);
-
-    public static IReadOnlyList<string> OptionsFor(LabParameterRowDto p) =>
-        TextOptions.TryGetValue(p.Code, out var o) ? o : Array.Empty<string>();
-
-    public static bool IsDerivedCode(string code) => Derived.ContainsKey(code);
-
-    public static string? DerivedNote(string code) => Derived.TryGetValue(code, out var n) ? n : null;
+    public static bool IsDerived(LabParameterRowDto p) => p.IsDerived;
 
     public static bool TryNumber(string? value, out decimal number) =>
         decimal.TryParse((value ?? "").Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out number);

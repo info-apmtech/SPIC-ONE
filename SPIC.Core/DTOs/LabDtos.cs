@@ -274,7 +274,7 @@ public class LabSampleRowDto
     public DateTime? AnalysisCompletedAt { get; set; }
 }
 
-public class LabParameterRowDto
+public partial class LabParameterRowDto   // partial: entry-form fields appended at the end of this file (phase 1e)
 {
     public int LabParameterId { get; set; }
     public string Code { get; set; } = "";
@@ -472,4 +472,14 @@ public class LabSampleReportDto
     public string OverallStatusText { get; set; } = "";
     public List<LabRecommendationGroupDto> Recommendations { get; set; } = new();
     public string? CropSuitabilityNote { get; set; }
+}
+
+// ---------------------------------------------------------------- entry-form fields (phase 1e, analyst Sample-wise Entry)
+
+/// <summary>How the analyst enters a parameter row (from the LabParameter master; filled by LabController).</summary>
+public partial class LabParameterRowDto
+{
+    public LabParameterValueType ValueType { get; set; } = LabParameterValueType.Numeric;   // Text rows (Texture) get a select
+    public List<string> Options { get; set; } = new();                                     // choices of a Text row, in master order
+    public bool IsDerived { get; set; }                                                    // computed (Organic Matter = Organic Carbon x factor); read-only
 }
