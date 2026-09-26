@@ -188,7 +188,9 @@ builder.Services.AddAuthentication(options =>
                  path.StartsWithSegments("/api/GuestHouseBooking/image") ||
                  path.StartsWithSegments("/api/Library/file") ||
                  path.StartsWithSegments("/api/Community/file") ||
-                 path.StartsWithSegments("/api/Sas/file")))
+                 path.StartsWithSegments("/api/Sas/file") ||
+                 (path.StartsWithSegments("/api/Sas/payments") &&
+                  path.Value!.EndsWith("/proof", StringComparison.OrdinalIgnoreCase))))
             {
                 context.Token = accessToken;
             }

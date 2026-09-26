@@ -1,0 +1,40 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+@using SPIC.Core.DTOs
+
+@* Screen 26: Approve & Forwarded Successfully. *@
+
+<PayModal IsOpen="IsOpen" OnClose="() => OnClose.InvokeAsync()" Title="Approved & Forwarded Successfully"
+          Subtitle="The payment has been approved and forwarded to Finance for verification."
+          Icon="bi-check-circle-fill" IconTone="green">
+    <ChildContent>
+        @if (Detail is { } d)
+        {
+            <dl class="spm-rows">
+                <div class="spm-row"><dt>Payment Ref No.</dt><dd>@d.Summary.Code</dd></div>
+                <div class="spm-row"><dt>Farmer Name</dt><dd>@PaymentLabels.Dash(d.Summary.FarmerName)</dd></div>
+                <div class="spm-row"><dt>Consignment No.</dt><dd>@PaymentLabels.Dash(d.Summary.ConsignmentCode)</dd></div>
+                <div class="spm-row"><dt>Approved Amount</dt><dd>@PaymentLabels.Money(d.VerifiedAmount ?? d.Summary.PaidAmount)</dd></div>
+                <div class="spm-row"><dt>Forwarded To</dt><dd>@PaymentLabels.Dash(d.ForwardedToName)</dd></div>
+                <div class="spm-row">
+                    <dt>Admin Status</dt>
+                    <dd><LabPill Text="@PaymentLabels.AdminStatusName(d.Summary.AdminStatus)" Tone="@PaymentLabels.AdminStatusTone(d.Summary.AdminStatus)" /></dd>
+                </div>
+                <div class="spm-row">
+                    <dt>Finance Status</dt>
+                    <dd><LabPill Text="Awaiting Verification" Tone="orange" /></dd>
+                </div>
+                <div class="spm-row"><dt>Forwarded On</dt><dd>@PaymentLabels.DateTime(d.ForwardedAt)</dd></div>
+            </dl>
+        }
+    </ChildContent>
+    <Footer>
+        <button type="button" class="spm-btn spm-btn--outline" @onclick="() => OnClose.InvokeAsync()">Cancel</button>
+        <a class="spm-btn spm-btn--primary" href="/Sas/Payments">Go to Payment Approval List</a>
+    </Footer>
+</PayModal>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public SasPaymentDetailDto? Detail { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+}

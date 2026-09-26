@@ -1,0 +1,351 @@
+﻿@page "/Sas/Payments/{Id:int}"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject SasPaymentApi Api
+@inject ToastService Toast
+@inject NavigationManager Nav
+
+@*
+    Payment Approval Details (admin, screen 24) / Payment Proof Details (Finance, screen 28) /
+    read-only for the MO and the farmer. The mode comes from the API (detail.Mode); the footer
+    offers Reject / Approve & Forward (admin, while Pending Review) or Mark Mismatch / Verify
+    Payment (Finance, while Awaiting Verification). Phone: one column, sticky action bar.
+*@
+
+<div class="spd-page">
+    <PageHeader Title="@PageTitle" Subtitle="@Subtitle" BackHref="@BackHref">
+        <Actions>
+            @if (_detail is { } h && h.Mode != SasPaymentPageMode.Farmer)
+            {
+                <div class="spd-pills">
+                    @if (IsFinanceView)
+                    {
+                        <LabPill Text="@PaymentLabels.AdminStatusName(h.Summary.AdminStatus)" Tone="@PaymentLabels.AdminStatusTone(h.Summary.AdminStatus)" />
+                        <LabPill Text="@FinancePill(h)" Tone="@PaymentLabels.FinanceStatusTone(h.Summary.FinanceStatus)" />
+                    }
+                    else
+                    {
+                        <LabPill Text="MO Submitted" Tone="blue" />
+                        <LabPill Text="@AdminPill(h)" Tone="@PaymentLabels.AdminStatusTone(h.Summary.AdminStatus)" />
+                    }
+                </div>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <Skeleton Variant="card" Rows="3" />
+    }
+    else if (_detail is null)
+    {
+        <EmptyState Icon="@(_notFound ? "bi-search" : "bi-wifi-off")"
+                    Title="@(_notFound ? "Payment not found" : "This payment could not be opened")"
+                    Message="@(_notFound ? "It may have been removed, or it is not one you can see." : "Please check your connection and try again.")">
+            @if (!_notFound)
+            {
+                <button type="button" class="spd-btn spd-btn--outline" @onclick="LoadAsync">Try again</button>
+            }
+            <a class="spd-btn spd-btn--outline" href="/Sas/Payments">Back to the list</a>
+        </EmptyState>
+    }
+    else if (_detail.Mode == SasPaymentPageMode.Farmer)
+    {
+        <section class="spd-card spd-card--narrow">
+            <PaymentFarmerView Detail="_detail" />
+        </section>
+    }
+    else
+    {
+        var d = _detail;
+        var s = d.Summary;
+
+        <div class="spd-grid">
+            <!-- ---------- source / payment summary ---------- -->
+            <section class="spd-card">
+                <h2 class="spd-title"><span class="spd-ico spd-ico--violet"><i class="bi bi-file-earmark-text" aria-hidden="true"></i></span>@(IsFinanceView ? "Payment Summary" : "Source Details")</h2>
+                <dl class="spd-rows">
+                    <div class="spd-row"><dt>Payment Ref No.</dt><dd>@s.Code</dd></div>
+                    <div class="spd-row"><dt>Consignment No.</dt><dd>@PaymentLabels.Dash(s.ConsignmentCode)</dd></div>
+                    <div class="spd-row">
+                        <dt>Sample Collection No.</dt>
+                        <dd>
+                            @if (IsFinanceView)
+                            {
+                                @s.CollectionCode
+                            }
+                            else
+                            {
+                                <a class="spd-link" href="@($"/SampleCollection/view/{s.CollectionId}")">@s.CollectionCode</a>
+                            }
+                        </dd>
+                    </div>
+                    @if (IsFinanceView)
+                    {
+                        <div class="spd-row"><dt>Admin Status</dt><dd><LabPill Text="@PaymentLabels.AdminStatusName(s.AdminStatus)" Tone="@PaymentLabels.AdminStatusTone(s.AdminStatus)" /></dd></div>
+                        <div class="spd-row"><dt>Finance Status</dt><dd><LabPill Text="@FinancePill(d)" Tone="@PaymentLabels.FinanceStatusTone(s.FinanceStatus)" /></dd></div>
+                    }
+                    else
+                    {
+                        <div class="spd-row"><dt>Payment Status</dt><dd><LabPill Text="@PaymentLabels.AdminStatusName(s.AdminStatus)" Tone="@PaymentLabels.AdminStatusTone(s.AdminStatus)" /></dd></div>
+                    }
+                    <div class="spd-row"><dt>Submitted Date</dt><dd>@PaymentLabels.DateTime(s.SubmittedAt)</dd></div>
+                    <div class="spd-row"><dt>Submitted By</dt><dd>@s.SubmittedByName@(string.IsNullOrWhiteSpace(s.SubmittedByRole) ? "" : $" ({s.SubmittedByRole})")</dd></div>
+                </dl>
+            </section>
+
+            <!-- ---------- farmer ---------- -->
+            <section class="spd-card">
+                <h2 class="spd-title"><span class="spd-ico spd-ico--green"><i class="bi bi-person" aria-hidden="true"></i></span>Farmer Details</h2>
+                <dl class="spd-rows">
+                    <div class="spd-row"><dt>Name</dt><dd>@PaymentLabels.Dash(s.FarmerName)</dd></div>
+                    <div class="spd-row"><dt>Mobile</dt><dd>@PaymentLabels.Dash(d.FarmerMobile)</dd></div>
+                    <div class="spd-row"><dt>State</dt><dd>@PaymentLabels.Dash(s.StateName)</dd></div>
+                    <div class="spd-row"><dt>Region</dt><dd>@PaymentLabels.Dash(s.RegionName)</dd></div>
+                    <div class="spd-row"><dt>District</dt><dd>@PaymentLabels.Dash(d.FarmerDistrict)</dd></div>
+                    <div class="spd-row"><dt>Village</dt><dd>@PaymentLabels.Dash(d.FarmerVillage)</dd></div>
+                    <div class="spd-row"><dt>Address</dt><dd>@PaymentLabels.Dash(d.FarmerAddress)</dd></div>
+                </dl>
+            </section>
+
+            <!-- ---------- sample ---------- -->
+            <section class="spd-card">
+                <h2 class="spd-title"><span class="spd-ico spd-ico--blue"><i class="bi bi-eyedropper" aria-hidden="true"></i></span>Sample Details</h2>
+                <dl class="spd-rows">
+                    <div class="spd-row"><dt>Total Samples</dt><dd>@d.TotalSamples</dd></div>
+                    <div class="spd-row"><dt>Soil Sample</dt><dd>@d.SoilSamples</dd></div>
+                    @if (d.WaterSamples > 0)
+                    {
+                        <div class="spd-row"><dt>Water Sample</dt><dd>@d.WaterSamples</dd></div>
+                    }
+                    <div class="spd-row"><dt>Rate per Sample</dt><dd>@PaymentLabels.Money(d.RatePerSample)</dd></div>
+                    <div class="spd-row"><dt>Total Payable Amount</dt><dd>@PaymentLabels.Money(s.ExpectedAmount)</dd></div>
+                    <div class="spd-row"><dt>Collected By</dt><dd>@d.CollectedByName@(string.IsNullOrWhiteSpace(d.CollectedByRole) ? "" : $" ({d.CollectedByRole})")</dd></div>
+                    <div class="spd-row"><dt>Collection Date</dt><dd>@PaymentLabels.Date(d.CollectionDate)</dd></div>
+                    <div class="spd-row"><dt>Consignment Created</dt><dd>@PaymentLabels.Date(d.ConsignmentCreatedAt)</dd></div>
+                </dl>
+            </section>
+
+            <!-- ---------- payment ---------- -->
+            <section class="spd-card spd-span2">
+                <h2 class="spd-title"><span class="spd-ico spd-ico--orange"><i class="bi bi-credit-card" aria-hidden="true"></i></span>Payment Details</h2>
+                <div class="spd-amounts">
+                    <div class="spd-amount spd-amount--blue"><span>Expected Amount</span><strong>@PaymentLabels.Money(s.ExpectedAmount)</strong></div>
+                    <div class="spd-amount spd-amount--violet"><span>Paid Amount</span><strong>@PaymentLabels.Money(s.PaidAmount)</strong></div>
+                    <div class="spd-amount @(s.Difference == 0 ? "spd-amount--green" : "spd-amount--red")"><span>Difference</span><strong>@PaymentLabels.Difference(s.Difference)</strong></div>
+                </div>
+                <dl class="spd-rows spd-rows--two">
+                    <div class="spd-row"><dt>Payment Mode</dt><dd>@PaymentLabels.ModeName(s.PaymentMode)</dd></div>
+                    <div class="spd-row"><dt>Transaction ID</dt><dd>@PaymentLabels.Dash(s.TransactionId)</dd></div>
+                    <div class="spd-row"><dt>Transaction Date</dt><dd>@PaymentLabels.Date(d.TransactionDate)</dd></div>
+                    <div class="spd-row"><dt>Bank Name</dt><dd>@PaymentLabels.Dash(d.BankName)</dd></div>
+                    <div class="spd-row"><dt>UTR No.</dt><dd>@PaymentLabels.Dash(d.UtrNumber)</dd></div>
+                    <div class="spd-row"><dt>MO Remarks</dt><dd>@PaymentLabels.Dash(d.MoRemarks)</dd></div>
+                    @if (IsFinanceView)
+                    {
+                        <div class="spd-row"><dt>Admin Remarks</dt><dd>@PaymentLabels.Dash(d.AdminRemarks)</dd></div>
+                    }
+                </dl>
+            </section>
+
+            <!-- ---------- admin review / verification ---------- -->
+            <section class="spd-card">
+                <h2 class="spd-title"><span class="spd-ico spd-ico--teal"><i class="bi bi-shield-check" aria-hidden="true"></i></span>@(IsFinanceView ? "Admin Verification" : "Admin Review Status")</h2>
+                <dl class="spd-rows">
+                    @if (IsFinanceView)
+                    {
+                        <div class="spd-row"><dt>Admin Status</dt><dd><LabPill Text="@PaymentLabels.AdminStatusName(s.AdminStatus)" Tone="@PaymentLabels.AdminStatusTone(s.AdminStatus)" /></dd></div>
+                        <div class="spd-row"><dt>Verified By</dt><dd>@PaymentLabels.Dash(d.ReviewedByName)</dd></div>
+                        <div class="spd-row"><dt>Verified Date &amp; Time</dt><dd>@PaymentLabels.DateTime(d.ReviewedAt)</dd></div>
+                        <div class="spd-row"><dt>Verified Amount</dt><dd>@(d.VerifiedAmount is { } va ? PaymentLabels.Money(va) : "-")</dd></div>
+                        <div class="spd-row"><dt>Admin Remarks</dt><dd>@PaymentLabels.Dash(d.AdminRemarks)</dd></div>
+                        <div class="spd-row"><dt>Forwarded to Finance</dt><dd>@PaymentLabels.DateTime(d.ForwardedAt)</dd></div>
+                    }
+                    else
+                    {
+                        <div class="spd-row"><dt>Current Status</dt><dd><LabPill Text="@AdminPill(d)" Tone="@PaymentLabels.AdminStatusTone(s.AdminStatus)" /></dd></div>
+                        <div class="spd-row"><dt>Reviewed By</dt><dd>@PaymentLabels.Dash(d.ReviewedByName)@(d.ReviewedAt is { } ra ? $" · {PaymentLabels.DateTime(ra)}" : "")</dd></div>
+                        <div class="spd-row"><dt>Verification Note</dt><dd>@PaymentLabels.Dash(s.AdminStatus == SamplePaymentStatus.Rejected ? d.RejectReason : d.AdminRemarks)</dd></div>
+                        <div class="spd-row"><dt>Forward To</dt><dd>@PaymentLabels.Dash(d.ForwardedToName ?? (s.AdminStatus == SamplePaymentStatus.Pending ? "Finance Team" : null))</dd></div>
+                        <div class="spd-row"><dt>Finance Status</dt><dd><LabPill Text="@FinancePill(d)" Tone="@PaymentLabels.FinanceStatusTone(s.FinanceStatus)" /></dd></div>
+                    }
+                    @if (s.FinanceStatus is SampleFinanceStatus.Verified or SampleFinanceStatus.Mismatch)
+                    {
+                        <div class="spd-row"><dt>Finance Verified By</dt><dd>@PaymentLabels.Dash(s.FinanceVerifiedByName)</dd></div>
+                        <div class="spd-row"><dt>Received Date</dt><dd>@PaymentLabels.Date(d.FinanceReceivedDate)</dd></div>
+                        <div class="spd-row"><dt>Finance Remarks</dt><dd>@PaymentLabels.Dash(s.FinanceRemarks)</dd></div>
+                    }
+                </dl>
+            </section>
+
+            <!-- ---------- timeline ---------- -->
+            <section class="spd-card">
+                <h2 class="spd-title"><span class="spd-ico spd-ico--green"><i class="bi bi-clock-history" aria-hidden="true"></i></span>Status Timeline</h2>
+                <PaymentTimeline Steps="d.Timeline" />
+            </section>
+
+            <!-- ---------- proof ---------- -->
+            <section class="spd-card spd-span2">
+                <h2 class="spd-title"><span class="spd-ico spd-ico--pink"><i class="bi bi-image" aria-hidden="true"></i></span>Payment Proof Preview</h2>
+                <PaymentProof Detail="d" />
+            </section>
+        </div>
+
+        @if (d.CanApprove || d.CanVerify)
+        {
+            <ActionBar>
+                <Secondary>
+                    @if (d.CanApprove)
+                    {
+                        <button type="button" class="spd-btn spd-btn--danger-outline" @onclick="() => _rejectOpen = true" disabled="@_busy">
+                            <i class="bi bi-x-circle" aria-hidden="true"></i> Reject Payment
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="spd-btn spd-btn--danger-outline" @onclick="() => _mismatchOpen = true" disabled="@_busy">
+                            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Mark Mismatch
+                        </button>
+                    }
+                </Secondary>
+                <ChildContent>
+                    @if (d.CanApprove)
+                    {
+                        <button type="button" class="spd-btn spd-btn--primary" @onclick="() => _approveOpen = true" disabled="@_busy">
+                            <i class="bi bi-send-check" aria-hidden="true"></i> Approve &amp; Forward<span class="spd-wide-only">&nbsp;to Finance</span>
+                        </button>
+                    }
+                    else
+                    {
+                        <button type="button" class="spd-btn spd-btn--primary" @onclick="() => _verifyOpen = true" disabled="@_busy">
+                            <i class="bi bi-patch-check" aria-hidden="true"></i> Verify Payment
+                        </button>
+                    }
+                </ChildContent>
+            </ActionBar>
+        }
+
+        <ApprovePaymentDialog IsOpen="_approveOpen" Detail="d" OnClose="() => _approveOpen = false" OnApproved="OnApprovedAsync" />
+        <ApprovedDialog IsOpen="_approvedOpen" Detail="d" OnClose="() => _approvedOpen = false" />
+        <ConfirmReceivedDialog IsOpen="_verifyOpen" Detail="d" OnClose="() => _verifyOpen = false" OnVerified="OnVerifiedAsync" />
+        <ReasonDialog IsOpen="_rejectOpen" Title="Reject Payment" Subtitle="The payment goes back to the MO (Returned to MO) with your reason."
+                      Label="Reason for rejection" ConfirmText="Reject Payment" Reference="@s.Code" Busy="_busy"
+                      OnClose="() => _rejectOpen = false" OnSubmit="RejectAsync" />
+        <ReasonDialog IsOpen="_mismatchOpen" Title="Mark Mismatch" Subtitle="Record why Finance could not confirm this payment."
+                      Icon="bi-exclamation-triangle" Label="Mismatch remarks" Placeholder="e.g. Transaction not found in the bank statement"
+                      ConfirmText="Mark Mismatch" Reference="@s.Code" Busy="_busy"
+                      OnClose="() => _mismatchOpen = false" OnSubmit="MismatchAsync" />
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private SasPaymentDetailDto? _detail;
+    private bool _loading = true;
+    private bool _notFound;
+    private bool _busy;
+
+    private bool _approveOpen;
+    private bool _approvedOpen;
+    private bool _verifyOpen;
+    private bool _rejectOpen;
+    private bool _mismatchOpen;
+
+    /// <summary>Finance wording (screen 28) for Finance users; admins keep the admin wording.</summary>
+    private bool IsFinanceView => _detail?.Mode == SasPaymentPageMode.Finance;
+
+    private string PageTitle => _detail?.Mode switch
+    {
+        SasPaymentPageMode.Admin => "Payment Approval Details",
+        SasPaymentPageMode.Finance => "Payment Proof Details",
+        _ => "Payment Details"
+    };
+
+    private string? Subtitle => _detail is { } d
+        ? $"{d.Summary.Code} · Submitted on {PaymentLabels.DateTime(d.Summary.SubmittedAt)}"
+        : null;
+
+    private string BackHref => _detail?.Mode == SasPaymentPageMode.Finance &&
+                               _detail.Summary.FinanceStatus is SampleFinanceStatus.Verified or SampleFinanceStatus.Mismatch
+        ? "/Sas/Payments/History"
+        : "/Sas/Payments";
+
+    private static string AdminPill(SasPaymentDetailDto d) => d.Summary.AdminStatus switch
+    {
+        SamplePaymentStatus.Pending => "Pending Admin Approval",
+        SamplePaymentStatus.Approved => "Approved & Forwarded",
+        _ => "Returned to MO"
+    };
+
+    private static string FinancePill(SasPaymentDetailDto d) => d.Summary.FinanceStatus switch
+    {
+        SampleFinanceStatus.NotForwarded => "Not Forwarded",
+        SampleFinanceStatus.AwaitingVerification => "Pending Verification",
+        SampleFinanceStatus.Verified => "Verified",
+        _ => d.VerifiedAmount is { } v && v < d.Summary.PaidAmount ? "Amount Mismatch" : "Failed"
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_detail?.Summary.Id == Id) return;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var (item, notFound) = await Api.GetPaymentAsync(Id);
+        _detail = item;
+        _notFound = notFound;
+        _loading = false;
+    }
+
+    private async Task OnApprovedAsync(SasPaymentDetailDto refreshed)
+    {
+        _detail = refreshed;
+        _approveOpen = false;
+        _approvedOpen = true;
+        await Task.CompletedTask;
+    }
+
+    private void OnVerifiedAsync(SasPaymentDetailDto refreshed)
+    {
+        _detail = refreshed;
+        _verifyOpen = false;
+
+        if (refreshed.Summary.FinanceStatus == SampleFinanceStatus.Verified)
+            Toast.Success($"{refreshed.Summary.Code} verified by Finance.");
+        else
+            Toast.Warning($"{refreshed.Summary.Code} recorded as an amount mismatch ({refreshed.Summary.FinanceRemarks}).");
+    }
+
+    private async Task RejectAsync(string reason)
+    {
+        if (_detail is null) return;
+        _busy = true;
+        var result = await Api.RejectAsync(_detail.Summary.Id, reason);
+        _busy = false;
+        if (result is null) return;
+
+        _detail = result;
+        _rejectOpen = false;
+        Toast.Success($"{result.Summary.Code} returned to the MO.");
+    }
+
+    private async Task MismatchAsync(string reason)
+    {
+        if (_detail is null) return;
+        _busy = true;
+        var result = await Api.MarkMismatchAsync(_detail.Summary.Id, reason);
+        _busy = false;
+        if (result is null) return;
+
+        _detail = result;
+        _mismatchOpen = false;
+        Toast.Warning($"{result.Summary.Code} marked as a mismatch.");
+    }
+}

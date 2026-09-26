@@ -768,7 +768,13 @@ namespace SpicAPI.Controllers
 				Amount = collection.TotalAmount,
 				Status = SamplePaymentStatus.Pending,
 				CreatedBy = User.Identity?.Name,
-				CreatedAt = DateTime.Now
+				CreatedAt = DateTime.Now,
+				PaymentMode = Enum.IsDefined(dto.PaymentMode) ? dto.PaymentMode : SamplePaymentMode.Upi,
+				TransactionDate = dto.TransactionDate,
+				BankName = Clean(dto.BankName),
+				MoRemarks = Clean(dto.MoRemarks),
+				FinanceStatus = SampleFinanceStatus.NotForwarded,
+				Code = await SasPaymentCodes.NextAsync(_db, DateTime.Now.Year)
 			};
 
 			_db.SamplePayments.Add(payment);
@@ -779,7 +785,19 @@ namespace SpicAPI.Controllers
 			AddEvent(collection.Id, null, nameof(SampleCollectionStatus.PendingApproval),
 				$"Payment {payment.TransactionId} recorded, awaiting approval.", name);
 
-			await _db.SaveChangesAsync();
+			// PAY-{yyyy}-{n} is unique: a payment saved at the same moment takes the next number.
+			for (var attempt = 0; ; attempt++)
+			{
+				try
+				{
+					await _db.SaveChangesAsync();
+					break;
+				}
+				catch (DbUpdateException ex) when (attempt < 4 && SasPaymentCodes.IsUniqueViolation(ex))
+				{
+					payment.Code = await SasPaymentCodes.NextAsync(_db, DateTime.Now.Year);
+				}
+			}
 
 			return Ok(MapPayment(payment));
 		}
@@ -876,6 +894,22 @@ namespace SpicAPI.Controllers
 			payment.ReviewedByName = name;
 			payment.ReviewedAt = DateTime.Now;
 			payment.RejectReason = newStatus == SamplePaymentStatus.Rejected ? Clean(reason) : null;
+
+			// Payment Approval module fields: an approval here is an "Approve & Forward to Finance"
+			// for the full paid amount; a rejection is "Returned to MO".
+			if (newStatus == SamplePaymentStatus.Approved)
+			{
+				payment.VerifiedAmount = payment.Amount;
+				payment.ApprovedDate = DateTime.Today;
+				payment.ForwardedToName = "Finance Team";
+				payment.ForwardedAt = DateTime.Now;
+				payment.FinanceStatus = SampleFinanceStatus.AwaitingVerification;
+			}
+			else
+			{
+				payment.AdminRemarks = Clean(reason);
+				payment.FinanceStatus = SampleFinanceStatus.NotForwarded;
+			}
 
 			if (newStatus == SamplePaymentStatus.Approved)
 			{
