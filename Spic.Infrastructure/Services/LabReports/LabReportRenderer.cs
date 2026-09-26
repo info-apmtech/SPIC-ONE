@@ -173,7 +173,7 @@ public sealed class LabReportRenderer
             {
                 col.Item().PaddingTop(2).PaddingLeft(8).Text(t.Group(group.Group)).FontSize(9).Bold().FontColor(GreenText);
                 foreach (var line in group.Lines)
-                    col.Item().PaddingLeft(8).Text("- " + t.Hint(line));
+                    col.Item().PaddingLeft(8).Text("- " + t.Line(m, line));
             }
             col.Item().PaddingTop(2).PaddingLeft(8).Text(text =>
             {
@@ -442,7 +442,7 @@ public sealed class LabReportRenderer
             }
             foreach (var group in m.Recommendations)
                 foreach (var line in group.Lines)
-                    col.Item().PaddingLeft(6).Text("- " + t.Hint(line));
+                    col.Item().PaddingLeft(6).Text("- " + t.Line(m, line));
 
             col.Item().PaddingTop(10).Text(t.T("label.note", "Note")).FontSize(12).Bold().FontColor(Navy);
             col.Item().PaddingLeft(6).Text(t.CropNote(m));
@@ -639,7 +639,7 @@ public sealed class LabReportRenderer
         foreach (var group in m.Recommendations)
         {
             if (!water) Merged(t.Group(group.Group), 10, true, GreenText, XLAlignmentHorizontalValues.Left);
-            foreach (var line in group.Lines) Merged("- " + t.Hint(line), 10, false, null, XLAlignmentHorizontalValues.Left);
+            foreach (var line in group.Lines) Merged("- " + t.Line(m, line), 10, false, null, XLAlignmentHorizontalValues.Left);
         }
         r++;
         Merged(water ? t.T("label.note", "Note") : t.T("label.cropNote", "Crop Suitability Note"), 11, true, accent, XLAlignmentHorizontalValues.Left);

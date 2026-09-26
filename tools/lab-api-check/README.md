@@ -19,7 +19,17 @@ upload / delete and export. It refuses any base URL that is not localhost.
 5. Documents (upload, served by `api/Sas/file`, filters, soft delete), exports via `?access_token=`,
    completion of batch one, and the v1 collection / consignment records (TestInProgress, Completed,
    results, timeline).
-6. `qa.analyst2` saves a draft (Continue Test Entry) and batch two is back-dated 7 days in the local
+6. Reports agree with the lab pages: display ids (`SAS-SOIL-001`) equal between `batches/{id}/samples`,
+   the report list and the report detail; the report's overall status, recommendations and crop note
+   equal the entry page's result (one result engine); `reports/stats.BatchGroups` counts batches with
+   reports; completing a completed batch returns 409 "Batch is already completed and its reports
+   exist", and after its reports are deleted in the local database (skip with `--no-db`) it
+   regenerates them and returns 200.
+7. Payments: the admin's `VerifiedAmount` and Finance's `FinanceVerifiedAmount` / `FinanceReceivedDate`
+   stay apart; a short verify is an Amount Mismatch, the mismatch route a Failed payment (no Finance
+   amount); `ApprovalPending` and the `approvalPending` filter count admin-approved payments not yet
+   processed by Finance.
+8. `qa.analyst2` saves a draft (Continue Test Entry) and batch two is back-dated 7 days in the local
    database to check Analysis Days and Delayed (skip with `--no-db`).
 
 KPIs are asserted as deltas against a baseline taken at the start, so the script can be re-run; each

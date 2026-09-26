@@ -20,8 +20,9 @@ namespace SPIC.Core.DTOs;
 ///   GET    api/Sas/payments/{id}                               -> SasPaymentDetailDto
 ///   POST   api/Sas/payments/{id}/approve                       -> SasPaymentDetailDto (admin; body: SasPaymentApproveDto; Status Approved, FinanceStatus AwaitingVerification, ForwardedAt now)
 ///   POST   api/Sas/payments/{id}/reject                        -> SasPaymentDetailDto (admin; body: SasPaymentRejectDto; Status Rejected = Returned to MO; collection back to PendingPayment)
-///   POST   api/Sas/payments/{id}/verify                        -> SasPaymentDetailDto (finance; body: SasPaymentVerifyDto; VerifiedAmount &lt; Amount -> Mismatch, else Verified)
-///   POST   api/Sas/payments/{id}/mismatch                      -> SasPaymentDetailDto (finance; body: SasPaymentRejectDto; FinanceStatus Mismatch)
+///   POST   api/Sas/payments/{id}/verify                        -> SasPaymentDetailDto (finance; body: SasPaymentVerifyDto; writes FinanceVerifiedAmount / FinanceReceivedDate,
+///                                                              leaves the admin's VerifiedAmount; FinanceVerifiedAmount &lt; Amount -> Mismatch "Amount Mismatch", else Verified)
+///   POST   api/Sas/payments/{id}/mismatch                      -> SasPaymentDetailDto (finance; body: SasPaymentRejectDto; FinanceStatus Mismatch with FinanceVerifiedAmount null = "Failed")
 ///   GET    api/Sas/payments/{id}/proof                         -> the receipt image (also ?access_token=; same file as api/Sas/file/{ProofPath})
 /// The v1 PATCH api/Sas/payments/{id}/status keeps working and maps to approve / reject.
 /// Codes: PAY-{yyyy}-{00001}; v1 payments without a code get one lazily when first listed.
@@ -51,7 +52,7 @@ public class SasPaymentStatsDto
     public int Failed { get; set; }
     // farmer
     public int TotalPaidSamples { get; set; }
-    public int ApprovalPending { get; set; }
+    public int ApprovalPending { get; set; }                   // pending review + admin approved, not yet processed by Finance
     public int PaymentIssues { get; set; }
 }
 
@@ -82,6 +83,10 @@ public class SasPaymentRowDto
     public string? FinanceRemarks { get; set; }
     public string? StateName { get; set; }
     public string? RegionName { get; set; }
+    // V5p: the admin's approved amount and Finance's own figures, kept apart.
+    public decimal? VerifiedAmount { get; set; }               // admin (approve)
+    public decimal? FinanceVerifiedAmount { get; set; }        // Finance: amount received; null when marked failed (mismatch route)
+    public DateTime? FinanceReceivedDate { get; set; }         // Finance: date received
 }
 
 public class SasPaymentTimelineStepDto
@@ -135,6 +140,8 @@ public class SasPaymentDetailDto
     public SasPaymentPageMode Mode { get; set; }
     public bool CanApprove { get; set; }
     public bool CanVerify { get; set; }
+    // V5p: Finance's amount received (VerifiedAmount above stays the admin's approved amount).
+    public decimal? FinanceVerifiedAmount { get; set; }
 }
 
 public class SasPaymentApproveDto

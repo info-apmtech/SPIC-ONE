@@ -74,7 +74,7 @@ namespace SpicAPI.Controllers
 				{
 					p.Status,
 					p.FinanceStatus,
-					Short = p.VerifiedAmount != null && p.VerifiedAmount < p.Amount
+					Short = p.FinanceVerifiedAmount != null && p.FinanceVerifiedAmount < p.Amount
 				})
 				.ToListAsync();
 
@@ -97,8 +97,12 @@ namespace SpicAPI.Controllers
 				Failed = mismatchAll - mismatchShort,
 
 				TotalPaidSamples = rows.Count,
+				// Farmer "Approval Pending" = the rows the farmer list labels "Admin Approval Pending" or
+				// "Admin Approved": pending review, or approved and not yet processed by Finance (awaiting
+				// verification, or a v1 approval from before Finance verification existed).
 				ApprovalPending = rows.Count(r => r.Status == SamplePaymentStatus.Pending ||
-												  r.FinanceStatus == SampleFinanceStatus.AwaitingVerification),
+												  (r.Status == SamplePaymentStatus.Approved &&
+												   r.FinanceStatus is SampleFinanceStatus.AwaitingVerification or SampleFinanceStatus.NotForwarded)),
 				PaymentIssues = rows.Count(r => r.Status == SamplePaymentStatus.Rejected ||
 												r.FinanceStatus == SampleFinanceStatus.Mismatch)
 			});
@@ -359,7 +363,9 @@ namespace SpicAPI.Controllers
 			var now = DateTime.Now;
 			var remarks = Clean(dto.Remarks);
 
-			payment.VerifiedAmount = dto.VerifiedAmount;
+			// Finance's own figures (V5p); the admin's approved VerifiedAmount is left as it is.
+			payment.FinanceVerifiedAmount = dto.VerifiedAmount;
+			payment.FinanceReceivedDate = (dto.ReceivedDate ?? now).Date;
 			if (dto.VerifiedAmount < payment.Amount)
 			{
 				payment.FinanceStatus = SampleFinanceStatus.Mismatch;
@@ -371,9 +377,7 @@ namespace SpicAPI.Controllers
 				payment.FinanceRemarks = remarks;
 			}
 
-			// The entity has no separate "received" column: the verification stamp carries the
-			// received date Finance entered (with the time it was confirmed).
-			payment.FinanceVerifiedAt = dto.ReceivedDate.HasValue ? dto.ReceivedDate.Value.Date + now.TimeOfDay : now;
+			payment.FinanceVerifiedAt = now;
 			payment.FinanceVerifiedByName = name;
 
 			await _db.SaveChangesAsync();
@@ -400,8 +404,11 @@ namespace SpicAPI.Controllers
 			if (payment.FinanceStatus != SampleFinanceStatus.AwaitingVerification)
 				return BadRequest(new { Success = false, Message = "This payment is not awaiting Finance verification." });
 
+			// Failed: nothing was received, so Finance's amount and received date stay empty.
 			payment.FinanceStatus = SampleFinanceStatus.Mismatch;
 			payment.FinanceRemarks = reason;
+			payment.FinanceVerifiedAmount = null;
+			payment.FinanceReceivedDate = null;
 			payment.FinanceVerifiedAt = DateTime.Now;
 			payment.FinanceVerifiedByName = await ResolveDisplayNameAsync();
 
@@ -501,16 +508,19 @@ namespace SpicAPI.Controllers
 				case "failedonly":
 					// History "Failed": marked as a mismatch without a short amount.
 					return query.Where(p => p.FinanceStatus == SampleFinanceStatus.Mismatch &&
-											!(p.VerifiedAmount != null && p.VerifiedAmount < p.Amount));
+											!(p.FinanceVerifiedAmount != null && p.FinanceVerifiedAmount < p.Amount));
 				case "mismatch":
 					return query.Where(p => p.FinanceStatus == SampleFinanceStatus.Mismatch &&
-											p.VerifiedAmount != null && p.VerifiedAmount < p.Amount);
+											p.FinanceVerifiedAmount != null && p.FinanceVerifiedAmount < p.Amount);
 				case "issues":
 					return query.Where(p => p.Status == SamplePaymentStatus.Rejected ||
 											p.FinanceStatus == SampleFinanceStatus.Mismatch);
 				case "approvalpending":
+					// Same rule as SasPaymentStatsDto.ApprovalPending.
 					return query.Where(p => p.Status == SamplePaymentStatus.Pending ||
-											p.FinanceStatus == SampleFinanceStatus.AwaitingVerification);
+											(p.Status == SamplePaymentStatus.Approved &&
+											 (p.FinanceStatus == SampleFinanceStatus.AwaitingVerification ||
+											  p.FinanceStatus == SampleFinanceStatus.NotForwarded)));
 				default:
 					return query;
 			}
@@ -553,7 +563,10 @@ namespace SpicAPI.Controllers
 					p.CreatedAt,
 					p.FinanceVerifiedByName,
 					p.FinanceVerifiedAt,
-					p.FinanceRemarks
+					p.FinanceRemarks,
+					p.VerifiedAmount,
+					p.FinanceVerifiedAmount,
+					p.FinanceReceivedDate
 				})
 				.ToListAsync();
 
@@ -588,7 +601,10 @@ namespace SpicAPI.Controllers
 					FinanceVerifiedAt = r.FinanceVerifiedAt,
 					FinanceRemarks = r.FinanceRemarks,
 					StateName = loc?.State ?? r.Items.Select(i => i.FarmerState).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)),
-					RegionName = loc?.Region
+					RegionName = loc?.Region,
+					VerifiedAmount = r.VerifiedAmount,
+					FinanceVerifiedAmount = r.FinanceVerifiedAmount,
+					FinanceReceivedDate = r.FinanceReceivedDate
 				};
 			}).ToList();
 		}
@@ -669,15 +685,14 @@ namespace SpicAPI.Controllers
 				ForwardedToName = payment.ForwardedToName,
 				ForwardedAt = payment.ForwardedAt,
 
-				FinanceReceivedDate = payment.FinanceStatus is SampleFinanceStatus.Verified or SampleFinanceStatus.Mismatch
-					? payment.FinanceVerifiedAt?.Date
-					: null,
+				FinanceReceivedDate = payment.FinanceReceivedDate,
 				Timeline = access.Mode == SasPaymentPageMode.Farmer
 					? FarmerTimeline(payment, collection.CollectedByName)
 					: StaffTimeline(payment, collection.CollectedByName, collection.CollectedByRole),
 				Mode = access.Mode,
 				CanApprove = access.CanApprove && payment.Status == SamplePaymentStatus.Pending,
-				CanVerify = access.CanVerify && payment.FinanceStatus == SampleFinanceStatus.AwaitingVerification
+				CanVerify = access.CanVerify && payment.FinanceStatus == SampleFinanceStatus.AwaitingVerification,
+				FinanceVerifiedAmount = payment.FinanceVerifiedAmount
 			};
 		}
 
@@ -728,8 +743,8 @@ namespace SpicAPI.Controllers
 			steps.Add(new()
 			{
 				Title = $"Admin Approved & Forwarded to {p.ForwardedToName ?? "Finance"}",
-				// VerifiedAmount holds Finance's figure once Finance has processed the payment.
-				Description = p.VerifiedAmount.HasValue && p.FinanceStatus is SampleFinanceStatus.AwaitingVerification or SampleFinanceStatus.NotForwarded
+				// The admin's approved amount; Finance's received amount has its own step below.
+				Description = p.VerifiedAmount.HasValue
 					? $"Approved amount {Money(p.VerifiedAmount.Value)}."
 					: "Payment approved by the admin.",
 				At = p.ForwardedAt ?? p.ReviewedAt,
@@ -752,7 +767,9 @@ namespace SpicAPI.Controllers
 				SampleFinanceStatus.Verified => new SasPaymentTimelineStepDto
 				{
 					Title = "Finance — Payment Verified",
-					Description = string.IsNullOrWhiteSpace(p.FinanceRemarks) ? "Amount received and verified." : p.FinanceRemarks,
+					Description = JoinNonEmpty(" ", ReceivedText(p), p.FinanceRemarks) is { Length: > 0 } verified
+						? verified
+						: "Amount received and verified.",
 					At = p.FinanceVerifiedAt,
 					ByName = p.FinanceVerifiedByName,
 					IsDone = true,
@@ -760,9 +777,11 @@ namespace SpicAPI.Controllers
 				},
 				SampleFinanceStatus.Mismatch => new SasPaymentTimelineStepDto
 				{
-					Title = p.VerifiedAmount.HasValue && p.VerifiedAmount < p.Amount ? "Finance — Amount Mismatch" : "Finance — Payment Failed",
-					Description = p.VerifiedAmount.HasValue && p.VerifiedAmount < p.Amount
-						? $"Received {Money(p.VerifiedAmount.Value)} against {Money(p.Amount)}: {p.FinanceRemarks}"
+					Title = p.FinanceVerifiedAmount.HasValue && p.FinanceVerifiedAmount < p.Amount ? "Finance — Amount Mismatch" : "Finance — Payment Failed",
+					Description = p.FinanceVerifiedAmount.HasValue && p.FinanceVerifiedAmount < p.Amount
+						? $"Received {Money(p.FinanceVerifiedAmount.Value)} against {Money(p.Amount)}" +
+						  (p.FinanceReceivedDate.HasValue ? $" on {p.FinanceReceivedDate.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)}" : "") +
+						  (string.IsNullOrWhiteSpace(p.FinanceRemarks) ? "." : $": {p.FinanceRemarks}")
 						: p.FinanceRemarks,
 					At = p.FinanceVerifiedAt,
 					ByName = p.FinanceVerifiedByName,
@@ -995,6 +1014,12 @@ namespace SpicAPI.Controllers
 		};
 
 		private static string Money(decimal amount) => "₹" + amount.ToString("N2", CultureInfo.GetCultureInfo("en-IN"));
+
+		/// <summary>"Received ₹200.00 on 27 Sep 2026." from Finance's own figures (V5p); null before Finance verified.</summary>
+		private static string? ReceivedText(SamplePayment p) => p.FinanceVerifiedAmount is { } received
+			? $"Received {Money(received)}" +
+			  (p.FinanceReceivedDate.HasValue ? $" on {p.FinanceReceivedDate.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture)}" : "") + "."
+			: null;
 
 		private static string? Clean(string? value) =>
 			string.IsNullOrWhiteSpace(value) ? null : value.Trim();

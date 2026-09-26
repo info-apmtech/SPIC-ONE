@@ -163,6 +163,11 @@ public class SamplePayment
     public DateTime? FinanceVerifiedAt { get; set; }
     public string? FinanceVerifiedByName { get; set; }
     public string? FinanceRemarks { get; set; }
+    // V5p (2026-09-27): Finance's own figures. VerifiedAmount stays the admin's approved amount;
+    // FinanceVerifiedAmount is what Finance confirmed as received (null when Finance marked the
+    // payment failed through "mismatch"), FinanceReceivedDate the date Finance entered.
+    public decimal? FinanceVerifiedAmount { get; set; }
+    public DateTime? FinanceReceivedDate { get; set; }
 }
 
 public class SampleConsignment

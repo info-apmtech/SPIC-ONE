@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.Lab;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 
@@ -8,7 +9,9 @@ namespace Spic.Infrastructure.Services.LabReports;
 /// <summary>
 /// Loads sample reports into <see cref="LabReportModel"/> (the PDF / Excel input and the body of
 /// LabReportDetailDto.Sample). The parameter rows come from SampleLabResult; overall status,
-/// recommendation groups and the crop note are recomputed from the stored rows.
+/// recommendation groups and the crop note come from the lab's one result engine
+/// (<see cref="LabAutoResultEngine"/>, fed the stored values like the analyst's entry page), and
+/// the Lab Number is the batch numbering of <see cref="LabSampleIds"/>.
 /// A SoilAndWater sample's result rows are split by LabParameter.AppliesTo (v1 rows without a
 /// master parameter are matched to the master by name, else treated as soil rows).
 /// </summary>
@@ -18,8 +21,13 @@ public sealed class LabReportReader
     public const string GeneralScheduleCrop = "Banana";
 
     private readonly AppDbContext _db;
+    private readonly LabAutoResultEngine _engine;
 
-    public LabReportReader(AppDbContext db) => _db = db;
+    public LabReportReader(AppDbContext db, LabAutoResultEngine engine)
+    {
+        _db = db;
+        _engine = engine;
+    }
 
     public async Task<LabReportModel?> LoadAsync(int reportId, CancellationToken ct = default) =>
         (await LoadManyAsync(new[] { reportId }, ct)).FirstOrDefault();
@@ -50,7 +58,10 @@ public sealed class LabReportReader
 
         var results = await _db.SampleLabResults.AsNoTracking()
             .Where(x => itemIds.Contains(x.SampleItemId))
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.Id)
             .ToListAsync(ct);
+
+        var displayIds = await LabSampleIds.ForBatchesAsync(_db, batchIds, ct);
 
         var parameters = await _db.LabParameters.AsNoTracking().ToListAsync(ct);
         var byId = parameters.ToDictionary(p => p.Id);
@@ -102,7 +113,7 @@ public sealed class LabReportReader
                 SampleItemId = item.Id,
                 CollectionId = item.CollectionId,
                 SampleNumber = item.Code,
-                LabNumber = LabReportRules.SampleDisplayId(item.Id, r.SampleType),
+                LabNumber = displayIds.TryGetValue(item.Id, out var labNumber) ? labNumber : LabSampleIds.Format(item.SampleType, item.Id),
                 ItemType = item.SampleType,
                 PaymentType = src.PaymentType,
                 AnalysisStatus = item.AnalysisStatus,
@@ -121,9 +132,13 @@ public sealed class LabReportReader
                 Rows = rows
             };
 
-            model.OverallStatus = LabReportRules.Overall(rows);
-            model.Recommendations = LabReportRules.Group(rows);
-            model.CropSuitabilityNote = LabReportRules.CropNoteEnglish(model.Layout, model.Crop1, rows);
+            var evaluation = Evaluate(item.SampleType, r.SampleType, model.Crop1,
+                results.Where(x => x.SampleItemId == item.Id).ToList(), parameters);
+            model.OverallStatus = evaluation.Result.OverallStatus;
+            model.Recommendations = evaluation.Result.Recommendations;
+            model.RecommendationLines = evaluation.Lines;
+            model.Suitability = evaluation.Suitability;
+            model.CropSuitabilityNote = evaluation.Result.CropSuitabilityNote ?? "";
             if (model.Layout == SampleType.Soil) model.Schedule = BuildSchedule(model, schedule);
 
             models.Add(model);
@@ -180,13 +195,35 @@ public sealed class LabReportReader
                 EnteredByName = r.EnteredByName
             }).ToList(),
             OverallStatus = m.OverallStatus,
-            OverallStatusText = LabReportRules.OverallText(m.OverallStatus),
+            OverallStatusText = LabAutoResultEngine.OverallText(m.OverallStatus),
             Recommendations = m.Recommendations,
             CropSuitabilityNote = m.CropSuitabilityNote
         };
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /// <summary>The engine's result for one report layout, from the stored values (matched to the
+    /// active master by parameter id, v1 rows by name, like LabController's entry page). A
+    /// SoilAndWater sample's Soil report takes the soil set (and parameters for both), its Water
+    /// report the water-only set, the same split as <see cref="ToRow"/>.</summary>
+    private LabEvaluation Evaluate(SampleType itemType, SampleType layout, string? crop,
+        List<SampleLabResult> own, List<LabParameter> all)
+    {
+        var set = _engine.ParametersFor(layout, all);
+        if (itemType == SampleType.SoilAndWater && layout == SampleType.Water)
+            set = set.Where(p => p.AppliesTo == SampleType.Water).ToList();
+
+        var values = new Dictionary<int, string?>();
+        foreach (var p in set)
+        {
+            var stored = own.LastOrDefault(x => x.LabParameterId == p.Id)
+                ?? own.LastOrDefault(x => x.LabParameterId == null && string.Equals(x.Parameter?.Trim(), p.Name, StringComparison.OrdinalIgnoreCase));
+            if (stored != null && !string.IsNullOrWhiteSpace(stored.EnteredValue)) values[p.Id] = stored.EnteredValue;
+        }
+
+        return _engine.Evaluate(layout, crop, set, values);
+    }
 
     private static (SampleType Layout, LabReportRow Row) ToRow(SampleLabResult x, Dictionary<int, LabParameter> byId,
         List<LabParameter> all, SampleType itemType)
@@ -217,7 +254,7 @@ public sealed class LabReportReader
             Unit = string.IsNullOrWhiteSpace(x.Unit) ? p?.Unit : x.Unit,
             NormalRange = string.IsNullOrWhiteSpace(x.NormalRange) ? p?.NormalRange : x.NormalRange,
             ReportingLimit = p?.ReportingLimit,
-            Group = LabReportRules.NormalizeGroup(p?.RecommendationGroup),
+            Group = LabAutoResultEngine.GroupName(p?.RecommendationGroup),
             Value = x.EnteredValue,
             ResultLabel = x.ResultLabel,
             Status = x.Status,

@@ -79,7 +79,8 @@ namespace SpicAPI.Controllers
             }
             else
             {
-                var batches = Batches(access);
+                // "Batch-wise report groups": batches in scope that have at least one report.
+                var batches = Batches(access).Where(b => b.Reports.Any());
                 if (financialYear.HasValue)
                 {
                     var (from, to) = LabReportRules.FinancialYearRange(financialYear.Value);
@@ -547,6 +548,7 @@ namespace SpicAPI.Controllers
             var consignments = await ConsignmentCodesAsync(batchIds);
             var hqIds = rows.Where(r => r.HqId.HasValue).Select(r => r.HqId!.Value).Distinct().ToList();
             var locations = await LabReportReader.LocationNamesAsync(_db, hqIds);
+            var sampleIds = await Spic.Infrastructure.Services.Lab.LabSampleIds.ForBatchesAsync(_db, batchIds);
 
             return rows.Select(r => new LabReportRowDto
             {
@@ -567,7 +569,8 @@ namespace SpicAPI.Controllers
                 GeneratedAt = r.GeneratedAt,
                 Status = r.Status,
                 DownloadCount = r.DownloadCount,
-                FinancialYearStart = r.FinancialYearStart
+                FinancialYearStart = r.FinancialYearStart,
+                SampleId = sampleIds.GetValueOrDefault(r.SampleItemId) ?? ""
             }).ToList();
         }
 

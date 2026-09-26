@@ -1,4 +1,5 @@
 ﻿using System.Globalization;
+using System.Text.RegularExpressions;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 
@@ -19,7 +20,14 @@ namespace Spic.Infrastructure.Services.Lab;
 /// left out so a low Organic Carbon is not counted twice through Organic Matter):
 /// 0 -> Good, 1-2 -> Needs Improvement, 3+ -> Poor. Recommendations are the hints of the
 /// non-Normal entered parameters grouped by RecommendationGroup (Fertilizer, Organic,
-/// Micronutrient, General) and phrased "{hint} because {parameter} is below normal range.".
+/// Micronutrient, General): a hint that already names its parameter ("Sodium is high; risk of
+/// sodicity") is printed as it is, any other is phrased "{hint} because {parameter} is below
+/// normal range.".
+///
+/// This is the ONE result engine of the lab: the entry preview, the stored SampleLabResult rows
+/// and the reports (LabReportReader) all call it. <see cref="LabEvaluation.Lines"/> and
+/// <see cref="LabEvaluation.Suitability"/> carry the same result in parts so the report layouts
+/// can translate it.
 /// </summary>
 public sealed class LabAutoResultEngine
 {
@@ -104,21 +112,40 @@ public sealed class LabAutoResultEngine
         // Recommendation groups, in the fixed order, then any other group name.
         var lines = counted
             .Where(r => r.Row.Status != LabResultStatus.Normal && !string.IsNullOrWhiteSpace(r.Row.Hint))
-            .Select(r => (Group: string.IsNullOrWhiteSpace(r.P.RecommendationGroup) ? "General" : r.P.RecommendationGroup.Trim(),
-                          Line: Phrase(r.Row.Hint!, r.P.Name, r.Row.Status!.Value)))
+            .Select(r => new LabRecommendationLine
+            {
+                Group = GroupName(r.P.RecommendationGroup),
+                Hint = r.Row.Hint!.Trim(),
+                ParameterCode = r.P.Code,
+                ParameterName = r.P.Name,
+                Status = r.Row.Status!.Value,
+                Text = Phrase(r.Row.Hint!, r.P.Name, r.Row.Status!.Value)
+            })
             .ToList();
 
         var groups = GroupOrder.Concat(lines.Select(l => l.Group).Where(g => !GroupOrder.Contains(g, StringComparer.OrdinalIgnoreCase)).Distinct());
         foreach (var group in groups)
         {
             var groupLines = lines.Where(l => string.Equals(l.Group, group, StringComparison.OrdinalIgnoreCase))
-                .Select(l => l.Line).Distinct().ToList();
-            if (groupLines.Count > 0)
-                result.Recommendations.Add(new LabRecommendationGroupDto { Group = group, Lines = groupLines });
+                .GroupBy(l => l.Text).Select(g => g.First()).ToList();
+            if (groupLines.Count == 0) continue;
+            foreach (var line in groupLines) line.Group = group;
+            evaluation.Lines.AddRange(groupLines);
+            result.Recommendations.Add(new LabRecommendationGroupDto { Group = group, Lines = groupLines.Select(l => l.Text).ToList() });
         }
 
-        result.CropSuitabilityNote = SuitabilityNote(sampleType, crop, rows.Where(r => IsEnterable(r.P)).ToList());
+        var suitability = Suitability(sampleType, crop, rows.Where(r => IsEnterable(r.P)).ToList());
+        evaluation.Suitability = suitability;
+        result.CropSuitabilityNote = suitability?.Text;
         return evaluation;
+    }
+
+    /// <summary>The recommendation group of a parameter: one of <see cref="GroupOrder"/> (any case),
+    /// "General" when blank, else the name as it is.</summary>
+    public static string GroupName(string? group)
+    {
+        if (string.IsNullOrWhiteSpace(group)) return "General";
+        return GroupOrder.FirstOrDefault(g => string.Equals(g, group.Trim(), StringComparison.OrdinalIgnoreCase)) ?? group.Trim();
     }
 
     public static string OverallText(LabOverallStatus status) => status switch
@@ -158,9 +185,15 @@ public sealed class LabAutoResultEngine
         }
     }
 
-    private static string Phrase(string hint, string name, LabResultStatus status)
+    /// <summary>A hint that already names its parameter (case-insensitive) is printed as it is
+    /// ("Sodium is high; risk of sodicity"); any other gets the reason ("Apply nitrogen fertilizer
+    /// because nitrogen is below normal range.").</summary>
+    public static string Phrase(string hint, string name, LabResultStatus status)
     {
-        var clean = hint.Trim().TrimEnd('.');
+        var trimmed = hint.Trim();
+        if (NamesParameter(trimmed, name)) return trimmed;
+
+        var clean = trimmed.TrimEnd('.');
         var subject = Lower(name);
         var reason = status switch
         {
@@ -171,23 +204,47 @@ public sealed class LabAutoResultEngine
         return $"{clean} because {reason}.";
     }
 
+    /// <summary>True when the hint mentions the parameter's name as whole words, any case
+    /// ("Sodium is high" names Sodium; "Apply lime" does not name pH).</summary>
+    public static bool NamesParameter(string hint, string? name)
+    {
+        if (string.IsNullOrWhiteSpace(hint) || string.IsNullOrWhiteSpace(name)) return false;
+        return Regex.IsMatch(hint, $@"(?<![\p{{L}}\p{{N}}]){Regex.Escape(name.Trim())}(?![\p{{L}}\p{{N}}])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    /// <summary>Crop name of the suitability note when the sample has none.</summary>
+    public const string DefaultCrop = "the selected crop";
+
     /// <summary>Soil: "Soil is suitable for {crop} after correcting low nitrogen, low organic
     /// carbon, and low zinc." / "Soil is suitable for {crop}.". Water: "Suitable for irrigation" /
     /// "Use with caution: high sodium and high chloride." SoilAndWater: both sentences.</summary>
-    private static string? SuitabilityNote(SampleType type, string? crop, List<(LabParameter P, LabParameterRowDto Row)> rows)
+    private static LabSuitability? Suitability(SampleType type, string? crop, List<(LabParameter P, LabParameterRowDto Row)> rows)
     {
         if (!rows.Any(r => r.Row.Status.HasValue)) return null;
 
-        string Problems(IEnumerable<(LabParameter P, LabParameterRowDto Row)> set) => JoinList(set
+        List<LabSuitabilityProblem> Problems(IEnumerable<(LabParameter P, LabParameterRowDto Row)> set) => set
             .Where(r => r.Row.Status == LabResultStatus.Deficient || r.Row.Status == LabResultStatus.Excess)
-            .Select(r => $"{(r.Row.Status == LabResultStatus.Deficient ? "low" : "high")} {Lower(r.P.Name)}")
-            .ToList());
+            .Select(r => new LabSuitabilityProblem
+            {
+                Code = r.P.Code,
+                Name = r.P.Name,
+                Status = r.Row.Status!.Value,
+                Text = $"{(r.Row.Status == LabResultStatus.Deficient ? "low" : "high")} {Lower(r.P.Name)}"
+            })
+            .ToList();
+
+        var note = new LabSuitability
+        {
+            Crop = string.IsNullOrWhiteSpace(crop) ? null : crop.Trim(),
+            Soil = type == SampleType.Water ? null : Problems(rows.Where(r => r.P.AppliesTo != SampleType.Water)),
+            Water = type == SampleType.Soil ? null : Problems(rows.Where(r => r.P.AppliesTo != SampleType.Soil))
+        };
 
         string SoilNote()
         {
-            var soil = rows.Where(r => r.P.AppliesTo != SampleType.Water).ToList();
-            var cropName = string.IsNullOrWhiteSpace(crop) ? "the selected crop" : crop.Trim();
-            var problems = Problems(soil);
+            var cropName = note.Crop ?? DefaultCrop;
+            var problems = JoinList(note.Soil!.Select(p => p.Text).ToList());
             return problems.Length == 0
                 ? $"Soil is suitable for {cropName}."
                 : $"Soil is suitable for {cropName} after correcting {problems}.";
@@ -195,20 +252,21 @@ public sealed class LabAutoResultEngine
 
         string WaterNote()
         {
-            var water = rows.Where(r => r.P.AppliesTo != SampleType.Soil).ToList();
-            var problems = Problems(water);
+            var problems = JoinList(note.Water!.Select(p => p.Text).ToList());
             return problems.Length == 0 ? "Suitable for irrigation" : $"Use with caution: {problems}.";
         }
 
-        return type switch
+        note.Text = type switch
         {
             SampleType.Soil => SoilNote(),
             SampleType.Water => WaterNote(),
             _ => $"{SoilNote()} Water: {WaterNote()}"
         };
+        return note;
     }
 
-    private static string JoinList(List<string> items) => items.Count switch
+    /// <summary>"a", "a and b", "a, b, and c".</summary>
+    public static string JoinList(List<string> items) => items.Count switch
     {
         0 => "",
         1 => items[0],
@@ -251,4 +309,42 @@ public sealed class LabEvaluation
     public LabAutoResultDto Result { get; } = new();
     public List<string> Errors { get; } = new();
     public bool IsValid => Errors.Count == 0;
+
+    /// <summary>The lines of <see cref="LabAutoResultDto.Recommendations"/> with their parts, in
+    /// the same order (group order, then parameter order).</summary>
+    public List<LabRecommendationLine> Lines { get; } = new();
+
+    /// <summary>The crop suitability note in parts (null when nothing was entered).</summary>
+    public LabSuitability? Suitability { get; set; }
+}
+
+/// <summary>One recommendation line: the parameter's hint and the printed English text.</summary>
+public sealed class LabRecommendationLine
+{
+    public string Group { get; set; } = "General";
+    public string Hint { get; set; } = "";
+    public string ParameterCode { get; set; } = "";
+    public string ParameterName { get; set; } = "";
+    public LabResultStatus Status { get; set; }
+    /// <summary>The English line (<see cref="LabAutoResultEngine.Phrase"/>).</summary>
+    public string Text { get; set; } = "";
+}
+
+/// <summary>The crop suitability note: the out-of-range parameters of the soil set and of the
+/// water set (null when the sample type has no such set) and the English sentence.</summary>
+public sealed class LabSuitability
+{
+    public string? Crop { get; set; }
+    public List<LabSuitabilityProblem>? Soil { get; set; }
+    public List<LabSuitabilityProblem>? Water { get; set; }
+    public string Text { get; set; } = "";
+}
+
+public sealed class LabSuitabilityProblem
+{
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public LabResultStatus Status { get; set; }
+    /// <summary>"low nitrogen" / "high sodium".</summary>
+    public string Text { get; set; } = "";
 }

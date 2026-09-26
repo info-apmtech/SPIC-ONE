@@ -366,7 +366,7 @@ public class LabActivityDto
 
 public class LabReportStatsDto { public int TotalReports { get; set; } public int ThisFinancialYear { get; set; } public int PreviousFinancialYears { get; set; }
     // Added by the reports workstream (analyst Test Reports KPIs; scoped like the lists, financialYear= applies):
-    public int BatchGroups { get; set; }          // batches in scope (batch-wise report groups)
+    public int BatchGroups { get; set; }          // batches in scope with at least one report (batch-wise report groups)
     public int SampleReports { get; set; }        // sample reports (LabReport rows)
     public int GeneratedToday { get; set; }       // sample reports generated today
     public int DownloadsCompleted { get; set; }   // PDF / Excel downloads (sum of DownloadCount)
@@ -395,6 +395,7 @@ public class LabReportRowDto
     public LabReportStatus Status { get; set; }             // Generated / Downloaded / Printed
     public int DownloadCount { get; set; }
     public int FinancialYearStart { get; set; }
+    public string SampleId { get; set; } = "";              // lab display id SAS-SOIL-001 (same as the batch's samples and the PDF's Lab Number)
 }
 
 public class LabReportDetailDto

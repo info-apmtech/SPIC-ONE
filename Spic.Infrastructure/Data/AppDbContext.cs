@@ -390,6 +390,7 @@ namespace Spic.Infrastructure.Data
         builder.Entity<SamplePayment>().HasIndex(x => x.Code).IsUnique();
         builder.Entity<SamplePayment>().HasIndex(x => x.FinanceStatus);
         builder.Entity<SamplePayment>().Property(x => x.VerifiedAmount).HasColumnType("numeric(12,2)");
+        builder.Entity<SamplePayment>().Property(x => x.FinanceVerifiedAmount).HasColumnType("numeric(12,2)");
 
         // ---------------------------------------------------------------- Knowledge Community
         builder.Entity<CommunityPost>(entity =>
