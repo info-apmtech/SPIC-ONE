@@ -1,0 +1,116 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Admin
+
+@*
+    Searchable select for the Lab Tracking filters (Batch No., Consignment No.): a text box that
+    filters the options as you type and a list underneath; picking an option sets Value, the
+    "x" (or "All") clears it. Options are (Value, Label) pairs supplied by the page.
+*@
+<div class="lss @(_open ? "is-open" : "")">
+    <div class="lss-box">
+        <i class="bi bi-search lss-icon" aria-hidden="true"></i>
+        <input id="@InputId" class="lss-input" type="text" autocomplete="off"
+               placeholder="@Placeholder" aria-label="@AriaLabel"
+               role="combobox" aria-expanded="@(_open ? "true" : "false")" aria-controls="@($"{InputId}-list")"
+               value="@_text"
+               @oninput="OnInput" @onfocus="Open" @onkeydown="OnKey" />
+        @if (!string.IsNullOrEmpty(Value))
+        {
+            <button type="button" class="lss-clear" aria-label="Clear @AriaLabel" @onclick="ClearAsync">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        }
+        else
+        {
+            <button type="button" class="lss-clear" aria-label="Show options" @onclick="Toggle" tabindex="-1">
+                <i class="bi bi-chevron-down" aria-hidden="true"></i>
+            </button>
+        }
+    </div>
+
+    @if (_open)
+    {
+        <div class="lss-backdrop" @onclick="Close"></div>
+        <ul class="lss-list" id="@($"{InputId}-list")" role="listbox">
+            <li role="option" aria-selected="@(string.IsNullOrEmpty(Value) ? "true" : "false")">
+                <button type="button" class="lss-opt lss-opt--all" @onclick="ClearAsync">@AllLabel</button>
+            </li>
+            @foreach (var o in Matches)
+            {
+                <li role="option" aria-selected="@(o.Value == Value ? "true" : "false")">
+                    <button type="button" class="lss-opt @(o.Value == Value ? "is-selected" : "")" @onclick="() => PickAsync(o)">@o.Label</button>
+                </li>
+            }
+            @if (!Matches.Any())
+            {
+                <li class="lss-none">No match</li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    public sealed record Option(string Value, string Label);
+
+    [Parameter] public IReadOnlyList<Option> Options { get; set; } = Array.Empty<Option>();
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Search";
+    [Parameter] public string AllLabel { get; set; } = "All";
+    [Parameter] public string AriaLabel { get; set; } = "Search";
+    [Parameter] public string InputId { get; set; } = $"lss-{Guid.NewGuid():N}";
+
+    private bool _open;
+    private string _text = "";
+    private string? _shownValue;
+
+    protected override void OnParametersSet()
+    {
+        if (_shownValue != Value || (_text.Length == 0 && !string.IsNullOrEmpty(Value)))
+        {
+            _shownValue = Value;
+            _text = Options.FirstOrDefault(o => o.Value == Value)?.Label ?? "";
+        }
+    }
+
+    private IEnumerable<Option> Matches
+    {
+        get
+        {
+            var selectedLabel = Options.FirstOrDefault(o => o.Value == Value)?.Label;
+            var term = _text.Trim();
+            if (term.Length == 0 || term == selectedLabel) return Options.Take(50);
+            return Options.Where(o => o.Label.Contains(term, StringComparison.OrdinalIgnoreCase)).Take(50);
+        }
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _text = e.Value?.ToString() ?? "";
+        _open = true;
+    }
+
+    private void Open() => _open = true;
+    private void Close() => _open = false;
+    private void Toggle() => _open = !_open;
+
+    private void OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") _open = false;
+    }
+
+    private async Task PickAsync(Option o)
+    {
+        _open = false;
+        _text = o.Label;
+        _shownValue = o.Value;
+        await ValueChanged.InvokeAsync(o.Value);
+    }
+
+    private async Task ClearAsync()
+    {
+        _open = false;
+        _text = "";
+        _shownValue = null;
+        await ValueChanged.InvokeAsync(null);
+    }
+}

@@ -1,0 +1,391 @@
+﻿@page "/Sas/MyReports"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Farmer
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject SasApi Sas
+@inject LabApi Lab
+@inject LoginState Login
+@implements IDisposable
+
+@*
+    My Reports (farmer, screen 33). The farmer's sample reports (GET api/Lab/reports, scoped to
+    the farmer by the API) with Tamil / English PDF downloads (GET api/Lab/languages gives the
+    farmer subset) and a details drawer (GET api/Lab/reports/{id}). "Under Process" counts the
+    farmer's samples that are at the lab without a report (v1 collections DeliveredToLab /
+    TestInProgress, and Completed ones whose report is not out yet). Filters and paging run in
+    the browser.
+*@
+
+<div class="mr-page">
+    <PageHeader Title="My Reports" Subtitle="Download your soil test reports in Tamil or English." />
+
+    <div class="mr-kpis">
+        <LabKpiCard Label="Total Reports" Value="@Num(_reports?.Count)" Caption="Reports generated for you" Icon="bi-file-earmark-text" Tone="violet" />
+        <LabKpiCard Label="Ready to Download" Value="@Num(_reports?.Count(r => r.Status == LabReportStatus.Generated))" Caption="Not downloaded yet" Icon="bi-cloud-arrow-down" Tone="green" />
+        <LabKpiCard Label="Downloaded" Value="@Num(_reports?.Count(r => r.Status != LabReportStatus.Generated))" Caption="Already saved" Icon="bi-check2-circle" Tone="blue" />
+        <LabKpiCard Label="Under Process" Value="@Num(_underProcess)" Caption="Samples in lab analysis" Icon="bi-hourglass-split" Tone="orange" />
+    </div>
+
+    <section class="mr-card" aria-labelledby="mr-list-title">
+        <div class="mr-card-head">
+            <h2 class="mr-card-title" id="mr-list-title">Reports List</h2>
+        </div>
+
+        <div class="mr-toolbar">
+            <div class="mr-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" class="mr-search-input" placeholder="Search report, sample, crop"
+                       aria-label="Search reports" value="@_q" @oninput="OnSearch" />
+            </div>
+            <div class="mr-dates">
+                <div class="mr-datefield @(string.IsNullOrWhiteSpace(_from) ? "is-empty" : null)">
+                    <input class="mr-input" type="date" aria-label="From date" value="@_from" @onchange="e => SetFrom(e.Value?.ToString())" />
+                    <span class="mr-datefield-ph" aria-hidden="true">From date</span>
+                </div>
+                <span class="mr-dates-sep">to</span>
+                <div class="mr-datefield @(string.IsNullOrWhiteSpace(_to) ? "is-empty" : null)">
+                    <input class="mr-input" type="date" aria-label="To date" value="@_to" @onchange="e => SetTo(e.Value?.ToString())" />
+                    <span class="mr-datefield-ph" aria-hidden="true">To date</span>
+                </div>
+            </div>
+            <select class="mr-input" aria-label="Status" value="@_status" @onchange="e => SetStatus(e.Value?.ToString())">
+                <option value="">All Statuses</option>
+                @foreach (var s in Enum.GetValues<LabReportStatus>())
+                {
+                    <option value="@s">@FarmerSamples.ReportStatusText(s)</option>
+                }
+            </select>
+            <select class="mr-input" aria-label="Crop" value="@_crop" @onchange="e => SetCrop(e.Value?.ToString())">
+                <option value="">All Crops</option>
+                @foreach (var c in Crops)
+                {
+                    <option value="@c">@c</option>
+                }
+            </select>
+        </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="table" Rows="5" />
+        }
+        else if (_reports is null)
+        {
+            <EmptyState Icon="bi-file-earmark-x" Title="Reports are not available right now"
+                        Message="Your reports could not be loaded. Try again in a little while." Compact="true">
+                <button type="button" class="mr-btn mr-btn-outline" @onclick="LoadAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (_reports.Count == 0)
+        {
+            <EmptyState Icon="bi-file-earmark-text" Title="No reports yet"
+                        Message="@(_underProcess > 0 ? $"{_underProcess} of your samples are being analysed. The report appears here once the lab finishes." : "Your soil and water test reports appear here once the lab finishes the analysis.")"
+                        Compact="true" />
+        }
+        else if (Filtered.Count == 0)
+        {
+            <EmptyState Icon="bi-search" Title="No report matches" Message="Change or clear the filters." Compact="true">
+                <button type="button" class="mr-btn mr-btn-outline" @onclick="ClearFilters">Clear filters</button>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="mr-table-wrap tablet-up">
+                <table class="mr-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Reports No.</th>
+                            <th scope="col">Sample No.</th>
+                            <th scope="col">Crop</th>
+                            <th scope="col">Sample Type</th>
+                            <th scope="col">Generated Date</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Download</th>
+                            <th scope="col" class="act"><span class="visually-hidden">View</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in PageRows)
+                        {
+                            <tr>
+                                <td class="mr-code">@r.Code</td>
+                                <td>@r.SampleCode</td>
+                                <td>@Dash(r.Crop)</td>
+                                <td>@FarmerSamples.SampleTypeName(r.SampleType)</td>
+                                <td>
+                                    <span class="mr-when">@r.GeneratedAt.ToString("dd MMM yyyy")</span>
+                                    <span class="mr-when-sub">@r.GeneratedAt.ToString("hh:mm tt")</span>
+                                </td>
+                                <td><LabPill Text="@FarmerSamples.ReportStatusText(r.Status)" Tone="@FarmerSamples.ReportStatusTone(r.Status)" /></td>
+                                <td><ReportDownloadButton ReportId="r.Id" Languages="_languages" Compact="true" OnDownloaded="_ => MarkDownloaded(r)" /></td>
+                                <td class="act">
+                                    <button type="button" class="mr-eye" aria-label="@($"View report {r.Code}")" title="View report" @onclick="() => OpenAsync(r)">
+                                        <i class="bi bi-eye" aria-hidden="true"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mr-mcards phone-only">
+                @foreach (var r in PageRows)
+                {
+                    <article class="mr-mcard">
+                        <header class="mr-mcard-head">
+                            <span class="mr-code">@r.Code</span>
+                            <LabPill Text="@FarmerSamples.ReportStatusText(r.Status)" Tone="@FarmerSamples.ReportStatusTone(r.Status)" />
+                        </header>
+                        <dl class="mr-mcard-defs">
+                            <div><dt>Sample No.</dt><dd>@r.SampleCode</dd></div>
+                            <div><dt>Crop</dt><dd>@Dash(r.Crop)</dd></div>
+                            <div><dt>Sample Type</dt><dd>@FarmerSamples.SampleTypeName(r.SampleType)</dd></div>
+                            <div><dt>Generated</dt><dd>@r.GeneratedAt.ToString("dd MMM yyyy, hh:mm tt")</dd></div>
+                        </dl>
+                        <footer class="mr-mcard-foot">
+                            <button type="button" class="mr-btn mr-btn-outline" @onclick="() => OpenAsync(r)">
+                                <i class="bi bi-eye" aria-hidden="true"></i> View
+                            </button>
+                            <ReportDownloadButton ReportId="r.Id" Languages="_languages" OnDownloaded="_ => MarkDownloaded(r)" />
+                        </footer>
+                    </article>
+                }
+            </div>
+
+            <LabPager Page="_page" PageSize="_pageSize" Total="Filtered.Count"
+                      PageChanged="p => _page = p" PageSizeChanged="SetPageSize" />
+        }
+    </section>
+</div>
+
+<BottomSheet @bind-IsOpen="_drawerOpen" Title="Report Details" Subtitle="@_open?.Code"
+             Size="BottomSheet.SheetSize.Full" CssClass="mr-drawer">
+    <ChildContent>
+        @if (_detailLoading)
+        {
+            <Skeleton Variant="card" Rows="3" />
+        }
+        else if (_detail is null)
+        {
+            <EmptyState Icon="bi-file-earmark-x" Title="The report could not be opened" Message="Try again in a little while." Compact="true" />
+        }
+        else
+        {
+            var s = _detail.Summary;
+            var sample = _detail.Sample;
+            <div class="mr-d">
+                <section class="mr-d-sec">
+                    <h3 class="mr-d-title">Report Summary</h3>
+                    <div class="mr-tiles">
+                        <div class="mr-tile"><span>Report No.</span><strong>@s.Code</strong></div>
+                        <div class="mr-tile"><span>Sample No.</span><strong>@s.SampleCode</strong></div>
+                        <div class="mr-tile"><span>Batch No.</span><strong>@Dash(s.BatchCode)</strong></div>
+                        <div class="mr-tile"><span>Generated Date</span><strong>@s.GeneratedAt.ToString("dd MMM yyyy, hh:mm tt")</strong></div>
+                        <div class="mr-tile"><span>Crop</span><strong>@Dash(s.Crop)</strong></div>
+                        <div class="mr-tile"><span>Sample Type</span><strong>@FarmerSamples.SampleTypeName(s.SampleType)</strong></div>
+                        <div class="mr-tile"><span>Village</span><strong>@Dash(s.Village)</strong></div>
+                        <div class="mr-tile"><span>Status</span><LabPill Text="@FarmerSamples.ReportStatusText(s.Status)" Tone="@FarmerSamples.ReportStatusTone(s.Status)" /></div>
+                    </div>
+                </section>
+
+                @if (sample.Parameters.Count > 0)
+                {
+                    <section class="mr-d-sec">
+                        <div class="mr-d-row">
+                            <h3 class="mr-d-title">Test Results</h3>
+                            @if (!string.IsNullOrWhiteSpace(sample.OverallStatusText))
+                            {
+                                <span class="mr-overall">Overall: <LabPill Text="@sample.OverallStatusText" Tone="@OverallTone(sample.OverallStatus)" /></span>
+                            }
+                        </div>
+                        <ul class="mr-results">
+                            @foreach (var p in sample.Parameters)
+                            {
+                                <li class="mr-result">
+                                    <div class="mr-result-main">
+                                        <span class="mr-result-name">@p.Name</span>
+                                        <span class="mr-result-range">Normal: @Dash(p.NormalRange)</span>
+                                    </div>
+                                    <div class="mr-result-val">
+                                        <strong>@Dash(p.EnteredValue)</strong> <span class="mr-unit">@p.Unit</span>
+                                    </div>
+                                    @if (p.Status is { } st)
+                                    {
+                                        <LabPill Text="@(p.ResultLabel ?? st.ToString())" Tone="@LabPill.ToneFor(st)" />
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+
+                @if (sample.Recommendations.Count > 0)
+                {
+                    <section class="mr-d-sec">
+                        <h3 class="mr-d-title">Recommendations</h3>
+                        @foreach (var g in sample.Recommendations)
+                        {
+                            <h4 class="mr-d-sub">@g.Group</h4>
+                            <ul class="mr-bullets">
+                                @foreach (var line in g.Lines)
+                                {
+                                    <li>@line</li>
+                                }
+                            </ul>
+                        }
+                    </section>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(sample.CropSuitabilityNote) || !string.IsNullOrWhiteSpace(_detail.FinalRemarks))
+                {
+                    <section class="mr-d-sec mr-note">
+                        @if (!string.IsNullOrWhiteSpace(sample.CropSuitabilityNote))
+                        {
+                            <p><strong>Crop suitability:</strong> @sample.CropSuitabilityNote</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_detail.FinalRemarks))
+                        {
+                            <p><strong>Lab remarks:</strong> @_detail.FinalRemarks</p>
+                        }
+                    </section>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <button type="button" class="mr-btn mr-btn-outline" @onclick="() => _drawerOpen = false">Close</button>
+        @if (_open is { } openRow)
+        {
+            <ReportDownloadButton ReportId="openRow.Id" Languages="_languages" OnDownloaded="_ => MarkDownloaded(openRow)" />
+        }
+    </Footer>
+</BottomSheet>
+
+@code {
+    private List<LabReportRowDto>? _reports;
+    private List<LabLanguageDto>? _languages;
+    private int? _underProcess;
+    private bool _loading = true;
+
+    private string _q = "";
+    private string? _from;
+    private string? _to;
+    private string? _status;
+    private string? _crop;
+    private int _page = 1;
+    private int _pageSize = LabApi.DefaultPageSize;
+
+    private bool _drawerOpen;
+    private LabReportRowDto? _open;
+    private LabReportDetailDto? _detail;
+    private bool _detailLoading;
+
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        var reportsTask = FarmerSamples.ReportsAsync(Lab, _cts.Token);
+        var languagesTask = Lab.GetLanguagesAsync(_cts.Token);
+        var collectionsTask = FarmerSamples.CollectionsAsync(Sas, _cts.Token);
+
+        _reports = (await reportsTask)?.OrderByDescending(r => r.GeneratedAt).ToList();
+        _languages = await languagesTask;
+        _loading = false;
+        StateHasChanged();
+
+        // Under Process: the farmer's samples at the lab that have no report yet.
+        var collections = await collectionsTask;
+        if (collections is null) return;
+        var atLab = collections.Where(c => c.Status is SampleCollectionStatus.DeliveredToLab
+            or SampleCollectionStatus.TestInProgress or SampleCollectionStatus.Completed).ToList();
+        var rows = await FarmerSamples.SamplesAsync(Sas, atLab, Login.UserId, _cts.Token);
+        var reported = (_reports ?? new()).Select(r => r.SampleItemId).ToHashSet();
+        _underProcess = rows.Count(r => !reported.Contains(r.ItemId));
+        StateHasChanged();
+    }
+
+    private IEnumerable<string> Crops =>
+        (_reports ?? new()).SelectMany(r => (r.Crop ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(c => c);
+
+    private List<LabReportRowDto> Filtered
+    {
+        get
+        {
+            IEnumerable<LabReportRowDto> q = _reports ?? new();
+            var term = _q.Trim();
+            if (term.Length > 0)
+                q = q.Where(r => r.Code.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || r.SampleCode.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || r.BatchCode.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || (r.Crop ?? "").Contains(term, StringComparison.OrdinalIgnoreCase));
+            if (DateTime.TryParse(_from, out var from)) q = q.Where(r => r.GeneratedAt.Date >= from.Date);
+            if (DateTime.TryParse(_to, out var to)) q = q.Where(r => r.GeneratedAt.Date <= to.Date);
+            if (Enum.TryParse<LabReportStatus>(_status, out var status)) q = q.Where(r => r.Status == status);
+            if (!string.IsNullOrWhiteSpace(_crop))
+                q = q.Where(r => (r.Crop ?? "").Split(',', StringSplitOptions.TrimEntries).Contains(_crop, StringComparer.OrdinalIgnoreCase));
+            return q.ToList();
+        }
+    }
+
+    private IEnumerable<LabReportRowDto> PageRows
+    {
+        get
+        {
+            var all = Filtered;
+            var pages = Math.Max(1, (int)Math.Ceiling(all.Count / (double)_pageSize));
+            if (_page > pages) _page = pages;
+            return all.Skip((_page - 1) * _pageSize).Take(_pageSize);
+        }
+    }
+
+    private async Task OpenAsync(LabReportRowDto row)
+    {
+        _open = row;
+        _detail = null;
+        _detailLoading = true;
+        _drawerOpen = true;
+        StateHasChanged();
+
+        _detail = await Lab.GetReportAsync(row.Id, _cts.Token);
+        _detailLoading = false;
+    }
+
+    private void OnSearch(ChangeEventArgs e) { _q = e.Value?.ToString() ?? ""; _page = 1; }
+    private void SetFrom(string? v) { _from = v; _page = 1; }
+    private void SetTo(string? v) { _to = v; _page = 1; }
+    private void SetStatus(string? v) { _status = v; _page = 1; }
+    private void SetCrop(string? v) { _crop = v; _page = 1; }
+    private void SetPageSize(int size) { _pageSize = size; _page = 1; }
+
+    private void ClearFilters()
+    {
+        _q = "";
+        _from = _to = _status = _crop = null;
+        _page = 1;
+    }
+
+    private static void MarkDownloaded(LabReportRowDto report)
+    {
+        if (report.Status == LabReportStatus.Generated) report.Status = LabReportStatus.Downloaded;
+        report.DownloadCount++;
+    }
+
+    private static string OverallTone(LabOverallStatus s) => s switch
+    {
+        LabOverallStatus.Good => "green",
+        LabOverallStatus.NeedsImprovement => "orange",
+        _ => "red"
+    };
+
+    private static string Num(int? n) => n?.ToString() ?? "–";
+    private static string Dash(string? s) => string.IsNullOrWhiteSpace(s) ? "-" : s;
+
+    public void Dispose() => _cts.Cancel();
+}
