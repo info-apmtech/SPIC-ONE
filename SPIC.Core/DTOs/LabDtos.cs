@@ -364,7 +364,13 @@ public class LabActivityDto
 
 // ---------------------------------------------------------------- reports
 
-public class LabReportStatsDto { public int TotalReports { get; set; } public int ThisFinancialYear { get; set; } public int PreviousFinancialYears { get; set; } }
+public class LabReportStatsDto { public int TotalReports { get; set; } public int ThisFinancialYear { get; set; } public int PreviousFinancialYears { get; set; }
+    // Added by the reports workstream (analyst Test Reports KPIs; scoped like the lists, financialYear= applies):
+    public int BatchGroups { get; set; }          // batches in scope (batch-wise report groups)
+    public int SampleReports { get; set; }        // sample reports (LabReport rows)
+    public int GeneratedToday { get; set; }       // sample reports generated today
+    public int DownloadsCompleted { get; set; }   // PDF / Excel downloads (sum of DownloadCount)
+}
 
 /// <summary>One sample report (RPT-SAS-2026-001).</summary>
 public class LabReportRowDto

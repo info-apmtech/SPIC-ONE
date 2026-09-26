@@ -188,7 +188,12 @@ builder.Services.AddAuthentication(options =>
                  path.StartsWithSegments("/api/GuestHouseBooking/image") ||
                  path.StartsWithSegments("/api/Library/file") ||
                  path.StartsWithSegments("/api/Community/file") ||
-                 path.StartsWithSegments("/api/Sas/file")))
+                 path.StartsWithSegments("/api/Sas/file") ||
+                 // SAS lab reports: api/Lab/reports/{id}/pdf|xlsx and api/Lab/batches/{id}/report/download
+                 (path.StartsWithSegments("/api/Lab") && path.Value is string labPath &&
+                  (labPath.EndsWith("/pdf", StringComparison.OrdinalIgnoreCase) ||
+                   labPath.EndsWith("/xlsx", StringComparison.OrdinalIgnoreCase) ||
+                   labPath.EndsWith("/report/download", StringComparison.OrdinalIgnoreCase)))))
             {
                 context.Token = accessToken;
             }
