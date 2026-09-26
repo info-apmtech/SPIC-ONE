@@ -3,6 +3,7 @@
 @inject LabApi Api
 @inject NavigationManager Nav
 @inject ToastService Toast
+@inject LoginState Login
 @implements IDisposable
 
 @*
@@ -63,7 +64,7 @@
             @switch (Tab)
             {
                 case "samples":
-                    <BatchSamplesTab BatchId="Id" />
+                    <BatchSamplesTab BatchId="Id" SampleHref="SampleHref" />
                     break;
                 case "parameters":
                     <BatchParametersTab BatchId="Id" />
@@ -108,6 +109,15 @@
     private int _version;
     private int _loadedId = -1;
     private CancellationTokenSource? _cts;
+
+    /// <summary>
+    /// Samples tab rows open the sample on the analyst entry page (read-only once the batch is
+    /// completed). The route guard maps /Lab/TestEntry to the LabTestEntry page key, so the link is
+    /// only rendered for users who can reach it (admins, or a designation holding LabTestEntry);
+    /// otherwise the row stays plain text instead of bouncing the user to their landing page.
+    /// </summary>
+    private string? SampleHref(LabSampleRowDto s) =>
+        Login.CanAccess("LabTestEntry") ? $"/Lab/TestEntry/{Id}?sample={s.SampleItemId}" : null;
 
     private string Tab => TabQuery?.ToLowerInvariant() switch
     {

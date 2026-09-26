@@ -318,6 +318,49 @@ public sealed class LabApi
 
     // ---------------------------------------------------------------- end of analyst additions
 
+    // ---------------------------------------------------------------- coordinator additions (phase 1d, Client-Coordinator)
+
+    /// <summary>Report KPIs for the Lab Reports page; a 404 (no reports yet / report service absent) returns null without a toast.</summary>
+    public Task<LabReportStatsDto?> GetReportStatsQuietAsync(int? financialYear = null, CancellationToken ct = default)
+        => GetQuietAsync<LabReportStatsDto>(Url($"{Root}/reports/stats", ("financialYear", financialYear)), "the report totals", ct);
+
+    /// <summary>Batch-wise report rows for the Lab Reports page; a 404 returns null without a toast.</summary>
+    public Task<PageResult<LabReportBatchRowDto>?> GetReportBatchesQuietAsync(
+        int? stateId = null, string? sampleType = null, int? financialYear = null,
+        string? q = null, DateTime? from = null, DateTime? to = null, int page = 1, int pageSize = DefaultPageSize, CancellationToken ct = default)
+        => GetQuietAsync<PageResult<LabReportBatchRowDto>>(
+            Url($"{Root}/reports/batches", ("stateId", stateId), ("sampleType", sampleType), ("financialYear", financialYear),
+                ("q", q), ("from", from), ("to", to), ("page", page), ("pageSize", pageSize)),
+            "the batch reports", ct);
+
+    /// <summary>Lab Report Details drawer; a 404 (report not generated yet) returns null without a toast.</summary>
+    public Task<LabBatchReportDto?> GetBatchReportQuietAsync(int batchId, CancellationToken ct = default)
+        => GetQuietAsync<LabBatchReportDto>($"{Root}/batches/{batchId}/report", "the batch report", ct);
+
+    /// <summary>GetAsync, except that 404 Not Found is an expected "nothing yet" answer: no toast.</summary>
+    private async Task<T?> GetQuietAsync<T>(string url, string what, CancellationToken ct) where T : class
+    {
+        try
+        {
+            var response = await _http.GetAsync(url, ct);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            if (!response.IsSuccessStatusCode)
+            {
+                await ToastFailureAsync(response, $"load {what}");
+                return null;
+            }
+            return await response.Content.ReadFromJsonAsync<T>(Json, ct);
+        }
+        catch (OperationCanceledException) { return null; }
+        catch (Exception)
+        {
+            ToastOffline($"load {what}");
+            return null;
+        }
+    }
+
+    // ---------------------------------------------------------------- end of coordinator additions
+
     // ---------------------------------------------------------------- plumbing
 
     private static string Url(string path, params (string Key, object? Value)[] query)

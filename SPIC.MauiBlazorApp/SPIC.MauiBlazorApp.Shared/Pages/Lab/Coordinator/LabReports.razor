@@ -8,17 +8,20 @@
     Lab Reports (screens 9-10): report KPI cards, a collapsible Filters card (Date Range, State,
     Sample Type, Financial Year; Clear All / Apply), the batch-wise reports table from
     api/Lab/reports/batches with search and pager; the view action opens the Lab Report Details
-    drawer. The report routes belong to the reports workstream: when they are missing the page
-    shows an empty state instead of failing.
+    drawer. KPI cards: Total Reports (this / earlier FY), Batch Reports, Sample Reports, Generated
+    Today, Downloads Completed. A 404 (nothing generated yet) shows the empty state, no toast.
 *@
 
 <LabFrame>
     <PageHeader Title="Lab Reports" Subtitle="Batch reports generated when a batch is completed." />
 
     <div class="lf-kpis">
-        <LabKpiCard Label="Total Reports" Value="@N(_stats?.TotalReports)" Icon="bi-file-earmark-text" Tone="violet" />
-        <LabKpiCard Label="This Financial Year" Value="@N(_stats?.ThisFinancialYear)" Icon="bi-calendar-check" Tone="green" />
-        <LabKpiCard Label="Previous Financial Years" Value="@N(_stats?.PreviousFinancialYears)" Icon="bi-archive" Tone="blue" />
+        <LabKpiCard Label="Total Reports" Value="@N(_stats?.TotalReports)" Icon="bi-file-earmark-text" Tone="violet"
+                    Caption="@(_stats is null ? null : $"This FY {_stats.ThisFinancialYear:N0} · earlier {_stats.PreviousFinancialYears:N0}")" />
+        <LabKpiCard Label="Batch Reports" Value="@N(_stats?.BatchGroups)" Icon="bi-collection" Tone="green" Caption="Batches in scope" />
+        <LabKpiCard Label="Sample Reports" Value="@N(_stats?.SampleReports)" Icon="bi-file-earmark-medical" Tone="blue" Caption="One per sample" />
+        <LabKpiCard Label="Generated Today" Value="@N(_stats?.GeneratedToday)" Icon="bi-calendar-check" Tone="orange" />
+        <LabKpiCard Label="Downloads Completed" Value="@N(_stats?.DownloadsCompleted)" Icon="bi-download" Tone="teal" Caption="PDF and Excel" />
     </div>
 
     <section class="lf-card">
@@ -227,8 +230,8 @@
 
         _loading = true;
         StateHasChanged();
-        var statsTask = withStats ? Api.GetReportStatsAsync(_fy, ct) : Task.FromResult(_stats);
-        var page = await Api.GetReportBatchesAsync(stateId: _stateId, sampleType: _type, financialYear: _fy, q: _q,
+        var statsTask = withStats ? Api.GetReportStatsQuietAsync(_fy, ct) : Task.FromResult(_stats);
+        var page = await Api.GetReportBatchesQuietAsync(stateId: _stateId, sampleType: _type, financialYear: _fy, q: _q,
             from: _from, to: _to, page: _page, pageSize: _size, ct: ct);
         var stats = await statsTask;
         if (ct.IsCancellationRequested) return;
