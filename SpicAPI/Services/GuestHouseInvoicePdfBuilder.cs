@@ -345,7 +345,11 @@ namespace SpicAPI.Services
                 col.Item().PaddingTop(8).AlignCenter().Text("I Agree that I am responsible for the full payment of this bill in the event").FontSize(9.5f).FontColor(BrandNavy);
                 col.Item().AlignCenter().Text("it is not paid by the Company, Organisation or Person indicated.").FontSize(9.5f).FontColor(BrandNavy);
 
-                col.Item().PaddingTop(22).Row(row =>
+                // Signing area: the gap above the labels is deliberately generous so the guest
+                // has comfortable room to physically sign (AUTHORISED on the left, GUEST on the
+                // right). It uses the blank space already left at the bottom of the one-page
+                // sheet - nothing above moves, so the invoice stays a single page.
+                col.Item().PaddingTop(34).Row(row =>
                 {
                     row.RelativeItem().Text("AUTHORISED SIGNATURE").Bold().FontSize(10).FontColor(InkColor);
                     row.RelativeItem().AlignRight().Text("GUEST SIGNATURE").Bold().FontSize(10).FontColor(InkColor);
