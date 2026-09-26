@@ -1,0 +1,290 @@
+@page "/SalesPlan"
+@inject NavigationManager Nav
+
+<PageTitle>Sales Plan · SPIC ONE</PageTitle>
+<ScrollToTop />
+
+<div class="container-fluid py-4 px-0">
+    <div class="spl-wrapper">
+
+        <!-- Header -->
+        <div class="spl-header">
+            <h1>Sales Plan &amp; Scheme Period</h1>
+            <p>Define scheme period and product-wise sales plan for the programme.</p>
+        </div>
+
+        <SalesAuditStepper CurrentStep="2" />
+
+        <!-- Scheme Period -->
+        <div class="spl-card">
+            <h3 class="spl-card-title">Scheme Period</h3>
+
+            <div class="spl-period-grid">
+                <div class="spl-form-group">
+                    <label class="spl-form-label">From Date</label>
+                    <div class="spl-date-wrap">
+                        <span class="spl-date-display">@FromDate.ToString("dd - MM - yyyy")</span>
+                        <SalesAuditIcon Name="calendar" Size="16" CssClass="spl-date-icon" />
+                        <input type="date" class="spl-date-native" aria-label="From date"
+                               value="@FromDate.ToString("yyyy-MM-dd")" @onchange="e => SetDate(e, isFrom: true)" />
+                    </div>
+                </div>
+
+                <div class="spl-form-group">
+                    <label class="spl-form-label">To Date</label>
+                    <div class="spl-date-wrap">
+                        <span class="spl-date-display">@ToDate.ToString("dd - MM - yyyy")</span>
+                        <SalesAuditIcon Name="calendar" Size="16" CssClass="spl-date-icon" />
+                        <input type="date" class="spl-date-native" aria-label="To date"
+                               value="@ToDate.ToString("yyyy-MM-dd")" min="@FromDate.ToString("yyyy-MM-dd")" @onchange="e => SetDate(e, isFrom: false)" />
+                    </div>
+                </div>
+
+                <div class="spl-form-group">
+                    <label class="spl-form-label">Duration</label>
+                    <div class="spl-duration">
+                        Scheme period duration:
+                        <strong>@DurationText</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product-wise Sales Plan -->
+        <div class="spl-card">
+            <div class="spl-card-top">
+                <h3 class="spl-card-title">Product - Wise Sales Plan</h3>
+                <button type="button" class="spl-add-btn" @onclick="AddRow">+ Add Product</button>
+            </div>
+
+            <div class="spl-table-wrapper">
+                <table class="spl-table">
+                    <thead>
+                        <tr>
+                            <th class="spl-col-no">S:NO</th>
+                            <th>Product</th>
+                            <th>Unit</th>
+                            <th>Planned Quantity</th>
+                            <th>Planned Value (₹)</th>
+                            <th class="spl-col-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (row, index) in Rows.Select((r, i) => (r, i)))
+                        {
+                            <tr>
+                                <td class="spl-col-no">@(index + 1)</td>
+                                <td>
+                                    <select class="spl-select" @bind="row.Product">
+                                        @foreach (var product in Products)
+                                        {
+                                            <option value="@product">@product</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>
+                                    <select class="spl-select" @bind="row.Unit">
+                                        @foreach (var unit in Units)
+                                        {
+                                            <option value="@unit">@unit</option>
+                                        }
+                                    </select>
+                                </td>
+                                <td>
+                                    <div class="spl-number">
+                                        <input type="text" inputmode="numeric" class="spl-number-input"
+                                               value="@SalesAuditFormat.Indian(row.Quantity)"
+                                               @onchange="e => row.Quantity = SalesAuditFormat.ParseAmount(e.Value, row.Quantity)" />
+                                        <div class="spl-spin">
+                                            <button type="button" aria-label="Increase quantity" @onclick="() => row.Quantity += QuantityStep">
+                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4" /></svg>
+                                            </button>
+                                            <button type="button" aria-label="Decrease quantity" @onclick="() => row.Quantity = Math.Max(0, row.Quantity - QuantityStep)">
+                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="spl-number">
+                                        <input type="text" inputmode="numeric" class="spl-number-input"
+                                               value="@("₹ " + SalesAuditFormat.Indian(row.Value))"
+                                               @onchange="e => row.Value = SalesAuditFormat.ParseAmount(e.Value, row.Value)" />
+                                        <div class="spl-spin">
+                                            <button type="button" aria-label="Increase value" @onclick="() => row.Value += ValueStep">
+                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4" /></svg>
+                                            </button>
+                                            <button type="button" aria-label="Decrease value" @onclick="() => row.Value = Math.Max(0, row.Value - ValueStep)">
+                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4" /></svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="spl-col-action">
+                                    <div class="spl-actions">
+                                        <button type="button" class="spl-icon-btn spl-icon-edit" aria-label="Edit row">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"></path></svg>
+                                        </button>
+                                        <button type="button" class="spl-icon-btn spl-icon-delete" aria-label="Delete row" @onclick="() => Rows.Remove(row)">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" x2="10" y1="11" y2="17"></line><line x1="14" x2="14" y1="11" y2="17"></line></svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+
+                        @if (!Rows.Any())
+                        {
+                            <tr>
+                                <td colspan="6" class="spl-empty">No products added yet. Use “+ Add Product” to start the plan.</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="spl-total-label">TOTAL PLANNED COMMITMENT (sum)</td>
+                            <td class="spl-total-value">@TotalQuantityText</td>
+                            <td class="spl-total-value">₹ @SalesAuditFormat.Indian(TotalValue)</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- Plan Summary & Comparison -->
+        <div class="spl-card">
+            <h3 class="spl-card-title">Plan Summary &amp; Comparison</h3>
+
+            <div class="spl-summary-grid">
+                <div class="spl-summary-tile spl-tile-purple">
+                    <div class="spl-tile-top">
+                        <span class="spl-tile-label">Required Turnover</span>
+                        <span class="spl-auto-badge">Auto Calculated</span>
+                    </div>
+                    <span class="spl-tile-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                    <span class="spl-tile-sub">Minimum Target you must achieve</span>
+                </div>
+
+                <div class="spl-summary-tile spl-tile-green">
+                    <span class="spl-tile-label">Total Planned Commitment</span>
+                    <span class="spl-tile-value">₹ @SalesAuditFormat.Crore(TotalValue) Cr</span>
+                    <span class="spl-tile-sub">Sum of all product-wise planned values</span>
+                </div>
+
+                <div class="spl-summary-tile @(Difference >= 0 ? "spl-tile-blue" : "spl-tile-red")">
+                    <span class="spl-tile-label">Difference</span>
+                    <span class="spl-tile-value">@(Difference >= 0 ? "+" : "-") ₹ @SalesAuditFormat.Crore(Math.Abs(Difference)) Cr</span>
+                    <span class="spl-tile-sub">@(Difference >= 0 ? "Above the required TO" : "Below the required TO")</span>
+                </div>
+
+                <div class="spl-summary-tile @(IsMet ? "spl-tile-green" : "spl-tile-red")">
+                    <span class="spl-tile-label">Requirement Status</span>
+                    <span class="spl-tile-value spl-status-value">@(IsMet ? "Met" : "Not Met")</span>
+                    <span class="spl-tile-sub">@(IsMet ? "Planned Commitment meets the Required TO" : "Planned Commitment is below the Required TO")</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer actions -->
+        <div class="spl-footer">
+            <button type="button" class="spl-btn spl-btn-back" @onclick="@(() => Nav.NavigateTo("/SalesAudit"))">
+                <SalesAuditIcon Name="chevrons-left" Size="16" />
+                Back to List
+            </button>
+
+            <div class="spl-footer-right">
+                <button type="button" class="spl-btn spl-btn-draft">
+                    <SalesAuditIcon Name="file-pen" Size="16" />
+                    Save Draft
+                </button>
+                <button type="button" class="spl-btn spl-btn-primary" @onclick="@(() => Nav.NavigateTo("/DealerMapping"))">
+                    Save &amp; Continue
+                    <SalesAuditIcon Name="chevrons-right" Size="16" />
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private const decimal QuantityStep = 10m;
+    private const decimal ValueStep = 10000m;
+
+    private static readonly string[] Products =
+    {
+        "SPIC Super Urea 45kg",
+        "SPIC DAP 50kg",
+        "SPIC Potash 50kg",
+        "SPIC Zinc Sulphate 10kg",
+    };
+
+    private static readonly string[] Units = { "MT", "Bags", "Kg" };
+
+    private DateTime FromDate = new(2026, 8, 1);
+    private DateTime ToDate = new(2026, 10, 31);
+
+    // Required turnover comes from the Audit Overview step; sample value for now.
+    private const decimal RequiredTurnover = 2_00_00_000m;
+
+    private class PlanRow
+    {
+        public string Product { get; set; } = Products[0];
+        public string Unit { get; set; } = "MT";
+        public decimal Quantity { get; set; }
+        public decimal Value { get; set; }
+    }
+
+    private readonly List<PlanRow> Rows = new()
+    {
+        new() { Quantity = 1000, Value = 80_00_000 },
+        new() { Quantity = 1000, Value = 50_00_000 },
+        new() { Quantity = 500, Value = 50_00_000 },
+        new() { Quantity = 500, Value = 50_00_000 },
+    };
+
+    private decimal TotalValue => Rows.Sum(r => r.Value);
+    private decimal Difference => TotalValue - RequiredTurnover;
+    private bool IsMet => TotalValue >= RequiredTurnover;
+
+    // Quantities only add up when every row uses the same unit.
+    private string TotalQuantityText
+    {
+        get
+        {
+            var units = Rows.Select(r => r.Unit).Distinct().ToList();
+            var total = SalesAuditFormat.Indian(Rows.Sum(r => r.Quantity));
+            return units.Count == 1 ? $"{total} {units[0]}" : total;
+        }
+    }
+
+    private string DurationText
+    {
+        get
+        {
+            var days = (ToDate - FromDate).Days + 1;
+            var months = (ToDate.Year - FromDate.Year) * 12 + ToDate.Month - FromDate.Month + 1;
+            return $"{months} {(months == 1 ? "Month" : "Months")} ( {days} {(days == 1 ? "Day" : "Days")})";
+        }
+    }
+
+    private void SetDate(ChangeEventArgs e, bool isFrom)
+    {
+        if (!DateTime.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var date))
+            return;
+
+        if (isFrom)
+        {
+            FromDate = date;
+            if (ToDate < FromDate) ToDate = FromDate;
+        }
+        else
+        {
+            ToDate = date < FromDate ? FromDate : date;
+        }
+    }
+
+    private void AddRow() => Rows.Add(new PlanRow());
+}

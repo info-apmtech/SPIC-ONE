@@ -1,0 +1,431 @@
+@page "/PlanReview"
+@inject NavigationManager Nav
+
+<PageTitle>Review &amp; Confirm Plan · SPIC ONE</PageTitle>
+<ScrollToTop />
+
+<div class="container-fluid py-4 px-0">
+    <div class="pr-wrapper">
+
+        <!-- Header -->
+        <div class="pr-header">
+            <h1>Review &amp; Confirm Plan</h1>
+            <p>Review all details before submitting the plan for approval</p>
+        </div>
+
+        <SalesAuditStepper CurrentStep="4" />
+
+        <!-- Info banner -->
+        <div class="pr-banner">
+            <SalesAuditIcon Name="info" Size="16" />
+            <span>Program details are automatically loaded from CSR2 and MD Portal. Review the information before creating the sales plan.</span>
+        </div>
+
+        <!-- Program summary strip -->
+        <div class="pr-card pr-summary">
+            <div class="pr-summary-item">
+                <div class="pr-summary-icon pr-tone-green"><SalesAuditIcon Name="users" Size="22" StrokeWidth="1.6" /></div>
+                <div class="pr-summary-text">
+                    <span class="pr-label">Program Type</span>
+                    <span class="pr-summary-value">Dealer Program</span>
+                </div>
+            </div>
+            <div class="pr-summary-item">
+                <div class="pr-summary-icon pr-tone-purple"><SalesAuditIcon Name="clipboard" Size="22" StrokeWidth="1.6" /></div>
+                <div class="pr-summary-text">
+                    <span class="pr-label">Program Name</span>
+                    <span class="pr-summary-value">Dealers Meet - State Level</span>
+                </div>
+            </div>
+            <div class="pr-summary-item">
+                <div class="pr-summary-icon pr-tone-blue"><SalesAuditIcon Name="stamp" Size="22" StrokeWidth="1.6" /></div>
+                <div class="pr-summary-text">
+                    <span class="pr-label">
+                        Scheme Period
+                        @if (!IsConfirmed)
+                        {
+                            <button type="button" class="pr-inline-edit" aria-label="Edit scheme period" title="Edit scheme period" @onclick="EditSalesPlan">
+                                <SalesAuditIcon Name="pencil" Size="13" />
+                            </button>
+                        }
+                    </span>
+                    <span class="pr-summary-value">@SchemeFrom.ToString("dd MMM yyyy") - @SchemeTo.ToString("dd MMM yyyy")</span>
+                </div>
+            </div>
+            <div class="pr-summary-item">
+                <div class="pr-summary-icon pr-tone-green"><SalesAuditIcon Name="badge-check" Size="22" StrokeWidth="1.6" /></div>
+                <div class="pr-summary-text">
+                    <span class="pr-label">Scheme Duration</span>
+                    <span class="pr-summary-value pr-green">@DurationText</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Program Information -->
+        <div class="pr-card">
+            <h3 class="pr-card-title">Program Information</h3>
+
+            <div class="pr-info-grid">
+                @foreach (var info in ProgramInfo)
+                {
+                    <div class="pr-info-item">
+                        <SalesAuditIcon Name="@info.Icon" Size="20" StrokeWidth="1.5" CssClass="pr-info-icon" />
+                        <div class="pr-info-text">
+                            <span class="pr-label">@info.Label</span>
+                            @if (info.IsBadge)
+                            {
+                                <span class="pr-status-pill">@info.Value</span>
+                            }
+                            else
+                            {
+                                <span class="pr-info-value">@info.Value</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Budget Details -->
+        <div class="pr-card">
+            <div class="pr-card-top">
+                <h3 class="pr-card-title">Budget Details</h3>
+                <span class="pr-ratio-pill">₹ 1.00 Cr Turnover for every ₹1.50 Lakh Budget</span>
+            </div>
+
+            <div class="pr-grid-4">
+                <div class="pr-tile pr-tile-white">
+                    <span class="pr-label">CSR1 Approved Budget</span>
+                    <span class="pr-tile-value pr-green">@SalesAuditFormat.Rupees(Csr1Budget)</span>
+                    <span class="pr-tile-sub">From CSR1</span>
+                </div>
+                <div class="pr-tile pr-tile-white">
+                    <span class="pr-label">Additional Approved Budget</span>
+                    <span class="pr-tile-value pr-green">@SalesAuditFormat.Rupees(AdditionalBudget)</span>
+                    <span class="pr-tile-sub">Under MD</span>
+                </div>
+                <div class="pr-tile pr-tile-green">
+                    <span class="pr-label">Total Approved Budget</span>
+                    <span class="pr-tile-value pr-green">@SalesAuditFormat.Rupees(Csr1Budget + AdditionalBudget)</span>
+                    <span class="pr-tile-sub">(CSR1 + Additional MD)</span>
+                </div>
+                <div class="pr-tile pr-tile-purple">
+                    <span class="pr-label">Required Turnover</span>
+                    <span class="pr-tile-value">@SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                    <span class="pr-tile-sub">Required Turnover is auto-calculated</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Product-wise Sales Plan & Summary -->
+        <div class="pr-card">
+            <div class="pr-card-top">
+                <h3 class="pr-card-title">Product - wise Sales Plan &amp; Summary</h3>
+                @if (!IsConfirmed)
+                {
+                    <button type="button" class="pr-edit-btn" @onclick="EditSalesPlan">
+                        <SalesAuditIcon Name="pencil" Size="15" />
+                        Edit Sales Plan
+                    </button>
+                }
+            </div>
+
+            <div class="pr-table-wrapper">
+                <table class="pr-table">
+                    <thead>
+                        <tr>
+                            <th class="pr-col-no">S:NO</th>
+                            <th>Product</th>
+                            <th>Unit</th>
+                            <th>Planned Quantity</th>
+                            <th>Planned Value (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (row, index) in PlanRows.Select((r, i) => (r, i)))
+                        {
+                            <tr>
+                                <td class="pr-col-no">@(index + 1)</td>
+                                <td>@row.Product</td>
+                                <td>@row.Unit</td>
+                                <td>@SalesAuditFormat.Indian(row.Quantity)</td>
+                                <td>@SalesAuditFormat.Rupees(row.Value)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="pr-total-label">TOTAL PLANNED COMMITMENT (sum)</td>
+                            <td class="pr-total-value">@SalesAuditFormat.Indian(PlanRows.Sum(r => r.Quantity)) MT</td>
+                            <td class="pr-total-value">@SalesAuditFormat.Rupees(PlanTotal)</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="pr-grid-4">
+                <div class="pr-tile pr-tile-purple">
+                    <span class="pr-label">Required Turnover (TO)</span>
+                    <span class="pr-tile-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                    <span class="pr-tile-sub">Minimum Target you must achieve</span>
+                </div>
+                <div class="pr-tile pr-tile-green">
+                    <span class="pr-label">Total Planned Commitment</span>
+                    <span class="pr-tile-value pr-green">₹ @SalesAuditFormat.Crore(PlanTotal) Cr</span>
+                    <span class="pr-tile-sub">Sum of all product-wise planned values</span>
+                </div>
+                <div class="pr-tile @(PlanDifference >= 0 ? "pr-tile-blue" : "pr-tile-red")">
+                    <span class="pr-label">Difference (Over TO)</span>
+                    <span class="pr-tile-value">@(PlanDifference >= 0 ? "+" : "-") ₹ @SalesAuditFormat.Crore(Math.Abs(PlanDifference)) Cr</span>
+                    <span class="pr-tile-sub">@(PlanDifference >= 0 ? "Above the required TO" : "Below the required TO")</span>
+                </div>
+                <div class="pr-tile @(PlanDifference >= 0 ? "pr-tile-green" : "pr-tile-red")">
+                    <span class="pr-label">Requirement Status</span>
+                    <span class="pr-tile-value pr-status">@(PlanDifference >= 0 ? "Met" : "Not Met")</span>
+                    <span class="pr-tile-sub">@(PlanDifference >= 0 ? "Planned Commitment meets the Required TO" : "Planned Commitment is below the Required TO")</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dealer Allocation Summary -->
+        <div class="pr-card">
+            <div class="pr-card-top">
+                <h3 class="pr-card-title">Dealer Allocation Summary</h3>
+                @if (!IsConfirmed)
+                {
+                    <button type="button" class="pr-edit-btn" @onclick="@(() => Nav.NavigateTo("/DealerMapping"))">
+                        <SalesAuditIcon Name="pencil" Size="15" />
+                        Edit Dealer Mapping
+                    </button>
+                }
+            </div>
+
+            <div class="pr-grid-5">
+                <div class="pr-tile pr-tile-white">
+                    <span class="pr-label">Total Dealers</span>
+                    <span class="pr-tile-value pr-dark">@TotalDealers</span>
+                    <span class="pr-tile-sub">Dealers mapped in plan</span>
+                </div>
+                <div class="pr-tile pr-tile-green">
+                    <span class="pr-label">Total Product Plan</span>
+                    <span class="pr-tile-value pr-green">₹ @SalesAuditFormat.Crore(PlanTotal) Cr</span>
+                    <span class="pr-tile-sub">From product wise plan</span>
+                </div>
+                <div class="pr-tile pr-tile-blue">
+                    <span class="pr-label">Total Dealer Allocation</span>
+                    <span class="pr-tile-value">₹ @SalesAuditFormat.Crore(DealerAllocation) Cr</span>
+                    <span class="pr-tile-sub">Sum of all dealer commitments</span>
+                </div>
+                <div class="pr-tile pr-tile-orange">
+                    <span class="pr-label">Remaining to Allocate</span>
+                    <span class="pr-tile-value pr-dark">@SalesAuditFormat.Rupees(Math.Max(0, Remaining))</span>
+                    <span class="pr-tile-sub">@(Remaining <= 0 ? "Fully allocated" : "Still to be allocated to dealers")</span>
+                </div>
+                <div class="pr-tile @(Remaining == 0 ? "pr-tile-green" : "pr-tile-red")">
+                    <span class="pr-label">Requirement Status</span>
+                    <span class="pr-tile-value pr-status">@(Remaining == 0 ? "Complete" : Remaining > 0 ? "Incomplete" : "Over Allocated")</span>
+                    <span class="pr-tile-sub">@(Remaining == 0 ? "All planned value has been allocated" : Remaining > 0 ? "Dealer allocation is below the product plan" : "Dealer allocation is above the product plan")</span>
+                </div>
+            </div>
+
+            @if (Remaining == 0)
+            {
+                <div class="pr-note">
+                    <SalesAuditIcon Name="check-circle" Size="15" />
+                    <span>Allocation completed! All planned product value has been allocated across dealers.</span>
+                </div>
+            }
+        </div>
+
+        <!-- Footer actions -->
+        <div class="pr-footer">
+            <button type="button" class="pr-btn pr-btn-back" @onclick="@(() => Nav.NavigateTo("/SalesAudit"))">
+                <SalesAuditIcon Name="chevrons-left" Size="16" />
+                Back to List
+            </button>
+
+            <div class="pr-footer-right">
+                <button type="button" class="pr-btn pr-btn-draft" disabled="@IsConfirmed">
+                    <SalesAuditIcon Name="file-pen" Size="16" />
+                    Save Draft
+                </button>
+                @if (IsConfirmed)
+                {
+                    <button type="button" class="pr-btn pr-btn-primary" disabled>
+                        <SalesAuditIcon Name="check-circle" Size="16" />
+                        Sales Plan Confirmed
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="pr-btn pr-btn-primary" disabled="@(!CanConfirm)" @onclick="() => OpenDialog(DialogState.Confirm)"
+                            title="@(CanConfirm ? null : "Meet the required turnover and allocate the full plan to dealers first")">
+                        Confirm Sales Plan
+                        <SalesAuditIcon Name="chevrons-right" Size="16" />
+                    </button>
+                }
+            </div>
+        </div>
+
+        <!-- Confirm / Confirmed dialogs -->
+        @if (Dialog != DialogState.None)
+        {
+            <div class="pr-overlay" @onclick="CloseDialog">
+                <div class="pr-modal @(Dialog == DialogState.Confirmed ? "pr-modal-success" : "")"
+                     role="dialog" aria-modal="true" aria-labelledby="pr-dialog-title" tabindex="-1"
+                     @ref="DialogRef" @onclick:stopPropagation="true" @onkeydown="OnDialogKeyDown">
+
+                    @if (Dialog == DialogState.Confirm)
+                    {
+                        <div class="pr-modal-body pr-confirm-body">
+                            @* Bulb + pencil + gear illustration *@
+                            <svg class="pr-confirm-art" width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M32 4v4M18 8.5l2.5 3M46 8.5l-2.5 3M12 18l3.5 1.5M52 18l-3.5 1.5"></path>
+                                <path d="M24.5 32.5c-2.8-2.2-4.5-5.5-4.5-9.2C20 16.5 25.4 11 32 11s12 5.5 12 12.3c0 3.7-1.7 7-4.5 9.2V36h-15z"></path>
+                                <path d="M28.5 29.5v-6.5a2 2 0 1 1 3.5 1.3M35.5 29.5v-6.5a2 2 0 1 0-3.5 1.3"></path>
+                                <path d="M9 40h40l5 2.5-5 2.5H9z"></path>
+                                <path d="M15 40v5M44 40v5"></path>
+                                <path d="M22 45v3.5l3.5 1 1 3.5 3.5-1.5 2 3 2-3 3.5 1.5 1-3.5 3.5-1V45"></path>
+                                <path d="M28 49a4 4 0 0 0 8 0"></path>
+                            </svg>
+                            <h2 id="pr-dialog-title" class="pr-modal-title">Confirm Sales Plan?</h2>
+                            <p class="pr-modal-text">
+                                This will save the sales plan as the baseline for achievement tracking.
+                                The planning steps will be locked and you will not need to repeat them.
+                            </p>
+                        </div>
+                        <div class="pr-modal-actions">
+                            <button type="button" class="pr-modal-btn pr-modal-btn-cancel" @onclick="CloseDialog">Cancel</button>
+                            <button type="button" class="pr-modal-btn pr-modal-btn-primary" @onclick="ConfirmPlan">Yes, Confirm &amp; Save</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="pr-modal-body pr-success-body">
+                            <span class="pr-success-icon">
+                                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"></path></svg>
+                            </span>
+                            <h2 id="pr-dialog-title" class="pr-modal-title">Sales Plan Confirmed</h2>
+                            <p class="pr-modal-text">
+                                Your sales plan and dealer mapping have been saved successfully. Actual sales will be
+                                tracked automatically from Sales Portal invoices during the scheme period.
+                            </p>
+                        </div>
+
+                        <div class="pr-success-summary">
+                            <dl>
+                                <div><dt>Program</dt><dd>@ProgramName</dd></div>
+                                <div><dt>Scheme Period</dt><dd>@SchemeFrom.ToString("dd MMM yyyy") – @SchemeTo.ToString("dd MMM yyyy")</dd></div>
+                                <div><dt>Required Turnover</dt><dd>₹@SalesAuditFormat.Crore(RequiredTurnover) Cr</dd></div>
+                                <div><dt>Planned Commitment</dt><dd>₹@SalesAuditFormat.Crore(PlanTotal) Cr</dd></div>
+                                <div><dt>Dealers</dt><dd>@TotalDealers</dd></div>
+                                <div class="pr-summary-status"><dt>Status</dt><dd><span class="pr-tracking-pill"><span class="pr-dot"></span>Sales Tracking</span></dd></div>
+                            </dl>
+                        </div>
+
+                        <div class="pr-modal-actions pr-success-actions">
+                            <button type="button" class="pr-modal-btn pr-modal-btn-primary" @onclick="@(() => Nav.NavigateTo("/SalesAudit"))">Back to Sales Audit</button>
+                            <button type="button" class="pr-modal-btn pr-modal-btn-soft" @onclick="@(() => Nav.NavigateTo("/SalesTracking?state=awaiting"))">View Tracking →</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+    </div>
+</div>
+
+@code {
+    // Everything below is carried over from the earlier steps; sample values until the API is wired.
+    private record InfoItem(string Label, string Value, string Icon, bool IsBadge = false);
+    private record PlanRow(string Product, string Unit, decimal Quantity, decimal Value);
+
+    private readonly DateTime SchemeFrom = new(2026, 8, 1);
+    private readonly DateTime SchemeTo = new(2026, 10, 31);
+
+    private readonly List<InfoItem> ProgramInfo = new()
+    {
+        new("Sanction Number", "CSR/2024/TN/0847", "gavel"),
+        new("Program Status", "CSR - 2 Completed", "user-check", IsBadge: true),
+        new("State", "Maharashtra", "map-pin"),
+        new("Region", "Pune", "calendar"),
+        new("HQ", "Pune", "calendar"),
+        new("Month", "20 Jul 2026", "calendar"),
+        new("Program Start Date", "01 Apr 2026", "calendar"),
+        new("Program End Date", "31 Jul 2026", "calendar"),
+    };
+
+    private const decimal Csr1Budget = 150000m;
+    private const decimal AdditionalBudget = 180000m;
+    private const decimal RequiredTurnover = 2_00_00_000m;
+
+    private readonly List<PlanRow> PlanRows = new()
+    {
+        new("SPIC Super Urea 45kg", "MT", 1000, 80_00_000),
+        new("SPIC Super Urea 45kg", "MT", 1000, 50_00_000),
+        new("SPIC Super Urea 45kg", "MT", 500, 50_00_000),
+        new("SPIC Super Urea 45kg", "MT", 500, 50_00_000),
+    };
+
+    private const int TotalDealers = 15;
+    private const decimal DealerAllocation = 2_30_00_000m;
+
+    private decimal PlanTotal => PlanRows.Sum(r => r.Value);
+    private decimal PlanDifference => PlanTotal - RequiredTurnover;
+    private decimal Remaining => PlanTotal - DealerAllocation;
+    private bool CanConfirm => PlanDifference >= 0 && Remaining == 0;
+
+    private string DurationText
+    {
+        get
+        {
+            var days = (SchemeTo - SchemeFrom).Days + 1;
+            var months = (SchemeTo.Year - SchemeFrom.Year) * 12 + SchemeTo.Month - SchemeFrom.Month + 1;
+            return $"{months} {(months == 1 ? "Month" : "Months")} ({days} Days)";
+        }
+    }
+
+    private void EditSalesPlan() => Nav.NavigateTo("/SalesPlan");
+
+    // ---- Confirm dialog ----
+    private const string ProgramName = "Dealers Meet - State Level";
+
+    private enum DialogState { None, Confirm, Confirmed }
+
+    private DialogState Dialog = DialogState.None;
+    private ElementReference DialogRef;
+    private bool FocusDialog;
+
+    /// <summary>Set once the plan is confirmed: the planning steps are locked from then on.</summary>
+    private bool IsConfirmed;
+
+    private void OpenDialog(DialogState state)
+    {
+        Dialog = state;
+        FocusDialog = true;
+    }
+
+    private void CloseDialog() => Dialog = DialogState.None;
+
+    // Nothing is persisted yet; the save call is wired with the API.
+    private void ConfirmPlan()
+    {
+        IsConfirmed = true;
+        OpenDialog(DialogState.Confirmed);
+    }
+
+    private void OnDialogKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") CloseDialog();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Move focus into the dialog so Escape and Tab work straight away.
+        if (FocusDialog && Dialog != DialogState.None)
+        {
+            FocusDialog = false;
+            await DialogRef.FocusAsync();
+        }
+    }
+}

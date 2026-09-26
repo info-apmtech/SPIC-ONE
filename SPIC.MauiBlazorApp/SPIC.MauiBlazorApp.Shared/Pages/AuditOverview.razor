@@ -1,0 +1,157 @@
+@page "/AuditOverview"
+@inject NavigationManager Nav
+
+<PageTitle>Audit Overview · SPIC ONE</PageTitle>
+<ScrollToTop />
+
+<div class="container-fluid py-4 px-0">
+    <div class="ao-wrapper">
+
+        <!-- Header -->
+        <div class="ao-header">
+            <h1>Audit Overview</h1>
+            <p>Review auto-field details from CSR-2 and MD Portal sources.</p>
+        </div>
+
+        <!-- Stepper -->
+        <SalesAuditStepper CurrentStep="1" />
+
+        <!-- Auto-load banner -->
+        <div class="ao-banner">
+            <SalesAuditIcon Name="check-circle" Size="16" />
+            <span>Program details are automatically loaded from CSR2 and MD Portal. Review the information before creating the sales plan.</span>
+        </div>
+
+        <!-- Program summary strip -->
+        <div class="ao-card ao-summary">
+            @foreach (var item in SummaryItems)
+            {
+                <div class="ao-summary-item">
+                    <div class="ao-summary-icon ao-tone-@item.Tone">
+                        <SalesAuditIcon Name="@item.Icon" Size="22" StrokeWidth="1.6" />
+                    </div>
+                    <div class="ao-summary-text">
+                        <span class="ao-label">@item.Label</span>
+                        <span class="ao-summary-value">@item.Value</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Program Information -->
+        <div class="ao-card">
+            <h3 class="ao-card-title">Program Information</h3>
+
+            <div class="ao-info-grid">
+                @foreach (var info in ProgramInfo)
+                {
+                    <div class="ao-info-item">
+                        <SalesAuditIcon Name="@info.Icon" Size="20" StrokeWidth="1.5" CssClass="ao-info-icon" />
+                        <div class="ao-info-text">
+                            <span class="ao-label">@info.Label</span>
+                            @if (info.IsBadge)
+                            {
+                                <span class="ao-status-pill">@info.Value</span>
+                            }
+                            else
+                            {
+                                <span class="ao-info-value">@info.Value</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Program Budget & Turnover -->
+        <div class="ao-card">
+            <div class="ao-card-top">
+                <h3 class="ao-card-title">Program Budget &amp; Turnover</h3>
+                <span class="ao-ratio-pill">₹ 1.00 Cr Turnover for every ₹1.50 Lakh Budget</span>
+            </div>
+
+            <div class="ao-budget-grid">
+                <div class="ao-budget-tile">
+                    <span class="ao-label">CSR1 Approved Budget</span>
+                    <span class="ao-budget-value">@SalesAuditFormat.Rupees(Csr1Budget)</span>
+                    <span class="ao-budget-sub">From CSR1</span>
+                </div>
+                <div class="ao-budget-tile">
+                    <span class="ao-label">Additional Approved Budget</span>
+                    <span class="ao-budget-value">@SalesAuditFormat.Rupees(AdditionalBudget)</span>
+                    <span class="ao-budget-sub">Under MD</span>
+                </div>
+                <div class="ao-budget-tile ao-budget-total">
+                    <span class="ao-label">Total Approved Budget</span>
+                    <span class="ao-budget-value">@SalesAuditFormat.Rupees(TotalBudget)</span>
+                    <span class="ao-budget-sub">(CSR1 + Additional MD)</span>
+                </div>
+                <div class="ao-budget-tile ao-budget-required">
+                    <span class="ao-label">Required Turnover</span>
+                    <span class="ao-budget-value">@RequiredTurnoverCr.ToString("0.00") Cr</span>
+                    <span class="ao-budget-sub">Required Turnover is auto-calculated</span>
+                </div>
+            </div>
+
+            <div class="ao-note">
+                <SalesAuditIcon Name="check-circle" Size="15" />
+                <span>Total Approved Budget is the sum of CSR1 Approved and Additional budget approved under MD</span>
+            </div>
+        </div>
+
+        <!-- Footer actions -->
+        <div class="ao-footer">
+            <button type="button" class="ao-btn ao-btn-back" @onclick="BackToList">
+                <SalesAuditIcon Name="chevrons-left" Size="16" />
+                Back to List
+            </button>
+
+            <div class="ao-footer-right">
+                <button type="button" class="ao-btn ao-btn-draft">
+                    <SalesAuditIcon Name="file-pen" Size="16" />
+                    Save Draft
+                </button>
+                <button type="button" class="ao-btn ao-btn-primary" @onclick="@(() => Nav.NavigateTo("/SalesPlan"))">
+                    Continue to sales plan
+                    <SalesAuditIcon Name="chevrons-right" Size="16" />
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private record SummaryItem(string Label, string Value, string Icon, string Tone);
+    private record InfoItem(string Label, string Value, string Icon, bool IsBadge = false);
+
+    private readonly List<SummaryItem> SummaryItems = new()
+    {
+        new("Program Type", "Dealer Program", "users", "green"),
+        new("Program Name", "Dealers Meet - State Level", "clipboard", "purple"),
+        new("Sanction Number", "SPIC/MD/26/001", "stamp", "blue"),
+        new("CSR-2 Status", "Completed on 15 Jul 2026", "badge-check", "green"),
+    };
+
+    private readonly List<InfoItem> ProgramInfo = new()
+    {
+        new("Sanction Number", "CSR/2024/TN/0847", "gavel"),
+        new("State", "Maharashtra", "map-pin"),
+        new("Region", "Pune", "calendar"),
+        new("HQ", "Pune", "calendar"),
+        new("Program Status", "CSR - 2 Completed", "user-check", IsBadge: true),
+        new("Month", "20 Jul 2026", "calendar"),
+        new("Program Start Date", "01 Apr 2026", "calendar"),
+        new("Program End Date", "31 Jul 2026", "calendar"),
+    };
+
+    private const decimal Csr1Budget = 150000m;
+    private const decimal AdditionalBudget = 180000m;
+    private static decimal TotalBudget => Csr1Budget + AdditionalBudget;
+
+    // Figma sample value; the real figure will come from the configured
+    // "₹1.00 Cr turnover per ₹1.50 Lakh budget" rule once the API is wired.
+    private const decimal RequiredTurnoverCr = 2.20m;
+
+    private void BackToList() => Nav.NavigateTo("/SalesAudit");
+}

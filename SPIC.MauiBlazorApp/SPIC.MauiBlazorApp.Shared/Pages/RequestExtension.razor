@@ -1,0 +1,246 @@
+@page "/RequestExtension"
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Request Extension · SPIC ONE</PageTitle>
+<ScrollToTop />
+
+<div class="container-fluid py-4 px-0">
+    <div class="rex-wrapper">
+
+        <!-- Header -->
+        <div class="rex-header">
+            <div>
+                <h1>Request Extension</h1>
+                <p>Submit a request to extend the Scheme period as the required turnover has not yet been achieved.</p>
+            </div>
+            <button type="button" class="rex-btn-outline-green" @onclick="BackToTracking">
+                <SalesAuditIcon Name="arrow-left" Size="15" />
+                Back to Period and Review
+            </button>
+        </div>
+
+        @if (Submitted is null)
+        {
+            <!-- Info banner -->
+            <div class="rex-banner">
+                <SalesAuditIcon Name="info" Size="16" />
+                <span>Please provide the details below to request an extension. Your request will be sent to Admin for review.</span>
+            </div>
+
+            <!-- Scheme Information -->
+            <h3 class="rex-section-title">Scheme Information <span>(Read Only)</span></h3>
+            <div class="rex-info-grid">
+                @foreach (var tile in InfoTiles)
+                {
+                    <div class="rex-info-tile">
+                        <div class="rex-info-icon rex-tone-@tile.Tone">
+                            <SalesAuditIcon Name="file-chart" Size="22" StrokeWidth="1.6" />
+                        </div>
+                        <div class="rex-info-text">
+                            <span class="rex-label">@tile.Label</span>
+                            <span class="rex-info-value @(tile.Tone == "red" ? "rex-red" : "")">@tile.Value</span>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Scheme Period form -->
+            <div class="rex-card">
+                <h3 class="rex-card-title">Scheme Period</h3>
+
+                <div class="rex-form-grid">
+                    <div class="rex-form-group">
+                        <label class="rex-form-label" for="rex-end-date">Requested New End Date</label>
+                        <div class="rex-date-wrap @(ShowErrors && DateError is not null ? "rex-invalid" : "")">
+                            <span class="rex-date-display @(NewEndDate is null ? "rex-placeholder" : "")">
+                                @(NewEndDate?.ToString("dd MMM yyyy") ?? "Select new end date")
+                            </span>
+                            <SalesAuditIcon Name="calendar" Size="16" CssClass="rex-date-icon" />
+                            <input id="rex-end-date" type="date" class="rex-date-native"
+                                   min="@CurrentEnd.AddDays(1).ToString("yyyy-MM-dd")"
+                                   value="@NewEndDate?.ToString("yyyy-MM-dd")" @onchange="SetNewEndDate" />
+                        </div>
+                        @if (ShowErrors && DateError is not null)
+                        {
+                            <span class="rex-error">@DateError</span>
+                        }
+                        else
+                        {
+                            <span class="rex-help">Select the new end date for the scheme period</span>
+                        }
+                    </div>
+
+                    <div class="rex-form-group">
+                        <label class="rex-form-label" for="rex-reason">Reason for Extension</label>
+                        <select id="rex-reason" class="rex-select @(string.IsNullOrEmpty(Reason) ? "rex-placeholder" : "") @(ShowErrors && ReasonError is not null ? "rex-invalid" : "")"
+                                @bind="Reason">
+                            <option value="">Select reason</option>
+                            @foreach (var reason in Reasons)
+                            {
+                                <option value="@reason">@reason</option>
+                            }
+                        </select>
+                        @if (ShowErrors && ReasonError is not null)
+                        {
+                            <span class="rex-error">@ReasonError</span>
+                        }
+                        else
+                        {
+                            <span class="rex-help">Select the primary reason for requesting extension</span>
+                        }
+                    </div>
+
+                    <div class="rex-form-group rex-span-2">
+                        <label class="rex-form-label" for="rex-remarks">Remarks / Explanation</label>
+                        <textarea id="rex-remarks" class="rex-textarea @(ShowErrors && RemarksError is not null ? "rex-invalid" : "")" rows="3"
+                                  maxlength="@RemarksMax" placeholder="Enter detailed explanation for requesting extension.."
+                                  @bind="Remarks" @bind:event="oninput"></textarea>
+                        @if (ShowErrors && RemarksError is not null)
+                        {
+                            <span class="rex-error">@RemarksError</span>
+                        }
+                        else
+                        {
+                            <span class="rex-help">Provide clear justification for the extension request.</span>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer actions -->
+            <div class="rex-footer">
+                <button type="button" class="rex-btn rex-btn-back" @onclick="BackToList">
+                    <SalesAuditIcon Name="chevrons-left" Size="16" />
+                    Back to List
+                </button>
+                <div class="rex-footer-right">
+                    <button type="button" class="rex-btn rex-btn-back" @onclick="BackToTracking">Close</button>
+                    <button type="button" class="rex-btn rex-btn-primary" @onclick="Submit">
+                        Submit Extension Request
+                        <SalesAuditIcon Name="chevrons-right" Size="16" />
+                    </button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- Submitted -->
+            <div class="rex-success">
+                <span class="rex-success-icon">
+                    <SalesAuditIcon Name="badge-check" Size="34" StrokeWidth="1.8" />
+                </span>
+                <h2 class="rex-success-title">Extension Request Submitted</h2>
+                <p class="rex-success-lead">Your extension request has been submitted for Admin approval.</p>
+                <p class="rex-success-text">
+                    The audit record status has been updated to Extension Requested. You will be notified
+                    once the Admin reviews your request.
+                </p>
+
+                <dl class="rex-summary">
+                    <div class="rex-summary-cell"><dt>Request ID</dt><dd class="rex-green">@Submitted.RequestId</dd></div>
+                    <div class="rex-summary-cell"><dt>Request Date</dt><dd>@Submitted.RequestDate.ToString("d MMM yyyy")</dd></div>
+                    <div class="rex-summary-cell"><dt>Current Scheme Period</dt><dd>@SchemeStart.ToString("dd MMM yyyy") - @CurrentEnd.ToString("dd MMM yyyy")</dd></div>
+                    <div class="rex-summary-cell"><dt>Request New End Date</dt><dd>@SchemeStart.ToString("dd MMM yyyy") - @Submitted.NewEndDate.ToString("d MMM yyyy")</dd></div>
+                    <div class="rex-summary-cell"><dt>Reason</dt><dd>@Submitted.Reason</dd></div>
+                    <div class="rex-summary-cell"><dt>Status</dt><dd><span class="rex-status-pill"><span class="rex-dot"></span>Extension Requested</span></dd></div>
+                    <div class="rex-summary-remarks"><dt>Remarks</dt><dd>@Submitted.Remarks</dd></div>
+                </dl>
+
+                <div class="rex-success-actions">
+                    <button type="button" class="rex-btn rex-btn-soft" @onclick="@(() => Nav.NavigateTo("/SalesTracking?extension=pending"))">
+                        <SalesAuditIcon Name="eye" Size="16" />
+                        View My Request
+                    </button>
+                    <button type="button" class="rex-btn rex-btn-primary" @onclick="BackToList">
+                        Go to Sales Audit List
+                        <SalesAuditIcon Name="arrow-right" Size="16" />
+                    </button>
+                </div>
+            </div>
+        }
+
+    </div>
+</div>
+
+@code {
+    // ---- Scheme being extended (sample data, same program as the Sales Tracking dashboard) ----
+    private readonly DateTime SchemeStart = new(2026, 8, 1);
+    private readonly DateTime CurrentEnd = new(2026, 10, 31);
+
+    private const decimal RequiredTurnover = 2_20_00_000m;
+    private const decimal ActualTurnover = 1_35_00_000m;
+
+    private record InfoTile(string Label, string Value, string Tone);
+
+    private List<InfoTile> InfoTiles => new()
+    {
+        new("Program Name", "Dealers Meet - State Level", "purple"),
+        new("Sanction Number", "CSR/2024/TN/0847", "green"),
+        new("Current Scheme Period", $"{SchemeStart:dd MMM yyyy} - {CurrentEnd:dd MMM yyyy}", "blue"),
+        new("Required Turnover (TO)", $"₹ {SalesAuditFormat.Crore(RequiredTurnover)} Cr", "purple"),
+        new("Actual Turnover Achieved", $"₹ {SalesAuditFormat.Crore(ActualTurnover)} Cr", "blue"),
+        new("Balance to Target", $"₹ {SalesAuditFormat.Crore(Math.Max(0, RequiredTurnover - ActualTurnover))} Cr", "red"),
+    };
+
+    private static readonly string[] Reasons =
+    {
+        "Market Condition",
+        "Weather / Crop Season Delay",
+        "Stock Availability",
+        "Dealer Onboarding Delay",
+        "Other",
+    };
+
+    // ---- Form ----
+    private const int RemarksMin = 10;
+    private const int RemarksMax = 500;
+
+    private DateTime? NewEndDate;
+    private string Reason = "";
+    private string Remarks = "";
+    private bool ShowErrors;
+
+    private string? DateError =>
+        NewEndDate is null ? "Select the new end date."
+        : NewEndDate <= CurrentEnd ? $"The new end date must be after {CurrentEnd:dd MMM yyyy}."
+        : null;
+
+    private string? ReasonError => string.IsNullOrEmpty(Reason) ? "Select a reason for the extension." : null;
+
+    private string? RemarksError =>
+        Remarks.Trim().Length < RemarksMin ? $"Enter at least {RemarksMin} characters explaining the request." : null;
+
+    private void SetNewEndDate(ChangeEventArgs e)
+    {
+        NewEndDate = DateTime.TryParse(e.Value?.ToString(), System.Globalization.CultureInfo.InvariantCulture,
+                         System.Globalization.DateTimeStyles.None, out var date)
+            ? date
+            : null;
+    }
+
+    // ---- Submission (not persisted yet; the save call is wired with the API) ----
+    private record SubmittedRequest(string RequestId, DateTime RequestDate, DateTime NewEndDate, string Reason, string Remarks);
+
+    private SubmittedRequest? Submitted;
+
+    private async Task Submit()
+    {
+        ShowErrors = true;
+        if (DateError is not null || ReasonError is not null || RemarksError is not null) return;
+
+        Submitted = new SubmittedRequest(
+            RequestId: $"EXT - {DateTime.Today.Year} - 00021",
+            RequestDate: DateTime.Today,
+            NewEndDate: NewEndDate!.Value,
+            Reason: Reason,
+            Remarks: Remarks.Trim());
+
+        // The confirmation replaces the form; bring it into view from the footer button.
+        try { await JS.InvokeVoidAsync("scrollPageToTop"); } catch (JSException) { }
+    }
+
+    private void BackToTracking() => Nav.NavigateTo("/SalesTracking");
+
+    private void BackToList() => Nav.NavigateTo("/SalesAudit");
+}

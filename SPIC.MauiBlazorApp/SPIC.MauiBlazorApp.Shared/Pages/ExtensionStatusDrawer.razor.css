@@ -1,0 +1,374 @@
+/* --- EXTENSION REQUEST STATUS DRAWER --- */
+
+.exd-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9998; /* same layer as the app's other drawers (e.g. CSR1ProgramDetailsDrawer), above the topbar */
+    display: flex;
+    justify-content: flex-end;
+    background-color: rgba(15, 23, 42, 0.45);
+    animation: exd-fade 0.15s ease-out;
+}
+
+.exd-drawer {
+    overflow-wrap: break-word;
+    width: 560px;
+    max-width: 100vw;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background-color: #ffffff;
+    box-shadow: -10px 0 40px rgba(15, 23, 42, 0.18);
+    font-family: 'Inter', sans-serif;
+    color: #334155;
+    outline: none;
+    animation: exd-slide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.exd-green { color: #166534 !important; }
+
+/* --- Header --- */
+.exd-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 18px 22px;
+    border-bottom: 1px solid #eef2f6;
+}
+
+    .exd-header h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+.exd-back {
+    display: inline-flex;
+    padding: 4px;
+    border: none;
+    background: none;
+    border-radius: 6px;
+    color: #1e293b;
+    cursor: pointer;
+}
+
+    .exd-back:hover {
+        background-color: #f1f5f9;
+    }
+
+/* --- Body --- */
+.exd-body {
+    flex: 1;
+    min-height: 0; /* lets the body shrink below its content so overflow-y can scroll */
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 18px 22px;
+}
+
+    /* Flex items shrink by default; without this the cards were squeezed to fit the drawer
+       and their overflow: hidden cut rows off instead of the body scrolling. */
+    .exd-body > * {
+        flex-shrink: 0;
+    }
+
+.exd-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+}
+
+    .exd-status > div {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .exd-status strong {
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .exd-status span:not(.exd-status-icon) {
+        font-size: 12px;
+        color: #475569;
+    }
+
+.exd-status-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    flex-shrink: 0;
+}
+
+.exd-status-approved {
+    background-color: #eaf7ef;
+    border-color: #c8ecd5;
+}
+
+    .exd-status-approved strong { color: #166534; }
+    .exd-status-approved .exd-status-icon { background-color: #166534; }
+
+.exd-status-pending {
+    background-color: #fff4ea;
+    border-color: #fde2c7;
+}
+
+    .exd-status-pending strong { color: #ea580c; }
+    .exd-status-pending .exd-status-icon { background-color: #f97316; }
+
+.exd-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+    .exd-card h3 {
+        margin: 0;
+        padding: 14px 16px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #1e293b;
+        border-bottom: 1px solid #eef2f6;
+    }
+
+/* --- Request summary --- */
+.exd-summary {
+    margin: 0;
+}
+
+    .exd-summary > div {
+        display: grid;
+        grid-template-columns: 44% minmax(0, 1fr);
+        border-bottom: 1px solid #eef2f6;
+    }
+
+    .exd-summary dt,
+    .exd-summary dd {
+        margin: 0;
+        padding: 11px 16px;
+        font-size: 13px;
+    }
+
+    .exd-summary dt {
+        font-weight: 400;
+        color: #64748b;
+        border-right: 1px solid #eef2f6;
+    }
+
+    .exd-summary dd {
+        font-weight: 500;
+        color: #1e293b;
+    }
+
+.exd-length {
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #16a34a;
+}
+
+.exd-remarks {
+    padding: 12px 16px 14px;
+    background-color: #f8fafc;
+}
+
+.exd-remarks-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.exd-remarks p {
+    margin: 6px 0 0 21px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #475569;
+}
+
+/* --- Progress timeline --- */
+.exd-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 16px;
+}
+
+.exd-step {
+    position: relative;
+    display: flex;
+    gap: 12px;
+    padding-bottom: 18px;
+}
+
+    .exd-step:last-child {
+        padding-bottom: 0;
+    }
+
+    /* connector to the next step */
+    .exd-step:not(:last-child)::after {
+        content: "";
+        position: absolute;
+        left: 11px;
+        top: 26px;
+        bottom: 2px;
+        width: 2px;
+        background-color: #e2e8f0;
+    }
+
+    .exd-step-done:not(:last-child)::after {
+        background-color: #16a34a;
+    }
+
+    .exd-step > div {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        padding-top: 2px;
+    }
+
+    .exd-step strong {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .exd-step > div > span:not(.exd-time) {
+        font-size: 12px;
+        color: #64748b;
+    }
+
+.exd-step-marker {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.exd-step-done .exd-step-marker { background-color: #16a34a; color: #ffffff; }
+.exd-step-current .exd-step-marker { background-color: #f97316; color: #ffffff; }
+.exd-step-upcoming .exd-step-marker { background-color: #e2e8f0; color: #64748b; }
+
+.exd-time {
+    padding: 2px 10px;
+    border-radius: 20px;
+    background-color: #334155;
+    color: #ffffff;
+    font-size: 11px;
+}
+
+.exd-pending-pill {
+    padding: 1px 8px;
+    border-radius: 20px;
+    background-color: #ffedd5;
+    color: #ea580c;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* --- Note & footer --- */
+.exd-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background-color: #eff5ff;
+    border: 1px solid #d6e4ff;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #2563eb;
+}
+
+    .exd-note ::deep svg {
+        flex-shrink: 0;
+    }
+
+.exd-footer {
+    flex-shrink: 0;
+    padding: 14px 22px 20px;
+    border-top: 1px solid #eef2f6;
+}
+
+.exd-close {
+    width: 100%;
+    height: 44px;
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    background-color: #eef1f4;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+    .exd-close:hover {
+        background-color: #e2e8f0;
+    }
+
+@keyframes exd-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes exd-slide {
+    from { transform: translateX(40px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+}
+
+@media (max-width: 767.98px) {
+    .exd-drawer {
+        width: 100vw;
+    }
+
+    .exd-header {
+        padding: 12px 16px;
+    }
+
+    .exd-back {
+        min-width: var(--tap-min, 44px);
+        min-height: var(--tap-min, 44px);
+        justify-content: center;
+        align-items: center;
+    }
+
+    .exd-body {
+        padding: 16px;
+    }
+
+    .exd-footer {
+        padding: 12px 16px calc(16px + var(--safe-bottom, 0px));
+    }
+
+    .exd-summary > div {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .exd-summary dt {
+        border-right: none;
+        padding-bottom: 2px;
+    }
+
+    .exd-summary dd {
+        padding-top: 2px;
+    }
+}

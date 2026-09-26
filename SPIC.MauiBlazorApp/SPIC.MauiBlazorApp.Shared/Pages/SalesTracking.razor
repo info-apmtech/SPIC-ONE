@@ -1,0 +1,542 @@
+@page "/SalesTracking"
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Sales Tracking · SPIC ONE</PageTitle>
+<ScrollToTop />
+
+<div class="container-fluid py-4 px-0">
+    <div class="trk-wrapper">
+
+        <!-- Header -->
+        <div class="trk-header">
+            <div>
+                <h1>Sales Tracking Dashboard</h1>
+                <p>Track actual sales performance against the planned targets.</p>
+            </div>
+            <div class="trk-header-actions">
+                <button type="button" class="trk-btn-outline-green" @onclick="@(() => Nav.NavigateTo("/PlanReview"))">
+                    <SalesAuditIcon Name="arrow-left" Size="15" />
+                    Back to Plan Review
+                </button>
+                <button type="button" class="@(HasData ? "trk-btn-outline-green" : "trk-btn-outline")" disabled="@(!HasData)">
+                    <SalesAuditIcon Name="download" Size="15" />
+                    Download Tracking Report
+                </button>
+                @if (HasData)
+                {
+                    <button type="button" class="trk-btn-solid" @onclick="GoToPeriodEndReview">
+                        View Final Review
+                        <SalesAuditIcon Name="arrow-right" Size="15" />
+                    </button>
+                }
+            </div>
+        </div>
+
+        <SalesAuditStepper CurrentStep="4" TrackingPhase="true" />
+
+        <!-- KPI tiles -->
+        <div class="trk-kpi-grid">
+            <div class="trk-kpi trk-kpi-purple">
+                <span class="trk-kpi-label">Required Turnover (TO)</span>
+                <span class="trk-kpi-value">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</span>
+                <span class="trk-kpi-sub">Minimum target to achieve</span>
+            </div>
+            <div class="trk-kpi trk-kpi-blue">
+                <span class="trk-kpi-label">Actual Turnover</span>
+                <span class="trk-kpi-value">@(HasData ? $"₹ {SalesAuditFormat.Crore(ActualTurnover)} Cr" : "-")</span>
+                <span class="trk-kpi-sub">Captured from Sales Portal</span>
+            </div>
+            <div class="trk-kpi trk-kpi-peach">
+                <span class="trk-kpi-label">Achievement %</span>
+                <span class="trk-kpi-value trk-orange">@(HasData ? $"{Pct(AchievementPct)}%" : "-")</span>
+                <span class="trk-kpi-sub">Against required TO</span>
+            </div>
+            <div class="trk-kpi trk-kpi-peach">
+                <span class="trk-kpi-label">Remaining to Achieve</span>
+                <span class="trk-kpi-value trk-red">@(HasData ? $"₹ {SalesAuditFormat.Crore(Remaining)}" : "-")</span>
+                <span class="trk-kpi-sub">To reach required TO</span>
+            </div>
+            <div class="trk-kpi trk-kpi-peach">
+                <span class="trk-kpi-label">Tracking Status</span>
+                <span class="trk-kpi-value trk-red">@(HasData ? "In Progress" : "-")</span>
+                <span class="trk-kpi-sub">Data updates in real time</span>
+            </div>
+        </div>
+
+        <!-- Program summary strip -->
+        <div class="trk-card trk-summary">
+            <div class="trk-summary-item">
+                <div class="trk-summary-icon trk-tone-green"><SalesAuditIcon Name="users" Size="22" StrokeWidth="1.6" /></div>
+                <div class="trk-summary-text">
+                    <span class="trk-label">Program Type</span>
+                    <span class="trk-summary-value">Dealer Program</span>
+                </div>
+            </div>
+            <div class="trk-summary-item">
+                <div class="trk-summary-icon trk-tone-purple"><SalesAuditIcon Name="clipboard" Size="22" StrokeWidth="1.6" /></div>
+                <div class="trk-summary-text">
+                    <span class="trk-label">Program Name</span>
+                    <span class="trk-summary-value">Dealers Meet - State Level</span>
+                </div>
+            </div>
+            <div class="trk-summary-item">
+                <div class="trk-summary-icon trk-tone-blue"><SalesAuditIcon Name="stamp" Size="22" StrokeWidth="1.6" /></div>
+                <div class="trk-summary-text">
+                    <span class="trk-label">
+                        Scheme Period
+                        @if (IsExtended)
+                        {
+                            <span class="trk-extended-pill"><span class="trk-dot"></span>Extended</span>
+                        }
+                        else
+                        {
+                            @* The period is locked after confirmation; changing it goes through Request Extension. *@
+                            <button type="button" class="trk-inline-edit" aria-label="Request a scheme period extension" title="Request extension" @onclick="RequestExtension">
+                                <SalesAuditIcon Name="pencil" Size="13" />
+                            </button>
+                        }
+                    </span>
+                    <span class="trk-summary-value">@SchemeFrom.ToString("dd MMM yyyy") - @SchemeTo.ToString("dd MMM yyyy")</span>
+                </div>
+            </div>
+            <div class="trk-summary-item">
+                <div class="trk-summary-icon trk-tone-green"><SalesAuditIcon Name="badge-check" Size="22" StrokeWidth="1.6" /></div>
+                <div class="trk-summary-text">
+                    <span class="trk-label">Scheme Duration</span>
+                    <span class="trk-summary-value trk-green">@DurationText</span>
+                </div>
+            </div>
+        </div>
+
+        @if (!HasData)
+        {
+            <!-- Awaiting sales data -->
+            <div class="trk-card trk-awaiting">
+                <svg class="trk-awaiting-art" width="110" height="90" viewBox="0 0 110 90" fill="none" aria-hidden="true">
+                    <ellipse cx="55" cy="46" rx="52" ry="34" fill="#eef1f0" />
+                    <path d="M26 30a4 4 0 0 1 4-4h16l6 6h24a4 4 0 0 1 4 4v30a4 4 0 0 1-4 4H30a4 4 0 0 1-4-4z" fill="#f8faf9" stroke="#166534" stroke-width="2" stroke-linejoin="round" />
+                    <path d="M32 22h14l5 5h21a3 3 0 0 1 3 3" stroke="#166534" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M26 42h54" stroke="#166534" stroke-width="2" />
+                    <circle cx="78" cy="64" r="13" fill="#ffffff" stroke="#166534" stroke-width="2" />
+                    <path d="M78 57v8" stroke="#166534" stroke-width="2.4" stroke-linecap="round" />
+                    <circle cx="78" cy="70" r="1.4" fill="#166534" />
+                </svg>
+                <h3 class="trk-awaiting-title">Awaiting Sales Data</h3>
+                <span class="trk-submitted-pill"><span class="trk-dot"></span>Plan Submitted</span>
+                <p class="trk-awaiting-text">
+                    Your sales plan has been submitted and Admin has been notified.<br />
+                    Sales tracking will be available once Admin uploads and confirm the sales data
+                </p>
+            </div>
+        }
+        else
+        {
+            @if (Extension is { State: ExtensionRequestState.Approved } approvedExt)
+            {
+                <!-- Extension approved -->
+                <div class="trk-ext trk-ext-approved">
+                    <div class="trk-ext-top">
+                        <div class="trk-ext-title">
+                            <span class="trk-ext-icon"><SalesAuditIcon Name="check-circle" Size="18" StrokeWidth="2.2" /></span>
+                            <div>
+                                <strong>Extension Details</strong>
+                                <span>Extension has been approved. Sales tracking will continue until @approvedExt.NewEndDate.ToString("dd MMM yyyy").</span>
+                            </div>
+                        </div>
+                        <button type="button" class="trk-btn-outline" @onclick="() => ShowExtensionDrawer = true">
+                            <SalesAuditIcon Name="eye" Size="15" />
+                            View Request Status
+                        </button>
+                    </div>
+                    <div class="trk-ext-grid">
+                        <div>
+                            <span class="trk-label">Original End Date</span>
+                            <span class="trk-warning-value"><SalesAuditIcon Name="calendar" Size="15" /> @approvedExt.OriginalEndDate.ToString("dd MMM yyyy")</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">New End Date <span class="trk-ext-pill">@approvedExt.ExtensionLength</span></span>
+                            <span class="trk-warning-value">@approvedExt.NewEndDate.ToString("dd MMM yyyy")</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">Approved date <span class="trk-ext-pill"><span class="trk-dot"></span>Approved</span></span>
+                            <span class="trk-warning-value"><SalesAuditIcon Name="calendar" Size="15" /> @approvedExt.ApprovedOn?.ToString("dd MMM yyyy, hh:mm tt")</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">Approved By</span>
+                            <span class="trk-warning-value"><SalesAuditIcon Name="user" Size="15" /> @approvedExt.ApprovedBy</span>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (Extension is { State: ExtensionRequestState.Pending } pendingExt)
+            {
+                <!-- Extension requested, awaiting Admin -->
+                <div class="trk-ext trk-ext-pending">
+                    <div class="trk-ext-top">
+                        <div class="trk-ext-title">
+                            <SalesAuditIcon Name="calendar" Size="24" StrokeWidth="1.6" CssClass="trk-ext-pending-icon" />
+                            <div>
+                                <strong>Extension Request <span class="trk-ext-review-pill">Pending Admin Review</span></strong>
+                                <span>You have requested additional time to achieve the target</span>
+                            </div>
+                        </div>
+                        <button type="button" class="trk-btn-outline" @onclick="() => ShowExtensionDrawer = true">
+                            <SalesAuditIcon Name="eye" Size="15" />
+                            View Request Status
+                        </button>
+                    </div>
+                    <div class="trk-ext-grid">
+                        <div>
+                            <span class="trk-label">New End Date <span class="trk-ext-pill">@pendingExt.ExtensionLength</span></span>
+                            <span class="trk-warning-value">@pendingExt.NewEndDate.ToString("dd MMM yyyy")</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">Requested On</span>
+                            <span class="trk-warning-value"><SalesAuditIcon Name="calendar" Size="15" /> @pendingExt.RequestedOn.ToString("dd MMM yyyy, HH:mm")</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">Requested By</span>
+                            <span class="trk-warning-value"><SalesAuditIcon Name="user" Size="15" /> @pendingExt.RequestedBy</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">Remaining to Target</span>
+                            <span class="trk-warning-value">@SalesAuditFormat.Rupees(Remaining) (@Pct(100 - AchievementPct)%)</span>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (DaysRemaining is >= 0 and <= 7)
+            {
+                <!-- Scheme period ending soon -->
+                <div class="trk-warning">
+                    <div class="trk-warning-top">
+                        <div class="trk-warning-title">
+                            <SalesAuditIcon Name="alert-triangle" Size="20" CssClass="trk-warning-icon" />
+                            <div>
+                                <strong>Scheme Period ends in @DaysRemaining @(DaysRemaining == 1 ? "day" : "days")</strong>
+                                <span>Ensure all eligible sales are captured in the sales portal</span>
+                            </div>
+                        </div>
+                        <button type="button" class="trk-btn-outline" @onclick="RequestExtension">
+                            Request Extension
+                            <SalesAuditIcon Name="chevrons-right" Size="15" />
+                        </button>
+                    </div>
+                    <div class="trk-warning-grid">
+                        <div>
+                            <span class="trk-label">End Date</span>
+                            <span class="trk-warning-value"><SalesAuditIcon Name="calendar" Size="15" /> @SchemeTo.ToString("dd MMM yyyy")</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">Days Remaining</span>
+                            <span class="trk-warning-value"><SalesAuditIcon Name="calendar" Size="15" /> @DaysRemaining Days</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">Current Achievement</span>
+                            <span class="trk-warning-value">@SalesAuditFormat.Rupees(ActualTurnover) (@Pct(AchievementPct)%)</span>
+                        </div>
+                        <div>
+                            <span class="trk-label">Remaining to Target</span>
+                            <span class="trk-warning-value">@SalesAuditFormat.Rupees(Remaining) (@Pct(100 - AchievementPct)%)</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Charts -->
+            <div class="trk-chart-grid">
+                <div class="trk-card">
+                    <h3 class="trk-card-title">Turnover Achievement Overview</h3>
+                    <div class="trk-gauge-layout">
+                        <figure class="trk-gauge">
+                            <div class="trk-gauge-canvas">
+                                <canvas id="trkGaugeChart" role="img" aria-label="@($"{Pct(AchievementPct)}% of the required turnover achieved")"></canvas>
+                                <div class="trk-gauge-center">
+                                    <span class="trk-gauge-value">@Pct(AchievementPct)%</span>
+                                    <span class="trk-gauge-caption">Achieved</span>
+                                </div>
+                            </div>
+                            <div class="trk-gauge-ends"><span>0%</span><span>100%</span></div>
+                        </figure>
+
+                        <ul class="trk-gauge-legend">
+                            <li>
+                                <span class="trk-legend-dot trk-bg-green"></span>
+                                <div><span>Actual Turnover</span><strong class="trk-green">₹ @SalesAuditFormat.Crore(ActualTurnover) Cr</strong></div>
+                            </li>
+                            <li>
+                                <span class="trk-legend-dot trk-bg-blue"></span>
+                                <div><span>Required Turnover</span><strong class="trk-green">₹ @SalesAuditFormat.Crore(RequiredTurnover) Cr</strong></div>
+                            </li>
+                            <li>
+                                <span class="trk-legend-dot trk-bg-grey"></span>
+                                <div><span>Remaining</span><strong>₹ @SalesAuditFormat.Crore(Remaining) Cr</strong></div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="trk-card">
+                    <div class="trk-card-top">
+                        <h3 class="trk-card-title">Monthly Progress Trend</h3>
+                        <div class="trk-trend-legend">
+                            <span><i class="trk-key trk-key-actual"></i>Actual Turnover</span>
+                            <span><i class="trk-key trk-key-required"></i>Required Turnover</span>
+                        </div>
+                    </div>
+
+                    <div class="trk-trend">
+                        <canvas id="trkTrendChart" role="img" aria-label="Cumulative actual turnover against the required turnover, by month"></canvas>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Product-wise Actual Sales -->
+        <div class="trk-card">
+            <div class="trk-card-top">
+                <h3 class="trk-card-title">Product - wise Actual Sales (From Sales Portal)</h3>
+                <button type="button" class="trk-btn-outline"><SalesAuditIcon Name="pencil" Size="15" /> View Details</button>
+            </div>
+            <div class="trk-table-wrapper">
+                <table class="trk-table">
+                    <thead>
+                        <tr>
+                            <th class="trk-col-no">S:NO</th>
+                            <th>Product</th>
+                            <th>Unit</th>
+                            <th>Planned Value (₹)</th>
+                            <th>Actual Value (₹)</th>
+                            <th>Achievement (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (row, index) in ProductSales.Select((r, i) => (r, i)))
+                        {
+                            <tr>
+                                <td class="trk-col-no">@(index + 1)</td>
+                                <td>@row.Name</td>
+                                <td>@row.Detail</td>
+                                <td>@SalesAuditFormat.Rupees(row.Planned)</td>
+                                <td>@(HasData ? SalesAuditFormat.Rupees(row.Actual) : "-")</td>
+                                <td>@AchievementCell(row.Planned, row.Actual)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="trk-total-label">Total</td>
+                            <td class="trk-total-value">@SalesAuditFormat.Rupees(ProductSales.Sum(r => r.Planned))</td>
+                            <td class="trk-total-value">@(HasData ? SalesAuditFormat.Rupees(ProductSales.Sum(r => r.Actual)) : "-")</td>
+                            <td class="trk-total-value">@(HasData ? $"{Pct(Percent(ProductSales.Sum(r => r.Actual), ProductSales.Sum(r => r.Planned)))}%" : "-")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- Dealer-wise Actual Sales (Top 5) -->
+        <div class="trk-card">
+            <div class="trk-card-top">
+                <h3 class="trk-card-title">Dealer - wise Actual Sales (Top 5)</h3>
+                <button type="button" class="trk-btn-outline"><SalesAuditIcon Name="pencil" Size="15" /> View Details</button>
+            </div>
+            <div class="trk-table-wrapper">
+                <table class="trk-table">
+                    <thead>
+                        <tr>
+                            <th class="trk-col-no">S:NO</th>
+                            <th>Dealer Name</th>
+                            <th>Location</th>
+                            <th>Planned Value (₹)</th>
+                            <th>Actual Value (₹)</th>
+                            <th>Achievement (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var (row, index) in TopDealers.Select((r, i) => (r, i)))
+                        {
+                            <tr>
+                                <td class="trk-col-no">@(index + 1)</td>
+                                <td>@row.Name</td>
+                                <td>@row.Detail</td>
+                                <td>@SalesAuditFormat.Rupees(row.Planned)</td>
+                                <td>@(HasData ? SalesAuditFormat.Rupees(row.Actual) : "-")</td>
+                                <td>@AchievementCell(row.Planned, row.Actual)</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="3" class="trk-total-label">Total (Top 5)</td>
+                            <td class="trk-total-value">@SalesAuditFormat.Rupees(TopDealers.Sum(r => r.Planned))</td>
+                            <td class="trk-total-value">@(HasData ? SalesAuditFormat.Rupees(TopDealers.Sum(r => r.Actual)) : "-")</td>
+                            <td class="trk-total-value">@(HasData ? $"{Pct(Percent(TopDealers.Sum(r => r.Actual), TopDealers.Sum(r => r.Planned)))}%" : "-")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer actions -->
+        <div class="trk-footer">
+            <button type="button" class="trk-btn trk-btn-back" @onclick="BackToList">
+                <SalesAuditIcon Name="chevrons-left" Size="16" />
+                Back to List
+            </button>
+
+            <div class="trk-footer-right">
+                @if (HasData)
+                {
+                    <button type="button" class="trk-btn trk-btn-back" @onclick="BackToList">Close</button>
+                }
+                else
+                {
+                    <span class="trk-footer-note"><SalesAuditIcon Name="info" Size="16" /> Sales data is required to review performance.</span>
+                }
+                <button type="button" class="trk-btn trk-btn-primary" disabled="@(!HasData)" @onclick="GoToPeriodEndReview">
+                    Go To Final Review
+                    <SalesAuditIcon Name="chevrons-right" Size="16" />
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<ExtensionStatusDrawer IsOpen="ShowExtensionDrawer" Request="Extension" OnClose="() => ShowExtensionDrawer = false" />
+
+@code {
+    /// <summary>"awaiting" shows the page before Admin has uploaded any sales data.</summary>
+    [SupplyParameterFromQuery(Name = "state")] public string? State { get; set; }
+
+    private bool HasData => !string.Equals(State, "awaiting", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>"pending" or "approved" shows the scheme with an extension request in that state.</summary>
+    [SupplyParameterFromQuery(Name = "extension")] public string? ExtensionState { get; set; }
+
+    // Sample request until the API is wired; replaces the "ends in 7 days" card when present.
+    private ExtensionRequestInfo? Extension => ExtensionState?.ToLowerInvariant() switch
+    {
+        "pending" => ExtensionRequestInfo.Sample(ExtensionRequestState.Pending),
+        "approved" => ExtensionRequestInfo.Sample(ExtensionRequestState.Approved),
+        _ => null,
+    };
+
+    private bool ShowExtensionDrawer;
+
+    // ---- Sample data (carried over from the plan; actuals come from Sales Portal invoices) ----
+    private readonly DateTime SchemeFrom = new(2026, 8, 1);
+    private readonly DateTime SchemeTo = new(2026, 10, 31);
+
+    // Fixed "today" for the sample so the ending-soon banner matches the design (7 days left).
+    private readonly DateTime AsOf = new(2026, 10, 24);
+
+    private bool IsExtended => !HasData || Extension?.State == ExtensionRequestState.Approved;
+
+    private const decimal RequiredTurnover = 2_20_00_000m;
+    private const decimal ActualTurnover = 1_35_00_000m;
+
+    private decimal Remaining => Math.Max(0, RequiredTurnover - ActualTurnover);
+    private decimal AchievementPct => Percent(ActualTurnover, RequiredTurnover);
+    private int DaysRemaining => (SchemeTo.Date - AsOf.Date).Days;
+
+    private record SalesRow(string Name, string Detail, decimal Planned, decimal Actual);
+
+    private readonly List<SalesRow> ProductSales = new()
+    {
+        new("SPIC Super Urea 45kg", "MT", 80_00_000, 48_00_000),
+        new("SPIC Super Urea 45kg", "MT", 50_00_000, 29_00_000),
+        new("SPIC Super Urea 45kg", "MT", 50_00_000, 29_00_000),
+        new("SPIC Super Urea 45kg", "MT", 50_00_000, 29_00_000),
+    };
+
+    private readonly List<SalesRow> TopDealers = Enumerable.Range(0, 5)
+        .Select(_ => new SalesRow("Green Field Agri Traders", "Ludhiana", 30_00_000, 18_00_000))
+        .ToList();
+
+    // Cumulative turnover in crores; "Required" is the target pro-rated across the scheme months.
+    private record TrendPoint(DateTime Month, decimal Actual, decimal Required);
+
+    private readonly List<TrendPoint> Trend = new()
+    {
+        new(new DateTime(2026, 8, 1), 0.25m, 0.73m),
+        new(new DateTime(2026, 9, 1), 0.75m, 1.47m),
+        new(new DateTime(2026, 10, 1), 1.35m, 2.20m),
+    };
+
+    // ---- Charts (Chart.js, via window.loadSalesTrackingCharts in wwwroot/js/chart.js) ----
+    private bool _chartsDrawn;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // The canvases only exist in the "has data" state; the state can change via the query string.
+        if (HasData && !_chartsDrawn)
+        {
+            _chartsDrawn = true;
+            var data = new
+            {
+                achievementPct = (double)AchievementPct,
+                labels = Trend.Select(t => t.Month.ToString("MMM yyyy")).ToArray(),
+                actual = Trend.Select(t => (double)t.Actual).ToArray(),
+                required = Trend.Select(t => (double)t.Required).ToArray(),
+            };
+            try { await JS.InvokeVoidAsync("loadSalesTrackingCharts", data); } catch (JSException) { }
+        }
+        else if (!HasData && _chartsDrawn)
+        {
+            _chartsDrawn = false;
+            await DestroyChartsAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync() => await DestroyChartsAsync();
+
+    private async Task DestroyChartsAsync()
+    {
+        // JSDisconnectedException: the circuit is already gone (tab closed) - nothing to clean up.
+        try { await JS.InvokeVoidAsync("destroySalesTrackingCharts"); }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+    }
+
+    // ---- Helpers ----
+    private static decimal Percent(decimal part, decimal whole) => whole == 0 ? 0 : part / whole * 100;
+
+    private static string Pct(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    // Inline CSS values need '.' decimals whatever the UI culture is.
+    private static string F(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private RenderFragment AchievementCell(decimal planned, decimal actual) => __builder =>
+    {
+        if (!HasData)
+        {
+            <span>-</span>
+            return;
+        }
+        var pct = Percent(actual, planned);
+        <div class="trk-achievement">
+            <div class="trk-progress-track"><div class="trk-progress-fill" style="width: @F(Math.Min(100m, pct))%;"></div></div>
+            <span>@pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+        </div>
+    };
+
+    private string DurationText
+    {
+        get
+        {
+            var days = (SchemeTo - SchemeFrom).Days + 1;
+            var months = (SchemeTo.Year - SchemeFrom.Year) * 12 + SchemeTo.Month - SchemeFrom.Month + 1;
+            return $"{months} {(months == 1 ? "Month" : "Months")} ({days} Days)";
+        }
+    }
+
+    private void BackToList() => Nav.NavigateTo("/SalesAudit");
+
+    private void RequestExtension() => Nav.NavigateTo("/RequestExtension");
+
+    private void GoToPeriodEndReview() => Nav.NavigateTo("/PeriodEndReview");
+}
