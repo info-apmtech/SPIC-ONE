@@ -97,12 +97,12 @@ namespace SpicAPI.Controllers
 				Failed = mismatchAll - mismatchShort,
 
 				TotalPaidSamples = rows.Count,
-				// Farmer "Approval Pending" = the rows the farmer list labels "Admin Approval Pending" or
-				// "Admin Approved": pending review, or approved and not yet processed by Finance (awaiting
-				// verification, or a v1 approval from before Finance verification existed).
+				// Farmer "Approval Pending" = pending admin review, or admin-approved and awaiting Finance.
+				// A v1 approval from before Finance verification existed (Approved + NotForwarded) is
+				// complete for the farmer and is NOT counted (coordinator decision 2026-09-27).
 				ApprovalPending = rows.Count(r => r.Status == SamplePaymentStatus.Pending ||
 												  (r.Status == SamplePaymentStatus.Approved &&
-												   r.FinanceStatus is SampleFinanceStatus.AwaitingVerification or SampleFinanceStatus.NotForwarded)),
+												   r.FinanceStatus == SampleFinanceStatus.AwaitingVerification)),
 				PaymentIssues = rows.Count(r => r.Status == SamplePaymentStatus.Rejected ||
 												r.FinanceStatus == SampleFinanceStatus.Mismatch)
 			});
@@ -519,8 +519,7 @@ namespace SpicAPI.Controllers
 					// Same rule as SasPaymentStatsDto.ApprovalPending.
 					return query.Where(p => p.Status == SamplePaymentStatus.Pending ||
 											(p.Status == SamplePaymentStatus.Approved &&
-											 (p.FinanceStatus == SampleFinanceStatus.AwaitingVerification ||
-											  p.FinanceStatus == SampleFinanceStatus.NotForwarded)));
+											 p.FinanceStatus == SampleFinanceStatus.AwaitingVerification));
 				default:
 					return query;
 			}

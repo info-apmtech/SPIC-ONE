@@ -649,8 +649,9 @@ ok(p_failed["id"] in failed and p_failed["id"] not in mism, "failed payment in H
 if not ARGS.no_db:
     try:
         import psycopg2
-        # A v1 approval from before Finance verification (Approved, NotForwarded) also reads "Admin Approved"
-        # for the farmer, so the Approval Pending KPI and filter count it too.
+        # A v1 approval from before Finance verification (Approved, NotForwarded) reads "Admin Approved"
+        # for the farmer but is complete for them: it is NOT counted by the Approval Pending KPI / filter
+        # (coordinator decision 2026-09-27).
         col = collection(PAID, [{"farmerId": fc["id"], "sampleType": SOIL, "crop1": "Banana"}], "paid legacy approval")
         p_legacy = mdo.j("POST", f"api/Sas/collections/{col['id']}/payment",
                          json={"transactionId": f"QA-LAB-TXN-{RUN}-7", "paidByName": "QA-LAB Payer", "bankGateway": "UPI"})
@@ -658,8 +659,8 @@ if not ARGS.no_db:
         before = admin.j("GET", "api/Sas/payments/stats")["approvalPending"]
         with psycopg2.connect(ARGS.db) as conn, conn.cursor() as cur:
             cur.execute('UPDATE "SamplePayments" SET "FinanceStatus" = 0, "ForwardedAt" = NULL WHERE "Id" = %s', (p_legacy["id"],))
-        eq(admin.j("GET", "api/Sas/payments/stats")["approvalPending"], before, "v1 approval (not forwarded) still counted in ApprovalPending")
-        ok(p_legacy["id"] in {r["id"] for r in all_pages(admin, "api/Sas/payments?tab=approvalPending")}, "and listed by the approvalPending filter")
+        eq(admin.j("GET", "api/Sas/payments/stats")["approvalPending"], before - 1, "v1 approval (not forwarded) no longer counted in ApprovalPending")
+        ok(p_legacy["id"] not in {r["id"] for r in all_pages(admin, "api/Sas/payments?tab=approvalPending")}, "and not listed by the approvalPending filter")
     except ImportError:
         print("  (psycopg2 not installed: legacy approval step skipped)")
 
