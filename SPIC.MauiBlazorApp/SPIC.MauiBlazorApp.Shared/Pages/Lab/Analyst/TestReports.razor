@@ -10,11 +10,9 @@
     GET api/Lab/reports/batches (an analyst's own batches); a row opens Batch Report Details.
     Current: the financial year filter starts at the current FY (April to March). Previous: only
     the years before it; with no year picked the list is capped at 31 March of the current FY's
-    start year. KPI cards: Total Batches and Downloads Completed from the filtered batch summary
-    (first 50 rows), Total Sample Reports from GET api/Lab/reports/stats, Reports Generated Today
-    from GET api/Lab/reports?from=today&to=today.
-    The report routes belong to the reports workstream (1b); until they answer, the page shows
-    an EmptyState instead of the table.
+    start year. KPI cards: BatchGroups / SampleReports / GeneratedToday / DownloadsCompleted of
+    GET api/Lab/reports/stats for the chosen year (Previous with no year: the earlier years added
+    up). When the report routes do not answer, the page shows an EmptyState.
 *@
 
 <LabEntryFrame CssClass="tr">
@@ -247,6 +245,17 @@
         + (string.IsNullOrWhiteSpace(_typeApplied) ? 0 : 1)
         + (_stateApplied is not null ? 1 : 0) + (_regionApplied is not null ? 1 : 0) + (_hqApplied is not null ? 1 : 0);
 
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    // /Reports and /Reports/Previous are the same component: switching between them keeps the
+    // instance (no new parameters), so the route change is picked up here.
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) =>
+        _ = InvokeAsync(async () =>
+        {
+            await OnParametersSetAsync();
+            StateHasChanged();
+        });
+
     protected override async Task OnParametersSetAsync()
     {
         var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
@@ -315,26 +324,22 @@
             return;
         }
 
-        // KPIs (skipped when the list itself failed, so a missing route toasts once)
-        var kpiRows = _page.Total <= _page.Items.Count
-            ? Task.FromResult<PageResult<LabReportBatchRowDto>?>(_page)
-            : Api.GetReportBatchesAsync(_stateApplied, _regionApplied, _hqApplied, _typeApplied, _fyApplied,
-                _q, _fromApplied, to, 1, 50, _cts.Token);
-        var stats = Api.GetReportStatsAsync(_fyApplied, _cts.Token);
-        var today = Api.GetReportsAsync(sampleType: _typeApplied, financialYear: _fyApplied, from: DateTime.Today, to: DateTime.Today,
-            pageSize: 1, ct: _cts.Token);
+        // KPIs from GET api/Lab/reports/stats (financialYear= scoped). Previous mode with no year
+        // picked adds up the earlier years one by one; nothing of those is "generated today".
+        var years = _fyApplied is int fy ? new List<int?> { fy }
+            : _previous ? _years.Where(y => y < CurrentFy).Select(y => (int?)y).ToList()
+            : new List<int?> { null };
+        var stats = await Task.WhenAll(years.Select(y => Api.GetReportStatsAsync(y, _cts.Token)));
+        if (stats.Any(x => x is null))
+        {
+            _kpiBatches = _kpiSampleReports = _kpiToday = _kpiDownloads = null;
+            return;
+        }
 
-        var rows = await kpiRows;
-        var s = await stats;
-        var t = await today;
-
-        _kpiBatches = _page.Total;
-        _kpiDownloads = rows?.Items.Sum(r => r.DownloadsCompleted);
-        _kpiSampleReports = s is null ? null
-            : _fyApplied is not null ? s.TotalReports
-            : _previous ? s.PreviousFinancialYears
-            : s.TotalReports;
-        _kpiToday = _previous && _fyApplied is null ? 0 : t?.Total;
+        _kpiBatches = stats.Sum(x => x!.BatchGroups);
+        _kpiSampleReports = stats.Sum(x => x!.SampleReports);
+        _kpiToday = _previous && _fyApplied is null ? 0 : stats.Sum(x => x!.GeneratedToday);
+        _kpiDownloads = stats.Sum(x => x!.DownloadsCompleted);
     }
 
     private async Task ApplyAsync()
@@ -397,6 +402,7 @@
 
     public void Dispose()
     {
+        Nav.LocationChanged -= OnLocationChanged;
         _cts.Cancel();
         _cts.Dispose();
     }

@@ -158,7 +158,7 @@
                             @foreach (var r in PageRows)
                             {
                                 <tr @key="r.Id">
-                                    <td class="la-code">@r.SampleCode</td>
+                                    <td class="la-code br-nowrap">@r.SampleCode</td>
                                     <td>
                                         <span class="la-person">
                                             <MemberAvatar Member="AnalystText.Person(r.FarmerName, r.FarmerAvatarUrl)" Size="30" />
@@ -168,20 +168,22 @@
                                     <td>@AnalystText.Dash(r.Crop)</td>
                                     <td>@AnalystText.Dash(r.Village)</td>
                                     <td>@AnalystText.SampleTypeText(r.SampleType)</td>
-                                    <td>@r.Code</td>
-                                    <td>@AnalystText.Date(r.GeneratedAt)<span class="la-sub">@AnalystText.Time(r.GeneratedAt)</span></td>
+                                    <td class="br-nowrap">@r.Code</td>
+                                    <td class="br-nowrap">
+                                        @AnalystText.Date(r.GeneratedAt)
+                                        <span class="la-sub">@AnalystText.Time(r.GeneratedAt)</span>
+                                    </td>
                                     <td><LabPill Text="@AnalystText.ReportStatusText(r.Status)" Tone="@AnalystText.ReportTone(r.Status)" /></td>
                                     <td class="la-td-action">
                                         <div class="br-actions">
-                                            <button type="button" class="la-btn la-btn-outline la-btn-sm" @onclick="() => View(r.Id)" aria-label="@($"View report {r.Code}")">
-                                                <i class="bi bi-eye" aria-hidden="true"></i> View
+                                            <button type="button" class="la-icon-btn" title="View" @onclick="() => View(r.Id)" aria-label="@($"View report {r.Code}")">
+                                                <i class="bi bi-eye" aria-hidden="true"></i>
                                             </button>
-                                            <LabSplitButton Label="Download PDF" Small="true" Languages="_languages" Busy="_downloading == r.Id"
-                                                            OnPick="lang => DownloadAsync(r, lang)" />
-                                            <button type="button" class="la-icon-btn" title="Mark printed" aria-label="@($"Mark {r.Code} printed")"
-                                                    disabled="@(r.Status == LabReportStatus.Printed || _printing == r.Id)" @onclick="() => MarkPrintedAsync(r)">
-                                                <i class="bi bi-printer" aria-hidden="true"></i>
-                                            </button>
+                                            <LabSplitButton Label="PDF" Small="true" Languages="_languages" Busy="_downloading == r.Id"
+                                                            OnPick="lang => DownloadAsync(r, lang)"
+                                                            ExtraLabel="@(r.Status == LabReportStatus.Printed ? "Printed" : "Mark printed")"
+                                                            ExtraDisabled="@(r.Status == LabReportStatus.Printed || _printing == r.Id)"
+                                                            OnExtra="() => MarkPrintedAsync(r)" />
                                         </div>
                                     </td>
                                 </tr>
@@ -230,7 +232,7 @@
         </section>
     }
 
-    <ReportViewSheet ReportId="ReportParam" Languages="_languages" DownloadingId="_downloading"
+    <ReportViewSheet ReportId="ReportParam" Languages="_languages" DownloadingId="_downloading" RefreshKey="_refreshKey"
                      OnClose="CloseReport" OnDownload="DownloadFromSheetAsync" OnPrinted="OnPrintedFromSheet" />
 </LabEntryFrame>
 
@@ -245,6 +247,7 @@
     private int? _downloading;
     private int? _printing;
     private int? _loadedBatch;
+    private int _refreshKey;
 
     // filters (applied / form)
     private string _fType = "", _fStatus = "", _fCrop = "", _fVillage = "";
@@ -285,10 +288,12 @@
 
     private async Task LoadAsync()
     {
+        var reload = _report is not null;
         _loading = true;
         StateHasChanged();
         _report = await Api.GetBatchReportAsync(BatchId, _cts.Token) ?? _report;
         _loading = false;
+        if (reload) _refreshKey++;   // an open report sheet reloads too (download count, status)
     }
 
     private void ApplyFilters()

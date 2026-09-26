@@ -111,8 +111,10 @@
         @if (_detail is not null)
         {
             <div class="rv-foot">
-                <button type="button" class="rv-btn" disabled="@(_printing || _detail.Summary.Status == LabReportStatus.Printed)" @onclick="MarkPrintedAsync">
-                    <i class="bi bi-printer" aria-hidden="true"></i> @(_detail.Summary.Status == LabReportStatus.Printed ? "Printed" : "Mark printed")
+                <button type="button" class="rv-btn" disabled="@(_printing || _detail.Summary.Status == LabReportStatus.Printed)" @onclick="MarkPrintedAsync"
+                        title="@(_detail.Summary.Status == LabReportStatus.Printed ? "Printed" : "Mark printed")" aria-label="@(_detail.Summary.Status == LabReportStatus.Printed ? "Printed" : "Mark printed")">
+                    <i class="bi bi-printer" aria-hidden="true"></i>
+                    <span class="tablet-up">@(_detail.Summary.Status == LabReportStatus.Printed ? "Printed" : "Mark printed")</span>
                 </button>
                 <LabSplitButton Label="Download PDF" Languages="LanguagesFor" Busy="DownloadingId == _detail.Summary.Id"
                                 OnPick="lang => OnDownload.InvokeAsync((_detail.Summary.Id, _detail.Summary.Code, lang))" />
@@ -125,6 +127,8 @@
     [Parameter] public int? ReportId { get; set; }
     [Parameter] public List<LabLanguageDto>? Languages { get; set; }
     [Parameter] public int? DownloadingId { get; set; }
+    /// <summary>Bumped by the page after a download or a status change, so the open report reloads (download count, status).</summary>
+    [Parameter] public int RefreshKey { get; set; }
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter] public EventCallback<(int ReportId, string Code, string Lang)> OnDownload { get; set; }
     [Parameter] public EventCallback<LabReportRowDto> OnPrinted { get; set; }
@@ -133,6 +137,7 @@
 
     private LabReportDetailDto? _detail;
     private int? _loadedId;
+    private int _loadedKey;
     private bool _loading;
     private bool _printing;
     private readonly CancellationTokenSource _cts = new();
@@ -150,13 +155,15 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (ReportId == _loadedId) return;
+        if (ReportId == _loadedId && RefreshKey == _loadedKey) return;
+        var sameReport = ReportId == _loadedId;
         _loadedId = ReportId;
-        _detail = null;
+        _loadedKey = RefreshKey;
+        if (!sameReport) _detail = null;
         if (ReportId is not int id) return;
 
-        _loading = true;
-        _detail = await Api.GetReportAsync(id, _cts.Token);
+        _loading = !sameReport;
+        _detail = await Api.GetReportAsync(id, _cts.Token) ?? (sameReport ? _detail : null);
         _loading = false;
     }
 

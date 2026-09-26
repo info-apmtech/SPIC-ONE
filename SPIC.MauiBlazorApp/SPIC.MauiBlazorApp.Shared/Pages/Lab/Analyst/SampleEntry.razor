@@ -404,7 +404,6 @@
     private LabSampleEntryDto? _entry;
     private LabAutoResultDto? _preview;
     private readonly Dictionary<int, string> _values = new();
-    private readonly HashSet<int> _derived = new();
     private readonly HashSet<int> _invalid = new();
     private bool _loading = true;
     private bool _switching;
@@ -430,7 +429,7 @@
 
     private List<LabParameterRowDto> Evaluated => Rows.Where(r => r.Status is not null).ToList();
 
-    private bool IsDerived(LabParameterRowDto p) => _derived.Contains(p.LabParameterId);
+    private static bool IsDerived(LabParameterRowDto p) => AnalystParameters.IsDerived(p);
 
     private int EnterableCount => Rows.Count(r => !IsDerived(r));
 
@@ -511,17 +510,11 @@
         _entry = entry;
         _preview = null;
         _values.Clear();
-        _derived.Clear();
         _invalid.Clear();
 
         foreach (var p in entry.Result.Parameters)
         {
-            if (AnalystParameters.IsDerivedCode(p.Code))
-            {
-                _derived.Add(p.LabParameterId);
-                continue;
-            }
-            _values[p.LabParameterId] = p.EnteredValue ?? "";
+            if (!IsDerived(p)) _values[p.LabParameterId] = p.EnteredValue ?? "";
         }
 
         _editing = !entry.IsLocked && !entry.Sample.ReportGenerated && entry.Sample.Status != SampleAnalysisStatus.Completed;
@@ -550,7 +543,7 @@
         {
             <span class="se-derived" title="Calculated by the system">
                 <span class="se-derived-value">@AnalystText.Dash(p.EnteredValue)</span>
-                <span class="se-derived-note"><i class="bi bi-calculator" aria-hidden="true"></i> Auto: @(AnalystParameters.DerivedNote(p.Code) ?? "calculated")</span>
+                <span class="se-derived-note"><i class="bi bi-calculator" aria-hidden="true"></i> Auto-calculated</span>
             </span>
         }
         else if (!_editing)
@@ -636,7 +629,6 @@
         if (_entry is null) return;
         var version = ++_previewVersion;
         var dto = BuildValues(submit: false, validOnly: true);
-        var sent = dto.Values.Select(v => v.LabParameterId).ToHashSet();
 
         _previewing = true;
         StateHasChanged();
@@ -644,13 +636,7 @@
         if (version != _previewVersion) return;   // a newer change is on its way
         _previewing = false;
 
-        if (result is not null)
-        {
-            _preview = result;
-            // any row the engine filled in without a value from us is derived (read-only)
-            foreach (var row in result.Parameters.Where(r => r.EnteredValue is not null && !sent.Contains(r.LabParameterId)))
-                _derived.Add(row.LabParameterId);
-        }
+        if (result is not null) _preview = result;
         StateHasChanged();
     }
 

@@ -1270,6 +1270,7 @@ namespace SpicAPI.Controllers
 			if (!evaluation.IsValid)
 				return BadRequest(new { Success = false, Message = string.Join(" ", evaluation.Errors), Errors = evaluation.Errors });
 
+			StampEntryFields(evaluation.Result.Parameters, parameters);
 			return Ok(evaluation.Result);
 		}
 
@@ -1497,6 +1498,23 @@ namespace SpicAPI.Controllers
 			return list;
 		}
 
+		/// <summary>Phase 1e (analyst entry form): copies ValueType, Options and IsDerived from the LabParameter
+		/// master onto the parameter rows, so the page renders a select for Text rows (Texture) and a read-only
+		/// cell for derived rows (Organic Matter) without knowing parameter codes.</summary>
+		private static void StampEntryFields(IEnumerable<LabParameterRowDto> rows, IReadOnlyList<LabParameter> parameters)
+		{
+			var byId = parameters.ToDictionary(p => p.Id);
+			foreach (var row in rows)
+			{
+				if (!byId.TryGetValue(row.LabParameterId, out var p)) continue;
+				row.ValueType = p.ValueType;
+				row.IsDerived = !LabAutoResultEngine.IsEnterable(p);
+				row.Options = string.IsNullOrWhiteSpace(p.Options)
+					? new List<string>()
+					: p.Options.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+			}
+		}
+
 		/// <summary>The sample's parameter rows with stored values, auto result and per-row entry status.</summary>
 		private LabSampleParametersDto ParameterRows(SampleContext sample) =>
 			new() { Sample = sample.Row, Parameters = Evaluate(sample).Parameters };
@@ -1516,6 +1534,7 @@ namespace SpicAPI.Controllers
 			}
 
 			var result = _engine.Evaluate(sample.Row.SampleType, sample.Row.Crop, sample.Parameters, values).Result;
+			StampEntryFields(result.Parameters, sample.Parameters);
 
 			foreach (var row in result.Parameters)
 			{
