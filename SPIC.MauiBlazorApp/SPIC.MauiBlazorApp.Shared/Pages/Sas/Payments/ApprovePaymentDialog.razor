@@ -1,0 +1,175 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+@using SPIC.Core.DTOs
+@inject SasPaymentApi Api
+@inject ToastService Toast
+
+@* Screen 25: Approve & Forward to Finance. Raises OnApproved with the refreshed payment. *@
+
+<PayModal IsOpen="IsOpen" OnClose="CloseAsync" Title="Approve & Forward to Finance"
+          Subtitle="Check the proof and the amount, then forward the payment to Finance for verification."
+          Icon="bi-send-check" IconTone="green" CloseOnBackdrop="!_saving">
+    <ChildContent>
+        @if (Detail is { } d)
+        {
+            <dl class="spm-rows">
+                <div class="spm-row"><dt>Payment Ref No.</dt><dd>@d.Summary.Code</dd></div>
+                <div class="spm-row"><dt>Farmer Name</dt><dd>@PaymentLabels.Dash(d.Summary.FarmerName)</dd></div>
+                <div class="spm-row"><dt>Consignment No.</dt><dd>@PaymentLabels.Dash(d.Summary.ConsignmentCode)</dd></div>
+                <div class="spm-row"><dt>Expected Amount</dt><dd>@PaymentLabels.Money(d.Summary.ExpectedAmount)</dd></div>
+                <div class="spm-row"><dt>Paid Amount</dt><dd>@PaymentLabels.Money(d.Summary.PaidAmount)</dd></div>
+                <div class="spm-row"><dt>Transaction ID</dt><dd>@PaymentLabels.Dash(d.Summary.TransactionId)</dd></div>
+                <div class="spm-row"><dt>Payment Mode</dt><dd>@PaymentLabels.ModeName(d.Summary.PaymentMode)</dd></div>
+            </dl>
+
+            <div class="spm-grid">
+                <div class="spm-field">
+                    <label class="spm-label" for="ap-amount">Verified Amount <span class="spm-req">*</span></label>
+                    <select id="ap-amount" class="spm-input" value="@_amountChoice" @onchange="OnAmountChoice">
+                        @foreach (var option in AmountOptions(d))
+                        {
+                            <option value="@option.Key">@option.Label</option>
+                        }
+                        <option value="other">Other amount</option>
+                    </select>
+                </div>
+
+                @if (_amountChoice == "other")
+                {
+                    <div class="spm-field">
+                        <label class="spm-label" for="ap-other">Amount (&#8377;)</label>
+                        <input id="ap-other" class="spm-input" type="number" min="0" step="0.01" inputmode="decimal"
+                               value="@_otherAmount" @oninput="e => _otherAmount = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+                }
+
+                <div class="spm-field">
+                    <label class="spm-label" for="ap-forward">Forward To</label>
+                    <select id="ap-forward" class="spm-input" value="@_forwardTo" @onchange="e => _forwardTo = e.Value?.ToString() ?? ForwardDefault">
+                        <option value="Finance Team">Finance Team</option>
+                    </select>
+                </div>
+
+                <div class="spm-field">
+                    <label class="spm-label" for="ap-date">Approved Date</label>
+                    <input id="ap-date" class="spm-input" type="date" value="@_approvedDate"
+                           max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                           @onchange="e => _approvedDate = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="spm-field spm-field--full">
+                    <label class="spm-label" for="ap-remarks">Remarks</label>
+                    <textarea id="ap-remarks" class="spm-input" maxlength="500" placeholder="Verification note for Finance"
+                              value="@_remarks" @oninput="e => _remarks = e.Value?.ToString() ?? string.Empty"></textarea>
+                </div>
+            </div>
+
+            @if (VerifiedAmount is { } v && v < d.Summary.ExpectedAmount)
+            {
+                <p class="spm-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                    The verified amount is @PaymentLabels.Money(d.Summary.ExpectedAmount - v) less than the expected amount.</p>
+            }
+
+            <label class="spm-check">
+                <input type="checkbox" checked="@_confirmed" @onchange="e => _confirmed = e.Value is true" />
+                <span>I confirm that the payment proof, transaction details and amount are verified.</span>
+            </label>
+            @if (_showErrors && !_confirmed)
+            {
+                <span class="spm-error">Tick the confirmation to continue.</span>
+            }
+            @if (_showErrors && VerifiedAmount is not > 0)
+            {
+                <span class="spm-error">Enter a verified amount greater than zero.</span>
+            }
+        }
+    </ChildContent>
+    <Footer>
+        <button type="button" class="spm-btn spm-btn--outline" @onclick="CloseAsync" disabled="@_saving">Cancel</button>
+        <button type="button" class="spm-btn spm-btn--primary" @onclick="SubmitAsync" disabled="@_saving">
+            <i class="bi bi-send-check" aria-hidden="true"></i> @(_saving ? "Forwarding..." : "Approve & Forward")
+        </button>
+    </Footer>
+</PayModal>
+
+@code {
+    private const string ForwardDefault = "Finance Team";
+
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public SasPaymentDetailDto? Detail { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<SasPaymentDetailDto> OnApproved { get; set; }
+
+    private string _amountChoice = "paid";
+    private string _otherAmount = "";
+    private string _forwardTo = ForwardDefault;
+    private string _approvedDate = "";
+    private string _remarks = "";
+    private bool _confirmed;
+    private bool _saving;
+    private bool _showErrors;
+    private bool _wasOpen;
+
+    private sealed record AmountOption(string Key, string Label, decimal Value);
+
+    private static IEnumerable<AmountOption> AmountOptions(SasPaymentDetailDto d)
+    {
+        yield return new AmountOption("paid", $"{PaymentLabels.Money(d.Summary.PaidAmount)} (paid)", d.Summary.PaidAmount);
+        if (d.Summary.ExpectedAmount != d.Summary.PaidAmount)
+            yield return new AmountOption("expected", $"{PaymentLabels.Money(d.Summary.ExpectedAmount)} (expected)", d.Summary.ExpectedAmount);
+    }
+
+    private decimal? VerifiedAmount
+    {
+        get
+        {
+            if (Detail is null) return null;
+            if (_amountChoice == "other")
+                return decimal.TryParse(_otherAmount, System.Globalization.NumberStyles.Number,
+                    System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : null;
+            return AmountOptions(Detail).FirstOrDefault(o => o.Key == _amountChoice)?.Value;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Fresh form every time the dialog opens.
+        if (IsOpen && !_wasOpen)
+        {
+            _amountChoice = "paid";
+            _otherAmount = "";
+            _forwardTo = ForwardDefault;
+            _approvedDate = DateTime.Today.ToString("yyyy-MM-dd");
+            _remarks = "";
+            _confirmed = false;
+            _saving = false;
+            _showErrors = false;
+        }
+        _wasOpen = IsOpen;
+    }
+
+    private void OnAmountChoice(ChangeEventArgs e) => _amountChoice = e.Value?.ToString() ?? "paid";
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+
+    private async Task SubmitAsync()
+    {
+        if (Detail is null || _saving) return;
+
+        _showErrors = true;
+        if (!_confirmed || VerifiedAmount is not > 0) return;
+
+        _saving = true;
+        var result = await Api.ApproveAsync(Detail.Summary.Id, new SasPaymentApproveDto
+        {
+            VerifiedAmount = VerifiedAmount!.Value,
+            ForwardTo = _forwardTo,
+            ApprovedDate = DateTime.TryParse(_approvedDate, out var date) ? date.Date : DateTime.Today,
+            Remarks = string.IsNullOrWhiteSpace(_remarks) ? null : _remarks.Trim(),
+            Confirmed = true
+        });
+        _saving = false;
+
+        if (result is null) return;     // SasPaymentApi already explained why
+        await OnApproved.InvokeAsync(result);
+    }
+}

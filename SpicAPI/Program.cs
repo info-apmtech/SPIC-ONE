@@ -193,7 +193,10 @@ builder.Services.AddAuthentication(options =>
                  (path.StartsWithSegments("/api/Lab") && path.Value is string labPath &&
                   (labPath.EndsWith("/pdf", StringComparison.OrdinalIgnoreCase) ||
                    labPath.EndsWith("/xlsx", StringComparison.OrdinalIgnoreCase) ||
-                   labPath.EndsWith("/report/download", StringComparison.OrdinalIgnoreCase)))))
+                   labPath.EndsWith("/report/download", StringComparison.OrdinalIgnoreCase))) ||
+                 // SAS payment proof: api/Sas/payments/{id}/proof
+                 (path.StartsWithSegments("/api/Sas/payments") &&
+                  path.Value!.EndsWith("/proof", StringComparison.OrdinalIgnoreCase))))
             {
                 context.Token = accessToken;
             }

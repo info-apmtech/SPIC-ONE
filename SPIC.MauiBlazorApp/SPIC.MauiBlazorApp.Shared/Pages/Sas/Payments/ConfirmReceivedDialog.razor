@@ -1,0 +1,152 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+@using SPIC.Core.DTOs
+@inject SasPaymentApi Api
+
+@*
+    Screen 29: Confirm Payment Received (Finance). A verified amount below the paid amount is
+    recorded by the API as a Mismatch with "₹n short" as the remark (unless remarks are typed).
+*@
+
+<PayModal IsOpen="IsOpen" OnClose="CloseAsync" Title="Confirm Payment Received"
+          Subtitle="Confirm the amount Finance received against this payment."
+          Icon="bi-patch-check" IconTone="green" CloseOnBackdrop="!_saving">
+    <ChildContent>
+        @if (Detail is { } d)
+        {
+            <dl class="spm-rows">
+                <div class="spm-row"><dt>Payment Ref No.</dt><dd>@d.Summary.Code</dd></div>
+                <div class="spm-row"><dt>Farmer Name</dt><dd>@PaymentLabels.Dash(d.Summary.FarmerName)</dd></div>
+                <div class="spm-row"><dt>Consignment No.</dt><dd>@PaymentLabels.Dash(d.Summary.ConsignmentCode)</dd></div>
+                <div class="spm-row"><dt>Expected Amount</dt><dd>@PaymentLabels.Money(d.Summary.ExpectedAmount)</dd></div>
+                <div class="spm-row"><dt>Paid Amount</dt><dd>@PaymentLabels.Money(d.Summary.PaidAmount)</dd></div>
+                <div class="spm-row"><dt>Transaction ID</dt><dd>@PaymentLabels.Dash(d.Summary.TransactionId)</dd></div>
+                <div class="spm-row"><dt>Payment Mode</dt><dd>@PaymentLabels.ModeName(d.Summary.PaymentMode)</dd></div>
+            </dl>
+
+            <div class="spm-grid">
+                <div class="spm-field">
+                    <label class="spm-label" for="cr-amount">Verified Amount <span class="spm-req">*</span></label>
+                    <select id="cr-amount" class="spm-input" value="@_amountChoice" @onchange="e => _amountChoice = e.Value?.ToString() ?? PaidKey">
+                        <option value="@PaidKey">@PaymentLabels.Money(d.Summary.PaidAmount) (paid)</option>
+                        @if (d.VerifiedAmount is { } admin && admin != d.Summary.PaidAmount)
+                        {
+                            <option value="admin">@PaymentLabels.Money(admin) (admin approved)</option>
+                        }
+                        <option value="other">Other amount received</option>
+                    </select>
+                </div>
+
+                @if (_amountChoice == "other")
+                {
+                    <div class="spm-field">
+                        <label class="spm-label" for="cr-other">Amount Received (&#8377;)</label>
+                        <input id="cr-other" class="spm-input" type="number" min="0" step="0.01" inputmode="decimal"
+                               value="@_otherAmount" @oninput="e => _otherAmount = e.Value?.ToString() ?? string.Empty" />
+                    </div>
+                }
+
+                <div class="spm-field">
+                    <label class="spm-label" for="cr-date">Received Date</label>
+                    <input id="cr-date" class="spm-input" type="date" value="@_receivedDate"
+                           max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                           @onchange="e => _receivedDate = e.Value?.ToString() ?? string.Empty" />
+                </div>
+
+                <div class="spm-field spm-field--full">
+                    <label class="spm-label" for="cr-remarks">Remarks</label>
+                    <textarea id="cr-remarks" class="spm-input" maxlength="500" placeholder="Optional"
+                              value="@_remarks" @oninput="e => _remarks = e.Value?.ToString() ?? string.Empty"></textarea>
+                </div>
+            </div>
+
+            @if (VerifiedAmount is { } v && v < d.Summary.PaidAmount)
+            {
+                <p class="spm-warn"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+                    @PaymentLabels.Money(d.Summary.PaidAmount - v) short: the payment will be recorded as an Amount Mismatch.</p>
+            }
+
+            <label class="spm-check">
+                <input type="checkbox" checked="@_confirmed" @onchange="e => _confirmed = e.Value is true" />
+                <span>I have verified the payment proof, transaction ID, and amount.</span>
+            </label>
+            @if (_showErrors && !_confirmed)
+            {
+                <span class="spm-error">Tick the confirmation to continue.</span>
+            }
+            @if (_showErrors && VerifiedAmount is null)
+            {
+                <span class="spm-error">Enter the amount received.</span>
+            }
+        }
+    </ChildContent>
+    <Footer>
+        <button type="button" class="spm-btn spm-btn--outline" @onclick="CloseAsync" disabled="@_saving">Cancel</button>
+        <button type="button" class="spm-btn spm-btn--primary" @onclick="SubmitAsync" disabled="@_saving">
+            <i class="bi bi-check2-circle" aria-hidden="true"></i> @(_saving ? "Saving..." : "Confirm")
+        </button>
+    </Footer>
+</PayModal>
+
+@code {
+    private const string PaidKey = "paid";
+
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public SasPaymentDetailDto? Detail { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<SasPaymentDetailDto> OnVerified { get; set; }
+
+    private string _amountChoice = PaidKey;
+    private string _otherAmount = "";
+    private string _receivedDate = "";
+    private string _remarks = "";
+    private bool _confirmed;
+    private bool _saving;
+    private bool _showErrors;
+    private bool _wasOpen;
+
+    private decimal? VerifiedAmount => Detail is null ? null : _amountChoice switch
+    {
+        PaidKey => Detail.Summary.PaidAmount,
+        "admin" => Detail.VerifiedAmount,
+        _ => decimal.TryParse(_otherAmount, System.Globalization.NumberStyles.Number,
+                 System.Globalization.CultureInfo.InvariantCulture, out var v) && v >= 0 ? v : null
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            _amountChoice = PaidKey;
+            _otherAmount = "";
+            _receivedDate = DateTime.Today.ToString("yyyy-MM-dd");
+            _remarks = "";
+            _confirmed = false;
+            _saving = false;
+            _showErrors = false;
+        }
+        _wasOpen = IsOpen;
+    }
+
+    private Task CloseAsync() => _saving ? Task.CompletedTask : OnClose.InvokeAsync();
+
+    private async Task SubmitAsync()
+    {
+        if (Detail is null || _saving) return;
+
+        _showErrors = true;
+        if (!_confirmed || VerifiedAmount is null) return;
+
+        _saving = true;
+        var result = await Api.VerifyAsync(Detail.Summary.Id, new SasPaymentVerifyDto
+        {
+            VerifiedAmount = VerifiedAmount.Value,
+            ReceivedDate = DateTime.TryParse(_receivedDate, out var date) ? date.Date : DateTime.Today,
+            Remarks = string.IsNullOrWhiteSpace(_remarks) ? null : _remarks.Trim(),
+            Confirmed = true
+        });
+        _saving = false;
+
+        if (result is null) return;
+        await OnVerified.InvokeAsync(result);
+    }
+}

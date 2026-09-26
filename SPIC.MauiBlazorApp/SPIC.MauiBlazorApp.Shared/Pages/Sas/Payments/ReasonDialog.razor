@@ -1,0 +1,71 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+
+@*
+    Reject Payment (admin, "Returned to MO") and Mark Mismatch (Finance): one reason box.
+    The parent does the API call in OnSubmit and closes the dialog when it succeeds.
+*@
+
+<PayModal IsOpen="IsOpen" OnClose="CloseAsync" Title="@Title" Subtitle="@Subtitle"
+          Icon="@Icon" IconTone="red" CloseOnBackdrop="!Busy">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(Reference))
+        {
+            <dl class="spm-rows">
+                <div class="spm-row"><dt>Payment Ref No.</dt><dd>@Reference</dd></div>
+            </dl>
+        }
+
+        <div class="spm-field">
+            <label class="spm-label" for="rd-reason">@Label <span class="spm-req">*</span></label>
+            <textarea id="rd-reason" class="spm-input" maxlength="500" placeholder="@Placeholder"
+                      value="@_reason" @oninput="e => _reason = e.Value?.ToString() ?? string.Empty"></textarea>
+            @if (_showErrors && string.IsNullOrWhiteSpace(_reason))
+            {
+                <span class="spm-error">Enter a reason.</span>
+            }
+        </div>
+    </ChildContent>
+    <Footer>
+        <button type="button" class="spm-btn spm-btn--outline" @onclick="CloseAsync" disabled="@Busy">Cancel</button>
+        <button type="button" class="spm-btn spm-btn--danger" @onclick="SubmitAsync" disabled="@Busy">
+            @(Busy ? "Saving..." : ConfirmText)
+        </button>
+    </Footer>
+</PayModal>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "Reject Payment";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string Icon { get; set; } = "bi-x-circle";
+    [Parameter] public string Label { get; set; } = "Reason";
+    [Parameter] public string Placeholder { get; set; } = "Tell the MO what to correct";
+    [Parameter] public string ConfirmText { get; set; } = "Reject Payment";
+    [Parameter] public string? Reference { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<string> OnSubmit { get; set; }
+
+    private string _reason = "";
+    private bool _showErrors;
+    private bool _wasOpen;
+
+    protected override void OnParametersSet()
+    {
+        if (IsOpen && !_wasOpen)
+        {
+            _reason = "";
+            _showErrors = false;
+        }
+        _wasOpen = IsOpen;
+    }
+
+    private Task CloseAsync() => Busy ? Task.CompletedTask : OnClose.InvokeAsync();
+
+    private async Task SubmitAsync()
+    {
+        _showErrors = true;
+        if (Busy || string.IsNullOrWhiteSpace(_reason)) return;
+        await OnSubmit.InvokeAsync(_reason.Trim());
+    }
+}

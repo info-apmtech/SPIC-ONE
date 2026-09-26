@@ -157,6 +157,37 @@
                         <input id="pay-email" class="sas-input" type="email" placeholder="name@example.com"
                                value="@_form.Email" @oninput="e => _form.Email = e.Value?.ToString()" />
                     </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-mode">Payment Mode</label>
+                        <select id="pay-mode" class="sas-input" value="@((int)_form.PaymentMode)"
+                                @onchange="OnPaymentModeChanged">
+                            <option value="0">UPI</option>
+                            <option value="1">Bank Transfer</option>
+                            <option value="2">Cash</option>
+                        </select>
+                    </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-date">Transaction Date</label>
+                        <input id="pay-date" class="sas-input" type="date"
+                               max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                               value="@(_form.TransactionDate?.ToString("yyyy-MM-dd"))"
+                               @onchange="OnTransactionDateChanged" />
+                    </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-bankname">Bank Name</label>
+                        <input id="pay-bankname" class="sas-input" placeholder="Enter Bank Name"
+                               value="@_form.BankName" @oninput="e => _form.BankName = e.Value?.ToString()" />
+                    </div>
+
+                    <div class="sas-field">
+                        <label class="sas-label" for="pay-remarks">Remarks</label>
+                        <input id="pay-remarks" class="sas-input" placeholder="Anything the approver should know"
+                               maxlength="500"
+                               value="@_form.MoRemarks" @oninput="e => _form.MoRemarks = e.Value?.ToString()" />
+                    </div>
                 </div>
             </section>
 
@@ -334,7 +365,19 @@
         _form.PaidByName = source.PaidByName;
         _form.ContactNumber = source.ContactNumber;
         _form.Email = source.Email;
+        _form.PaymentMode = source.PaymentMode;
+        _form.TransactionDate = source.TransactionDate;
+        _form.BankName = source.BankName;
+        _form.MoRemarks = source.MoRemarks;
     }
+
+    private void OnPaymentModeChanged(ChangeEventArgs e) =>
+        _form.PaymentMode = int.TryParse(e.Value?.ToString(), out var mode) && Enum.IsDefined(typeof(SamplePaymentMode), mode)
+            ? (SamplePaymentMode)mode
+            : SamplePaymentMode.Upi;
+
+    private void OnTransactionDateChanged(ChangeEventArgs e) =>
+        _form.TransactionDate = DateTime.TryParse(e.Value?.ToString(), out var date) ? date.Date : null;
 
     /// <summary>upi://pay?pa=..&amp;pn=..&amp;am=..&amp;cu=INR&amp;tn=..</summary>
     private string BuildUpiPayload()

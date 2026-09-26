@@ -297,6 +297,11 @@ public sealed class SasPaymentForm
     public string PaidByName { get; set; } = "";
     public string? ContactNumber { get; set; }
     public string? Email { get; set; }
+    // Payment Approval module (2026-09-27)
+    public SamplePaymentMode PaymentMode { get; set; } = SamplePaymentMode.Upi;
+    public DateTime? TransactionDate { get; set; }
+    public string? BankName { get; set; }
+    public string? MoRemarks { get; set; }
 
     public SamplePaymentUpsertDto ToDto() => new()
     {
@@ -305,7 +310,11 @@ public sealed class SasPaymentForm
         UtrNumber = Blank(UtrNumber),
         PaidByName = PaidByName.Trim(),
         ContactNumber = Blank(ContactNumber),
-        Email = Blank(Email)
+        Email = Blank(Email),
+        PaymentMode = PaymentMode,
+        TransactionDate = TransactionDate,
+        BankName = Blank(BankName),
+        MoRemarks = Blank(MoRemarks)
     };
 
     public static SasPaymentForm FromDto(SamplePaymentDto dto) => new()

@@ -1,0 +1,61 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+
+@*
+    Centred dialog frame shared by the payment dialogs (Approve & Forward, Approved, Confirm
+    Payment Received, Reject / Mismatch reason). Desktop: 560px card over a dim backdrop.
+    Phone (<= 767.98px): full-width sheet pinned to the bottom, scrollable body, footer
+    buttons stretched to 44px+ targets. The shared row / field classes (spm-rows, spm-field,
+    spm-check, spm-btn ...) are styled here with ::deep so every dialog uses the same look.
+*@
+
+@if (IsOpen)
+{
+    <div class="spm-backdrop" @onclick="OnBackdrop">
+        <div class="spm-panel @(Wide ? "spm-panel--wide" : "")" role="dialog" aria-modal="true" aria-labelledby="@_titleId"
+             @onclick:stopPropagation="true">
+            <header class="spm-head">
+                @if (!string.IsNullOrWhiteSpace(Icon))
+                {
+                    <span class="spm-icon spm-icon--@IconTone" aria-hidden="true"><i class="bi @Icon"></i></span>
+                }
+                <div class="spm-titles">
+                    <h2 class="spm-title" id="@_titleId">@Title</h2>
+                    @if (!string.IsNullOrWhiteSpace(Subtitle))
+                    {
+                        <p class="spm-subtitle">@Subtitle</p>
+                    }
+                </div>
+                <button type="button" class="spm-close" aria-label="Close" @onclick="CloseAsync">
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+            </header>
+
+            <div class="spm-body">@ChildContent</div>
+
+            @if (Footer is not null)
+            {
+                <footer class="spm-foot">@Footer</footer>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    /// <summary>green | red | orange | blue</summary>
+    [Parameter] public string IconTone { get; set; } = "green";
+    [Parameter] public bool Wide { get; set; }
+    [Parameter] public bool CloseOnBackdrop { get; set; } = true;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    private readonly string _titleId = "pm-" + Guid.NewGuid().ToString("N")[..8];
+
+    private Task CloseAsync() => OnClose.InvokeAsync();
+
+    private Task OnBackdrop() => CloseOnBackdrop ? CloseAsync() : Task.CompletedTask;
+}
