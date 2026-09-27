@@ -6,7 +6,7 @@ namespace SPIC.Core.DTOs;
 /// SAS Payment Approval / Verification API contracts (2026-09-27; docs/sas-lab-portal-plan.md,
 /// screens 23-30 and 34-35). Lives in the existing "Sas" controller (region "payment approval").
 /// Modes are resolved on the server from the caller's pages, like LibraryController does:
-///   ADMIN   : SasPaymentApproval (or Admin / CorporateAdmin)  -> review, approve &amp; forward, reject
+///   ADMIN   : SasPaymentApproval page (designation-only; the Admin role alone gives nothing) -> review, approve &amp; forward, reject
 ///   FINANCE : SasPaymentVerification                            -> verify, mismatch
 ///   FARMER  : role Farmer                                       -> own samples only, read-only
 ///   MO/JMDO : v1 write roles                                    -> own submissions, read-only here

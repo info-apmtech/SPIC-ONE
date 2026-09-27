@@ -47,6 +47,9 @@ Sidebar of the lab portal: Dashboard, Consignment Details, Analysis Tracking, La
 
 ### Admin role (main app sidebar)
 
+"Admin" here is a job (the lab / payment administrator), not the Admin ROLE: these pages open only
+for users whose designation grants `LabTracking` / `SasPaymentApproval` (section 3).
+
 | # | Screen | Notes |
 |---|---|---|
 | 21 | Lab Tracking (admin) | Subtitle "Admin view to monitor consignments, batches and analysis progress across the lab workflow." 4 KPI cards (Total Batches = all batches in system, Batch Created = batch created in lab, Taken for analysis = analysis in progress, Analysis Completed = completed batches); status tabs with counts (All Batches, Batch Created, Taken for Analysis, Analysis Completed); collapsible Filters (Date Range, Batch No., Consignment No., Assigned To, State, Region, Current Stage; Clear All / Apply); Lab Tracking List with search: Batch No., Consignment No., Sample Type, No. of Samples, Soil, Water, Assigned To (avatar), Current Status pill, Analysis Days, Last Updated (date + time), view (opens the coordinator's Batch Details read-only); items per page + pager. Page key `LabTracking` (module "SAS Lab"), route `/Lab/Tracking`; it reads `api/Lab/batches` with `batchId`, `consignmentId`, `stateId`, `regionId` filters and `api/Lab/batches/stats` |
@@ -66,7 +69,9 @@ Sidebar of the lab portal: Dashboard, Consignment Details, Analysis Tracking, La
 
 Page keys: `SasPaymentApproval` (admin mode) and `SasPaymentVerification` (finance mode); one
 page pair `/Sas/Payments` and `/Sas/Payments/{id}` renders the mode from the key the user holds
-(admins hold both and see the admin actions until forwarded, then the finance status read-only).
+(a designation holding both sees the admin actions until forwarded, then the finance status
+read-only). Designation only: the Admin / CorporateAdmin ROLES get no payment mode by themselves
+(section 3).
 Payment History = the same list filtered to Verified / Rejected; Finance Reports = later.
 
 ### Farmer role (sidebar: Dashboard, My Samples, My Reports, Payments)
@@ -169,10 +174,34 @@ the pages behind "View All".
 ## 3. Access
 
 New page keys appended to `PagePermission`, module "SAS Lab": `LabDashboard`, `LabConsignments`,
-`LabAnalysis`, `LabReports`. Granted through Designation (a "Lab Coordinator" designation); admins
-see everything. Routes: `/Lab` (dashboard), `/Lab/Consignments`, `/Lab/Consignments/{id}`,
-`/Lab/Analysis`, `/Lab/Reports`. API: `api/Lab/...` (contract to be fixed in
-`SPIC.Core/DTOs/LabDtos.cs` before the agents start).
+`LabAnalysis`, `LabReports`, `LabTestEntry`, `LabTracking`; module "SAS": `SasPaymentApproval`,
+`SasPaymentVerification`. Routes: `/Lab` (dashboard), `/Lab/Consignments`, `/Lab/Consignments/{id}`,
+`/Lab/Analysis`, `/Lab/Reports`, `/Lab/TestEntry...`, `/Lab/Tracking...`, `/Sas/Payments...`. API:
+`api/Lab/...` (contract in `SPIC.Core/DTOs/LabDtos.cs`) and `api/Sas/payments/...`.
+
+**Designation only (product decision 2026-09-27).** These eight keys are granted through the
+designation and NOTHING else: the Admin and CorporateAdmin ROLES do not bypass them (everywhere else
+in the application they still bypass every page check). A user of any role, Admin included, sees
+Payment Approval only with `SasPaymentApproval`, Lab Tracking only with `LabTracking`, the
+coordinator pages only with `LabDashboard` / `LabConsignments` / `LabAnalysis` / `LabReports`, the
+analyst pages only with `LabTestEntry` and Finance only with `SasPaymentVerification`.
+- Client: `LoginState.HasPageStrict(key)` (designation only, same `Page.Action` matching) drives
+  NavMenu, the shell tabs (`ShellNavigation`, `Rule = HasPageStrict`), `PageGuard` (admins go
+  through the guard for `/Lab/*` and `/Sas/Payments*`; they never take the farmer / field
+  `SampleCollection` path to `/Sas/Payments`) and the Batch Details sample links;
+  `LoginState.CanAccess` / `Can` also skip the admin bypass for these keys
+  (`LoginState.DesignationOnlyPages`). `/Lab` sends a user who is neither coordinator nor analyst
+  to `/Dashboard`.
+- API: `LabAccess` grants nothing for the role (403 on every `api/Lab/*` route except `me` and
+  `languages`); `analysts` = users whose designation grants `LabTestEntry` (no "plus admins");
+  `LabReportsController` gives an admin without a lab designation the v1 read-only rule (as for
+  field staff: reads reports, cannot mark Printed); `SasPaymentsController` resolves Admin mode
+  from `SasPaymentApproval` only, so an admin without the keys falls to ReadOnly / 403.
+- Unchanged: the v1 review routes in `SasController` (payment status, consignment status, lab
+  results) stay with the Admin / CorporateAdmin review roles, the v1 keys `SampleCollection` /
+  `ConsignmentHistory` keep the admin bypass, and the farmer pages keep their rule.
+- Production: give every admin who must keep these pages a designation holding the keys (for
+  example the admin designation gets `SasPaymentApproval` and `LabTracking`).
 
 ## 4. Build plan (phase 0 done by the coordinator on 2026-09-27; phases 1a-1f in parallel)
 
@@ -192,7 +221,7 @@ shared components under `Shared/Components/Lab/`.
 | 1e | Client-Analyst | `Shared/Pages/Lab/Analyst/*` | Analyst Dashboard, Batch List, Sample-wise Entry (+ Submit / Submitted dialogs), Test Reports, Batch Report Details, Previous FY Reports |
 | 1f | Client-Admin+Farmer | `Shared/Pages/Lab/Admin/*`, `Shared/Pages/Sas/Farmer/*`, farmer additions to `Shared/Pages/Sas/SampleCollectionDetails.razor` (+css) | Lab Tracking list + Batch View Details; farmer My Samples, My Reports, v1 details page additions |
 | 2 | coordinator | merges, `Lab.razor` dashboard switch (coordinator / analyst variant by `api/Lab/me`), role sweeps (admin, coordinator, analyst, finance, farmer, MDO at 375 / 1280), phone check, docs | release on Satham |
-| 3 | product owner | `migrate.ps1`, `deploy.ps1`, Designation grants (Lab Coordinator: LabDashboard, LabConsignments, LabAnalysis, LabReports; Lab Analyst: LabDashboard, LabTestEntry, LabReports; Finance: SasPaymentVerification; admins: SasPaymentApproval, LabTracking), fonts, fertilizer rules | production |
+| 3 | product owner | `migrate.ps1`, `deploy.ps1`, Designation grants (Lab Coordinator: LabDashboard, LabConsignments, LabAnalysis, LabReports; Lab Analyst: LabDashboard, LabTestEntry, LabReports; Finance: SasPaymentVerification; the admin designation: SasPaymentApproval, LabTracking, since the Admin role no longer implies them), fonts, fertilizer rules | production |
 
 Phase 2 reconciliation list (coordinator), collected from the workstream reports:
 - Sample display id: LabController numbers samples per batch (`SAS-SOIL-001`), the report renderer
@@ -249,6 +278,16 @@ accounts, no live API; phone-first checks at 375 px; sweeps clean; commit in the
   analyst 5, finance 3, farmer 4, admin 3, all unflagged except finance's 404 on a payment it may
   not see; scroll-through captures reviewed for every role (dashboard, lists, batch details tabs,
   sample-wise entry, batch report details, payment list, my samples, farmer details, lab tracking).
+- 2026-09-27, designation-only access for the lab and payment pages (section 3): the Admin /
+  CorporateAdmin role bypass removed from those eight keys on the client and the API. Local QA:
+  designation 9 "QA Admin All Pages" (= designation 5 plus the eight keys) for qa.admin only
+  (designation 5 is shared by qa.mdo, qa.dealer, qa.farmer and others, which must stay without lab
+  access); new user qa.plainadmin (role Admin, designation 2 "Plain Staff QA"). Checks:
+  `lab_api_check.py` 659 / 659 (qa.plainadmin 403s added), `lab_report_check.py` 124 / 124
+  (coordinator) and 115 / 115 (qa.admin, no generation); sweeps at 375 over `/Lab*` and
+  `/Sas/Payments*`: qa.admin 0 of 15 flagged, qa.plainadmin and qa.corporateadmin 15 of 15
+  REDIRECT to `/Dashboard` with no lab / payment links, coordinator / analyst / finance / MDO /
+  farmer as before.
 
 ## 6. Principles
 

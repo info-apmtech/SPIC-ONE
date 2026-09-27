@@ -267,7 +267,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", default="http://localhost:5122")
     ap.add_argument("--batch-id", type=int, required=True)
-    ap.add_argument("--user", default="qa.labcoord", help="lab coordinator or admin account")
+    ap.add_argument("--user", default="qa.labcoord", help="lab coordinator account, or an admin whose designation holds a lab page (no role bypass)")
     ap.add_argument("--password", default=os.environ.get("LAB_CHECK_PASSWORD"))
     ap.add_argument("--farmer-user", help="optional farmer account for the scoping checks")
     ap.add_argument("--generate-route", default="api/Lab/batches/{id}/status?status=Completed",

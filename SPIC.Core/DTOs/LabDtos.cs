@@ -8,7 +8,8 @@ namespace SPIC.Core.DTOs;
 /// designation RoleAccess exactly like LibraryController does (RoleAccessPermissions.HasPage):
 ///   COORDINATOR pages : LabDashboard, LabConsignments, LabAnalysis, LabReports
 ///   ANALYST page      : LabTestEntry (sees only batches assigned to them)
-///   Admin / CorporateAdmin bypass the page checks (same as everywhere else).
+///   Admin / CorporateAdmin get NO bypass here (product decision 2026-09-27): lab access is
+///   designation-only; admins need the keys in their designation like everyone else.
 /// Every list is paged (PageResult&lt;T&gt;, default 16, max 50) and takes q= (search), from= / to=
 /// (dates, inclusive) and the filters named per route. Enums serialize as integers.
 /// Dates are local (DateTime.Now convention of the rest of the API).
@@ -16,7 +17,7 @@ namespace SPIC.Core.DTOs;
 ///   GET    api/Lab/me                                       -> LabMeDto (which lab pages the caller holds; drives the dashboard variant)
 ///   GET    api/Lab/dashboard                                -> LabDashboardDto (coordinator KPIs + recent consignments and batches, 5 each)
 ///   GET    api/Lab/analyst/dashboard                        -> LabAnalystDashboardDto (analyst KPIs + work priority counts)
-///   GET    api/Lab/analysts                                 -> List&lt;LabUserDto&gt; (users whose designation grants LabTestEntry, plus admins)
+///   GET    api/Lab/analysts                                 -> List&lt;LabUserDto&gt; (users whose designation grants LabTestEntry)
 ///   GET    api/Lab/consignments/stats                       -> LabConsignmentStatsDto
 ///   GET    api/Lab/consignments?status=&amp;stateId=&amp;q=&amp;from=&amp;to=&amp;page=&amp;pageSize=  -> PageResult&lt;LabConsignmentRowDto&gt;
 ///                                                            status = LabConsignmentStatus name (InTransit, BatchPending, BatchCreated, Completed) or empty
