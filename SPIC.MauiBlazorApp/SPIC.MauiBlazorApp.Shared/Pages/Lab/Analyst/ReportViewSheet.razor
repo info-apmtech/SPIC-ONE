@@ -104,6 +104,82 @@
                 {
                     <p class="rv-note"><strong>Note:</strong> @sample.CropSuitabilityNote</p>
                 }
+
+                @* Phase 2b: the adjusted schedule the soil PDF prints ("Recommendations (Kg/acre)"). *@
+                @if (ScheduleColumns.Count > 0)
+                {
+                    <h3 class="rv-title">Fertilizer Schedule (Kg/acre)</h3>
+                    <p class="rv-fs-sub">Adjusted to this sample's results: base quantity x dose factor of the nutrient's status.</p>
+                    @foreach (var col in ScheduleColumns)
+                    {
+                        <div class="rv-fs-crop">
+                            <span class="rv-reco-title">@ScheduleTitle(col)</span>
+
+                            <div class="rv-table-wrap tablet-up">
+                                <table class="rv-table">
+                                    <thead>
+                                        <tr>
+                                            <th scope="col">Product</th>
+                                            <th scope="col">Status Used</th>
+                                            <th scope="col" class="rv-fs-num">Base</th>
+                                            <th scope="col" class="rv-fs-num">Factor</th>
+                                            <th scope="col" class="rv-fs-num">Adjusted</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var stage in col.Rows.GroupBy(r => r.Stage))
+                                        {
+                                            <tr class="rv-fs-stage"><th scope="colgroup" colspan="5">@StageTitle(stage.First())</th></tr>
+                                            @foreach (var r in stage)
+                                            {
+                                                <tr>
+                                                    <th scope="row">@r.Product@(string.IsNullOrWhiteSpace(r.Nutrient) ? "" : $" ({r.Nutrient})")</th>
+                                                    <td class="rv-resp rv-resp--@StatusSlug(r)">@StatusText(r)</td>
+                                                    <td class="rv-fs-num">@Kg(r.BaseKgPerAcre)</td>
+                                                    <td class="rv-fs-num">x @Kg(r.Factor)</td>
+                                                    <td class="rv-fs-num rv-value">
+                                                        @Kg(r.AdjustedKgPerAcre)
+                                                        @if (r.NotRequired)
+                                                        {
+                                                            <span class="rv-fs-nr">not required</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="rv-fs-cards phone-only">
+                                @foreach (var stage in col.Rows.GroupBy(r => r.Stage))
+                                {
+                                    <div class="rv-fs-card">
+                                        <span class="rv-fs-card-title">@StageTitle(stage.First())</span>
+                                        <ul>
+                                            @foreach (var r in stage)
+                                            {
+                                                <li>
+                                                    <span class="rv-fs-line">
+                                                        <span>@r.Product</span>
+                                                        <strong>@Kg(r.AdjustedKgPerAcre)</strong>
+                                                    </span>
+                                                    <span class="rv-fs-line-sub">
+                                                        @Kg(r.BaseKgPerAcre) x @Kg(r.Factor) &middot; <span class="rv-resp rv-resp--@StatusSlug(r)">@StatusText(r)</span>
+                                                        @if (r.NotRequired)
+                                                        {
+                                                            <span class="rv-fs-nr">not required</span>
+                                                        }
+                                                    </span>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                }
             </div>
         }
     </ChildContent>
@@ -166,6 +242,36 @@
         _detail = await Api.GetReportAsync(id, _cts.Token) ?? (sameReport ? _detail : null);
         _loading = false;
     }
+
+    // ---------------------------------------------------------------- fertilizer schedule (phase 2b)
+
+    /// <summary>The schedule's crop columns, once each (Crop1 comes twice when there is no Crop2, like the PDF).</summary>
+    private List<LabFertilizerScheduleDto> ScheduleColumns => (_detail?.Sample.FertilizerSchedule ?? new())
+        .Where(c => c.Rows.Count > 0)
+        .GroupBy(c => $"{c.Crop}|{c.ScheduleCrop}|{c.IsGeneral}", StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.First())
+        .ToList();
+
+    private static string ScheduleTitle(LabFertilizerScheduleDto c) =>
+        !c.IsGeneral ? c.Crop
+        : string.IsNullOrWhiteSpace(c.Crop) ? "General (no crop on the sample)"
+        : $"General (no schedule configured for {c.Crop})";
+
+    private static string StageTitle(LabFertilizerScheduleRowDto r) =>
+        r.DayNumber is int day ? $"{r.StageName} ({day}th day)" : r.StageName;
+
+    private static string Kg(decimal v) => v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string StatusText(LabFertilizerScheduleRowDto r)
+    {
+        if (string.IsNullOrWhiteSpace(r.StatusUsed)) return "-";
+        var name = string.IsNullOrWhiteSpace(r.ParameterName) ? r.StatusNutrient : r.ParameterName;
+        var status = Enum.TryParse<LabResultStatus>(r.StatusUsed, out var st) ? AnalystText.ResultStatusText(st) : "not tested";
+        return $"{name}: {status}";
+    }
+
+    private static string StatusSlug(LabFertilizerScheduleRowDto r) =>
+        Enum.TryParse<LabResultStatus>(r.StatusUsed, out var st) ? st.ToString().ToLowerInvariant() : "none";
 
     private Task OnOpenChanged(bool open) => open ? Task.CompletedTask : OnClose.InvokeAsync();
 

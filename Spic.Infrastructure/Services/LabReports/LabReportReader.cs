@@ -17,16 +17,19 @@ namespace Spic.Infrastructure.Services.LabReports;
 /// </summary>
 public sealed class LabReportReader
 {
-    /// <summary>Crop whose schedule is printed (as "General") when the sample's crop has none.</summary>
-    public const string GeneralScheduleCrop = "Banana";
+    /// <summary>Crop whose schedule is printed (as "General") when the sample's crop has none
+    /// (phase 2b: its own seeded set, see <see cref="LabFertilizerSchedule"/>).</summary>
+    public const string GeneralScheduleCrop = LabFertilizerSchedule.GeneralCrop;
 
     private readonly AppDbContext _db;
     private readonly LabAutoResultEngine _engine;
+    private readonly LabFertilizerSchedule _schedule;
 
-    public LabReportReader(AppDbContext db, LabAutoResultEngine engine)
+    public LabReportReader(AppDbContext db, LabAutoResultEngine engine, LabFertilizerSchedule schedule)
     {
         _db = db;
         _engine = engine;
+        _schedule = schedule;
     }
 
     public async Task<LabReportModel?> LoadAsync(int reportId, CancellationToken ct = default) =>
@@ -72,10 +75,7 @@ public sealed class LabReportReader
             .Select(c => new { BatchId = c.BatchId!.Value, c.Code })
             .ToListAsync(ct);
 
-        var schedule = await _db.LabCropRecommendations.AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.Stage).ThenBy(x => x.SortOrder).ThenBy(x => x.Id)
-            .ToListAsync(ct);
+        var schedule = await LabFertilizerSchedule.LoadRowsAsync(_db, ct);
 
         var hqIds = reports.Where(r => r.HeadquarterId.HasValue).Select(r => r.HeadquarterId!.Value).Distinct().ToList();
         var states = await LocationNamesAsync(_db, hqIds, ct);
@@ -139,7 +139,9 @@ public sealed class LabReportReader
             model.RecommendationLines = evaluation.Lines;
             model.Suitability = evaluation.Suitability;
             model.CropSuitabilityNote = evaluation.Result.CropSuitabilityNote ?? "";
-            if (model.Layout == SampleType.Soil) model.Schedule = BuildSchedule(model, schedule);
+            // Phase 2b: the schedule of the sample's crops, scaled by this sample's results.
+            if (model.Layout == SampleType.Soil)
+                model.Schedule = _schedule.Build(SampleType.Soil, model.Crop1, model.Crop2, evaluation.Result.Parameters, schedule);
 
             models.Add(model);
         }
@@ -197,7 +199,8 @@ public sealed class LabReportReader
             OverallStatus = m.OverallStatus,
             OverallStatusText = LabAutoResultEngine.OverallText(m.OverallStatus),
             Recommendations = m.Recommendations,
-            CropSuitabilityNote = m.CropSuitabilityNote
+            CropSuitabilityNote = m.CropSuitabilityNote,
+            FertilizerSchedule = m.Schedule
         };
     }
 
@@ -265,32 +268,6 @@ public sealed class LabReportReader
             EnteredByName = x.EnteredByName
         };
         return (layout, row);
-    }
-
-    private static List<LabScheduleColumn> BuildSchedule(LabReportModel m, List<LabCropRecommendation> all)
-    {
-        // Two crop columns like the reference (the farmer's first and second crop; the first
-        // crop twice when there is only one).
-        var crops = new List<string>();
-        var c1 = m.Crop1 ?? "";
-        crops.Add(c1);
-        crops.Add(string.IsNullOrWhiteSpace(m.Crop2) ? c1 : m.Crop2!);
-
-        var columns = new List<LabScheduleColumn>();
-        foreach (var crop in crops)
-        {
-            var rows = all.Where(x => string.Equals(x.Crop, crop, StringComparison.OrdinalIgnoreCase)).ToList();
-            var general = rows.Count == 0;
-            if (general) rows = all.Where(x => string.Equals(x.Crop, GeneralScheduleCrop, StringComparison.OrdinalIgnoreCase)).ToList();
-            columns.Add(new LabScheduleColumn
-            {
-                Crop = crop,
-                ScheduleCrop = general ? GeneralScheduleCrop : crop,
-                IsGeneral = general,
-                Rows = rows
-            });
-        }
-        return columns;
     }
 
     private static List<string> AddressLines(SasFarmer? f)

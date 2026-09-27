@@ -317,6 +317,7 @@ public class LabAutoResultDto
     public string OverallStatusText { get; set; } = "";     // Good / Needs Improvement / Poor
     public List<LabRecommendationGroupDto> Recommendations { get; set; } = new();
     public string? CropSuitabilityNote { get; set; }
+    public List<LabFertilizerScheduleDto> FertilizerSchedule { get; set; } = new();   // phase 2b: soil samples only (empty for water)
 }
 
 public class LabSampleEntryDto
@@ -473,6 +474,7 @@ public class LabSampleReportDto
     public string OverallStatusText { get; set; } = "";
     public List<LabRecommendationGroupDto> Recommendations { get; set; } = new();
     public string? CropSuitabilityNote { get; set; }
+    public List<LabFertilizerScheduleDto> FertilizerSchedule { get; set; } = new();   // phase 2b: the soil report's adjusted schedule (empty for water)
 }
 
 // ---------------------------------------------------------------- entry-form fields (phase 1e, analyst Sample-wise Entry)
@@ -483,4 +485,40 @@ public partial class LabParameterRowDto
     public LabParameterValueType ValueType { get; set; } = LabParameterValueType.Numeric;   // Text rows (Texture) get a select
     public List<string> Options { get; set; } = new();                                     // choices of a Text row, in master order
     public bool IsDerived { get; set; }                                                    // computed (Organic Matter = Organic Carbon x factor); read-only
+}
+
+// ---------------------------------------------------------------- fertilizer schedule (phase 2b)
+
+/// <summary>
+/// One crop column of the soil report's "Recommendations (Kg/acre)" schedule: the crop's
+/// LabCropRecommendation rows (crop "General" when the crop has none) with every quantity scaled
+/// by the dose factor of the sample's status for the product's nutrient (Sas:Lab:DoseFactors,
+/// NutrientParameters, NutrientDoseFactors). Two columns like the reference: Crop1 and Crop2, or
+/// Crop1 twice when there is no second crop.
+/// </summary>
+public class LabFertilizerScheduleDto
+{
+    public string Crop { get; set; } = "";                 // the farmer's crop of this column ("" when the sample has none)
+    public string ScheduleCrop { get; set; } = "";         // the crop whose rows are used ("General" when the crop has none)
+    public bool IsGeneral { get; set; }                    // printed under the heading "General" with the general-schedule note
+    public List<LabFertilizerScheduleRowDto> Rows { get; set; } = new();
+}
+
+public class LabFertilizerScheduleRowDto
+{
+    public LabCropStage Stage { get; set; }
+    public string StageName { get; set; } = "";             // Basal Application / 1st Application / 2nd Application / 3rd Application
+    public int? DayNumber { get; set; }                     // 90 / 150 / 210 for the top dressings
+    public string Product { get; set; } = "";
+    public string? Nutrient { get; set; }                   // "N,P", "K", "Organic", "Gypsum" ... (null: printed unchanged)
+    public decimal BaseKgPerAcre { get; set; }              // the master quantity
+    public decimal Factor { get; set; } = 1m;               // the dose factor applied (highest of the product's nutrients)
+    public decimal AdjustedKgPerAcre { get; set; }          // BaseKgPerAcre x Factor, 2 decimals (printed on the report)
+    public string StatusUsed { get; set; } = "";            // Deficient / Moderate / Normal / Excess / NotTested ("" without a nutrient)
+    public string? StatusNutrient { get; set; }             // the nutrient whose status gave the factor ("N" of "N,P")
+    public string? ParameterCode { get; set; }              // S-N, S-PH ...
+    public string? ParameterName { get; set; }              // Nitrogen, pH ...
+    public string? ResultLabel { get; set; }                // the parameter's result word (Low, Alkaline ...)
+    public bool NotRequired { get; set; }                   // factor 0 (e.g. gypsum on acidic soil): "not required"
+    public int SortOrder { get; set; }
 }

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 
 namespace Spic.Infrastructure.Services.LabReports;
@@ -195,6 +196,8 @@ public sealed class LabReportRenderer
                 var generalNote = GeneralScheduleNote(m, t);
                 if (generalNote != null)
                     col.Item().PaddingTop(3).Text(generalNote).FontSize(8).Italic().FontColor(Muted);
+                foreach (var note in ScheduleNotes(m, t))
+                    col.Item().PaddingTop(2).Text(note).FontSize(8).Italic().FontColor(Muted);
             }
 
             col.Item().PaddingTop(14).AlignCenter()
@@ -492,20 +495,39 @@ public sealed class LabReportRenderer
             .Replace("{crop}", string.Join(", ", crops));
     }
 
-    private static string CropHeader(LabScheduleColumn col, LabTranslator t) =>
+    /// <summary>Phase 2b: the line saying the quantities follow this sample's results, then one
+    /// "{product} not required ({parameter}: {response})" line per product whose factor is 0
+    /// (gypsum on acidic soil).</summary>
+    private static List<string> ScheduleNotes(LabReportModel m, LabTranslator t)
+    {
+        var notes = new List<string> { t.T("schedule.adjustedNote", "Quantities are adjusted to the soil test results of this sample.") };
+        var template = t.T("schedule.notRequired", "{product} not required ({param}: {response}).");
+        notes.AddRange(m.Schedule.SelectMany(c => c.Rows)
+            .Where(r => r.NotRequired)
+            .GroupBy(r => r.Product, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .Select(r => template
+                .Replace("{product}", t.Product(r.Product))
+                .Replace("{param}", t.Param(r.ParameterCode, r.ParameterName ?? r.ParameterCode ?? ""))
+                .Replace("{response}", t.Response(r.ResultLabel ?? r.StatusUsed))));
+        return notes;
+    }
+
+    private static string CropHeader(LabFertilizerScheduleDto col, LabTranslator t) =>
         col.IsGeneral ? t.T("schedule.general", "General") : t.Crop(col.Crop);
 
-    private static List<string> ProductsFor(List<LabScheduleColumn> columns, LabCropStage stage) =>
+    private static List<string> ProductsFor(List<LabFertilizerScheduleDto> columns, LabCropStage stage) =>
         columns.SelectMany(c => c.Rows.Where(r => r.Stage == stage))
-            .OrderBy(r => r.SortOrder).ThenBy(r => r.Id)
+            .OrderBy(r => r.SortOrder)
             .Select(r => r.Product)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    private static string Kg(LabScheduleColumn col, LabCropStage stage, string product)
+    /// <summary>The ADJUSTED quantity (phase 2b) of a product in a column, "-" when the column has no such row.</summary>
+    private static string Kg(LabFertilizerScheduleDto col, LabCropStage stage, string product)
     {
         var row = col.Rows.FirstOrDefault(r => r.Stage == stage && string.Equals(r.Product, product, StringComparison.OrdinalIgnoreCase));
-        return row == null ? "-" : row.KgPerAcre.ToString("0.00", Inv);
+        return row == null ? "-" : row.AdjustedKgPerAcre.ToString("0.00", Inv);
     }
 
     private void LoadLogos()
@@ -650,7 +672,7 @@ public sealed class LabReportRenderer
             r++;
             Merged(t.T("label.fertilizerSchedule", "Recommendations (Kg/acre)"), 11, true);
             var cols = m.Schedule;
-            string Header(LabScheduleColumn col) => CropHeader(col, t);
+            string Header(LabFertilizerScheduleDto col) => CropHeader(col, t);
 
             Row4(t.T("schedule.basal", "Basal Application"), cols.ElementAtOrDefault(0) is { } c0 ? Header(c0) : "", cols.ElementAtOrDefault(1) is { } c1 ? Header(c1) : "", "", header: true);
             foreach (var product in ProductsFor(cols, LabCropStage.Basal))
@@ -668,7 +690,7 @@ public sealed class LabReportRenderer
             {
                 var products = ProductsFor(cols, stage);
                 if (products.Count == 0) continue;
-                string Day(LabScheduleColumn col) =>
+                string Day(LabFertilizerScheduleDto col) =>
                     col.Rows.Where(x => x.Stage == stage && x.DayNumber.HasValue).Select(x => x.DayNumber).FirstOrDefault() is int d ? $"{d} {thDay}" : "-";
                 Row4(t.T(key, en), Day(cols[0]), cols.Count > 1 ? Day(cols[1]) : "", "", boldFirst: true);
                 foreach (var product in products)
@@ -676,6 +698,7 @@ public sealed class LabReportRenderer
             }
             var generalNote = GeneralScheduleNote(m, t);
             if (generalNote != null) Merged(generalNote, 9, false, Muted, XLAlignmentHorizontalValues.Left);
+            foreach (var note in ScheduleNotes(m, t)) Merged(note, 9, false, Muted, XLAlignmentHorizontalValues.Left);
         }
 
         r++;

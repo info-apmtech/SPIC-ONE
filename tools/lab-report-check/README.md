@@ -28,6 +28,15 @@ report (which counts downloads) and marks one report Printed.
 7. `POST reports/{id}/printed` sets Printed and a later download keeps it.
 8. With `--farmer-user`: the farmer sees only their own reports, gets 403 on another farmer's
    report and on batch routes, can download Tamil, is refused Telugu (400) and cannot mark printed.
+9. Fertilizer schedule (phase 2b): every soil report's `sample.fertilizerSchedule` has two crop
+   columns (Crop1 and Crop2, or Crop1 twice), a crop without rows prints the `General` rows
+   (`--general-crops`, default Paddy; Banana always has its own), and every row's factor, status
+   used, adjusted kg/acre and "not required" flag are recomputed from the report's parameter
+   statuses and the `Sas:Lab` rules of `SpicAPI/appsettings.json` (`DoseFactors`,
+   `NutrientParameters`, `NutrientDoseFactors`; `--appsettings` for another file). The XLSX must
+   contain the adjusted quantities; water reports have no schedule. The cases seen (N deficient,
+   K excess, alkaline / acidic pH, General, two crops) are printed; `--expect-cases
+   n-deficient,k-excess,ph-alkaline,ph-acidic,general,two-crops` makes them required.
 
 ## Usage
 

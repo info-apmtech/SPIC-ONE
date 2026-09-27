@@ -10,7 +10,14 @@ Generates the sample reports of one batch through the API and asserts:
     and a download moves the status to Downloaded and counts it;
   * the batch download as one PDF and as a zip of PDFs named by report code;
   * ?access_token= works for the file routes; POST printed sets Printed and a later download keeps it;
-  * optional: a farmer account sees only its own reports, no batch routes, farmer languages only.
+  * optional: a farmer account sees only its own reports, no batch routes, farmer languages only;
+  * phase 2b fertilizer schedule: every soil report's FertilizerSchedule has two crop columns
+    (Crop1, Crop2 or Crop1 again; "General" rows when the crop has none, Banana never General),
+    each row's factor / status used / adjusted quantity is recomputed from the report's parameter
+    statuses and the rules of SpicAPI/appsettings.json (Sas:Lab:DoseFactors, NutrientParameters,
+    NutrientDoseFactors; --appsettings), the XLSX prints the adjusted quantities, water reports
+    have no schedule. --expect-cases asserts the rule cases seen in the batch (n-deficient,
+    k-excess, ph-alkaline, ph-acidic, general, two-crops).
 
 Local use only (never the live API). Standard library only.
 
@@ -115,6 +122,135 @@ def fy_start(dt):
     return dt.year if dt.month >= 4 else dt.year - 1
 
 
+# ---------------------------------------------------------------- fertilizer schedule (phase 2b)
+
+STATUS_NAMES = {0: "Normal", 1: "Deficient", 2: "Moderate", 3: "Excess"}
+DEFAULT_RULES = {
+    "DoseFactors": {"Deficient": 1.25, "Moderate": 1.10, "Normal": 1.00, "Excess": 0.75, "NotTested": 1.00},
+    "NutrientParameters": {"N": "S-N", "P": "S-P", "K": "S-K", "Zn": "S-ZN", "Fe": "S-FE", "Mn": "S-MN", "Cu": "S-CU",
+                           "S": "S-S", "B": "S-B", "Organic": "S-OC", "Gypsum": "S-PH"},
+    "NutrientDoseFactors": {
+        "Organic": {"Deficient": 1.25, "Moderate": 1.00, "Normal": 1.00, "Excess": 1.00, "NotTested": 1.00},
+        "Gypsum": {"Deficient": 0.00, "Moderate": 1.00, "Normal": 1.00, "Excess": 1.25, "NotTested": 1.00},
+    },
+}
+CASES = ["n-deficient", "k-excess", "ph-alkaline", "ph-acidic", "general", "two-crops"]
+SEEN = {c: [] for c in CASES}
+
+
+def load_rules(path):
+    """Sas:Lab schedule rules from appsettings.json (full-line // comments stripped), over the defaults."""
+    rules = {k: {kk: (dict(vv) if isinstance(vv, dict) else vv) for kk, vv in v.items()} for k, v in DEFAULT_RULES.items()}
+    if not path or not os.path.exists(path):
+        return rules
+    text = "\n".join(l for l in open(path, encoding="utf-8-sig").read().splitlines() if not l.strip().startswith("//"))
+    lab = (json.loads(text).get("Sas") or {}).get("Lab") or {}
+    for k, v in (lab.get("DoseFactors") or {}).items():
+        rules["DoseFactors"][k] = float(v)
+    for k, v in (lab.get("NutrientParameters") or {}).items():
+        rules["NutrientParameters"][k] = v
+    for n, table in (lab.get("NutrientDoseFactors") or {}).items():
+        own = rules["NutrientDoseFactors"].setdefault(n, {})
+        for k, v in table.items():
+            own[k] = float(v)
+    return rules
+
+
+def _ci(d, key):
+    for k, v in d.items():
+        if k.lower() == key.lower():
+            return v
+    return None
+
+
+def expected_factor(rules, nutrient, status):
+    own = _ci(rules["NutrientDoseFactors"], nutrient)
+    if own is not None and _ci(own, status) is not None:
+        return _ci(own, status)
+    f = _ci(rules["DoseFactors"], status)
+    return f if f is not None else (_ci(rules["DoseFactors"], "NotTested") or 1.0)
+
+
+def money(x):
+    from decimal import Decimal, ROUND_HALF_UP
+    return Decimal(str(x)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def xlsx_texts(content):
+    """Every cell text of an xlsx (shared strings, inline strings and numbers)."""
+    z = zipfile.ZipFile(io.BytesIO(content))
+    texts = set()
+    for name in z.namelist():
+        if name == "xl/sharedStrings.xml" or name.startswith("xl/worksheets/sheet"):
+            xml = z.read(name).decode("utf-8-sig", "replace")
+            # ClosedXML writes prefixed tags (<x:t>, <x:v>)
+            texts.update(re.findall(r"<(?:\w+:)?t(?:\s[^>]*)?>([^<]*)</(?:\w+:)?t>", xml))
+            if name != "xl/sharedStrings.xml":
+                texts.update(re.findall(r"<(?:\w+:)?c [^>]*?(?<!t=\"s\")>\s*<(?:\w+:)?v>([^<]*)</(?:\w+:)?v>", xml))
+    return texts
+
+
+def check_schedule(rules, report, detail, general_crops):
+    """Recomputes every schedule row from the report's parameter statuses; returns the rows of the first column."""
+    code = report["code"]
+    sched = detail["sample"].get("fertilizerSchedule")
+    if report["sampleType"] == 1:
+        check(sched == [], f"schedule {code}: water report has none", f"{len(sched or [])} columns")
+        return []
+    if not check(isinstance(sched, list) and len(sched) == 2, f"schedule {code}: two crop columns", f"{len(sched or [])} columns"):
+        return []
+    crop1 = (report.get("crop") or "").strip()
+    c0, c1 = sched
+    check(c0["crop"].lower() == crop1.lower(), f"schedule {code}: first column is Crop1", f"{c0['crop']!r} vs {crop1!r}")
+    if not c1.get("crop") or c1["crop"].lower() == crop1.lower():
+        check(c1["crop"].lower() == c0["crop"].lower(), f"schedule {code}: one crop printed twice", c1["crop"])
+    else:
+        SEEN["two-crops"].append(f"{code} {c0['crop']}+{c1['crop']}")
+    for col in sched:
+        crop = col["crop"] or ""
+        if col["isGeneral"]:
+            SEEN["general"].append(f"{code} {crop or '(none)'}")
+            check(col["scheduleCrop"] == "General", f"schedule {code} {crop}: General rows", col["scheduleCrop"])
+        else:
+            check(col["scheduleCrop"].lower() == crop.lower() and crop, f"schedule {code} {crop}: own rows", col["scheduleCrop"])
+        if crop.lower() == "banana":
+            check(not col["isGeneral"], f"schedule {code}: Banana uses its own rows")
+        if crop.lower() in general_crops:
+            check(col["isGeneral"], f"schedule {code}: {crop} uses General")
+        check(len(col["rows"]) > 0, f"schedule {code} {crop}: has rows", f"{len(col['rows'])} rows")
+
+    status_by_code = {p["code"].upper(): (STATUS_NAMES.get(p["status"]) if p.get("status") is not None else "NotTested", p)
+                      for p in detail["sample"]["parameters"] if p.get("code")}
+    bad = []
+    for col in sched:
+        for r in col["rows"]:
+            nutrients = [n.strip() for n in (r.get("nutrient") or "").split(",") if n.strip()]
+            factor, status, by = 1.0, "", None
+            for i, n in enumerate(nutrients):
+                pcode = _ci(rules["NutrientParameters"], n)
+                st = status_by_code.get((pcode or "").upper(), ("NotTested", None))[0]
+                f = expected_factor(rules, n, st)
+                if i == 0 or f > factor:
+                    factor, status, by = f, st, n
+            adjusted = money(0) if money(r["baseKgPerAcre"]) == 0 else money(float(r["baseKgPerAcre"]) * factor)
+            if (money(r["factor"]) != money(factor) or r["statusUsed"] != status or money(r["adjustedKgPerAcre"]) != adjusted
+                    or bool(r["notRequired"]) != (bool(nutrients) and factor == 0)):
+                bad.append(f"{col['crop']}/{r['stageName']}/{r['product']}: got x{r['factor']} {r['statusUsed']} {r['adjustedKgPerAcre']}"
+                           f" nr={r['notRequired']}, want x{factor} {status} {adjusted}")
+            # the cases the product owner named
+            if r["product"] in ("SPIC Urea", "SPIC DAP") and status == "Deficient" and by == "N" and money(r["baseKgPerAcre"]) > 0:
+                SEEN["n-deficient"].append(f"{code} {r['product']} {r['baseKgPerAcre']} x{r['factor']} = {r['adjustedKgPerAcre']}")
+            if r["product"] == "Potash" and status == "Excess" and money(r["baseKgPerAcre"]) > 0:
+                SEEN["k-excess"].append(f"{code} Potash {r['baseKgPerAcre']} x{r['factor']} = {r['adjustedKgPerAcre']}")
+            if "Gypsum" in nutrients and status == "Excess":
+                SEEN["ph-alkaline"].append(f"{code} {r['product']} {r['baseKgPerAcre']} x{r['factor']} = {r['adjustedKgPerAcre']}")
+            if "Gypsum" in nutrients and status == "Deficient":
+                SEEN["ph-acidic"].append(f"{code} {r['product']} {r['adjustedKgPerAcre']} not required={r['notRequired']}")
+    rows = sum(len(c["rows"]) for c in sched)
+    check(not bad, f"schedule {code}: factors, status used and adjusted quantities", "; ".join(bad[:4]) or f"{rows} rows")
+    return c0["rows"]
+
+
 def all_reports(api, batch_id):
     items, page = [], 1
     while True:
@@ -139,7 +275,13 @@ def main():
     ap.add_argument("--no-generate", action="store_true", help="skip generation (reports already exist)")
     ap.add_argument("--generate-method", default="PATCH")
     ap.add_argument("--out", help="folder to save the downloaded files into")
+    ap.add_argument("--appsettings", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "SpicAPI", "appsettings.json"),
+                    help="appsettings.json with the Sas:Lab schedule rules (defaults apply when missing)")
+    ap.add_argument("--general-crops", default="Paddy", help="comma list of crops without their own schedule (must print General)")
+    ap.add_argument("--expect-cases", default="", help=f"comma list of schedule cases the batch must contain: {', '.join(CASES)}")
     args = ap.parse_args()
+    rules = load_rules(args.appsettings)
+    general_crops = {c.strip().lower() for c in args.general_crops.split(",") if c.strip()}
     if not args.password:
         raise SystemExit("password missing: --password or LAB_CHECK_PASSWORD")
 
@@ -223,6 +365,7 @@ def main():
         lines = [l for g in detail["sample"]["recommendations"] for l in g["lines"]]
         doubled = [l for l in lines if re.match(r"^(\w[\w ]*?) is (high|low)\b.* because \1 is ", l, re.I)]
         check(not doubled, f"recommendation wording {r['code']}", "; ".join(doubled) or f"{len(lines)} lines")
+        schedule_rows = check_schedule(rules, r, detail, general_crops)
         before_count = detail["summary"]["downloadCount"]
         for lang in detail["languages"]:
             s, h, content = api.get(f"api/Lab/reports/{r['id']}/pdf?lang={lang}", raw=True)
@@ -238,6 +381,10 @@ def main():
                 open(os.path.join(out, f"{r['code']}-{lang}.pdf"), "wb").write(content)
         s, h, content = api.get(f"api/Lab/reports/{r['id']}/xlsx?lang=en", raw=True)
         check(s == 200 and ctype(h) == XLSX and content[:2] == b"PK", f"xlsx {r['code']}", f"{len(content)} bytes")
+        if s == 200 and schedule_rows:
+            texts = xlsx_texts(content)
+            missing = sorted({f"{money(x['adjustedKgPerAcre']):.2f}" for x in schedule_rows} - texts)
+            check(not missing, f"xlsx {r['code']} prints the adjusted quantities", ", ".join(missing) or f"{len(schedule_rows)} rows")
         if out and s == 200:
             open(os.path.join(out, f"{r['code']}-en.xlsx"), "wb").write(content)
         _, _, again = api.get(f"api/Lab/reports/{r['id']}")
@@ -299,6 +446,12 @@ def main():
             check(s == 400, "farmer: non-farmer language refused", f"HTTP {s}")
             s, _, _ = farmer.call("POST", f"api/Lab/reports/{rid}/printed")
             check(s == 403, "farmer: cannot mark printed", f"HTTP {s}")
+
+    # ---------------------------------------------------------------- schedule cases seen
+    for case in CASES:
+        print(f"INFO schedule case {case}: " + ("; ".join(SEEN[case][:3]) if SEEN[case] else "not in this batch"))
+    for case in [c.strip() for c in args.expect_cases.split(",") if c.strip()]:
+        check(SEEN.get(case), f"schedule case {case} present", "; ".join((SEEN.get(case) or [])[:2]))
 
     return finish()
 

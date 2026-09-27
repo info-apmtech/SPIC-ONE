@@ -19,6 +19,7 @@ public static class LabReportsServiceCollectionExtensions
         services.AddScoped<LabReportReader>();
         // The reader evaluates with the lab's one result engine (also registered by AddSasLab()).
         services.TryAddSingleton<LabAutoResultEngine>();
+        services.TryAddSingleton<LabFertilizerSchedule>();
         services.AddScoped<LabReportFiles>();
         services.AddSingleton<LabTranslations>();
         services.AddSingleton<LabFonts>();

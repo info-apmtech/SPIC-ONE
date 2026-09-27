@@ -103,7 +103,12 @@ and recommendation lines come from a `LabTranslation` table (Key, Lang, Text) se
 reference PDF (English and Tamil first). Soil and water use two QuestPDF layouts that copy the
 reference. The fertilizer schedule comes from an admin-editable `LabCropRecommendation` master
 (Crop, Stage: Basal / TopDressing1 / 2 / 3 with DayNumber, Product, KgPerAcre), seeded with the
-Banana example; result-dependent adjustments wait for the product owner's rules. `LabParameter`
+Banana example. Phase 2b (V5q): each row carries its `Nutrient` ("N,P", "K", "Organic", "Gypsum"
+...), crop "General" (a copy of the Banana set) serves crops without rows, and the printed
+quantity is KgPerAcre x the dose factor of the sample's status for that nutrient (highest factor
+for several nutrients, 2 decimals), all numbers in `Sas:Lab:DoseFactors` / `NutrientParameters`
+/ `NutrientDoseFactors` (LabFertilizerSchedule; also in the entry preview and report detail as
+`FertilizerSchedule`). `LabParameter`
 gains `ValueType` (Numeric / Text with `Options`, e.g. Texture) and derived parameters (Organic
 Matter = Organic Carbon x 1.724). Fonts for Indian scripts: Noto Sans (pending approval to add).
 

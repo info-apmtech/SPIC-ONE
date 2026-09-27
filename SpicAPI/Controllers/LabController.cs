@@ -41,10 +41,13 @@ namespace SpicAPI.Controllers
 		private readonly LabAutoResultEngine _engine;
 		private readonly ILabReportService _reports;
 		private readonly ILogger<LabController> _logger;
+		private readonly LabFertilizerSchedule _schedule;
 
 		public LabController(AppDbContext db, IWebHostEnvironment env, IConfiguration config, LabAccess access,
-			LabActivityWriter activities, LabAutoResultEngine engine, ILabReportService reports, ILogger<LabController> logger)
+			LabActivityWriter activities, LabAutoResultEngine engine, ILabReportService reports, ILogger<LabController> logger,
+			LabFertilizerSchedule schedule)
 		{
+			_schedule = schedule;
 			_db = db;
 			_env = env;
 			_config = config;
@@ -1277,7 +1280,7 @@ namespace SpicAPI.Controllers
 
 			var item = await _db.SampleItems.AsNoTracking()
 				.Where(i => i.Id == dto.SampleItemId)
-				.Select(i => new { i.SampleType, i.Crop1 })
+				.Select(i => new { i.SampleType, i.Crop1, i.Crop2 })
 				.FirstAsync();
 
 			var parameters = _engine.ParametersFor(item.SampleType, await ActiveParametersAsync());
@@ -1287,6 +1290,7 @@ namespace SpicAPI.Controllers
 				return BadRequest(new { Success = false, Message = string.Join(" ", evaluation.Errors), Errors = evaluation.Errors });
 
 			StampEntryFields(evaluation.Result.Parameters, parameters);
+			await AddScheduleAsync(evaluation.Result, item.SampleType, item.Crop1, item.Crop2);
 			return Ok(evaluation.Result);
 		}
 
@@ -1577,6 +1581,12 @@ namespace SpicAPI.Controllers
 			var samples = await LoadBatchSamplesAsync(batch);
 			var sample = samples.First(s => s.Row.SampleItemId == itemId);
 			var row = (await BuildBatchRowsAsync(new List<int> { batch.Id })).First();
+			var result = Evaluate(sample);
+			var crops = await _db.SampleItems.AsNoTracking()
+				.Where(i => i.Id == itemId)
+				.Select(i => new { i.Crop1, i.Crop2 })
+				.FirstAsync();
+			await AddScheduleAsync(result, sample.Row.SampleType, crops.Crop1, crops.Crop2);
 
 			return new LabSampleEntryDto
 			{
@@ -1588,8 +1598,17 @@ namespace SpicAPI.Controllers
 				FarmerMobile = sample.FarmerMobile,
 				CollectedOn = sample.CollectedOn,
 				IsLocked = batch.Status == SampleBatchStatus.Completed,
-				Result = Evaluate(sample)
+				Result = result
 			};
+		}
+
+		/// <summary>Phase 2b: the soil report's fertilizer schedule for the sample's crops, adjusted to the
+		/// evaluated rows (the same LabFertilizerSchedule the PDF uses); empty for water samples.</summary>
+		private async Task AddScheduleAsync(LabAutoResultDto result, SampleType type, string? crop1, string? crop2)
+		{
+			if (type == SampleType.Water) return;
+			var master = await LabFertilizerSchedule.LoadRowsAsync(_db);
+			result.FertilizerSchedule = _schedule.Build(type, crop1, crop2, result.Parameters, master);
 		}
 
 		private async Task<LabBatchDetailDto> BuildBatchDetailAsync(int id)

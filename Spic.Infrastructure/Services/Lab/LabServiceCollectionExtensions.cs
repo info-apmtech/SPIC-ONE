@@ -16,6 +16,8 @@ public static class LabServiceCollectionExtensions
         services.AddScoped<LabAccess>();
         services.AddScoped<LabActivityWriter>();
         services.AddSingleton<LabAutoResultEngine>();
+        // Phase 2b: soil-test-based fertilizer schedule (Sas:Lab:DoseFactors, NutrientParameters).
+        services.AddSingleton<LabFertilizerSchedule>();
         return services;
     }
 }

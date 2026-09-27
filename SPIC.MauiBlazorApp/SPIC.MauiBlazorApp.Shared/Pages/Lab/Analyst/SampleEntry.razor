@@ -335,6 +335,94 @@
             </section>
         </div>
 
+        @* ---------------------------------------------------------------- fertilizer schedule (phase 2b) *@
+        @if (ScheduleColumns.Count > 0)
+        {
+            <section class="la-card se-fs" aria-labelledby="se-fs-title">
+                <div class="la-card-head">
+                    <div>
+                        <h2 class="la-card-title" id="se-fs-title"><i class="bi bi-basket" aria-hidden="true"></i> Fertilizer Schedule (Kg/acre)</h2>
+                        <p class="la-card-sub">
+                            @(Evaluated.Count == 0
+                                ? "Base quantities; they are adjusted as the test values are entered."
+                                : "Adjusted to this sample's results: base quantity x dose factor of the nutrient's status.")
+                        </p>
+                    </div>
+                </div>
+                @foreach (var col in ScheduleColumns)
+                {
+                    <div class="se-fs-crop">
+                        <h3 class="se-fs-crop-title"><i class="bi bi-flower1" aria-hidden="true"></i> @ScheduleTitle(col)</h3>
+
+                        <div class="la-table-wrap tablet-up">
+                            <table class="la-table se-fs-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Product</th>
+                                        <th scope="col">Nutrient</th>
+                                        <th scope="col">Status Used</th>
+                                        <th scope="col" class="se-fs-num">Base</th>
+                                        <th scope="col" class="se-fs-num">Factor</th>
+                                        <th scope="col" class="se-fs-num">Adjusted</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var stage in col.Rows.GroupBy(r => r.Stage))
+                                    {
+                                        <tr class="se-fs-stage"><th scope="colgroup" colspan="6">@StageTitle(stage.First())</th></tr>
+                                        @foreach (var r in stage)
+                                        {
+                                            <tr>
+                                                <th scope="row" class="se-param">@r.Product</th>
+                                                <td>@AnalystText.Dash(r.Nutrient)</td>
+                                                <td>@ScheduleStatus(r)</td>
+                                                <td class="se-fs-num">@Kg(r.BaseKgPerAcre)</td>
+                                                <td class="se-fs-num">x @Kg(r.Factor)</td>
+                                                <td class="se-fs-num se-fs-adj">
+                                                    @Kg(r.AdjustedKgPerAcre)
+                                                    @if (r.NotRequired)
+                                                    {
+                                                        <span class="se-fs-nr">not required</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="se-pcards phone-only">
+                            @foreach (var stage in col.Rows.GroupBy(r => r.Stage))
+                            {
+                                <div class="se-pcard">
+                                    <div class="se-pcard-head"><span class="se-pcard-name">@StageTitle(stage.First())</span></div>
+                                    <ul class="se-fs-lines">
+                                        @foreach (var r in stage)
+                                        {
+                                            <li>
+                                                <span class="se-fs-line-top">
+                                                    <span class="se-fs-product">@r.Product</span>
+                                                    <span class="se-fs-adj">@Kg(r.AdjustedKgPerAcre)</span>
+                                                </span>
+                                                <span class="se-fs-line-sub">
+                                                    @Kg(r.BaseKgPerAcre) x @Kg(r.Factor) &middot; @AnalystText.Dash(r.Nutrient) @ScheduleStatus(r)
+                                                    @if (r.NotRequired)
+                                                    {
+                                                        <span class="se-fs-nr">not required</span>
+                                                    }
+                                                </span>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </section>
+        }
+
         @* ---------------------------------------------------------------- footer *@
         <div class="se-footer">
         <ActionBar Align="ActionBar.BarAlign.Between" AriaLabel="Sample actions" CssClass="se-actions">
@@ -446,6 +534,41 @@
     private string Value(int id) => _values.TryGetValue(id, out var v) ? v : "";
 
     private static string Slug(LabResultStatus? s) => s?.ToString().ToLowerInvariant() ?? "none";
+
+    // ---------------------------------------------------------------- fertilizer schedule (phase 2b)
+
+    /// <summary>The schedule's crop columns, once each (the API sends Crop1 twice when there is no Crop2, like the PDF).</summary>
+    private List<LabFertilizerScheduleDto> ScheduleColumns => (Result.FertilizerSchedule ?? new())
+        .Where(c => c.Rows.Count > 0)
+        .GroupBy(c => $"{c.Crop}|{c.ScheduleCrop}|{c.IsGeneral}", StringComparer.OrdinalIgnoreCase)
+        .Select(g => g.First())
+        .ToList();
+
+    private static string ScheduleTitle(LabFertilizerScheduleDto c) =>
+        !c.IsGeneral ? c.Crop
+        : string.IsNullOrWhiteSpace(c.Crop) ? "General (no crop on the sample)"
+        : $"General (no schedule configured for {c.Crop})";
+
+    private static string StageTitle(LabFertilizerScheduleRowDto r) =>
+        r.DayNumber is int day ? $"{r.StageName} ({day}th day)" : r.StageName;
+
+    private static string Kg(decimal v) => v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static RenderFragment ScheduleStatus(LabFertilizerScheduleRowDto r) => __builder =>
+    {
+        if (string.IsNullOrWhiteSpace(r.StatusUsed))
+        {
+            <span class="la-sub">-</span>
+        }
+        else if (Enum.TryParse<LabResultStatus>(r.StatusUsed, out var st))
+        {
+            <LabPill Text="@($"{(string.IsNullOrWhiteSpace(r.ParameterName) ? r.StatusNutrient : r.ParameterName)}: {AnalystText.ResultStatusText(st)}")" Tone="@LabPill.ToneFor(st)" />
+        }
+        else
+        {
+            <LabPill Text="@($"{(string.IsNullOrWhiteSpace(r.ParameterName) ? r.StatusNutrient : r.ParameterName)}: not tested")" Tone="grey" />
+        }
+    };
 
     // ---------------------------------------------------------------- loading
 

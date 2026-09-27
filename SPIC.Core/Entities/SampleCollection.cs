@@ -403,6 +403,11 @@ public class LabCropRecommendation
     public decimal KgPerAcre { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>V5q (phase 2b): the nutrient(s) the product supplies, comma separated codes of
+    /// Sas:Lab:NutrientParameters ("N", "N,P", "K", "Zn", "Organic", "Gypsum" ...). The soil
+    /// report scales KgPerAcre by the dose factor of the sample's status for that nutrient
+    /// (LabFertilizerSchedule); null = printed unchanged.</summary>
+    public string? Nutrient { get; set; }
 }
 
 /// <summary>Report labels per language (Key + Lang unique). Missing keys fall back to English.</summary>

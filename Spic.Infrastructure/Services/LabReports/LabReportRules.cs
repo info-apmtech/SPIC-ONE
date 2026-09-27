@@ -136,14 +136,8 @@ public sealed class LabReportModel
     /// <summary>The engine's crop note in parts (for the translated layouts).</summary>
     public LabSuitability? Suitability { get; set; }
 
-    /// <summary>Fertilizer schedule columns (Crop1, Crop2 or Crop1 twice like the reference).</summary>
-    public List<LabScheduleColumn> Schedule { get; set; } = new();
-}
-
-public sealed class LabScheduleColumn
-{
-    public string Crop { get; set; } = "";              // the crop the column is for (farmer's crop)
-    public string ScheduleCrop { get; set; } = "";      // the crop whose rows are printed
-    public bool IsGeneral { get; set; }                  // no rows for Crop -> Banana rows printed as "General"
-    public List<LabCropRecommendation> Rows { get; set; } = new();
+    /// <summary>Fertilizer schedule columns (Crop1, Crop2 or Crop1 twice like the reference), with
+    /// the quantities adjusted to this sample's results (<see cref="LabFertilizerSchedule"/>; the
+    /// layouts print AdjustedKgPerAcre). A crop without rows gets the "General" rows (IsGeneral).</summary>
+    public List<LabFertilizerScheduleDto> Schedule { get; set; } = new();
 }

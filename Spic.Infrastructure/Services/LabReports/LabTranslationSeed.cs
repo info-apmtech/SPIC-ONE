@@ -170,6 +170,9 @@ public static class LabTranslationSeed
         new("schedule.thDay", "th day", "வது நாள்", "వ రోజు", "वा दिवस"),
         new("schedule.general", "General", "பொது", "సాధారణ", "सामान्य"),
         new("schedule.generalNote", "No fertilizer schedule is configured for {crop}; the general schedule is shown.", "{crop} பயிருக்கு உர அட்டவணை இல்லை; பொது அட்டவணை காட்டப்பட்டுள்ளது.", "{crop} పంటకు ఎరువుల పట్టిక లేదు; సాధారణ పట్టిక చూపబడింది.", "{crop} पिकासाठी खत वेळापत्रक उपलब्ध नाही; सामान्य वेळापत्रक दाखवले आहे."),
+        // phase 2b: the schedule follows the sample's results (LabFertilizerSchedule)
+        new("schedule.adjustedNote", "Quantities are adjusted to the soil test results of this sample.", "இந்த மாதிரியின் மண் பரிசோதனை முடிவுகளுக்கு ஏற்ப அளவுகள் மாற்றப்பட்டுள்ளன.", "ఈ నమూనా మట్టి పరీక్ష ఫలితాల ప్రకారం పరిమాణాలు సవరించబడ్డాయి.", "या नमुन्याच्या माती परीक्षण निकालानुसार प्रमाण बदलले आहे."), // review
+        new("schedule.notRequired", "{product} not required ({param}: {response}).", "{product} தேவையில்லை ({param}: {response}).", "{product} అవసరం లేదు ({param}: {response}).", "{product} आवश्यक नाही ({param}: {response})."), // review
         new("product.SPIC Jyoti", "SPIC Jyoti", "ஸ்பிக் ஜோதி", "స్పిక్ జ్యోతి", "स्पीक ज्योती"),
         new("product.SPIC Gypsum", "SPIC Gypsum", "ஜிப்ஸம்", "స్పిక్ జిప్సం", "स्पीक जिप्सम"),
         new("product.SPIC Sangamam", "SPIC Sangamam", "சங்கமம்", "స్పిక్ సంగమం", "स्पीक संगमम"),
