@@ -242,6 +242,13 @@ accounts, no live API; phone-first checks at 375 px; sweeps clean; commit in the
   46 flagged, largest page 1,183 nodes), coordinator, analyst, finance and farmer (only intended
   redirects and 404s on records the role may not see). Outputs in `tools/ui-sweep/out/final-*`.
   Production still needs: `migrate.ps1` (V5o + V5p), `deploy.ps1`, designation grants, fonts.
+- 2026-09-27 later: Noto fonts added (ba24d0c; Tamil / Telugu / Marathi PDFs checked), fertilizer
+  schedule adjusted to the sample's results and crop (47e012d, migration V5q, config
+  `Sas:Lab:DoseFactors`), translation workbook sent to the product owner for review. Phone walk
+  (POCO X6 Neo, Debug build against the local API through adb reverse): coordinator 10 routes,
+  analyst 5, finance 3, farmer 4, admin 3, all unflagged except finance's 404 on a payment it may
+  not see; scroll-through captures reviewed for every role (dashboard, lists, batch details tabs,
+  sample-wise entry, batch report details, payment list, my samples, farmer details, lab tracking).
 
 ## 6. Principles
 

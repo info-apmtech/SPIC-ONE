@@ -133,3 +133,22 @@ window.navSearch = {
         if (match) match.click();
     }
 };
+
+// Share a title / text / url through the platform share sheet. Returns
+// "shared" | "cancelled" | "copied" (clipboard fallback) | "none". The MAUI host
+// (wwwroot/maui-interop.js) replaces this with the native share sheet.
+window.spic.share = async function (title, text, url) {
+    var data = {};
+    if (title) data.title = title;
+    if (text) data.text = text;
+    if (url) data.url = url;
+    if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
+        try { await navigator.share(data); return "shared"; }
+        catch (e) { if (e && e.name === "AbortError") return "cancelled"; }
+    }
+    var fallback = [text, url].filter(Boolean).join("\n");
+    try {
+        if (navigator.clipboard && fallback) { await navigator.clipboard.writeText(fallback); return "copied"; }
+    } catch (e) { /* no clipboard permission */ }
+    return "none";
+};

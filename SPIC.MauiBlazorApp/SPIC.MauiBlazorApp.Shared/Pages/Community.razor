@@ -184,11 +184,18 @@
                         </div>
                         <h3 class="cmh-product-name">@p.Name</h3>
                         <p class="cmh-product-count">@Short(p.DiscussionCount) discussion</p>
-                        <button type="button" class="cmh-join @(p.Joined ? "is-on" : "")"
-                                disabled="@(_joining == p.Name)"
-                                @onclick="() => ToggleJoinAsync(p)">
-                            @(p.Joined ? "Joined" : "Join")
-                        </button>
+                        @* Product owner 2026-09-27: a way into the product's discussions next to Join. *@
+                        <div class="cmh-product-actions">
+                            <button type="button" class="cmh-join @(p.Joined ? "is-on" : "")"
+                                    disabled="@(_joining == p.Name)"
+                                    @onclick="() => ToggleJoinAsync(p)">
+                                @(p.Joined ? "Joined" : "Join")
+                            </button>
+                            <a class="cmh-join cmh-open" href="@DiscussionsHref(p.Name)"
+                               title="@($"Open the {p.Name} discussions")">
+                                <i class="bi bi-chat-dots" aria-hidden="true"></i> Discussions
+                            </a>
+                        </div>
                     </article>
                 }
             </div>
@@ -218,6 +225,9 @@
 </div>
 
 @code {
+    private static string DiscussionsHref(string product)
+        => $"/Community/discussions?product={Uri.EscapeDataString(product)}";
+
     private const string LayoutKey = "community.recentLayout";
 
     private string _query = "";

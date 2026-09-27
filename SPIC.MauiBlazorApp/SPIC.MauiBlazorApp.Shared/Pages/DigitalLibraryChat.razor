@@ -686,7 +686,46 @@
         Nav.NavigateTo("/DigitalLibrary/chat");
     }
 
-    private void Share() => Toast.Info(Current is null ? "Start a conversation to share it." : "Sharing a conversation is not part of the assistant yet.");
+    private async Task Share()
+    {
+        if (Current is null || Current.Messages.Count == 0)
+        {
+            Toast.Info("Start a conversation to share it.");
+            return;
+        }
+        var sb = new System.Text.StringBuilder();
+        var title = string.IsNullOrWhiteSpace(Current.Title) ? "Digital Library Assistant" : Current.Title;
+        sb.AppendLine(title);
+        sb.AppendLine();
+        foreach (var m in Current.Messages)
+        {
+            var who = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "Assistant";
+            sb.Append(who).Append(": ").AppendLine((m.Text ?? "").Trim());
+            sb.AppendLine();
+        }
+        sb.AppendLine("Shared from SPIC ONE Digital Library Assistant");
+        string result;
+        try
+        {
+            result = await JS.InvokeAsync<string>("spic.share", title, sb.ToString(), null);
+        }
+        catch
+        {
+            result = "none";
+        }
+        switch (result)
+        {
+            case "shared":
+            case "cancelled":
+                break;
+            case "copied":
+                Toast.Info("Conversation copied to the clipboard.");
+                break;
+            default:
+                Toast.Error("Sharing is not available here.");
+                break;
+        }
+    }
 
     private Task Send()
     {

@@ -131,6 +131,7 @@ public class LibraryStatsDto
     public int Total { get; set; }
     public int Published { get; set; }
     public int Drafts { get; set; }
+    public int Archived { get; set; }
     public int Videos { get; set; }
     public int Products { get; set; }
     public int Brochures { get; set; }

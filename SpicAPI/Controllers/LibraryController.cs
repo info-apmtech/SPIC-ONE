@@ -124,6 +124,7 @@ namespace SpicAPI.Controllers
                 Total = rows.Count,
                 Published = rows.Count(r => r.Status == LibraryContentStatus.Published),
                 Drafts = rows.Count(r => r.Status == LibraryContentStatus.Draft),
+                Archived = rows.Count(r => r.Status == LibraryContentStatus.Archived),
                 Videos = rows.Count(r => r.Kind == LibraryContentKind.Video),
                 Products = rows.Count(r => r.Kind == LibraryContentKind.Product),
                 Brochures = rows.Count(r => r.Kind == LibraryContentKind.Brochure),

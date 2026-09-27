@@ -60,6 +60,12 @@
                 <span class="dlc-stat-hint">Pending content</span>
                 <span class="dlc-stat-icon dlc-ic-yellow"><i class="bi bi-pencil-square"></i></span>
             </button>
+            <button type="button" class="dlc-stat @(Status == "archived" ? "active" : "")" @onclick='() => SetStatus("archived")'>
+                <span class="dlc-stat-label">Archived</span>
+                <span class="dlc-stat-value">@(_stats?.Archived ?? 0)</span>
+                <span class="dlc-stat-hint">Hidden from readers; restore any time</span>
+                <span class="dlc-stat-icon dlc-ic-grey"><i class="bi bi-archive"></i></span>
+            </button>
         }
     </div>
 
@@ -77,6 +83,10 @@
                     <option value="">All Status</option>
                     <option value="published">Published</option>
                     <option value="draft">Draft</option>
+                    @if (CanEdit)
+                    {
+                        <option value="archived">Archived</option>
+                    }
                 </select>
             }
             <div class="dlc-search">
@@ -191,6 +201,7 @@
         {
             "published" => LibraryContentStatus.Published,
             "draft" => LibraryContentStatus.Draft,
+            "archived" => LibraryContentStatus.Archived,
             _ => null
         }
         : LibraryContentStatus.Published;
@@ -290,6 +301,21 @@
 
     private async Task Archive(DigitalLibraryItem item)
     {
+        if (item.Status == LibraryContentStatus.Archived)
+        {
+            // Restore: an archived item comes back as a draft so the editor can review it before publishing.
+            if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Draft) is null)
+            {
+                Toast.Error(Api.LastError ?? "The item could not be restored.");
+                return;
+            }
+            item.Status = LibraryContentStatus.Draft;
+            item.Published = false;
+            if (StatusFilter == LibraryContentStatus.Archived) { Items.Remove(item); _total = Math.Max(0, _total - 1); }
+            Toast.Success("Content restored to Drafts.");
+            _stats = await Api.GetStatsAsync() ?? _stats;
+            return;
+        }
         if (await Api.SetStatusAsync(item.Id, LibraryContentStatus.Archived) is null)
         {
             Toast.Error(Api.LastError ?? "The item could not be archived.");
