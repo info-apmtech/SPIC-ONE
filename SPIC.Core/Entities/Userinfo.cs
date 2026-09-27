@@ -88,8 +88,7 @@ namespace SPIC.Core.Entities
         ReportsCenter,
         ContactUs,
         LogisticsMaster,
-        UserProfile
-        [PageModule("SAS")] ConsignmentHistory,
+        UserProfile,
         // Lab portal (version 2, 2026-09-27): coordinator pages, then the analyst page.
         [PageModule("SAS Lab")] LabDashboard,
         [PageModule("SAS Lab")] LabConsignments,
