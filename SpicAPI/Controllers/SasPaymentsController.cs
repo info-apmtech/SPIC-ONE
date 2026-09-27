@@ -15,9 +15,11 @@ namespace SpicAPI.Controllers
 	/// payments (docs/sas-lab-portal-plan.md, screens 23-30 and 34-35). Contract and route list:
 	/// SPIC.Core/DTOs/SasPaymentDtos.cs.
 	///
-	/// Mode (resolved per request, like LibraryController):
+	/// Mode (resolved per request, like LibraryController). DESIGNATION ONLY (product decision
+	/// 2026-09-27): the Admin / CorporateAdmin ROLES get no payment mode by themselves; an admin without
+	/// SasPaymentApproval / SasPaymentVerification falls to the ReadOnly / 403 rule like any other role.
 	///   Farmer   : role Farmer -> payments of collections carrying a farmer whose SasFarmer.UserId is theirs
-	///   Admin    : Admin / CorporateAdmin, or a designation granting SasPaymentApproval -> everything
+	///   Admin    : a designation granting SasPaymentApproval -> everything
 	///   Finance  : a designation granting SasPaymentVerification -> payments forwarded to Finance
 	///   ReadOnly : v1 write roles (MDO / JMDO) -> the payments they submitted
 	///   anyone else -> 403
@@ -435,8 +437,7 @@ namespace SpicAPI.Controllers
 				return _access = new Access(SasPaymentPageMode.Farmer, false, false, userId, userId != "");
 
 			var roleAccess = await CurrentRoleAccessAsync(userId);
-			var approval = role is AppRole.Admin or AppRole.CorporateAdmin ||
-						   RoleAccessPermissions.HasPage(roleAccess, PagePermission.SasPaymentApproval);
+			var approval = RoleAccessPermissions.HasPage(roleAccess, PagePermission.SasPaymentApproval);
 			var verify = RoleAccessPermissions.HasPage(roleAccess, PagePermission.SasPaymentVerification);
 
 			if (approval)

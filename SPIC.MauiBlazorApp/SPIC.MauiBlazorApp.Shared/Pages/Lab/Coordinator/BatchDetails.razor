@@ -113,11 +113,12 @@
     /// <summary>
     /// Samples tab rows open the sample on the analyst entry page (read-only once the batch is
     /// completed). The route guard maps /Lab/TestEntry to the LabTestEntry page key, so the link is
-    /// only rendered for users who can reach it (admins, or a designation holding LabTestEntry);
+    /// only rendered for users who can reach it (a designation holding LabTestEntry or LabAnalysis;
+    /// designation only, no Admin / CorporateAdmin bypass);
     /// otherwise the row stays plain text instead of bouncing the user to their landing page.
     /// </summary>
     private string? SampleHref(LabSampleRowDto s) =>
-        (Login.CanAccess("LabTestEntry") || Login.CanAccess("LabAnalysis")) ? $"/Lab/TestEntry/{Id}?sample={s.SampleItemId}" : null;
+        (Login.HasPageStrict(PagePermission.LabTestEntry) || Login.HasPageStrict(PagePermission.LabAnalysis)) ? $"/Lab/TestEntry/{Id}?sample={s.SampleItemId}" : null;
 
     private string Tab => TabQuery?.ToLowerInvariant() switch
     {

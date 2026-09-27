@@ -20,8 +20,10 @@ namespace SpicAPI.Controllers
 	/// routes (api/Lab/reports*, api/Lab/batches/{id}/report*) live in LabReportsController.
 	///
 	/// Access (resolved once per request by LabAccess from the designation RoleAccess):
-	///   coordinator pages (LabDashboard / LabConsignments / LabAnalysis / LabReports) or
-	///   Admin / CorporateAdmin : read everything, write consignments / batches / documents
+	/// DESIGNATION ONLY (product decision 2026-09-27): the Admin / CorporateAdmin ROLES get no lab
+	/// rights by themselves; an admin without a lab designation gets 403 here like anyone else.
+	///   coordinator pages (LabDashboard / LabConsignments / LabAnalysis / LabReports)
+	///                          : read everything, write consignments / batches / documents
 	///   LabTestEntry (analyst) : read and enter values only on the batches assigned to them
 	///   LabTracking            : read everything
 	///   anyone else            : 403 (me and languages answer every signed-in user)
@@ -330,7 +332,7 @@ namespace SpicAPI.Controllers
 				return NotFound(new { Success = false, Message = "Consignment not found." });
 
 			var summary = (await BuildConsignmentRowsAsync(new List<int> { id })).First();
-			var consignment = await LabV1Sync.BuildConsignmentDetailAsync(_db, id, _access.IsAdmin);
+			var consignment = await LabV1Sync.BuildConsignmentDetailAsync(_db, id, _access.IsV1ReviewRole);
 
 			LabBatchRowDto? batch = null;
 			if (summary.BatchId.HasValue && await ScopedBatches().AnyAsync(b => b.Id == summary.BatchId.Value))
@@ -1318,7 +1320,7 @@ namespace SpicAPI.Controllers
 			{
 				return _access.AnalystOnly
 					? NotFound(new { Success = false, Message = "Sample not found in a lab batch." })
-					: Forbid403("Only the assigned analyst, the lab coordinator or an admin can enter test values.");
+					: Forbid403("Only the assigned analyst or the lab coordinator can enter test values.");
 			}
 
 			if (batch.Status == SampleBatchStatus.Completed)
@@ -1842,8 +1844,7 @@ namespace SpicAPI.Controllers
 			var designationIds = await LabAccess.AnalystDesignationIdsAsync(_db);
 
 			var users = await _db.Users.AsNoTracking()
-				.Where(u => (u.DesignationId != null && designationIds.Contains(u.DesignationId.Value)) ||
-							u.Role == AppRole.Admin || u.Role == AppRole.CorporateAdmin)
+				.Where(u => u.DesignationId != null && designationIds.Contains(u.DesignationId.Value))
 				.Select(u => new { u.Id, u.Name, u.UserName, Designation = u.Designation != null ? u.Designation.Name : null })
 				.ToListAsync();
 

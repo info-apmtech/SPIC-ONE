@@ -129,6 +129,9 @@ section("sign in")
 mdo, admin, coord = Client("qa.mdo"), Client("qa.admin"), Client("qa.labcoord")
 analyst, analyst2 = Client("qa.analyst"), Client("qa.analyst2")
 farmer, dealer, finance = Client("qa.farmer"), Client("qa.dealer"), Client("qa.finance")
+# Role Admin, designation 2 "Plain Staff QA" (no lab / payment keys): lab and payment access is
+# designation only (product decision 2026-09-27), so this admin must be refused like anyone else.
+plain = Client("qa.plainadmin")
 
 # ------------------------------------------------------------------------------------------ access
 section("access: me, 403s, languages")
@@ -153,8 +156,26 @@ eq([l["code"] for l in farmer.j("GET", "api/Lab/languages")], ["en", "ta"], "far
 
 analysts = coord.j("GET", "api/Lab/analysts")
 names = {a["userId"]: a for a in analysts}
-ok(analyst.id in names and analyst2.id in names and admin.id in names, "analysts list has qa.analyst, qa.analyst2 and admins")
+ok(analyst.id in names and analyst2.id in names and admin.id in names,
+   "analysts list has qa.analyst, qa.analyst2 and qa.admin (its designation grants LabTestEntry)")
 ok(coord.id not in names and dealer.id not in names, "analysts list excludes coordinator and dealer")
+ok(plain.id not in names, "analysts list excludes qa.plainadmin (Admin role alone is not an analyst)")
+
+# ------------------------------------------------------------------------------------------ designation only
+section("designation only: qa.plainadmin (Admin role, no lab / payment designation)")
+m = plain.j("GET", "api/Lab/me")
+ok(not (m["isCoordinator"] or m["isAnalyst"] or m["canWrite"]), f"qa.plainadmin has no lab rights {m}")
+eq([l["code"] for l in plain.j("GET", "api/Lab/languages")], ["en", "ta", "te", "mr"], "qa.plainadmin languages still answer")
+for path in ("api/Lab/dashboard", "api/Lab/analyst/dashboard", "api/Lab/analysts", "api/Lab/consignments",
+             "api/Lab/consignments/stats", "api/Lab/consignments/1", "api/Lab/batches", "api/Lab/batches/stats",
+             "api/Lab/batches/1", "api/Lab/batches/1/samples", "api/Lab/batches/1/samples/stats",
+             "api/Lab/batches/1/parameters/stats", "api/Lab/batches/1/documents", "api/Lab/batches/1/activities",
+             "api/Lab/samples/1", "api/Lab/financial-years"):
+    plain.get(path, expect=403)
+plain.call("POST", "api/Lab/batches", expect=403, json={"consignmentIds": [1]})
+plain.call("PATCH", "api/Lab/batches/1/status?status=Completed", expect=403)
+for path in ("api/Sas/payments/me", "api/Sas/payments/stats", "api/Sas/payments", "api/Sas/payments?tab=approvalPending"):
+    plain.get(path, expect=403)
 
 # ------------------------------------------------------------------------------------------ baselines
 section("baselines")
@@ -579,6 +600,9 @@ rstats = coord.j("GET", "api/Lab/reports/stats")
 eq(rstats["batchGroups"] - rstats0["batchGroups"], 1, "reports/stats BatchGroups +1 (B1 has reports, B2 has none)")
 with_reports = [b for b in all_pages(coord, "api/Lab/reports/batches") if b["reportsGenerated"] > 0]
 eq(rstats["batchGroups"], len(with_reports), "BatchGroups = batches with at least one report")
+# Reports: an Admin without a lab designation gets the v1 read rule (like field staff), never the lab scope.
+plain.get(f"api/Lab/reports/{reps[0]['id']}", expect=200)
+plain.call("POST", f"api/Lab/reports/{reps[0]['id']}/printed", expect=403)
 
 if not ARGS.no_db:
     try:
@@ -615,6 +639,13 @@ for p in pays:
        "approved: Admin Approved, awaiting Finance, admin amount, no Finance amount")
 adm_stats = admin.j("GET", "api/Sas/payments/stats")
 eq(adm_stats["approvalPending"] - adm_stats0["approvalPending"], 3, "ApprovalPending counts admin-approved payments awaiting Finance")
+# qa.plainadmin (Admin role, no SasPaymentApproval / SasPaymentVerification): 403 on every payment route.
+for path in (f"api/Sas/payments/{p_short['id']}", f"api/Sas/payments/{p_short['id']}/proof"):
+    plain.get(path, expect=403)
+plain.call("POST", f"api/Sas/payments/{p_short['id']}/approve", expect=403, json={"verifiedAmount": paid, "confirmed": True})
+plain.call("POST", f"api/Sas/payments/{p_short['id']}/reject", expect=403, json={"reason": "QA-LAB plain admin"})
+plain.call("POST", f"api/Sas/payments/{p_short['id']}/verify", expect=403, json={"verifiedAmount": paid, "confirmed": True})
+plain.call("POST", f"api/Sas/payments/{p_short['id']}/mismatch", expect=403, json={"reason": "QA-LAB plain admin"})
 pending_ids = {r["id"] for r in all_pages(admin, "api/Sas/payments?tab=approvalPending")}
 ok({p["id"] for p in pays} <= pending_ids, "approvalPending tab lists admin-approved payments awaiting Finance")
 

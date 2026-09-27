@@ -22,15 +22,17 @@ namespace SpicAPI.Controllers
     ///   POST api/Lab/reports/{id}/printed
     /// The pdf / xlsx / download routes also accept ?access_token= (allowlist in Program.cs).
     ///
-    /// Access (designation RoleAccess, same parsing as LibraryController):
-    ///   Admin / CorporateAdmin, or LabTracking / LabConsignments / LabAnalysis : every report.
+    /// Access (designation RoleAccess, same parsing as LibraryController). DESIGNATION ONLY (product
+    /// decision 2026-09-27): the Admin / CorporateAdmin ROLES get no lab scope by themselves; an admin
+    /// without a lab designation falls to the read-only rule below like any other signed-in user.
+    ///   LabTracking / LabConsignments / LabAnalysis                             : every report.
     ///   LabTestEntry (analyst; also holds LabDashboard / LabReports)            : batches assigned to them.
     ///   LabDashboard / LabReports without LabTestEntry (coordinator)            : every report.
     ///   Farmer : only reports of samples carrying their own farmer record (v1 scoping: SasFarmer.UserId,
     ///            or the mobile number = the account's user name / phone), farmer languages only,
     ///            no batch routes.
     ///   Anyone else signed in (Dealer, field staff): the v1 read rule (every collection), read-only.
-    /// Marking Printed needs a lab page or admin. sampleType= takes Soil / Water / SoilAndWater (or
+    /// Marking Printed needs a lab page. sampleType= takes Soil / Water / SoilAndWater (or
     /// 0 / 1 / 2) and Paid / Free; status= takes Generated / Downloaded / Printed (or 0 / 1 / 2).
     /// </summary>
     [Authorize]
@@ -404,9 +406,6 @@ namespace SpicAPI.Controllers
             var hasRole = !string.IsNullOrWhiteSpace(roleRaw) && Enum.TryParse<AppRole>(roleRaw, true, out _);
             var languages = Languages("Sas:Lab:ReportLanguages", DefaultLanguages);
 
-            if (hasRole && (role == AppRole.Admin || role == AppRole.CorporateAdmin))
-                return _access = new LabAccess { Scope = LabScope.All, UserId = userId, CanMarkPrinted = true, Languages = languages };
-
             if (hasRole && role == AppRole.Farmer)
                 return _access = new LabAccess
                 {
@@ -426,7 +425,8 @@ namespace SpicAPI.Controllers
             if (Has(PagePermission.LabDashboard) || Has(PagePermission.LabReports))
                 return _access = new LabAccess { Scope = LabScope.All, UserId = userId, CanMarkPrinted = true, Languages = languages };
 
-            // v1 read rule (SasController): every signed-in user other than a Farmer reads every collection.
+            // v1 read rule (SasController): every signed-in user other than a Farmer reads every collection
+            // (Admin / CorporateAdmin without a lab designation included).
             return _access = new LabAccess { Scope = LabScope.ReadOnly, UserId = userId, Languages = languages };
         }
 

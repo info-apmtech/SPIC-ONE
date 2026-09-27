@@ -10,7 +10,10 @@ namespace Spic.Infrastructure.Services.Lab;
 /// per request from the designation RoleAccess exactly like LibraryController does
 /// (RoleAccessPermissions.HasPage on an ACTIVE designation).
 ///
-///   Admin / CorporateAdmin               : everything (coordinator and analyst rights)
+/// DESIGNATION ONLY (product decision 2026-09-27): the Admin / CorporateAdmin ROLES get no lab
+/// rights by themselves; an admin reaches the lab only through a designation holding the keys
+/// below, like every other user. (IsV1ReviewRole only feeds the v1 CanReview flag.)
+///
 ///   coordinator pages                    : LabConsignments or LabAnalysis, or LabDashboard /
 ///                                          LabReports WITHOUT LabTestEntry (the Lab Analyst
 ///                                          designation also holds LabDashboard and LabReports
@@ -33,9 +36,11 @@ public sealed class LabAccess
     public string? DesignationName { get; private set; }
     public AppRole? Role { get; private set; }
 
-    public bool IsAdmin { get; private set; }
+    /// <summary>Role Admin / CorporateAdmin: the v1 review roles (SasController). Grants NO lab
+    /// rights; only passed on as the v1 CanReview flag of the embedded v1 consignment detail.</summary>
+    public bool IsV1ReviewRole { get; private set; }
     public bool IsFarmer => Role == AppRole.Farmer;
-    /// <summary>Coordinator pages or admin.</summary>
+    /// <summary>Holds a coordinator page (designation only).</summary>
     public bool IsCoordinator { get; private set; }
     /// <summary>Holds the LabTestEntry page.</summary>
     public bool IsAnalyst { get; private set; }
@@ -43,11 +48,11 @@ public sealed class LabAccess
     public bool HasTracking { get; private set; }
 
     /// <summary>Create batches, receive consignments, documents, assign, complete.</summary>
-    public bool CanWrite => IsAdmin || IsCoordinator;
-    public bool CanRead => IsAdmin || IsCoordinator || IsAnalyst || HasTracking;
-    /// <summary>An analyst without coordinator / admin / tracking rights: every list, stat and
+    public bool CanWrite => IsCoordinator;
+    public bool CanRead => IsCoordinator || IsAnalyst || HasTracking;
+    /// <summary>An analyst without coordinator / tracking rights: every list, stat and
     /// dashboard is limited to the batches assigned to them.</summary>
-    public bool AnalystOnly => IsAnalyst && !IsAdmin && !IsCoordinator && !HasTracking;
+    public bool AnalystOnly => IsAnalyst && !IsCoordinator && !HasTracking;
 
     /// <summary>"Lab Coordinator" style label for the activity log (designation, else role).</summary>
     public string? RoleLabel => DesignationName ?? Role?.ToString();
@@ -62,12 +67,11 @@ public sealed class LabAccess
 
         var rawRole = user.FindFirst(ClaimTypes.Role)?.Value;
         Role = Enum.TryParse<AppRole>(rawRole, true, out var role) ? role : null;
-        IsAdmin = Role == AppRole.Admin || Role == AppRole.CorporateAdmin;
+        IsV1ReviewRole = Role == AppRole.Admin || Role == AppRole.CorporateAdmin;
 
         if (string.IsNullOrWhiteSpace(UserId))
         {
             Name = UserName;
-            IsCoordinator = IsAdmin;
             return;
         }
 
@@ -100,7 +104,7 @@ public sealed class LabAccess
 
         IsAnalyst = testEntry;
         HasTracking = RoleAccessPermissions.HasPage(roleAccess, PagePermission.LabTracking);
-        IsCoordinator = IsAdmin || consignments || analysis || ((dashboard || reports) && !testEntry);
+        IsCoordinator = consignments || analysis || ((dashboard || reports) && !testEntry);
     }
 
     /// <summary>Designation ids whose RoleAccess grants LabTestEntry (the analyst pool).</summary>
