@@ -15,6 +15,12 @@ namespace SPIC.Core.DTOs;
 ///   POST   api/Library/{id}/cover | /video | /document             (multipart "file") -> LibraryFileDto
 ///   GET    api/Library/file/{*path}                                (also accepts ?access_token= for &lt;img&gt;/&lt;video&gt;)
 ///   GET    api/Library/lookups                                     -> LibraryLookupsDto
+///   -- category master (V5r; reads for every signed-in user, writes need the DigitalLibrary page) --
+///   GET    api/Library/categories?includeInactive=                 -> List&lt;LibraryCategoryDto&gt; (categories, each with SubCategories)
+///   POST   api/Library/categories                                  -> LibraryCategoryDto (body: LibraryCategoryUpsertDto)
+///   PUT    api/Library/categories/{id}                             -> LibraryCategoryDto (a rename is carried into the content rows)
+///   PATCH  api/Library/categories/{id}/active?value=true|false     -> LibraryCategoryDto
+///   DELETE api/Library/categories/{id}                             (409 while content uses the name or it has sub-categories)
 ///   -- assistant --
 ///   GET    api/Library/assistant/conversations                     -> List&lt;AssistantConversationDto&gt; (mine)
 ///   GET    api/Library/assistant/conversations/{id}                -> AssistantConversationDetailDto
@@ -143,6 +149,14 @@ public class LibraryLookupsDto
     public List<string> SubCategories { get; set; } = new();
     public List<string> Formats { get; set; } = new();
     public List<string> Visibilities { get; set; } = new();
+    /// <summary>
+    /// ACTIVE categories (SortOrder, then Name) with their ACTIVE sub-categories, so the form can
+    /// narrow the sub-category list to the chosen category. The flat Categories / SubCategories
+    /// lists above stay (master names merged with names already used by content).
+    /// </summary>
+    public List<LibraryCategoryDto> CategoryTree { get; set; } = new();
+    /// <summary>Tags already used by non-deleted content: distinct ignoring case, most used first, then by name.</summary>
+    public List<string> Tags { get; set; } = new();
 }
 
 /// <summary>Generic page envelope used by the new list endpoints.</summary>
@@ -210,4 +224,36 @@ public class AssistantAskResponse
     public AssistantMessageDto Reply { get; set; } = new();
     /// <summary>"anthropic" | "keyword" — which provider answered (for the UI disclaimer).</summary>
     public string Provider { get; set; } = "keyword";
+}
+
+// ---------------------------------------------------------------- category master (V5r)
+
+/// <summary>One category or sub-category of the Digital Library category master.</summary>
+public class LibraryCategoryDto
+{
+    public int Id { get; set; }
+    public LibraryCategoryKind Kind { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary>Sub-categories: the category they belong to. Null for categories.</summary>
+    public int? ParentCategoryId { get; set; }
+    public string? ParentName { get; set; }
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    /// <summary>Non-deleted content items whose Category / SubCategory is this name (0 in the lookups tree).</summary>
+    public int UsageCount { get; set; }
+    public string? UpdatedBy { get; set; }
+    public DateTime UpdatedAt { get; set; }
+    /// <summary>Categories only: their sub-categories (SortOrder, then Name).</summary>
+    public List<LibraryCategoryDto> SubCategories { get; set; } = new();
+}
+
+/// <summary>Body of POST / PUT api/Library/categories. Kind cannot change on PUT.</summary>
+public class LibraryCategoryUpsertDto
+{
+    public LibraryCategoryKind Kind { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary>Required for a sub-category (must be a category); ignored for a category.</summary>
+    public int? ParentCategoryId { get; set; }
+    /// <summary>Null = after the last one at the same level.</summary>
+    public int? SortOrder { get; set; }
 }

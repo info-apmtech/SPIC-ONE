@@ -18,6 +18,8 @@ namespace SpicAPI.Controllers
     ///   * Reads of PUBLISHED content, the lookups and the stats are open to every signed-in user.
     ///   * Draft/Archived reads and every write need Admin/CorporateAdmin, or a Designation
     ///     whose RoleAccess grants the DigitalLibrary page (same CSV parsing LoginState uses).
+    ///   * The category master (api/Library/categories, table LibraryCategories) follows the same
+    ///     rule: every signed-in user reads it, writes need the DigitalLibrary page.
     ///
     /// Files live under Uploads/Library/{id}/ and are served by GET api/Library/file/{*path},
     /// which is on the ?access_token= allowlist in Program.cs so &lt;img&gt;/&lt;video&gt; tags work.
@@ -35,15 +37,8 @@ namespace SpicAPI.Controllers
         private static readonly string[] VideoExtensions = { ".mp4", ".webm", ".mov" };
         private static readonly string[] DocumentExtensions = { ".pdf" };
 
-        private static readonly string[] DefaultCategories =
-        {
-            "Phosphatic Fertilizers", "Nitrogenous Fertilizers", "Potassic Fertilizers",
-            "Micronutrients", "Organic & Bio", "Speciality Products"
-        };
-        private static readonly string[] DefaultSubCategories =
-        {
-            "DAP", "Urea", "Complex", "Water Soluble", "Soil Conditioner"
-        };
+        // Categories and sub-categories come from the LibraryCategories master (V5r seeds the
+        // defaults that used to be hard-coded here); see the "Category master" region.
         private static readonly string[] DefaultFormats = { "Video", "PDF", "Article" };
         private static readonly string[] DefaultVisibilities = { "Everyone", "Staff", "Dealers" };
 
@@ -140,7 +135,7 @@ namespace SpicAPI.Controllers
             var rows = await _db.LibraryContents
                 .AsNoTracking()
                 .Where(c => !c.IsDeleted)
-                .Select(c => new { c.Category, c.SubCategory, c.Format, c.Visibility })
+                .Select(c => new { c.Category, c.SubCategory, c.Format, c.Visibility, c.Tags })
                 .ToListAsync();
 
             static List<string> Merge(IEnumerable<string?> used, IEnumerable<string> defaults) =>
@@ -150,12 +145,39 @@ namespace SpicAPI.Controllers
                     .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
+            // Categories / sub-categories: the ACTIVE master names in master order (SortOrder, Name),
+            // then any other name content already uses (A-Z), so nothing in use disappears.
+            static List<string> MergeMaster(IEnumerable<string> master, IEnumerable<string?> used)
+            {
+                var result = master.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                var seen = new HashSet<string>(result, StringComparer.OrdinalIgnoreCase);
+                result.AddRange(used
+                    .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .Select(v => v!.Trim())
+                    .Where(seen.Add)
+                    .OrderBy(v => v, StringComparer.OrdinalIgnoreCase));
+                return result;
+            }
+
+            var tree = await LoadCategoryTreeAsync(includeInactive: false, withUsage: false);
+
+            // Tags: distinct ignoring case (first spelling seen wins), most used first, then A-Z.
+            var tags = rows
+                .SelectMany(r => SplitTags(r.Tags))
+                .GroupBy(t => t, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+
             return Ok(new LibraryLookupsDto
             {
-                Categories = Merge(rows.Select(r => r.Category), DefaultCategories),
-                SubCategories = Merge(rows.Select(r => r.SubCategory), DefaultSubCategories),
+                Categories = MergeMaster(tree.Select(c => c.Name), rows.Select(r => r.Category)),
+                SubCategories = MergeMaster(tree.SelectMany(c => c.SubCategories).Select(s => s.Name), rows.Select(r => r.SubCategory)),
                 Formats = Merge(rows.Select(r => r.Format), DefaultFormats),
-                Visibilities = Merge(rows.Select(r => r.Visibility), DefaultVisibilities)
+                Visibilities = Merge(rows.Select(r => r.Visibility), DefaultVisibilities),
+                CategoryTree = tree,
+                Tags = tags
             });
         }
 
@@ -643,6 +665,312 @@ namespace SpicAPI.Controllers
             {
                 return default;
             }
+        }
+
+        // =====================================================================
+        //  Category master (V5r): the category / sub-category options on the content forms
+        //  Reads: every signed-in user (inactive rows only for managers).
+        //  Writes: same rule as content (CanManageAsync).
+        // =====================================================================
+
+        private const int MaxCategoryNameLength = 150;
+
+        // GET /api/Library/categories?includeInactive=
+        [HttpGet("categories")]
+        public async Task<IActionResult> GetCategories([FromQuery] bool includeInactive = false)
+        {
+            if (includeInactive && !await CanManageAsync()) includeInactive = false;
+            return Ok(await LoadCategoryTreeAsync(includeInactive, withUsage: true));
+        }
+
+        // POST /api/Library/categories
+        [HttpPost("categories")]
+        public async Task<IActionResult> CreateCategory([FromBody] LibraryCategoryUpsertDto payload)
+        {
+            if (!await CanManageAsync()) return Forbidden("You are not authorized to manage Digital Library categories.");
+            if (payload is null) return BadRequest(new { Success = false, Message = "Category details are required." });
+            if (!Enum.IsDefined(payload.Kind)) return BadRequest(new { Success = false, Message = "Unknown category kind." });
+
+            var (name, error) = CleanCategoryName(payload.Name, payload.Kind);
+            if (error is not null) return BadRequest(new { Success = false, Message = error });
+
+            int? parentId = null;
+            if (payload.Kind == LibraryCategoryKind.SubCategory)
+            {
+                var parentError = await ValidateParentAsync(payload.ParentCategoryId);
+                if (parentError is not null) return BadRequest(new { Success = false, Message = parentError });
+                parentId = payload.ParentCategoryId;
+            }
+
+            var clash = await FindCategoryClashAsync(payload.Kind, name!, exceptId: null);
+            if (clash is not null) return Conflict(new { Success = false, Message = clash });
+
+            var sortOrder = payload.SortOrder ?? (await _db.LibraryCategories
+                .Where(c => c.Kind == payload.Kind && c.ParentCategoryId == parentId)
+                .MaxAsync(c => (int?)c.SortOrder) ?? 0) + 1;
+
+            var now = DateTime.Now;
+            var entity = new LibraryCategory
+            {
+                Kind = payload.Kind,
+                Name = name!,
+                ParentCategoryId = parentId,
+                SortOrder = sortOrder,
+                IsActive = true,
+                CreatedBy = CurrentUserName,
+                CreatedAt = now,
+                UpdatedBy = CurrentUserName,
+                UpdatedAt = now
+            };
+
+            _db.LibraryCategories.Add(entity);
+            try
+            {
+                await _db.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Two admins adding the same name at the same moment: the unique index wins.
+                _logger.LogWarning(ex, "Library category insert failed for {Name}", name);
+                return Conflict(new { Success = false, Message = $"\"{name}\" already exists." });
+            }
+
+            return Ok(await LoadCategoryDtoAsync(entity.Id));
+        }
+
+        // PUT /api/Library/categories/{id}
+        [HttpPut("categories/{id:int}")]
+        public async Task<IActionResult> UpdateCategory(int id, [FromBody] LibraryCategoryUpsertDto payload)
+        {
+            if (!await CanManageAsync()) return Forbidden("You are not authorized to manage Digital Library categories.");
+            if (payload is null) return BadRequest(new { Success = false, Message = "Category details are required." });
+
+            var entity = await _db.LibraryCategories.FirstOrDefaultAsync(c => c.Id == id);
+            if (entity is null) return NotFound(new { Success = false, Message = "Category not found." });
+
+            var (name, error) = CleanCategoryName(payload.Name, entity.Kind);
+            if (error is not null) return BadRequest(new { Success = false, Message = error });
+
+            if (entity.Kind == LibraryCategoryKind.SubCategory)
+            {
+                var parentError = await ValidateParentAsync(payload.ParentCategoryId);
+                if (parentError is not null) return BadRequest(new { Success = false, Message = parentError });
+                entity.ParentCategoryId = payload.ParentCategoryId;
+            }
+
+            var clash = await FindCategoryClashAsync(entity.Kind, name!, exceptId: entity.Id);
+            if (clash is not null) return Conflict(new { Success = false, Message = clash });
+
+            var oldName = entity.Name;
+            var renamed = !string.Equals(oldName, name, StringComparison.Ordinal);
+
+            entity.Name = name!;
+            if (payload.SortOrder.HasValue) entity.SortOrder = payload.SortOrder.Value;
+            entity.UpdatedBy = CurrentUserName;
+            entity.UpdatedAt = DateTime.Now;
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            await _db.SaveChangesAsync();
+
+            // Content stores the name, so a rename (including a change of case) is carried into
+            // every content row that used the old name; otherwise the old spelling would come back
+            // through the lookups merge.
+            var moved = 0;
+            if (renamed)
+            {
+                var oldLower = oldName.ToLower();
+                moved = entity.Kind == LibraryCategoryKind.Category
+                    ? await _db.LibraryContents
+                        .Where(c => c.Category != null && c.Category.ToLower() == oldLower)
+                        .ExecuteUpdateAsync(s => s.SetProperty(c => c.Category, name))
+                    : await _db.LibraryContents
+                        .Where(c => c.SubCategory != null && c.SubCategory.ToLower() == oldLower)
+                        .ExecuteUpdateAsync(s => s.SetProperty(c => c.SubCategory, name));
+            }
+
+            await tx.CommitAsync();
+
+            if (moved > 0)
+                _logger.LogInformation("Library category {Id} renamed from {Old} to {New}; {Count} content rows updated", id, oldName, name, moved);
+
+            return Ok(await LoadCategoryDtoAsync(entity.Id));
+        }
+
+        // PATCH /api/Library/categories/{id}/active?value=true|false
+        [HttpPatch("categories/{id:int}/active")]
+        public async Task<IActionResult> SetCategoryActive(int id, [FromQuery] bool value)
+        {
+            if (!await CanManageAsync()) return Forbidden("You are not authorized to manage Digital Library categories.");
+
+            var entity = await _db.LibraryCategories.FirstOrDefaultAsync(c => c.Id == id);
+            if (entity is null) return NotFound(new { Success = false, Message = "Category not found." });
+
+            if (entity.IsActive != value)
+            {
+                entity.IsActive = value;
+                entity.UpdatedBy = CurrentUserName;
+                entity.UpdatedAt = DateTime.Now;
+                await _db.SaveChangesAsync();
+            }
+
+            return Ok(await LoadCategoryDtoAsync(entity.Id));
+        }
+
+        // DELETE /api/Library/categories/{id}
+        [HttpDelete("categories/{id:int}")]
+        public async Task<IActionResult> DeleteCategory(int id)
+        {
+            if (!await CanManageAsync()) return Forbidden("You are not authorized to manage Digital Library categories.");
+
+            var entity = await _db.LibraryCategories.FirstOrDefaultAsync(c => c.Id == id);
+            if (entity is null) return NotFound(new { Success = false, Message = "Category not found." });
+
+            var lower = entity.Name.ToLower();
+            var inUse = entity.Kind == LibraryCategoryKind.Category
+                ? await _db.LibraryContents.CountAsync(c => !c.IsDeleted && c.Category != null && c.Category.ToLower() == lower)
+                : await _db.LibraryContents.CountAsync(c => !c.IsDeleted && c.SubCategory != null && c.SubCategory.ToLower() == lower);
+
+            var noun = entity.Kind == LibraryCategoryKind.Category ? "category" : "sub-category";
+            if (inUse > 0)
+            {
+                return Conflict(new
+                {
+                    Success = false,
+                    Message = $"\"{entity.Name}\" is in use by {inUse} library item{(inUse == 1 ? "" : "s")}, so it cannot be deleted. Deactivate it instead."
+                });
+            }
+
+            if (entity.Kind == LibraryCategoryKind.Category)
+            {
+                var children = await _db.LibraryCategories.CountAsync(c => c.ParentCategoryId == entity.Id);
+                if (children > 0)
+                {
+                    return Conflict(new
+                    {
+                        Success = false,
+                        Message = $"\"{entity.Name}\" has {children} sub-categor{(children == 1 ? "y" : "ies")}. Delete or move them first, or deactivate the category instead."
+                    });
+                }
+            }
+
+            _db.LibraryCategories.Remove(entity);
+            await _db.SaveChangesAsync();
+            return Ok(new { Success = true, Message = $"The {noun} \"{entity.Name}\" was deleted." });
+        }
+
+        /// <summary>
+        /// Categories (SortOrder, Name) with their sub-categories. Without includeInactive, inactive
+        /// rows and the sub-categories of inactive categories are left out.
+        /// </summary>
+        private async Task<List<LibraryCategoryDto>> LoadCategoryTreeAsync(bool includeInactive, bool withUsage)
+        {
+            var all = await _db.LibraryCategories
+                .AsNoTracking()
+                .Where(c => includeInactive || c.IsActive)
+                .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
+                .ToListAsync();
+
+            Dictionary<string, int> catUse = new(StringComparer.OrdinalIgnoreCase);
+            Dictionary<string, int> subUse = new(StringComparer.OrdinalIgnoreCase);
+            if (withUsage)
+            {
+                var used = await _db.LibraryContents
+                    .AsNoTracking()
+                    .Where(c => !c.IsDeleted)
+                    .Select(c => new { c.Category, c.SubCategory })
+                    .ToListAsync();
+                foreach (var g in used.Where(u => !string.IsNullOrWhiteSpace(u.Category)).GroupBy(u => u.Category!.Trim(), StringComparer.OrdinalIgnoreCase))
+                    catUse[g.Key] = g.Count();
+                foreach (var g in used.Where(u => !string.IsNullOrWhiteSpace(u.SubCategory)).GroupBy(u => u.SubCategory!.Trim(), StringComparer.OrdinalIgnoreCase))
+                    subUse[g.Key] = g.Count();
+            }
+
+            var categories = all
+                .Where(c => c.Kind == LibraryCategoryKind.Category)
+                .Select(c => MapCategory(c, null, catUse.GetValueOrDefault(c.Name)))
+                .ToList();
+            var byId = categories.ToDictionary(c => c.Id);
+
+            foreach (var sub in all.Where(c => c.Kind == LibraryCategoryKind.SubCategory))
+            {
+                if (sub.ParentCategoryId is int pid && byId.TryGetValue(pid, out var parent))
+                    parent.SubCategories.Add(MapCategory(sub, parent.Name, subUse.GetValueOrDefault(sub.Name)));
+            }
+
+            return categories;
+        }
+
+        private async Task<LibraryCategoryDto?> LoadCategoryDtoAsync(int id)
+        {
+            var entity = await _db.LibraryCategories
+                .AsNoTracking()
+                .Include(c => c.ParentCategory)
+                .FirstOrDefaultAsync(c => c.Id == id);
+            if (entity is null) return null;
+
+            var lower = entity.Name.ToLower();
+            var usage = entity.Kind == LibraryCategoryKind.Category
+                ? await _db.LibraryContents.CountAsync(c => !c.IsDeleted && c.Category != null && c.Category.ToLower() == lower)
+                : await _db.LibraryContents.CountAsync(c => !c.IsDeleted && c.SubCategory != null && c.SubCategory.ToLower() == lower);
+
+            var dto = MapCategory(entity, entity.ParentCategory?.Name, usage);
+            if (entity.Kind == LibraryCategoryKind.Category)
+            {
+                dto.SubCategories = (await _db.LibraryCategories
+                        .AsNoTracking()
+                        .Where(c => c.ParentCategoryId == entity.Id)
+                        .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
+                        .ToListAsync())
+                    .Select(c => MapCategory(c, entity.Name, 0))
+                    .ToList();
+            }
+            return dto;
+        }
+
+        private static LibraryCategoryDto MapCategory(LibraryCategory c, string? parentName, int usage) => new()
+        {
+            Id = c.Id,
+            Kind = c.Kind,
+            Name = c.Name,
+            ParentCategoryId = c.ParentCategoryId,
+            ParentName = parentName,
+            SortOrder = c.SortOrder,
+            IsActive = c.IsActive,
+            UsageCount = usage,
+            UpdatedBy = c.UpdatedBy,
+            UpdatedAt = c.UpdatedAt
+        };
+
+        private static (string? Name, string? Error) CleanCategoryName(string? raw, LibraryCategoryKind kind)
+        {
+            var noun = kind == LibraryCategoryKind.Category ? "Category" : "Sub-category";
+            var name = string.Join(' ', (raw ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (name.Length == 0) return (null, $"{noun} name is required.");
+            if (name.Length > MaxCategoryNameLength) return (null, $"{noun} name must be {MaxCategoryNameLength} characters or less.");
+            return (name, null);
+        }
+
+        private async Task<string?> ValidateParentAsync(int? parentId)
+        {
+            if (parentId is null) return "Choose the category this sub-category belongs to.";
+            var ok = await _db.LibraryCategories.AnyAsync(c => c.Id == parentId && c.Kind == LibraryCategoryKind.Category);
+            return ok ? null : "The chosen parent category does not exist.";
+        }
+
+        private async Task<string?> FindCategoryClashAsync(LibraryCategoryKind kind, string name, int? exceptId)
+        {
+            var lower = name.ToLower();
+            var clash = await _db.LibraryCategories
+                .AsNoTracking()
+                .Where(c => c.Kind == kind && c.Name.ToLower() == lower && (exceptId == null || c.Id != exceptId))
+                .Select(c => new { c.Name, c.IsActive })
+                .FirstOrDefaultAsync();
+            if (clash is null) return null;
+
+            var noun = kind == LibraryCategoryKind.Category ? "category" : "sub-category";
+            return clash.IsActive
+                ? $"A {noun} named \"{clash.Name}\" already exists."
+                : $"A {noun} named \"{clash.Name}\" already exists but is inactive. Reactivate it instead.";
         }
     }
 }

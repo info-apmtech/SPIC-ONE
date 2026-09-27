@@ -156,6 +156,23 @@ namespace Spic.Infrastructure.Data
             entity.HasIndex(x => x.ConversationId);
         });
 
+        // Category master (V5r). Unique per Kind ignoring case: the stored generated column
+        // NormalizedName = lower(Name) carries the unique index (the API also checks in code).
+        builder.Entity<LibraryCategory>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).IsRequired().HasMaxLength(150);
+            entity.Property<string>("NormalizedName")
+                .HasMaxLength(150)
+                .HasComputedColumnSql("lower(\"Name\")", stored: true);
+            entity.HasIndex("Kind", "NormalizedName").IsUnique();
+            entity.HasIndex(x => x.ParentCategoryId);
+            entity.HasOne(x => x.ParentCategory)
+                .WithMany()
+                .HasForeignKey(x => x.ParentCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         // ---------------------------------------------------------------- SAS sample collection
         builder.Entity<SasFarmer>(entity =>
         {
@@ -603,6 +620,7 @@ namespace Spic.Infrastructure.Data
 		public DbSet<LibraryContent> LibraryContents { get; set; }
 		public DbSet<LibraryConversation> LibraryConversations { get; set; }
 		public DbSet<LibraryMessage> LibraryMessages { get; set; }
+		public DbSet<LibraryCategory> LibraryCategories { get; set; }
 
 		//// SAS: sample collection
 		public DbSet<SasFarmer> SasFarmers { get; set; }
