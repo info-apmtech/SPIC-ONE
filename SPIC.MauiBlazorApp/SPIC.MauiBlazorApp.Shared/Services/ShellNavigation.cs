@@ -179,6 +179,13 @@ public static class ShellNavigation
             // every role; the rest of the Digital Library stays behind CanAccess("DigitalLibrary").
             ShortLabel = "Ask AI", Rule = s => s.IsLoggedIn
         },
+        // Category master behind the content forms (admin page; PageGuard treats
+        // /DigitalLibrary/categories like /DigitalLibrary/add). Own key so it is never confused
+        // with the Library tab in Find / ActiveKey; the permission is the DigitalLibrary page.
+        new("LibraryCategories", "Library Categories", "bi-tags", "/DigitalLibrary/categories", "DigitalLibrary")
+        {
+            ShortLabel = "Categories", Group = "Digital Library"
+        },
 
         // ---- role-specific quick destinations (pages reachable today but not listed in NavMenu) ----
         new("SDWADashboard", "Dealer Dashboard", "bi-house-door-fill", "/SDWADashboard", nameof(PagePermission.SDWADashboard))

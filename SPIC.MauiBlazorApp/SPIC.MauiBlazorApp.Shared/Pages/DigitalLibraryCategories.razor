@@ -1,0 +1,509 @@
+@page "/DigitalLibrary/categories"
+@inject DigitalLibraryApi Api
+@inject ToastService Toast
+@inject LoginState LoginState
+@inject NavigationManager Nav
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+
+@*
+    Library Categories (admin master, 2026-09-27). The categories and sub-categories offered by
+    the "Main Category / Type" and "Associated Program / Sub-Category" selects on the Digital
+    Library content forms, from api/Library/categories (table LibraryCategories, migration V5r).
+
+      * two levels: a category card expands to its sub-categories;
+      * Add Category / Add Sub-Category open a small sheet (name, parent, sort order);
+      * the pencil edits a row in place, the toggle activates / deactivates, the bin deletes
+        (the API answers 409 while content still uses the name: deactivate instead);
+      * search and the All / Active / Inactive filter narrow both levels.
+    Guard: PageGuard sends /DigitalLibrary/categories through the DigitalLibrary page check (like
+    /DigitalLibrary/add); the API enforces the same rule on every write.
+    Phone (<= 767.98px): cards, 44px targets, Add buttons in the sticky ActionBar.
+*@
+
+@if (!CanEdit)
+{
+    <EmptyState Icon="bi-lock" Title="You do not have permission to manage categories"
+                Message="Library categories are maintained by the team that manages Digital Library content.">
+        <button type="button" class="btn btn-success" @onclick='() => Nav.NavigateTo("/DigitalLibrary")'>
+            <i class="bi bi-arrow-left"></i> Back to the library
+        </button>
+    </EmptyState>
+}
+else
+{
+<div class="lc-page">
+    <PageHeader Title="Library Categories" Subtitle="Categories and sub-categories offered on the content forms" BackHref="/DigitalLibrary">
+        <Actions>
+            <button type="button" class="lc-btn lc-btn-outline" disabled="@(_busy || !HasCategories)" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, null)">
+                <i class="bi bi-diagram-2" aria-hidden="true"></i> Add Sub-Category
+            </button>
+            <button type="button" class="lc-btn lc-btn-primary" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> Add Category
+            </button>
+        </Actions>
+    </PageHeader>
+
+    @* ------------------------------------------------------------ toolbar *@
+    <section class="lc-toolbar" aria-label="Search and filter">
+        <label class="lc-search">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" placeholder="Search categories and sub-categories" aria-label="Search categories"
+                   value="@_search" @oninput="e => _search = e.Value?.ToString() ?? string.Empty" />
+        </label>
+        <div class="lc-filter" role="group" aria-label="Status">
+            @foreach (var f in Filters)
+            {
+                var key = f;
+                <button type="button" class="lc-filter-btn @(_filter == key ? "is-active" : "")"
+                        aria-pressed="@(_filter == key ? "true" : "false")" @onclick="() => _filter = key">@key</button>
+            }
+        </div>
+    </section>
+
+    <p class="lc-summary">
+        @Count(_tree.Count, "category", "categories") ·
+        @Count(SubCount, "sub-category", "sub-categories")
+        @if (InactiveCount > 0)
+        {
+            <span> · @InactiveCount inactive</span>
+        }
+    </p>
+
+    @* ------------------------------------------------------------ list *@
+    @if (_loading)
+    {
+        <section class="lc-card"><Skeleton Variant="text" Rows="6" /></section>
+    }
+    else if (_loadError is not null)
+    {
+        <EmptyState Icon="bi-wifi-off" Title="Categories could not be loaded" Message="@_loadError">
+            <button type="button" class="btn btn-success" @onclick="LoadAsync"><i class="bi bi-arrow-clockwise"></i> Try again</button>
+        </EmptyState>
+    }
+    else if (_tree.Count == 0)
+    {
+        <EmptyState Icon="bi-tags" Title="No categories yet" Message="Add the first category the content forms should offer.">
+            <button type="button" class="btn btn-success" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)"><i class="bi bi-plus-lg"></i> Add Category</button>
+        </EmptyState>
+    }
+    else if (!Visible.Any())
+    {
+        <EmptyState Icon="bi-search" Title="Nothing matches" Message="No category or sub-category matches the search and filter." Compact="true" />
+    }
+    else
+    {
+        <ul class="lc-list" aria-label="Categories">
+            @foreach (var (cat, subs, forceOpen) in Visible)
+            {
+                var c = cat;
+                var open = forceOpen || _expanded.Contains(c.Id);
+                <li class="lc-card @(c.IsActive ? "" : "is-inactive")" @key="c.Id">
+                    @if (_editId == c.Id)
+                    {
+                        @EditRow(c)
+                    }
+                    else
+                    {
+                        <div class="lc-row lc-row--cat">
+                            <button type="button" class="lc-expand" aria-expanded="@(open ? "true" : "false")"
+                                    aria-label="@((open ? "Hide" : "Show") + " sub-categories of " + c.Name)"
+                                    @onclick="() => Toggle(c.Id)">
+                                <i class="bi @(open ? "bi-chevron-down" : "bi-chevron-right")" aria-hidden="true"></i>
+                            </button>
+                            <div class="lc-name">
+                                <span class="lc-title">@c.Name</span>
+                                <span class="lc-meta">
+                                    @Count(c.SubCategories.Count, "sub-category", "sub-categories") · @UsageText(c.UsageCount) · order @c.SortOrder
+                                </span>
+                            </div>
+                            <LabPill Text="@(c.IsActive ? "Active" : "Inactive")" Tone="@(c.IsActive ? "green" : "grey")" CssClass="lc-pill" />
+                            @RowActions(c)
+                        </div>
+                    }
+
+                    @if (open)
+                    {
+                        <ul class="lc-subs" aria-label="@("Sub-categories of " + c.Name)">
+                            @if (subs.Count == 0)
+                            {
+                                <li class="lc-sub-empty">@(c.SubCategories.Count > 0 ? "No sub-categories match." : "No sub-categories yet.")</li>
+                            }
+                            @foreach (var s in subs)
+                            {
+                                var sub = s;
+                                <li class="lc-sub @(sub.IsActive ? "" : "is-inactive")" @key="sub.Id">
+                                    @if (_editId == sub.Id)
+                                    {
+                                        @EditRow(sub)
+                                    }
+                                    else
+                                    {
+                                        <div class="lc-row lc-row--sub">
+                                            <i class="bi bi-arrow-return-right lc-sub-mark" aria-hidden="true"></i>
+                                            <div class="lc-name">
+                                                <span class="lc-title">@sub.Name</span>
+                                                <span class="lc-meta">@UsageText(sub.UsageCount) · order @sub.SortOrder</span>
+                                            </div>
+                                            <LabPill Text="@(sub.IsActive ? "Active" : "Inactive")" Tone="@(sub.IsActive ? "green" : "grey")" CssClass="lc-pill" />
+                                            @RowActions(sub)
+                                        </div>
+                                    }
+                                </li>
+                            }
+                            <li class="lc-sub-add">
+                                <button type="button" class="lc-link-btn" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, c.Id)">
+                                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add sub-category to @c.Name
+                                </button>
+                            </li>
+                        </ul>
+                    }
+                </li>
+            }
+        </ul>
+    }
+
+    <ActionBar CssClass="lc-actionbar" AriaLabel="Add">
+        <Secondary>
+            <button type="button" class="lc-btn lc-btn-outline" disabled="@(_busy || !HasCategories)" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, null)">
+                <i class="bi bi-diagram-2" aria-hidden="true"></i> Sub-Category
+            </button>
+        </Secondary>
+        <ChildContent>
+            <button type="button" class="lc-btn lc-btn-primary" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i> Category
+            </button>
+        </ChildContent>
+    </ActionBar>
+</div>
+
+<BottomSheet @bind-IsOpen="_dialogOpen" Title="@(_dlgKind == LibraryCategoryKind.Category ? "Add Category" : "Add Sub-Category")"
+             Subtitle="@(_dlgKind == LibraryCategoryKind.Category ? "A new option for Main Category / Type" : "A new option for Associated Program / Sub-Category")">
+    <ChildContent>
+        <form class="lc-dialog" @onsubmit="SaveDialogAsync" @onsubmit:preventDefault="true">
+            <label class="lc-field">
+                <span>Name</span>
+                <input type="text" maxlength="150" placeholder="@(_dlgKind == LibraryCategoryKind.Category ? "e.g. Phosphatic Fertilizers" : "e.g. DAP")"
+                       value="@_dlgName" @oninput="e => _dlgName = e.Value?.ToString() ?? string.Empty" />
+            </label>
+            @if (_dlgKind == LibraryCategoryKind.SubCategory)
+            {
+                <label class="lc-field">
+                    <span>Category</span>
+                    <select @bind="_dlgParent">
+                        <option value="0">Select the category..</option>
+                        @foreach (var c in _tree)
+                        {
+                            <option value="@c.Id">@OptionText(c)</option>
+                        }
+                    </select>
+                </label>
+            }
+            <label class="lc-field">
+                <span>Sort order <small>(optional; empty = last)</small></span>
+                <input type="number" min="0" inputmode="numeric" value="@_dlgSort" @oninput="e => _dlgSort = e.Value?.ToString() ?? string.Empty" />
+            </label>
+            @if (_dlgError is not null)
+            {
+                <p class="lc-error" role="alert"><i class="bi bi-exclamation-circle" aria-hidden="true"></i> @_dlgError</p>
+            }
+            <button type="submit" hidden aria-hidden="true" tabindex="-1"></button>
+        </form>
+    </ChildContent>
+    <Footer>
+        <div class="lc-dialog-actions">
+            <button type="button" class="lc-btn lc-btn-ghost" @onclick="() => _dialogOpen = false">Cancel</button>
+            <button type="button" class="lc-btn lc-btn-primary" disabled="@_busy" @onclick="SaveDialogAsync">
+                <i class="bi bi-check-lg" aria-hidden="true"></i> Save
+            </button>
+        </div>
+    </Footer>
+</BottomSheet>
+}
+
+@code {
+    private static readonly string[] Filters = { "All", "Active", "Inactive" };
+
+    private bool CanEdit => LoginState.CanAccess("DigitalLibrary");
+
+    private List<LibraryCategoryDto> _tree = new();
+    private readonly HashSet<int> _expanded = new();
+    private bool _loading = true;
+    private string? _loadError;
+    private bool _busy;
+
+    private string _search = string.Empty;
+    private string _filter = "All";
+
+    // inline edit
+    private int? _editId;
+    private string _editName = string.Empty;
+    private string _editSort = string.Empty;
+    private int _editParent;
+
+    // add dialog
+    private bool _dialogOpen;
+    private LibraryCategoryKind _dlgKind;
+    private string _dlgName = string.Empty;
+    private int _dlgParent;
+    private string _dlgSort = string.Empty;
+    private string? _dlgError;
+
+    private bool HasCategories => _tree.Count > 0;
+    private int SubCount => _tree.Sum(c => c.SubCategories.Count);
+    private int InactiveCount => _tree.Count(c => !c.IsActive) + _tree.Sum(c => c.SubCategories.Count(s => !s.IsActive));
+
+    private static string UsageText(int n) => n == 0 ? "not used yet" : "used by " + Count(n, "item", "items");
+    private static string Count(int n, string one, string many) => $"{n} {(n == 1 ? one : many)}";
+    private static string OptionText(LibraryCategoryDto c) => c.IsActive ? c.Name : c.Name + " (inactive)";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!CanEdit) { _loading = false; return; }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _loadError = null;
+        var tree = await Api.GetCategoriesAsync(includeInactive: true);
+        if (Api.LastError is not null)
+        {
+            _loadError = Api.LastError;
+        }
+        else
+        {
+            _tree = tree;
+        }
+        _loading = false;
+    }
+
+    // ------------------------------------------------------------------ filtering
+
+    private bool StatusOk(LibraryCategoryDto x) => _filter switch
+    {
+        "Active" => x.IsActive,
+        "Inactive" => !x.IsActive,
+        _ => true
+    };
+
+    private bool TextOk(LibraryCategoryDto x) =>
+        string.IsNullOrWhiteSpace(_search) || x.Name.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private bool Narrowed => !string.IsNullOrWhiteSpace(_search) || _filter != "All";
+
+    /// <summary>
+    /// Categories to show with the sub-categories to show under each. A category shows when it
+    /// matches, or when one of its sub-categories does (then it opens by itself).
+    /// </summary>
+    private IEnumerable<(LibraryCategoryDto Cat, List<LibraryCategoryDto> Subs, bool ForceOpen)> Visible
+    {
+        get
+        {
+            foreach (var c in _tree)
+            {
+                var catMatches = StatusOk(c) && TextOk(c);
+                var subs = c.SubCategories
+                    .Where(s => StatusOk(s) && (TextOk(s) || (catMatches && !string.IsNullOrWhiteSpace(_search))))
+                    .ToList();
+                if (!Narrowed)
+                {
+                    yield return (c, c.SubCategories, false);
+                }
+                else if (catMatches || subs.Count > 0)
+                {
+                    yield return (c, subs, subs.Count > 0 && !catMatches);
+                }
+            }
+        }
+    }
+
+    private void Toggle(int id)
+    {
+        if (!_expanded.Remove(id)) _expanded.Add(id);
+    }
+
+    // ------------------------------------------------------------------ row fragments
+
+    private RenderFragment RowActions(LibraryCategoryDto x) => __builder =>
+    {
+        <div class="lc-actions">
+            <button type="button" class="lc-icon-btn" title="Edit" aria-label="@("Edit " + x.Name)" disabled="@_busy" @onclick="() => StartEdit(x)">
+                <i class="bi bi-pencil" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="lc-icon-btn @(x.IsActive ? "lc-icon-warn" : "lc-icon-ok")" disabled="@_busy"
+                    title="@(x.IsActive ? "Deactivate" : "Activate")" aria-label="@((x.IsActive ? "Deactivate " : "Activate ") + x.Name)"
+                    @onclick="() => SetActiveAsync(x, !x.IsActive)">
+                <i class="bi @(x.IsActive ? "bi-toggle-on" : "bi-toggle-off")" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="lc-icon-btn lc-icon-danger" title="Delete" aria-label="@("Delete " + x.Name)" disabled="@_busy" @onclick="() => DeleteAsync(x)">
+                <i class="bi bi-trash" aria-hidden="true"></i>
+            </button>
+        </div>
+    };
+
+    private RenderFragment EditRow(LibraryCategoryDto x) => __builder =>
+    {
+        <form class="lc-edit" @onsubmit="() => SaveEditAsync(x)" @onsubmit:preventDefault="true">
+            <label class="lc-field lc-edit-name">
+                <span>@(x.Kind == LibraryCategoryKind.Category ? "Category name" : "Sub-category name")</span>
+                <input type="text" maxlength="150" value="@_editName" @oninput="e => _editName = e.Value?.ToString() ?? string.Empty" />
+            </label>
+            @if (x.Kind == LibraryCategoryKind.SubCategory)
+            {
+                <label class="lc-field lc-edit-parent">
+                    <span>Category</span>
+                    <select @bind="_editParent">
+                        @foreach (var c in _tree)
+                        {
+                            <option value="@c.Id">@OptionText(c)</option>
+                        }
+                    </select>
+                </label>
+            }
+            <label class="lc-field lc-edit-sort">
+                <span>Order</span>
+                <input type="number" min="0" inputmode="numeric" value="@_editSort" @oninput="e => _editSort = e.Value?.ToString() ?? string.Empty" />
+            </label>
+            <div class="lc-edit-actions">
+                <button type="button" class="lc-btn lc-btn-ghost" @onclick="CancelEdit">Cancel</button>
+                <button type="submit" class="lc-btn lc-btn-primary" disabled="@_busy"><i class="bi bi-check-lg" aria-hidden="true"></i> Save</button>
+            </div>
+            @if (x.UsageCount > 0)
+            {
+                <p class="lc-hint"><i class="bi bi-info-circle" aria-hidden="true"></i> @($"A new name is also applied to the {Count(x.UsageCount, "library item", "library items")} that use it.")</p>
+            }
+        </form>
+    };
+
+    // ------------------------------------------------------------------ actions
+
+    private void OpenAdd(LibraryCategoryKind kind, int? parentId)
+    {
+        _dlgKind = kind;
+        _dlgName = string.Empty;
+        _dlgSort = string.Empty;
+        _dlgError = null;
+        _dlgParent = parentId ?? 0;
+        _dialogOpen = true;
+    }
+
+    private async Task SaveDialogAsync()
+    {
+        if (_busy) return;
+        _dlgError = null;
+        if (string.IsNullOrWhiteSpace(_dlgName)) { _dlgError = "Enter a name."; return; }
+        if (_dlgKind == LibraryCategoryKind.SubCategory && _dlgParent <= 0) { _dlgError = "Choose the category it belongs to."; return; }
+        if (!TryParseSort(_dlgSort, out var sort)) { _dlgError = "Sort order must be a whole number of 0 or more."; return; }
+
+        _busy = true;
+        var created = await Api.CreateCategoryAsync(new LibraryCategoryUpsertDto
+        {
+            Kind = _dlgKind,
+            Name = _dlgName.Trim(),
+            ParentCategoryId = _dlgKind == LibraryCategoryKind.SubCategory ? _dlgParent : null,
+            SortOrder = sort
+        });
+        _busy = false;
+
+        if (created is null)
+        {
+            _dlgError = Api.LastError ?? "The category could not be saved.";
+            return;
+        }
+
+        _dialogOpen = false;
+        Toast.Success($"\"{created.Name}\" was added.");
+        if (created.ParentCategoryId is int pid) _expanded.Add(pid);
+        await LoadAsync();
+    }
+
+    private void StartEdit(LibraryCategoryDto x)
+    {
+        _editId = x.Id;
+        _editName = x.Name;
+        _editSort = x.SortOrder.ToString();
+        _editParent = x.ParentCategoryId ?? 0;
+    }
+
+    private void CancelEdit() => _editId = null;
+
+    private async Task SaveEditAsync(LibraryCategoryDto x)
+    {
+        if (_busy) return;
+        if (string.IsNullOrWhiteSpace(_editName)) { Toast.Warning("Enter a name."); return; }
+        if (!TryParseSort(_editSort, out var sort)) { Toast.Warning("Order must be a whole number of 0 or more."); return; }
+
+        _busy = true;
+        var saved = await Api.UpdateCategoryAsync(x.Id, new LibraryCategoryUpsertDto
+        {
+            Kind = x.Kind,
+            Name = _editName.Trim(),
+            ParentCategoryId = x.Kind == LibraryCategoryKind.SubCategory ? _editParent : null,
+            SortOrder = sort ?? x.SortOrder
+        });
+        _busy = false;
+
+        if (saved is null)
+        {
+            Toast.Error(Api.LastError ?? "The change could not be saved.");
+            return;
+        }
+
+        _editId = null;
+        Toast.Success($"\"{saved.Name}\" was saved.");
+        if (saved.ParentCategoryId is int pid) _expanded.Add(pid);
+        await LoadAsync();
+    }
+
+    private async Task SetActiveAsync(LibraryCategoryDto x, bool value)
+    {
+        if (_busy) return;
+        _busy = true;
+        var saved = await Api.SetCategoryActiveAsync(x.Id, value);
+        _busy = false;
+
+        if (saved is null)
+        {
+            Toast.Error(Api.LastError ?? "The status could not be changed.");
+            return;
+        }
+
+        Toast.Success(value
+            ? $"\"{saved.Name}\" is active again and is offered on the content forms."
+            : $"\"{saved.Name}\" is inactive and no longer offered on the content forms.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync(LibraryCategoryDto x)
+    {
+        if (_busy) return;
+        var noun = x.Kind == LibraryCategoryKind.Category ? "category" : "sub-category";
+        var ok = await Toast.ConfirmAsync($"Delete this {noun}?",
+            $"\"{x.Name}\" will be removed from the content forms. This cannot be undone.", "Delete", danger: true);
+        if (!ok) return;
+
+        _busy = true;
+        var deleted = await Api.DeleteCategoryAsync(x.Id);
+        _busy = false;
+
+        if (!deleted)
+        {
+            Toast.Error(Api.LastError ?? "The category could not be deleted.", durationMs: 6000);
+            return;
+        }
+
+        Toast.Success($"\"{x.Name}\" was deleted.");
+        if (_editId == x.Id) _editId = null;
+        await LoadAsync();
+    }
+
+    private static bool TryParseSort(string text, out int? value)
+    {
+        value = null;
+        if (string.IsNullOrWhiteSpace(text)) return true;
+        if (int.TryParse(text.Trim(), out var n) && n >= 0) { value = n; return true; }
+        return false;
+    }
+}
