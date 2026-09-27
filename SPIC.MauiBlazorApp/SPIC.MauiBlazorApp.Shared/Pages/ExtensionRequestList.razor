@@ -1,0 +1,396 @@
+@page "/ExtensionRequests"
+@inject NavigationManager Nav
+
+<PageTitle>Extension Requests · SPIC ONE</PageTitle>
+<ScrollToTop />
+
+<div class="container-fluid py-4 px-0">
+    <div class="erl-wrapper">
+
+        <!-- Header -->
+        <div class="erl-header">
+            <div class="erl-header-text">
+                <h1>Extension Request List</h1>
+                <p>Review and take action on extension requests raised by Sales Officers</p>
+            </div>
+        </div>
+
+        <!-- Filters (expandable) -->
+        <div class="erl-filter-card">
+            <div class="erl-filter-header" @onclick="() => FiltersOpen = !FiltersOpen">
+                <div class="erl-filter-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M7 12h10"></path><path d="M10 18h4"></path></svg>
+                    Filters
+                </div>
+                <svg class="erl-filter-chevron @(FiltersOpen ? "" : "erl-chevron-closed")" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+
+            @if (FiltersOpen)
+            {
+                <div class="erl-filter-body">
+                    <div class="erl-filter-grid">
+
+                        <div class="erl-form-group">
+                            <label class="erl-form-label">Sanction Number</label>
+                            <select class="erl-form-select @(string.IsNullOrEmpty(SelectedSanction) ? "" : "erl-has-value")" @bind="SelectedSanction">
+                                <option value="">Select Sanction Number</option>
+                                @foreach (var item in AllRequests.Select(x => x.SanctionNumber).Distinct())
+                                {
+                                    <option value="@item">@item</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="erl-form-group">
+                            <label class="erl-form-label">Program Type</label>
+                            <select class="erl-form-select @(string.IsNullOrEmpty(SelectedProgramType) ? "" : "erl-has-value")" @bind="SelectedProgramType">
+                                <option value="">Select Program Type</option>
+                                @foreach (var item in AllRequests.Select(x => x.ProgramType).Distinct())
+                                {
+                                    <option value="@item">@item</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="erl-form-group">
+                            <label class="erl-form-label">Location</label>
+                            <select class="erl-form-select @(string.IsNullOrEmpty(SelectedLocation) ? "" : "erl-has-value")" @bind="SelectedLocation">
+                                <option value="">Select Location</option>
+                                @foreach (var item in AllRequests.Select(x => x.Location).Distinct().Order())
+                                {
+                                    <option value="@item">@item</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="erl-form-group">
+                            <label class="erl-form-label">Request On</label>
+                            <div class="erl-date-range">
+                                <button type="button" class="erl-form-control erl-date-input @(RequestFrom is null && RequestTo is null ? "" : "erl-has-value")"
+                                        @onclick="() => DatePickerOpen = !DatePickerOpen">
+                                    <span>@RequestRangeText</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                </button>
+
+                                @if (DatePickerOpen)
+                                {
+                                    <div class="erl-date-popover">
+                                        <div class="erl-form-group">
+                                            <label class="erl-form-label">From</label>
+                                            <input type="date" class="erl-form-control erl-has-value" @bind="RequestFrom" />
+                                        </div>
+                                        <div class="erl-form-group">
+                                            <label class="erl-form-label">To</label>
+                                            <input type="date" class="erl-form-control erl-has-value" @bind="RequestTo" />
+                                        </div>
+                                        <button type="button" class="erl-btn erl-btn-solid" @onclick="() => DatePickerOpen = false">Done</button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="erl-form-group">
+                            <label class="erl-form-label">Status</label>
+                            <select class="erl-form-select @(string.IsNullOrEmpty(SelectedStatus) ? "" : "erl-has-value")" @bind="SelectedStatus">
+                                <option value="">Select Status</option>
+                                @foreach (var state in Enum.GetValues<ExtensionRequestState>())
+                                {
+                                    <option value="@state">@state</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="erl-filter-actions">
+                            <button class="erl-btn erl-btn-outline" @onclick="ClearFilter">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                Clear All
+                            </button>
+                            <button class="erl-btn erl-btn-solid" @onclick="ApplyFilter">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M7 12h10"></path><path d="M10 18h4"></path></svg>
+                                Apply Filters
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="erl-stats-grid">
+            <div class="erl-stat-card">
+                <div class="erl-stat-text">
+                    <p class="erl-stat-title">Total Request</p>
+                    <h2>@AllRequests.Count</h2>
+                    <span class="erl-stat-desc">Over all request</span>
+                </div>
+                <div class="erl-stat-icon erl-tone-blue"><SalesAuditIcon Name="file-chart" Size="22" StrokeWidth="1.6" /></div>
+            </div>
+            <div class="erl-stat-card">
+                <div class="erl-stat-text">
+                    <p class="erl-stat-title">Pending Request</p>
+                    <h2>@Count(ExtensionRequestState.Pending)</h2>
+                    <span class="erl-stat-desc">Waiting for your action</span>
+                </div>
+                <div class="erl-stat-icon erl-tone-yellow"><SalesAuditIcon Name="clock" Size="22" StrokeWidth="1.6" /></div>
+            </div>
+            <div class="erl-stat-card">
+                <div class="erl-stat-text">
+                    <p class="erl-stat-title">Rejected</p>
+                    <h2>@Count(ExtensionRequestState.Rejected)</h2>
+                    <span class="erl-stat-desc">Request rejected by you</span>
+                </div>
+                <div class="erl-stat-icon erl-tone-red"><SalesAuditIcon Name="clock" Size="22" StrokeWidth="1.6" /></div>
+            </div>
+            <div class="erl-stat-card">
+                <div class="erl-stat-text">
+                    <p class="erl-stat-title">Approved</p>
+                    <h2>@Count(ExtensionRequestState.Approved)</h2>
+                    <span class="erl-stat-desc">Completed</span>
+                </div>
+                <div class="erl-stat-icon erl-tone-gray"><SalesAuditIcon Name="file-pen" Size="22" StrokeWidth="1.6" /></div>
+            </div>
+        </div>
+
+        <!-- Requests table -->
+        <div class="erl-table-card">
+
+            <div class="erl-table-top">
+                <h3>Extension Request List</h3>
+                <input type="text" class="erl-search-input" placeholder="Search requests..."
+                       @bind="SearchText" @bind:event="oninput" @bind:after="ResetPage" />
+            </div>
+
+            <div class="erl-table-wrapper">
+                <table class="erl-main-table">
+                    <thead>
+                        <tr>
+                            <th>Request ID</th>
+                            <th>Sanction Number</th>
+                            <th>Program Name</th>
+                            <th>Location</th>
+                            <th>Requested By</th>
+                            <th>Scheme Period</th>
+                            <th>Required TO <span class="erl-th-muted">(Auto)</span></th>
+                            <th>Actual Turnover</th>
+                            <th>Request New Date</th>
+                            <th>Achievement</th>
+                            <th>Document Status</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!PagedList.Any())
+                        {
+                            <tr>
+                                <td colspan="12" class="erl-empty-cell">No records found</td>
+                            </tr>
+                        }
+                        @foreach (var item in PagedList)
+                        {
+                            <tr>
+                                <td>@item.Id</td>
+                                <td><span class="erl-sanction">@item.SanctionNumber</span></td>
+                                <td>@item.ProgramName</td>
+                                <td>@item.Location</td>
+                                <td>@item.RequestedBy</td>
+                                <td>
+                                    <div class="erl-period">
+                                        @if (item.SchemeFrom is null || item.SchemeTo is null)
+                                        {
+                                            <span class="erl-period-dates">Not Set</span>
+                                            <span class="erl-period-pill erl-pill-muted">Not Planned</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="erl-period-dates">
+                                                @item.SchemeFrom.Value.ToString("dd MMM yyyy")
+                                                <span class="erl-period-to">to</span>
+                                                @item.SchemeTo.Value.ToString("dd MMM yyyy")
+                                            </span>
+                                            <span class="erl-period-pill">@MonthsLabel(item.SchemeFrom.Value, item.SchemeTo.Value)</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td><span class="erl-amount">₹ @SalesAuditFormat.Crore(item.RequiredTurnover) Cr</span></td>
+                                <td><span class="erl-amount">₹ @SalesAuditFormat.Crore(item.ActualTurnover) Cr</span></td>
+                                <td>
+                                    <div class="erl-period">
+                                        <span class="erl-period-dates">@item.NewEndDate.ToString("dd MMM yyyy")</span>
+                                        @if (item.ExtraDays > 0)
+                                        {
+                                            <span class="erl-period-pill">@ExtensionLabel(item.ExtraDays)</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="erl-achievement">
+                                        <span>@item.AchievementPct.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                                        <div class="erl-progress-track">
+                                            <div class="erl-progress-fill @(item.AchievementPct < 100 ? "erl-progress-low" : "")"
+                                                 style="width: @(Math.Min(100m, item.AchievementPct).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="erl-badge erl-badge-@StateTone(item.State)">
+                                        <span class="erl-badge-dot"></span>
+                                        @item.State
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="erl-action-btn" @onclick="() => Open(item)">View Request</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            <div class="erl-pagination">
+                <div class="erl-page-size">
+                    <span>Items Per Page</span>
+                    <select class="erl-page-size-select" @bind="PageSize" @bind:after="ResetPage">
+                        <option value="16">16</option>
+                        <option value="32">32</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+
+                <div class="erl-page-controls">
+                    <button class="erl-page-btn" disabled="@(CurrentPage <= 1)" @onclick="() => GoToPage(CurrentPage - 1)" aria-label="Previous page">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
+                    @foreach (var pageNo in PageNumbers)
+                    {
+                        if (pageNo == -1)
+                        {
+                            <span class="erl-page-btn erl-dots">..</span>
+                        }
+                        else
+                        {
+                            <button class="erl-page-btn @(pageNo == CurrentPage ? "active" : "")" @onclick="() => GoToPage(pageNo)">@pageNo</button>
+                        }
+                    }
+                    <button class="erl-page-btn" disabled="@(CurrentPage >= TotalPages)" @onclick="() => GoToPage(CurrentPage + 1)" aria-label="Next page">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+@code {
+    private readonly IReadOnlyList<ExtensionRequestRow> AllRequests = ExtensionRequestSamples.All;
+    private List<ExtensionRequestRow> FilteredList = new();
+
+    private bool FiltersOpen = true;
+    private bool DatePickerOpen;
+
+    private string SearchText = "";
+    private string SelectedSanction = "";
+    private string SelectedProgramType = "";
+    private string SelectedLocation = "";
+    private string SelectedStatus = "";
+    private DateTime? RequestFrom;
+    private DateTime? RequestTo;
+
+    private int CurrentPage = 1;
+    private int PageSize = 16;
+
+    protected override void OnInitialized() => FilteredList = AllRequests.ToList();
+
+    private int Count(ExtensionRequestState state) => AllRequests.Count(r => r.State == state);
+
+    private string RequestRangeText =>
+        RequestFrom is null && RequestTo is null
+            ? "Select Date Range"
+            : $"{RequestFrom?.ToString("dd MMM yyyy") ?? "…"} - {RequestTo?.ToString("dd MMM yyyy") ?? "…"}";
+
+    private IEnumerable<ExtensionRequestRow> SearchedList =>
+        string.IsNullOrWhiteSpace(SearchText)
+            ? FilteredList
+            : FilteredList.Where(x =>
+                x.Id.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                x.SanctionNumber.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                x.ProgramName.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                x.Location.Contains(SearchText, StringComparison.OrdinalIgnoreCase) ||
+                x.RequestedBy.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(SearchedList.Count() / (double)PageSize));
+    private IEnumerable<ExtensionRequestRow> PagedList => SearchedList.Skip((CurrentPage - 1) * PageSize).Take(PageSize);
+
+    private IEnumerable<int> PageNumbers
+    {
+        get
+        {
+            var total = TotalPages;
+            if (total <= 7) return Enumerable.Range(1, total);
+
+            var pages = new List<int> { 1 };
+            var start = Math.Max(2, CurrentPage - 1);
+            var end = Math.Min(total - 1, CurrentPage + 1);
+
+            if (start > 2) pages.Add(-1);
+            for (var i = start; i <= end; i++) pages.Add(i);
+            if (end < total - 1) pages.Add(-1);
+            pages.Add(total);
+
+            return pages;
+        }
+    }
+
+    private void GoToPage(int page) => CurrentPage = Math.Clamp(page, 1, TotalPages);
+    private void ResetPage() => CurrentPage = 1;
+
+    private void ApplyFilter()
+    {
+        FilteredList = AllRequests
+            .Where(x =>
+                (string.IsNullOrEmpty(SelectedSanction) || x.SanctionNumber == SelectedSanction) &&
+                (string.IsNullOrEmpty(SelectedProgramType) || x.ProgramType == SelectedProgramType) &&
+                (string.IsNullOrEmpty(SelectedLocation) || x.Location == SelectedLocation) &&
+                (string.IsNullOrEmpty(SelectedStatus) || x.State.ToString() == SelectedStatus) &&
+                (RequestFrom is null || x.RequestedOn.Date >= RequestFrom.Value.Date) &&
+                (RequestTo is null || x.RequestedOn.Date <= RequestTo.Value.Date))
+            .ToList();
+        DatePickerOpen = false;
+        ResetPage();
+    }
+
+    private void ClearFilter()
+    {
+        SelectedSanction = "";
+        SelectedProgramType = "";
+        SelectedLocation = "";
+        SelectedStatus = "";
+        RequestFrom = null;
+        RequestTo = null;
+        SearchText = "";
+        FilteredList = AllRequests.ToList();
+        ResetPage();
+    }
+
+    private void Open(ExtensionRequestRow item) => Nav.NavigateTo($"/ExtensionRequestDetails?id={Uri.EscapeDataString(item.Id)}");
+
+    // Calendar months the scheme touches, e.g. 01 Aug - 31 Oct = 3 months.
+    private static string MonthsLabel(DateTime from, DateTime to)
+    {
+        var months = Math.Max(1, (to.Year - from.Year) * 12 + to.Month - from.Month + 1);
+        return months == 1 ? "1 month" : $"{months} months";
+    }
+
+    // Extension length in whole 30-day months where possible: 30 days -> "1 month".
+    private static string ExtensionLabel(int days) =>
+        days >= 30 && days % 30 == 0 ? (days == 30 ? "1 month" : $"{days / 30} months") : $"{days} days";
+
+    private static string StateTone(ExtensionRequestState state) => state switch
+    {
+        ExtensionRequestState.Approved => "green",
+        ExtensionRequestState.Rejected => "red",
+        _ => "orange",
+    };
+}

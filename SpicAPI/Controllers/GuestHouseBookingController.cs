@@ -1144,6 +1144,266 @@ namespace SpicAPI.Controllers
 			}
 		}
 
+		// =====================================================================
+		//  CANCELLATION / REFUND (Dealer side)
+		// =====================================================================
+
+		// The reasons offered on the existing CancelBooking dropdown - kept here as the
+		// single source so the dealer's submitted reason always matches one of the
+		// options the (already designed) page shows.
+		private static readonly string[] CancellationReasons =
+		{
+			"Change in travel plans",
+			"Health / Medical reasons",
+			"Found better accommodation",
+			"Other"
+		};
+
+		// GET /api/GuestHouseBooking/bookings/{id}/cancellation-preview
+		// Data needed by the existing CancelBooking page: booking/guest summary and the
+		// refund calculation from the Guest House's own GuestHouseCancellationPolicy -
+		// never a hard-coded percentage. Does not create anything.
+		[Authorize]
+		[HttpGet("bookings/{id:int}/cancellation-preview")]
+		public async Task<IActionResult> GetCancellationPreview(int id)
+		{
+			var userName = User.Identity?.Name;
+			if (string.IsNullOrWhiteSpace(userName))
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
+			var booking = await _db.GuestHouseBookings
+				.AsNoTracking()
+				.Include(b => b.GuestHouse)
+				.ThenInclude(h => h!.Images.Where(i => i.IsActive))
+				.Include(b => b.GuestHouseRoom)
+				.Include(b => b.Guests)
+				.Include(b => b.Payments)
+				.FirstOrDefaultAsync(b => b.Id == id);
+
+			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+				return NotFound(new { Success = false, Message = "Booking not found." });
+
+			if (booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
+				return BadRequest(new { Success = false, Message = "This booking has already been cancelled." });
+			if (booking.BookingStatus == GuestHouseBookingStatus.Completed)
+				return BadRequest(new { Success = false, Message = "A completed stay cannot be cancelled." });
+			if (booking.BookingStatus == GuestHouseBookingStatus.CheckedIn)
+				return BadRequest(new { Success = false, Message = "This booking is already checked in and cannot be cancelled online. Please contact the Front Office." });
+
+			var existing = await _db.Set<GuestHouseBookingCancellation>()
+				.AsNoTracking()
+				.FirstOrDefaultAsync(c => c.GuestHouseBookingId == id);
+
+			var calc = await GuestHouseCancellationHelper.CalculateAsync(_db, booking);
+			var guest = booking.Guests.FirstOrDefault();
+			var cover = booking.GuestHouse?.Images
+				.OrderBy(i => i.IsPrimary ? 0 : 1)
+				.ThenBy(i => i.DisplayOrder)
+				.Select(i => i.FilePath)
+				.FirstOrDefault();
+
+			return Ok(new CancellationPreviewDto
+			{
+				BookingId = booking.Id,
+				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
+				GuestHouseName = booking.GuestHouse?.Name ?? "",
+				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
+				RoomImagePath = cover,
+				BookingStatus = BookingStatusName(booking.BookingStatus),
+				CheckInDate = booking.CheckInDate,
+				CheckOutDate = booking.CheckOutDate,
+				TotalAmount = booking.TotalAmount ?? 0,
+				CancellationChargePercent = calc.CancellationChargePercentage,
+				RefundPercent = calc.RefundPercentage,
+				CancellationCharge = calc.CancellationCharge,
+				TaxAdjustment = calc.TaxAdjustment,
+				RefundAmount = calc.RefundAmount,
+				RefundMethod = "Original Payment Method",
+				EstimatedRefundWindow = "Within 2 working days after Admin approval",
+				PolicyConfigured = calc.PolicyConfigured,
+				AlreadyRequested = existing != null,
+				ExistingCancellationId = existing?.Id,
+				ExistingApprovalStatus = existing?.ApprovalStatus.ToString(),
+				CancellationReasons = CancellationReasons.ToList(),
+				EmployeeOrDealerCode = guest?.EmployeeOrDealerCode,
+				GuestName = guest?.GuestName,
+				CompanyName = guest?.CompanyName,
+				PhoneNumber = guest?.PhoneNumber,
+				Email = guest?.Email,
+				NumberOfPersons = booking.NumberOfPersons ?? guest?.NumberOfPersons,
+				Nationality = guest?.Nationality,
+				AadhaarOrPassportNumber = guest?.AadhaarOrPassportNumber,
+				Address = guest?.Address
+			});
+		}
+
+		// POST /api/GuestHouseBooking/bookings/{id}/cancel
+		//
+		// Creates a cancellation REQUEST only - per the required business flow this must
+		// NEVER cancel the booking, release the room or touch Razorpay. It only records
+		// the request as Pending Admin Approval; GuestHouseFrontOfficeController's
+		// Approve/Reject endpoints are the only place that ever changes booking/room/refund
+		// state from here on.
+		//
+		// Idempotent: GuestHouseBookingCancellation has a unique index on
+		// GuestHouseBookingId, so a duplicate submit (double-click, retry) returns the
+		// SAME existing request instead of creating a second one.
+		[Authorize]
+		[HttpPost("bookings/{id:int}/cancel")]
+		public async Task<IActionResult> RequestCancellation(int id, [FromBody] CreateCancellationRequest? request)
+		{
+			var userName = User.Identity?.Name;
+			if (string.IsNullOrWhiteSpace(userName))
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
+			var booking = await _db.GuestHouseBookings.FirstOrDefaultAsync(b => b.Id == id);
+			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+				return NotFound(new { Success = false, Message = "Booking not found." });
+
+			if (booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
+				return BadRequest(new { Success = false, Message = "This booking has already been cancelled." });
+			if (booking.BookingStatus == GuestHouseBookingStatus.Completed)
+				return BadRequest(new { Success = false, Message = "A completed stay cannot be cancelled." });
+			if (booking.BookingStatus == GuestHouseBookingStatus.CheckedIn)
+				return BadRequest(new { Success = false, Message = "This booking is already checked in and cannot be cancelled online. Please contact the Front Office." });
+
+			var existing = await _db.Set<GuestHouseBookingCancellation>()
+				.FirstOrDefaultAsync(c => c.GuestHouseBookingId == id);
+			if (existing != null)
+			{
+				return Ok(new
+				{
+					Success = true,
+					AlreadyRequested = true,
+					CancellationId = existing.Id,
+					CancellationReference = existing.CancellationReference,
+					ApprovalStatus = existing.ApprovalStatus.ToString()
+				});
+			}
+
+			if (string.IsNullOrWhiteSpace(request?.Reason))
+				return BadRequest(new { Success = false, Message = "Please select a reason for cancellation." });
+
+			var calc = await GuestHouseCancellationHelper.CalculateAsync(_db, booking);
+
+			var cancellation = new GuestHouseBookingCancellation
+			{
+				CancellationReference = GenerateCancellationReference(),
+				GuestHouseBookingId = booking.Id,
+				CancellationReason = request.Reason,
+				CancelledBy = userName,
+				CancelledAt = DateTime.Now,
+				CancellationCharge = calc.CancellationCharge,
+				TaxAdjustment = calc.TaxAdjustment,
+				RefundAmount = calc.RefundAmount,
+				RefundMethod = "Original Payment Method",
+				RefundStatus = GuestHouseRefundStatus.Pending,
+				ApprovalStatus = GuestHouseCancellationApprovalStatus.PendingApproval,
+				// Set on Admin approval (2 working days from then) - unknown until approved.
+				EstimatedRefundDate = null
+			};
+
+			_db.Set<GuestHouseBookingCancellation>().Add(cancellation);
+
+			try
+			{
+				await _db.SaveChangesAsync();
+			}
+			catch (DbUpdateException)
+			{
+				// Unique-index race: someone else's concurrent request won - return that one.
+				var raced = await _db.Set<GuestHouseBookingCancellation>()
+					.AsNoTracking()
+					.FirstOrDefaultAsync(c => c.GuestHouseBookingId == id);
+				if (raced == null) throw;
+
+				return Ok(new
+				{
+					Success = true,
+					AlreadyRequested = true,
+					CancellationId = raced.Id,
+					CancellationReference = raced.CancellationReference,
+					ApprovalStatus = raced.ApprovalStatus.ToString()
+				});
+			}
+
+			return Ok(new
+			{
+				Success = true,
+				AlreadyRequested = false,
+				CancellationId = cancellation.Id,
+				CancellationReference = cancellation.CancellationReference,
+				ApprovalStatus = cancellation.ApprovalStatus.ToString()
+			});
+		}
+
+		// GET /api/GuestHouseBooking/bookings/{id}/refund-status
+		// Data needed by the existing RefundStatus page. Ownership-enforced the same way
+		// as every other customer-facing booking endpoint.
+		[Authorize]
+		[HttpGet("bookings/{id:int}/refund-status")]
+		public async Task<IActionResult> GetRefundStatus(int id)
+		{
+			var userName = User.Identity?.Name;
+			if (string.IsNullOrWhiteSpace(userName))
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
+			var booking = await _db.GuestHouseBookings
+				.AsNoTracking()
+				.Include(b => b.GuestHouse)
+				.Include(b => b.GuestHouseRoom)
+				.Include(b => b.Payments)
+				.FirstOrDefaultAsync(b => b.Id == id);
+
+			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+				return NotFound(new { Success = false, Message = "Booking not found." });
+
+			// Pull the latest refund state from Razorpay (read-only) before reporting it.
+			await GuestHouseRefundStatusSync.SyncAsync(_db, _razorpay, _logger, id);
+
+			var cancellation = await _db.Set<GuestHouseBookingCancellation>()
+				.AsNoTracking()
+				.FirstOrDefaultAsync(c => c.GuestHouseBookingId == id);
+			if (cancellation == null)
+				return NotFound(new { Success = false, Message = "No cancellation request found for this booking." });
+
+			var refund = await _db.Set<GuestHouseBookingRefund>()
+				.AsNoTracking()
+				.FirstOrDefaultAsync(r => r.GuestHouseBookingId == id);
+			var payment = booking.Payments.FirstOrDefault();
+
+			return Ok(new RefundStatusDto
+			{
+				BookingId = booking.Id,
+				BookingReference = booking.BookingReference ?? $"BK{booking.Id}",
+				GuestHouseName = booking.GuestHouse?.Name ?? "",
+				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
+				CancellationId = cancellation.Id,
+				CancellationReference = cancellation.CancellationReference,
+				CancellationReason = cancellation.CancellationReason,
+				ApprovalStatus = cancellation.ApprovalStatus.ToString(),
+				RefundStatus = cancellation.RefundStatus.ToString(),
+				RequestedAt = cancellation.CancelledAt,
+				DecidedAt = cancellation.AdminDecisionAt,
+				RejectionReason = cancellation.RejectionReason,
+				TotalPaid = booking.TotalAmount ?? 0,
+				CancellationCharge = cancellation.CancellationCharge ?? 0,
+				TaxAdjustment = cancellation.TaxAdjustment ?? 0,
+				RefundAmount = cancellation.RefundAmount ?? 0,
+				RefundMethod = cancellation.RefundMethod,
+				EstimatedRefundDate = cancellation.EstimatedRefundDate,
+				RefundReference = refund?.RefundReference,
+				RefundProcessedAt = refund?.ProcessedAt,
+				PaymentMethod = payment != null ? PaymentMethodName(payment.PaymentMethod) : "",
+				RefundTimelineMessage = GuestHouseRefundStatusSync.RefundTimelineMessage
+			});
+		}
+
+		private static string GenerateCancellationReference()
+		{
+			return $"CAN-{DateTime.Now:yyyy}-{Random.Shared.Next(1000, 9999)}";
+		}
+
 		private static string BookingStatusName(GuestHouseBookingStatus status)
 		{
 			return status switch
@@ -1615,5 +1875,80 @@ namespace SpicAPI.Controllers
 		public string? Address { get; set; }
 
 		public List<BookingDocumentDto> Documents { get; set; } = new List<BookingDocumentDto>();
+	}
+
+	public class CreateCancellationRequest
+	{
+		public string? Reason { get; set; }
+	}
+
+	public class CancellationPreviewDto
+	{
+		public int BookingId { get; set; }
+		public string BookingReference { get; set; } = "";
+		public string GuestHouseName { get; set; } = "";
+		public string RoomType { get; set; } = "";
+		public string? RoomImagePath { get; set; }
+		public string BookingStatus { get; set; } = "";
+		public DateTime? CheckInDate { get; set; }
+		public DateTime? CheckOutDate { get; set; }
+		public decimal TotalAmount { get; set; }
+
+		// Refund calculation from GuestHouseCancellationHelper (policy-driven)
+		public decimal CancellationChargePercent { get; set; }
+		public decimal RefundPercent { get; set; }
+		public decimal CancellationCharge { get; set; }
+		public decimal TaxAdjustment { get; set; }
+		public decimal RefundAmount { get; set; }
+		public string RefundMethod { get; set; } = "";
+		public string EstimatedRefundWindow { get; set; } = "";
+		public bool PolicyConfigured { get; set; }
+
+		// Set when a cancellation request already exists for this booking
+		public bool AlreadyRequested { get; set; }
+		public int? ExistingCancellationId { get; set; }
+		public string? ExistingApprovalStatus { get; set; }
+
+		public List<string> CancellationReasons { get; set; } = new List<string>();
+
+		public string? EmployeeOrDealerCode { get; set; }
+		public string? GuestName { get; set; }
+		public string? CompanyName { get; set; }
+		public string? PhoneNumber { get; set; }
+		public string? Email { get; set; }
+		public int? NumberOfPersons { get; set; }
+		public string? Nationality { get; set; }
+		public string? AadhaarOrPassportNumber { get; set; }
+		public string? Address { get; set; }
+	}
+
+	public class RefundStatusDto
+	{
+		public int BookingId { get; set; }
+		public string BookingReference { get; set; } = "";
+		public string GuestHouseName { get; set; } = "";
+		public string RoomType { get; set; } = "";
+
+		public int CancellationId { get; set; }
+		public string? CancellationReference { get; set; }
+		public string? CancellationReason { get; set; }
+		public string ApprovalStatus { get; set; } = "";
+		public string RefundStatus { get; set; } = "";
+		public DateTime RequestedAt { get; set; }
+		public DateTime? DecidedAt { get; set; }
+		public string? RejectionReason { get; set; }
+
+		public decimal TotalPaid { get; set; }
+		public decimal CancellationCharge { get; set; }
+		public decimal TaxAdjustment { get; set; }
+		public decimal RefundAmount { get; set; }
+		public string? RefundMethod { get; set; }
+		public DateTime? EstimatedRefundDate { get; set; }
+		public string? RefundReference { get; set; }
+		public DateTime? RefundProcessedAt { get; set; }
+		public string PaymentMethod { get; set; } = "";
+
+		// Client's refund-credit expectation after Admin approval (not a Razorpay guarantee).
+		public string RefundTimelineMessage { get; set; } = "";
 	}
 }

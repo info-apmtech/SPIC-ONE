@@ -1,0 +1,142 @@
+@* Right-hand drawer showing an extension request's summary and progress (opened from Sales Tracking). *@
+
+@if (IsOpen && Request is not null)
+{
+    var approved = Request.State == ExtensionRequestState.Approved;
+
+    <div class="exd-overlay" @onclick="Close">
+        <aside class="exd-drawer" role="dialog" aria-modal="true" aria-labelledby="exd-title" tabindex="-1"
+               @ref="DrawerRef" @onclick:stopPropagation="true" @onkeydown="OnKeyDown">
+
+            <header class="exd-header">
+                <button type="button" class="exd-back" aria-label="Close" @onclick="Close">
+                    <SalesAuditIcon Name="arrow-left" Size="20" />
+                </button>
+                <h2 id="exd-title">Extension Request Status</h2>
+            </header>
+
+            <div class="exd-body">
+                <!-- Status banner -->
+                <div class="exd-status @(approved ? "exd-status-approved" : "exd-status-pending")">
+                    <span class="exd-status-icon">
+                        <SalesAuditIcon Name="@(approved ? "check-circle" : "clock")" Size="16" StrokeWidth="2.2" />
+                    </span>
+                    <div>
+                        <strong>@(approved ? "Extension Details" : "Pending Admin Review")</strong>
+                        <span>@(approved ? "Your extension request has been approved." : "Your request is currently under review by Admin")</span>
+                    </div>
+                </div>
+
+                <!-- Request summary -->
+                <section class="exd-card">
+                    <h3>Request Summary</h3>
+                    <dl class="exd-summary">
+                        <div><dt>Request ID</dt><dd class="exd-green">@Request.RequestId</dd></div>
+                        <div><dt>Requested On</dt><dd>@Request.RequestedOn.ToString("dd MMM yyyy, hh:mm tt")</dd></div>
+                        <div><dt>Requested By</dt><dd>@Request.RequestedBy</dd></div>
+                        <div><dt>Original End Date</dt><dd>@Request.OriginalEndDate.ToString("dd MMM yyyy")</dd></div>
+                        <div>
+                            <dt>Requested New End Date</dt>
+                            <dd>@Request.NewEndDate.ToString("dd MMM yyyy") <span class="exd-length">@Request.ExtensionLength</span></dd>
+                        </div>
+                        @if (approved)
+                        {
+                            <div><dt>Approved On</dt><dd>@Request.ApprovedOn?.ToString("dd MMM yyyy, hh:mm tt")</dd></div>
+                            <div><dt>Approved By</dt><dd>@Request.ApprovedBy</dd></div>
+                        }
+                    </dl>
+                    <div class="exd-remarks">
+                        <span class="exd-remarks-label"><SalesAuditIcon Name="message" Size="15" /> Reason Remarks</span>
+                        <p>@Request.Remarks</p>
+                    </div>
+                </section>
+
+                <!-- Request progress -->
+                <section class="exd-card">
+                    <h3>Request Progress</h3>
+                    <ol class="exd-timeline">
+                        <li class="exd-step exd-step-done">
+                            <span class="exd-step-marker"><SalesAuditIcon Name="check-circle" Size="16" StrokeWidth="2.2" /></span>
+                            <div>
+                                <strong>Extension Request Submitted</strong>
+                                <span class="exd-time">@Request.RequestedOn.ToString("dd MMM yyyy, hh:mm tt")</span>
+                                <span>Request Submitted Successfully</span>
+                            </div>
+                        </li>
+
+                        @if (approved)
+                        {
+                            <li class="exd-step exd-step-done">
+                                <span class="exd-step-marker"><SalesAuditIcon Name="check-circle" Size="16" StrokeWidth="2.2" /></span>
+                                <div>
+                                    <strong>Admin Approved</strong>
+                                    <span class="exd-time">@Request.ApprovedOn?.ToString("dd MMM yyyy, hh:mm tt")</span>
+                                    <span>Extension request approved.</span>
+                                </div>
+                            </li>
+                            <li class="exd-step exd-step-upcoming">
+                                <span class="exd-step-marker"><SalesAuditIcon Name="clock" Size="16" StrokeWidth="2" /></span>
+                                <div>
+                                    <strong>Tracking continued</strong>
+                                    <span>Sales Tracking will continue until @Request.NewEndDate.ToString("dd MMM yyyy")</span>
+                                </div>
+                            </li>
+                        }
+                        else
+                        {
+                            <li class="exd-step exd-step-current">
+                                <span class="exd-step-marker"><SalesAuditIcon Name="clock" Size="16" StrokeWidth="2" /></span>
+                                <div>
+                                    <strong>Admin Review <span class="exd-pending-pill">Pending</span></strong>
+                                    <span>Your request is under review by Admin.</span>
+                                </div>
+                            </li>
+                            <li class="exd-step exd-step-upcoming">
+                                <span class="exd-step-marker"><SalesAuditIcon Name="clock" Size="16" StrokeWidth="2" /></span>
+                                <div>
+                                    <strong>Decision <span class="exd-pending-pill">Pending</span></strong>
+                                    <span>You will be notified once the decision is made</span>
+                                </div>
+                            </li>
+                        }
+                    </ol>
+                </section>
+
+                <div class="exd-note">
+                    <SalesAuditIcon Name="info" Size="15" />
+                    <span>You will receive a notification and email once admin makes a decision</span>
+                </div>
+            </div>
+
+            <footer class="exd-footer">
+                <button type="button" class="exd-close" @onclick="Close">Close</button>
+            </footer>
+        </aside>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public ExtensionRequestInfo? Request { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private ElementReference DrawerRef;
+    private bool _wasOpen;
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") await Close();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Focus the drawer when it opens so Escape works straight away.
+        if (IsOpen && !_wasOpen)
+        {
+            try { await DrawerRef.FocusAsync(); } catch (InvalidOperationException) { }
+        }
+        _wasOpen = IsOpen;
+    }
+}

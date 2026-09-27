@@ -1,4 +1,7 @@
-﻿@page "/RefundStatus"
+@page "/RefundStatus"
+@using System.Globalization
+@inject HttpClient Http
+@inject NavigationManager Navigation
 
 <style>
     :root {
@@ -295,47 +298,59 @@
 </style>
 
 <div class="container-fluid py-4 px-0">
-    
+
     <div class="rs-page-header">
-        <PageHeader Title="Refund Status" Subtitle="Track the progress of your refund for booking CAN-2025-0089" BackHref="/MyBookings" CssClass="w-100">
+        <PageHeader Title="Refund Status" Subtitle="@($"Track the progress of your refund for booking {(_status?.CancellationReference ?? _status?.BookingReference ?? "")}")" BackHref="/MyBookings" CssClass="w-100">
             <Actions>
                 <button class="rs-btn-outline"><i class="bi bi-file-earmark-arrow-down"></i> Download Cancellation Receipt</button>
             </Actions>
         </PageHeader>
     </div>
 
+    @if (_isLoading)
+    {
+        <Skeleton Variant="table" Rows="6" LoadingText="Loading refund status" />
+    }
+    else if (_status == null)
+    {
+        <EmptyState Icon="bi-exclamation-circle" Title="Refund status unavailable" Message="@(_loadError ?? "We could not load the refund status.")">
+            <button class="rs-btn-outline" @onclick="GoBack">Back to My Bookings</button>
+        </EmptyState>
+    }
+    else
+    {
     <div class="row g-4">
-        
+
         <div class="col-lg-5">
-            
+
             <div class="rs-card">
                 <div class="rs-card-body">
-                    
+
                     <div class="rs-summary-top">
                         <div class="rs-summary-lbl">Total Refund Amount</div>
-                        <div class="rs-summary-amount">₹2967</div>
-                        <div class="rs-summary-id">Cancellation ID: <span class="rs-text-red">CAN-2025-0089</span></div>
+                        <div class="rs-summary-amount">@Money(_status.RefundAmount)</div>
+                        <div class="rs-summary-id">Cancellation ID: <span class="rs-text-red">@Dash(_status.CancellationReference)</span></div>
                     </div>
 
                     <div class="rs-kv-row">
                         <span class="rs-kv-label">Refund Method</span>
-                        <span class="rs-kv-value">Original Payment Method (Credit Card)</span>
+                        <span class="rs-kv-value">@Dash(_status.RefundMethod)@(string.IsNullOrWhiteSpace(_status.PaymentMethod) ? "" : $" ({_status.PaymentMethod})")</span>
                     </div>
                     <div class="rs-kv-row">
-                        <span class="rs-kv-label">Expected Date</span>
-                        <span class="rs-kv-value">22 May 2026</span>
+                        <span class="rs-kv-label">Target Credit Date</span>
+                        <span class="rs-kv-value">@(IsRejected ? "-" : _status.EstimatedRefundDate.HasValue ? FormatDate(_status.EstimatedRefundDate) : "Within 2 working days after Admin approval")</span>
                     </div>
                     <div class="rs-kv-row">
                         <span class="rs-kv-label">Transaction Ref.</span>
-                        <span class="rs-kv-value">TXN-AXBK-20250115-9842</span>
+                        <span class="rs-kv-value">@Dash(_status.RefundReference)</span>
                     </div>
                     <div class="rs-kv-row">
                         <span class="rs-kv-label">Cancellation Date</span>
-                        <span class="rs-kv-value">27 May 2026 at 10:42 AM</span>
+                        <span class="rs-kv-value">@FormatDateTime(_status.RequestedAt)</span>
                     </div>
                     <div class="rs-kv-row mt-3">
                         <span class="rs-kv-label">Current Status</span>
-                        <span class="rs-status-pill">Bank Processing</span>
+                        <span class="rs-status-pill">@CurrentStatusLabel</span>
                     </div>
 
                 </div>
@@ -348,22 +363,22 @@
                 <div class="rs-card-body">
                     <div class="rs-kv-row">
                         <span class="rs-kv-label">Total Paid</span>
-                        <span class="rs-kv-value">₹3367</span>
+                        <span class="rs-kv-value">@Money(_status.TotalPaid)</span>
                     </div>
                     <div class="rs-kv-row">
-                        <span class="rs-kv-label">Cancellation Charges (5%)</span>
-                        <span class="rs-kv-value red">−₹630</span>
+                        <span class="rs-kv-label">Cancellation Charges</span>
+                        <span class="rs-kv-value red">−@Money(_status.CancellationCharge)</span>
                     </div>
                     <div class="rs-kv-row">
                         <span class="rs-kv-label">Tax Adjustment (GST)</span>
-                        <span class="rs-kv-value red">−₹130</span>
+                        <span class="rs-kv-value red">−@Money(_status.TaxAdjustment)</span>
                     </div>
 
                     <div class="rs-divider"></div>
 
                     <div class="rs-kv-row">
                         <span class="rs-kv-label" style="font-size: 0.95rem; font-weight: 700; color: #1f2937;">Refund Amount</span>
-                        <span class="rs-kv-value blue">₹2967.00</span>
+                        <span class="rs-kv-value blue">@Money(_status.RefundAmount)</span>
                     </div>
                 </div>
             </div>
@@ -371,63 +386,137 @@
         </div>
 
         <div class="col-lg-7">
-            
+
             <div class="rs-card h-100 mb-0">
                 <div class="rs-card-header">
                     <h3 class="rs-card-title">Refund Tracking</h3>
                 </div>
                 <div class="rs-card-body">
-                    
+
                     <div class="rs-timeline">
-                        
+
                         <div class="rs-tl-item">
                             <div class="rs-tl-line green"></div>
                             <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
                             <div class="rs-tl-content">
                                 <h4 class="rs-tl-title red">Cancellation Requested</h4>
-                                <p class="rs-tl-date">27 May 2026 at 10:42 AM</p>
-                                <p class="rs-tl-desc">Cancellation successfully recorded in system</p>
+                                <p class="rs-tl-date">@FormatDateTime(_status.RequestedAt)</p>
+                                <p class="rs-tl-desc">@(string.IsNullOrWhiteSpace(_status.CancellationReason) ? "Cancellation request recorded in system" : $"Reason: {_status.CancellationReason}")</p>
                             </div>
                         </div>
 
                         <div class="rs-tl-item">
-                            <div class="rs-tl-line green"></div>
-                            <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
+                            <div class="rs-tl-line @(IsApproved ? "green" : "gray")"></div>
+                            @if (IsApproved)
+                            {
+                                <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
+                            }
+                            else if (IsRejected)
+                            {
+                                <div class="rs-tl-icon active"><i class="bi bi-x-lg"></i></div>
+                            }
+                            else
+                            {
+                                <div class="rs-tl-icon active"><i class="bi bi-hourglass-split"></i></div>
+                            }
                             <div class="rs-tl-content">
-                                <h4 class="rs-tl-title green">Refund Initiated</h4>
-                                <p class="rs-tl-date">27 May 2026 at 10:42 AM</p>
-                                <p class="rs-tl-desc">Refund of ₹2967 approved and initiated</p>
+                                <h4 class="rs-tl-title @(IsRejected ? "red" : IsApproved ? "green" : "dark")">@(IsRejected ? "Cancellation Rejected" : IsApproved ? "Approved by Admin" : "Pending Admin Approval")</h4>
+                                <p class="rs-tl-date">@(_status.DecidedAt.HasValue ? FormatDateTime(_status.DecidedAt.Value) : "(In Progress)")</p>
+                                <p class="rs-tl-desc">@(IsRejected ? $"Reason: {Dash(_status.RejectionReason)}. Your booking remains active." : IsApproved ? "Your booking has been cancelled and the room released" : "Your request is awaiting review by the Admin")</p>
                             </div>
                         </div>
 
-                        <div class="rs-tl-item">
-                            <div class="rs-tl-line green"></div>
-                            <div class="rs-tl-icon active"><i class="bi bi-arrow-clockwise"></i></div>
-                            <div class="rs-tl-content">
-                                <h4 class="rs-tl-title dark">Bank Processing</h4>
-                                <p class="rs-tl-date">28 May 2026 (In Progress)</p>
-                                <p class="rs-tl-desc">Your bank (Axis Bank) is processing the refund to your credit card ending ****4721</p>
+                        @if (IsApproved && _status.RefundAmount <= 0)
+                        {
+                            <div class="rs-tl-item">
+                                <div class="rs-tl-icon done"><i class="bi bi-dash-lg"></i></div>
+                                <div class="rs-tl-content">
+                                    <h4 class="rs-tl-title dark">No Refund Due</h4>
+                                    <p class="rs-tl-date">@(_status.DecidedAt.HasValue ? FormatDateTime(_status.DecidedAt.Value) : "-")</p>
+                                    <p class="rs-tl-desc">No refund is due for this cancellation under the cancellation policy</p>
+                                </div>
                             </div>
-                        </div>
+                        }
+                        else
+                        {
+                            <div class="rs-tl-item">
+                                <div class="rs-tl-line @(IsRefundInitiated ? "green" : "gray")"></div>
+                                @if (IsRefundInitiated)
+                                {
+                                    <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
+                                }
+                                else
+                                {
+                                    <div class="rs-tl-icon pending"></div>
+                                }
+                                <div class="rs-tl-content">
+                                    <h4 class="rs-tl-title @(IsRefundInitiated ? "green" : "dark")">Refund Initiated</h4>
+                                    <p class="rs-tl-date">@(IsRefundInitiated && _status.DecidedAt.HasValue ? FormatDateTime(_status.DecidedAt.Value) : IsRejected ? "-" : "Pending")</p>
+                                    <p class="rs-tl-desc">Refund of @Money(_status.RefundAmount) initiated to your original payment method@(string.IsNullOrWhiteSpace(_status.RefundReference) ? "" : $" (Ref. {_status.RefundReference})")</p>
+                                </div>
+                            </div>
 
-                        <div class="rs-tl-item">
-                            <div class="rs-tl-icon pending"></div>
-                            <div class="rs-tl-content">
-                                <h4 class="rs-tl-title dark">Refunded</h4>
-                                <p class="rs-tl-date">Expected: 05 Jun 2026</p>
-                                <p class="rs-tl-desc">Amount will appear in your statement within 1–2 days after credit</p>
+                            <div class="rs-tl-item">
+                                <div class="rs-tl-line @(IsRefundCompleted ? "green" : "gray")"></div>
+                                @if (IsRefundCompleted)
+                                {
+                                    <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
+                                }
+                                else if (IsRefundProcessing)
+                                {
+                                    <div class="rs-tl-icon active"><i class="bi bi-arrow-clockwise"></i></div>
+                                }
+                                else
+                                {
+                                    <div class="rs-tl-icon pending"></div>
+                                }
+                                <div class="rs-tl-content">
+                                    <h4 class="rs-tl-title @(IsRefundCompleted ? "green" : "dark")">Refund Processing</h4>
+                                    <p class="rs-tl-date">@(IsRefundProcessing ? "(In Progress)" : IsRefundCompleted ? "Done" : IsRefundFailed ? "Failed" : "Pending")</p>
+                                    <p class="rs-tl-desc">@(IsRefundFailed ? "The payment gateway could not complete this refund. Our team will contact you." : "Your refund is being processed by the payment gateway and your bank")</p>
+                                </div>
                             </div>
-                        </div>
+
+                            <div class="rs-tl-item">
+                                @if (IsRefundCompleted)
+                                {
+                                    <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
+                                }
+                                else
+                                {
+                                    <div class="rs-tl-icon pending"></div>
+                                }
+                                <div class="rs-tl-content">
+                                    @* "Completed" = Razorpay's final "processed" state. Razorpay does not
+                                       report the credit to the payment source itself, so this never says "credited". *@
+                                    <h4 class="rs-tl-title @(IsRefundCompleted ? "green" : "dark")">Refund Completed by Razorpay</h4>
+                                    <p class="rs-tl-date">@(IsRefundCompleted && _status.RefundProcessedAt.HasValue ? FormatDateTime(_status.RefundProcessedAt.Value) : IsRejected ? "-" : _status.EstimatedRefundDate.HasValue ? $"Target credit date: {FormatDate(_status.EstimatedRefundDate)}" : "Within 2 working days after Admin approval")</p>
+                                    <p class="rs-tl-desc">@(IsRefundCompleted ? "Razorpay has completed the refund to your original payment source. Please check your bank or card statement." : "Razorpay confirms when it has completed the refund")</p>
+                                </div>
+                            </div>
+                        }
 
                     </div>
 
-                    <div class="rs-alert-orange">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        <div>
-                            If the refund is not received by 22 Jan 2025, please contact support with reference:<br/>
-                            <strong>TXN-AXBK-20250115-9842</strong>
+                    @if (!IsRejected && !(IsApproved && _status.RefundAmount <= 0))
+                    {
+                        <div class="rs-alert-orange">
+                            <i class="bi bi-info-circle"></i>
+                            <div>
+                                @_status.RefundTimelineMessage
+                                @if (IsPastTargetDate)
+                                {
+                                    <br/>
+                                    <span>The target date (@FormatDate(_status.EstimatedRefundDate)) has passed. If the amount has not reached your original payment source, please contact support with reference: <strong>@(_status.RefundReference ?? _status.CancellationReference)</strong></span>
+                                }
+                                else if (_status.EstimatedRefundDate.HasValue)
+                                {
+                                    <br/>
+                                    <span>If the amount has not reached your original payment source by @FormatDate(_status.EstimatedRefundDate), please contact support with reference: <strong>@(_status.RefundReference ?? _status.CancellationReference)</strong></span>
+                                }
+                            </div>
                         </div>
-                    </div>
+                    }
 
                 </div>
             </div>
@@ -435,6 +524,7 @@
         </div>
 
     </div>
+    }
 
     <div class="rs-bottom-actions">
         <ActionBar AriaLabel="Refund actions">
@@ -442,7 +532,7 @@
                labels shorten on phones (the bar clips rather than ellipsises,
                because the buttons are flex containers). *@
             <Secondary>
-                <button class="rs-btn-outline">Back</button>
+                <button class="rs-btn-outline" @onclick="GoBack">Back</button>
                 <button class="rs-btn-outline">
                     <span class="phone-only">Share</span>
                     <span class="tablet-up">Share Refund Details</span>
@@ -460,5 +550,110 @@
 </div>
 
 @code {
+    [SupplyParameterFromQuery(Name = "bookingId")]
+    public int? BookingId { get; set; }
 
+    private RefundStatusDto? _status;
+    private bool _isLoading = true;
+    private string? _loadError;
+
+    private bool IsApproved => _status?.ApprovalStatus == "Approved";
+    private bool IsRejected => _status?.ApprovalStatus == "Rejected";
+    private bool IsRefundInitiated => IsApproved && _status!.RefundAmount > 0
+        && (_status.RefundStatus == "Processing" || _status.RefundStatus == "Completed");
+    private bool IsRefundCompleted => IsApproved && _status!.RefundAmount > 0 && _status.RefundStatus == "Completed";
+    private bool IsRefundProcessing => IsApproved && _status!.RefundAmount > 0 && _status.RefundStatus == "Processing";
+    private bool IsRefundFailed => IsApproved && _status!.RefundStatus == "Failed";
+    private bool IsPastTargetDate => _status?.EstimatedRefundDate.HasValue == true && DateTime.Now > _status.EstimatedRefundDate.Value;
+
+    private string CurrentStatusLabel
+    {
+        get
+        {
+            if (_status == null) return "-";
+            if (IsRejected) return "Rejected";
+            if (!IsApproved) return _status.RefundStatus == "Failed" ? "Refund Retry Pending" : "Pending Approval";
+            if (_status.RefundAmount <= 0) return "Cancelled - No Refund Due";
+            return _status.RefundStatus switch
+            {
+                "Completed" => "Refund Completed by Razorpay",
+                "Processing" => "Refund Initiated / Processing",
+                "Failed" => "Refund Failed",
+                _ => "Refund Pending"
+            };
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!BookingId.HasValue)
+        {
+            _loadError = "No booking selected.";
+            _isLoading = false;
+            return;
+        }
+
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/bookings/{BookingId}/refund-status");
+            if (response.IsSuccessStatusCode)
+            {
+                _status = await response.Content.ReadFromJsonAsync<RefundStatusDto>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _loadError = "No cancellation request was found for this booking.";
+            }
+            else
+            {
+                _loadError = "We could not load the refund status. Please try again.";
+            }
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not load the refund status. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void GoBack() => Navigation.NavigateTo("/MyBookings");
+
+    private static string Money(decimal value) => "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+
+    private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string FormatDate(DateTime? value) =>
+        value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
+
+    private static string FormatDateTime(DateTime value) =>
+        value.ToString("dd MMM yyyy 'at' hh:mm tt", CultureInfo.InvariantCulture);
+
+    private sealed class RefundStatusDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public string GuestHouseName { get; set; } = "";
+        public string RoomType { get; set; } = "";
+        public int CancellationId { get; set; }
+        public string? CancellationReference { get; set; }
+        public string? CancellationReason { get; set; }
+        public string ApprovalStatus { get; set; } = "";
+        public string RefundStatus { get; set; } = "";
+        public DateTime RequestedAt { get; set; }
+        public DateTime? DecidedAt { get; set; }
+        public string? RejectionReason { get; set; }
+        public decimal TotalPaid { get; set; }
+        public decimal CancellationCharge { get; set; }
+        public decimal TaxAdjustment { get; set; }
+        public decimal RefundAmount { get; set; }
+        public string? RefundMethod { get; set; }
+        public DateTime? EstimatedRefundDate { get; set; }
+        public string? RefundReference { get; set; }
+        public DateTime? RefundProcessedAt { get; set; }
+        public string PaymentMethod { get; set; } = "";
+        public string RefundTimelineMessage { get; set; } = "";
+    }
 }

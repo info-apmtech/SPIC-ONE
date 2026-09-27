@@ -1,12 +1,13 @@
 ﻿@page "/RMDDashboard"
+@using SPIC.Core.Entities;
 @inject IJSRuntime JSRuntime
-
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 <div class="container-fluid py-4 px-0">
     <div class="rmd-wrapper">
 
         <!-- Welcome Section -->
         <div class="rmd-welcome">
-            <PageHeader Title="Welcome Back, RMD User" CssClass="rmd-welcome-header" />
+            <PageHeader Title="@DashboardTitle" CssClass="rmd-welcome-header" />
             <div class="rmd-meta">
                 <span class="rmd-meta-item">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -733,7 +734,7 @@
                 <h1 class="rmd-modal-title">Request Additional Budget</h1>
                 <button type="button" class="rmd-modal-close" @onclick="CloseAdditionalBudgetPopup" aria-label="Close">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
             </div>
@@ -749,8 +750,8 @@
                                 <input type="text" id="rmd-request-amount" class="rmd-input" value="e.g ₹ 20,000" />
                                 <span class="rmd-input-icon">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" width="16" height="20">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 7h8M8 11h5M8 15h3M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/>
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M16 7v4M16 15v2"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M8 7h8M8 11h5M8 15h3M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M16 7v4M16 15v2" />
                                     </svg>
                                 </span>
                             </div>
@@ -761,10 +762,10 @@
                                 <input type="text" id="rmd-required-date" class="rmd-input" value="25 - 05 - 2026" />
                                 <span class="rmd-input-icon">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                        <line x1="16" y1="2" x2="16" y2="6" stroke-linecap="round"/>
-                                        <line x1="8" y1="2" x2="8" y2="6" stroke-linecap="round"/>
-                                        <line x1="3" y1="10" x2="21" y2="10" stroke-linecap="round"/>
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke-linecap="round" stroke-linejoin="round" />
+                                        <line x1="16" y1="2" x2="16" y2="6" stroke-linecap="round" />
+                                        <line x1="8" y1="2" x2="8" y2="6" stroke-linecap="round" />
+                                        <line x1="3" y1="10" x2="21" y2="10" stroke-linecap="round" />
                                     </svg>
                                 </span>
                             </div>
@@ -826,13 +827,13 @@
                         <div class="rmd-actions-group">
                             <button type="button" class="rmd-btn rmd-btn-draft">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                 </svg>
                                 Save Draft
                             </button>
                             <button type="button" class="rmd-btn rmd-btn-submit">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                                 </svg>
                                 Submit Request
                             </button>
@@ -933,8 +934,31 @@
 }
 
 @code {
+
+    private AppRole CurrentDashboardRole = AppRole.MO;
+
+    private string DashboardTitle => CurrentDashboardRole switch
+    {
+        AppRole.SMD => "Welcome Back, SMD User",
+        AppRole.SMM => "Welcome Back, SMM User",
+        AppRole.RMD => "Welcome Back, RMD User",
+        AppRole.RM => "Welcome Back, RM User",
+        AppRole.MDO => "Welcome Back, MDO User",
+        AppRole.MO => "Welcome Back, MO User",
+        AppRole.JMDO => "Welcome Back, JMDO User",
+        AppRole.Admin => "Welcome Back, Admin",
+        AppRole.CorporateAdmin => "Welcome Back, Corporate Admin",
+        _ => "Welcome Back"
+    };
+
     private bool showAdditionalBudgetPopup;
     private bool showBudgetStatusPanel;
+
+    protected override Task OnInitializedAsync()
+    {
+        CurrentDashboardRole = LoginState.UserRole ?? AppRole.RMD;
+        return Task.CompletedTask;
+    }
 
     private void OpenAdditionalBudgetPopup() => showAdditionalBudgetPopup = true;
 

@@ -478,7 +478,9 @@ namespace SPIC.Core.Entities
 		[Required]
 		public bool IsActive { get; set; } = true;
 
-		[Required]
+        public bool? IsSpecialityProduct { get; set; }
+
+        [Required]
 		public DateTime CreatedAt { get; set; }
 
 		[Required]

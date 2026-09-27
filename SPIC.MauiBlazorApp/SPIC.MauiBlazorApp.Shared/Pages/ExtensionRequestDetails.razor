@@ -1,0 +1,364 @@
+@page "/ExtensionRequestDetails"
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Extension Request Details · SPIC ONE</PageTitle>
+<ScrollToTop />
+
+<div class="container-fluid py-4 px-0">
+    <div class="erd-wrapper">
+
+        @if (Request is null)
+        {
+            <div class="erd-card erd-missing">
+                <h3 class="erd-card-title">Request not found</h3>
+                <p>The extension request you are looking for does not exist or is no longer available.</p>
+                <button type="button" class="erd-btn erd-btn-primary" @onclick="BackToList">Back to Request List</button>
+            </div>
+        }
+        else if (ShowApprovedScreen)
+        {
+            <!-- Approved confirmation -->
+            <div class="erd-success">
+                <span class="erd-success-icon"><SalesAuditIcon Name="badge-check" Size="34" StrokeWidth="1.8" /></span>
+                <h2>Extension Approved Successfully</h2>
+                <p>The extension request has been approved and the scheme period has been updated</p>
+
+                <dl class="erd-success-summary">
+                    <div class="erd-success-cell"><dt>Request ID</dt><dd class="erd-green">@Request.DisplayId</dd></div>
+                    <div class="erd-success-cell"><dt>Approved By</dt><dd>@ApprovedBy</dd></div>
+                    <div class="erd-success-cell">
+                        <dt>New End Date &amp; Period</dt>
+                        <dd>@Request.NewEndDate.ToString("dd MMM yyyy") <span class="erd-length">@ExtensionLength</span></dd>
+                    </div>
+                    <div class="erd-success-cell"><dt>Approved On</dt><dd>@ApprovedOn?.ToString("dd MMM yyyy, hh:mm tt")</dd></div>
+                    <div class="erd-success-remarks"><dt>Remarks</dt><dd>@Remarks</dd></div>
+                </dl>
+
+                <button type="button" class="erd-btn erd-btn-primary erd-success-btn" @onclick="ViewDetails">
+                    View Request Details
+                    <SalesAuditIcon Name="arrow-right" Size="16" />
+                </button>
+            </div>
+        }
+        else
+        {
+            <!-- Header -->
+            <div class="erd-header">
+                <div>
+                    <h1>
+                        Extension Request Details
+                        <span class="erd-state-pill erd-state-@State.ToString().ToLowerInvariant()">@StateLabel</span>
+                    </h1>
+                    <p>
+                        <span>Request ID: @Request.DisplayId</span>
+                        <span class="erd-sep"></span>
+                        <span>Request On: @Request.RequestedOn.ToString("dd MMM yyyy, hh:mm tt")</span>
+                    </p>
+                </div>
+                <div class="erd-header-actions">
+                    <button type="button" class="erd-btn-outline-green" @onclick="BackToList">
+                        <SalesAuditIcon Name="arrow-left" Size="15" />
+                        Back to Request List
+                    </button>
+                    <button type="button" class="erd-btn-outline-green">
+                        <SalesAuditIcon Name="download" Size="15" />
+                        Download Request PDF
+                    </button>
+                </div>
+            </div>
+
+            <!-- Program Information -->
+            <div class="erd-card">
+                <h3 class="erd-card-title">Program Information</h3>
+                <div class="erd-summary">
+                    <div class="erd-summary-item">
+                        <div class="erd-summary-icon erd-tone-green"><SalesAuditIcon Name="users" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="erd-summary-text">
+                            <span class="erd-label">Program Type</span>
+                            <span class="erd-summary-value">@Request.ProgramType</span>
+                        </div>
+                    </div>
+                    <div class="erd-summary-item">
+                        <div class="erd-summary-icon erd-tone-purple"><SalesAuditIcon Name="clipboard" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="erd-summary-text">
+                            <span class="erd-label">Program Name</span>
+                            <span class="erd-summary-value">@Request.ProgramName</span>
+                        </div>
+                    </div>
+                    <div class="erd-summary-item">
+                        <div class="erd-summary-icon erd-tone-blue"><SalesAuditIcon Name="stamp" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="erd-summary-text">
+                            <span class="erd-label">Scheme Period</span>
+                            <span class="erd-summary-value">@SchemePeriodText</span>
+                        </div>
+                    </div>
+                    <div class="erd-summary-item">
+                        <div class="erd-summary-icon erd-tone-green"><SalesAuditIcon Name="badge-check" Size="22" StrokeWidth="1.6" /></div>
+                        <div class="erd-summary-text">
+                            <span class="erd-label">Scheme Duration</span>
+                            <span class="erd-summary-value erd-green">@(DurationText ?? "Not Set")</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scheme Performance -->
+            <div class="erd-card">
+                <h3 class="erd-card-title">Scheme Performance @(Request.SchemeTo is null ? "" : $"(Till {Request.SchemeTo.Value:dd MMM yyyy})")</h3>
+                <div class="erd-kpi-grid">
+                    <div class="erd-kpi erd-kpi-purple">
+                        <span class="erd-label">Required Turnover (TO)</span>
+                        <span class="erd-kpi-value">₹ @SalesAuditFormat.Crore(Request.RequiredTurnover) Cr</span>
+                        <span class="erd-kpi-sub">Minimum target to achieve</span>
+                    </div>
+                    <div class="erd-kpi erd-kpi-blue">
+                        <span class="erd-label">Actual Turnover</span>
+                        <span class="erd-kpi-value">₹ @SalesAuditFormat.Crore(Request.ActualTurnover) Cr</span>
+                        <span class="erd-kpi-sub">Captured from Sales Portal</span>
+                    </div>
+                    <div class="erd-kpi erd-kpi-grey">
+                        <span class="erd-label">Achievement %</span>
+                        <span class="erd-kpi-value erd-orange">@Pct(Request.AchievementPct)%</span>
+                        <span class="erd-kpi-sub">Against required TO</span>
+                    </div>
+                    <div class="erd-kpi erd-kpi-peach">
+                        <span class="erd-label">Remaining to Achieve</span>
+                        <span class="erd-kpi-value erd-red">₹ @SalesAuditFormat.Crore(Math.Max(0, Request.RequiredTurnover - Request.ActualTurnover)) Cr</span>
+                        <span class="erd-kpi-sub">To reach required TO</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Extension Request -->
+            <div class="erd-card">
+                <h3 class="erd-card-title">Extension Request</h3>
+                <div class="erd-request-grid">
+                    <div>
+                        <span class="erd-label">Current Scheme Period</span>
+                        <span class="erd-request-value">
+                            @SchemePeriodText
+                            @if (DurationText is not null)
+                            {
+                                <span class="erd-pill erd-pill-blue">@DurationText</span>
+                            }
+                        </span>
+                    </div>
+                    <div>
+                        <span class="erd-label">Request New End Date</span>
+                        <span class="erd-request-value">
+                            @Request.NewEndDate.ToString("dd MMM yyyy")
+                            @if (Request.ExtraDays > 0)
+                            {
+                                <span class="erd-pill erd-pill-purple">+ @ExtensionLength</span>
+                            }
+                        </span>
+                    </div>
+                    <div>
+                        <span class="erd-label">Requested By</span>
+                        <span class="erd-request-value">
+                            @RequesterName
+                            <span class="erd-pill erd-pill-grey">@RequesterRole</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="erd-remarks">
+                    <SalesAuditIcon Name="message" Size="18" CssClass="erd-remarks-icon" />
+                    <div>
+                        <strong>Reason Remarks</strong>
+                        <p>@Remarks</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dealer-wise Actual Sales -->
+            <div class="erd-card">
+                <div class="erd-card-top">
+                    <h3 class="erd-card-title">Dealer - wise Actual Sales</h3>
+                    <button type="button" class="erd-btn-outline"><SalesAuditIcon Name="pencil" Size="15" /> View Details</button>
+                </div>
+                <div class="erd-table-wrapper">
+                    <table class="erd-table">
+                        <thead>
+                            <tr>
+                                <th class="erd-col-no">S:NO</th>
+                                <th>Product</th>
+                                <th>Dealer Name</th>
+                                <th>Location</th>
+                                <th>Planned Value (₹)</th>
+                                <th>Actual Value (₹)</th>
+                                <th>Achievement (%)</th>
+                                <th>Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var (row, index) in DealerSales.Select((r, i) => (r, i)))
+                            {
+                                var pct = row.Planned == 0 ? 0 : row.Actual / row.Planned * 100;
+                                <tr>
+                                    <td class="erd-col-no">@(index + 1)</td>
+                                    <td>@row.Product</td>
+                                    <td>@row.Dealer</td>
+                                    <td>@row.Location</td>
+                                    <td>@SalesAuditFormat.Rupees(row.Planned)</td>
+                                    <td>@SalesAuditFormat.Rupees(row.Actual)</td>
+                                    <td>
+                                        <div class="erd-achievement">
+                                            <div class="erd-progress-track"><div class="erd-progress-fill" style="width: @Pct(Math.Min(100m, pct))%;"></div></div>
+                                            <span>@pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture)%</span>
+                                        </div>
+                                    </td>
+                                    <td>@SalesAuditFormat.Rupees(Math.Max(0, row.Planned - row.Actual))</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="4" class="erd-total-label">Total</td>
+                                <td class="erd-total-value">@SalesAuditFormat.Rupees(DealerSales.Sum(r => r.Planned))</td>
+                                <td class="erd-total-value">@SalesAuditFormat.Rupees(DealerSales.Sum(r => r.Actual))</td>
+                                <td class="erd-total-value">@Pct(TotalDealerPct)%</td>
+                                <td class="erd-total-value">@SalesAuditFormat.Rupees(DealerSales.Sum(r => Math.Max(0, r.Planned - r.Actual)))</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Footer actions -->
+            <div class="erd-footer">
+                <button type="button" class="erd-btn erd-btn-back" @onclick="BackToList">
+                    <SalesAuditIcon Name="chevrons-left" Size="16" />
+                    Back to List
+                </button>
+                @if (State == ExtensionRequestState.Pending)
+                {
+                    <div class="erd-footer-right">
+                        <button type="button" class="erd-btn erd-btn-reject">Reject Request</button>
+                        <button type="button" class="erd-btn erd-btn-primary" @onclick="Approve">
+                            Approve Extension
+                            <SalesAuditIcon Name="chevrons-right" Size="16" />
+                        </button>
+                    </div>
+                }
+            </div>
+        }
+
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "id")] public string? Id { get; set; }
+
+    private ExtensionRequestRow? Request;
+
+    // State can move on this page (Pending -> Approved); nothing is persisted until the API is wired.
+    private ExtensionRequestState State;
+    private bool ShowApprovedScreen;
+    private DateTime? ApprovedOn;
+    private const string ApprovedBy = "Admin User";
+
+    private const string Remarks = "Additional time required to achieve the remaining turnover due to delayed dealer sales.";
+
+    protected override void OnParametersSet()
+    {
+        // Without an id (e.g. opened directly) show the newest request.
+        Request = string.IsNullOrWhiteSpace(Id) ? ExtensionRequestSamples.All.FirstOrDefault() : ExtensionRequestSamples.Find(Id);
+        State = Request?.State ?? ExtensionRequestState.Pending;
+        ShowApprovedScreen = false;
+    }
+
+    private string StateLabel => State switch
+    {
+        ExtensionRequestState.Approved => "Approved",
+        ExtensionRequestState.Rejected => "Rejected",
+        _ => "Pending Admin Review",
+    };
+
+    // "Rakesh Kumar (MO)" -> name "Rakesh Kumar", role "MO - Maharashtra"
+    private string RequesterName => Request!.RequestedBy.Split(" (")[0];
+    private string RequesterRole
+    {
+        get
+        {
+            var role = Request!.RequestedBy.Contains('(') ? Request.RequestedBy.Split('(')[1].TrimEnd(')') : "";
+            var state = Request.Location.Contains(',') ? Request.Location.Split(',')[1].Trim() : Request.Location;
+            return string.IsNullOrEmpty(role) ? state : $"{role} - {state}";
+        }
+    }
+
+    private string SchemePeriodText =>
+        Request!.SchemeFrom is null || Request.SchemeTo is null
+            ? "Not Set"
+            : $"{Request.SchemeFrom.Value:dd MMM yyyy} - {Request.SchemeTo.Value:dd MMM yyyy}";
+
+    private string? DurationText
+    {
+        get
+        {
+            if (Request!.SchemeFrom is not DateTime from || Request.SchemeTo is not DateTime to) return null;
+            var days = (to - from).Days + 1;
+            var months = (to.Year - from.Year) * 12 + to.Month - from.Month + 1;
+            return $"{months} {(months == 1 ? "Month" : "Months")} ({days} Days)";
+        }
+    }
+
+    private string ExtensionLength
+    {
+        get
+        {
+            var days = Request!.ExtraDays;
+            var months = days / 30;
+            return months >= 1 ? $"{months} {(months == 1 ? "Month" : "Months")} ({days} Days)" : $"{days} Days";
+        }
+    }
+
+    // ---- Dealer-wise sales (sample; scaled so the totals match the request's actual turnover) ----
+    private record DealerSale(string Product, string Dealer, string Location, decimal Planned, decimal Actual);
+
+    private List<DealerSale> DealerSales
+    {
+        get
+        {
+            var city = Request!.Location.Split(',')[0];
+            decimal[] plannedShare = { 0.35m, 0.25m, 0.20m, 0.20m };
+            var plannedTotal = 2_30_00_000m;
+            return plannedShare.Select((share, i) => new DealerSale(
+                    "SPIC Super Urea 45Kg",
+                    new[] { "Green Field Agri Traders", "Sri Balaji Fertilisers", "Kisan Seva Kendra", "Harvest Agro Mart" }[i],
+                    city,
+                    Math.Round(plannedTotal * share),
+                    Math.Round(Request.ActualTurnover * share)))
+                .ToList();
+        }
+    }
+
+    private decimal TotalDealerPct
+    {
+        get
+        {
+            var planned = DealerSales.Sum(r => r.Planned);
+            return planned == 0 ? 0 : DealerSales.Sum(r => r.Actual) / planned * 100;
+        }
+    }
+
+    private static string Pct(decimal value) => value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+    // ---- Actions ----
+    private async Task Approve()
+    {
+        State = ExtensionRequestState.Approved;
+        ApprovedOn = DateTime.Now;
+        ShowApprovedScreen = true;
+        try { await JS.InvokeVoidAsync("scrollPageToTop"); } catch (JSException) { }
+    }
+
+    private async Task ViewDetails()
+    {
+        ShowApprovedScreen = false;
+        try { await JS.InvokeVoidAsync("scrollPageToTop"); } catch (JSException) { }
+    }
+
+    private void BackToList() => Nav.NavigateTo("/ExtensionRequests");
+}

@@ -32,10 +32,6 @@
         "Community"
     };
 
-    // Generic identity rule: a dynamically registered page's ApplicationPage.Key
-    // must equal its URL's FIRST path segment (e.g. page "/TestReport" has Key
-    // "TestReport"). The same generic check used by every legacy page therefore
-    // applies with no per-page code, constant, or route mapping.
     private bool _restored;
 
     protected override async Task OnInitializedAsync()
@@ -84,6 +80,19 @@
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var firstSegment = segments.FirstOrDefault() ?? "";
         var secondSegment = segments.Skip(1).FirstOrDefault() ?? "";
+
+        // Data Explorer is SuperAdmin only. Admin is explicitly
+        // excluded here, even though Admin otherwise bypasses every other page
+        // check below - this must run BEFORE the general Admin bypass.
+        if (firstSegment.Equals("DataExplorer", StringComparison.OrdinalIgnoreCase)
+            && LoginState.UserRole == AppRole.Admin)
+        {
+            Nav.NavigateTo("/Dashboard", replace: true);
+            return;
+        }
+
+        // Admin, CorporateAdmin and SuperAdmin bypass everything else
+        if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return;
 
         // Admin and CorporateAdmin bypass everything EXCEPT the SAS Lab (/Lab/...) and payment
         // (/Sas/Payments...) routes: those are reached through the designation only (product
@@ -222,7 +231,7 @@
             if (LoginState.UserRole == AppRole.Dealer)
                 fallback = "/SDWADashboard";
             else if (LoginState.UserRole == AppRole.SpecialAdmin)
-                fallback = LoginState.CanAccess("Logistics") ? "/Logistics" : "/Welcome";
+                fallback = LoginState.CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome";
             else
                 fallback = "/Dashboard";
             Nav.NavigateTo(fallback, replace: true);
