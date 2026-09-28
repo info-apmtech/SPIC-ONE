@@ -771,6 +771,15 @@
     // this just stops the page from ever offering Retry Payment for that dead attempt.
     private bool _paymentFailed;
 
+    // Set once the server has verified the payment / while that verification is running, so
+    // leaving the page afterwards (or mid-verification) is never reported as an abandoned payment.
+    private bool _paymentVerified;
+    private bool _isVerifying;
+
+    // The booking row exists but was neither paid nor already reported failed: leaving the page
+    // now abandons it, so it must stop holding the room (the user starts a new booking to retry).
+    private bool IsAbandonedIfLeft => _pendingBookingId.HasValue && !_paymentVerified && !_isVerifying && !_paymentFailed;
+
     protected override void OnInitialized()
     {
         if (!BookingState.IsInitialized)
@@ -786,8 +795,10 @@
         _submitError = null;
     }
 
-    private void GoBack()
+    private async Task GoBack()
     {
+        if (IsAbandonedIfLeft)
+            await MarkPaymentFailedAsync("abandoned");
         Navigation.NavigateTo("/BookingPreview");
     }
 
@@ -1012,6 +1023,7 @@
     {
         _submitError = null;
         _isSubmitting = true;
+        _isVerifying = true;
         StateHasChanged();
 
         try
@@ -1028,6 +1040,7 @@
             if (response.IsSuccessStatusCode)
             {
                 _razorpayPaymentId = paymentId;
+                _paymentVerified = true;
                 isBookingConfirmed = true;
             }
             else
@@ -1044,6 +1057,7 @@
         finally
         {
             _isSubmitting = false;
+            _isVerifying = false;
             StateHasChanged();
         }
     }
@@ -1088,6 +1102,17 @@
 
     public void Dispose()
     {
+        // Browser Back / menu / any navigation away from an unpaid booking abandons it. The
+        // request is fire-and-forget (Dispose can't await); the server re-checks Razorpay and
+        // never fails a Paid/Confirmed booking, so a late or duplicate call is harmless.
+        if (IsAbandonedIfLeft)
+        {
+            _paymentFailed = true;
+            _ = Http.PostAsJsonAsync(
+                $"api/GuestHouseBooking/bookings/{_pendingBookingId}/payment/failed",
+                new MarkPaymentFailedRequest { Reason = "abandoned" });
+        }
+
         _dotNetRef?.Dispose();
     }
 

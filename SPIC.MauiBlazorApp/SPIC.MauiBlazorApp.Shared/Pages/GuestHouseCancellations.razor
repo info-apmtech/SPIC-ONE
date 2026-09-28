@@ -139,16 +139,16 @@
                                         <span class="gc-badge @ApprovalBadge(item.ApprovalStatus)">@ApprovalLabel(item.ApprovalStatus)</span>
                                         @if (item.ApprovalStatus == "Approved")
                                         {
-                                            <div class="gc-muted">Refund: @item.RefundStatus @(item.RefundReference != null ? $"({item.RefundReference})" : "")</div>
-                                            @if (item.RefundStatus == "Processing" && item.EstimatedRefundDate.HasValue)
+                                            <div class="gc-muted">Refund: @RefundLabel(item) @(item.RefundReference != null ? $"({item.RefundReference})" : "")</div>
+                                            @if (item.RefundStatus is "Pending" or "Processing" && item.RefundAmount > 0 && item.EstimatedRefundDate.HasValue)
                                             {
                                                 <div class="@(DateTime.Now > item.EstimatedRefundDate.Value ? "gc-warn" : "gc-muted")">
-                                                    Target credit: @FormatDate(item.EstimatedRefundDate)@(DateTime.Now > item.EstimatedRefundDate.Value ? " - past 2-working-day target" : "")
+                                                    Refund target: @FormatDate(item.EstimatedRefundDate)@(DateTime.Now > item.EstimatedRefundDate.Value ? " - past 2-working-day target" : "")
                                                 </div>
                                             }
-                                            @if (item.RefundStatus is "Completed" or "Failed" or "Processing" && !string.IsNullOrWhiteSpace(item.Remarks))
+                                            @if (!string.IsNullOrWhiteSpace(item.Remarks))
                                             {
-                                                <div class="@(item.RefundStatus == "Failed" || item.Remarks!.Contains("normal speed") ? "gc-warn" : "gc-muted")">@item.Remarks</div>
+                                                <div class="@(item.RefundStatus == "Failed" ? "gc-warn" : "gc-muted")">@item.Remarks</div>
                                             }
                                         }
                                         @if (item.ApprovalStatus == "Rejected" && !string.IsNullOrWhiteSpace(item.RejectionReason))
@@ -165,21 +165,13 @@
                                         }
                                     </td>
                                     <td class="gc-actions-cell" style="white-space:nowrap;">
-                                        @if (item.ApprovalStatus == "PendingApproval" && item.RefundStatus != "Processing")
+                                        @if (item.ApprovalStatus == "PendingApproval")
                                         {
-                                            <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="() => OpenApprove(item)"><i class="bi bi-check-lg"></i> @(item.RefundStatus == "Failed" ? "Retry Approve" : "Approve")</button>
-                                            <button class="gc-btn gc-btn-reject" disabled="@_isBusy" @onclick="() => OpenReject(item)"><i class="bi bi-x-lg"></i> Reject</button>
-                                        }
-                                        else if ((item.ApprovalStatus == "PendingApproval" && item.RefundStatus == "Processing")
-                                                 || (item.ApprovalStatus == "Approved" && item.RefundStatus == "Failed"))
-                                        {
-                                            @* Interrupted approval, or refund failed after approval: reconcile
-                                               against Razorpay's own refund records - never refunds again. *@
-                                            <button class="gc-btn gc-btn-secondary" disabled="@_isBusy" @onclick="() => RefreshRefundAsync(item)"><i class="bi bi-arrow-left-right"></i> Reconcile Refund</button>
-                                        }
-                                        else if (item.ApprovalStatus == "Approved" && item.RefundStatus == "Processing")
-                                        {
-                                            <button class="gc-btn gc-btn-secondary" disabled="@_isBusy" @onclick="() => RefreshRefundAsync(item)"><i class="bi bi-arrow-repeat"></i> Check Refund Status</button>
+                                            <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="() => OpenApprove(item)"><i class="bi bi-check-lg"></i> Approve</button>
+                                            @if (item.RefundStatus != "Processing")
+                                            {
+                                                <button class="gc-btn gc-btn-reject" disabled="@_isBusy" @onclick="() => OpenReject(item)"><i class="bi bi-x-lg"></i> Reject</button>
+                                            }
                                         }
                                         else
                                         {
@@ -225,17 +217,17 @@
                         <p class="mt-2 mb-0" style="font-size:0.85rem;">
                             @if (_selected.PaymentStatus == "Paid" && _selected.RefundAmount > 0)
                             {
-                                <span>A Razorpay refund of <strong>@Money(_selected.RefundAmount)</strong> will be initiated to the original payment method. </span>
+                                <span>A refund of <strong>@Money(_selected.RefundAmount)</strong> is due to the original payment source. </span>
                             }
                             else
                             {
                                 <span>No refund is due for this booking. </span>
                             }
-                            The booking will be cancelled and the room released only after the refund is initiated successfully.
+                            The booking will be cancelled and the room released.
                         </p>
                         @if (_selected.PaymentStatus == "Paid" && _selected.RefundAmount > 0)
                         {
-                            <p class="gc-muted mt-2 mb-0">A Razorpay Instant Refund is initiated immediately. Refund will be credited to the customer's/dealer's original payment source within 2 working days after Admin approval. The status stays "Processing" until Razorpay reports refund.processed; if Razorpay cannot refund instantly it falls back to normal speed (5-7 working days per Razorpay).</p>
+                            <p class="gc-muted mt-2 mb-0">No refund is created automatically. Process the refund manually outside the application, within 2 working days after approval.</p>
                         }
                     }
                 </div>
@@ -247,7 +239,7 @@
                     }
                     else
                     {
-                        <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="ConfirmApproveAsync">@(_isBusy ? "Processing..." : "Approve & Refund")</button>
+                        <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="ConfirmApproveAsync">@(_isBusy ? "Processing..." : "Approve Cancellation")</button>
                     }
                 </div>
             </div>
@@ -358,30 +350,6 @@
         await LoadAsync();
     }
 
-    private async Task RefreshRefundAsync(CancellationRequestItem item)
-    {
-        if (_isBusy) return;
-        _isBusy = true;
-        try
-        {
-            var response = await Http.PostAsync($"api/GuestHouseFrontOffice/cancellations/{item.CancellationId}/refresh-refund-status", null);
-            var message = await ReadMessageAsync(response);
-            if (response.IsSuccessStatusCode)
-                Toast.Info(message ?? "Refund status checked.");
-            else
-                Toast.Error(message ?? "Could not check the refund status.");
-        }
-        catch (Exception)
-        {
-            Toast.Error("Could not check the refund status. Please try again.");
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-        await LoadAsync();
-    }
-
     private async Task ConfirmRejectAsync()
     {
         if (_selected == null || _isBusy || string.IsNullOrWhiteSpace(_rejectReason)) return;
@@ -435,6 +403,12 @@
         "Rejected" => "gc-badge-rejected",
         _ => "gc-badge-info"
     };
+
+    // Refunds are processed manually outside the application; "Pending" means awaiting that manual refund.
+    private static string RefundLabel(CancellationRequestItem item) =>
+        item.RefundAmount <= 0 ? "No refund due"
+        : item.RefundStatus == "Pending" ? "Pending (manual refund)"
+        : item.RefundStatus;
 
     private static string Money(decimal value) => "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
 

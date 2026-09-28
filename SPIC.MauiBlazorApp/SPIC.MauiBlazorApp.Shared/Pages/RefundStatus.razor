@@ -337,7 +337,7 @@
                         <span class="rs-kv-value">@Dash(_status.RefundMethod)@(string.IsNullOrWhiteSpace(_status.PaymentMethod) ? "" : $" ({_status.PaymentMethod})")</span>
                     </div>
                     <div class="rs-kv-row">
-                        <span class="rs-kv-label">Target Credit Date</span>
+                        <span class="rs-kv-label">Target Refund Date</span>
                         <span class="rs-kv-value">@(IsRejected ? "-" : _status.EstimatedRefundDate.HasValue ? FormatDate(_status.EstimatedRefundDate) : "Within 2 working days after Admin approval")</span>
                     </div>
                     <div class="rs-kv-row">
@@ -439,59 +439,24 @@
                         }
                         else
                         {
-                            <div class="rs-tl-item">
-                                <div class="rs-tl-line @(IsRefundInitiated ? "green" : "gray")"></div>
-                                @if (IsRefundInitiated)
-                                {
-                                    <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
-                                }
-                                else
-                                {
-                                    <div class="rs-tl-icon pending"></div>
-                                }
-                                <div class="rs-tl-content">
-                                    <h4 class="rs-tl-title @(IsRefundInitiated ? "green" : "dark")">Refund Initiated</h4>
-                                    <p class="rs-tl-date">@(IsRefundInitiated && _status.DecidedAt.HasValue ? FormatDateTime(_status.DecidedAt.Value) : IsRejected ? "-" : "Pending")</p>
-                                    <p class="rs-tl-desc">Refund of @Money(_status.RefundAmount) initiated to your original payment method@(string.IsNullOrWhiteSpace(_status.RefundReference) ? "" : $" (Ref. {_status.RefundReference})")</p>
-                                </div>
-                            </div>
-
-                            <div class="rs-tl-item">
-                                <div class="rs-tl-line @(IsRefundCompleted ? "green" : "gray")"></div>
-                                @if (IsRefundCompleted)
-                                {
-                                    <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
-                                }
-                                else if (IsRefundProcessing)
-                                {
-                                    <div class="rs-tl-icon active"><i class="bi bi-arrow-clockwise"></i></div>
-                                }
-                                else
-                                {
-                                    <div class="rs-tl-icon pending"></div>
-                                }
-                                <div class="rs-tl-content">
-                                    <h4 class="rs-tl-title @(IsRefundCompleted ? "green" : "dark")">Refund Processing</h4>
-                                    <p class="rs-tl-date">@(IsRefundProcessing ? "(In Progress)" : IsRefundCompleted ? "Done" : IsRefundFailed ? "Failed" : "Pending")</p>
-                                    <p class="rs-tl-desc">@(IsRefundFailed ? "The payment gateway could not complete this refund. Our team will contact you." : "Your refund is being processed by the payment gateway and your bank")</p>
-                                </div>
-                            </div>
-
+                            @* Refunds are processed manually outside the application (no payment-gateway refund). *@
                             <div class="rs-tl-item">
                                 @if (IsRefundCompleted)
                                 {
                                     <div class="rs-tl-icon done"><i class="bi bi-check-lg"></i></div>
                                 }
+                                else if (IsApproved && !IsRefundFailed)
+                                {
+                                    <div class="rs-tl-icon active"><i class="bi bi-hourglass-split"></i></div>
+                                }
                                 else
                                 {
                                     <div class="rs-tl-icon pending"></div>
                                 }
                                 <div class="rs-tl-content">
-                                    @* "Completed" = Razorpay's final "processed" state. Razorpay does not
-                                       report the credit to the payment source itself, so this never says "credited". *@
-                                    <h4 class="rs-tl-title @(IsRefundCompleted ? "green" : "dark")">Refund Completed by Razorpay</h4>
-                                    <p class="rs-tl-date">@(IsRefundCompleted && _status.RefundProcessedAt.HasValue ? FormatDateTime(_status.RefundProcessedAt.Value) : IsRejected ? "-" : _status.EstimatedRefundDate.HasValue ? $"Target credit date: {FormatDate(_status.EstimatedRefundDate)}" : "Within 2 working days after Admin approval")</p>
-                                    <p class="rs-tl-desc">@(IsRefundCompleted ? "Razorpay has completed the refund to your original payment source. Please check your bank or card statement." : "Razorpay confirms when it has completed the refund")</p>
+                                    <h4 class="rs-tl-title @(IsRefundCompleted ? "green" : "dark")">@(IsRefundCompleted ? "Refund Completed" : "Refund (Processed Manually)")</h4>
+                                    <p class="rs-tl-date">@(IsRefundCompleted && _status.RefundProcessedAt.HasValue ? FormatDateTime(_status.RefundProcessedAt.Value) : IsRejected ? "-" : IsRefundFailed ? "Failed" : IsApproved ? (_status.EstimatedRefundDate.HasValue ? $"Target refund date: {FormatDate(_status.EstimatedRefundDate)}" : "(In Progress)") : "Pending")</p>
+                                    <p class="rs-tl-desc">@(IsRefundFailed ? "The refund could not be completed. Our team will contact you." : IsRefundCompleted ? $"Refund of {Money(_status.RefundAmount)} has been completed. Please check your bank or card statement." : $"Refund of {Money(_status.RefundAmount)} will be processed manually to your original payment source after Admin approval")</p>
                                 </div>
                             </div>
                         }
@@ -559,10 +524,7 @@
 
     private bool IsApproved => _status?.ApprovalStatus == "Approved";
     private bool IsRejected => _status?.ApprovalStatus == "Rejected";
-    private bool IsRefundInitiated => IsApproved && _status!.RefundAmount > 0
-        && (_status.RefundStatus == "Processing" || _status.RefundStatus == "Completed");
     private bool IsRefundCompleted => IsApproved && _status!.RefundAmount > 0 && _status.RefundStatus == "Completed";
-    private bool IsRefundProcessing => IsApproved && _status!.RefundAmount > 0 && _status.RefundStatus == "Processing";
     private bool IsRefundFailed => IsApproved && _status!.RefundStatus == "Failed";
     private bool IsPastTargetDate => _status?.EstimatedRefundDate.HasValue == true && DateTime.Now > _status.EstimatedRefundDate.Value;
 
@@ -572,14 +534,14 @@
         {
             if (_status == null) return "-";
             if (IsRejected) return "Rejected";
-            if (!IsApproved) return _status.RefundStatus == "Failed" ? "Refund Retry Pending" : "Pending Approval";
+            if (!IsApproved) return "Pending Approval";
             if (_status.RefundAmount <= 0) return "Cancelled - No Refund Due";
             return _status.RefundStatus switch
             {
-                "Completed" => "Refund Completed by Razorpay",
-                "Processing" => "Refund Initiated / Processing",
+                "Completed" => "Refund Completed",
+                "Processing" => "Refund Processing",
                 "Failed" => "Refund Failed",
-                _ => "Refund Pending"
+                _ => "Cancelled - Refund to be Processed Manually"
             };
         }
     }
