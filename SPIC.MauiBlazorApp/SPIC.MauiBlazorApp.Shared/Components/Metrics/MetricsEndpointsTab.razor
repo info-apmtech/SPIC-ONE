@@ -1,0 +1,143 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Metrics
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@implements IDisposable
+@inject MetricsApi Metrics
+
+@* API tab: the top 20 endpoints by calls, by P95 time or by errors (api/Metrics/endpoints?sort=). *@
+<section class="mx-card" aria-labelledby="mx-api-title">
+    <div class="mx-card-head">
+        <h2 class="mx-card-title" id="mx-api-title">API endpoints</h2>
+        <div class="mx-seg" role="group" aria-label="Sort endpoints">
+            @foreach (var s in Sorts)
+            {
+                <button type="button" class="mx-seg-btn @(_sort == s.Key ? "is-active" : "")"
+                        aria-pressed="@(_sort == s.Key ? "true" : "false")" @onclick="() => SortAsync(s.Key)">
+                    @s.Label
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (_loading && _rows is null)
+    {
+        <Skeleton Variant="table" Rows="6" />
+    }
+    else if (_rows is null)
+    {
+        <EmptyState Icon="bi-cloud-slash" Title="The endpoints could not be loaded" Message="Check the connection and try again." Compact="true">
+            <button type="button" class="mx-btn mx-btn-outline" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="bi-arrow-left-right" Title="No API calls in this period" Compact="true" />
+    }
+    else
+    {
+        <div class="mx-table-wrap tablet-up @(_loading ? "is-busy" : "")">
+            <table class="mx-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Endpoint</th>
+                        <th scope="col" class="num">Requests</th>
+                        <th scope="col" class="num">Avg</th>
+                        <th scope="col" class="num">P95</th>
+                        <th scope="col" class="num">Errors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in _rows)
+                    {
+                        var (method, path) = MetricsText.SplitEndpoint(r.Route);
+                        <tr>
+                            <td class="wrap">
+                                @if (method.Length > 0)
+                                {
+                                    <span class="mx-method mx-method--@method.ToLowerInvariant()">@method</span>
+                                }
+                                <span class="mx-route">@path</span>
+                            </td>
+                            <td class="num">@MetricsText.Num(r.Hits)</td>
+                            <td class="num">@MetricsText.Ms(r.AvgDurationMs)</td>
+                            <td class="num @(r.P95DurationMs >= SlowMs ? "mx-warn" : "")">@MetricsText.Ms(r.P95DurationMs)</td>
+                            <td class="num @(r.Errors > 0 ? "mx-bad" : "")">@MetricsText.Num(r.Errors)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mx-mcards phone-only">
+            @foreach (var r in _rows)
+            {
+                var (method, path) = MetricsText.SplitEndpoint(r.Route);
+                <article class="mx-mcard">
+                    <header class="mx-mcard-head mx-mcard-head--start">
+                        @if (method.Length > 0)
+                        {
+                            <span class="mx-method mx-method--@method.ToLowerInvariant()">@method</span>
+                        }
+                        <span class="mx-route">@path</span>
+                    </header>
+                    <dl class="mx-mcard-nums">
+                        <div><dt>Requests</dt><dd>@MetricsText.Num(r.Hits)</dd></div>
+                        <div><dt>Avg</dt><dd>@MetricsText.Ms(r.AvgDurationMs)</dd></div>
+                        <div><dt>P95</dt><dd class="@(r.P95DurationMs >= SlowMs ? "mx-warn" : "")">@MetricsText.Ms(r.P95DurationMs)</dd></div>
+                        <div><dt>Errors</dt><dd class="@(r.Errors > 0 ? "mx-bad" : "")">@MetricsText.Num(r.Errors)</dd></div>
+                    </dl>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private const int SlowMs = 2000;
+
+    private static readonly (string Key, string Label)[] Sorts =
+    {
+        ("hits", "Most called"),
+        ("slow", "Slowest"),
+        ("errors", "Most failing")
+    };
+
+    [Parameter] public int Days { get; set; } = 7;
+    [Parameter] public TelemetryApp? App { get; set; }
+
+    private List<MetricsRouteRowDto>? _rows;
+    private string _sort = "hits";
+    private bool _loading = true;
+    private int _version;
+    private (int, TelemetryApp?)? _loadedFor;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == (Days, App)) return;
+        _loadedFor = (Days, App);
+        await LoadAsync();
+    }
+
+    private async Task SortAsync(string key)
+    {
+        if (_sort == key) return;
+        _sort = key;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        _loading = true;
+        StateHasChanged();
+
+        var rows = await Metrics.GetEndpointsAsync(Days, App, _sort, 20, _cts.Token);
+        if (version != _version) return;
+        _rows = rows;
+        _loading = false;
+        StateHasChanged();
+    }
+
+    public void Dispose() => _cts.Cancel();
+}

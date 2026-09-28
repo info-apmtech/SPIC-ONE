@@ -11,6 +11,8 @@ using Spic.Infrastructure.Services.Assistant;
 using Spic.Infrastructure.Services.Lab;
 using Spic.Infrastructure.Services.LabReports;
 using Spic.Infrastructure.Services.Payments;
+using Spic.Infrastructure.Services.Telemetry;
+using Microsoft.AspNetCore.Routing;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using SpicAPI.Services;
@@ -85,6 +87,19 @@ builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
 // SAS Lab portal (docs/sas-lab-portal-plan.md): each workstream registers inside its own extension.
 builder.Services.AddSasLab();
 builder.Services.AddSasLabReports();
+// Metrics & error telemetry (docs/metrics-telemetry-plan.md): channel, writer, rollup, the API
+// logger provider (errors logged at Telemetry:MinimumLogLevel become AppErrorLogs rows) and the
+// Metrics read services. The middlewares are added by app.UseSpicTelemetry() below.
+builder.Services.AddSpicTelemetry(builder.Configuration);
+
+// Application Insights (engineers' deep view: dependencies, live metrics, traces). Only when a
+// connection string is configured - the bicep template sets APPLICATIONINSIGHTS_CONNECTION_STRING
+// in Azure; locally and on the VPS it stays off (the SDK would otherwise fail / send nothing).
+if (!string.IsNullOrWhiteSpace(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]) ||
+    !string.IsNullOrWhiteSpace(builder.Configuration["ApplicationInsights:ConnectionString"]))
+{
+    builder.Services.AddApplicationInsightsTelemetry();
+}
 builder.Services.AddScoped<IAckCycleService, AckCycleService>();
 builder.Services.AddScoped<ILiquidationCycleService, LiquidationCycleService>();
 builder.Services.AddScoped<IProductStockAvailabilityService, ProductStockAvailabilityService>();
@@ -254,6 +269,12 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Telemetry FIRST: the exception middleware (outermost; unhandled exception -> error row + JSON 500)
+// and the request middleware (one row per request, written after the pipeline ran so the JWT claims
+// and the matched route template are known, and 401 / 403 short-circuits are counted as well).
+// /health, /swagger and / are excluded (Telemetry:ExcludePaths).
+app.UseSpicTelemetry(ctx => (ctx.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText);
 
 // Kept unchanged from the existing application behavior.
 app.UseSwagger();

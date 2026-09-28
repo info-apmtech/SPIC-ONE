@@ -283,6 +283,8 @@ public static class ShellNavigation
         {
             Group = GroupAdminTools
         },
+        // Metrics (NavMenu: Settings accordion). MoreOnly: never takes a tab-bar / rail slot.
+        new("Metrics", "Metrics", "bi-activity", "/Metrics", nameof(PagePermission.Metrics)) { Group = GroupAdminTools, MoreOnly = true },
 
         // ---- Subsidy Management System accordion ----
         new("StockReport", "Stock Report", "bi-table", "/StockReport", nameof(PagePermission.SalesReport)) { Group = GroupSubsidy },

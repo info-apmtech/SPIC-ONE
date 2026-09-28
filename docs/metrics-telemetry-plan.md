@@ -97,4 +97,23 @@ Phase 2 (coordinator): build all, run the check script and the UI sweep, phone i
 
 ## 8. Status log
 
-- 2026-09-28: phase 0 written.
+- 2026-09-28: phase 0 written (19c15bd).
+- 2026-09-28: phase 1 merged. API: `Spic.Infrastructure/Services/Telemetry/*`, `TelemetryController`,
+  `MetricsController`, migration `V5t_Telemetry` (applied to the local database only; page row
+  `Metrics` seeded idempotently, sort 105), `Microsoft.ApplicationInsights.AspNetCore` guarded by
+  the connection string, bicep App Insights + `telemetry-ingest-key` (also mapped in
+  `deploy/azure/common.ps1` so it survives redeploys). The middlewares sit first in the pipeline
+  (request rows are written after the pipeline ran, so 401 / 403 are counted). Client:
+  `Services/Telemetry/*`, `TelemetryErrorBoundary` in both layouts, `Routes.razor` starts
+  `ClientTelemetry`, `window.spic.telemetry` hook, `X-Spic-Client` / `X-Spic-Version` headers,
+  `/Metrics` page (Overview, Users, Pages, API, Errors + detail sheet with Resolve), links in
+  NavMenu, MobileSidebar and ShellNavigation. Checks on the merged build:
+  `tools/metrics-api-check/metrics_api_check.py` 182 / 182, `lab_api_check.py` 659 / 659, UI sweep
+  `/Metrics` 0 of 2 flagged (418 DOM nodes at 375 px), browser walk: a thrown JS error and an
+  unhandled rejection reached the Errors tab within seconds; endpoint timings 20-80 ms locally.
+  Production needs: `migrate.ps1` (V5t), `deploy.ps1`, then `provision.ps1` when convenient for
+  App Insights and the ingest key (everything works without them); designation grants for
+  `Metrics` only for non-admin staff (admins get it by role).
+- Known limits: the KPI cards follow the period only (the summary route has no app filter); the
+  web-host logger provider was verified by build and ingest tests, not by a forced circuit crash;
+  `TotalUsers` counts `AppUsers.IsActive`.

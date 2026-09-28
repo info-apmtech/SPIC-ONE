@@ -1,3 +1,24 @@
 ﻿@inherits LayoutComponentBase
 
-@Body
+@* Login and public pages. Errors are reported like MainLayout's (Services/Telemetry). *@
+<TelemetryErrorBoundary @ref="_boundary">
+    <ChildContent>
+        @Body
+    </ChildContent>
+    <ErrorContent Context="pageError">
+        <div class="page-error" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <h5>This page hit a problem</h5>
+            <p>Something went wrong while loading this screen. You can try again.</p>
+            <div class="page-error-actions">
+                <button type="button" class="btn btn-success btn-sm" @onclick="() => _boundary?.Recover()">Try again</button>
+            </div>
+        </div>
+    </ErrorContent>
+</TelemetryErrorBoundary>
+
+@code {
+    private TelemetryErrorBoundary? _boundary;
+
+    protected override void OnParametersSet() => _boundary?.Recover();
+}

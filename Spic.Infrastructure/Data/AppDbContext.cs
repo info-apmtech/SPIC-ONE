@@ -474,6 +474,37 @@ namespace Spic.Infrastructure.Data
             entity.HasIndex(x => new { x.UserId, x.ProductName }).IsUnique();
         });
 
+        // ---------------------------------------------------------------- Metrics & error telemetry
+        // docs/metrics-telemetry-plan.md: written only by Services/Telemetry, purged by retention.
+        builder.Entity<AppRequestLog>(entity =>
+        {
+            entity.HasIndex(x => x.At);
+            entity.HasIndex(x => new { x.UserId, x.At });
+        });
+
+        builder.Entity<AppPageView>(entity =>
+        {
+            entity.HasIndex(x => x.At);
+            entity.HasIndex(x => new { x.UserId, x.At });
+        });
+
+        builder.Entity<AppErrorLog>(entity =>
+        {
+            entity.HasIndex(x => x.At);
+            entity.HasIndex(x => new { x.Fingerprint, x.At });
+            entity.HasIndex(x => x.TraceId);
+        });
+
+        builder.Entity<AppUsageDaily>(entity =>
+        {
+            entity.HasIndex(x => new { x.Day, x.App, x.Role }).IsUnique();
+        });
+
+        builder.Entity<AppRouteDaily>(entity =>
+        {
+            entity.HasIndex(x => new { x.Day, x.App, x.Kind, x.Route }).IsUnique();
+        });
+
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
         }
@@ -651,6 +682,13 @@ namespace Spic.Infrastructure.Data
 		public DbSet<CommunityPostAttachment> CommunityPostAttachments { get; set; }
 		public DbSet<CommunityReaction> CommunityReactions { get; set; }
 		public DbSet<CommunityProductMember> CommunityProductMembers { get; set; }
+
+		//// Metrics & error telemetry (Services/Telemetry)
+		public DbSet<AppRequestLog> AppRequestLogs { get; set; }
+		public DbSet<AppPageView> AppPageViews { get; set; }
+		public DbSet<AppErrorLog> AppErrorLogs { get; set; }
+		public DbSet<AppUsageDaily> AppUsageDaily { get; set; }
+		public DbSet<AppRouteDaily> AppRouteDaily { get; set; }
 
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
