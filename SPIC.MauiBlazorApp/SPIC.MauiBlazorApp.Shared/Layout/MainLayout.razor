@@ -10,6 +10,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.ShellSession Shell
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageGuard />
 
@@ -239,6 +240,11 @@ else
 
         StartExpiryCheck();
 
+        // .main-content (or, on phone, <body>) is the actual scroll container, so
+        // the browser's own scroll restoration never resets it on navigation -
+        // every in-app page change would otherwise open at the old scroll offset.
+        Navigation.LocationChanged += OnLocationChanged;
+
 
         /*
          * Token already available
@@ -380,6 +386,16 @@ else
                 );
             }
         }
+    }
+
+
+    /* =========================================================
+       SCROLL TO TOP ON NAVIGATION
+       ========================================================= */
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        try { await JS.InvokeVoidAsync("scrollPageToTop"); } catch { }
     }
 
 
@@ -544,6 +560,8 @@ else
     public void Dispose()
     {
         _tokenExpiryTimer?.Dispose();
+
+        Navigation.LocationChanged -= OnLocationChanged;
 
         if (ReferenceEquals(Shell.LogoutHandler, _logoutHandler))
         {
