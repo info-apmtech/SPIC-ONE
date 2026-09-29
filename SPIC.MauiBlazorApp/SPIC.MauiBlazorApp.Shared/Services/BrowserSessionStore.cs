@@ -20,7 +20,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         {
             try
             {
-                return await _js.InvokeAsync<string?>("sessionStorage.getItem", key);
+                var value = await _js.InvokeAsync<string?>("sessionStorage.getItem", key);
+                if (!string.IsNullOrEmpty(value))
+                    return value;
+
+                // Fall back to localStorage for a remembered (persistent) session.
+                return await _js.InvokeAsync<string?>("localStorage.getItem", key);
             }
             catch
             {
@@ -49,6 +54,33 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             catch
             {
                 // Same as above.
+            }
+        }
+
+        public async Task SetPersistentAsync(string key, string value)
+        {
+            try
+            {
+                await _js.InvokeVoidAsync("localStorage.setItem", key, value);
+            }
+            catch { }
+        }
+
+        public async Task RemovePersistentAsync(string key)
+        {
+            try
+            {
+                await _js.InvokeVoidAsync("localStorage.removeItem", key);
+            }
+            catch { }
+        }
+
+        public async Task ClearAsync()
+        {
+            foreach (var k in SessionKeys.All)
+            {
+                await RemoveAsync(k);
+                await RemovePersistentAsync(k);
             }
         }
     }
