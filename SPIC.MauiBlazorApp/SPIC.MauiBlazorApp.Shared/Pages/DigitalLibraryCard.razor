@@ -1,3 +1,4 @@
+@using SPIC.Core.Entities
 @*
     One content card of the Digital Library (AI video, product information or brochure),
     shared by the landing page and the All Content list. Design: Figma "Digital Library".
@@ -13,7 +14,14 @@
     <div class="dlc-card-body">
         <div class="dlc-card-meta">
             <span class="dlc-tag dlc-tag-type">@Item.TypeLabel</span>
-            <span class="dlc-tag @(Item.Published ? "dlc-tag-pub" : "dlc-tag-draft")">@(Item.Published ? "Published" : "Draft")</span>
+            @if (Item.Status == LibraryContentStatus.Archived)
+            {
+                <span class="dlc-tag dlc-tag-archived">Archived</span>
+            }
+            else
+            {
+                <span class="dlc-tag @(Item.Published ? "dlc-tag-pub" : "dlc-tag-draft")">@(Item.Published ? "Published" : "Draft")</span>
+            }
             @if (ShowUpdate || ShowDelete)
             {
                 <span class="dlc-card-actions">
@@ -27,7 +35,14 @@
                     }
                     @if (ShowUpdate)
                     {
-                        <button type="button" class="dlc-icon-btn dlc-icon-archive" title="Archive" aria-label="Archive" @onclick="() => OnArchive.InvokeAsync(Item)"><i class="bi bi-archive"></i></button>
+                        @if (Item.Status == LibraryContentStatus.Archived)
+                        {
+                            <button type="button" class="dlc-icon-btn dlc-icon-archive" title="Restore to Drafts" aria-label="Restore to Drafts" @onclick="() => OnArchive.InvokeAsync(Item)"><i class="bi bi-arrow-counterclockwise"></i></button>
+                        }
+                        else
+                        {
+                            <button type="button" class="dlc-icon-btn dlc-icon-archive" title="Archive" aria-label="Archive" @onclick="() => OnArchive.InvokeAsync(Item)"><i class="bi bi-archive"></i></button>
+                        }
                     }
                 </span>
             }
@@ -36,7 +51,11 @@
         <p class="dlc-card-desc">@Item.Description</p>
         <div class="dlc-card-foot">
             <span class="dlc-card-author">@Item.Author <small>@Item.Date.ToString("dd MMM yyyy")</small></span>
-            @if (ShowUpdate)
+            @if (ShowUpdate && Item.Status == LibraryContentStatus.Archived)
+            {
+                <button type="button" class="dlc-btn-publish" @onclick="() => OnArchive.InvokeAsync(Item)">Restore</button>
+            }
+            else if (ShowUpdate)
             {
                 <button type="button" class="@(Item.Published ? "dlc-btn-unpublish" : "dlc-btn-publish")" @onclick="() => OnTogglePublish.InvokeAsync(Item)">
                     @(Item.Published ? "Unpublish" : "Publish")

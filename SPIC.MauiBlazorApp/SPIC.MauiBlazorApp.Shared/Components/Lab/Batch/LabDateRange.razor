@@ -1,0 +1,75 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+
+@*
+    "Date Range" toolbar button: opens a small panel with From / To and Apply / Clear, then raises
+    Changed with the pair (either may be null). Popover on tablet / desktop, in-flow panel on phones.
+*@
+<div class="ldr @CssClass">
+    <button type="button" class="lf-btn lf-btn--outline ldr-toggle @(HasValue ? "is-set" : "")" aria-expanded="@(_open ? "true" : "false")"
+            @onclick="Toggle">
+        <i class="bi bi-calendar3" aria-hidden="true"></i>
+        <span>@Label</span>
+        <i class="bi @(_open ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+    </button>
+
+    @if (_open)
+    {
+        <div class="ldr-panel" role="group" aria-label="Date range">
+            <label class="ldr-field">
+                <span>From</span>
+                <input type="date" class="lf-input" value="@_from" @onchange="e => _from = e.Value?.ToString() ?? string.Empty" />
+            </label>
+            <label class="ldr-field">
+                <span>To</span>
+                <input type="date" class="lf-input" value="@_to" @onchange="e => _to = e.Value?.ToString() ?? string.Empty" />
+            </label>
+            <div class="ldr-actions">
+                <button type="button" class="lf-btn lf-btn--outline lf-btn--sm" @onclick="ClearAsync">Clear</button>
+                <button type="button" class="lf-btn lf-btn--primary lf-btn--sm" @onclick="ApplyAsync">Apply</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public DateTime? From { get; set; }
+    [Parameter] public DateTime? To { get; set; }
+    [Parameter] public EventCallback<(DateTime? From, DateTime? To)> Changed { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _open;
+    private string _from = "";
+    private string _to = "";
+
+    private bool HasValue => From.HasValue || To.HasValue;
+
+    private string Label => !HasValue
+        ? "Date Range"
+        : $"{(From is { } f ? f.ToString("dd MMM") : "...")} - {(To is { } t ? t.ToString("dd MMM") : "...")}";
+
+    private void Toggle()
+    {
+        _open = !_open;
+        if (_open)
+        {
+            _from = From?.ToString("yyyy-MM-dd") ?? "";
+            _to = To?.ToString("yyyy-MM-dd") ?? "";
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        _open = false;
+        DateTime? from = DateTime.TryParse(_from, out var f) ? f.Date : null;
+        DateTime? to = DateTime.TryParse(_to, out var t) ? t.Date : null;
+        if (from.HasValue && to.HasValue && from > to) (from, to) = (to, from);
+        await Changed.InvokeAsync((from, to));
+    }
+
+    private async Task ClearAsync()
+    {
+        _open = false;
+        _from = _to = "";
+        await Changed.InvokeAsync((null, null));
+    }
+}

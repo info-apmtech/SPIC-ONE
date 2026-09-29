@@ -515,15 +515,31 @@ else
 
     private async Task ShareAsync()
     {
+        // System share sheet on phones (WhatsApp, mail, ...), Web Share API in supporting
+        // browsers, clipboard elsewhere.
+        var title = _d?.Title ?? "SPIC Knowledge Community";
+        var text = _d is null ? "" : $"{_d.Title} - SPIC Knowledge Community";
+        string result;
         try
         {
-            await JS.InvokeVoidAsync("navigator.clipboard.writeText", Nav.Uri);
+            result = await JS.InvokeAsync<string>("spic.share", title, text, Nav.Uri);
         }
         catch
         {
-            // no clipboard permission / no JS: the toast still tells the user what happened
+            result = "none";
         }
-        Toast.Info("Link copied");
+        switch (result)
+        {
+            case "shared":
+            case "cancelled":
+                break;
+            case "copied":
+                Toast.Info("Link copied");
+                break;
+            default:
+                Toast.Info(Nav.Uri);
+                break;
+        }
     }
 
     // ---------------------------------------------------------------- composer

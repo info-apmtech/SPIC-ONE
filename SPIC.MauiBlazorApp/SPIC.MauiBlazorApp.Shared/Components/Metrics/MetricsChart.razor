@@ -1,0 +1,66 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Metrics
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    One line chart (Chart.js through wwwroot/js/metrics-chart.js, imported as a module so neither
+    host page needs a script tag). Redrawn when Labels / Series change; the old chart on the
+    canvas is destroyed first, and on dispose. 260 px tall, 200 px on phones.
+*@
+<figure class="mx-chart" aria-label="@AriaLabel">
+    <div class="mx-chart-box">
+        <canvas id="@_canvasId" role="img" aria-label="@AriaLabel"></canvas>
+    </div>
+</figure>
+
+@code {
+    public sealed record Series(string Label, int[] Data, string Color);
+
+    [Parameter, EditorRequired] public string[] Labels { get; set; } = Array.Empty<string>();
+    [Parameter, EditorRequired] public IReadOnlyList<Series> Datasets { get; set; } = Array.Empty<Series>();
+    [Parameter] public string? AriaLabel { get; set; }
+
+    private readonly string _canvasId = "mx-chart-" + Guid.NewGuid().ToString("N")[..8];
+    private IJSObjectReference? _module;
+    private object? _drawnLabels;
+    private object? _drawnSeries;
+    private bool _disposed;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_disposed) return;
+        if (ReferenceEquals(_drawnLabels, Labels) && ReferenceEquals(_drawnSeries, Datasets)) return;
+        _drawnLabels = Labels;
+        _drawnSeries = Datasets;
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/SPIC.MauiBlazorApp.Shared/js/metrics-chart.js");
+            var sets = Datasets.Select(d => new { label = d.Label, data = d.Data, color = d.Color }).ToArray();
+            await _module.InvokeVoidAsync("render", _canvasId, Labels, sets);
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        catch (InvalidOperationException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("dispose", _canvasId);
+                await _module.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        catch (InvalidOperationException) { }
+        catch (TaskCanceledException) { }
+    }
+}

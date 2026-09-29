@@ -79,7 +79,17 @@ namespace SpicAPI.Controllers
             var responseData = new LoginResponseModel
             {
                 Token = $"Bearer {token}",
-                User = user,
+                User = new LoginUserDto
+                {
+                    Id = user.Id,
+                    UserName = user.UserName,
+                    Name = user.Name,
+                    Email = user.Email,
+                    PhoneNumber = user.PhoneNumber,
+                    Role = user.Role.ToString(),
+                    DesignationId = user.DesignationId,
+                    IsActive = user.IsActive
+                },
                 Expiration = jwtToken?.ValidTo ?? DateTime.UtcNow.AddHours(1),
                 RoleAccess = roleAccess,
                 DesignationName = designationName

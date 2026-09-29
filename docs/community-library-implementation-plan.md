@@ -70,6 +70,20 @@ addition by designation). Verified with one QA login per AppRole (`qa.<role>` in
 database, designation "QA All Pages") through the ui-sweep harness at phone width on the web and
 on the phone against the local API.
 
+## 3b. Category master (2026-09-27)
+
+The "Main Category / Type" and "Associated Program / Sub-Category" options are now a master table
+(`LibraryCategories`, migration `V5r_LibraryCategories`, seeded with the six categories and five
+sub-categories the controller used to hard-code; ids 1-6 and 101-105, new rows start at 1001).
+Routes: `GET/POST api/Library/categories`, `PUT/DELETE api/Library/categories/{id}`,
+`PATCH api/Library/categories/{id}/active?value=`; writes need the DigitalLibrary page. A rename is
+carried into the content rows; a name that content uses cannot be deleted (409, deactivate it).
+`GET api/Library/lookups` returns the active master names merged with names content already uses,
+plus `CategoryTree` (sub-categories per category) and `Tags` (tags in use, most used first).
+Admin page `/DigitalLibrary/categories` ("Library Categories", guarded like `/DigitalLibrary/add`);
+the content form adds a category / sub-category inline, narrows sub-categories to the chosen
+category and offers the tags already in use. Production: run `migrate.ps1` before the deploy.
+
 ## 4. Acceptance
 
 - `dotnet build SpicOne.sln` clean; migration applies to an empty database and to a copy of the

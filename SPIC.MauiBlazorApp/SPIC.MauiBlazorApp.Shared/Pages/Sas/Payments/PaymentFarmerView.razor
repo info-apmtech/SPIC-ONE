@@ -1,0 +1,59 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+@using SPIC.Core.DTOs
+
+@*
+    Screen 35 body: the farmer's read-only payment (drawer over the list; also used by the
+    details page when a farmer opens /Sas/Payments/{id} directly).
+*@
+
+@if (Detail is { } d)
+{
+    var s = d.Summary;
+    <div class="pf">
+        @if (ShowHead)
+        {
+        <div class="spf-head">
+            <div class="spf-head-text">
+                <span class="spf-caption">Sample No.</span>
+                <strong class="spf-sample">@s.CollectionCode</strong>
+            </div>
+            <LabPill Text="@PaymentLabels.FarmerStatusName(s.AdminStatus, s.FinanceStatus)"
+                     Tone="@PaymentLabels.FarmerStatusTone(s.AdminStatus, s.FinanceStatus)" />
+        </div>
+        }
+
+        <section class="spf-card">
+            <h3 class="spf-title"><i class="bi bi-wallet2" aria-hidden="true"></i> Payment Details</h3>
+            <dl class="spf-tiles">
+                <div class="spf-tile"><dt>Sample ID</dt><dd>@s.CollectionCode</dd></div>
+                <div class="spf-tile"><dt>Crop Name</dt><dd>@PaymentLabels.Dash(s.Crop)</dd></div>
+                <div class="spf-tile"><dt>Payment Amount</dt><dd>@PaymentLabels.Money(s.PaidAmount)</dd></div>
+                <div class="spf-tile"><dt>Payment Mode</dt><dd>@PaymentLabels.ModeName(s.PaymentMode)</dd></div>
+                <div class="spf-tile"><dt>Transaction ID</dt><dd>@PaymentLabels.Dash(s.TransactionId)</dd></div>
+                <div class="spf-tile"><dt>Payment Date</dt><dd>@PaymentLabels.Date(d.TransactionDate ?? s.SubmittedAt)</dd></div>
+                <div class="spf-tile"><dt>Submitted By</dt><dd>@s.SubmittedByName@(string.IsNullOrWhiteSpace(s.SubmittedByRole) ? "" : $" ({s.SubmittedByRole})")</dd></div>
+                <div class="spf-tile">
+                    <dt>Admin Status</dt>
+                    <dd><LabPill Text="@PaymentLabels.AdminStatusName(s.AdminStatus)" Tone="@PaymentLabels.AdminStatusTone(s.AdminStatus)" /></dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="spf-card">
+            <h3 class="spf-title"><i class="bi bi-receipt" aria-hidden="true"></i> Payment Proof</h3>
+            <PaymentProof Detail="d" ShowTools="true" />
+        </section>
+
+        <section class="spf-card">
+            <h3 class="spf-title"><i class="bi bi-signpost-split" aria-hidden="true"></i> Verification Journey</h3>
+            <PaymentTimeline Steps="d.Timeline" AriaLabel="Verification journey" />
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public SasPaymentDetailDto? Detail { get; set; }
+
+    /// <summary>False inside the drawer, whose header already carries the sample no. and status.</summary>
+    [Parameter] public bool ShowHead { get; set; } = true;
+}

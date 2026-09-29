@@ -1,0 +1,441 @@
+﻿@page "/Lab/Tracking/{Id:int}"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Admin
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject LabApi Lab
+@inject SasApi Sas
+@inject NavigationManager Nav
+@implements IDisposable
+
+@*
+    Batch View Details (admin, screen 22, read-only). Sources:
+      * GET api/Lab/batches/{id}              header, sample type summary, status timeline, consignments
+      * GET api/Lab/consignments/{firstId}    v1 consignment detail (tracking link, expected delivery,
+                                              collections, v1 events: Delivered + who)
+      * GET api/Sas/collections/{firstId}     first collection (collector role, location, date)
+      * GET api/Lab/batches/{id}/activities   "Lab Entry Created" (SampleReceived / SampleLogged) and Last Updated
+    Timeline: Consignment Delivered to Lab, Lab Entry Created, Batch Created, Taken for Analysis,
+    Analysis Completed, Report Generated. Horizontal on tablet / desktop, vertical on phones.
+*@
+
+<div class="bv-page">
+    <PageHeader Title="@(_detail is null ? "Batch View Details" : $"Batch View Details - {_detail.Header.Code}")"
+                Subtitle="@(_detail is null ? null : $"Batch Created on {LabAdminText.Stamp(_detail.CreatedAt)}")"
+                BackHref="/Lab/Tracking">
+        <Actions>
+            @if (_detail is not null)
+            {
+                <a class="bv-btn bv-btn-outline" href="@Lab.SamplesExportUrl(Id)" target="_blank" rel="noopener" download
+                   aria-label="Export the batch samples to Excel" title="Export the batch samples to Excel">
+                    <i class="bi bi-download" aria-hidden="true"></i> Export
+                </a>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <Skeleton Variant="card" Rows="4" />
+    }
+    else if (_detail is null)
+    {
+        <EmptyState Icon="bi-box-seam" Title="The batch could not be loaded"
+                    Message="It may have been removed, or you do not have access to Lab Tracking.">
+            <button type="button" class="bv-btn bv-btn-outline" @onclick="LoadAsync">Try again</button>
+            <a class="bv-btn bv-btn-primary" href="/Lab/Tracking">Back to Lab Tracking</a>
+        </EmptyState>
+    }
+    else
+    {
+        var d = _detail;
+        var h = d.Header;
+        var (soil, water) = LabAdminText.SoilWater(d);
+        var firstCons = d.Consignments.FirstOrDefault();
+
+        @* -------------------------------------------------------- header strip *@
+        <section class="bv-strip" aria-label="Batch summary">
+            <div class="bv-cell">
+                <span class="bv-cell-label">Batch No.</span>
+                <span class="bv-cell-value bv-green">@h.Code</span>
+                <LabPill Text="@LabAdminText.Status(h.Status)" Tone="@LabPill.ToneFor(h.Status)" />
+            </div>
+            <div class="bv-cell">
+                <span class="bv-cell-label">Consignment No.</span>
+                <span class="bv-cell-value">@(d.Consignments.Count == 0 ? "-" : string.Join(", ", d.Consignments.Select(c => c.Code)))</span>
+                <span class="bv-cell-sub">Delivered On: @LabAdminText.StampOrDash(DeliveredAt)</span>
+            </div>
+            <div class="bv-cell">
+                <span class="bv-cell-label">Test Samples</span>
+                <span class="bv-cell-value">@h.SampleCount</span>
+                <span class="bv-cell-sub">Soil: @soil &nbsp; Water: @water</span>
+            </div>
+            <div class="bv-cell">
+                <span class="bv-cell-label">Samples</span>
+                <span class="bv-cell-value">@h.SampleCount</span>
+                <span class="bv-cell-sub">(@d.ParameterRowCount test@(d.ParameterRowCount == 1 ? "" : "s"))</span>
+            </div>
+            <div class="bv-cell">
+                <span class="bv-cell-label">Assigned To (Analyst)</span>
+                @if (string.IsNullOrWhiteSpace(h.AssignedToName))
+                {
+                    <span class="bv-cell-value bv-muted">Not assigned</span>
+                }
+                else
+                {
+                    <span class="bv-person">
+                        <MemberAvatar Member="@(new CommunityMember { UserId = h.AssignedToUserId ?? "", Name = h.AssignedToName, Avatar = Lab.AvatarSrc(h.AssignedToAvatarUrl) })" Size="28" />
+                        <span class="bv-cell-value">@h.AssignedToName</span>
+                    </span>
+                }
+            </div>
+            <div class="bv-cell">
+                <span class="bv-cell-label">Batch Created On</span>
+                <span class="bv-cell-value">@LabAdminText.Date(d.CreatedAt)</span>
+                <span class="bv-cell-sub">@LabAdminText.Time(d.CreatedAt)</span>
+            </div>
+            <div class="bv-cell">
+                <span class="bv-cell-label">Last Updated</span>
+                <span class="bv-cell-value">@LabAdminText.Date(LastUpdated)</span>
+                <span class="bv-cell-sub">@LabAdminText.Time(LastUpdated)</span>
+            </div>
+        </section>
+
+        @* -------------------------------------------------------- three cards *@
+        <div class="bv-cards">
+            <section class="bv-card">
+                <h2 class="bv-card-title"><span class="bv-card-icon bv-ic-green"><i class="bi bi-person-badge" aria-hidden="true"></i></span> Source Details</h2>
+                <dl class="bv-defs">
+                    <div>
+                        <dt>Collected By</dt>
+                        <dd>
+                            @LabAdminText.Dash(_collection?.CollectedByName ?? FirstCollection?.CollectedByName)
+                            @if (!string.IsNullOrWhiteSpace(_collection?.CollectedByRole))
+                            {
+                                <span class="bv-sub"> (@_collection!.CollectedByRole)</span>
+                            }
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Mobile No.</dt>
+                        <dd>
+                            @if (!string.IsNullOrWhiteSpace(_consignment?.ContactMobile))
+                            {
+                                <a class="bv-link" href="@($"tel:{_consignment!.ContactMobile}")">@_consignment!.ContactMobile</a>
+                            }
+                            else
+                            {
+                                <span>-</span>
+                            }
+                        </dd>
+                    </div>
+                    <div><dt>Location</dt><dd>@LabAdminText.Dash(Location)</dd></div>
+                    <div><dt>Collection Date</dt><dd>@LabAdminText.DateOrDash(_collection?.CollectionDate ?? FirstCollection?.CollectionDate)</dd></div>
+                </dl>
+            </section>
+
+            <section class="bv-card">
+                <h2 class="bv-card-title"><span class="bv-card-icon bv-ic-blue"><i class="bi bi-truck" aria-hidden="true"></i></span> Consignment Details</h2>
+                <dl class="bv-defs">
+                    <div><dt>Consignment No.</dt><dd>@(firstCons?.Code ?? "-")@(d.Consignments.Count > 1 ? $" +{d.Consignments.Count - 1}" : "")</dd></div>
+                    <div><dt>Dispatch Date</dt><dd>@(firstCons is null ? "-" : LabAdminText.Stamp(firstCons.ShipmentDate))</dd></div>
+                    <div>
+                        <dt>AWB / Tracking No</dt>
+                        <dd>
+                            @if (string.IsNullOrWhiteSpace(firstCons?.TrackingNumber))
+                            {
+                                <span>-</span>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(_consignment?.TrackingLink))
+                            {
+                                <a class="bv-link" href="@_consignment!.TrackingLink" target="_blank" rel="noopener">@firstCons!.TrackingNumber</a>
+                            }
+                            else
+                            {
+                                <span class="bv-green">@firstCons!.TrackingNumber</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(firstCons?.CourierService))
+                            {
+                                <span class="bv-sub"> (@firstCons!.CourierService)</span>
+                            }
+                        </dd>
+                    </div>
+                    <div><dt>Expected Delivery Date</dt><dd>@LabAdminText.DateOrDash(_consignment?.ExpectedDeliveryDate)</dd></div>
+                </dl>
+            </section>
+
+            <section class="bv-card">
+                <h2 class="bv-card-title"><span class="bv-card-icon bv-ic-violet"><i class="bi bi-boxes" aria-hidden="true"></i></span> Batch Details</h2>
+                <dl class="bv-defs">
+                    <div><dt>Batch No.</dt><dd>@h.Code</dd></div>
+                    <div><dt>Total Samples</dt><dd>@h.SampleCount</dd></div>
+                    <div><dt>Soil Sample</dt><dd>@soil</dd></div>
+                    <div><dt>Water Sample</dt><dd>@water</dd></div>
+                    <div>
+                        <dt>Batch Created By</dt>
+                        <dd>@LabAdminText.Dash(d.CreatedByName) <span class="bv-sub">(Lab Coordinator)</span></dd>
+                    </div>
+                    <div><dt>Batch Created Date</dt><dd>@LabAdminText.Stamp(d.CreatedAt)</dd></div>
+                    <div><dt>Assigned Analyst</dt><dd>@LabAdminText.Dash(h.AssignedToName)</dd></div>
+                </dl>
+            </section>
+        </div>
+
+        @* -------------------------------------------------------- analysis process *@
+        <section class="bv-card">
+            <h2 class="bv-card-title">Analysis Process</h2>
+            @if (d.SampleTypeSummary.Count == 0)
+            {
+                <EmptyState Icon="bi-clipboard-data" Title="No samples" Message="This batch carries no samples." Compact="true" />
+            }
+            else
+            {
+                <div class="bv-mini phone-only">
+                    @foreach (var s in d.SampleTypeSummary)
+                    {
+                        <div class="bv-mini-card">
+                            <div class="bv-mini-head">
+                                <span class="bv-mini-title">@LabAdminText.SampleTypeName(s.SampleType)</span>
+                                <span class="bv-sub">@s.Total sample@(s.Total == 1 ? "" : "s")</span>
+                            </div>
+                            <span class="bv-mini-line">Completed @s.Completed &middot; Not Started @s.NotStarted@(s.InProgress > 0 ? $" · In Progress {s.InProgress}" : "")</span>
+                            @Bar(Pct(s.Completed, s.Total))
+                        </div>
+                    }
+                    <div class="bv-mini-card bv-mini-card--total">
+                        <div class="bv-mini-head">
+                            <span class="bv-mini-title">Total</span>
+                            <span class="bv-sub">@d.SampleTypeSummary.Sum(s => s.Total) samples</span>
+                        </div>
+                        <span class="bv-mini-line">Completed @d.SampleTypeSummary.Sum(s => s.Completed) &middot; Not Started @d.SampleTypeSummary.Sum(s => s.NotStarted)</span>
+                        @Bar(Pct(d.SampleTypeSummary.Sum(s => s.Completed), d.SampleTypeSummary.Sum(s => s.Total)))
+                    </div>
+                </div>
+
+                <div class="bv-table-wrap tablet-up">
+                    <table class="bv-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">S.No</th>
+                                <th scope="col" class="left">Sample Type</th>
+                                <th scope="col">Total Samples</th>
+                                <th scope="col">Completed</th>
+                                <th scope="col">Not Started</th>
+                                <th scope="col" class="bv-col-bar">Completed %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{
+                                var n = 0;
+                            }
+                            @foreach (var s in d.SampleTypeSummary)
+                            {
+                                n++;
+                                var pct = Pct(s.Completed, s.Total);
+                                <tr>
+                                    <td>@n</td>
+                                    <th scope="row" class="left">@LabAdminText.SampleTypeName(s.SampleType)</th>
+                                    <td>@s.Total</td>
+                                    <td>@s.Completed</td>
+                                    <td>
+                                        @s.NotStarted
+                                        @if (s.InProgress > 0)
+                                        {
+                                            <span class="bv-sub bv-block">+@s.InProgress in progress</span>
+                                        }
+                                    </td>
+                                    <td class="bv-col-bar">@Bar(pct)</td>
+                                </tr>
+                            }
+                            @{
+                                var total = d.SampleTypeSummary.Sum(s => s.Total);
+                                var done = d.SampleTypeSummary.Sum(s => s.Completed);
+                                var notStarted = d.SampleTypeSummary.Sum(s => s.NotStarted);
+                                var inProgress = d.SampleTypeSummary.Sum(s => s.InProgress);
+                            }
+                            <tr class="bv-total">
+                                <td colspan="2" class="left">Total</td>
+                                <td>@total</td>
+                                <td>@done</td>
+                                <td>
+                                    @notStarted
+                                    @if (inProgress > 0)
+                                    {
+                                        <span class="bv-sub bv-block">+@inProgress in progress</span>
+                                    }
+                                </td>
+                                <td class="bv-col-bar">@Bar(Pct(done, total))</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+
+        @* -------------------------------------------------------- timeline *@
+        <section class="bv-card">
+            <h2 class="bv-card-title">Timeline</h2>
+            <ol class="bv-tl" aria-label="Batch timeline">
+                @for (var i = 0; i < Steps.Count; i++)
+                {
+                    var s = Steps[i];
+                    var nextDone = i + 1 < Steps.Count && Steps[i + 1].Done;
+                    <li class="bv-tl-step @(s.Done ? "is-done" : "")">
+                        <div class="bv-tl-rail" aria-hidden="true">
+                            <span class="bv-tl-dot"><i class="bi @(s.Done ? "bi-check-lg" : s.Icon)"></i></span>
+                            @if (i < Steps.Count - 1)
+                            {
+                                <span class="bv-tl-line @(nextDone ? "is-done" : "")"></span>
+                            }
+                        </div>
+                        <div class="bv-tl-body">
+                            <span class="bv-tl-title">@s.Title</span>
+                            @if (s.Done && s.At is { } at)
+                            {
+                                <span class="bv-tl-when">@LabAdminText.Stamp(at)</span>
+                                @if (!string.IsNullOrWhiteSpace(s.By))
+                                {
+                                    <span class="bv-tl-by">by @s.By</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="bv-tl-when bv-muted">Pending</span>
+                            }
+                            <span class="visually-hidden">@(s.Done ? "done" : "pending")</span>
+                        </div>
+                    </li>
+                }
+            </ol>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private sealed record Step(string Title, string Icon, bool Done, DateTime? At, string? By);
+
+    private LabBatchDetailDto? _detail;
+    private ConsignmentDetailDto? _consignment;
+    private SampleCollectionDetailDto? _collection;
+    private List<LabActivityDto> _activities = new();
+    private bool _loading = true;
+    private int _loadedId;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id && _detail is not null) return;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _consignment = null;
+        _collection = null;
+        _activities = new();
+        StateHasChanged();
+
+        var detailTask = Lab.GetBatchAsync(Id, _cts.Token);
+        var activitiesTask = Lab.GetActivitiesAsync(Id, pageSize: 50, ct: _cts.Token);
+        _detail = await detailTask;
+        _activities = (await activitiesTask)?.Items ?? new();
+        _loadedId = Id;
+        _loading = false;
+        StateHasChanged();
+
+        // Source / consignment cards: optional reads, the page is usable without them.
+        if (_detail?.Consignments.FirstOrDefault() is { } first)
+        {
+            var cons = await Lab.GetConsignmentAsync(first.Id, _cts.Token);
+            _consignment = cons?.Consignment;
+            StateHasChanged();
+
+            if (FirstCollection is { } col)
+            {
+                var (item, _) = await Sas.GetCollectionAsync(col.Id, _cts.Token);
+                _collection = item;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private SampleCollectionSummaryDto? FirstCollection => _consignment?.Collections.OrderBy(c => c.Id).FirstOrDefault();
+
+    private string? Location
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_collection?.LocationName)) return _collection!.LocationName;
+            if (!string.IsNullOrWhiteSpace(FirstCollection?.LocationName)) return FirstCollection!.LocationName;
+            var farmer = _collection?.Items.FirstOrDefault()?.Farmer;
+            if (farmer is not null && !string.IsNullOrWhiteSpace(farmer.Location)) return farmer.Location;
+            var c = _detail?.Consignments.FirstOrDefault();
+            return string.Join(", ", new[] { c?.HeadquarterName, c?.RegionName, c?.StateName }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        }
+    }
+
+    private DateTime? DeliveredAt =>
+        _detail?.Consignments.Where(c => c.DeliveredAt != null).Select(c => c.DeliveredAt).Min();
+
+    private DateTime LastUpdated
+    {
+        get
+        {
+            var at = _detail is null ? DateTime.MinValue : LabAdminText.LastUpdated(_detail);
+            var latest = _activities.Count == 0 ? DateTime.MinValue : _activities.Max(a => a.At);
+            return latest > at ? latest : at;
+        }
+    }
+
+    private LabActivityDto? FirstActivity(params LabActivityKind[] kinds) =>
+        _activities.Concat(_detail?.Timeline ?? new())
+            .Where(a => kinds.Contains(a.Kind))
+            .OrderBy(a => a.At)
+            .FirstOrDefault();
+
+    /// <summary>The six steps of screen 22, derived from the batch, its activities and the v1 consignment.</summary>
+    private List<Step> Steps
+    {
+        get
+        {
+            var d = _detail!;
+            var delivered = _consignment?.Timeline
+                .Where(e => string.Equals(e.Status, nameof(ConsignmentStatus.Delivered), StringComparison.OrdinalIgnoreCase))
+                .OrderBy(e => e.At)
+                .FirstOrDefault();
+            var deliveredAt = DeliveredAt ?? delivered?.At;
+
+            var entry = FirstActivity(LabActivityKind.SampleReceived, LabActivityKind.SampleLogged);
+            var created = FirstActivity(LabActivityKind.BatchCreated);
+            var taken = d.Progress.FirstOrDefault(p => p.Status == SampleBatchStatus.TakenForAnalysis);
+            var analysed = d.Progress.FirstOrDefault(p => p.Status == SampleBatchStatus.AnalysisCompleted);
+            var report = FirstActivity(LabActivityKind.ReportGenerated);
+            var completed = d.Progress.FirstOrDefault(p => p.Status == SampleBatchStatus.Completed);
+            var reportAt = report?.At ?? d.CompletedAt;
+
+            return new List<Step>
+            {
+                new("Consignment Delivered to Lab", "bi-truck", deliveredAt != null, deliveredAt, delivered?.ByName),
+                new("Lab Entry Created", "bi-journal-plus", entry != null || deliveredAt != null, entry?.At ?? deliveredAt, entry?.ByName ?? delivered?.ByName),
+                new("Batch Created", "bi-boxes", true, d.CreatedAt, created?.ByName ?? d.CreatedByName),
+                new("Taken for Analysis", "bi-hourglass-split", d.TakenForAnalysisAt != null, d.TakenForAnalysisAt, taken?.ByName),
+                new("Analysis Completed", "bi-clipboard-check", d.AnalysisCompletedAt != null, d.AnalysisCompletedAt, analysed?.ByName),
+                new("Report Generated", "bi-file-earmark-text", reportAt != null, reportAt, report?.ByName ?? completed?.ByName)
+            };
+        }
+    }
+
+    private static int Pct(int part, int total) => total <= 0 ? 0 : (int)Math.Round(part * 100.0 / total);
+
+    private static RenderFragment Bar(int pct) => __builder =>
+    {
+        <span class="bv-bar" role="img" aria-label="@($"{pct}% completed")">
+            <span class="bv-bar-track"><span class="bv-bar-fill" style="width:@(pct)%"></span></span>
+            <span class="bv-bar-text">@pct%</span>
+        </span>
+    };
+
+    public void Dispose() => _cts.Cancel();
+}

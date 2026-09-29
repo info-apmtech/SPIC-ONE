@@ -1,0 +1,70 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.Core.DTOs
+
+@*
+    "Assign To" picker: a select-like button that opens the analyst list (avatar, name,
+    designation, open batches). Analysts come from the caller (LabApi.GetAnalystsAsync).
+*@
+<div class="lap @CssClass">
+    <button type="button" id="@Id" class="lf-input lap-toggle" aria-haspopup="listbox" aria-expanded="@(_open ? "true" : "false")"
+            disabled="@Disabled" @onclick="() => _open = !_open">
+        @if (Selected is { } s)
+        {
+            <LabPerson Name="@s.Name" AvatarUrl="@s.AvatarUrl" Sub="@OpenText(s)" Size="28" />
+        }
+        else
+        {
+            <span class="lap-placeholder">@Placeholder</span>
+        }
+        <i class="bi @(_open ? "bi-chevron-up" : "bi-chevron-down") lap-caret" aria-hidden="true"></i>
+    </button>
+
+    @if (_open)
+    {
+        <div class="lap-list" role="listbox" aria-label="Analysts">
+            @if (AllowNone)
+            {
+                <button type="button" role="option" aria-selected="@(string.IsNullOrEmpty(Value) ? "true" : "false")"
+                        class="lap-option @(string.IsNullOrEmpty(Value) ? "is-on" : "")" @onclick="() => PickAsync(null)">
+                    <span class="lap-none">Not assigned yet</span>
+                </button>
+            }
+            @if (Analysts.Count == 0)
+            {
+                <span class="lap-empty">No lab analysts found. Grant the Lab Test Entry page to a designation first.</span>
+            }
+            @foreach (var a in Analysts)
+            {
+                var id = a.UserId;
+                <button type="button" role="option" aria-selected="@(id == Value ? "true" : "false")"
+                        class="lap-option @(id == Value ? "is-on" : "")" @onclick="() => PickAsync(id)">
+                    <LabPerson Name="@a.Name" AvatarUrl="@a.AvatarUrl" Sub="@a.DesignationName" Size="32" />
+                    <span class="lap-open">@OpenText(a)</span>
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<LabUserDto> Analysts { get; set; } = new();
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Select analyst";
+    [Parameter] public bool AllowNone { get; set; } = true;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Id { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _open;
+
+    private LabUserDto? Selected => Analysts.FirstOrDefault(a => a.UserId == Value);
+
+    private static string OpenText(LabUserDto a) => a.OpenBatches == 1 ? "1 open batch" : $"{a.OpenBatches} open batches";
+
+    private async Task PickAsync(string? id)
+    {
+        _open = false;
+        await ValueChanged.InvokeAsync(id);
+    }
+}

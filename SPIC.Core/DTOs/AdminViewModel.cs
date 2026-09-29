@@ -20,7 +20,8 @@ namespace SPIC.Core.DTOs
         public class LoginResponseModel
         {
             public required string Token { get; set; }
-            public required UserInfo User { get; set; }
+            /// <summary>Identity fields only: never the credential columns (Password / PasswordHash).</summary>
+            public required LoginUserDto User { get; set; }
             public DateTime Expiration { get; set; }
             public string? RoleAccess { get; set; }
             // Name of the user's assigned Designation (e.g. "SDWA"), resolved from
@@ -37,4 +38,20 @@ namespace SPIC.Core.DTOs
 
 
 
+}
+
+namespace SPIC.Core.DTOs
+{
+    /// <summary>What the login response says about the signed-in user (no secrets).</summary>
+    public class LoginUserDto
+    {
+        public string Id { get; set; } = "";
+        public string? UserName { get; set; }
+        public string? Name { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string Role { get; set; } = "";
+        public int? DesignationId { get; set; }
+        public bool IsActive { get; set; }
+    }
 }

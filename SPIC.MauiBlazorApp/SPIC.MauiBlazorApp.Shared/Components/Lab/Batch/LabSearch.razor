@@ -1,0 +1,46 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@implements IDisposable
+
+@* Search box with a 400 ms debounce; raises ValueChanged once the user pauses typing. *@
+<div class="lf-search @CssClass">
+    <i class="bi bi-search" aria-hidden="true"></i>
+    <input type="search" placeholder="@Placeholder" aria-label="@(AriaLabel ?? Placeholder)" value="@Value"
+           @oninput="OnInput" />
+</div>
+
+@code {
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Search";
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    [Parameter] public int DelayMs { get; set; } = 400;
+
+    private CancellationTokenSource? _debounce;
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        var text = e.Value?.ToString();
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+        _debounce = new CancellationTokenSource();
+        var token = _debounce.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(DelayMs, token);
+                await InvokeAsync(() => ValueChanged.InvokeAsync(string.IsNullOrWhiteSpace(text) ? null : text.Trim()));
+            }
+            catch (TaskCanceledException) { }
+            catch (ObjectDisposedException) { }
+        });
+    }
+
+    public void Dispose()
+    {
+        _debounce?.Cancel();
+        _debounce?.Dispose();
+    }
+}

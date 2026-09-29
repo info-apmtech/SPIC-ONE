@@ -88,7 +88,18 @@ namespace SPIC.Core.Entities
         ReportsCenter,
         ContactUs,
         LogisticsMaster,
-        UserProfile
+        UserProfile,
+        // Lab portal (version 2, 2026-09-27): coordinator pages, then the analyst page.
+        [PageModule("SAS Lab")] LabDashboard,
+        [PageModule("SAS Lab")] LabConsignments,
+        [PageModule("SAS Lab")] LabAnalysis,
+        [PageModule("SAS Lab")] LabReports,
+        [PageModule("SAS Lab")] LabTestEntry,
+        [PageModule("SAS Lab")] LabTracking,
+        [PageModule("SAS")] SasPaymentApproval,
+        [PageModule("SAS")] SasPaymentVerification,
+        // Usage / error metrics page (2026-09-28, docs/metrics-telemetry-plan.md). Normal CanAccess rule.
+        [PageModule("Administration")] Metrics
 
     }
 }

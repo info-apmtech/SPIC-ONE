@@ -128,16 +128,38 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             return result;
         }
 
-        public bool CanAccess(PagePermission page) => CanAccess(RoleAccessPermissions.KeyFor(page));
+        // SAS Lab / payment pages reached through the DESIGNATION only (product decision 2026-09-27):
+        // the Admin / CorporateAdmin roles do NOT bypass these; an admin needs a designation that
+        // grants the key like every other user. Everything else keeps the admin bypass below.
+        public static readonly IReadOnlySet<string> DesignationOnlyPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            nameof(PagePermission.LabDashboard),
+            nameof(PagePermission.LabConsignments),
+            nameof(PagePermission.LabAnalysis),
+            nameof(PagePermission.LabReports),
+            nameof(PagePermission.LabTestEntry),
+            nameof(PagePermission.LabTracking),
+            nameof(PagePermission.SasPaymentApproval),
+            nameof(PagePermission.SasPaymentVerification)
+        };
+
+        public bool HasPageStrict(PagePermission page) => HasPageStrict(page.ToString());
+
+        // Page-level, designation only: true when the designation holds any token for the page
+        // (same PagePart matching as CanAccess) - NO Admin / CorporateAdmin bypass.
+        public bool HasPageStrict(string pageKey) =>
+            AllowedPages.Any(t => string.Equals(PagePart(t), pageKey, StringComparison.OrdinalIgnoreCase));
+
+        public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
 
         // Page-level: can the user REACH this page at all?
         // True if they hold any permission token for that page (any action, or a
         // legacy bare page token). Used by the route guard and menu visibility.
         public bool CanAccess(string pageKey)
         {
-            pageKey = RoleAccessPermissions.NormalizePageKey(pageKey);
-
-            // Admin and CorporateAdmin bypass everything
+            // Designation-only pages (SAS Lab / payments): no role bypass
+            if (DesignationOnlyPages.Contains(pageKey)) return HasPageStrict(pageKey);
+            // Admin and CorporateAdmin bypass everything else
             if (UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return true;
             // No designation assigned => access ONLY the Welcome page (nothing else)
             if (AllowedPages.Count == 0)
@@ -154,8 +176,8 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         public bool Can(string pageKey, string action)
         {
-            pageKey = RoleAccessPermissions.NormalizePageKey(pageKey);
-            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return true;
+            // Admin and CorporateAdmin bypass everything except the designation-only pages
+            if ((UserRole is AppRole.Admin or AppRole.CorporateAdmin) && !DesignationOnlyPages.Contains(pageKey)) return true;
             if (AllowedPages.Count == 0) return false;
             return AllowedPages.Any(t =>
             {

@@ -67,20 +67,22 @@ else
             @if (Kind == DigitalLibraryType.Products)
             {
                 <div class="pf-grid2">
-                    <label class="pf-field">
-                        <span>Main Category / Type</span>
-                        <select @bind="Draft.Category">
-                            <option value="">Select Category Type..</option>
-                            @foreach (var c in Categories) { <option value="@c">@c</option> }
-                        </select>
-                    </label>
-                    <label class="pf-field">
-                        <span>Associated Program / Sub-Category</span>
-                        <select @bind="Draft.SubCategory" disabled="@(Draft.Category == "")">
+                    @CategoryField("Main Category / Type", "Select Category Type..")
+                    <div class="pf-field">
+                        <label class="pf-field-label" for="pf-subcategory">Associated Program / Sub-Category</label>
+                        <select id="pf-subcategory" value="@SubCategorySelectValue" @onchange="OnSubCategoryChanged" disabled="@(Draft.Category == "")">
                             <option value="">@(Draft.Category == "" ? "Select Category first.." : "Select Sub-Category..")</option>
-                            @foreach (var c in SubCategories) { <option value="@c">@c</option> }
+                            @foreach (var c in SubCategoryOptions) { <option value="@c">@c</option> }
+                            @if (CurrentCategoryNode is not null)
+                            {
+                                <option value="@NewOptionValue">+ Add new sub-category…</option>
+                            }
                         </select>
-                    </label>
+                        @if (_mini == MiniAdd.SubCategory)
+                        {
+                            @MiniAddBox("New sub-category under " + (CurrentCategoryNode?.Name ?? Draft.Category))
+                        }
+                    </div>
                     <label class="pf-field">
                         <span>Resource Content Format</span>
                         <select @bind="Draft.Format">
@@ -104,13 +106,7 @@ else
                         <span>@KindNoun Title</span>
                         <input type="text" placeholder="@($"Enter a descriptive {KindNoun.ToLowerInvariant()} title...")" @bind="Draft.Title" @bind:event="oninput" />
                     </label>
-                    <label class="pf-field">
-                        <span>@KindNoun Category</span>
-                        <select @bind="Draft.Category">
-                            <option value="">Select Category</option>
-                            @foreach (var c in Categories) { <option value="@c">@c</option> }
-                        </select>
-                    </label>
+                    @CategoryField(KindNoun + " Category", "Select Category")
                 </div>
                 <div class="pf-field">
                     <span>Tags</span>
@@ -431,6 +427,24 @@ else
     private List<string> SubCategories { get; set; } = new();
     private List<string> Formats { get; set; } = new();
     private List<string> Visibilities { get; set; } = new();
+    /// <summary>Active master categories with their sub-categories (narrows the sub-category select).</summary>
+    private List<LibraryCategoryDto> CategoryTree { get; set; } = new();
+    /// <summary>Tags already used by other content (most used first), offered as suggestions.</summary>
+    private List<string> TagOptions { get; set; } = new();
+
+    // "+ Add new category / sub-category" inline mini dialog
+    private const string NewOptionValue = "__add_new__";
+    private enum MiniAdd { None, Category, SubCategory }
+    private MiniAdd _mini = MiniAdd.None;
+    private string _miniName = "";
+    private string? _miniError;
+    private bool _miniBusy;
+    private bool _focusMini;
+    private ElementReference _miniInput;
+
+    // tag suggestions
+    private const int TagSuggestionCount = 12;
+    private bool _showAllTags;
 
     private string NextLabel => _step switch { 1 => "Next: Related Content", 2 => "Next: Page Layout", _ => (IsEdit ? "Save Changes" : "Save & Publish") };
 
@@ -476,6 +490,8 @@ else
             SubCategories = lookups.SubCategories;
             Formats = lookups.Formats;
             Visibilities = lookups.Visibilities;
+            CategoryTree = lookups.CategoryTree ?? new();
+            TagOptions = lookups.Tags ?? new();
         }
         else
         {
@@ -539,14 +555,92 @@ else
             : new DigitalLibraryItem { Id = id, Title = $"Item #{id}", Image = DigitalLibraryItem.PlaceholderImage(id) };
 
     // ---------- shared fragments ----------
+    // Tags: chips for the selected tags (with a remove cross), a box to type a new one (Enter,
+    // comma or "+"), and the tags other content already uses as tappable suggestions, narrowed by
+    // what is typed. Draft.Tags is still the list the API joins into LibraryContent.Tags.
     private RenderFragment TagsEditor => __builder =>
     {
+        var suggestions = TagSuggestions.ToList();
+        var shown = _showAllTags || !string.IsNullOrWhiteSpace(_tagInput) ? suggestions : suggestions.Take(TagSuggestionCount).ToList();
         <div class="pf-tags">
             @foreach (var t in Draft.Tags)
             {
-                <span class="pf-tag">@t <button type="button" aria-label="Remove @t" @onclick="() => Draft.Tags.Remove(t)"><i class="bi bi-x"></i></button></span>
+                var tag = t;
+                <span class="pf-tag">@tag <button type="button" aria-label="@("Remove " + tag)" @onclick="() => Draft.Tags.Remove(tag)"><i class="bi bi-x"></i></button></span>
             }
-            <input type="text" placeholder="@(Draft.Tags.Count == 0 ? "Type a tag and press Enter" : "")" @bind="_tagInput" @bind:event="oninput" @onkeydown="OnTagKey" />
+            <input type="text" aria-label="Add a tag" placeholder="@(Draft.Tags.Count == 0 ? "Type a tag or pick below" : "Add a tag")" @bind="_tagInput" @bind:event="oninput" @onkeydown="OnTagKey" />
+            <button type="button" class="pf-tag-add" aria-label="Add the typed tag" title="Add tag" disabled="@string.IsNullOrWhiteSpace(_tagInput)" @onclick="AddTypedTag"><i class="bi bi-plus-lg"></i></button>
+        </div>
+        @if (suggestions.Count > 0)
+        {
+            <div class="pf-tag-suggest" role="group" aria-label="Tags used by other content">
+                <span class="pf-tag-suggest-label">@(string.IsNullOrWhiteSpace(_tagInput) ? "Used before:" : "Matching tags:")</span>
+                @foreach (var s in shown)
+                {
+                    var tag = s;
+                    <button type="button" class="pf-tag-option" aria-label="@("Add tag " + tag)" @onclick="() => AddTag(tag)"><i class="bi bi-plus"></i> @tag</button>
+                }
+                @if (string.IsNullOrWhiteSpace(_tagInput) && suggestions.Count > TagSuggestionCount)
+                {
+                    <button type="button" class="pf-tag-more" @onclick="() => _showAllTags = !_showAllTags">@(_showAllTags ? "Show fewer" : $"Show all {suggestions.Count}")</button>
+                }
+            </div>
+        }
+    };
+
+    /// <summary>Known tags not yet selected, narrowed by the text typed in the tag box.</summary>
+    private IEnumerable<string> TagSuggestions => TagOptions
+        .Where(t => !Draft.Tags.Contains(t, StringComparer.OrdinalIgnoreCase))
+        .Where(t => string.IsNullOrWhiteSpace(_tagInput) || t.Contains(_tagInput.Trim().TrimEnd(','), StringComparison.OrdinalIgnoreCase));
+
+    private void AddTag(string tag)
+    {
+        tag = tag.Trim().TrimEnd(',').Trim();
+        if (tag.Length == 0) return;
+        // Typed text that matches a known tag takes the known spelling.
+        var known = TagOptions.FirstOrDefault(t => string.Equals(t, tag, StringComparison.OrdinalIgnoreCase));
+        tag = known ?? tag;
+        if (!Draft.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) Draft.Tags.Add(tag);
+        _tagInput = "";
+    }
+
+    private void AddTypedTag() => AddTag(_tagInput);
+
+    // Category select with "Manage categories" and "+ Add new category…" (shared by all kinds).
+    private RenderFragment CategoryField(string label, string placeholder) => __builder =>
+    {
+        <div class="pf-field">
+            <div class="pf-field-head">
+                <label class="pf-field-label" for="pf-category">@label</label>
+                <a class="pf-manage-link" href="/DigitalLibrary/categories"><i class="bi bi-gear"></i> Manage categories</a>
+            </div>
+            <select id="pf-category" value="@CategorySelectValue" @onchange="OnCategoryChanged">
+                <option value="">@placeholder</option>
+                @foreach (var c in Categories) { <option value="@c">@c</option> }
+                <option value="@NewOptionValue">+ Add new category…</option>
+            </select>
+            @if (_mini == MiniAdd.Category)
+            {
+                @MiniAddBox("New category")
+            }
+        </div>
+    };
+
+    private RenderFragment MiniAddBox(string caption) => __builder =>
+    {
+        <div class="pf-mini-add" role="group" aria-label="@caption">
+            <span class="pf-mini-caption">@caption</span>
+            <div class="pf-mini-row">
+                <input type="text" maxlength="150" aria-label="@(caption + " name")" placeholder="Name"
+                       value="@_miniName" @oninput="e => _miniName = e.Value?.ToString() ?? string.Empty"
+                       @onkeydown="OnMiniKey" @ref="_miniInput" />
+                <button type="button" class="pf-btn pf-btn-primary pf-btn-sm" disabled="@_miniBusy" @onclick="SaveMiniAsync"><i class="bi bi-check-lg"></i> Add</button>
+                <button type="button" class="pf-btn pf-btn-ghost pf-btn-sm" disabled="@_miniBusy" @onclick="CancelMini">Cancel</button>
+            </div>
+            @if (_miniError is not null)
+            {
+                <small class="pf-mini-error" role="alert">@_miniError</small>
+            }
         </div>
     };
 
@@ -745,14 +839,151 @@ else
 
     private void BackToList() => Nav.NavigateTo(ListUrl);
 
+    // ---------- step 1: category master ----------
+
+    /// <summary>The select shows the "+ Add new" option while its mini dialog is open.</summary>
+    private string CategorySelectValue => _mini == MiniAdd.Category ? NewOptionValue : Draft.Category;
+    private string SubCategorySelectValue => _mini == MiniAdd.SubCategory ? NewOptionValue : Draft.SubCategory;
+
+    /// <summary>The master node for the chosen category (null for a name only content uses).</summary>
+    private LibraryCategoryDto? CurrentCategoryNode => string.IsNullOrEmpty(Draft.Category)
+        ? null
+        : CategoryTree.FirstOrDefault(c => string.Equals(c.Name, Draft.Category, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Sub-categories of the chosen category when the master has any for it, otherwise every
+    /// sub-category. The current value always stays in the list (editing older content).
+    /// </summary>
+    private List<string> SubCategoryOptions
+    {
+        get
+        {
+            var list = SubCategoriesFor(Draft.Category);
+            if (!string.IsNullOrEmpty(Draft.SubCategory) && !list.Contains(Draft.SubCategory, StringComparer.OrdinalIgnoreCase))
+                list.Add(Draft.SubCategory);
+            return list;
+        }
+    }
+
+    private List<string> SubCategoriesFor(string category)
+    {
+        var node = CategoryTree.FirstOrDefault(c => string.Equals(c.Name, category, StringComparison.OrdinalIgnoreCase));
+        return node is { SubCategories.Count: > 0 }
+            ? node.SubCategories.Select(s => s.Name).ToList()
+            : SubCategories.ToList();
+    }
+
+    private void OnCategoryChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+        if (value == NewOptionValue) { StartMini(MiniAdd.Category); return; }
+        if (_mini == MiniAdd.Category) _mini = MiniAdd.None;
+        SetCategory(value);
+    }
+
+    private void SetCategory(string value)
+    {
+        Draft.Category = value;
+        // A sub-category that does not belong to the new category is cleared.
+        if (!string.IsNullOrEmpty(Draft.SubCategory)
+            && !SubCategoriesFor(value).Contains(Draft.SubCategory, StringComparer.OrdinalIgnoreCase))
+        {
+            Draft.SubCategory = "";
+        }
+        if (_mini == MiniAdd.SubCategory) _mini = MiniAdd.None;
+    }
+
+    private void OnSubCategoryChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString() ?? "";
+        if (value == NewOptionValue) { StartMini(MiniAdd.SubCategory); return; }
+        if (_mini == MiniAdd.SubCategory) _mini = MiniAdd.None;
+        Draft.SubCategory = value;
+    }
+
+    private void StartMini(MiniAdd what)
+    {
+        _mini = what;
+        _miniName = "";
+        _miniError = null;
+        _focusMini = true;
+    }
+
+    private void CancelMini()
+    {
+        _mini = MiniAdd.None;
+        _miniError = null;
+    }
+
+    private async Task OnMiniKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SaveMiniAsync();
+        else if (e.Key == "Escape") CancelMini();
+    }
+
+    private async Task SaveMiniAsync()
+    {
+        if (_miniBusy || _mini == MiniAdd.None) return;
+        var name = _miniName.Trim();
+        if (name.Length == 0) { _miniError = "Enter a name."; return; }
+
+        var kind = _mini == MiniAdd.Category ? LibraryCategoryKind.Category : LibraryCategoryKind.SubCategory;
+        var parent = kind == LibraryCategoryKind.SubCategory ? CurrentCategoryNode : null;
+        if (kind == LibraryCategoryKind.SubCategory && parent is null)
+        {
+            _miniError = "Choose a category from the list first.";
+            return;
+        }
+
+        _miniBusy = true;
+        _miniError = null;
+        var created = await Api.CreateCategoryAsync(new LibraryCategoryUpsertDto
+        {
+            Kind = kind,
+            Name = name,
+            ParentCategoryId = parent?.Id
+        });
+        _miniBusy = false;
+
+        if (created is null)
+        {
+            _miniError = Api.LastError ?? "It could not be added.";
+            return;
+        }
+
+        if (kind == LibraryCategoryKind.Category)
+        {
+            if (!Categories.Contains(created.Name, StringComparer.OrdinalIgnoreCase)) Categories.Add(created.Name);
+            CategoryTree.Add(created);
+            _mini = MiniAdd.None;
+            SetCategory(created.Name);
+        }
+        else
+        {
+            if (!SubCategories.Contains(created.Name, StringComparer.OrdinalIgnoreCase)) SubCategories.Add(created.Name);
+            parent!.SubCategories.Add(created);
+            _mini = MiniAdd.None;
+            Draft.SubCategory = created.Name;
+        }
+
+        Toast.Success($"\"{created.Name}\" was added and selected.");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusMini && _mini != MiniAdd.None)
+        {
+            _focusMini = false;
+            try { await _miniInput.FocusAsync(); } catch { /* element not rendered yet */ }
+        }
+    }
+
     // ---------- step 1 helpers ----------
     private void OnTagKey(KeyboardEventArgs e)
     {
         if (e.Key is "Enter" or "," or "Tab")
         {
-            var tag = _tagInput.Trim().TrimEnd(',');
-            if (tag.Length > 0 && !Draft.Tags.Contains(tag, StringComparer.OrdinalIgnoreCase)) Draft.Tags.Add(tag);
-            _tagInput = "";
+            AddTag(_tagInput);
         }
         else if (e.Key == "Backspace" && _tagInput == "" && Draft.Tags.Count > 0)
         {

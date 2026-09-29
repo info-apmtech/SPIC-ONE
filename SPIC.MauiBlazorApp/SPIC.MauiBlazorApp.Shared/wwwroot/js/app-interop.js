@@ -155,3 +155,83 @@ window.scrollPageToTop = function () {
     });
     window.scrollTo(0, 0);
 };
+
+// Share a title / text / url through the platform share sheet. Returns
+// "shared" | "cancelled" | "copied" (clipboard fallback) | "none". The MAUI host
+// (wwwroot/maui-interop.js) replaces this with the native share sheet.
+window.spic.share = async function (title, text, url) {
+    var data = {};
+    if (title) data.title = title;
+    if (text) data.text = text;
+    if (url) data.url = url;
+    if (navigator.share && (!navigator.canShare || navigator.canShare(data))) {
+        try { await navigator.share(data); return "shared"; }
+        catch (e) { if (e && e.name === "AbortError") return "cancelled"; }
+    }
+    var fallback = [text, url].filter(Boolean).join("\n");
+    try {
+        if (navigator.clipboard && fallback) { await navigator.clipboard.writeText(fallback); return "copied"; }
+    } catch (e) { /* no clipboard permission */ }
+    return "none";
+};
+
+// ---------------------------------------------------------------------------
+// Error telemetry (docs/metrics-telemetry-plan.md row 8). window errors and unhandled
+// promise rejections are queued (max 20) until ClientTelemetry calls attach(dotnetRef),
+// then sent to ReportJsError. Blazor's own reconnect chatter and empty "Script error."
+// messages are ignored. Nothing here may throw.
+// ---------------------------------------------------------------------------
+window.spic.telemetry = (function () {
+    var ref = null;
+    var queue = [];
+
+    function isNoise(msg) {
+        if (!msg) return true;
+        var m = String(msg);
+        if (m === 'Script error.' || m === 'Script error') return true;
+        return /websocket|connection (was )?(closed|disconnected|lost)|disconnected|reconnect|circuit/i.test(m);
+    }
+
+    function send(item) {
+        try {
+            ref.invokeMethodAsync('ReportJsError', item[0], item[1], item[2], item[3])
+                .catch(function () { });
+        } catch (e) { /* circuit gone */ }
+    }
+
+    function report(msg, src, stack, url) {
+        try {
+            if (isNoise(msg)) return;
+            var item = [String(msg).slice(0, 2000), src ? String(src).slice(0, 300) : null,
+                stack ? String(stack).slice(0, 8000) : null, url || location.href];
+            if (ref) send(item);
+            else if (queue.length < 20) queue.push(item);
+        } catch (e) { /* never throw from the error hook */ }
+    }
+
+    window.addEventListener('error', function (e) {
+        try {
+            if (!e || (!e.message && !e.error)) return;   // resource load errors carry neither
+            var src = e.filename ? e.filename + ':' + (e.lineno || 0) + ':' + (e.colno || 0) : null;
+            report(e.message || (e.error && e.error.message), src, e.error && e.error.stack, location.href);
+        } catch (x) { }
+    });
+
+    window.addEventListener('unhandledrejection', function (e) {
+        try {
+            var r = e ? e.reason : null;
+            var msg = r && r.message ? r.message : (typeof r === 'string' ? r : (r ? String(r) : ''));
+            report(msg, 'unhandledrejection', r && r.stack, location.href);
+        } catch (x) { }
+    });
+
+    return {
+        attach: function (dotnetRef) {
+            ref = dotnetRef;
+            var pending = queue;
+            queue = [];
+            pending.forEach(send);
+        },
+        report: report
+    };
+})();

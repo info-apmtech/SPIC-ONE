@@ -62,6 +62,9 @@ param clientIp string = ''
 param postgresAdminPassword string = newGuid()
 @secure()
 param jwtKey string = newGuid()
+@description('Shared key of X-Telemetry-Key (web host -> api/Telemetry/batch, server-attributed errors). Generated like jwtKey.')
+@secure()
+param telemetryIngestKey string = newGuid()
 param jwtIssuer string = 'SPIC_API'
 param jwtAudience string = 'SPIC_API_USERS'
 @description('Lifetime of a login token in minutes.')
@@ -91,6 +94,7 @@ var suffix = take(uniqueString(resourceGroup().id), 6)
 var tags = { app: 'spicone', env: envName, client: 'SPIC' }
 
 var lawName = 'log-spicone-${envShort}'
+var appInsightsName = 'appi-spicone-${envShort}'
 var vnetName = 'vnet-spicone-${envShort}'
 var storageName = 'stspicone${envShort}${suffix}'
 var backupStorageName = 'stspiconebk${envShort}${suffix}'
@@ -129,6 +133,21 @@ resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   properties: {
     sku: { name: 'PerGB2018' }
     retentionInDays: logRetentionDays
+  }
+}
+
+// Application Insights (workspace-based, on the workspace above): the engineers' deep view
+// (dependencies, live metrics, traces). Both container apps get its connection string; the API and
+// the web host switch the SDK on only when APPLICATIONINSIGHTS_CONNECTION_STRING is set.
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  tags: tags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: law.id
+    IngestionMode: 'LogAnalytics'
   }
 }
 
@@ -396,6 +415,12 @@ resource secretJwtKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   properties: { value: jwtKey }
 }
 
+resource secretTelemetryIngestKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: kv
+  name: 'telemetry-ingest-key'
+  properties: { value: telemetryIngestKey }
+}
+
 resource secretIfmsDeviceKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = if (!empty(ifmsDeviceKey)) {
   parent: kv
   name: 'ifms-device-key'
@@ -468,6 +493,7 @@ var probes = [
 var apiSecretsBase = [
   { name: 'db-connection', keyVaultUrl: secretDbConnection.properties.secretUri, identity: uai.id }
   { name: 'jwt-key', keyVaultUrl: secretJwtKey.properties.secretUri, identity: uai.id }
+  { name: 'telemetry-ingest-key', keyVaultUrl: secretTelemetryIngestKey.properties.secretUri, identity: uai.id }
 ]
 // Optional secrets are addressed by name under the vault URI so the template never
 // dereferences a conditionally-deployed resource.
@@ -486,6 +512,9 @@ var apiEnvBase = [
   { name: 'Jwt__Audience', value: jwtAudience }
   { name: 'Jwt__ExpiryMinutes', value: string(jwtExpiryMinutes) }
   { name: 'DataProtection__KeysPath', value: '/app/keys' }
+  // Metrics & error telemetry (docs/metrics-telemetry-plan.md section 6).
+  { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
+  { name: 'Telemetry__IngestKey', secretRef: 'telemetry-ingest-key' }
 ]
 var apiEnvIfms = concat(
   empty(ifmsDeviceKey) ? [] : [{ name: 'IfmsAutomation__DeviceKey', secretRef: 'ifms-device-key' }],
@@ -579,6 +608,9 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       registries: [
         { server: acr.properties.loginServer, identity: uai.id }
       ]
+      secrets: [
+        { name: 'telemetry-ingest-key', keyVaultUrl: secretTelemetryIngestKey.properties.secretUri, identity: uai.id }
+      ]
     }
     template: {
       containers: [
@@ -591,6 +623,9 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
             { name: 'DetailedErrors', value: 'false' }
             { name: 'ApiBaseUrl', value: apiBaseUrl }
             { name: 'DataProtection__KeysPath', value: '/app/keys' }
+            // Metrics & error telemetry: App Insights + the key its logger provider posts with.
+            { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: appInsights.properties.ConnectionString }
+            { name: 'Telemetry__IngestKey', secretRef: 'telemetry-ingest-key' }
           ]
           probes: probes
           volumeMounts: [
@@ -610,7 +645,7 @@ resource webApp 'Microsoft.App/containerApps@2024-03-01' = if (deployApps) {
       ]
     }
   }
-  dependsOn: [acrPull, caeStorages]
+  dependsOn: [acrPull, kvSecretsUser, caeStorages]
 }
 
 // ---------------------------------------------------------------- nightly database dump job
@@ -677,6 +712,7 @@ output postgresDatabase string = pgDatabaseName
 output postgresAdminLogin string = pgAdminLogin
 output environmentName string = cae.name
 output logAnalyticsName string = law.name
+output appInsightsName string = appInsights.name
 output apiAppName string = apiAppName
 output webAppName string = webAppName
 output apiFqdn string = deployApps ? apiApp.properties.configuration.ingress.fqdn : ''

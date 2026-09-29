@@ -1,0 +1,227 @@
+@page "/Metrics"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Admin
+@using System.Net
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Metrics
+@inject MetricsApi Api
+@inject NavigationManager Nav
+@implements IDisposable
+
+@*
+    Metrics (admin; docs/metrics-telemetry-plan.md). Read-only view over api/Metrics/* for holders
+    of the Metrics page key (Admin / CorporateAdmin / SuperAdmin always):
+      * period 7 / 30 / 90 days and an app filter drive every tab (the KPIs follow the period only);
+      * the live strip (api/Metrics/live) refreshes every minute while the page is open;
+      * tabs Overview | Users | Pages | API | Errors, kept in ?tab= so a refresh stays on the tab;
+        each tab (Components/Metrics) loads its own data.
+    Phone (<= 767.98px): tables become cards, filters start collapsed, tabs scroll sideways.
+*@
+
+<div class="mx-page">
+    <PageHeader Title="Metrics" Subtitle="Who is using SPIC ONE, on which app, and what went wrong." />
+
+    @if (_noAccess)
+    {
+        <section class="mx-card">
+            <EmptyState Icon="bi-shield-lock" Title="You do not have access to Metrics"
+                        Message="Ask an administrator to add the Metrics page to your designation." />
+        </section>
+    }
+    else if (!_checked)
+    {
+        <div class="mx-loading"><span class="spinner-border text-success" role="status"><span class="visually-hidden">Loading</span></span></div>
+    }
+    else
+    {
+        <div class="mx-toolbar">
+            <div class="mx-seg" role="group" aria-label="Period">
+                @foreach (var d in PeriodDays)
+                {
+                    <button type="button" class="mx-seg-btn @(_days == d ? "is-active" : "")"
+                            aria-pressed="@(_days == d ? "true" : "false")" @onclick="() => SetDaysAsync(d)">
+                        @d days
+                    </button>
+                }
+            </div>
+
+            <label class="mx-app">
+                <span class="visually-hidden">App</span>
+                <i class="bi bi-phone" aria-hidden="true"></i>
+                <select class="mx-input" value="@(_app?.ToString() ?? "")" @onchange="OnAppChanged" aria-label="App">
+                    <option value="">All apps</option>
+                    @foreach (var a in MetricsText.FilterApps)
+                    {
+                        <option value="@a">@MetricsText.AppName(a)</option>
+                    }
+                </select>
+            </label>
+
+            <div class="mx-live" role="status" aria-live="polite">
+                <span class="mx-live-dot @(_live is null ? "is-off" : "")" aria-hidden="true"></span>
+                @if (_live is null)
+                {
+                    <span>Live numbers unavailable</span>
+                }
+                else
+                {
+                    <span><b>@MetricsText.Num(_live.ActiveUsers15Min)</b> online in the last 15 min</span>
+                    <span class="mx-live-sep" aria-hidden="true">·</span>
+                    <span><b>@MetricsText.Num(_live.RequestsLastHour)</b> requests</span>
+                    <span class="mx-live-sep" aria-hidden="true">·</span>
+                    <span class="@(_live.ErrorsLastHour > 0 ? "mx-bad" : "")"><b>@MetricsText.Num(_live.ErrorsLastHour)</b> errors in the last hour</span>
+                }
+            </div>
+        </div>
+
+        @if (_summary?.DroppedSinceStart > 0)
+        {
+            <p class="mx-note" role="note">
+                <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+                @MetricsText.Num(_summary.DroppedSinceStart) telemetry rows were dropped since the API started (it was too busy to record them).
+            </p>
+        }
+
+        <div class="mx-tabs" role="tablist" aria-label="Metrics sections">
+            @foreach (var t in Tabs)
+            {
+                var active = _tab == t.Key;
+                <button type="button" role="tab" class="mx-tab @(active ? "is-active" : "")"
+                        aria-selected="@(active ? "true" : "false")" @onclick="() => SelectTab(t.Key)">
+                    <i class="bi @t.Icon" aria-hidden="true"></i>
+                    <span>@t.Label</span>
+                    @if (t.Key == "errors" && _summary?.OpenErrorGroups > 0)
+                    {
+                        <span class="mx-tab-count">@MetricsText.Num(_summary.OpenErrorGroups)</span>
+                    }
+                </button>
+            }
+        </div>
+
+        @switch (_tab)
+        {
+            case "users":
+                <MetricsUsersTab Days="_days" App="_app" />
+                break;
+            case "pages":
+                <MetricsPagesTab Days="_days" App="_app" />
+                break;
+            case "api":
+                <MetricsEndpointsTab Days="_days" App="_app" />
+                break;
+            case "errors":
+                <MetricsErrorsTab Days="_days" App="_app" />
+                break;
+            default:
+                if (_summaryFailed)
+                {
+                    <section class="mx-card">
+                        <EmptyState Icon="bi-cloud-slash" Title="The metrics could not be loaded" Message="Check the connection and try again." Compact="true">
+                            <button type="button" class="mx-btn mx-btn-outline" @onclick="LoadSummaryAsync">Try again</button>
+                        </EmptyState>
+                    </section>
+                }
+                <MetricsOverview Summary="_summary" Days="_days" App="_app" />
+                break;
+        }
+    }
+</div>
+
+@code {
+    private sealed record Tab(string Key, string Label, string Icon);
+
+    private static readonly Tab[] Tabs =
+    {
+        new("overview", "Overview", "bi-grid-1x2"),
+        new("users", "Users", "bi-people"),
+        new("pages", "Pages", "bi-window-stack"),
+        new("api", "API", "bi-arrow-left-right"),
+        new("errors", "Errors", "bi-bug")
+    };
+
+    private static readonly int[] PeriodDays = { 7, 30, 90 };
+
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabQuery { get; set; }
+
+    private string _tab = "overview";
+    private int _days = 7;
+    private TelemetryApp? _app;
+    private MetricsSummaryDto? _summary;
+    private MetricsLiveDto? _live;
+    private bool _summaryFailed;
+    private bool _noAccess;
+    private bool _checked;
+    private int _summaryVersion;
+    private System.Threading.Timer? _liveTimer;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var summary = LoadSummaryAsync();
+        await LoadLiveAsync();
+        await summary;
+        if (_noAccess) return;
+
+        _liveTimer = new System.Threading.Timer(_ => InvokeAsync(async () =>
+        {
+            await LoadLiveAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    protected override void OnParametersSet()
+    {
+        var key = TabQuery?.Trim().ToLowerInvariant();
+        _tab = Tabs.Any(t => t.Key == key) ? key! : "overview";
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        var version = ++_summaryVersion;
+        _summaryFailed = false;
+
+        var summary = await Api.GetSummaryAsync(_days, _cts.Token);
+        if (version != _summaryVersion) return;
+
+        _summary = summary;
+        _checked = true;
+        if (summary is null)
+        {
+            _noAccess = Api.LastStatus == HttpStatusCode.Forbidden;
+            _summaryFailed = !_noAccess && !_cts.IsCancellationRequested;
+        }
+        StateHasChanged();
+    }
+
+    private async Task LoadLiveAsync()
+    {
+        if (_cts.IsCancellationRequested) return;
+        var live = await Api.GetLiveAsync(_cts.Token);
+        // keep the last good numbers through a failed refresh
+        if (live is not null || _live is null) _live = live;
+    }
+
+    private async Task SetDaysAsync(int days)
+    {
+        if (_days == days) return;
+        _days = days;
+        _summary = null;
+        await LoadSummaryAsync();
+    }
+
+    private void OnAppChanged(ChangeEventArgs e) =>
+        _app = Enum.TryParse<TelemetryApp>(e.Value?.ToString(), out var a) ? a : null;
+
+    private void SelectTab(string key)
+    {
+        if (_tab == key) return;
+        _tab = key;
+        Nav.NavigateTo(Nav.GetUriWithQueryParameter("tab", key == "overview" ? null : key), replace: true);
+    }
+
+    public void Dispose()
+    {
+        _liveTimer?.Dispose();
+        _cts.Cancel();
+    }
+}
