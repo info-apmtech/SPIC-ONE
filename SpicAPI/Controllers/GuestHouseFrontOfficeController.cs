@@ -36,18 +36,15 @@ namespace SpicAPI.Controllers
 	{
 		private readonly AppDbContext _db;
 		private readonly GuestHouseBookingOptions _bookingOptions;
-		private readonly IRazorpayService _razorpay;
 		private readonly ILogger<GuestHouseFrontOfficeController> _logger;
 
 		public GuestHouseFrontOfficeController(
 			AppDbContext db,
 			IOptions<GuestHouseBookingOptions> bookingOptions,
-			IRazorpayService razorpay,
 			ILogger<GuestHouseFrontOfficeController> logger)
 		{
 			_db = db;
 			_bookingOptions = bookingOptions.Value;
-			_razorpay = razorpay;
 			_logger = logger;
 		}
 
@@ -584,7 +581,8 @@ namespace SpicAPI.Controllers
 		//
 		//  Dealer request (GuestHouseBookingController POST bookings/{id}/cancel) only
 		//  records a PendingApproval GuestHouseBookingCancellation. These endpoints are the
-		//  only place that ever refunds, cancels the booking or releases the room.
+		//  only place that ever cancels the booking or releases the room. Refunds are NOT
+		//  automatic: they are processed manually outside the application (no Razorpay refund).
 		//  Admin / CorporateAdmin only - enforced by the class-level [Authorize(Roles)].
 		// =====================================================================
 
@@ -592,19 +590,6 @@ namespace SpicAPI.Controllers
 		[HttpGet("cancellations")]
 		public async Task<IActionResult> GetCancellationRequests([FromQuery] string? status)
 		{
-			// Refresh initiated refunds from Razorpay before listing (bounded so the list stays fast).
-			var processingBookingIds = await _db.Set<GuestHouseBookingCancellation>()
-				.AsNoTracking()
-				.Where(c => c.ApprovalStatus == GuestHouseCancellationApprovalStatus.Approved
-					&& c.RefundStatus == GuestHouseRefundStatus.Processing)
-				.OrderBy(c => c.AdminDecisionAt)
-				.Select(c => c.GuestHouseBookingId)
-				.Take(20)
-				.ToListAsync();
-			foreach (var processingBookingId in processingBookingIds)
-				await GuestHouseRefundStatusSync.SyncAsync(_db, _razorpay, _logger, processingBookingId);
-			_db.ChangeTracker.Clear();
-
 			var query = _db.Set<GuestHouseBookingCancellation>()
 				.AsNoTracking()
 				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.GuestHouse)
@@ -677,24 +662,22 @@ namespace SpicAPI.Controllers
 
 		// POST /api/GuestHouseFrontOffice/cancellations/{id}/approve
 		//
-		// Duplicate-refund safety:
-		//   1. An already Approved request returns its current state - never refunds again.
-		//   2. The request is atomically CLAIMED (RefundStatus Pending/Failed -> Processing,
-		//      conditional UPDATE) before Razorpay is called, so a concurrent second approve
-		//      (double-click, second admin) affects 0 rows and is refused.
-		//   3. If the gateway outcome is unknown (timeout / 5xx) the claim is NOT released:
-		//      RefundStatus stays Processing and further approve/reject is refused until the
-		//      refund is reconciled against the Razorpay dashboard. Only a definite gateway
-		//      rejection (4xx) moves it to Failed, which allows a retry.
-		//   4. GuestHouseBookingRefund has a unique index on GuestHouseBookingId.
-		// The booking is cancelled and its room released ONLY after the refund was
-		// successfully initiated (or when no refund is due).
+		// Approves the dealer's cancellation request: the booking is cancelled and its room
+		// released. No refund is created here - the refund is processed manually outside the
+		// application (client requirement), so the request is recorded with RefundStatus Pending
+		// when a refund is due.
+		//
+		// Duplicate safety: an already Approved request returns its current state, and the
+		// PendingApproval -> Approved transition is a conditional UPDATE (see
+		// GuestHouseRefundStatusSync.FinalizeApprovalAsync), so a concurrent second approve or a
+		// reject affects 0 rows.
 		[HttpPost("cancellations/{id:int}/approve")]
 		public async Task<IActionResult> ApproveCancellation(int id)
 		{
 			var adminName = User.Identity?.Name;
 
 			var cancellation = await _db.Set<GuestHouseBookingCancellation>()
+				.AsNoTracking()
 				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.Payments)
 				.FirstOrDefaultAsync(c => c.Id == id);
 			if (cancellation == null || cancellation.GuestHouseBooking == null)
@@ -715,8 +698,6 @@ namespace SpicAPI.Controllers
 			}
 			if (cancellation.ApprovalStatus == GuestHouseCancellationApprovalStatus.Rejected)
 				return BadRequest(new { Success = false, Message = "This cancellation request has already been rejected." });
-			if (cancellation.RefundStatus == GuestHouseRefundStatus.Processing)
-				return Conflict(new { Success = false, Message = "A refund for this request is already in progress or its outcome is unconfirmed. Verify it in the Razorpay dashboard before taking further action." });
 
 			switch (booking.BookingStatus)
 			{
@@ -728,177 +709,44 @@ namespace SpicAPI.Controllers
 					return BadRequest(new { Success = false, Message = "The guest is checked in. Check the guest out instead of cancelling." });
 			}
 
-			// Refund amount = the snapshot the dealer was shown at request time (computed by
-			// GuestHouseCancellationHelper), capped at what was actually captured. Nothing is
-			// refundable if no payment was captured (e.g. Pay After Stay).
-			var calc = GuestHouseRefundStatusSync.ComputeRefund(booking, cancellation);
-			var payment = calc.Payment;
-			var refundAmount = calc.RefundAmount;
-			var needsGatewayRefund = refundAmount > 0;
-
-			if (needsGatewayRefund
-				&& (payment == null || payment.PaymentMethod != GuestHousePaymentMethod.Razorpay || string.IsNullOrWhiteSpace(payment.TransactionId)))
-			{
-				return BadRequest(new { Success = false, Message = "This booking was not paid online through Razorpay, so the refund cannot be processed automatically." });
-			}
-
-			// Atomic claim - see the method comment. The claim also records who approved and
-			// when, so an interrupted approval can later be reconciled (webhook / Admin
-			// "Reconcile Refund") and the in-flight window can be told apart from a dead request.
-			var claimedAt = DateTime.Now;
-			var claimed = await _db.Set<GuestHouseBookingCancellation>()
-				.Where(c => c.Id == id
-					&& c.ApprovalStatus == GuestHouseCancellationApprovalStatus.PendingApproval
-					&& (c.RefundStatus == GuestHouseRefundStatus.Pending || c.RefundStatus == GuestHouseRefundStatus.Failed))
-				.ExecuteUpdateAsync(s => s
-					.SetProperty(c => c.RefundStatus, GuestHouseRefundStatus.Processing)
-					.SetProperty(c => c.AdminDecisionBy, adminName)
-					.SetProperty(c => c.AdminDecisionAt, claimedAt));
-			if (claimed == 0)
-				return Conflict(new { Success = false, Message = "This request is already being processed. Please refresh." });
-
-			// Keep the tracked entity in step with the claim so later SaveChanges diffs correctly.
-			var entry = _db.Entry(cancellation);
-			cancellation.RefundStatus = GuestHouseRefundStatus.Processing;
-			entry.Property(c => c.RefundStatus).OriginalValue = GuestHouseRefundStatus.Processing;
-			cancellation.AdminDecisionBy = adminName;
-			entry.Property(c => c.AdminDecisionBy).OriginalValue = adminName;
-			cancellation.AdminDecisionAt = claimedAt;
-			entry.Property(c => c.AdminDecisionAt).OriginalValue = claimedAt;
-
-			RazorpayRefundResult? gateway = null;
-			if (needsGatewayRefund)
-			{
-				gateway = await _razorpay.CreateRefundAsync(
-					payment!.TransactionId!, GuestHouseRefundStatusSync.ToPaise(refundAmount),
-					GuestHouseRefundStatusSync.RefundNote(cancellation.CancellationReference));
-
-				if (!gateway.Success)
-				{
-					if (gateway.OutcomeUnknown)
-					{
-						_logger.LogError("Razorpay refund outcome UNKNOWN for cancellation {CancellationId}, booking {BookingId}, payment {PaymentId}. Left in Processing for manual reconciliation.",
-							cancellation.Id, booking.Id, payment.TransactionId);
-						cancellation.Remarks = $"Refund outcome unconfirmed ({DateTime.Now:dd MMM yyyy HH:mm}, by {adminName}). It will be reconciled automatically by the Razorpay webhook, or use Reconcile Refund.";
-						await _db.SaveChangesAsync();
-						return StatusCode(502, new { Success = false, OutcomeUnknown = true, Message = "The payment gateway did not confirm the refund. The booking has NOT been cancelled yet. It will be reconciled automatically when Razorpay reports the refund, or use Reconcile Refund in a few minutes. Do not refund it again from the Razorpay dashboard." });
-					}
-
-					_logger.LogWarning("Razorpay refund rejected for cancellation {CancellationId}: {Error}", cancellation.Id, gateway.ErrorMessage);
-					cancellation.RefundStatus = GuestHouseRefundStatus.Failed;
-					cancellation.AdminDecisionBy = null;   // not decided - the claim is released for a retry
-					cancellation.AdminDecisionAt = null;
-					cancellation.Remarks = $"Refund attempt failed ({DateTime.Now:dd MMM yyyy HH:mm}, by {adminName}): {gateway.ErrorMessage}";
-					await _db.SaveChangesAsync();
-					return StatusCode(502, new { Success = false, Message = (gateway.ErrorMessage ?? "The refund could not be processed.") + " The booking has NOT been cancelled; you can retry the approval." });
-				}
-			}
-
-			// ---- Refund accepted by Razorpay (or none due): finalise ----
-			// Shared with the webhook / Admin reconciliation; exactly one of them can win. If this
-			// save fails, the claim stays (PendingApproval + Processing) and the approval is
-			// reconciled later from Razorpay's own refund record - never by refunding again.
 			GuestHouseRefundStatusSync.FinalizeOutcome finalized;
 			try
 			{
-				finalized = await GuestHouseRefundStatusSync.FinalizeApprovalAsync(_db, cancellation.Id, gateway, adminName);
+				finalized = await GuestHouseRefundStatusSync.FinalizeApprovalAsync(_db, cancellation.Id, adminName);
 			}
 			catch (Exception ex)
 			{
-				// Money may already have moved. The claim (RefundStatus = Processing) was
-				// committed earlier, so the request stays locked against any new refund and is
-				// finalised by the refund.* webhook or the Admin "Reconcile Refund" action.
-				_logger.LogCritical(ex, "Refund {RefundId} was initiated for cancellation {CancellationId} (booking {BookingId}) but saving the approval failed. It will be reconciled from Razorpay.",
-					gateway?.RefundId, cancellation.Id, booking.Id);
-				return StatusCode(500, new
-				{
-					Success = false,
-					RefundReference = gateway?.RefundId,
-					Message = gateway?.RefundId != null
-						? $"The refund was initiated (ref {gateway.RefundId}) but the approval could not be saved. Do not refund again - it will be reconciled automatically, or use Reconcile Refund in a few minutes."
-						: "The approval could not be saved. Use Reconcile Refund in a few minutes."
-				});
+				_logger.LogError(ex, "Approving cancellation {CancellationId} (booking {BookingId}) failed.", cancellation.Id, booking.Id);
+				return StatusCode(500, new { Success = false, Message = "The approval could not be saved. The booking has NOT been cancelled; please try again." });
 			}
 
 			var current = await _db.Set<GuestHouseBookingCancellation>().AsNoTracking().FirstAsync(c => c.Id == cancellation.Id);
-			return Ok(new
+			if (finalized == GuestHouseRefundStatusSync.FinalizeOutcome.AlreadyFinalized)
 			{
-				Success = true,
-				AlreadyProcessed = finalized == GuestHouseRefundStatusSync.FinalizeOutcome.AlreadyFinalized,
-				ApprovalStatus = current.ApprovalStatus.ToString(),
-				RefundStatus = current.RefundStatus.ToString(),
-				RefundAmount = refundAmount,
-				RefundReference = gateway?.RefundId,
-				EstimatedRefundDate = current.EstimatedRefundDate,
-				Message = needsGatewayRefund
-					? $"Cancellation approved. Refund initiated and room released. {GuestHouseRefundStatusSync.RefundTimelineMessage}"
-					: "Cancellation approved and room released. No refund was due."
-			});
-		}
-
-		// POST /api/GuestHouseFrontOffice/cancellations/{id}/refresh-refund-status
-		// "Check Refund Status" / "Reconcile Refund". Never creates a refund:
-		//   - Approved + Processing: re-checks the saved refund (Fetch Refund API) and updates
-		//     Processing -> Completed/Failed.
-		//   - PendingApproval + Processing (approval interrupted after the claim): looks up the
-		//     payment's refunds at Razorpay and finalises the approval with the matching refund,
-		//     or releases it for a retry when Razorpay confirms no refund exists.
-		//   - Approved + Failed (refund.failed after approval): links a replacement refund the
-		//     Admin issued from the Razorpay Dashboard.
-		[HttpPost("cancellations/{id:int}/refresh-refund-status")]
-		public async Task<IActionResult> RefreshRefundStatus(int id)
-		{
-			var target = await _db.Set<GuestHouseBookingCancellation>()
-				.AsNoTracking()
-				.Where(c => c.Id == id)
-				.Select(c => new { c.GuestHouseBookingId, c.ApprovalStatus, c.RefundStatus })
-				.FirstOrDefaultAsync();
-			if (target == null)
-				return NotFound(new { Success = false, Message = "Cancellation request not found." });
-
-			var interruptedApproval = target.ApprovalStatus == GuestHouseCancellationApprovalStatus.PendingApproval
-				&& target.RefundStatus == GuestHouseRefundStatus.Processing;
-			var failedAfterApproval = target.ApprovalStatus == GuestHouseCancellationApprovalStatus.Approved
-				&& target.RefundStatus == GuestHouseRefundStatus.Failed;
-			if (interruptedApproval || failedAfterApproval)
-			{
-				GuestHouseRefundStatusSync.ManualReconcileResult reconciled;
-				try
-				{
-					reconciled = await GuestHouseRefundStatusSync.ReconcileManuallyAsync(_db, _razorpay, id);
-				}
-				catch (Exception ex)
-				{
-					_logger.LogError(ex, "Manual refund reconciliation failed for cancellation {CancellationId}.", id);
-					return StatusCode(500, new { Success = false, Message = "Reconciliation could not be completed. Nothing was refunded; please try again." });
-				}
-
-				var after = await _db.Set<GuestHouseBookingCancellation>().AsNoTracking().FirstAsync(c => c.Id == id);
+				if (current.ApprovalStatus == GuestHouseCancellationApprovalStatus.Rejected)
+					return BadRequest(new { Success = false, Message = "This cancellation request has already been rejected." });
 				return Ok(new
 				{
 					Success = true,
-					Reconciled = reconciled.Changed,
-					ApprovalStatus = after.ApprovalStatus.ToString(),
-					RefundStatus = after.RefundStatus.ToString(),
-					Message = reconciled.Message
+					AlreadyProcessed = true,
+					ApprovalStatus = current.ApprovalStatus.ToString(),
+					RefundStatus = current.RefundStatus.ToString(),
+					Message = "This cancellation has already been approved."
 				});
 			}
 
-			await GuestHouseRefundStatusSync.SyncAsync(_db, _razorpay, _logger, target.GuestHouseBookingId);
-
-			var current = await _db.Set<GuestHouseBookingCancellation>().AsNoTracking().FirstAsync(c => c.Id == id);
+			var refundAmount = current.RefundAmount ?? 0m;
 			return Ok(new
 			{
 				Success = true,
+				AlreadyProcessed = false,
 				ApprovalStatus = current.ApprovalStatus.ToString(),
 				RefundStatus = current.RefundStatus.ToString(),
-				Message = current.RefundStatus switch
-				{
-					GuestHouseRefundStatus.Completed => "Razorpay has processed the refund. Credit to the original payment source is not separately confirmed by Razorpay.",
-					GuestHouseRefundStatus.Failed => "Razorpay reported the refund as failed. Manual follow-up required.",
-					GuestHouseRefundStatus.Processing => "The refund is still processing at Razorpay.",
-					_ => "Refund status is unchanged."
-				}
+				RefundAmount = refundAmount,
+				EstimatedRefundDate = current.EstimatedRefundDate,
+				Message = refundAmount > 0
+					? "Cancellation approved and room released. The refund will be processed manually."
+					: "Cancellation approved and room released. No refund was due."
 			});
 		}
 

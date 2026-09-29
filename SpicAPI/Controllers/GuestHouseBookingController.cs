@@ -844,20 +844,28 @@ namespace SpicAPI.Controllers
 
         // POST /api/GuestHouseBooking/bookings/{id}/payment/failed
         //
-        // Called when Razorpay Checkout is closed/dismissed without a completed payment, or
-        // reports an explicit payment.failed event (see OnRazorpayDismiss/OnRazorpayFailed in
+        // Called when Razorpay Checkout is closed/dismissed without a completed payment, reports
+        // an explicit payment.failed event, or the customer leaves the Payment page (Back / any
+        // navigation away) before paying (see OnRazorpayDismiss/OnRazorpayFailed/Dispose in
         // Payment.razor). Marks the attempt Failed using the EXISTING GuestHousePaymentStatus.Failed
         // value (no new status/enum), and moves the booking to the EXISTING Cancelled status so it
         // stops holding room inventory immediately via the availability query's existing Cancelled
-        // exclusion - no new room-allocation/availability mechanism is introduced.
+        // exclusion. Any physical room allocation of THIS booking is removed as well.
         //
-        // Safety: a booking that is already Paid is NEVER touched here, no matter what the client
-        // reports - a server-verified successful payment always takes precedence over a client-side
-        // dismiss/failure signal that may arrive out of order. Idempotent otherwise.
+        // Safety:
+        //   - Only a Draft/PendingPayment booking that is not Paid is ever changed - Paid,
+        //     Confirmed (incl. Pay After Stay), CheckedIn, Completed or already-Failed bookings
+        //     are a no-op, so duplicate/late calls are harmless.
+        //   - Before failing it, Razorpay is asked whether the order already has an authorized/
+        //     captured payment; if so (or if that cannot be determined) the booking is left
+        //     PendingPayment for the verify callback / existing hold window to resolve.
+        //   - The final change is a conditional UPDATE, so it can never overwrite a payment that
+        //     VerifyPayment marked Paid in the meantime.
         [HttpPost("bookings/{id:int}/payment/failed")]
         public async Task<IActionResult> MarkPaymentFailed(int id, [FromBody] MarkPaymentFailedRequest? request)
         {
             var booking = await _db.GuestHouseBookings
+                .AsNoTracking()
                 .Include(b => b.Payments)
                 .FirstOrDefaultAsync(b => b.Id == id);
 
@@ -871,9 +879,10 @@ namespace SpicAPI.Controllers
                 return Forbid();
             }
 
-            // A verified payment always wins - never overwrite an already-Paid booking.
-            if (booking.PaymentStatus == GuestHousePaymentStatus.Paid)
+            var isAwaitingPayment = booking.BookingStatus is GuestHouseBookingStatus.Draft or GuestHouseBookingStatus.PendingPayment;
+            if (!isAwaitingPayment || booking.PaymentStatus == GuestHousePaymentStatus.Paid)
             {
+                // Paid / Confirmed / CheckedIn / Completed / already Failed: nothing to do.
                 return Ok(new
                 {
                     Success = true,
@@ -883,33 +892,81 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            var payment = booking.Payments.FirstOrDefault();
-            if (payment != null)
+            // A valid payment may still be completing at Razorpay (e.g. the customer paid and left
+            // before the verify callback arrived) - never fail the booking in that case.
+            var orderId = booking.Payments.FirstOrDefault()?.PaymentReference;
+            if (!string.IsNullOrWhiteSpace(orderId))
             {
-                payment.PaymentStatus = GuestHousePaymentStatus.Failed;
-                payment.GatewayResponse = JsonSerializer.Serialize(new
+                var gateway = await _razorpay.GetOrderPaymentsAsync(orderId);
+                if (!gateway.Success || gateway.HasSuccessfulPayment)
                 {
-                    failed = true,
-                    reason = string.IsNullOrWhiteSpace(request?.Reason) ? "dismissed" : request!.Reason,
-                    at = DateTime.Now
-                });
-                payment.UpdatedAt = DateTime.Now;
+                    _logger.LogInformation("Booking {BookingId} not marked Failed: Razorpay order {OrderId} {State}.",
+                        booking.Id, orderId, gateway.Success ? "has an authorized/captured payment" : "state could not be determined");
+                    return Ok(new
+                    {
+                        Success = true,
+                        AlreadyProcessed = false,
+                        PaymentInProgress = true,
+                        BookingStatus = booking.BookingStatus,
+                        PaymentStatus = booking.PaymentStatus
+                    });
+                }
             }
 
-            booking.PaymentStatus = GuestHousePaymentStatus.Failed;
-            if (booking.BookingStatus == GuestHouseBookingStatus.Draft || booking.BookingStatus == GuestHouseBookingStatus.PendingPayment)
-                booking.BookingStatus = GuestHouseBookingStatus.Cancelled;
-            booking.UpdatedAt = DateTime.Now;
-            booking.UpdatedBy = userName ?? booking.UpdatedBy;
+            var now = DateTime.Now;
+            var gatewayNote = JsonSerializer.Serialize(new
+            {
+                failed = true,
+                reason = string.IsNullOrWhiteSpace(request?.Reason) ? "dismissed" : request!.Reason,
+                at = now
+            });
 
-            await _db.SaveChangesAsync();
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            var failed = await _db.GuestHouseBookings
+                .Where(b => b.Id == id
+                    && (b.BookingStatus == GuestHouseBookingStatus.Draft || b.BookingStatus == GuestHouseBookingStatus.PendingPayment)
+                    && b.PaymentStatus != GuestHousePaymentStatus.Paid)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(b => b.BookingStatus, GuestHouseBookingStatus.Cancelled)
+                    .SetProperty(b => b.PaymentStatus, GuestHousePaymentStatus.Failed)
+                    .SetProperty(b => b.UpdatedAt, now)
+                    .SetProperty(b => b.UpdatedBy, userName ?? booking.UpdatedBy));
+
+            if (failed == 0)
+            {
+                // VerifyPayment (or another call) changed it first - leave it as it is.
+                await transaction.RollbackAsync();
+                var current = await _db.GuestHouseBookings.AsNoTracking().FirstAsync(b => b.Id == id);
+                return Ok(new
+                {
+                    Success = true,
+                    AlreadyProcessed = true,
+                    BookingStatus = current.BookingStatus,
+                    PaymentStatus = current.PaymentStatus
+                });
+            }
+
+            await _db.Set<GuestHouseBookingPayment>()
+                .Where(p => p.GuestHouseBookingId == id && p.PaymentStatus != GuestHousePaymentStatus.Paid)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(p => p.PaymentStatus, GuestHousePaymentStatus.Failed)
+                    .SetProperty(p => p.GatewayResponse, gatewayNote)
+                    .SetProperty(p => p.UpdatedAt, now));
+
+            // Release any physical room allocation held by THIS booking only.
+            await _db.GuestHouseRoomAllocations
+                .Where(a => a.GuestHouseBookingId == id)
+                .ExecuteDeleteAsync();
+
+            await transaction.CommitAsync();
 
             return Ok(new
             {
                 Success = true,
                 AlreadyProcessed = false,
-                BookingStatus = booking.BookingStatus,
-                PaymentStatus = booking.PaymentStatus
+                BookingStatus = GuestHouseBookingStatus.Cancelled,
+                PaymentStatus = GuestHousePaymentStatus.Failed
             });
         }
 
@@ -1357,9 +1414,6 @@ namespace SpicAPI.Controllers
 
 			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
 				return NotFound(new { Success = false, Message = "Booking not found." });
-
-			// Pull the latest refund state from Razorpay (read-only) before reporting it.
-			await GuestHouseRefundStatusSync.SyncAsync(_db, _razorpay, _logger, id);
 
 			var cancellation = await _db.Set<GuestHouseBookingCancellation>()
 				.AsNoTracking()

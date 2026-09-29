@@ -16,15 +16,8 @@
 <style>
     .gc-container { max-width: 1400px; margin: auto; }
     .gc-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1rem; flex-wrap: wrap; gap: 15px; }
-    .gc-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 1rem; }
-    .gc-tab { border: 1px solid #e5e7eb; background: #fff; color: #374151; font-weight: 600; font-size: 0.8rem; padding: 7px 14px; border-radius: 50px; cursor: pointer; }
-    .gc-tab.active { background: #2563eb; border-color: #2563eb; color: #fff; }
-    .gc-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.02); margin-bottom: 1.5rem; overflow: hidden; }
-    .gc-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    .gc-table thead th { background: #f9fafb; color: #6b7280; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
-    .gc-table tbody td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-    .gc-table tbody tr:hover { background: #f8fafc; }
-    .gc-table tbody tr:last-child td { border-bottom: none; }
+    /* PageHeader is the only child: span the row so the Refresh action stays right-aligned. */
+    .gc-header > .shell-page-header { width: 100%; }
     .gc-badge { display: inline-block; padding: 4px 12px; border-radius: 50px; font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
     .gc-badge-pending { background: #FEF3C7; color: #B45309; }
     .gc-badge-approved { background: #D1FAE5; color: #059669; }
@@ -43,25 +36,11 @@
     .gc-btn-secondary:hover:not(:disabled) { background: #f9fafb; }
     .gc-kv { display: flex; justify-content: space-between; gap: 12px; font-size: 0.85rem; margin-bottom: 8px; }
     .gc-kv span:first-child { color: #6b7280; }
+    .gc-card-status { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #eef0f3; }
 
-    /* native: phone */
-    @@media (max-width: 1199.98px) {
-        .gc-card .table-responsive { max-height: 70vh; overflow: auto; -webkit-overflow-scrolling: touch; }
-        .gc-table thead th { position: sticky; top: 0; z-index: 1; }
-    }
     @@media (max-width: 767.98px) {
         .gc-btn { min-height: 44px; }
-        .gc-card { background: transparent; border: 0; box-shadow: none; }
-        .gc-card .table-responsive { max-height: none; overflow: visible; }
-        .gc-table, .gc-table tbody, .gc-table tr, .gc-table td { display: block; width: 100%; }
-        .gc-table thead { display: none; }
-        .gc-table tbody tr { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
-        .gc-table tbody td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px dashed #eef0f3; text-align: right; }
-        .gc-table tbody td:last-child { border-bottom: none; }
-        .gc-table tbody td::before { content: attr(data-label); color: #6b7280; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; text-align: left; flex-shrink: 0; }
-        .gc-table tbody td.gc-actions-cell { justify-content: stretch; gap: 8px; padding-top: 10px; }
-        .gc-table tbody td.gc-actions-cell::before { display: none; }
-        .gc-table tbody td.gc-actions-cell .gc-btn { flex: 1 1 0; justify-content: center; }
+        .spic-card-actions .gc-btn { flex: 1 1 0; justify-content: center; }
     }
 </style>
 
@@ -81,10 +60,10 @@
     }
     else
     {
-        <div class="gc-tabs">
+        <div class="fo-tabs-container">
             @foreach (var tab in Tabs)
             {
-                <button class="gc-tab @(_status == tab.Key ? "active" : "")" @onclick="() => SelectTab(tab.Key)">@tab.Label</button>
+                <button class="fo-tab @(_status == tab.Key ? "active" : "")" @onclick="() => SelectTab(tab.Key)">@tab.Label</button>
             }
         </div>
 
@@ -98,100 +77,86 @@
                 <button class="gc-btn gc-btn-secondary" @onclick="LoadAsync"><i class="bi bi-arrow-clockwise"></i> Retry</button>
             </EmptyState>
         }
-        else if (_items.Count == 0)
-        {
-            <EmptyState Icon="bi-inbox" Title="No cancellation requests" Message="Requests appear here when a dealer asks to cancel a booking." />
-        }
         else
         {
-            <div class="gc-card">
-                <div class="table-responsive">
-                    <table class="gc-table">
-                        <thead>
-                            <tr>
-                                <th>Cancellation</th>
-                                <th>Booking</th>
-                                <th>Guest</th>
-                                <th>Guest House / Room</th>
-                                <th>Stay</th>
-                                <th>Paid</th>
-                                <th>Refund</th>
-                                <th>Reason</th>
-                                <th>Requested</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in _items)
-                            {
-                                <tr>
-                                    <td data-label="Cancellation"><span class="gc-strong">@item.CancellationReference</span></td>
-                                    <td data-label="Booking">@item.BookingReference<div class="gc-muted">@item.BookingStatus · @item.PaymentStatus</div></td>
-                                    <td data-label="Guest">@Dash(item.GuestName)<div class="gc-muted">@item.EmployeeOrDealerCode</div></td>
-                                    <td data-label="Guest House / Room">@item.GuestHouseName<div class="gc-muted">@item.RoomType</div></td>
-                                    <td data-label="Stay">@FormatDate(item.CheckInDate) – @FormatDate(item.CheckOutDate)</td>
-                                    <td data-label="Paid">@Money(item.TotalAmount)<div class="gc-muted">@item.PaymentMethod</div></td>
-                                    <td data-label="Refund" class="gc-strong">@Money(item.RefundAmount)<div class="gc-muted">Charges @Money(item.CancellationCharge + item.TaxAdjustment)</div></td>
-                                    <td data-label="Reason">@Dash(item.CancellationReason)</td>
-                                    <td data-label="Requested">@FormatDateTime(item.RequestedAt)<div class="gc-muted">@item.RequestedBy</div></td>
-                                    <td data-label="Status">
-                                        <span class="gc-badge @ApprovalBadge(item.ApprovalStatus)">@ApprovalLabel(item.ApprovalStatus)</span>
-                                        @if (item.ApprovalStatus == "Approved")
-                                        {
-                                            <div class="gc-muted">Refund: @item.RefundStatus @(item.RefundReference != null ? $"({item.RefundReference})" : "")</div>
-                                            @if (item.RefundStatus == "Processing" && item.EstimatedRefundDate.HasValue)
-                                            {
-                                                <div class="@(DateTime.Now > item.EstimatedRefundDate.Value ? "gc-warn" : "gc-muted")">
-                                                    Target credit: @FormatDate(item.EstimatedRefundDate)@(DateTime.Now > item.EstimatedRefundDate.Value ? " - past 2-working-day target" : "")
-                                                </div>
-                                            }
-                                            @if (item.RefundStatus is "Completed" or "Failed" or "Processing" && !string.IsNullOrWhiteSpace(item.Remarks))
-                                            {
-                                                <div class="@(item.RefundStatus == "Failed" || item.Remarks!.Contains("normal speed") ? "gc-warn" : "gc-muted")">@item.Remarks</div>
-                                            }
-                                        }
-                                        @if (item.ApprovalStatus == "Rejected" && !string.IsNullOrWhiteSpace(item.RejectionReason))
-                                        {
-                                            <div class="gc-muted">@item.RejectionReason</div>
-                                        }
-                                        @if (item.ApprovalStatus == "PendingApproval" && item.RefundStatus is "Failed" or "Processing" && !string.IsNullOrWhiteSpace(item.Remarks))
-                                        {
-                                            <div class="gc-warn">@item.Remarks</div>
-                                        }
-                                        @if (item.AdminDecisionAt.HasValue)
-                                        {
-                                            <div class="gc-muted">@item.AdminDecisionBy, @FormatDateTime(item.AdminDecisionAt.Value)</div>
-                                        }
-                                    </td>
-                                    <td class="gc-actions-cell" style="white-space:nowrap;">
-                                        @if (item.ApprovalStatus == "PendingApproval" && item.RefundStatus != "Processing")
-                                        {
-                                            <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="() => OpenApprove(item)"><i class="bi bi-check-lg"></i> @(item.RefundStatus == "Failed" ? "Retry Approve" : "Approve")</button>
-                                            <button class="gc-btn gc-btn-reject" disabled="@_isBusy" @onclick="() => OpenReject(item)"><i class="bi bi-x-lg"></i> Reject</button>
-                                        }
-                                        else if ((item.ApprovalStatus == "PendingApproval" && item.RefundStatus == "Processing")
-                                                 || (item.ApprovalStatus == "Approved" && item.RefundStatus == "Failed"))
-                                        {
-                                            @* Interrupted approval, or refund failed after approval: reconcile
-                                               against Razorpay's own refund records - never refunds again. *@
-                                            <button class="gc-btn gc-btn-secondary" disabled="@_isBusy" @onclick="() => RefreshRefundAsync(item)"><i class="bi bi-arrow-left-right"></i> Reconcile Refund</button>
-                                        }
-                                        else if (item.ApprovalStatus == "Approved" && item.RefundStatus == "Processing")
-                                        {
-                                            <button class="gc-btn gc-btn-secondary" disabled="@_isBusy" @onclick="() => RefreshRefundAsync(item)"><i class="bi bi-arrow-repeat"></i> Check Refund Status</button>
-                                        }
-                                        else
-                                        {
-                                            <span class="gc-muted">-</span>
-                                        }
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+            <SpicDataTable Items="FilteredItems"
+                           Title="Cancellation Requests"
+                           FileName="GuestHouse_Cancellations"
+                           ExportColumns="GetExportColumns()"
+                           SearchText="@_searchText"
+                           EmptyTitle="No cancellation requests"
+                           EmptyMessage="Requests appear here when a dealer asks to cancel a booking.">
+
+                <FilterControls>
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search requests..."
+                               @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+                    </div>
+                    <select class="filter-select" @bind="_guestHouseFilter">
+                        <option value="All">All Guest Houses</option>
+                        @foreach (var gh in _items.Select(i => i.GuestHouseName).Where(n => !string.IsNullOrWhiteSpace(n)).Distinct())
+                        {
+                            <option value="@gh">@gh</option>
+                        }
+                    </select>
+                </FilterControls>
+
+                <TableHeader>
+                    <th>Cancellation</th>
+                    <th>Booking</th>
+                    <th>Guest</th>
+                    <th>Guest House / Room</th>
+                    <th>Stay</th>
+                    <th>Paid</th>
+                    <th>Refund</th>
+                    <th>Reason</th>
+                    <th>Requested</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </TableHeader>
+
+                <TableRow Context="item">
+                    <td><span class="gc-strong">@item.CancellationReference</span></td>
+                    <td>@item.BookingReference<div class="gc-muted">@item.BookingStatus · @item.PaymentStatus</div></td>
+                    <td>@Dash(item.GuestName)<div class="gc-muted">@item.EmployeeOrDealerCode</div></td>
+                    <td>@item.GuestHouseName<div class="gc-muted">@item.RoomType</div></td>
+                    <td style="white-space:nowrap;">@FormatDate(item.CheckInDate) – @FormatDate(item.CheckOutDate)</td>
+                    <td>@Money(item.TotalAmount)<div class="gc-muted">@item.PaymentMethod</div></td>
+                    <td class="gc-strong">@Money(item.RefundAmount)<div class="gc-muted">Charges @Money(item.CancellationCharge + item.TaxAdjustment)</div></td>
+                    <td>@Dash(item.CancellationReason)</td>
+                    <td>@FormatDateTime(item.RequestedAt)<div class="gc-muted">@item.RequestedBy</div></td>
+                    <td>@StatusDetails(item)</td>
+                    <td style="white-space:nowrap;">@RowActions(item)</td>
+                </TableRow>
+
+                <CardTemplate Context="item">
+                    <div class="fo-card-head">
+                        <div>
+                            <div class="gc-strong">@item.CancellationReference</div>
+                            <div class="gc-muted">@item.BookingReference · @item.BookingStatus · @item.PaymentStatus</div>
+                        </div>
+                        <span class="gc-badge @ApprovalBadge(item.ApprovalStatus)">@ApprovalLabel(item.ApprovalStatus)</span>
+                    </div>
+                    <div class="fo-card-rows">
+                        <div class="fo-kv"><span class="fo-kv-label">Guest</span><span class="fo-kv-value">@Dash(item.GuestName)@(string.IsNullOrWhiteSpace(item.EmployeeOrDealerCode) ? "" : $" ({item.EmployeeOrDealerCode})")</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Guest House</span><span class="fo-kv-value">@item.GuestHouseName · @item.RoomType</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Stay</span><span class="fo-kv-value">@FormatDate(item.CheckInDate) – @FormatDate(item.CheckOutDate)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Paid</span><span class="fo-kv-value">@Money(item.TotalAmount) @item.PaymentMethod</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Refund</span><span class="fo-kv-value">@Money(item.RefundAmount) (charges @Money(item.CancellationCharge + item.TaxAdjustment))</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Reason</span><span class="fo-kv-value">@Dash(item.CancellationReason)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Requested</span><span class="fo-kv-value">@FormatDateTime(item.RequestedAt) @item.RequestedBy</span></div>
+                    </div>
+                    <div class="gc-card-status">@StatusDetails(item, false)</div>
+                </CardTemplate>
+
+                <CardActions Context="item">
+                    @if (item.ApprovalStatus == "PendingApproval")
+                    {
+                        @RowActions(item)
+                    }
+                </CardActions>
+            </SpicDataTable>
         }
     }
 </div>
@@ -225,17 +190,17 @@
                         <p class="mt-2 mb-0" style="font-size:0.85rem;">
                             @if (_selected.PaymentStatus == "Paid" && _selected.RefundAmount > 0)
                             {
-                                <span>A Razorpay refund of <strong>@Money(_selected.RefundAmount)</strong> will be initiated to the original payment method. </span>
+                                <span>A refund of <strong>@Money(_selected.RefundAmount)</strong> is due to the original payment source. </span>
                             }
                             else
                             {
                                 <span>No refund is due for this booking. </span>
                             }
-                            The booking will be cancelled and the room released only after the refund is initiated successfully.
+                            The booking will be cancelled and the room released.
                         </p>
                         @if (_selected.PaymentStatus == "Paid" && _selected.RefundAmount > 0)
                         {
-                            <p class="gc-muted mt-2 mb-0">A Razorpay Instant Refund is initiated immediately. Refund will be credited to the customer's/dealer's original payment source within 2 working days after Admin approval. The status stays "Processing" until Razorpay reports refund.processed; if Razorpay cannot refund instantly it falls back to normal speed (5-7 working days per Razorpay).</p>
+                            <p class="gc-muted mt-2 mb-0">No refund is created automatically. Process the refund manually outside the application, within 2 working days after approval.</p>
                         }
                     }
                 </div>
@@ -247,7 +212,7 @@
                     }
                     else
                     {
-                        <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="ConfirmApproveAsync">@(_isBusy ? "Processing..." : "Approve & Refund")</button>
+                        <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="ConfirmApproveAsync">@(_isBusy ? "Processing..." : "Approve Cancellation")</button>
                     }
                 </div>
             </div>
@@ -273,6 +238,85 @@
     private CancellationRequestItem? _selected;
     private bool _isRejecting;
     private string _rejectReason = "";
+
+    // Client-side search / guest-house filter over the rows already loaded for the selected tab.
+    private string _searchText = "";
+    private string _guestHouseFilter = "All";
+
+    private List<CancellationRequestItem> FilteredItems => _items
+        .Where(i => _guestHouseFilter == "All" || i.GuestHouseName == _guestHouseFilter)
+        .ToList();
+
+    private List<ExportColumn<CancellationRequestItem>> GetExportColumns() => new()
+    {
+        new() { Header = "Cancellation", ValueSelector = i => i.CancellationReference ?? "" },
+        new() { Header = "Booking", ValueSelector = i => i.BookingReference },
+        new() { Header = "Booking Status", ValueSelector = i => $"{i.BookingStatus} / {i.PaymentStatus}" },
+        new() { Header = "Guest", ValueSelector = i => i.GuestName ?? "" },
+        new() { Header = "Dealer/Employee Code", ValueSelector = i => i.EmployeeOrDealerCode ?? "" },
+        new() { Header = "Guest House", ValueSelector = i => i.GuestHouseName },
+        new() { Header = "Room Type", ValueSelector = i => i.RoomType },
+        new() { Header = "Stay", ValueSelector = i => $"{FormatDate(i.CheckInDate)} - {FormatDate(i.CheckOutDate)}" },
+        new() { Header = "Paid", ValueSelector = i => $"{Money(i.TotalAmount)} {i.PaymentMethod}" },
+        new() { Header = "Refund", ValueSelector = i => Money(i.RefundAmount) },
+        new() { Header = "Charges", ValueSelector = i => Money(i.CancellationCharge + i.TaxAdjustment) },
+        new() { Header = "Reason", ValueSelector = i => i.CancellationReason ?? "" },
+        new() { Header = "Requested", ValueSelector = i => $"{FormatDateTime(i.RequestedAt)} {i.RequestedBy}" },
+        new() { Header = "Approval Status", ValueSelector = i => ApprovalLabel(i.ApprovalStatus) },
+        new() { Header = "Refund Status", ValueSelector = i => i.ApprovalStatus == "Approved" ? RefundLabel(i) : "" },
+        new() { Header = "Decision", ValueSelector = i => i.AdminDecisionAt.HasValue ? $"{i.AdminDecisionBy}, {FormatDateTime(i.AdminDecisionAt.Value)}" : "" },
+        new() { Header = "Remarks", ValueSelector = i => i.RejectionReason ?? i.Remarks ?? "" }
+    };
+
+    // Status cell content, shared by the table row and the phone card (same markup as before).
+    private RenderFragment StatusDetails(CancellationRequestItem item, bool showBadge = true) => @<text>
+        @if (showBadge)
+        {
+            <span class="gc-badge @ApprovalBadge(item.ApprovalStatus)">@ApprovalLabel(item.ApprovalStatus)</span>
+        }
+        @if (item.ApprovalStatus == "Approved")
+        {
+            <div class="gc-muted">Refund: @RefundLabel(item) @(item.RefundReference != null ? $"({item.RefundReference})" : "")</div>
+            @if (item.RefundStatus is "Pending" or "Processing" && item.RefundAmount > 0 && item.EstimatedRefundDate.HasValue)
+            {
+                <div class="@(DateTime.Now > item.EstimatedRefundDate.Value ? "gc-warn" : "gc-muted")">
+                    Refund target: @FormatDate(item.EstimatedRefundDate)@(DateTime.Now > item.EstimatedRefundDate.Value ? " - past 2-working-day target" : "")
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(item.Remarks))
+            {
+                <div class="@(item.RefundStatus == "Failed" ? "gc-warn" : "gc-muted")">@item.Remarks</div>
+            }
+        }
+        @if (item.ApprovalStatus == "Rejected" && !string.IsNullOrWhiteSpace(item.RejectionReason))
+        {
+            <div class="gc-muted">@item.RejectionReason</div>
+        }
+        @if (item.ApprovalStatus == "PendingApproval" && item.RefundStatus is "Failed" or "Processing" && !string.IsNullOrWhiteSpace(item.Remarks))
+        {
+            <div class="gc-warn">@item.Remarks</div>
+        }
+        @if (item.AdminDecisionAt.HasValue)
+        {
+            <div class="gc-muted">@item.AdminDecisionBy, @FormatDateTime(item.AdminDecisionAt.Value)</div>
+        }
+    </text>;
+
+    // Approve / Reject buttons, shared by the table row and the phone card (same rules as before).
+    private RenderFragment RowActions(CancellationRequestItem item) => @<text>
+        @if (item.ApprovalStatus == "PendingApproval")
+        {
+            <button class="gc-btn gc-btn-approve" disabled="@_isBusy" @onclick="() => OpenApprove(item)"><i class="bi bi-check-lg"></i> Approve</button>
+            @if (item.RefundStatus != "Processing")
+            {
+                <button class="gc-btn gc-btn-reject" disabled="@_isBusy" @onclick="() => OpenReject(item)"><i class="bi bi-x-lg"></i> Reject</button>
+            }
+        }
+        else
+        {
+            <span class="gc-muted">-</span>
+        }
+    </text>;
 
     private bool IsAdmin => LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
 
@@ -358,30 +402,6 @@
         await LoadAsync();
     }
 
-    private async Task RefreshRefundAsync(CancellationRequestItem item)
-    {
-        if (_isBusy) return;
-        _isBusy = true;
-        try
-        {
-            var response = await Http.PostAsync($"api/GuestHouseFrontOffice/cancellations/{item.CancellationId}/refresh-refund-status", null);
-            var message = await ReadMessageAsync(response);
-            if (response.IsSuccessStatusCode)
-                Toast.Info(message ?? "Refund status checked.");
-            else
-                Toast.Error(message ?? "Could not check the refund status.");
-        }
-        catch (Exception)
-        {
-            Toast.Error("Could not check the refund status. Please try again.");
-        }
-        finally
-        {
-            _isBusy = false;
-        }
-        await LoadAsync();
-    }
-
     private async Task ConfirmRejectAsync()
     {
         if (_selected == null || _isBusy || string.IsNullOrWhiteSpace(_rejectReason)) return;
@@ -435,6 +455,12 @@
         "Rejected" => "gc-badge-rejected",
         _ => "gc-badge-info"
     };
+
+    // Refunds are processed manually outside the application; "Pending" means awaiting that manual refund.
+    private static string RefundLabel(CancellationRequestItem item) =>
+        item.RefundAmount <= 0 ? "No refund due"
+        : item.RefundStatus == "Pending" ? "Pending (manual refund)"
+        : item.RefundStatus;
 
     private static string Money(decimal value) => "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
 

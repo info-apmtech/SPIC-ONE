@@ -162,6 +162,16 @@
             firstSegment = "SchemeApproval";
         }
 
+        // CancelBooking and RefundStatus are child pages of My Bookings (see
+        // ShellNavigation's parent map) with no PagePermission of their own, so they use the
+        // MyBookings permission - otherwise a Dealer is bounced to the fallback dashboard.
+        // The API still enforces booking ownership and the cancellation rules.
+        if (firstSegment.Equals("CancelBooking", StringComparison.OrdinalIgnoreCase)
+            || firstSegment.Equals("RefundStatus", StringComparison.OrdinalIgnoreCase))
+        {
+            firstSegment = nameof(PagePermission.MyBookings);
+        }
+
         if (!LoginState.CanAccess(firstSegment) && !isDirectorSchemeApproval)
         {
             string fallback;

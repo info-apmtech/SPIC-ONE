@@ -18,7 +18,6 @@ namespace Spic.Infrastructure.Services.Payments;
 public class RazorpayService : IRazorpayService
 {
     private const string OrdersEndpoint = "https://api.razorpay.com/v1/orders";
-    private const string PaymentsEndpoint = "https://api.razorpay.com/v1/payments";
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly RazorpayOptions _options;
@@ -98,149 +97,6 @@ public class RazorpayService : IRazorpayService
         }
     }
 
-    public async Task<RazorpayRefundResult> CreateRefundAsync(string paymentId, long amountInPaise, string? notes, CancellationToken cancellationToken = default)
-    {
-        if (!_options.IsConfigured)
-        {
-            _logger.LogWarning("Razorpay refund attempted but Razorpay:KeyId/KeySecret are not configured.");
-            return new RazorpayRefundResult { Success = false, ErrorMessage = "Online refund is not configured." };
-        }
-
-        if (string.IsNullOrWhiteSpace(paymentId))
-            return new RazorpayRefundResult { Success = false, ErrorMessage = "Invalid payment reference." };
-
-        if (amountInPaise <= 0)
-            return new RazorpayRefundResult { Success = false, ErrorMessage = "Invalid refund amount." };
-
-        try
-        {
-            var payload = new Dictionary<string, object?>
-            {
-                ["amount"] = amountInPaise,
-                // Instant Refund: Razorpay refunds instantly where it can and otherwise falls
-                // back to normal speed by itself (speed_processed in the response/webhooks says which).
-                ["speed"] = "optimum"
-            };
-            if (!string.IsNullOrWhiteSpace(notes))
-                payload["notes"] = new { reason = notes };
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, $"{PaymentsEndpoint}/{paymentId}/refund")
-            {
-                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-            };
-            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", BasicAuthValue());
-
-            var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(30);
-
-            using var response = await client.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Razorpay refund failed for payment {PaymentId} with {Status}: {Body}", paymentId, (int)response.StatusCode, Trim(body, 500));
-                // A 4xx is a definite rejection; a 5xx gives no guarantee the refund was not created.
-                return new RazorpayRefundResult
-                {
-                    Success = false,
-                    OutcomeUnknown = (int)response.StatusCode >= 500,
-                    ErrorMessage = "The payment gateway could not process this refund.",
-                    RawResponse = body
-                };
-            }
-
-            using var doc = JsonDocument.Parse(body);
-            var refundId = doc.RootElement.TryGetProperty("id", out var idProp) ? idProp.GetString() : null;
-            var status = doc.RootElement.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null;
-
-            if (string.IsNullOrWhiteSpace(refundId))
-            {
-                _logger.LogWarning("Razorpay refund response had no refund id for payment {PaymentId}: {Body}", paymentId, Trim(body, 500));
-                return new RazorpayRefundResult { Success = false, ErrorMessage = "The payment gateway returned an unexpected response.", RawResponse = body };
-            }
-
-            return new RazorpayRefundResult
-            {
-                Success = true,
-                RefundId = refundId,
-                Status = status,
-                AmountInPaise = amountInPaise,
-                SpeedProcessed = ReadString(doc.RootElement, "speed_processed"),
-                BankReference = ReadBankReference(doc.RootElement),
-                RawResponse = body
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Razorpay refund threw for payment {PaymentId}.", paymentId);
-            return new RazorpayRefundResult { Success = false, OutcomeUnknown = true, ErrorMessage = "Could not reach the payment gateway." };
-        }
-    }
-
-    public async Task<RazorpayRefundResult> GetRefundAsync(string paymentId, string refundId, CancellationToken cancellationToken = default)
-    {
-        if (!_options.IsConfigured)
-            return new RazorpayRefundResult { Success = false, ErrorMessage = "Online refund is not configured." };
-
-        if (string.IsNullOrWhiteSpace(paymentId) || string.IsNullOrWhiteSpace(refundId))
-            return new RazorpayRefundResult { Success = false, ErrorMessage = "Invalid refund reference." };
-
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get,
-                $"{PaymentsEndpoint}/{Uri.EscapeDataString(paymentId)}/refunds/{Uri.EscapeDataString(refundId)}");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", BasicAuthValue());
-
-            var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(15);
-
-            using var response = await client.SendAsync(request, cancellationToken);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Razorpay refund fetch failed for refund {RefundId} with {Status}: {Body}", refundId, (int)response.StatusCode, Trim(body, 500));
-                return new RazorpayRefundResult { Success = false, ErrorMessage = "Could not fetch the refund status.", RawResponse = body };
-            }
-
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-            return new RazorpayRefundResult
-            {
-                Success = true,
-                RefundId = root.TryGetProperty("id", out var idProp) ? idProp.GetString() : refundId,
-                Status = root.TryGetProperty("status", out var statusProp) ? statusProp.GetString() : null,
-                AmountInPaise = root.TryGetProperty("amount", out var amountProp) && amountProp.TryGetInt64(out var amount) ? amount : 0,
-                SpeedProcessed = root.TryGetProperty("speed_processed", out var speedProp) && speedProp.ValueKind == JsonValueKind.String ? speedProp.GetString() : null,
-                BankReference = ReadBankReference(root),
-                RawResponse = body
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Razorpay refund fetch threw for refund {RefundId}.", refundId);
-            return new RazorpayRefundResult { Success = false, OutcomeUnknown = true, ErrorMessage = "Could not reach the payment gateway." };
-        }
-    }
-
-    // acquirer_data holds the banking partner's reference (ARN, RRN or UTR, depending on the
-    // payment method). Often null at first - Razorpay can mark a refund processed before it arrives.
-    private static string? ReadBankReference(JsonElement root)
-    {
-        if (!root.TryGetProperty("acquirer_data", out var acquirer) || acquirer.ValueKind != JsonValueKind.Object)
-            return null;
-
-        foreach (var key in new[] { "arn", "rrn", "utr" })
-        {
-            if (acquirer.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
-                && !string.IsNullOrWhiteSpace(value.GetString()))
-            {
-                return $"{key.ToUpperInvariant()} {value.GetString()}";
-            }
-        }
-        return null;
-    }
-
     public bool VerifySignature(string orderId, string paymentId, string signature)
     {
         if (string.IsNullOrWhiteSpace(orderId) || string.IsNullOrWhiteSpace(paymentId) || string.IsNullOrWhiteSpace(signature))
@@ -274,50 +130,17 @@ public class RazorpayService : IRazorpayService
         return expected.Length == actual.Length && CryptographicOperations.FixedTimeEquals(expected, actual);
     }
 
-    public bool VerifyWebhookSignature(string rawBody, string? signature)
-    {
-        if (string.IsNullOrEmpty(rawBody) || string.IsNullOrWhiteSpace(signature))
-            return false;
-
-        if (!_options.IsWebhookConfigured)
-        {
-            _logger.LogWarning("Razorpay webhook received but Razorpay:WebhookSecret is not configured.");
-            return false;
-        }
-
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(_options.WebhookSecret));
-        var expected = Encoding.UTF8.GetBytes(Convert.ToHexStringLower(hmac.ComputeHash(Encoding.UTF8.GetBytes(rawBody))));
-        var actual = Encoding.UTF8.GetBytes(signature.Trim());
-
-        return expected.Length == actual.Length && CryptographicOperations.FixedTimeEquals(expected, actual);
-    }
-
-    public static RazorpayRefundResult ParseRefundEntity(JsonElement refund) => new RazorpayRefundResult
-    {
-        Success = true,
-        RefundId = ReadString(refund, "id"),
-        Status = ReadString(refund, "status"),
-        AmountInPaise = refund.TryGetProperty("amount", out var amountProp) && amountProp.TryGetInt64(out var amount) ? amount : 0,
-        SpeedProcessed = ReadString(refund, "speed_processed"),
-        BankReference = ReadBankReference(refund),
-        PaymentId = ReadString(refund, "payment_id"),
-        NotesReason = refund.TryGetProperty("notes", out var notes) && notes.ValueKind == JsonValueKind.Object
-            ? ReadString(notes, "reason")
-            : null
-    };
-
-    public async Task<RazorpayRefundListResult> GetRefundsForPaymentAsync(string paymentId, CancellationToken cancellationToken = default)
+    public async Task<RazorpayOrderPaymentsResult> GetOrderPaymentsAsync(string orderId, CancellationToken cancellationToken = default)
     {
         if (!_options.IsConfigured)
-            return new RazorpayRefundListResult { Success = false, ErrorMessage = "Online refund is not configured." };
+            return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "Online payment is not configured." };
 
-        if (string.IsNullOrWhiteSpace(paymentId))
-            return new RazorpayRefundListResult { Success = false, ErrorMessage = "Invalid payment reference." };
+        if (string.IsNullOrWhiteSpace(orderId))
+            return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "Invalid order reference." };
 
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get,
-                $"{PaymentsEndpoint}/{Uri.EscapeDataString(paymentId)}/refunds?count=100");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{OrdersEndpoint}/{Uri.EscapeDataString(orderId)}/payments");
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", BasicAuthValue());
 
             var client = _httpClientFactory.CreateClient();
@@ -328,29 +151,27 @@ public class RazorpayService : IRazorpayService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Razorpay refund list failed for payment {PaymentId} with {Status}: {Body}", paymentId, (int)response.StatusCode, Trim(body, 500));
-                return new RazorpayRefundListResult { Success = false, ErrorMessage = "Could not fetch refunds for this payment." };
+                _logger.LogWarning("Razorpay order payments fetch failed for order {OrderId} with {Status}: {Body}", orderId, (int)response.StatusCode, Trim(body, 500));
+                return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "Could not fetch the payment status." };
             }
 
             using var doc = JsonDocument.Parse(body);
             if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
-                return new RazorpayRefundListResult { Success = false, ErrorMessage = "The payment gateway returned an unexpected response." };
+                return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "The payment gateway returned an unexpected response." };
 
-            return new RazorpayRefundListResult
-            {
-                Success = true,
-                Refunds = items.EnumerateArray().Select(ParseRefundEntity).ToList()
-            };
+            var hasSuccessful = items.EnumerateArray().Any(p =>
+                p.TryGetProperty("status", out var s) && s.ValueKind == JsonValueKind.String
+                && (string.Equals(s.GetString(), "authorized", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(s.GetString(), "captured", StringComparison.OrdinalIgnoreCase)));
+
+            return new RazorpayOrderPaymentsResult { Success = true, HasSuccessfulPayment = hasSuccessful };
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Razorpay refund list threw for payment {PaymentId}.", paymentId);
-            return new RazorpayRefundListResult { Success = false, ErrorMessage = "Could not reach the payment gateway." };
+            _logger.LogWarning(ex, "Razorpay order payments fetch threw for order {OrderId}.", orderId);
+            return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "Could not reach the payment gateway." };
         }
     }
-
-    private static string? ReadString(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.String ? prop.GetString() : null;
 
     private string BasicAuthValue() =>
         Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_options.KeyId}:{_options.KeySecret}"));
