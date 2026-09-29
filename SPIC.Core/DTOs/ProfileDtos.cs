@@ -72,7 +72,7 @@ namespace SPIC.Core.DTOs
         /// <summary>Employeelogin.IsActive (Status: Active / Inactive).</summary>
         public bool IsActive { get; set; } = true;
 
-        public List<EmployeeRegistration.SpecialAdminLocationItem>? SpecialAdminLocations { get; set; }
+        public List<SpecialAdminLocationItem>? SpecialAdminLocations { get; set; }
     }
 
     /// <summary>
@@ -104,6 +104,6 @@ namespace SPIC.Core.DTOs
         public int HeadquartersId { get; set; }
         public bool IsActive { get; set; } = true;
 
-        public List<EmployeeRegistration.SpecialAdminLocationItem>? SpecialAdminLocations { get; set; }
+        public List<SpecialAdminLocationItem>? SpecialAdminLocations { get; set; }
     }
 }
