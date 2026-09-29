@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @using System.Linq
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
 
 @code {
     private static readonly HashSet<string> _alwaysOpen = new(StringComparer.OrdinalIgnoreCase)
@@ -172,7 +173,16 @@
             firstSegment = nameof(PagePermission.MyBookings);
         }
 
-        if (!LoginState.CanAccess(firstSegment) && !isDirectorSchemeApproval)
+        // Resolve the permission identity for this route the SAME way the menus do:
+        // ShellNavigation.Candidates is the single register that pairs each route
+        // first segment with the PagePermission key that gates its menu entry
+        // (e.g. /CREATE-CSR-1Management -> CSR1Create, /StockReport -> SalesReport,
+        // /qr-scanner -> QRScanner). Fall back to the segment itself, which is the
+        // convention new pages follow (route prefix == enum member name), so a new
+        // page/menu/enum member needs no wiring here.
+        var permissionKey = ShellNavigation.Find(firstSegment)?.PermissionKey ?? firstSegment;
+
+        if (!LoginState.CanAccess(permissionKey) && !isDirectorSchemeApproval)
         {
             string fallback;
             if (LoginState.UserRole == AppRole.Dealer)
