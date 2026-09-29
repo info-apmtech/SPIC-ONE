@@ -7,6 +7,7 @@ using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using Spic.Infrastructure.Data;
+using SpicAPI.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -107,10 +108,23 @@ namespace SpicAPI.Controllers
                 new Claim(ClaimTypes.Role, user.Role.ToString())
             };
 
-            var empLogin = await _db.Employeelogins
-                .FirstOrDefaultAsync(l =>
-                    l.UserId == user.Id ||
-                    l.UserId == user.UserName);
+            // The current login row is resolved through the one shared rule so the
+            // location claims in this token describe the same row the Profile page
+            // displays and the Profile update writes. The previous bare
+            // FirstOrDefault had no IsActive filter and no ordering, so a user with
+            // more than one Employeelogin row could get claims from a deactivated
+            // row that differed per request.
+            var resolvedLogin = await _db.Employeelogins
+                .ResolveAsync(user.Id, user.UserName);
+
+            if (resolvedLogin.HasMultipleActiveRows)
+                Console.WriteLine($"[Auth] DATA INTEGRITY: user '{user.Id}' has " +
+                                  $"{resolvedLogin.ActiveCandidates} active Employeelogin rows " +
+                                  $"(of {resolvedLogin.TotalCandidates} total). Resolved " +
+                                  $"Employeelogin.Id={resolvedLogin.Row?.Id} by the shared rule.");
+
+            var empLogin = resolvedLogin.Row;
+
             claims.Add(new Claim("spic:state_id", empLogin?.StateId.ToString() ?? "0"));
             claims.Add(new Claim("spic:region_id", empLogin?.RegionId.ToString() ?? "0"));
             claims.Add(new Claim("spic:hq_id", empLogin?.HeadquartersId.ToString() ?? "0"));
