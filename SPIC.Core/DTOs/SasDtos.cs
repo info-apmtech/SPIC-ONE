@@ -227,6 +227,11 @@ public class SamplePaymentUpsertDto
     public string PaidByName { get; set; } = "";
     public string? ContactNumber { get; set; }
     public string? Email { get; set; }
+    // Payment Approval module (2026-09-27): MO-entered details shown to the admin and Finance.
+    public SamplePaymentMode PaymentMode { get; set; } = SamplePaymentMode.Upi;
+    public DateTime? TransactionDate { get; set; }
+    public string? BankName { get; set; }
+    public string? MoRemarks { get; set; }
 }
 
 public class SasFileDto { public string Path { get; set; } = ""; public string FileName { get; set; } = ""; public long Size { get; set; } public string ContentType { get; set; } = ""; }

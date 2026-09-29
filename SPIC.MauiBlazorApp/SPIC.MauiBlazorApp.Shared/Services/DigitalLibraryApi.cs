@@ -237,6 +237,41 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             }
         }
 
+        // ------------------------------------------------------- category master
+
+        /// <summary>Categories with their sub-categories. Never null: an empty list on failure.</summary>
+        public async Task<List<LibraryCategoryDto>> GetCategoriesAsync(bool includeInactive = false, CancellationToken ct = default)
+            => await GetAsync<List<LibraryCategoryDto>>($"{Root}/categories?includeInactive={(includeInactive ? "true" : "false")}", ct) ?? new();
+
+        public Task<LibraryCategoryDto?> CreateCategoryAsync(LibraryCategoryUpsertDto body, CancellationToken ct = default)
+            => SendAsync<LibraryCategoryDto>(HttpMethod.Post, $"{Root}/categories", body, ct);
+
+        public Task<LibraryCategoryDto?> UpdateCategoryAsync(int id, LibraryCategoryUpsertDto body, CancellationToken ct = default)
+            => SendAsync<LibraryCategoryDto>(HttpMethod.Put, $"{Root}/categories/{id}", body, ct);
+
+        public Task<LibraryCategoryDto?> SetCategoryActiveAsync(int id, bool value, CancellationToken ct = default)
+            => SendAsync<LibraryCategoryDto>(HttpMethod.Patch, $"{Root}/categories/{id}/active?value={(value ? "true" : "false")}", null, ct);
+
+        /// <summary>False with <see cref="LastError"/> set when the API refuses (e.g. 409 "in use, deactivate instead").</summary>
+        public async Task<bool> DeleteCategoryAsync(int id, CancellationToken ct = default)
+        {
+            LastError = null;
+            try
+            {
+                using var response = await _http.DeleteAsync($"{Root}/categories/{id}", ct);
+                if (response.IsSuccessStatusCode) return true;
+                LastError = (int)response.StatusCode == 404
+                    ? "That category no longer exists."
+                    : await DescribeAsync(response);
+                return false;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                LastError = Describe(ex);
+                return false;
+            }
+        }
+
         // ----------------------------------------------------------------- mapping
 
         /// <summary>Summary DTO to the card view model, with the cover resolved to a usable URL.</summary>

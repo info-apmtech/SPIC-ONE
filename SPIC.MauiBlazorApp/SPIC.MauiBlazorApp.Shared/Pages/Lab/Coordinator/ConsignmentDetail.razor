@@ -1,0 +1,332 @@
+﻿@page "/Lab/Consignments/{Id:int}"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@inject SasApi Sas
+@inject ToastService Toast
+@implements IDisposable
+
+@*
+    Lab view of one consignment: the lab summary (status, counts, state / region / HQ, batch link)
+    on top of the v1 consignment detail (courier, timeline, collections, samples, photos through
+    the v1 ConsignmentPhotosDialog). Writers get "Mark received" (In Transit) and "Create Batch"
+    (Batch Pending, opens the Create Batch dialog with this consignment picked).
+*@
+
+<LabFrame>
+    <PageHeader Title="Consignment Details" BackHref="/Lab/Consignments">
+        <Actions>
+            @if (_d is not null && CanWrite)
+            {
+                @if (_d.Summary.LabStatus == LabConsignmentStatus.InTransit)
+                {
+                    <button type="button" class="lf-btn lf-btn--primary" disabled="@_busy" @onclick="ReceiveAsync">
+                        <i class="bi bi-box-arrow-in-down" aria-hidden="true"></i> Mark received
+                    </button>
+                }
+                else if (_d.Summary.LabStatus == LabConsignmentStatus.BatchPending)
+                {
+                    <button type="button" class="lf-btn lf-btn--primary" @onclick="() => _createOpen = true">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i> Create Batch
+                    </button>
+                }
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <section class="lf-card"><Skeleton Rows="3" Height="18px" /></section>
+        <section class="lf-card"><Skeleton Variant="card" Rows="2" /></section>
+    }
+    else if (_d is null)
+    {
+        <section class="lf-card">
+            <EmptyState Icon="bi-truck" Title="The consignment could not be loaded"
+                        Message="It may no longer exist, or your connection dropped.">
+                <a class="lf-btn lf-btn--outline" href="/Lab/Consignments">Back to Consignment Details</a>
+            </EmptyState>
+        </section>
+    }
+    else
+    {
+        var s = _d.Summary;
+        var c = _d.Consignment;
+
+        <section class="lf-card" aria-label="Lab summary">
+            <div class="lf-card-head">
+                <div>
+                    <h2 class="lf-card-title">@s.Code</h2>
+                    <p class="lf-card-sub">Shipped on @LabText.Stamp(s.ShipmentDate) by @LabText.Dash(s.DispatchedByName)</p>
+                </div>
+                <LabPill Text="@LabText.ConsignmentStatus(s.LabStatus)" Tone="@LabText.ConsignmentTone(s.LabStatus)" />
+            </div>
+            <div class="lf-tiles">
+                <div class="lf-tile"><span class="lf-tile-key">Shipment Date</span><span class="lf-tile-val">@LabText.Date(s.ShipmentDate)</span></div>
+                <div class="lf-tile"><span class="lf-tile-key">Received at Lab</span><span class="lf-tile-val">@LabText.Stamp(s.DeliveredAt)</span></div>
+                <div class="lf-tile"><span class="lf-tile-key">Sample Type</span><span class="lf-tile-val">@LabText.PaymentType(s.SampleType)</span></div>
+                <div class="lf-tile"><span class="lf-tile-key">Soil / Water / Total</span><span class="lf-tile-val">@s.SoilSamples / @s.WaterSamples / @s.TotalSamples</span></div>
+                <div class="lf-tile"><span class="lf-tile-key">State</span><span class="lf-tile-val">@LabText.Dash(s.StateName)</span></div>
+                <div class="lf-tile"><span class="lf-tile-key">Region</span><span class="lf-tile-val">@LabText.Dash(s.RegionName)</span></div>
+                <div class="lf-tile"><span class="lf-tile-key">Head Quarters</span><span class="lf-tile-val">@LabText.Dash(s.HeadquarterName)</span></div>
+                <div class="lf-tile"><span class="lf-tile-key">Courier / AWB</span><span class="lf-tile-val">@LabText.Dash(s.CourierService) · @LabText.Dash(s.TrackingNumber)</span></div>
+            </div>
+        </section>
+
+        @if (_d.Batch is { } b)
+        {
+            <section class="lf-card cdt-batch" aria-labelledby="cdt-batch">
+                <div class="lf-card-head">
+                    <h2 id="cdt-batch" class="lf-card-title">Batch</h2>
+                    <a class="lf-btn lf-btn--outline lf-btn--sm" href="@($"/Lab/Analysis/{b.Id}")">
+                        <i class="bi bi-eye" aria-hidden="true"></i> View Batch Details
+                    </a>
+                </div>
+                <div class="lf-tiles">
+                    <div class="lf-tile"><span class="lf-tile-key">Batch No.</span><a class="lf-tile-val lf-link" href="@($"/Lab/Analysis/{b.Id}")">@b.Code</a></div>
+                    <div class="lf-tile"><span class="lf-tile-key">Current Status</span><span><LabPill Text="@LabText.BatchStatus(b.Status)" Tone="@LabPill.ToneFor(b.Status)" /></span></div>
+                    <div class="lf-tile"><span class="lf-tile-key">Assigned To</span><span class="lf-tile-val"><LabPerson Name="@b.AssignedToName" AvatarUrl="@b.AssignedToAvatarUrl" Size="28" Empty="Not assigned" /></span></div>
+                    <div class="lf-tile"><span class="lf-tile-key">Analysis Days</span><span><LabPill Text="@LabText.AnalysisDays(b.AnalysisDays)" Tone="@LabText.AnalysisDaysTone(b)" /></span></div>
+                    <div class="lf-tile"><span class="lf-tile-key">Consignments in Batch</span><span class="lf-tile-val"><LabConsignmentCodes Codes="b.ConsignmentCodes" /></span></div>
+                </div>
+            </section>
+        }
+
+        <section class="lf-card" aria-labelledby="cdt-timeline">
+            <h2 id="cdt-timeline" class="lf-card-title cdt-gap">History / Timeline</h2>
+            <div class="cdt-timeline">
+                <StatusTimeline Events="c.Timeline" Current="c.Status" AriaLabel="Consignment progress" />
+            </div>
+        </section>
+
+        <div class="lf-two">
+            <div class="lf-stack">
+                <!-- collections -->
+                <section class="lf-card" aria-labelledby="cdt-cols">
+                    <h2 id="cdt-cols" class="lf-card-title cdt-gap">Collections (@c.Collections.Count)</h2>
+                    @if (c.Collections.Count == 0)
+                    {
+                        <EmptyState Icon="bi-eyedropper" Title="No collections" Compact="true" Message="This consignment carries no collections." />
+                    }
+                    else
+                    {
+                        <div class="lf-table-wrap tablet-up">
+                            <table class="lf-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Collection No.</th>
+                                        <th scope="col">Date</th>
+                                        <th scope="col">Collected By</th>
+                                        <th scope="col">Farmer</th>
+                                        <th scope="col">Samples</th>
+                                        <th scope="col">Payment</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var col in c.Collections)
+                                    {
+                                        <tr @key="col.Id">
+                                            <td><a class="lf-link" href="@($"/SampleCollection/view/{col.Id}")">@col.Code</a></td>
+                                            <td class="lf-nowrap">@LabText.Date(col.CollectionDate)</td>
+                                            <td>@LabText.Dash(col.CollectedByName)</td>
+                                            <td>@LabText.Dash(col.FarmerName)</td>
+                                            <td>@col.SampleCount<span class="lf-sub">@col.SampleTypes</span></td>
+                                            <td><LabPill Text="@LabText.PaymentType(col.PaymentType)" Tone="@LabText.PaymentTone(col.PaymentType)" /></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="lf-cards phone-only">
+                            @foreach (var col in c.Collections)
+                            {
+                                <article class="lf-rowcard" @key="@($"k{col.Id}")">
+                                    <div class="lf-rowcard-top">
+                                        <a class="lf-link" href="@($"/SampleCollection/view/{col.Id}")">@col.Code</a>
+                                        <LabPill Text="@LabText.PaymentType(col.PaymentType)" Tone="@LabText.PaymentTone(col.PaymentType)" />
+                                    </div>
+                                    <dl class="lf-facts">
+                                        <dt>Date</dt><dd>@LabText.Date(col.CollectionDate)</dd>
+                                        <dt>Collected By</dt><dd>@LabText.Dash(col.CollectedByName)</dd>
+                                        <dt>Farmer</dt><dd>@LabText.Dash(col.FarmerName)</dd>
+                                        <dt>Samples</dt><dd>@col.SampleCount (@LabText.Dash(col.SampleTypes))</dd>
+                                    </dl>
+                                </article>
+                            }
+                        </div>
+                    }
+                </section>
+
+                <!-- samples -->
+                <section class="lf-card" aria-labelledby="cdt-samples">
+                    <h2 id="cdt-samples" class="lf-card-title cdt-gap">Samples (@c.Samples.Count)</h2>
+                    @if (c.Samples.Count == 0)
+                    {
+                        <EmptyState Icon="bi-eyedropper" Title="No samples" Compact="true" Message="The sample list is not available for this consignment." />
+                    }
+                    else
+                    {
+                        <div class="lf-table-wrap tablet-up">
+                            <table class="lf-table">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">S.No</th>
+                                        <th scope="col">Sample Code</th>
+                                        <th scope="col">Farmer</th>
+                                        <th scope="col">Sample Type</th>
+                                        <th scope="col">Crop</th>
+                                        <th scope="col">No. of Tests</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{ var n = 0; }
+                                    @foreach (var item in ShownSamples)
+                                    {
+                                        n++;
+                                        <tr @key="item.Id">
+                                            <td>@n</td>
+                                            <td>@item.Code</td>
+                                            <td>@LabText.Dash(item.Farmer?.Name)</td>
+                                            <td>@LabText.SampleType(item.SampleType)</td>
+                                            <td>@LabText.Dash(Crops(item))</td>
+                                            <td>@item.NoOfTests</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="lf-cards phone-only">
+                            @foreach (var item in ShownSamples)
+                            {
+                                <article class="lf-rowcard" @key="@($"s{item.Id}")">
+                                    <div class="lf-rowcard-top">
+                                        <span class="lf-strong">@item.Code</span>
+                                        <LabPill Text="@LabText.SampleType(item.SampleType)" Tone="blue" />
+                                    </div>
+                                    <dl class="lf-facts">
+                                        <dt>Farmer</dt><dd>@LabText.Dash(item.Farmer?.Name)</dd>
+                                        <dt>Crop</dt><dd>@LabText.Dash(Crops(item))</dd>
+                                        <dt>Tests</dt><dd>@item.NoOfTests</dd>
+                                    </dl>
+                                </article>
+                            }
+                        </div>
+                        @if (c.Samples.Count > ShowLimit)
+                        {
+                            <button type="button" class="lf-viewall" @onclick="() => _showAll = !_showAll">
+                                @(_showAll ? "Show fewer samples" : $"View All Samples ({c.Samples.Count})")
+                                <i class="bi @(_showAll ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+                            </button>
+                        }
+                    }
+                </section>
+            </div>
+
+            <!-- courier and package -->
+            <aside class="lf-stack">
+                <section class="lf-card" aria-labelledby="cdt-courier">
+                    <h2 id="cdt-courier" class="lf-card-title cdt-gap">Courier &amp; Package</h2>
+                    <dl class="lf-kv">
+                        <dt>Courier Partner</dt><dd>@LabText.Dash(c.CourierService)</dd>
+                        <dt>AWB / Tracking No.</dt><dd>@LabText.Dash(c.TrackingNumber)</dd>
+                        <dt>Dispatched By</dt><dd>@LabText.Dash(c.DispatchedByName)</dd>
+                        <dt>Dispatched On</dt><dd>@LabText.Stamp(c.DispatchedAt)</dd>
+                        <dt>Expected Delivery</dt><dd>@LabText.Date(c.ExpectedDeliveryDate)</dd>
+                        <dt>Packages</dt><dd>@c.PackageCount</dd>
+                        <dt>Package Weight</dt><dd>@(c.PackageWeightKg is { } kg ? $"{kg:0.##} Kg" : "-")</dd>
+                        <dt>Packaging Type</dt><dd>@LabText.Dash(c.PackagingType)</dd>
+                        <dt>Contact</dt><dd>@LabText.Dash(c.ContactPerson) @(string.IsNullOrWhiteSpace(c.ContactMobile) ? "" : $"· {c.ContactMobile}")</dd>
+                        <dt>Notes</dt><dd>@LabText.Dash(c.Notes)</dd>
+                    </dl>
+                    <button type="button" class="lf-btn lf-btn--outline cdt-photos" @onclick="() => _photosOpen = true" disabled="@(c.Photos.Count == 0)">
+                        <i class="bi bi-images" aria-hidden="true"></i> Consignment Photos (@c.Photos.Count)
+                    </button>
+                </section>
+            </aside>
+        </div>
+
+        <ConsignmentPhotosDialog @bind-IsOpen="_photosOpen" Code="@c.Code" DispatchedAt="c.DispatchedAt"
+                                 CourierService="@c.CourierService" Photos="c.Photos" FileUrl="Sas.FileUrl" />
+
+        @if (CanWrite && s.LabStatus == LabConsignmentStatus.BatchPending)
+        {
+            <CreateBatchDialog @bind-IsOpen="_createOpen" Initial="@(new List<LabConsignmentRowDto> { s })" OnCreated="OnCreatedAsync" />
+        }
+        <BatchCreatedDialog @bind-IsOpen="_createdOpen" Batch="_created" />
+    }
+</LabFrame>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private LabMeDto? _me;
+    private LabConsignmentDetailDto? _d;
+    private bool _loading = true;
+    private bool _busy;
+    private bool _photosOpen;
+    private bool _showAll;
+    private bool _createOpen;
+    private bool _createdOpen;
+    private LabBatchDetailDto? _created;
+    private int _loadedId = -1;
+    private CancellationTokenSource? _cts;
+
+    private const int ShowLimit = 10;
+
+    private bool CanWrite => _me?.CanWrite == true;
+
+    private IEnumerable<SampleItemDto> ShownSamples => _showAll ? _d!.Consignment.Samples : _d!.Consignment.Samples.Take(ShowLimit);
+
+    private static string Crops(SampleItemDto s) =>
+        string.Join(" + ", new[] { s.Crop1, s.Crop2 }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id) return;
+        _loadedId = Id;
+        _me ??= await Api.GetMeAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = _d is null;
+        var d = await Api.GetConsignmentAsync(Id, ct);
+        if (ct.IsCancellationRequested) return;
+        _d = d;
+        _loading = false;
+    }
+
+    private async Task ReceiveAsync()
+    {
+        if (_d is null) return;
+        if (!await Toast.ConfirmAsync("Mark received",
+                $"Mark {_d.Summary.Code} as received at the lab? Its samples become ready for batching.", "Mark received")) return;
+
+        _busy = true;
+        var row = await Api.ReceiveConsignmentAsync(Id);
+        _busy = false;
+        if (row is null) return;
+
+        Toast.Success($"{row.Code} received at the lab.");
+        await LoadAsync();
+    }
+
+    private async Task OnCreatedAsync(LabBatchDetailDto batch)
+    {
+        _created = batch;
+        await Task.Delay(350);   // see ConsignmentList: let the closing sheet pop its history entry first
+        _createdOpen = true;
+        await LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

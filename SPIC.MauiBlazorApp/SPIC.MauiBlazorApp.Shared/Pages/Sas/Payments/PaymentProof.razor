@@ -1,0 +1,139 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+@using SPIC.Core.DTOs
+@implements IAsyncDisposable
+@inject SasPaymentApi Api
+@inject FileDownloadService Downloads
+@inject ToastService Toast
+@inject IJSRuntime JS
+
+@*
+    Payment Proof Preview: the receipt the MO uploaded (v1 SamplePayment.ProofPath, served by
+    api/Sas/payments/{id}/proof with access_token). An image shows inline and opens a
+    full-size viewer; a PDF opens in a new tab. ShowTools adds Download and Print (farmer drawer).
+*@
+
+@if (Detail is { } d)
+{
+    @if (string.IsNullOrWhiteSpace(d.ProofUrl))
+    {
+        <div class="spp-empty">
+            <i class="bi bi-image" aria-hidden="true"></i>
+            <span>No payment proof was uploaded.</span>
+        </div>
+    }
+    else if (IsPdf)
+    {
+        <a class="spp-pdf" href="@Url" target="_blank" rel="noopener">
+            <i class="bi bi-filetype-pdf" aria-hidden="true"></i>
+            <span class="spp-pdf-text">
+                <strong>Payment receipt (PDF)</strong>
+                <span>Opens in a new tab</span>
+            </span>
+            <i class="bi bi-box-arrow-up-right" aria-hidden="true"></i>
+        </a>
+    }
+    else
+    {
+        <button type="button" class="spp-thumb" @onclick="() => _viewerOpen = true" aria-label="Open the payment proof full size">
+            <img src="@Url" alt="Payment proof uploaded by the MO" loading="lazy" />
+            <span class="spp-zoom"><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> View full size</span>
+        </button>
+    }
+
+    @if (ShowTools && !string.IsNullOrWhiteSpace(d.ProofUrl))
+    {
+        <div class="spp-tools">
+            <button type="button" class="spp-tool" @onclick="DownloadAsync" disabled="@_busy">
+                <i class="bi bi-download" aria-hidden="true"></i> Download
+            </button>
+            <button type="button" class="spp-tool" @onclick="PrintAsync" disabled="@_busy">
+                <i class="bi bi-printer" aria-hidden="true"></i> Print
+            </button>
+        </div>
+    }
+
+    @if (_viewerOpen)
+    {
+        <div class="spp-viewer" role="dialog" aria-modal="true" aria-label="Payment proof" @onclick="() => _viewerOpen = false">
+            <button type="button" class="spp-viewer-close" aria-label="Close" @onclick="() => _viewerOpen = false" @onclick:stopPropagation="true">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+            <img class="spp-viewer-img" src="@Url" alt="Payment proof" @onclick:stopPropagation="true" />
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public SasPaymentDetailDto? Detail { get; set; }
+    [Parameter] public bool ShowTools { get; set; }
+
+    private bool _viewerOpen;
+    private bool _busy;
+    private IJSObjectReference? _module;
+
+    private string Url => Detail is null ? "" : Api.ProofUrl(Detail.Summary.Id);
+
+    private bool IsPdf => string.Equals(Detail?.ProofContentType, "application/pdf", StringComparison.OrdinalIgnoreCase);
+
+    private string FileName
+    {
+        get
+        {
+            var ext = Detail?.ProofContentType switch
+            {
+                "image/png" => ".png",
+                "image/webp" => ".webp",
+                "application/pdf" => ".pdf",
+                _ => ".jpg"
+            };
+            return $"{(string.IsNullOrWhiteSpace(Detail?.Summary.Code) ? "payment-proof" : Detail!.Summary.Code)}{ext}";
+        }
+    }
+
+    private async Task DownloadAsync()
+    {
+        if (Detail is null) return;
+        _busy = true;
+        var file = await Api.DownloadProofAsync(Detail.Summary.Id);
+        _busy = false;
+        if (file is null) return;
+
+        try
+        {
+            await Downloads.SaveAsync(FileName, file.Value.ContentType, file.Value.Bytes);
+        }
+        catch (Exception)
+        {
+            Toast.Error("The proof could not be saved on this device.");
+        }
+    }
+
+    private async Task PrintAsync()
+    {
+        if (Detail is null) return;
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>(
+                "import", "./_content/SPIC.MauiBlazorApp.Shared/Pages/Sas/Payments/PaymentProof.razor.js");
+            var ok = await _module.InvokeAsync<bool>("printProof", Url, IsPdf);
+            if (!ok) Toast.Info("Printing is not available here. Download the proof and print it instead.");
+        }
+        catch (Exception)
+        {
+            Toast.Info("Printing is not available here. Download the proof and print it instead.");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch (Exception)
+        {
+            // the circuit may already be gone
+        }
+    }
+}

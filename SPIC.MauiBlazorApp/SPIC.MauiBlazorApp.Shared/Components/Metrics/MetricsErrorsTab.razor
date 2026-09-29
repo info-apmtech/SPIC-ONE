@@ -1,0 +1,222 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Metrics
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@implements IDisposable
+@inject MetricsApi Metrics
+
+@*
+    Errors tab: occurrences grouped by fingerprint, last seen first (api/Metrics/errors). Filters:
+    search, source, Open / Resolved / All (Open by default). A row opens MetricsErrorSheet.
+*@
+<section class="mx-filters @(_filtersOpen ? "is-open" : "")">
+    <button type="button" class="mx-filters-head" aria-controls="mx-error-filters" aria-expanded="@(_filtersOpen ? "true" : "false")"
+            @onclick="() => _filtersOpen = !_filtersOpen">
+        <span class="mx-filters-title"><i class="bi bi-funnel" aria-hidden="true"></i> Filters
+            @if (FilterCount > 0)
+            {
+                <span class="mx-filters-badge">@FilterCount</span>
+            }
+        </span>
+        <i class="bi bi-chevron-down mx-filters-chevron" aria-hidden="true"></i>
+    </button>
+    <div class="mx-filter-body" id="mx-error-filters">
+        <div class="mx-field mx-field--grow">
+            <label class="mx-label" for="mx-err-q">Search</label>
+            <div class="mx-search">
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input id="mx-err-q" type="search" class="mx-search-input" placeholder="Type, message or page"
+                       value="@_q" @oninput="OnSearchInput" />
+            </div>
+        </div>
+        <div class="mx-field">
+            <label class="mx-label" for="mx-err-source">Source</label>
+            <select id="mx-err-source" class="mx-input" value="@(_source?.ToString() ?? "")" @onchange="OnSourceChanged">
+                <option value="">All sources</option>
+                @foreach (var s in Enum.GetValues<TelemetrySource>())
+                {
+                    <option value="@s">@MetricsText.SourceName(s)</option>
+                }
+            </select>
+        </div>
+        <div class="mx-field">
+            <label class="mx-label" for="mx-err-status">Status</label>
+            <select id="mx-err-status" class="mx-input" value="@_status" @onchange="OnStatusChanged">
+                <option value="open">Open</option>
+                <option value="resolved">Resolved</option>
+                <option value="all">All</option>
+            </select>
+        </div>
+    </div>
+</section>
+
+<section class="mx-card" aria-labelledby="mx-errors-title">
+    <div class="mx-card-head">
+        <h2 class="mx-card-title" id="mx-errors-title">Errors</h2>
+        @if (_result is not null)
+        {
+            <span class="mx-muted">@MetricsText.Num(_result.Total) @(_result.Total == 1 ? "group" : "groups")</span>
+        }
+    </div>
+
+    @if (_loading && _result is null)
+    {
+        <Skeleton Variant="table" Rows="6" />
+    }
+    else if (_result is null)
+    {
+        <EmptyState Icon="bi-cloud-slash" Title="The errors could not be loaded" Message="Check the connection and try again." Compact="true">
+            <button type="button" class="mx-btn mx-btn-outline" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else if (_result.Items.Count == 0)
+    {
+        <EmptyState Icon="bi-check2-circle" Title="@(_status == "open" ? "No open errors" : "No errors found")"
+                    Message="@(FilterCount > 0 ? "Nothing matches these filters." : "Nothing went wrong in this period.")" Compact="true" />
+    }
+    else
+    {
+        <ul class="mx-errors @(_loading ? "is-busy" : "")">
+            @foreach (var g in _result.Items)
+            {
+                <li>
+                    <button type="button" class="mx-error @(g.IsResolved ? "is-resolved" : "")" @onclick="() => Open(g)"
+                            aria-label="@($"{MetricsText.ShortType(g.ExceptionType)}: open the details")">
+                        <span class="mx-error-head">
+                            <span class="mx-error-type">@MetricsText.ShortType(g.ExceptionType)</span>
+                            @if (g.IsResolved)
+                            {
+                                <LabPill Text="Resolved" Tone="green" />
+                            }
+                            <span class="mx-error-count" title="Occurrences">&times; @MetricsText.Num(g.Count)</span>
+                        </span>
+                        <span class="mx-error-msg">@g.Message</span>
+                        <span class="mx-error-meta">
+                            <LabPill Text="@MetricsText.SourceName(g.Source)" Tone="@MetricsText.SourceTone(g.Source)" />
+                            <LabPill Text="@MetricsText.AppName(g.App)" Tone="@MetricsText.AppTone(g.App)" />
+                            @if (!string.IsNullOrWhiteSpace(g.Route))
+                            {
+                                <span class="mx-route">@g.Route</span>
+                            }
+                        </span>
+                        <span class="mx-error-foot">
+                            <span>@MetricsText.Num(g.Users) @(g.Users == 1 ? "user" : "users")</span>
+                            <span>First @MetricsText.Ago(g.FirstSeen)</span>
+                            <span>Last @MetricsText.Ago(g.LastSeen)</span>
+                        </span>
+                    </button>
+                </li>
+            }
+        </ul>
+
+        <LabPager Page="_page" PageSize="_pageSize" Total="_result.Total" Sizes="PageSizes"
+                  PageChanged="GoToPageAsync" PageSizeChanged="ChangePageSizeAsync" />
+    }
+</section>
+
+<MetricsErrorSheet Group="_selected" @bind-IsOpen="_sheetOpen" GroupChanged="OnGroupChanged" />
+
+@code {
+    private static readonly int[] PageSizes = { 20, 50, 100 };
+
+    [Parameter] public int Days { get; set; } = 7;
+    [Parameter] public TelemetryApp? App { get; set; }
+
+    private PageResult<MetricsErrorGroupDto>? _result;
+    private string _q = "";
+    private TelemetrySource? _source;
+    private string _status = "open";
+    private int _page = 1;
+    private int _pageSize = 20;
+    private bool _loading = true;
+    private bool _filtersOpen;
+    private int _version;
+    private (int, TelemetryApp?)? _loadedFor;
+    private System.Threading.Timer? _debounce;
+    private readonly CancellationTokenSource _cts = new();
+
+    private MetricsErrorGroupDto? _selected;
+    private bool _sheetOpen;
+
+    private int FilterCount => (string.IsNullOrWhiteSpace(_q) ? 0 : 1) + (_source is null ? 0 : 1) + (_status == "open" ? 0 : 1);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == (Days, App)) return;
+        _loadedFor = (Days, App);
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        _loading = true;
+        StateHasChanged();
+
+        bool? resolved = _status switch { "open" => false, "resolved" => true, _ => null };
+        var result = await Metrics.GetErrorsAsync(Days, _q, _source, App, resolved, _page, _pageSize, _cts.Token);
+        if (version != _version) return;
+        _result = result;
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private void Open(MetricsErrorGroupDto group)
+    {
+        _selected = group;
+        _sheetOpen = true;
+    }
+
+    /// <summary>Resolve / Reopen from the sheet: the row takes the new state in place.</summary>
+    private void OnGroupChanged(MetricsErrorGroupDto updated)
+    {
+        if (_result is null) return;
+        var i = _result.Items.FindIndex(g => g.Fingerprint == updated.Fingerprint);
+        if (i >= 0) _result.Items[i] = updated;
+        _selected = updated;
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        _q = e.Value?.ToString() ?? "";
+        _debounce?.Dispose();
+        _debounce = new System.Threading.Timer(_ => InvokeAsync(async () =>
+        {
+            _page = 1;
+            await LoadAsync();
+        }), null, 350, Timeout.Infinite);
+    }
+
+    private async Task OnSourceChanged(ChangeEventArgs e)
+    {
+        _source = Enum.TryParse<TelemetrySource>(e.Value?.ToString(), out var s) ? s : null;
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task OnStatusChanged(ChangeEventArgs e)
+    {
+        _status = e.Value?.ToString() ?? "open";
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task GoToPageAsync(int page)
+    {
+        _page = page;
+        await LoadAsync();
+    }
+
+    private async Task ChangePageSizeAsync(int size)
+    {
+        _pageSize = size;
+        _page = 1;
+        await LoadAsync();
+    }
+
+    public void Dispose()
+    {
+        _debounce?.Dispose();
+        _cts.Cancel();
+    }
+}

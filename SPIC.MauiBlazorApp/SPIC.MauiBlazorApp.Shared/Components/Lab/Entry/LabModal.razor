@@ -1,0 +1,75 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Entry
+
+@*
+    Centred confirmation / result dialog of the analyst screens 16 and 17 (icon in a tinted
+    circle, title, message, label/value rows, two buttons). Phone: a bottom sheet with the
+    buttons side by side. Closes on the X, the backdrop (unless Busy) and Escape.
+
+        <LabModal IsOpen="_open" Title="Submit Test Values?" Icon="bi-send-check" OnClose="Close">
+            <dl class="lm-rows">...</dl>
+            <Actions>...</Actions>
+        </LabModal>
+
+    Rows: <div class="lm-row"><dt>Sample No.</dt><dd>SAS-SOIL-001</dd></div> inside <dl class="lm-rows">.
+*@
+@if (IsOpen)
+{
+    <div class="lm" @onkeydown="OnKeyDown">
+        <div class="lm-backdrop" @onclick="BackdropAsync"></div>
+        <div class="lm-dialog" role="dialog" aria-modal="true" aria-labelledby="@(_id)-t" tabindex="-1" @ref="_dialog">
+            <button type="button" class="lm-close" aria-label="Close" disabled="@Busy" @onclick="() => OnClose.InvokeAsync()">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+            @if (!string.IsNullOrWhiteSpace(Icon))
+            {
+                <div class="lm-icon lm-icon--@Tone" aria-hidden="true"><i class="bi @Icon"></i></div>
+            }
+            <h2 class="lm-title" id="@(_id)-t">@Title</h2>
+            @if (!string.IsNullOrWhiteSpace(Message))
+            {
+                <p class="lm-msg">@Message</p>
+            }
+            <div class="lm-body">@ChildContent</div>
+            @if (Actions is not null)
+            {
+                <div class="lm-actions">@Actions</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public string? Icon { get; set; }
+    /// <summary>green | orange | blue | red</summary>
+    [Parameter] public string Tone { get; set; } = "green";
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Actions { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private readonly string _id = "lm-" + Guid.NewGuid().ToString("N")[..8];
+    private ElementReference _dialog;
+    private bool _focused;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && !_focused)
+        {
+            _focused = true;
+            try { await _dialog.FocusAsync(); }
+            catch (Exception) { /* focus is a nicety */ }
+        }
+        else if (!IsOpen)
+        {
+            _focused = false;
+        }
+    }
+
+    private Task BackdropAsync() => Busy ? Task.CompletedTask : OnClose.InvokeAsync();
+
+    private Task OnKeyDown(KeyboardEventArgs e) =>
+        e.Key == "Escape" && !Busy ? OnClose.InvokeAsync() : Task.CompletedTask;
+}

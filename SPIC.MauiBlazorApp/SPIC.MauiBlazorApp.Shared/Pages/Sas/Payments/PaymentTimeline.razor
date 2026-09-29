@@ -1,0 +1,50 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+@using SPIC.Core.DTOs
+
+@* Vertical status timeline (screens 24 / 28 "Status Timeline", screen 35 "Verification Journey"). *@
+
+<ol class="spt-list" aria-label="@AriaLabel">
+    @foreach (var step in Steps)
+    {
+        var state = step.IsDone ? (step.IsCurrent ? "is-done is-current" : "is-done") : (step.IsCurrent ? "is-current" : "is-pending");
+        <li class="spt-step @state @ToneClass(step)">
+            <span class="spt-dot" aria-hidden="true">
+                <i class="bi @(Icon(step))"></i>
+            </span>
+            <div class="spt-body">
+                <span class="spt-title">@step.Title</span>
+                @if (!string.IsNullOrWhiteSpace(step.Description))
+                {
+                    <span class="spt-desc">@step.Description</span>
+                }
+                @if (step.At is { } at)
+                {
+                    <span class="spt-when">@PaymentLabels.DateTime(at)@(string.IsNullOrWhiteSpace(step.ByName) ? "" : $" · By: {step.ByName}")</span>
+                }
+                else if (!step.IsDone)
+                {
+                    <span class="spt-when">@(step.IsCurrent ? "In progress" : "Pending")</span>
+                }
+            </div>
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter] public List<SasPaymentTimelineStepDto> Steps { get; set; } = new();
+    [Parameter] public string AriaLabel { get; set; } = "Status timeline";
+
+    private static bool IsProblem(SasPaymentTimelineStepDto s) =>
+        s.Title.Contains("Returned", StringComparison.OrdinalIgnoreCase) ||
+        s.Title.Contains("Mismatch", StringComparison.OrdinalIgnoreCase) ||
+        s.Title.Contains("Failed", StringComparison.OrdinalIgnoreCase) ||
+        s.Title.Contains("Issue", StringComparison.OrdinalIgnoreCase);
+
+    private static string ToneClass(SasPaymentTimelineStepDto s) => IsProblem(s) && s.IsDone ? "is-problem" : "";
+
+    private static string Icon(SasPaymentTimelineStepDto s) =>
+        IsProblem(s) && s.IsDone ? "bi-exclamation-lg"
+        : s.IsDone ? "bi-check-lg"
+        : s.IsCurrent ? "bi-hourglass-split"
+        : "bi-circle";
+}

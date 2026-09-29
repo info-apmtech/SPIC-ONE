@@ -1,0 +1,52 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Entry
+
+@*
+    Collapsible "Filters" card (Figma: funnel + title, chevron; fields in a grid; Clear All and
+    Apply Filters bottom right). Expanded by default on tablet / desktop, collapsed on phones;
+    the header toggles it. The fields are the caller's markup (ChildContent).
+
+        <LabFilterCard ActiveCount="_activeFilters" OnClear="ClearAsync" OnApply="ApplyAsync">
+            <div class="la-field">...</div>
+        </LabFilterCard>
+*@
+<section class="lf @(_toggled ? "is-toggled" : "") @CssClass">
+    <button type="button" class="lf-head" aria-controls="@_id" @onclick="() => _toggled = !_toggled">
+        <span class="lf-title">
+            <i class="bi bi-funnel" aria-hidden="true"></i> @Title
+            @if (ActiveCount > 0)
+            {
+                <span class="lf-count" aria-label="@($"{ActiveCount} active")">@ActiveCount</span>
+            }
+        </span>
+        <i class="bi bi-chevron-down lf-chevron" aria-hidden="true"></i>
+    </button>
+
+    <div class="lf-body" id="@_id">
+        <div class="lf-grid" style="@(Columns > 0 ? $"--lf-cols:{Columns}" : null)">
+            @ChildContent
+        </div>
+        <div class="lf-actions">
+            <button type="button" class="lf-btn lf-btn-outline" @onclick="OnClear">
+                <i class="bi bi-x-lg" aria-hidden="true"></i> Clear All
+            </button>
+            <button type="button" class="lf-btn lf-btn-apply" @onclick="OnApply">
+                <i class="bi bi-funnel" aria-hidden="true"></i> Apply Filters
+            </button>
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Filters";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnClear { get; set; }
+    [Parameter] public EventCallback OnApply { get; set; }
+    /// <summary>Number of filters in force (badge next to the title).</summary>
+    [Parameter] public int ActiveCount { get; set; }
+    /// <summary>Desktop grid columns (default 3).</summary>
+    [Parameter] public int Columns { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+
+    private readonly string _id = "lf-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _toggled;
+}

@@ -1,0 +1,48 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject LabApi Api
+
+@*
+    Avatar + name (+ optional second line, e.g. the role) for lab tables: Assigned To, Uploaded By,
+    Performed By. The avatar is the community MemberAvatar (photo when the API knows one, the
+    initial otherwise). A blank name renders "-".
+*@
+@if (string.IsNullOrWhiteSpace(Name))
+{
+    <span class="lab-person-none">@Empty</span>
+}
+else
+{
+    <span class="lab-person @CssClass">
+        <MemberAvatar Member="_member" Size="Size" />
+        <span class="lab-person-text">
+            <span class="lab-person-name">@Name</span>
+            @if (!string.IsNullOrWhiteSpace(Sub))
+            {
+                <span class="lab-person-sub">@Sub</span>
+            }
+        </span>
+    </span>
+}
+
+@code {
+    [Parameter] public string? Name { get; set; }
+    /// <summary>Relative API path (api/Community/file/...) or an absolute URL; null = initial.</summary>
+    [Parameter] public string? AvatarUrl { get; set; }
+    [Parameter] public string? Sub { get; set; }
+    [Parameter] public int Size { get; set; } = 32;
+    [Parameter] public string Empty { get; set; } = "-";
+    [Parameter] public string? CssClass { get; set; }
+
+    private CommunityMember? _member;
+
+    protected override void OnParametersSet()
+    {
+        string? avatar = null;
+        if (!string.IsNullOrWhiteSpace(AvatarUrl))
+        {
+            avatar = AvatarUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? AvatarUrl : Api.FileUrl(AvatarUrl);
+        }
+        _member = new CommunityMember { Name = Name ?? "", Avatar = avatar };
+    }
+}

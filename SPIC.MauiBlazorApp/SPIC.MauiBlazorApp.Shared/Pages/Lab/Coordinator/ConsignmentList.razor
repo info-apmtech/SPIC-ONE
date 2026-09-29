@@ -1,0 +1,382 @@
+﻿@page "/Lab/Consignments"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Coordinator
+@inject LabApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@implements IDisposable
+
+@*
+    Consignment Details list (screen 2): five KPI cards and the Consignment List with search,
+    status filter and pager (state in the URL: ?status=&q=&page=&size=, written with replace).
+
+    Product decision: Batch Pending rows carry a checkbox; ticking any shows "Create Batch (n)"
+    (header on tablet / desktop, sticky action bar on phones), which opens the Create Batch
+    dialog with the picked consignments as chips. In Transit rows get "Mark received" for
+    writers (api/Lab/consignments/{id}/receive).
+*@
+
+<LabFrame>
+    <PageHeader Title="Consignment Details" Subtitle="Consignments received at the lab and their batch status." />
+
+    <div class="lf-kpis">
+        <LabKpiCard Label="Total Consignments" Value="@N(_stats?.TotalConsignments)" Icon="bi-box-seam" Tone="violet" />
+        <LabKpiCard Label="Pending Batch Creation" Value="@N(_stats?.PendingBatchCreation)" Icon="bi-hourglass-split" Tone="orange" />
+        <LabKpiCard Label="Batched Consignments" Value="@N(_stats?.BatchedConsignments)" Icon="bi-collection" Tone="green" />
+        <LabKpiCard Label="Water Samples" Value="@N(_stats?.WaterSamples)" Icon="bi-droplet" Tone="blue" />
+        <LabKpiCard Label="Soil Samples" Value="@N(_stats?.SoilSamples)" Icon="bi-flower1" Tone="yellow" />
+    </div>
+
+    <section class="lf-card" aria-labelledby="cl-title">
+        <div class="lf-card-head">
+            <div>
+                <h2 id="cl-title" class="lf-card-title">Consignment List</h2>
+                @if (CanWrite)
+                {
+                    <p class="lf-card-sub">Tick Batch Pending consignments to create a batch.</p>
+                }
+            </div>
+            <div class="lf-toolbar">
+                <LabSearch Value="@_q" ValueChanged="OnSearch" Placeholder="Search consignment, AWB..." AriaLabel="Search consignments" />
+                <select class="lf-select" aria-label="Status" value="@_status" @onchange="OnStatus">
+                    <option value="">All Statuses</option>
+                    @foreach (var s in LabText.ConsignmentStatuses)
+                    {
+                        <option value="@s">@LabText.ConsignmentStatus(s)</option>
+                    }
+                </select>
+                @if (CanWrite && _selected.Count > 0)
+                {
+                    <button type="button" class="lf-btn lf-btn--primary tablet-up" @onclick="OpenCreate">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i> Create Batch (@_selected.Count)
+                    </button>
+                }
+            </div>
+        </div>
+
+        @if (_loading)
+        {
+            <Skeleton Variant="table" Rows="6" />
+        }
+        else if (_failed)
+        {
+            <EmptyState Icon="bi-truck" Title="The consignments could not be loaded" Message="Please check your connection and try again.">
+                <button type="button" class="lf-btn lf-btn--outline" @onclick="ReloadAsync">Try again</button>
+            </EmptyState>
+        }
+        else if (_rows.Count == 0)
+        {
+            <EmptyState Icon="bi-truck" Title="No consignments found" Message="Try another status or search term.">
+                @if (!string.IsNullOrEmpty(_status) || !string.IsNullOrEmpty(_q))
+                {
+                    <button type="button" class="lf-btn lf-btn--outline" @onclick="ClearFilters">Clear filters</button>
+                }
+            </EmptyState>
+        }
+        else
+        {
+            <div class="lf-table-wrap tablet-up">
+                <table class="lf-table">
+                    <thead>
+                        <tr>
+                            @if (CanWrite)
+                            {
+                                <th scope="col" class="lf-th-check">
+                                    @if (PendingOnPage.Count > 0)
+                                    {
+                                        <label class="lf-check-hit" title="Select all Batch Pending on this page">
+                                            <input type="checkbox" class="lf-check" checked="@AllPendingSelected" @onchange="ToggleAll"
+                                                   aria-label="Select all Batch Pending consignments on this page" />
+                                        </label>
+                                    }
+                                </th>
+                            }
+                            <th scope="col">Consignment No.</th>
+                            <th scope="col">Shipment Date</th>
+                            <th scope="col">Sample Type</th>
+                            <th scope="col">Soil Samples</th>
+                            <th scope="col">Water Samples</th>
+                            <th scope="col">Total Samples</th>
+                            <th scope="col">State</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="lf-th-action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in _rows)
+                        {
+                            var row = c;
+                            var picked = _selected.ContainsKey(row.Id);
+                            <tr @key="row.Id" class="@(picked ? "is-selected" : "")">
+                                @if (CanWrite)
+                                {
+                                    <td class="lf-td-check">
+                                        @if (row.LabStatus == LabConsignmentStatus.BatchPending)
+                                        {
+                                            <label class="lf-check-hit">
+                                                <input type="checkbox" class="lf-check" checked="@picked" @onchange="() => Toggle(row)"
+                                                       aria-label="@($"Select {row.Code}")" />
+                                            </label>
+                                        }
+                                    </td>
+                                }
+                                <td><a class="lf-link" href="@DetailHref(row.Id)">@row.Code</a></td>
+                                <td class="lf-nowrap">@LabText.Date(row.ShipmentDate)</td>
+                                <td><LabPill Text="@LabText.PaymentType(row.SampleType)" Tone="@LabText.PaymentTone(row.SampleType)" /></td>
+                                <td>@row.SoilSamples</td>
+                                <td>@row.WaterSamples</td>
+                                <td>@row.TotalSamples</td>
+                                <td>@LabText.Dash(row.StateName)</td>
+                                <td>
+                                    <LabPill Text="@LabText.ConsignmentStatus(row.LabStatus)" Tone="@LabText.ConsignmentTone(row.LabStatus)" />
+                                    @if (!string.IsNullOrEmpty(row.BatchCode) && row.BatchId is { } bid)
+                                    {
+                                        <a class="lf-sub lf-link" href="@($"/Lab/Analysis/{bid}")">@row.BatchCode</a>
+                                    }
+                                </td>
+                                <td class="lf-td-action">
+                                    @if (CanWrite && row.LabStatus == LabConsignmentStatus.InTransit)
+                                    {
+                                        <button type="button" class="lf-icon-btn" disabled="@(_receiving == row.Id)" title="Mark received"
+                                                aria-label="@($"Mark {row.Code} received")" @onclick="() => ReceiveAsync(row)">
+                                            <i class="bi bi-box-arrow-in-down" aria-hidden="true"></i>
+                                        </button>
+                                    }
+                                    <a class="lf-icon-btn" href="@DetailHref(row.Id)" aria-label="@($"View {row.Code}")" title="View"><i class="bi bi-eye" aria-hidden="true"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="lf-cards phone-only">
+                @foreach (var c in _rows)
+                {
+                    var row = c;
+                    var picked = _selected.ContainsKey(row.Id);
+                    <article class="lf-rowcard @(picked ? "is-selected" : "")" @key="@($"m{row.Id}")">
+                        <div class="lf-rowcard-top">
+                            <span class="lf-rowcard-title">
+                                @if (CanWrite && row.LabStatus == LabConsignmentStatus.BatchPending)
+                                {
+                                    <label class="lf-check-hit">
+                                        <input type="checkbox" class="lf-check" checked="@picked" @onchange="() => Toggle(row)"
+                                               aria-label="@($"Select {row.Code}")" />
+                                    </label>
+                                }
+                                <a class="lf-link" href="@DetailHref(row.Id)">@row.Code</a>
+                            </span>
+                            <LabPill Text="@LabText.ConsignmentStatus(row.LabStatus)" Tone="@LabText.ConsignmentTone(row.LabStatus)" />
+                        </div>
+                        <dl class="lf-facts">
+                            <dt>Shipment Date</dt><dd>@LabText.Date(row.ShipmentDate)</dd>
+                            <dt>Sample Type</dt><dd>@LabText.PaymentType(row.SampleType)</dd>
+                            <dt>Soil / Water</dt><dd>@row.SoilSamples / @row.WaterSamples</dd>
+                            <dt>Total Samples</dt><dd>@row.TotalSamples</dd>
+                            <dt>State</dt><dd>@LabText.Dash(row.StateName)</dd>
+                            @if (!string.IsNullOrEmpty(row.BatchCode))
+                            {
+                                <dt>Batch</dt><dd><a class="lf-link" href="@($"/Lab/Analysis/{row.BatchId}")">@row.BatchCode</a></dd>
+                            }
+                        </dl>
+                        <div class="lf-rowcard-actions">
+                            @if (CanWrite && row.LabStatus == LabConsignmentStatus.InTransit)
+                            {
+                                <button type="button" class="lf-btn lf-btn--outline lf-btn--sm" disabled="@(_receiving == row.Id)"
+                                        @onclick="() => ReceiveAsync(row)">
+                                    <i class="bi bi-box-arrow-in-down" aria-hidden="true"></i> Mark received
+                                </button>
+                            }
+                            <a class="lf-btn lf-btn--outline lf-btn--sm" href="@DetailHref(row.Id)"><i class="bi bi-eye" aria-hidden="true"></i> View</a>
+                        </div>
+                    </article>
+                }
+            </div>
+
+            <LabPager Page="_page" PageSize="_size" Total="_total" PageChanged="GoToPage" PageSizeChanged="SetSize" />
+        }
+    </section>
+
+    @if (CanWrite && _selected.Count > 0)
+    {
+        <div class="phone-only">
+            <ActionBar AriaLabel="Batch actions">
+                <Secondary>
+                    <button type="button" class="lf-btn lf-btn--outline" @onclick="() => _selected.Clear()">Clear</button>
+                </Secondary>
+                <ChildContent>
+                    <button type="button" class="lf-btn lf-btn--primary" @onclick="OpenCreate">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i> Create Batch (@_selected.Count)
+                    </button>
+                </ChildContent>
+            </ActionBar>
+        </div>
+    }
+
+    <CreateBatchDialog @bind-IsOpen="_createOpen" Initial="_selected.Values.ToList()" OnCreated="OnCreatedAsync" />
+    <BatchCreatedDialog @bind-IsOpen="_createdOpen" Batch="_created" />
+</LabFrame>
+
+@code {
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "size")] public int? SizeQuery { get; set; }
+
+    private LabMeDto? _me;
+    private LabConsignmentStatsDto? _stats;
+    private List<LabConsignmentRowDto> _rows = new();
+    private readonly Dictionary<int, LabConsignmentRowDto> _selected = new();
+    private string _status = "";
+    private string? _q;
+    private int _page = 1;
+    private int _size = LabApi.DefaultPageSize;
+    private int _total;
+    private bool _loading = true;
+    private bool _failed;
+    private int? _receiving;
+    private bool _createOpen;
+    private bool _createdOpen;
+    private LabBatchDetailDto? _created;
+    private string _appliedKey = "?";
+    private CancellationTokenSource? _cts;
+
+    private bool CanWrite => _me?.CanWrite == true;
+    private List<LabConsignmentRowDto> PendingOnPage => _rows.Where(r => r.LabStatus == LabConsignmentStatus.BatchPending).ToList();
+    private bool AllPendingSelected => PendingOnPage.Count > 0 && PendingOnPage.All(r => _selected.ContainsKey(r.Id));
+
+    private static string N(int? value) => (value ?? 0).ToString("N0");
+    private static string DetailHref(int id) => $"/Lab/Consignments/{id}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _status = Enum.TryParse<LabConsignmentStatus>(StatusQuery, true, out var s) ? s.ToString() : "";
+        _q = string.IsNullOrWhiteSpace(SearchQuery) ? null : SearchQuery;
+        _page = Math.Max(1, PageQuery ?? 1);
+        _size = SizeQuery is > 0 and <= 50 ? SizeQuery.Value : LabApi.DefaultPageSize;
+
+        var key = $"{_status}|{_q}|{_page}|{_size}";
+        if (key == _appliedKey) return;
+        _appliedKey = key;
+
+        _me ??= await Api.GetMeAsync();
+        await LoadAsync(withStats: _stats is null);
+    }
+
+    private async Task LoadAsync(bool withStats)
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+
+        var statsTask = withStats ? Api.GetConsignmentStatsAsync(ct) : Task.FromResult(_stats);
+        var page = await Api.GetConsignmentsAsync(status: _status, q: _q, page: _page, pageSize: _size, ct: ct);
+        var stats = await statsTask;
+        if (ct.IsCancellationRequested) return;
+
+        _failed = page is null;
+        _rows = page?.Items ?? new();
+        _total = page?.Total ?? 0;
+        _stats = stats ?? _stats;
+        _loading = false;
+    }
+
+    private Task ReloadAsync() => LoadAsync(withStats: true);
+
+    // ---------------- URL state
+
+    private void Apply(int page)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(_status)) parts.Add($"status={_status}");
+        if (!string.IsNullOrWhiteSpace(_q)) parts.Add($"q={Uri.EscapeDataString(_q)}");
+        if (page > 1) parts.Add($"page={page}");
+        if (_size != LabApi.DefaultPageSize) parts.Add($"size={_size}");
+        Nav.NavigateTo("/Lab/Consignments" + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
+    }
+
+    private void OnSearch(string? q)
+    {
+        _q = q;
+        Apply(1);
+    }
+
+    private void OnStatus(ChangeEventArgs e)
+    {
+        _status = e.Value?.ToString() ?? "";
+        Apply(1);
+    }
+
+    private void ClearFilters()
+    {
+        _status = "";
+        _q = null;
+        Apply(1);
+    }
+
+    private void GoToPage(int page) => Apply(page);
+
+    private void SetSize(int size)
+    {
+        _size = size;
+        Apply(1);
+    }
+
+    // ---------------- selection
+
+    private void Toggle(LabConsignmentRowDto row)
+    {
+        if (!_selected.Remove(row.Id)) _selected[row.Id] = row;
+    }
+
+    private void ToggleAll()
+    {
+        if (AllPendingSelected)
+        {
+            foreach (var r in PendingOnPage) _selected.Remove(r.Id);
+        }
+        else
+        {
+            foreach (var r in PendingOnPage) _selected[r.Id] = r;
+        }
+    }
+
+    private void OpenCreate() => _createOpen = true;
+
+    private async Task OnCreatedAsync(LabBatchDetailDto batch)
+    {
+        _created = batch;
+        _selected.Clear();
+        // Let the Create Batch sheet drop its history entry first (feedback-interop pops it
+        // asynchronously); opening the next sheet in the same tick would be closed by that pop.
+        await Task.Delay(350);
+        _createdOpen = true;
+        await LoadAsync(withStats: true);
+    }
+
+    // ---------------- receive
+
+    private async Task ReceiveAsync(LabConsignmentRowDto row)
+    {
+        if (!await Toast.ConfirmAsync("Mark received",
+                $"Mark {row.Code} as received at the lab? Its samples become ready for batching.", "Mark received")) return;
+
+        _receiving = row.Id;
+        var updated = await Api.ReceiveConsignmentAsync(row.Id);
+        _receiving = null;
+        if (updated is null) return;
+
+        Toast.Success($"{row.Code} received at the lab.");
+        await LoadAsync(withStats: true);
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

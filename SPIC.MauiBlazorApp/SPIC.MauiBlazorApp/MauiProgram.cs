@@ -1,7 +1,9 @@
 ﻿using System.Reflection;
 using Microsoft.Extensions.Logging;
 using SPIC.MauiBlazorApp.Services;
+using SPIC.Core.Entities;
 using SPIC.MauiBlazorApp.Shared.Services;
+using SPIC.MauiBlazorApp.Shared.Services.Telemetry;
 
 namespace SPIC.MauiBlazorApp
 {
@@ -44,6 +46,20 @@ namespace SPIC.MauiBlazorApp
 			builder.Services.AddScoped<DigitalLibraryApi>();
 			builder.Services.AddScoped<CommunityApi>();
 			builder.Services.AddScoped<SasApi>();
+			builder.Services.AddScoped<SasPaymentApi>();
+			builder.Services.AddScoped<LabApi>();
+			builder.Services.AddScoped<MetricsApi>();
+
+			// Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on
+			// every API call, page views and client errors, and anything the app logs at Error+.
+			builder.Services.AddSingleton(new ClientInfo(CurrentApp(), AppInfo.Current.VersionString));
+			builder.Services.AddSingleton<TelemetryCircuitRegistry>();
+			builder.Services.AddScoped<ClientTelemetry>();
+			builder.Logging.Services.AddSingleton<ILoggerProvider>(sp => new TelemetryLoggerProvider(
+				sp.GetRequiredService<ClientInfo>(),
+				sp.GetRequiredService<TelemetryCircuitRegistry>(),
+				ApiBaseUrl,
+				TelemetrySource.Client));
 
 			// ADD THIS
 			builder.Services.AddSingleton(new PlatformService
@@ -69,6 +85,16 @@ namespace SPIC.MauiBlazorApp
 #endif
 
             return builder.Build();
+        }
+
+        private static TelemetryApp CurrentApp()
+        {
+            var platform = DeviceInfo.Platform;
+            if (platform == DevicePlatform.Android) return TelemetryApp.Android;
+            if (platform == DevicePlatform.iOS) return TelemetryApp.iOS;
+            if (platform == DevicePlatform.WinUI) return TelemetryApp.Windows;
+            if (platform == DevicePlatform.MacCatalyst || platform == DevicePlatform.macOS) return TelemetryApp.MacCatalyst;
+            return TelemetryApp.Unknown;
         }
     }
 }
