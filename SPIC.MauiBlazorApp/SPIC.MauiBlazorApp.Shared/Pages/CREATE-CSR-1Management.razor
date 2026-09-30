@@ -4,8 +4,11 @@
 @using System.Globalization
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
-
+@using SPIC.Core.Entities
+@inject NavigationManager Navigation
 @inject HttpClient Http
+@inject ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
 
 <div class="container-fluid py-4 px-0">
 
@@ -399,12 +402,13 @@
                 </td>
                 <td>
                     ₹@program.TotalBudget.ToString(
-                                                                                                        "N0",
-                                                                                                        CultureInfo.CreateSpecificCulture("en-IN"))
+                                                                                                                                                "N0",
+                                                                                                                                                CultureInfo.CreateSpecificCulture("en-IN"))
                 </td>
                 <td style="text-align:right;">
                     <button type="button"
-                            class="csr-apply-btn"
+                            class="csr-apply-btn @(loginState.UserRole == AppRole.Admin ? "csr-btn-disabled" : "")"
+                            disabled="@(loginState.UserRole == AppRole.Admin)"
                             @onclick="() => PopulateFormFromProgram(program)">
                         Apply CSR 1
                     </button>
@@ -573,22 +577,68 @@
                         </select>
                     </div>
                     <div class="csr-form-group">
-                        <label class="csr-form-label justify-between">
-                            <span>Focused Product</span>
-                            <span class="csr-chip">Product 1 <i class="bi bi-x-circle-fill"></i></span>
+
+                        <label class="csr-form-label">
+                            Focused Product
                         </label>
-                        <select class="csr-form-select" @bind="focusProduct1Id">
+
+
+                        @* Selected Products *@
+                        @if (focusProduct1Ids.Any())
+                        {
+                            <div class="csr-selected-products">
+
+                                @foreach (var productId in focusProduct1Ids)
+                                {
+                                    var product = Products
+                                        .FirstOrDefault(x => x.Id == productId);
+
+                                    if (product != null)
+                                    {
+                                        <span class="csr-product-chip">
+
+                                            <span>
+                                                @product.Name
+                                            </span>
+
+                                            <button type="button"
+                                                    class="csr-product-chip-remove"
+                                                    title="Remove"
+                                                    @onclick="() => RemoveFocusProduct1(productId)">
+
+                                                <i class="bi bi-x"></i>
+
+                                            </button>
+
+                                        </span>
+                                    }
+                                }
+
+                            </div>
+                        }
+
+
+                        @* Product Dropdown *@
+                        <select class="csr-form-select"
+                                @bind="selectedFocusProduct1Id"
+                                @bind:after="AddFocusProduct1">
+
                             <option value="0">
                                 Select Product
                             </option>
 
                             @foreach (var item in Products)
                             {
-                                <option value="@item.Id">
-                                    @item.Name
-                                </option>
+                                @if (!focusProduct1Ids.Contains(item.Id))
+                                {
+                                    <option value="@item.Id">
+                                        @item.Name
+                                    </option>
+                                }
                             }
+
                         </select>
+
                     </div>
                 </div>
 
@@ -607,22 +657,65 @@
                         </select>
                     </div>
                     <div class="csr-form-group">
-                        <label class="csr-form-label justify-between">
-                            <span>Focused Product</span>
-                            <span class="csr-chip">Product 1 <i class="bi bi-x-circle-fill"></i></span>
+
+                        <label class="csr-form-label">
+                            Focused Product
                         </label>
-                        <select class="csr-form-select" @bind="focusProduct2Id">
+
+                        @if (focusProduct2Ids.Any())
+                        {
+                            <div class="csr-selected-products">
+
+                                @foreach (var productId in focusProduct2Ids)
+                                {
+                                    var product = Products
+                                        .FirstOrDefault(x => x.Id == productId);
+
+                                    if (product != null)
+                                    {
+                                        <span class="csr-product-chip">
+
+                                            <span>
+                                                @product.Name
+                                            </span>
+
+                                            <button type="button"
+                                                    class="csr-product-chip-remove"
+                                                    title="Remove"
+                                                    @onclick="() => RemoveFocusProduct2(productId)">
+
+                                                <i class="bi bi-x"></i>
+
+                                            </button>
+
+                                        </span>
+                                    }
+                                }
+
+                            </div>
+                        }
+
+
+                        <select class="csr-form-select"
+                                @bind="selectedFocusProduct2Id"
+                                @bind:after="AddFocusProduct2">
+
                             <option value="0">
                                 Select Product
                             </option>
 
                             @foreach (var item in Products)
                             {
-                                <option value="@item.Id">
-                                    @item.Name
-                                </option>
+                                @if (!focusProduct2Ids.Contains(item.Id))
+                                {
+                                    <option value="@item.Id">
+                                        @item.Name
+                                    </option>
+                                }
                             }
+
                         </select>
+
                     </div>
                 </div>
 
@@ -641,22 +734,64 @@
                         </select>
                     </div>
                     <div class="csr-form-group">
-                        <label class="csr-form-label justify-between">
-                            <span>Focused Product</span>
-                            <span class="csr-chip">Product 1 <i class="bi bi-x-circle-fill"></i></span>
+
+                        <label class="csr-form-label">
+                            Focused Product
                         </label>
-                        <select class="csr-form-select" @bind="focusProduct3Id">
+
+                        @if (focusProduct3Ids.Any())
+                        {
+                            <div class="csr-selected-products">
+
+                                @foreach (var productId in focusProduct3Ids)
+                                {
+                                    var product = Products
+                                        .FirstOrDefault(x => x.Id == productId);
+
+                                    if (product != null)
+                                    {
+                                        <span class="csr-product-chip">
+
+                                            <span>
+                                                @product.Name
+                                            </span>
+
+                                            <button type="button"
+                                                    class="csr-product-chip-remove"
+                                                    title="Remove"
+                                                    @onclick="() => RemoveFocusProduct3(productId)">
+
+                                                <i class="bi bi-x"></i>
+
+                                            </button>
+
+                                        </span>
+                                    }
+                                }
+
+                            </div>
+                        }
+
+                        <select class="csr-form-select"
+                                @bind="selectedFocusProduct3Id"
+                                @bind:after="AddFocusProduct3">
+
                             <option value="0">
                                 Select Product
                             </option>
 
                             @foreach (var item in Products)
                             {
-                                <option value="@item.Id">
-                                    @item.Name
-                                </option>
+                                @if (!focusProduct3Ids.Contains(item.Id))
+                                {
+                                    <option value="@item.Id">
+                                        @item.Name
+                                    </option>
+                                }
                             }
+
                         </select>
+
                     </div>
                 </div>
             </div>
@@ -734,6 +869,19 @@
         </div>
 
         <!-- Form Actions -->
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="alert alert-danger mb-3">
+                @errorMessage
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(successMessage))
+        {
+            <div class="alert alert-success mb-3">
+                @successMessage
+            </div>
+        }
         <div class="csr-form-actions-bottom">
             <button class="csr-form-btn-secondary" @onclick="HandleSaveDraft">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -743,12 +891,44 @@
                 </svg>
                 Save Draft
             </button>
-            <button class="csr-form-btn-primary" @onclick="HandleSubmitValidation">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-                Submit forValidation
+            <button type="button"
+                    class="csr-form-btn-primary"
+                    @onclick="HandleSubmitValidation"
+                    disabled="@isSubmitting">
+
+                @if (isSubmitting)
+                {
+                    <span class="spinner-border spinner-border-sm"
+                          role="status"
+                          aria-hidden="true">
+                    </span>
+
+                    <span>Submitting...</span>
+                }
+                else
+                {
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         width="16"
+                         height="16"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         stroke-linecap="round"
+                         stroke-linejoin="round">
+
+                        <line x1="22"
+                              y1="2"
+                              x2="11"
+                              y2="13">
+                        </line>
+
+                        <polygon points="22 2 15 22 11 13 2 9 22 2">
+                        </polygon>
+                    </svg>
+
+                    <span>Submit for Validation</span>
+                }
             </button>
         </div>
     }
@@ -1295,8 +1475,8 @@
             font-weight: 700;
         }
     /* =========================================================
-                           BUDGET PLAN FILTER
-                           ========================================================= */
+                                   BUDGET PLAN FILTER
+                                   ========================================================= */
 
     .csr-filter-card {
         background: #ffffff;
@@ -1633,7 +1813,7 @@
                 min-height: 44px;
             }
         /* minmax(0,…) so a long "₹ 50,00,000" cannot push the tile (and the
-                               page) wider than the 392px viewport. */
+                                       page) wider than the 392px viewport. */
         .csr-stats-grid-4 {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
@@ -1672,7 +1852,7 @@
             display: none; /* decorative only */
         }
         /* Program table becomes one card per program so "Apply CSR 1" and the
-                               budget columns are on screen instead of off the right edge. */
+                                       budget columns are on screen instead of off the right edge. */
         .csr-table-container {
             overflow: visible;
             padding: 0 12px 4px;
@@ -1772,6 +1952,69 @@
             gap: 10px;
         }
     }
+
+    .csr-selected-products {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
+    }
+
+    .csr-product-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: #e6fcf1;
+        color: #047857;
+        border: 1px solid #a7f3d0;
+        border-radius: 16px;
+        padding: 4px 8px 4px 10px;
+        font-size: 11px;
+        font-weight: 600;
+        max-width: 100%;
+    }
+
+        .csr-product-chip span {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+    .csr-product-chip-remove {
+        width: 16px;
+        height: 16px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        color: #059669;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+        .csr-product-chip-remove:hover {
+            background: #d1fae5;
+            color: #047857;
+        }
+
+        .csr-product-chip-remove i {
+            font-size: 14px;
+            line-height: 1;
+        }
+
+    .csr-btn-disabled {
+        background-color: #d1d5db !important;
+        color: #ffffff !important;
+        border-color: #d1d5db !important;
+        cursor: not-allowed !important;
+        opacity: 1 !important;
+    }
+
+        .csr-btn-disabled:hover {
+            background-color: #d1d5db !important;
+        }
 </style>
 
 @code {
@@ -1786,6 +2029,13 @@
     private string searchQuery = "";
     private string budgetLoadError = "";
 
+    // Main CSR1 form model
+    private CSR1 csr1Model = new();
+
+    // Prevent multiple submit clicks
+    private bool isSubmitting = false;
+    private string errorMessage = "";
+    private string successMessage = "";
     // =========================================================
     // Filter State
     // =========================================================
@@ -1806,6 +2056,10 @@
     // =========================================================
     private string selectedProgramType = "";
     private string selectedProgramName = "";
+    private int selectedProgramTypeId = 0;
+    private int selectedProgramId = 0;
+    public int ProgramTypeId { get; set; }
+    public int ProgramId { get; set; }
     private decimal? selectedBudget = null;
     private int programCount = 0;
 
@@ -1814,6 +2068,13 @@
     private string selectedLocation = "";
     private int selectedEmployeeId = 0;
 
+    private int selectedFocusProduct1Id = 0;
+    private int selectedFocusProduct2Id = 0;
+    private int selectedFocusProduct3Id = 0;
+
+    private List<int> focusProduct1Ids = new();
+    private List<int> focusProduct2Ids = new();
+    private List<int> focusProduct3Ids = new();
     private List<EmployeeInformationDto> Employees = new();
 
     // Bind these lists from the relevant master APIs when available.
@@ -1912,6 +2173,8 @@
         public int Id { get; set; }
 
         public int ProgramId { get; set; }
+
+        public int ProgramTypeId { get; set; }
 
         public string ProgramType { get; set; } = "";
 
@@ -2224,6 +2487,8 @@
     {
         selectedProgramType = program.ProgramType;
         selectedProgramName = program.ProgramName;
+        selectedProgramTypeId = program.ProgramTypeId;
+        selectedProgramId = program.ProgramId;
         selectedBudget = program.TotalBudget;
 
         programCount =
@@ -2243,9 +2508,376 @@
         // Existing mock save draft action retained.
     }
 
-    private void HandleSubmitValidation()
+    private async Task HandleSubmitValidation()
     {
-        // Existing mock submit validation action retained.
+        if (isSubmitting)
+            return;
+
+        errorMessage = "";
+        successMessage = "";
+
+        try
+        {
+            // =========================================================
+            // VALIDATION
+            // =========================================================
+
+            if (string.IsNullOrWhiteSpace(selectedProgramType))
+            {
+                Toast.Error("Please select Program Type.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(selectedProgramName))
+            {
+                Toast.Error("Please select Program Name.");
+                return;
+            }
+
+            if (programCount <= 0)
+            {
+                Toast.Error("Please enter Number of Programs.");
+                return;
+            }
+
+            if (!selectedBudget.HasValue ||
+                selectedBudget.Value <= 0)
+            {
+                Toast.Error("Please enter Budget.");
+                return;
+            }
+
+            if (selectedHQId <= 0)
+            {
+                Toast.Error("Please select HQ.");
+                return;
+            }
+
+            if (selectedZoneId <= 0)
+            {
+                Toast.Error("Please select Location.");
+                return;
+            }
+
+            if (selectedEmployeeId <= 0)
+            {
+                Toast.Error("Please select Responsible Person.");
+                return;
+            }
+
+
+            // =========================================================
+            // OPTIONAL FOCUS VALIDATION
+            // If crop is selected, at least one product is required.
+            // =========================================================
+
+            // =========================================================
+            // FOCUS 1 VALIDATION
+            // =========================================================
+
+            if (focusCrop1Id <= 0)
+            {
+                Toast.Error("Please select Focus Crop 1.");
+                return;
+            }
+
+            if (!focusProduct1Ids.Any())
+            {
+                Toast.Error("Please select at least one product for Focus Crop 1.");
+                return;
+            }
+
+
+            // =========================================================
+            // FOCUS 2 VALIDATION
+            // =========================================================
+
+            if (focusCrop2Id <= 0)
+            {
+                Toast.Error("Please select Focus Crop 2.");
+                return;
+            }
+
+            if (!focusProduct2Ids.Any())
+            {
+                Toast.Error("Please select at least one product for Focus Crop 2.");
+                return;
+            }
+
+
+            // =========================================================
+            // FOCUS 3 VALIDATION
+            // =========================================================
+
+            if (focusCrop3Id <= 0)
+            {
+                Toast.Error("Please select Focus Crop 3.");
+                return;
+            }
+
+            if (!focusProduct3Ids.Any())
+            {
+                Toast.Error("Please select at least one product for Focus Crop 3.");
+                return;
+            }
+
+
+            // =========================================================
+            // FIND SELECTED PROGRAM
+            // =========================================================
+
+            var selectedProgram =
+                budgetPrograms.FirstOrDefault(x =>
+                    !string.IsNullOrWhiteSpace(x.ProgramType) &&
+                    !string.IsNullOrWhiteSpace(x.ProgramName) &&
+                    x.ProgramType.Equals(
+                        selectedProgramType,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    x.ProgramName.Equals(
+                        selectedProgramName,
+                        StringComparison.OrdinalIgnoreCase));
+
+
+            if (selectedProgram == null)
+            {
+                Toast.Error(
+                    "Unable to find the selected program details.");
+
+                return;
+            }
+
+
+            // =========================================================
+            // VALIDATE PROGRAM ID
+            // =========================================================
+
+            if (selectedProgram.ProgramId <= 0)
+            {
+                Toast.Error(
+                    "Invalid Program Id received from Budget data.");
+
+                return;
+            }
+
+
+            // =========================================================
+            // BUILD CSR1 MODEL
+            // =========================================================
+
+            csr1Model.ProgramId =
+                selectedProgram.ProgramId;
+
+
+            // ProgramTypeId will be derived
+            // by API using ProgramMaster
+            csr1Model.ProgramTypeId = 0;
+
+
+            csr1Model.NumberOfPrograms =
+                programCount;
+
+            csr1Model.Budget =
+                selectedBudget.Value;
+
+            csr1Model.HeadquarterId =
+                selectedHQId;
+
+            csr1Model.LocationId =
+                selectedZoneId;
+
+            csr1Model.ResponsiblePersonId =
+                selectedEmployeeId;
+
+
+            // =========================================================
+            // IMPORTANT:
+            // Crop/Product details are NOT saved directly in CSR1.
+            //
+            // They are passed through CSR1SaveRequest and saved in:
+            //
+            // CSR1Products1
+            // CSRProducts2
+            // CSRProducts3
+            // =========================================================
+
+
+            // =========================================================
+            // EXPENSE DETAILS
+            // =========================================================
+
+            csr1Model.PrintingAndStationery =
+                printStationary;
+
+            csr1Model.PublicityMaterial =
+                publicityMaterial;
+
+            csr1Model.StageArrangements =
+                stageArrangements;
+
+            csr1Model.ServiceChargesLCA =
+                serviceCharges;
+
+            csr1Model.TransportRent =
+                transportRent;
+
+            csr1Model.JeepRunningExpenses =
+                jeepExpenses;
+
+            csr1Model.Refreshments =
+                refreshments;
+
+            csr1Model.Inputs =
+                inputs;
+
+            csr1Model.Photography =
+                photography;
+
+            csr1Model.Compliments =
+                compliments;
+
+            csr1Model.Others =
+                othersExpense;
+
+
+            // =========================================================
+            // STATUS
+            // =========================================================
+
+            csr1Model.Status =
+                "SubmittedForValidation";
+
+            csr1Model.IsActive =
+                true;
+
+
+            // =========================================================
+            // DEBUG
+            // =========================================================
+
+            Console.WriteLine(
+                $"Selected Program Type: {selectedProgramType}");
+
+            Console.WriteLine(
+                $"Selected Program Name: {selectedProgramName}");
+
+            Console.WriteLine(
+                $"ProgramId Sending: {csr1Model.ProgramId}");
+
+            Console.WriteLine(
+                $"Crop1Id Sending: {focusCrop1Id}");
+
+            Console.WriteLine(
+                $"Crop1 Products: {string.Join(",", focusProduct1Ids)}");
+
+            Console.WriteLine(
+                $"Crop2Id Sending: {focusCrop2Id}");
+
+            Console.WriteLine(
+                $"Crop2 Products: {string.Join(",", focusProduct2Ids)}");
+
+            Console.WriteLine(
+                $"Crop3Id Sending: {focusCrop3Id}");
+
+            Console.WriteLine(
+                $"Crop3 Products: {string.Join(",", focusProduct3Ids)}");
+
+
+            // =========================================================
+            // BUILD REQUEST
+            // =========================================================
+
+            var request =
+                new CSR1SaveRequest
+                {
+                    CSR1 =
+                        csr1Model,
+
+                    Crop1Id =
+                        focusCrop1Id,
+
+                    Product1Ids =
+                        focusProduct1Ids.ToList(),
+
+                    Crop2Id =
+                        focusCrop2Id,
+
+                    Product2Ids =
+                        focusProduct2Ids.ToList(),
+
+                    Crop3Id =
+                        focusCrop3Id,
+
+                    Product3Ids =
+                        focusProduct3Ids.ToList()
+                };
+
+
+            // =========================================================
+            // SUBMIT
+            // =========================================================
+
+            isSubmitting = true;
+
+            HttpResponseMessage response;
+
+
+            if (csr1Model.Id == 0)
+            {
+                response =
+                    await Http.PostAsJsonAsync(
+                        "api/CSR1",
+                        request);
+            }
+            else
+            {
+                response =
+                    await Http.PutAsJsonAsync(
+                        $"api/CSR1/{csr1Model.Id}",
+                        request);
+            }
+
+
+            // =========================================================
+            // RESPONSE
+            // =========================================================
+
+            if (response.IsSuccessStatusCode)
+            {
+                Toast.Success(
+                    "CSR1 saved successfully");
+
+                ClearCSR1Form();
+            }
+            else
+            {
+                var apiError =
+                    await response.Content
+                        .ReadAsStringAsync();
+
+
+                Console.WriteLine(
+                    $"CSR1 API Error: {apiError}");
+
+
+                Toast.Error(
+                    string.IsNullOrWhiteSpace(apiError)
+                        ? "Unable to submit CSR-1."
+                        : $"Unable to submit CSR-1. {apiError}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"CSR1 Submit Error: {ex}");
+
+
+            Toast.Error(
+                $"Error while submitting CSR-1: {ex.Message}");
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
     }
 
     private void ToggleFilters()
@@ -2462,4 +3094,117 @@
         }
     }
 
+    private void ClearCSR1Form()
+    {
+        csr1Model = new CSR1();
+
+        selectedProgramType = "";
+        selectedProgramName = "";
+
+        selectedProgramId = 0;
+
+        selectedBudget = null;
+        programCount = 0;
+
+        selectedHQId = 0;
+        selectedZoneId = 0;
+        selectedEmployeeId = 0;
+
+        focusCrop1Id = 0;
+        focusCrop2Id = 0;
+        focusCrop3Id = 0;
+
+        focusProduct1Id = 0;
+        focusProduct2Id = 0;
+        focusProduct3Id = 0;
+
+        printStationary = 0;
+        publicityMaterial = 0;
+        stageArrangements = 0;
+        serviceCharges = 0;
+        transportRent = 0;
+        jeepExpenses = 0;
+        refreshments = 0;
+        inputs = 0;
+        photography = 0;
+        compliments = 0;
+        othersExpense = 0;
+
+        errorMessage = "";
+        successMessage = "";
+
+        isFormView = false;
+
+        selectedFocusProduct1Id = 0;
+        focusProduct1Ids.Clear();
+        selectedFocusProduct2Id = 0;
+        focusProduct2Ids.Clear();
+        selectedFocusProduct3Id = 0;
+        focusProduct3Ids.Clear();
+        StateHasChanged();
+    }
+
+    private void AddFocusProduct1()
+    {
+        if (selectedFocusProduct1Id <= 0)
+            return;
+
+        if (!focusProduct1Ids.Contains(selectedFocusProduct1Id))
+        {
+            focusProduct1Ids.Add(
+                selectedFocusProduct1Id);
+        }
+
+        // Reset dropdown after selection
+        selectedFocusProduct1Id = 0;
+    }
+
+    private void RemoveFocusProduct1(int productId)
+    {
+        focusProduct1Ids.Remove(productId);
+
+        StateHasChanged();
+    }
+
+    private void AddFocusProduct2()
+    {
+        if (selectedFocusProduct2Id <= 0)
+            return;
+
+        if (!focusProduct2Ids.Contains(selectedFocusProduct2Id))
+        {
+            focusProduct2Ids.Add(
+                selectedFocusProduct2Id);
+        }
+
+        selectedFocusProduct2Id = 0;
+    }
+
+    private void RemoveFocusProduct2(int productId)
+    {
+        focusProduct2Ids.Remove(productId);
+
+        StateHasChanged();
+    }
+
+    private void AddFocusProduct3()
+    {
+        if (selectedFocusProduct3Id <= 0)
+            return;
+
+        if (!focusProduct3Ids.Contains(selectedFocusProduct3Id))
+        {
+            focusProduct3Ids.Add(
+                selectedFocusProduct3Id);
+        }
+
+        selectedFocusProduct3Id = 0;
+    }
+
+    private void RemoveFocusProduct3(int productId)
+    {
+        focusProduct3Ids.Remove(productId);
+
+        StateHasChanged();
+    }
 }

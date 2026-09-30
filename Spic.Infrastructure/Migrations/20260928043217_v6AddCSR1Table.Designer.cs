@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928043217_v6AddCSR1Table")]
+    partial class v6AddCSR1Table
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1409,6 +1412,24 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text");
 
+                    b.Property<int?>("FocusCrop1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FocusCrop2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FocusCrop3Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FocusProduct1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FocusProduct2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FocusProduct3Id")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("HeadquarterId")
                         .HasColumnType("integer");
 
@@ -1477,81 +1498,6 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("CSR1");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.CSR1Products1", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CSR1Id")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CropId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CSR1Products1");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.CSR1Products2", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CSR1Id")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CropId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CSR1Products2");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.CSR1Products3", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CSR1Id")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CropId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CSR1Products3");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>

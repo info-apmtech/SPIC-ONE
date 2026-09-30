@@ -21,6 +21,7 @@ namespace SpicAPI.Controllers
         private readonly IGenericRepository<EmployeeInformation> _employeeRepo;
         private readonly IGenericRepository<Crop> _cropRepo;
         private readonly IGenericRepository<Product> _productRepo;
+        private readonly IGenericRepository<State> _stateRepo;
         private string CurrentUser =>   
     User.Identity?.Name ?? "System";
         public BudgetController(
@@ -30,7 +31,8 @@ namespace SpicAPI.Controllers
     IGenericRepository<Zone> zoneRepo,
    IGenericRepository<EmployeeInformation> employeeRepo,
    IGenericRepository<Crop> cropRepo,
-   IGenericRepository<Product> productRepo)
+   IGenericRepository<Product> productRepo,
+   IGenericRepository<State> stateRepo)
         {
             _budgetRepo = budgetRepo;
             _programRepo = programRepo;
@@ -39,6 +41,7 @@ namespace SpicAPI.Controllers
             _employeeRepo = employeeRepo;
             _cropRepo = cropRepo;
             _productRepo = productRepo;
+            _stateRepo = stateRepo;
         }
 
 
@@ -212,7 +215,7 @@ namespace SpicAPI.Controllers
                 .Select(x => new ProgramWiseBudgetDto
                 {
                     ProgramId = x.Program.Id,
-
+                    ProgramTypeId = x.Program.Id,
                     ProgramType = x.Program.ProgramType != null
                         ? x.Program.ProgramType.Name
                         : "",
@@ -572,6 +575,30 @@ namespace SpicAPI.Controllers
                 .ToListAsync();
 
             return Ok(products);
+        }
+
+        [HttpGet("states-budget")]
+        public async Task<IActionResult> GetStatesBudget()
+        {
+            var states = await _stateRepo
+                .GetAll()
+                .Where(x => x.IsActive)
+                .Select(x => new
+                {
+                    StateId = x.Id,
+                    StateName = x.StateName,
+                    BudgetAmount = 0
+                })
+                .OrderBy(x => x.StateName)
+                .ToListAsync();
+
+            return Ok(states);
+        }
+
+        [HttpPost("save-state-budget")]
+        public IActionResult SaveStateBudget([FromBody] object data)
+        {
+            return Ok();
         }
     }
 

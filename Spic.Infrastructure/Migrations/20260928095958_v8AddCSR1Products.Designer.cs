@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260928095958_v8AddCSR1Products")]
+    partial class v8AddCSR1Products
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1504,7 +1507,7 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("CSR1Products1");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.CSR1Products2", b =>
+            modelBuilder.Entity("SPIC.Core.Entities.CSRProducts2", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1526,10 +1529,10 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CSR1Products2");
+                    b.ToTable("CSRProducts2");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.CSR1Products3", b =>
+            modelBuilder.Entity("SPIC.Core.Entities.CSRProducts3", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -1551,7 +1554,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("CSR1Products3");
+                    b.ToTable("CSRProducts3");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
