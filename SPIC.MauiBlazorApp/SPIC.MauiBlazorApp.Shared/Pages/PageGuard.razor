@@ -223,9 +223,15 @@
         // is granted) as well as legacy bare page tokens. Dynamically registered
         // pages use the same generic check: Key == URL first segment.
         // The designation-only lab / payment keys are checked without the admin bypass.
-        bool allowed = SPIC.MauiBlazorApp.Shared.Services.LoginState.DesignationOnlyPages.Contains(firstSegment)
-            ? LoginState.HasPageStrict(firstSegment)
-            : LoginState.CanAccess(firstSegment);
+        // Resolve the permission identity the SAME way the menus do: ShellNavigation maps
+        // each route first segment to its PagePermission key (e.g. /CREATE-CSR-1Management
+        // -> CSR1Create, /StockReport -> SalesReport, /qr-scanner -> QRScanner). Fall back
+        // to the segment, which is the convention new pages follow (route prefix == enum
+        // member name), so a new page / menu / enum member needs no wiring here.
+        var permissionKey = ShellNavigation.Find(firstSegment)?.PermissionKey ?? firstSegment;
+        bool allowed = SPIC.MauiBlazorApp.Shared.Services.LoginState.DesignationOnlyPages.Contains(permissionKey)
+            ? LoginState.HasPageStrict(permissionKey)
+            : LoginState.CanAccess(permissionKey);
         if (!allowed && !isDirectorSchemeApproval)
         {
             string fallback;
