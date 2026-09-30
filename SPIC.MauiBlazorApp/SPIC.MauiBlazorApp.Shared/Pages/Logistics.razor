@@ -1503,6 +1503,12 @@
         .lg-page .table-controls .filter-select { flex: 1 1 45%; min-height: var(--tap-min, 44px); }
         .lg-page .table-controls .search-box { flex: 1 1 100%; }
         .lg-page .spic-card-actions .btn { flex: 1 1 auto; }
+        /* Card actions: each group on its own full-width row, buttons in a row share it equally
+           (Documents / SPIC PDF / Green Star PDF / Approve + Send Back / Edit + Delete). */
+        .lg-page .spic-card-actions .lg-card-row { display: flex; flex: 1 1 100%; gap: 8px; min-width: 0; }
+        .lg-page .spic-card-actions .lg-card-row--stack { flex-direction: column; }
+        .lg-page .spic-card-actions .lg-card-row--stack .btn { flex: 0 0 auto; width: 100%; }
+        .lg-page .spic-card-actions .lg-card-row .btn { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     }
     @@media (min-width: 768px) and (max-width: 1199.98px) {
         .lg-page .map-box-wrap,
@@ -1521,6 +1527,11 @@
     @@media (max-width: 767.98px) {
         .lg-page { --shell-bottom-offset: calc(var(--shell-tabbar-h, 60px) + var(--safe-bottom, 0px)); }
         .lg-page .fb-actionbar--sticky { padding-bottom: 10px; } /* tab bar already covers the home-indicator area */
+
+        /* The ActionBar's in-flow spacer sat inside the form card and left an empty block
+           under the Documents cards. Drop it and reserve the bar's height at the page end. */
+        .lg-page .fb-actionbar-spacer { display: none !important; }
+        .lg-page { padding-bottom: 80px !important; }
     }
 </style>
 
@@ -3518,33 +3529,41 @@ else
                     @if (IsWarehouseTab || IsRakePointTab)
                     {
                         var cardDocCount = GetItemDocumentEntries(item).Count;
-                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(cardDocCount == 0)" @onclick="() => OpenDocumentsModal(item)">
-                            <i class="bi bi-folder2-open"></i> Documents (@cardDocCount)
-                        </button>
+                        <div class="lg-card-row">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@(cardDocCount == 0)" @onclick="() => OpenDocumentsModal(item)">
+                                <i class="bi bi-folder2-open"></i> Documents (@cardDocCount)
+                            </button>
+                        </div>
                     }
-                    @if (item.InSpic == true)
-                    {
-                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick='() => OpenLogisticsPdf(item, "SPIC")'><i class="bi bi-file-earmark-pdf"></i> SPIC PDF</button>
-                    }
-                    @if (item.InGreenStar == true)
-                    {
-                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick='() => OpenLogisticsPdf(item, "GreenStar")'><i class="bi bi-file-earmark-pdf"></i> Green Star PDF</button>
-                    }
-                    @if (item.InSpic != true && item.InGreenStar != true)
-                    {
-                        <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenLogisticsPdf(item, null)"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
-                    }
+                    <div class="lg-card-row lg-card-row--stack">
+                        @if (item.InSpic == true)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick='() => OpenLogisticsPdf(item, "SPIC")'><i class="bi bi-file-earmark-pdf"></i> SPIC PDF</button>
+                        }
+                        @if (item.InGreenStar == true)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick='() => OpenLogisticsPdf(item, "GreenStar")'><i class="bi bi-file-earmark-pdf"></i> Green Star PDF</button>
+                        }
+                        @if (item.InSpic != true && item.InGreenStar != true)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => OpenLogisticsPdf(item, null)"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+                        }
+                    </div>
                     @if (CanApprove(item))
                     {
-                        <button type="button" class="btn btn-sm btn-success" @onclick="() => OpenApproveModal(item)" disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
-                            <i class="bi bi-check-circle"></i> @(_approvingId == item.Id ? "Approving..." : GetApproveButtonText(item))
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-warning" @onclick="() => OpenRejectModal(item)" disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
-                            <i class="bi bi-arrow-counterclockwise"></i> Send Back
-                        </button>
+                        <div class="lg-card-row">
+                            <button type="button" class="btn btn-sm btn-success" @onclick="() => OpenApproveModal(item)" disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
+                                <i class="bi bi-check-circle"></i> @(_approvingId == item.Id ? "Approving..." : GetApproveButtonText(item))
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-warning" @onclick="() => OpenRejectModal(item)" disabled="@(_approvingId == item.Id || _rejectingId == item.Id)">
+                                <i class="bi bi-arrow-counterclockwise"></i> Send Back
+                            </button>
+                        </div>
                     }
-                    <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
-                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+                    <div class="lg-card-row">
+                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+                    </div>
                 </CardActions>
             </SpicDataTable>
         </div>
