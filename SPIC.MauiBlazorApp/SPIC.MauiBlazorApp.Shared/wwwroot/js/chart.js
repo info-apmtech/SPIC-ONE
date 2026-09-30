@@ -551,3 +551,186 @@ window.loadRMDDashboardCharts = function () {
         });
     }
 };
+
+// ── Sales Tracking Dashboard (Pages/SalesTracking.razor) ──
+// data = { achievementPct, labels: [..], actual: [..], required: [..] }  (turnover in crores, cumulative)
+// Plugins are passed per chart (not Chart.register) so they never leak into the other dashboards.
+window.loadSalesTrackingCharts = function (data) {
+    if (typeof Chart === 'undefined' || !data) return;
+    window.destroySalesTrackingCharts();
+
+    const crore = v => '₹ ' + Number(v).toFixed(2) + ' Cr';
+    const tooltipStyle = {
+        backgroundColor: '#ffffff',
+        titleColor: '#1e293b',
+        titleFont: { size: 13, weight: 'bold' },
+        bodyColor: '#475569',
+        borderColor: '#e2e8f0',
+        borderWidth: 1,
+        padding: 10,
+        usePointStyle: true,
+        boxPadding: 6
+    };
+
+    // ── 1. Turnover Achievement gauge (half doughnut) ──
+    const gaugeCanvas = document.getElementById('trkGaugeChart');
+    if (gaugeCanvas) {
+        const pct = Math.max(0, Math.min(100, Number(data.achievementPct) || 0));
+        window.trkGaugeChartInstance = new Chart(gaugeCanvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Achieved', 'Remaining'],
+                datasets: [{
+                    data: [pct, 100 - pct],
+                    backgroundColor: ['#2f9e6f', '#eceff1'],
+                    hoverBackgroundColor: ['#28875f', '#e2e6e9'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                rotation: -90,
+                circumference: 180,
+                cutout: '58%',
+                layout: { padding: { top: 4, bottom: 0 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: Object.assign({}, tooltipStyle, {
+                        callbacks: { label: ctx => ` ${ctx.label}: ${Number(ctx.raw).toFixed(2)}%` }
+                    })
+                }
+            }
+        });
+    }
+
+    // ── 2. Monthly Progress Trend (line) ──
+    const trendCanvas = document.getElementById('trkTrendChart');
+    if (trendCanvas) {
+        const ctx = trendCanvas.getContext('2d');
+        const last = data.labels.length - 1;
+        // Round the top of the axis up to the next ₹0.5 Cr step, leaving headroom for the point labels.
+        const yMax = Math.max(0.5, Math.ceil((Math.max(...data.actual, ...data.required) + 0.2) / 0.5) * 0.5);
+
+        const areaFill = ctx.createLinearGradient(0, 0, 0, 280);
+        areaFill.addColorStop(0, 'rgba(22, 163, 74, 0.16)');
+        areaFill.addColorStop(1, 'rgba(22, 163, 74, 0.02)');
+
+        // Dashed guide line under the hovered month.
+        const crosshair = {
+            id: 'trkCrosshair',
+            afterDraw(chart) {
+                const active = chart.tooltip && chart.tooltip.getActiveElements();
+                if (!active || !active.length) return;
+                const x = active[0].element.x;
+                const { top, bottom } = chart.scales.y;
+                const c = chart.ctx;
+                c.save();
+                c.beginPath();
+                c.moveTo(x, top);
+                c.lineTo(x, bottom);
+                c.lineWidth = 1;
+                c.strokeStyle = '#94a3b8';
+                c.setLineDash([3, 3]);
+                c.stroke();
+                c.restore();
+            }
+        };
+
+        // Direct labels: every actual point + the final required point (as in the design).
+        const pointLabels = {
+            id: 'trkPointLabels',
+            afterDatasetsDraw(chart) {
+                const c = chart.ctx;
+                c.save();
+                c.font = "600 11px 'Inter', sans-serif";
+                c.fillStyle = '#334155';
+                c.textBaseline = 'bottom';
+                chart.getDatasetMeta(0).data.forEach((pt, i) => {
+                    c.textAlign = i === last ? 'right' : 'left';
+                    c.fillText(crore(data.actual[i]), pt.x + (i === last ? -8 : 8), pt.y - 8);
+                });
+                const req = chart.getDatasetMeta(1).data[last];
+                if (req) {
+                    c.textAlign = 'right';
+                    c.fillText(crore(data.required[last]), req.x - 8, req.y - 8);
+                }
+                c.restore();
+            }
+        };
+
+        window.trkTrendChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [
+                    {
+                        label: 'Actual Turnover',
+                        data: data.actual,
+                        borderColor: '#16a34a',
+                        backgroundColor: areaFill,
+                        fill: true,
+                        borderWidth: 2,
+                        tension: 0,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
+                        pointBackgroundColor: '#16a34a',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2
+                    },
+                    {
+                        label: 'Required Turnover',
+                        data: data.required,
+                        borderColor: '#2563eb',
+                        borderDash: [6, 4],
+                        fill: false,
+                        borderWidth: 2,
+                        tension: 0.35,
+                        pointRadius: data.required.map((_, i) => (i === last ? 5 : 0)),
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#2563eb',
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                layout: { padding: { top: 22, right: 8 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: Object.assign({}, tooltipStyle, {
+                        callbacks: { label: c => ` ${c.dataset.label}: ${crore(c.parsed.y)}` }
+                    })
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: yMax,
+                        border: { display: false },
+                        grid: { color: '#eef2f6' },
+                        ticks: {
+                            stepSize: 0.5,
+                            color: '#64748b',
+                            font: { size: 10 },
+                            callback: v => (v === 0 ? '0' : '₹ ' + v + ' Cr')
+                        }
+                    },
+                    x: {
+                        border: { display: false },
+                        grid: { color: '#f1f5f9' },
+                        ticks: { color: '#64748b', font: { size: 11 } }
+                    }
+                }
+            },
+            plugins: [crosshair, pointLabels]
+        });
+    }
+};
+
+window.destroySalesTrackingCharts = function () {
+    if (window.trkGaugeChartInstance) { window.trkGaugeChartInstance.destroy(); window.trkGaugeChartInstance = null; }
+    if (window.trkTrendChartInstance) { window.trkTrendChartInstance.destroy(); window.trkTrendChartInstance = null; }
+};

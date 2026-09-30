@@ -1,4 +1,8 @@
-﻿using SPIC.MauiBlazorApp.Shared.Services;
+﻿using System.Reflection;
+using Microsoft.AspNetCore.Components.Server.Circuits;
+using SPIC.Core.Entities;
+using SPIC.MauiBlazorApp.Shared.Services;
+using SPIC.MauiBlazorApp.Shared.Services.Telemetry;
 using SPIC.MauiBlazorApp.Web.Components;
 using SPIC.MauiBlazorApp.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -59,6 +63,29 @@ builder.Services.AddScoped<GuestHouseBookingState>();
 builder.Services.AddScoped<DigitalLibraryApi>();
 builder.Services.AddScoped<CommunityApi>();
 builder.Services.AddScoped<SasApi>();
+builder.Services.AddScoped<SasPaymentApi>();
+builder.Services.AddScoped<LabApi>();
+builder.Services.AddScoped<MetricsApi>();
+
+// Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on every API
+// call, page views and client errors per circuit, and anything this host logs at Error or above.
+const string DefaultApiBaseUrl = "https://spicapi.apmiot.com/";
+builder.Services.AddSingleton(new ClientInfo(TelemetryApp.Web,
+    typeof(SPIC.MauiBlazorApp.Shared._Imports).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion));
+builder.Services.AddSingleton<TelemetryCircuitRegistry>();
+builder.Services.AddScoped<ClientTelemetry>();
+builder.Services.AddScoped<CircuitHandler, TelemetryCircuitHandler>();
+builder.Logging.Services.AddSingleton<ILoggerProvider>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    return new TelemetryLoggerProvider(
+        sp.GetRequiredService<ClientInfo>(),
+        sp.GetRequiredService<TelemetryCircuitRegistry>(),
+        config["ApiBaseUrl"] ?? DefaultApiBaseUrl,
+        TelemetrySource.WebHost,
+        config["Telemetry:IngestKey"]);
+});
 
 // ADD THIS
 builder.Services.AddSingleton(new PlatformService
@@ -71,7 +98,7 @@ builder.Services.AddScoped(sp =>
     var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
     handler.InnerHandler = new HttpClientHandler();
     var config = sp.GetRequiredService<IConfiguration>();
-    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
+    var baseUrl = config["ApiBaseUrl"] ?? DefaultApiBaseUrl;
     //var baseUrl = config["ApiBaseUrl"] ?? "https://previewspicapi.apmiot.com/";
     // var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient(handler)

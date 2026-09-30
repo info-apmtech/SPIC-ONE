@@ -136,6 +136,21 @@
 			await SessionStore.SetAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
 			await SessionStore.SetAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
 
+			if (_model.RememberMe)
+			{
+				await SessionStore.SetPersistentAsync(SessionKeys.Token, rawToken);
+				await SessionStore.SetPersistentAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
+				await SessionStore.SetPersistentAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
+				await SessionStore.SetPersistentAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
+			}
+			else
+			{
+				await SessionStore.RemovePersistentAsync(SessionKeys.Token);
+				await SessionStore.RemovePersistentAsync(SessionKeys.Expiration);
+				await SessionStore.RemovePersistentAsync(SessionKeys.RoleAccess);
+				await SessionStore.RemovePersistentAsync(SessionKeys.DesignationName);
+			}
+
 			// Persist token + page permissions for refreshes and other pages
 			LoginState.Token = rawToken;
 			LoginState.Expiration = result.Expiration;

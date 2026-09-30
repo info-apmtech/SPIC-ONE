@@ -34,7 +34,7 @@ namespace SPIC.Core.Entities
     }
     public enum AppRole
     {
-        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin
+        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin, SuperAdmin
     }
     public enum PagePermission
     {
@@ -64,7 +64,42 @@ namespace SPIC.Core.Entities
         // Appended at the END on purpose: ApplicationPage seed ids are enum-index based (see AppDbContext).
         [PageModule("Digital Library")] DigitalLibrary,
         [PageModule("SAS")] SampleCollection,
-        [PageModule("SAS")] ConsignmentHistory
+        [PageModule("SAS")] ConsignmentHistory,
+        IfmsRelaySetup,
+        SchemeOverview,
+        AddScheme,
+        WinnerPopUp,
+        WinnerDetails,
+        Luckydraw,
+        LuckyDrawList,
+        SelectPurchasedProducts,
+        Scanproduct,
+        QRScanner,
+        BudgetOverview,
+        BudgetingManagements,
+        CSR2,
+        FinalReportCSRView,
+        RMDValidationQueue,
+        MOSubmissionValidation,
+        RMApprovalStatus,
+        SMMApprovals,
+        AVPApprovals,
+        ReportDashboard,
+        ReportsCenter,
+        ContactUs,
+        LogisticsMaster,
+        UserProfile,
+        // Lab portal (version 2, 2026-09-27): coordinator pages, then the analyst page.
+        [PageModule("SAS Lab")] LabDashboard,
+        [PageModule("SAS Lab")] LabConsignments,
+        [PageModule("SAS Lab")] LabAnalysis,
+        [PageModule("SAS Lab")] LabReports,
+        [PageModule("SAS Lab")] LabTestEntry,
+        [PageModule("SAS Lab")] LabTracking,
+        [PageModule("SAS")] SasPaymentApproval,
+        [PageModule("SAS")] SasPaymentVerification,
+        // Usage / error metrics page (2026-09-28, docs/metrics-telemetry-plan.md). Normal CanAccess rule.
+        [PageModule("Administration")] Metrics
 
     }
 }

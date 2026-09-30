@@ -1,0 +1,55 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+@using SPIC.Core.DTOs
+
+@*
+    Language split button ("Download PDF | v"): the main part uses the first language, the caret
+    lists every language from api/Lab/languages. Raises Selected with the language code.
+*@
+<div class="lsb @(DropUp ? "lsb--up" : "") @CssClass">
+    <button type="button" class="lf-btn @ButtonClass lsb-main" disabled="@(Disabled || Languages.Count == 0)"
+            @onclick="() => PickAsync(Languages.FirstOrDefault()?.Code ?? DefaultCode)">
+        <i class="bi @Icon" aria-hidden="true"></i> @Text
+    </button>
+    <button type="button" class="lf-btn @ButtonClass lsb-caret" disabled="@(Disabled || Languages.Count == 0)"
+            aria-haspopup="menu" aria-expanded="@(_open ? "true" : "false")" aria-label="@($"{Text}: choose language")"
+            @onclick="() => _open = !_open">
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </button>
+
+    @if (_open)
+    {
+        <div class="lsb-menu" role="menu">
+            @foreach (var lang in Languages)
+            {
+                var code = lang.Code;
+                <button type="button" role="menuitem" class="lsb-item" @onclick="() => PickAsync(code)">
+                    <span>@lang.Name</span>
+                    @if (!string.Equals(lang.NativeName, lang.Name, StringComparison.Ordinal))
+                    {
+                        <span class="lsb-native">@lang.NativeName</span>
+                    }
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Text { get; set; } = "Download PDF";
+    [Parameter] public string Icon { get; set; } = "bi-file-earmark-pdf";
+    [Parameter] public List<LabLanguageDto> Languages { get; set; } = new();
+    [Parameter] public EventCallback<string> Selected { get; set; }
+    [Parameter] public string ButtonClass { get; set; } = "lf-btn--outline";
+    [Parameter] public bool DropUp { get; set; }
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string DefaultCode { get; set; } = "en";
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _open;
+
+    private async Task PickAsync(string code)
+    {
+        _open = false;
+        await Selected.InvokeAsync(code);
+    }
+}

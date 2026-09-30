@@ -130,6 +130,49 @@ public class RazorpayService : IRazorpayService
         return expected.Length == actual.Length && CryptographicOperations.FixedTimeEquals(expected, actual);
     }
 
+    public async Task<RazorpayOrderPaymentsResult> GetOrderPaymentsAsync(string orderId, CancellationToken cancellationToken = default)
+    {
+        if (!_options.IsConfigured)
+            return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "Online payment is not configured." };
+
+        if (string.IsNullOrWhiteSpace(orderId))
+            return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "Invalid order reference." };
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{OrdersEndpoint}/{Uri.EscapeDataString(orderId)}/payments");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Basic", BasicAuthValue());
+
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(15);
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Razorpay order payments fetch failed for order {OrderId} with {Status}: {Body}", orderId, (int)response.StatusCode, Trim(body, 500));
+                return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "Could not fetch the payment status." };
+            }
+
+            using var doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
+                return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "The payment gateway returned an unexpected response." };
+
+            var hasSuccessful = items.EnumerateArray().Any(p =>
+                p.TryGetProperty("status", out var s) && s.ValueKind == JsonValueKind.String
+                && (string.Equals(s.GetString(), "authorized", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(s.GetString(), "captured", StringComparison.OrdinalIgnoreCase)));
+
+            return new RazorpayOrderPaymentsResult { Success = true, HasSuccessfulPayment = hasSuccessful };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Razorpay order payments fetch threw for order {OrderId}.", orderId);
+            return new RazorpayOrderPaymentsResult { Success = false, ErrorMessage = "Could not reach the payment gateway." };
+        }
+    }
+
     private string BasicAuthValue() =>
         Convert.ToBase64String(Encoding.UTF8.GetBytes($"{_options.KeyId}:{_options.KeySecret}"));
 

@@ -5,6 +5,7 @@
 @inject IJSRuntime JS
 @using System.Linq
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
 
 @code {
     private static readonly HashSet<string> _alwaysOpen = new(StringComparer.OrdinalIgnoreCase)
@@ -32,10 +33,6 @@
         "Community"
     };
 
-    // Generic identity rule: a dynamically registered page's ApplicationPage.Key
-    // must equal its URL's FIRST path segment (e.g. page "/TestReport" has Key
-    // "TestReport"). The same generic check used by every legacy page therefore
-    // applies with no per-page code, constant, or route mapping.
     private bool _restored;
 
     protected override async Task OnInitializedAsync()
@@ -73,9 +70,6 @@
     {
         if (!LoginState.IsLoggedIn) return;
 
-        // Admin and CorporateAdmin bypass everything
-        if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin) return;
-
         var path = (new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri
                 ? new Uri(url).AbsolutePath
                 : url)
@@ -87,6 +81,27 @@
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         var firstSegment = segments.FirstOrDefault() ?? "";
         var secondSegment = segments.Skip(1).FirstOrDefault() ?? "";
+
+        // Data Explorer is SuperAdmin only. Admin is explicitly
+        // excluded here, even though Admin otherwise bypasses every other page
+        // check below - this must run BEFORE the general Admin bypass.
+        if (firstSegment.Equals("DataExplorer", StringComparison.OrdinalIgnoreCase)
+            && LoginState.UserRole == AppRole.Admin)
+        {
+            Nav.NavigateTo("/Dashboard", replace: true);
+            return;
+        }
+
+        // SuperAdmin bypasses everything else.
+        if (LoginState.UserRole == AppRole.SuperAdmin) return;
+
+        // Admin and CorporateAdmin bypass everything EXCEPT the SAS Lab (/Lab/...) and payment
+        // (/Sas/Payments...) routes: those are reached through the designation only (product
+        // decision 2026-09-27), so admins go through the strict checks below like everyone else.
+        bool designationOnlyRoute = firstSegment.Equals("Lab", StringComparison.OrdinalIgnoreCase)
+            || (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase)
+                && secondSegment.Equals("Payments", StringComparison.OrdinalIgnoreCase));
+        if ((LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin) && !designationOnlyRoute) return;
 
         // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
         // but must NEVER reach the SchemeApproval page.
@@ -141,8 +156,11 @@
 
         if (_alwaysOpen.Contains(firstSegment)) return;
         if (_shellHubs.Contains(firstSegment)) return;
+        // /DigitalLibrary/add/... (content wizard) and /DigitalLibrary/categories (category master)
+        // are admin pages: they fall through to the generic DigitalLibrary page check below.
         if (firstSegment.Equals("DigitalLibrary", StringComparison.OrdinalIgnoreCase)
-            && !secondSegment.Equals("add", StringComparison.OrdinalIgnoreCase))
+            && !secondSegment.Equals("add", StringComparison.OrdinalIgnoreCase)
+            && !secondSegment.Equals("categories", StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
@@ -150,6 +168,51 @@
         // ApprovalDetail (and its legacy MOApproval alias) is a dedicated
         // full-page route for approval details shared by all roles;
         // it uses the same SchemeApproval permission.
+        // SAS Lab portal and Payment Approval (2026-09-27): routes live under one prefix and map
+        // to a page key by their second segment. Farmer pages under /Sas use the v1 keys.
+        // The lab / payment keys are DESIGNATION only (HasPageStrict): the Admin / CorporateAdmin
+        // roles do not bypass them (product decision 2026-09-27).
+        if (firstSegment.Equals("Lab", StringComparison.OrdinalIgnoreCase))
+        {
+            firstSegment = secondSegment.ToLowerInvariant() switch
+            {
+                "" => "LabDashboard",
+                "consignments" => "LabConsignments",
+                "analysis" => "LabAnalysis",
+                "reports" => "LabReports",
+                "testentry" => "LabTestEntry",
+                "tracking" => "LabTracking",
+                _ => "LabDashboard"
+            };
+            // Coordinators (LabAnalysis) may open a sample's entry page read-only from Batch Details.
+            if (firstSegment == "LabTestEntry" && LoginState.HasPageStrict("LabAnalysis")) return;
+            // The lab dashboard opens to anyone holding any lab page (it picks the variant).
+            if (firstSegment == "LabDashboard"
+                && (LoginState.HasPageStrict("LabTestEntry") || LoginState.HasPageStrict("LabConsignments")
+                    || LoginState.HasPageStrict("LabAnalysis") || LoginState.HasPageStrict("LabReports")))
+            {
+                return;
+            }
+        }
+        else if (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase))
+        {
+            if (secondSegment.Equals("Payments", StringComparison.OrdinalIgnoreCase))
+            {
+                // Admin and Finance modes by their keys (designation only); farmers and the v1 write
+                // roles open the same page read-only through the SampleCollection key (the API decides
+                // the mode). Admin / CorporateAdmin never take the SampleCollection path: their
+                // payment access comes from the designation only.
+                if (LoginState.HasPageStrict("SasPaymentApproval") || LoginState.HasPageStrict("SasPaymentVerification")) return;
+                if (LoginState.UserRole is not (AppRole.Admin or AppRole.CorporateAdmin)
+                    && LoginState.CanAccess("SampleCollection")) return;
+                firstSegment = "SasPaymentApproval";
+            }
+            else
+            {
+                firstSegment = "SampleCollection";   // /Sas/MySamples, /Sas/MyReports, /Sas/MyPayments (farmer)
+            }
+        }
+
         if (firstSegment.Equals("MOApproval", StringComparison.OrdinalIgnoreCase)
             || firstSegment.Equals("ApprovalDetail", StringComparison.OrdinalIgnoreCase))
         {
@@ -159,13 +222,23 @@
         // CanAccess understands "Page.Action" tokens (page reachable if any action
         // is granted) as well as legacy bare page tokens. Dynamically registered
         // pages use the same generic check: Key == URL first segment.
-        if (!LoginState.CanAccess(firstSegment) && !isDirectorSchemeApproval)
+        // The designation-only lab / payment keys are checked without the admin bypass.
+        // Resolve the permission identity the SAME way the menus do: ShellNavigation maps
+        // each route first segment to its PagePermission key (e.g. /CREATE-CSR-1Management
+        // -> CSR1Create, /StockReport -> SalesReport, /qr-scanner -> QRScanner). Fall back
+        // to the segment, which is the convention new pages follow (route prefix == enum
+        // member name), so a new page / menu / enum member needs no wiring here.
+        var permissionKey = ShellNavigation.Find(firstSegment)?.PermissionKey ?? firstSegment;
+        bool allowed = SPIC.MauiBlazorApp.Shared.Services.LoginState.DesignationOnlyPages.Contains(permissionKey)
+            ? LoginState.HasPageStrict(permissionKey)
+            : LoginState.CanAccess(permissionKey);
+        if (!allowed && !isDirectorSchemeApproval)
         {
             string fallback;
             if (LoginState.UserRole == AppRole.Dealer)
                 fallback = "/SDWADashboard";
             else if (LoginState.UserRole == AppRole.SpecialAdmin)
-                fallback = LoginState.CanAccess("Logistics") ? "/Logistics" : "/Welcome";
+                fallback = LoginState.CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome";
             else
                 fallback = "/Dashboard";
             Nav.NavigateTo(fallback, replace: true);

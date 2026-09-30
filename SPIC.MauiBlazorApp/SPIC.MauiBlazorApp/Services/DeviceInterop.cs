@@ -54,6 +54,32 @@ namespace SPIC.MauiBlazorApp.Services
             }
         }
 
+        /// <summary>Native share sheet for a title / text / link (window.spic.share in the WebView).</summary>
+        [JSInvokable]
+        public static async Task<bool> ShareText(string title, string text, string url)
+        {
+            try
+            {
+                return await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    var request = new ShareTextRequest
+                    {
+                        Title = string.IsNullOrWhiteSpace(title) ? "SPIC ONE" : title,
+                        Subject = string.IsNullOrWhiteSpace(title) ? null : title,
+                        Text = string.IsNullOrWhiteSpace(text) ? null : text,
+                        Uri = string.IsNullOrWhiteSpace(url) ? null : url
+                    };
+                    await Share.Default.RequestAsync(request);
+                    return true;
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"ShareText failed: {ex}");
+                return false;
+            }
+        }
+
         /// <summary>
         /// Replaces window.open. http(s) goes to the system browser; tel:, sms:,
         /// mailto:, whatsapp: and any other scheme go to whichever app handles it.

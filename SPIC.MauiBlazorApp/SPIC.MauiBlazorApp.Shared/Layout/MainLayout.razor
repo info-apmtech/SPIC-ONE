@@ -10,6 +10,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.ShellSession Shell
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageGuard />
 
@@ -117,7 +118,7 @@
         @* ================= MAIN CONTENT ================= *@
         <div class="main-content">
 
-            <ErrorBoundary @ref="_pageErrorBoundary">
+            <TelemetryErrorBoundary @ref="_pageErrorBoundary">
                 <ChildContent>
                     @Body
                 </ChildContent>
@@ -132,7 +133,7 @@
                         </div>
                     </div>
                 </ErrorContent>
-            </ErrorBoundary>
+            </TelemetryErrorBoundary>
 
         </div>
 
@@ -202,7 +203,7 @@ else
 
 
 @code {
-    private ErrorBoundary? _pageErrorBoundary;
+    private TelemetryErrorBoundary? _pageErrorBoundary;
 
     // A page that threw is given a fresh start on the next navigation.
     protected override void OnParametersSet() => _pageErrorBoundary?.Recover();
@@ -238,6 +239,11 @@ else
         Shell.LogoutHandler = _logoutHandler;
 
         StartExpiryCheck();
+
+        // .main-content (or, on phone, <body>) is the actual scroll container, so
+        // the browser's own scroll restoration never resets it on navigation -
+        // every in-app page change would otherwise open at the old scroll offset.
+        Navigation.LocationChanged += OnLocationChanged;
 
 
         /*
@@ -384,6 +390,16 @@ else
 
 
     /* =========================================================
+       SCROLL TO TOP ON NAVIGATION
+       ========================================================= */
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        try { await JS.InvokeVoidAsync("scrollPageToTop"); } catch { }
+    }
+
+
+    /* =========================================================
        MANUAL LOGOUT
        ========================================================= */
 
@@ -437,13 +453,7 @@ else
 
         try
         {
-            await SessionStore.RemoveAsync(SessionKeys.Token);
-
-            await SessionStore.RemoveAsync(SessionKeys.Expiration);
-
-            await SessionStore.RemoveAsync(SessionKeys.RoleAccess);
-
-            await SessionStore.RemoveAsync(SessionKeys.DesignationName);
+            await SessionStore.ClearAsync();
         }
         catch
         {
@@ -517,13 +527,7 @@ else
 
         try
         {
-            await SessionStore.RemoveAsync(SessionKeys.Token);
-
-            await SessionStore.RemoveAsync(SessionKeys.Expiration);
-
-            await SessionStore.RemoveAsync(SessionKeys.RoleAccess);
-
-            await SessionStore.RemoveAsync(SessionKeys.DesignationName);
+            await SessionStore.ClearAsync();
         }
         catch
         {
@@ -544,6 +548,8 @@ else
     public void Dispose()
     {
         _tokenExpiryTimer?.Dispose();
+
+        Navigation.LocationChanged -= OnLocationChanged;
 
         if (ReferenceEquals(Shell.LogoutHandler, _logoutHandler))
         {

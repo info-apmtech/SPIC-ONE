@@ -20,7 +20,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public string LandingPage => UserRole switch
         {
             AppRole.Dealer => "/SDWADashboard",
-            AppRole.SpecialAdmin => CanAccess("Logistics") ? "/Logistics" : "/Welcome",
+            AppRole.SpecialAdmin => CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome",
             _ => "/Dashboard"
         };
         public event Action? OnChange;
@@ -69,7 +69,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             OnChange?.Invoke();
         }
 
-        public bool IsAdmin => UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
+        public bool IsAdmin => UserRole is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
         public bool IsStateRole => UserRole is AppRole.SMD or AppRole.SMM;
         public bool IsRegionRole => UserRole is AppRole.RM or AppRole.RMD;
         public bool IsHQRole => UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
@@ -128,6 +128,28 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             return result;
         }
 
+        // SAS Lab / payment pages reached through the DESIGNATION only (product decision 2026-09-27):
+        // the Admin / CorporateAdmin roles do NOT bypass these; an admin needs a designation that
+        // grants the key like every other user. Everything else keeps the admin bypass below.
+        public static readonly IReadOnlySet<string> DesignationOnlyPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            nameof(PagePermission.LabDashboard),
+            nameof(PagePermission.LabConsignments),
+            nameof(PagePermission.LabAnalysis),
+            nameof(PagePermission.LabReports),
+            nameof(PagePermission.LabTestEntry),
+            nameof(PagePermission.LabTracking),
+            nameof(PagePermission.SasPaymentApproval),
+            nameof(PagePermission.SasPaymentVerification)
+        };
+
+        public bool HasPageStrict(PagePermission page) => HasPageStrict(page.ToString());
+
+        // Page-level, designation only: true when the designation holds any token for the page
+        // (same PagePart matching as CanAccess) - NO Admin / CorporateAdmin bypass.
+        public bool HasPageStrict(string pageKey) =>
+            AllowedPages.Any(t => string.Equals(PagePart(t), pageKey, StringComparison.OrdinalIgnoreCase));
+
         public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
 
         // Page-level: can the user REACH this page at all?
@@ -135,28 +157,40 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         // legacy bare page token). Used by the route guard and menu visibility.
         public bool CanAccess(string pageKey)
         {
-            // Admin and CorporateAdmin bypass everything
-            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
+            // Designation-only pages (SAS Lab / payments): no role bypass
+            if (DesignationOnlyPages.Contains(pageKey)) return HasPageStrict(pageKey);
+            // Admin and CorporateAdmin bypass everything else
+            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return true;
             // No designation assigned => access ONLY the Welcome page (nothing else)
             if (AllowedPages.Count == 0)
                 return string.Equals(pageKey, "Welcome", StringComparison.OrdinalIgnoreCase);
 
             return AllowedPages.Any(t =>
-                string.Equals(PagePart(t), pageKey, StringComparison.OrdinalIgnoreCase));
+                string.Equals(RoleAccessPermissions.NormalizePageKey(PagePart(t)), pageKey, StringComparison.OrdinalIgnoreCase));
         }
 
         // Action-level: can the user perform a specific action on a page?
         // Use inside pages to show/hide Add / Edit / Delete buttons.
         // e.g. LoginState.Can("Register", "Update")
-        public bool Can(PagePermission page, string action) => Can(page.ToString(), action);
+        public bool Can(PagePermission page, string action) => Can(RoleAccessPermissions.KeyFor(page), action);
 
         public bool Can(string pageKey, string action)
         {
-            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin) return true;
+            // Admin and CorporateAdmin bypass everything except the designation-only pages
+            if ((UserRole is AppRole.Admin or AppRole.CorporateAdmin) && !DesignationOnlyPages.Contains(pageKey)) return true;
             if (AllowedPages.Count == 0) return false;
-            // Legacy bare page token => full access to that page
-            if (AllowedPages.Contains(pageKey)) return true;
-            return AllowedPages.Contains($"{pageKey}.{action}");
+            return AllowedPages.Any(t =>
+            {
+                var dot = t.IndexOf('.');
+                var tokenPage = dot < 0 ? t : t.Substring(0, dot);
+                if (!string.Equals(
+                        RoleAccessPermissions.NormalizePageKey(tokenPage),
+                        pageKey,
+                        StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                return dot < 0 || string.Equals(t.Substring(dot + 1), action, StringComparison.OrdinalIgnoreCase);
+            });
         }
 
         // -------------------------------------------------------------------------------------

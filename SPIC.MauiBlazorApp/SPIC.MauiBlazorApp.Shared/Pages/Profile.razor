@@ -1,15 +1,19 @@
 ﻿@page "/Profile"
 @using System.Net.Http.Json
+@using System.Text.Json
 @using SPIC.Core.Entities
 @using SPIC.Core.DTOs
 @using SPIC.MauiBlazorApp.Shared.Services
 @using static SPIC.Core.Entities.EmployeeRegistration
 @using RelationshipEntity = SPIC.Core.Entities.Relationship
+@using DesignationEntity = SPIC.Core.Entities.Designation
 
 @inject HttpClient Http
 @inject LoginState LoginState
 @inject NavigationManager Nav
 @inject LookupCacheService LookupCache
+@inject ToastService Toast
+@inject ISessionStore SessionStore
 <style>
     :root {
         --dp-bg-body: #f8fafc;
@@ -101,6 +105,13 @@
     }
     .dp-card-header { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; }
     .dp-card-title { font-size: 1.2rem; font-weight: 700; color: var(--dp-text-main); margin: 0; }
+    .dp-card-header-action { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .dp-btn-outline-green {
+        background-color: transparent; color: #166534; border: 1px solid #166534;
+        padding: 8px 18px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; transition: 0.2s; cursor: pointer;
+    }
+    .dp-btn-outline-green:hover { background-color: #f0fdf4; }
+    .dp-btn-outline-green:disabled { opacity: 0.6; cursor: not-allowed; }
 
     .dp-icon-box {
         width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center;
@@ -397,6 +408,11 @@
                 <div class="dp-card-header">
                     <div class="dp-icon-box dp-icon-green"><i class="bi bi-person-badge"></i></div>
                     <h3 class="dp-card-title">Employee Details</h3>
+                    <div class="dp-card-header-action">
+                        <button type="button" class="dp-btn-outline-green" @onclick="OpenEditModalAsync">
+                            <i class="bi bi-pencil-square"></i> Edit Profile
+                        </button>
+                    </div>
                 </div>
                 @if (_employee != null && _employeeLogin != null)
                 {
@@ -863,6 +879,220 @@
 
 </div>
 
+@if (_showEditModal)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal fade show d-block emp-modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-person-badge me-2"></i>Edit Profile</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal" disabled="@_isSavingProfile"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        You can update your own employee profile. Changing your <strong>Role</strong>,
+                        <strong>Designation</strong>, <strong>Zone</strong>, <strong>State</strong>,
+                        <strong>Region</strong>, <strong>Headquarter</strong> or <strong>Status</strong>
+                        affects your permissions and data scope, so you will be signed out and asked to log in
+                        again once the change is saved.
+                    </p>
+
+                    @if (_editFormError is not null)
+                    {
+                        <div class="alert alert-danger py-2">@_editFormError</div>
+                    }
+
+                    @if (_isLoadingEditForm)
+                    {
+                        <div class="text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Loading your details...</div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-2 fw-semibold">Personal Details</p>
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <label class="form-lbl">Employee Code</label>
+                                <input type="text" class="form-inp" placeholder="Enter Employee ID"
+                                       @bind="_edit.EmployeeCode" disabled="@_editDisabled" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-lbl">Name</label>
+                                <input type="text" class="form-inp" placeholder="Enter Name"
+                                       @bind="_edit.Name" disabled="@_editDisabled" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-lbl">Email</label>
+                                <input type="email" class="form-inp" placeholder="Enter Email"
+                                       @bind="_edit.Email" disabled="@_editDisabled" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-lbl">Personal Phone Number</label>
+                                <input type="text" class="form-inp" placeholder="Enter 10 digit mobile number"
+                                       @bind="_edit.PersonalPhoneNumber" maxlength="10" disabled="@_editDisabled"
+                                       oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-lbl">Official Phone Number</label>
+                                <input type="text" class="form-inp" placeholder="Enter 10 digit official number"
+                                       @bind="_edit.OfficialPhoneNumber" maxlength="10" disabled="@_editDisabled"
+                                       oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+                            </div>
+                        </div>
+
+                        <hr class="my-4" />
+                        <p class="text-muted small mb-2 fw-semibold">Role &amp; Access</p>
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <label class="form-lbl">Role</label>
+                                <select class="form-inp" @bind="_edit.Role" disabled="@_editDisabled">
+                                    <option value="">Select Role</option>
+                                    @foreach (var r in EditableRoles)
+                                    {
+                                        <option value="@r">@r</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-lbl">Designation</label>
+                                <select class="form-inp" @bind="_edit.DesignationId" disabled="@_editDisabled">
+                                    <option value="0">-- No Designation (full access) --</option>
+                                    @foreach (var d in _editDesignations)
+                                    {
+                                        <option value="@d.Id">@d.Name</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr class="my-4" />
+                        <p class="text-muted small mb-2 fw-semibold">Role Specification</p>
+                        <div class="row g-4">
+                            @* AVP -> Zone only. Every list below is the flat, unfiltered
+                               lookup list, exactly as EmployeeRegistration binds them;
+                               there is no Region-by-State or Headquarter-by-Region
+                               filtering and no onchange handler. *@
+                            @if (NeedsZone(SelectedEditRole))
+                            {
+                                <div class="col-md-3">
+                                    <label class="form-lbl">Zone</label>
+                                    <select class="form-inp" @bind="_edit.ZoneId" disabled="@_editDisabled">
+                                        <option value="0">Select Zone</option>
+                                        @foreach (var z in _editZones)
+                                        {
+                                            <option value="@z.Id">@z.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+
+                            @* SMD, SMM -> State only *@
+                            @if (NeedsState(SelectedEditRole) && !NeedsRegion(SelectedEditRole))
+                            {
+                                <div class="col-md-3">
+                                    <label class="form-lbl">State</label>
+                                    <select class="form-inp" @bind="_edit.StateId" disabled="@_editDisabled">
+                                        <option value="0">Select State</option>
+                                        @foreach (var s in _editStates)
+                                        {
+                                            <option value="@s.Id">@s.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+
+                            @* RM, RMD, MO, MDO, JMDO -> State + Region *@
+                            @if (NeedsState(SelectedEditRole) && NeedsRegion(SelectedEditRole))
+                            {
+                                <div class="col-md-3">
+                                    <label class="form-lbl">State</label>
+                                    <select class="form-inp" @bind="_edit.StateId" disabled="@_editDisabled">
+                                        <option value="0">Select State</option>
+                                        @foreach (var s in _editStates)
+                                        {
+                                            <option value="@s.Id">@s.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-lbl">Region</label>
+                                    <select class="form-inp" @bind="_edit.RegionId" disabled="@_editDisabled">
+                                        <option value="0">Select Region</option>
+                                        @foreach (var r in _editRegions)
+                                        {
+                                            <option value="@r.Id">@r.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+
+                            @* MDO, MO, JMDO -> Headquarter *@
+                            @if (NeedsHeadquarter(SelectedEditRole))
+                            {
+                                <div class="col-md-3">
+                                    <label class="form-lbl">Headquarters</label>
+                                    <select class="form-inp" @bind="_edit.HeadquartersId" disabled="@_editDisabled">
+                                        <option value="0">Select Headquarters</option>
+                                        @foreach (var h in _editHeadquarters)
+                                        {
+                                            <option value="@h.Id">@h.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            }
+
+                            @if (IsLocationlessRole(SelectedEditRole) && !string.IsNullOrEmpty(SelectedEditRole))
+                            {
+                                <div class="col-12">
+                                    <p class="text-muted small"><i class="bi bi-info-circle me-1"></i>No location specification required for this role.</p>
+                                </div>
+                            }
+                        </div>
+
+                        <hr class="my-4" />
+                        <p class="text-muted small mb-2 fw-semibold">Status</p>
+                        <div class="d-flex gap-4 align-items-center">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="editStatus" id="editStatusActive"
+                                       value="active" checked="@_edit.IsActive"
+                                       @onchange="() => _edit.IsActive = true" disabled="@_editDisabled" />
+                                <label class="form-check-label" for="editStatusActive">Active</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="editStatus" id="editStatusInactive"
+                                       value="inactive" checked="@(!_edit.IsActive)"
+                                       @onchange="() => _edit.IsActive = false" disabled="@_editDisabled" />
+                                <label class="form-check-label" for="editStatusInactive">Inactive</label>
+                            </div>
+                        </div>
+
+                        @if (!_edit.IsActive)
+                        {
+                            <div class="alert alert-warning py-2 mt-3 mb-0 small">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                Setting your status to <strong>Inactive</strong> will save the change and then
+                                immediately sign you out. Contact your administrator to reactivate the account.
+                            </div>
+                        }
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4"
+                            @onclick="CloseEditModal" disabled="@_isSavingProfile">Cancel</button>
+                    <button type="button" class="btn btn-success btn-sm rounded-pill px-4"
+                            @onclick="SaveProfileAsync" disabled="@(_isSavingProfile || _isLoadingEditForm || _editFormLoadFailed)">
+                        @if (_isSavingProfile)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                        }
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private string activeTab = "DealerInfo";
     private bool _isLoading = true;
@@ -914,7 +1144,69 @@
     private bool _isDealer = false;
     private EmployeeInformation? _employee;
     private Employeelogin? _employeeLogin;
-    private List<ZoneItemDto> _zones = new();
+    private List<LocationItemDto> _zones = new();
+
+    // Edit Profile (employee branch only). All 12 fields shown on the Employee tab
+    // are editable and are persisted by the self-scoped api/Profile endpoint.
+    private bool _showEditModal;
+    private bool _isLoadingEditForm;
+    private bool _isSavingProfile;
+    private bool _editFormLoadFailed;
+    private string? _editFormError;
+    private ProfileUpdateDto _edit = new();
+
+    // Master lists backing the edit dropdowns. Loaded from the same lookup APIs
+    // EmployeeManagementList/EmployeeRegistration use, never hard-coded.
+    //
+    // All four levels share one superset DTO (the pattern already used by
+    // EmployeeManagementList.LocationItemDto) so every row carries IsActive and
+    // its parent foreign key: State.ZoneId, Region.StateId, Headquarter.RegionId.
+    private List<LocationItemDto> _editZones = new();
+    private List<LocationItemDto> _editStates = new();
+    private List<LocationItemDto> _editRegions = new();
+    private List<LocationItemDto> _editHeadquarters = new();
+    private List<DesignationEntity> _editDesignations = new();
+
+    /// <summary>The explicit role list EmployeeRegistration.AllowedRoles uses, so the
+    /// Profile Edit role dropdown offers exactly the roles the employee editor
+    /// offers. Not derived from Enum.GetValues so a new enum member can never
+    /// appear here before it is deliberately allowed.</summary>
+    private static readonly AppRole[] EditableRoles = new[]
+    {
+        AppRole.CorporateAdmin,
+        AppRole.Director,
+        AppRole.AVP,
+        AppRole.SMD,
+        AppRole.SMM,
+        AppRole.RM,
+        AppRole.RMD,
+        AppRole.MDO,
+        AppRole.MO,
+        AppRole.JMDO,
+        AppRole.SpecialAdmin
+    };
+
+    private bool _editDisabled => _isSavingProfile || _editFormLoadFailed;
+
+    // The location block is rendered from the selected role exactly as
+    // EmployeeRegistration does, via a computed property, so there is no
+    // @bind:after / onchange handler anywhere in Profile Edit.
+    private string SelectedEditRole => _edit.Role.ToString();
+
+    private static bool NeedsZone(string role) => role == "AVP";
+
+    private static bool NeedsState(string role) =>
+        role == "SMD" || role == "SMM"
+        || role == "RM" || role == "RMD" || role == "MO" || role == "MDO" || role == "JMDO";
+
+    private static bool NeedsRegion(string role) =>
+        role == "RM" || role == "RMD" || role == "MO" || role == "MDO" || role == "JMDO";
+
+    private static bool NeedsHeadquarter(string role) => role == "MDO" || role == "MO" || role == "JMDO";
+
+    private static bool IsLocationlessRole(string role) =>
+        !NeedsZone(role) && !NeedsState(role) && !NeedsRegion(role) && !NeedsHeadquarter(role);
+
 
     private void SetTab(string tabName)
     {
@@ -1274,18 +1566,343 @@
 
         try
         {
-            var logins = await Http.GetFromJsonAsync<List<Employeelogin>>("api/Employeelogin/all");
-            _employeeLogin = logins?.FirstOrDefault(l => l.UserId == LoginState.UserId);
+            // The card is populated from api/Profile, which resolves the current
+            // Employeelogin row with the same shared rule the JWT and the PUT use.
+            // This page used to select the row itself from api/Employeelogin/all,
+            // which (a) applied its own ordering and (b) only ever returned ACTIVE
+            // rows, so for a user with a deactivated login the card went blank while
+            // the API still resolved an inactive row. Driving both the card and the
+            // Edit modal from this one response makes divergence impossible.
+            var profile = await SafeGetAsync<ProfileDto>("api/Profile");
+            if (profile == null || profile.EmployeeInformationId <= 0) return;
 
-            if (_employeeLogin == null || _employeeLogin.EmployeeInformationID <= 0) return;
+            _employeeLogin = new Employeelogin
+            {
+                Id = profile.LoginId,
+                UserId = LoginState.UserId ?? string.Empty,
+                EmployeeInformationID = profile.EmployeeInformationId,
+                Role = profile.Role,
+                ZoneId = profile.ZoneId,
+                StateId = profile.StateId,
+                RegionId = profile.RegionId,
+                HeadquartersId = profile.HeadquartersId,
+                IsActive = profile.IsActive
+            };
 
-            _employee = await SafeGetAsync<EmployeeInformation>($"api/EmployeeRegistration/{_employeeLogin.EmployeeInformationID}");
+            if (ProfileSaveDebug)
+                Console.WriteLine($"Selected LoginId = {_employeeLogin.Id} " +
+                                  $"(EmployeeInformationId={_employeeLogin.EmployeeInformationID}) " +
+                                  $"- must equal the PROFILESAVE Resolved LoginId from the API");
+
+            _employee = await SafeGetAsync<EmployeeInformation>($"api/EmployeeRegistration/{profile.EmployeeInformationId}");
             if (_employee == null) return;
 
             await LookupCache.EnsureLoadedAsync();
-            _zones = (await SafeGetAsync<List<ZoneItemDto>>("api/Zone/all")) ?? new();
+            _zones = (await SafeGetAsync<List<LocationItemDto>>("api/Zone/all")) ?? new();
         }
         catch { }
+    }
+
+    /// <summary>
+    /// Loads the masters that back the edit dropdowns from the same APIs
+    /// EmployeeRegistration uses. Zone/State/Region/Headquarter are deserialized
+    /// into the real entities (not LocationItemDto) so the cascade can read both
+    /// the parent foreign key and IsActive.
+    /// </summary>
+    private async Task LoadEditLookupsAsync()
+    {
+        // The same four lookup endpoints EmployeeRegistration loads in its
+        // OnInitializedAsync, deserialised into the same LocationItemDto shape and
+        // used as flat, unfiltered option lists.
+        var zonesTask = SafeGetAsync<List<LocationItemDto>>("api/Zone/all");
+        var statesTask = SafeGetAsync<List<LocationItemDto>>("api/State/all");
+        var regionsTask = SafeGetAsync<List<LocationItemDto>>("api/Region/all");
+        var hqsTask = SafeGetAsync<List<LocationItemDto>>("api/Headquarter/all");
+        var desigTask = SafeGetAsync<List<DesignationEntity>>("api/Designation");
+
+        await Task.WhenAll(zonesTask, statesTask, regionsTask, hqsTask, desigTask);
+
+        _editZones = zonesTask.Result ?? new();
+        _editStates = statesTask.Result ?? new();
+        _editRegions = regionsTask.Result ?? new();
+        _editHeadquarters = hqsTask.Result ?? new();
+        _editDesignations = desigTask.Result ?? new();
+
+        if (ProfileSaveDebug)
+            Console.WriteLine($"[ProfileSave] lookups: zones={_editZones.Count} states={_editStates.Count} " +
+                              $"regions={_editRegions.Count} hqs={_editHeadquarters.Count} designations={_editDesignations.Count}");
+    }
+
+    private async Task OpenEditModalAsync()
+    {
+        if (_isDealer) return;
+
+        _showEditModal = true;
+        _editFormError = null;
+        _editFormLoadFailed = false;
+        _isLoadingEditForm = true;
+        _edit = new ProfileUpdateDto();
+
+        await LoadEditLookupsAsync();
+
+        // Prefill from the self-scoped API, so every dropdown binds to the current
+        // stored value. The values are assigned straight onto the DTO and are never
+        // filtered or cleared: EmployeeRegistration likewise populates vm.Login from
+        // the stored row, and its selects are not allowed to reset a value.
+        var profile = await SafeGetAsync<ProfileDto>("api/Profile");
+        if (profile != null)
+        {
+            _edit = new ProfileUpdateDto
+            {
+                EmployeeCode = profile.EmployeeCode,
+                Name = profile.Name,
+                Email = profile.Email,
+                PersonalPhoneNumber = profile.PersonalPhoneNumber,
+                OfficialPhoneNumber = profile.OfficialPhoneNumber,
+                Role = profile.Role,
+                DesignationId = profile.DesignationId,
+                ZoneId = profile.ZoneId,
+                StateId = profile.StateId,
+                RegionId = profile.RegionId,
+                HeadquartersId = profile.HeadquartersId,
+                IsActive = profile.IsActive
+            };
+
+            if (ProfileSaveDebug)
+            {
+                Console.WriteLine($"StateId = {_edit.StateId}");
+                Console.WriteLine($"RegionId = {_edit.RegionId}");
+                Console.WriteLine($"ZoneId = {_edit.ZoneId}");
+                Console.WriteLine($"HeadquartersId = {_edit.HeadquartersId}");
+                Console.WriteLine($"[ProfileSave] initial binding -> LoginId={profile.LoginId} " +
+                                  $"State={_edit.StateId} Region={_edit.RegionId} " +
+                                  $"Zone={_edit.ZoneId} Hq={_edit.HeadquartersId} " +
+                                  $"DesignationId={_edit.DesignationId} Role={_edit.Role} IsActive={_edit.IsActive} " +
+                                  $"| role={SelectedEditRole} " +
+                                  $"| showsZone={NeedsZone(SelectedEditRole)} " +
+                                  $"showsState={NeedsState(SelectedEditRole)} " +
+                                  $"showsRegion={NeedsRegion(SelectedEditRole)} " +
+                                  $"showsHq={NeedsHeadquarter(SelectedEditRole)}");
+            }
+        }
+        else
+        {
+            // The client cannot know UserInfo.DesignationId (the page only ever
+            // held the designation *name* from the JWT claim). Prefilling a guess
+            // would silently clear the designation on save, so block the save
+            // instead of risking a wrong write.
+            _editFormLoadFailed = true;
+            _editFormError = "Your details could not be loaded, so the form has been locked to avoid " +
+                             "overwriting your Role, Designation, Location or Status. Please cancel and try again.";
+        }
+
+        _isLoadingEditForm = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CloseEditModal()
+    {
+        if (_isSavingProfile) return;
+        _showEditModal = false;
+        _editFormError = null;
+        _editFormLoadFailed = false;
+    }
+
+    // TEMPORARY DIAGNOSTIC — set to false (or delete the ProfileSaveDebug*
+    // members) once the save flow is confirmed working.
+    private const bool ProfileSaveDebug = true;
+
+    private void DumpEditModel(string stage)
+    {
+        if (!ProfileSaveDebug) return;
+        Console.WriteLine($"[ProfileSave][{stage}] EmployeeCode={_edit.EmployeeCode}");
+        Console.WriteLine($"[ProfileSave][{stage}] Name={_edit.Name}");
+        Console.WriteLine($"[ProfileSave][{stage}] Email={_edit.Email}");
+        Console.WriteLine($"[ProfileSave][{stage}] PersonalPhoneNumber={_edit.PersonalPhoneNumber}");
+        Console.WriteLine($"[ProfileSave][{stage}] OfficialPhoneNumber={_edit.OfficialPhoneNumber}");
+        Console.WriteLine($"[ProfileSave][{stage}] Role={_edit.Role} ({(int)_edit.Role})");
+        Console.WriteLine($"[ProfileSave][{stage}] DesignationId={_edit.DesignationId}");
+        Console.WriteLine($"[ProfileSave][{stage}] ZoneId={_edit.ZoneId}");
+        Console.WriteLine($"[ProfileSave][{stage}] StateId={_edit.StateId}");
+        Console.WriteLine($"[ProfileSave][{stage}] RegionId={_edit.RegionId}");
+        Console.WriteLine($"[ProfileSave][{stage}] HeadquartersId={_edit.HeadquartersId}");
+        Console.WriteLine($"[ProfileSave][{stage}] IsActive={_edit.IsActive}");
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        if (_isSavingProfile || _editFormLoadFailed) return;
+
+        _isSavingProfile = true;
+        _editFormError = null;
+
+        try
+        {
+            DumpEditModel("before PUT");
+
+            var outcome = await SafePutAsync("api/Profile", _edit);
+
+            if (ProfileSaveDebug)
+            {
+                Console.WriteLine($"[ProfileSave] StatusCode={outcome.StatusCode} Success={outcome.Success}");
+                Console.WriteLine($"[ProfileSave] RawBody={outcome.RawBody}");
+                Console.WriteLine($"[ProfileSave] Error={outcome.Error}");
+            }
+
+            if (!outcome.Success)
+            {
+                _editFormError = outcome.Error ?? "Your profile could not be saved. Please try again.";
+                return;
+            }
+
+            _showEditModal = false;
+
+            if (outcome.Payload?.RequiresReauthentication == true)
+            {
+                // Role / Designation / location / Status changed, so the current
+                // JWT claims, RoleAccess -> AllowedPages and designation name are
+                // stale. Drop the session and force a fresh sign-in.
+                Toast.Success("Profile updated successfully. Please sign in again to apply your new access.");
+                await ForceReloginAsync();
+                return;
+            }
+
+            Toast.Success("Profile updated successfully.");
+
+            // Only the non security-scoped fields changed, so the token is still
+            // valid — reload the display straight from the API.
+            await LoadEmployeeProfileAsync();
+        }
+        catch (Exception)
+        {
+            _editFormError = "Your profile could not be saved. Please try again.";
+        }
+        finally
+        {
+            _isSavingProfile = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    /// <summary>
+    /// Clears every trace of the current session and sends the user back to the
+    /// login page. LoginState.Logout() drops the parsed claims, AllowedPages and
+    /// the designation name; the session store purge stops MainLayout from
+    /// restoring the stale token on reload.
+    /// </summary>
+    private async Task ForceReloginAsync()
+    {
+        await SessionStore.ClearAsync();
+        LoginState.Expiration = default;
+        LoginState.Logout();
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+
+    private async Task<PutOutcome> SafePutAsync(string url, ProfileUpdateDto body)
+    {
+        try
+        {
+            var response = await Http.PutAsJsonAsync(url, body);
+            var raw = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var payload = string.IsNullOrWhiteSpace(raw)
+                    ? new ProfileSaveResult()
+                    : JsonSerializer.Deserialize<ProfileSaveResult>(raw, ProfileJsonOptions);
+
+                return new PutOutcome
+                {
+                    Success = true,
+                    StatusCode = (int)response.StatusCode,
+                    RawBody = raw,
+                    Payload = payload ?? new ProfileSaveResult()
+                };
+            }
+
+            return new PutOutcome
+            {
+                Success = false,
+                StatusCode = (int)response.StatusCode,
+                RawBody = raw,
+                Error = ExtractErrorMessage(raw)
+                         ?? $"Your profile could not be saved. Please try again. (HTTP {(int)response.StatusCode})"
+            };
+        }
+        catch (Exception ex)
+        {
+            return new PutOutcome
+            {
+                Success = false,
+                StatusCode = 0,
+                Error = $"Your profile could not be saved. Please try again. ({ex.GetType().Name}: {ex.Message})"
+            };
+        }
+    }
+
+    /// <summary>
+    /// Pulls a human-readable error out of a failure body. Handles the
+    /// { "message": "..." } shape returned by the ProfileController and the
+    /// ValidationProblemDetails shape that [ApiController] produces for
+    /// DataAnnotation failures, so a validation problem is never shown as a
+    /// generic "could not save" message.
+    /// </summary>
+    private static string? ExtractErrorMessage(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        try
+        {
+            var api = JsonSerializer.Deserialize<ApiMessage>(raw, ProfileJsonOptions);
+            if (!string.IsNullOrWhiteSpace(api?.Message)) return api!.Message;
+
+            var problem = JsonSerializer.Deserialize<ValidationProblem>(raw, ProfileJsonOptions);
+            if (problem?.Errors is { Count: > 0 })
+            {
+                var flattened = problem.Errors
+                    .SelectMany(kv => kv.Value ?? Array.Empty<string>())
+                    .Select(m => m?.Trim())
+                    .Where(m => !string.IsNullOrWhiteSpace(m))
+                    .Distinct()
+                    .ToList();
+                if (flattened.Count > 0) return string.Join(" ", flattened);
+            }
+        }
+        catch (Exception)
+        {
+            // Fall through to the raw body below.
+        }
+
+        return raw.Length <= 300 ? raw : raw[..300];
+    }
+
+    private static readonly JsonSerializerOptions ProfileJsonOptions = new(JsonSerializerDefaults.Web);
+
+    /// <summary>Full outcome of the PUT: success flag, status, raw body, payload.</summary>
+    private sealed class PutOutcome
+    {
+        public bool Success { get; init; }
+        public int StatusCode { get; init; }
+        public string RawBody { get; init; } = "";
+        public ProfileSaveResult? Payload { get; init; }
+        public string? Error { get; init; }
+    }
+
+    private sealed class ProfileSaveResult
+    {
+        public string? Message { get; set; }
+        public bool RequiresReauthentication { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    private sealed class ValidationProblem
+    {
+        public Dictionary<string, string[]>? Errors { get; set; }
+    }
+
+    private sealed class ApiMessage
+    {
+        public string? Message { get; set; }
     }
 
     private static string TextOrDash(string? value) =>
@@ -1312,10 +1929,35 @@
             ? LookupCache.Headquarters.FirstOrDefault(h => h.Id == _employeeLogin.HeadquartersId)?.HeadquarterName ?? "—"
             : "—";
 
-    private class ZoneItemDto
+    /// <summary>Mirrors the LocationItemDto EmployeeRegistration declares for the
+    /// same four lookup endpoints, including the same Name fallback chain, so both
+    /// screens render identical option text for identical rows.</summary>
+    private class LocationItemDto
     {
         public int Id { get; set; }
         public string ZoneName { get; set; } = "";
+        public string StateName { get; set; } = "";
+        public string DistrictName { get; set; } = "";
+        public string SubDistrictName { get; set; } = "";
+        public string RegionName { get; set; } = "";
+        public string HeadquarterName { get; set; } = "";
+        public string? ZoneCode { get; set; }
+        public string? ZoneColorCode { get; set; }
+        public int ZoneId { get; set; }
+        public int StateId { get; set; }
+        public int DistrictId { get; set; }
+        public int RegionId { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+
+        public string Name =>
+            !string.IsNullOrEmpty(ZoneName) ? ZoneName :
+            !string.IsNullOrEmpty(StateName) ? StateName :
+            !string.IsNullOrEmpty(DistrictName) ? DistrictName :
+            !string.IsNullOrEmpty(SubDistrictName) ? SubDistrictName :
+            !string.IsNullOrEmpty(RegionName) ? RegionName :
+            HeadquarterName;
     }
 
     private List<CreditLimitHistory> SpicCreditHistories =>

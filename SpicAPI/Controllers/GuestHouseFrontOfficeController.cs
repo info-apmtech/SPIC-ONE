@@ -36,11 +36,16 @@ namespace SpicAPI.Controllers
 	{
 		private readonly AppDbContext _db;
 		private readonly GuestHouseBookingOptions _bookingOptions;
+		private readonly ILogger<GuestHouseFrontOfficeController> _logger;
 
-		public GuestHouseFrontOfficeController(AppDbContext db, IOptions<GuestHouseBookingOptions> bookingOptions)
+		public GuestHouseFrontOfficeController(
+			AppDbContext db,
+			IOptions<GuestHouseBookingOptions> bookingOptions,
+			ILogger<GuestHouseFrontOfficeController> logger)
 		{
 			_db = db;
 			_bookingOptions = bookingOptions.Value;
+			_logger = logger;
 		}
 
 		// A PendingPayment booking only holds its room for this long from its own CreatedAt -
@@ -569,6 +574,217 @@ namespace SpicAPI.Controllers
 				BookingReference = booking.BookingReference,
 				Message = "Check-out completed. Room is now available."
 			});
+		}
+
+		// =====================================================================
+		//  CANCELLATION APPROVAL (Admin side)
+		//
+		//  Dealer request (GuestHouseBookingController POST bookings/{id}/cancel) only
+		//  records a PendingApproval GuestHouseBookingCancellation. These endpoints are the
+		//  only place that ever cancels the booking or releases the room. Refunds are NOT
+		//  automatic: they are processed manually outside the application (no Razorpay refund).
+		//  Admin / CorporateAdmin only - enforced by the class-level [Authorize(Roles)].
+		// =====================================================================
+
+		// GET /api/GuestHouseFrontOffice/cancellations?status=PendingApproval|Approved|Rejected|All
+		[HttpGet("cancellations")]
+		public async Task<IActionResult> GetCancellationRequests([FromQuery] string? status)
+		{
+			var query = _db.Set<GuestHouseBookingCancellation>()
+				.AsNoTracking()
+				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.GuestHouse)
+				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.GuestHouseRoom)
+				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.Guests)
+				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.Payments)
+				.AsQueryable();
+
+			if (string.IsNullOrWhiteSpace(status))
+			{
+				query = query.Where(c => c.ApprovalStatus == GuestHouseCancellationApprovalStatus.PendingApproval);
+			}
+			else if (!string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
+			{
+				if (!Enum.TryParse<GuestHouseCancellationApprovalStatus>(status, true, out var parsed))
+					return BadRequest(new { Success = false, Message = "Invalid status filter." });
+				query = query.Where(c => c.ApprovalStatus == parsed);
+			}
+
+			var rows = await query.OrderByDescending(c => c.CancelledAt).ToListAsync();
+
+			var bookingIds = rows.Select(c => c.GuestHouseBookingId).ToList();
+			var refunds = await _db.Set<GuestHouseBookingRefund>()
+				.AsNoTracking()
+				.Where(r => bookingIds.Contains(r.GuestHouseBookingId))
+				.ToDictionaryAsync(r => r.GuestHouseBookingId);
+
+			var items = rows.Select(c =>
+			{
+				var b = c.GuestHouseBooking!;
+				var guest = b.Guests.FirstOrDefault();
+				var payment = b.Payments.FirstOrDefault();
+				refunds.TryGetValue(c.GuestHouseBookingId, out var refund);
+				return new CancellationRequestListItemDto
+				{
+					CancellationId = c.Id,
+					CancellationReference = c.CancellationReference,
+					BookingId = b.Id,
+					BookingReference = b.BookingReference ?? $"BK{b.Id}",
+					GuestHouseName = b.GuestHouse?.Name ?? "",
+					RoomType = b.GuestHouseRoom?.RoomType ?? "Room",
+					GuestName = guest?.GuestName,
+					EmployeeOrDealerCode = guest?.EmployeeOrDealerCode,
+					PhoneNumber = guest?.PhoneNumber,
+					CheckInDate = b.CheckInDate,
+					CheckOutDate = b.CheckOutDate,
+					BookingStatus = b.BookingStatus.ToString(),
+					PaymentStatus = b.PaymentStatus.ToString(),
+					PaymentMethod = payment?.PaymentMethod.ToString() ?? "",
+					TotalAmount = b.TotalAmount ?? 0,
+					CancellationCharge = c.CancellationCharge ?? 0,
+					TaxAdjustment = c.TaxAdjustment ?? 0,
+					RefundAmount = c.RefundAmount ?? 0,
+					CancellationReason = c.CancellationReason,
+					RequestedBy = c.CancelledBy,
+					RequestedAt = c.CancelledAt,
+					ApprovalStatus = c.ApprovalStatus.ToString(),
+					RefundStatus = c.RefundStatus.ToString(),
+					AdminDecisionBy = c.AdminDecisionBy,
+					AdminDecisionAt = c.AdminDecisionAt,
+					RejectionReason = c.RejectionReason,
+					Remarks = c.Remarks,
+					RefundReference = refund?.RefundReference,
+					EstimatedRefundDate = c.EstimatedRefundDate
+				};
+			}).ToList();
+
+			return Ok(items);
+		}
+
+		// POST /api/GuestHouseFrontOffice/cancellations/{id}/approve
+		//
+		// Approves the dealer's cancellation request: the booking is cancelled and its room
+		// released. No refund is created here - the refund is processed manually outside the
+		// application (client requirement), so the request is recorded with RefundStatus Pending
+		// when a refund is due.
+		//
+		// Duplicate safety: an already Approved request returns its current state, and the
+		// PendingApproval -> Approved transition is a conditional UPDATE (see
+		// GuestHouseRefundStatusSync.FinalizeApprovalAsync), so a concurrent second approve or a
+		// reject affects 0 rows.
+		[HttpPost("cancellations/{id:int}/approve")]
+		public async Task<IActionResult> ApproveCancellation(int id)
+		{
+			var adminName = User.Identity?.Name;
+
+			var cancellation = await _db.Set<GuestHouseBookingCancellation>()
+				.AsNoTracking()
+				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.Payments)
+				.FirstOrDefaultAsync(c => c.Id == id);
+			if (cancellation == null || cancellation.GuestHouseBooking == null)
+				return NotFound(new { Success = false, Message = "Cancellation request not found." });
+
+			var booking = cancellation.GuestHouseBooking;
+
+			if (cancellation.ApprovalStatus == GuestHouseCancellationApprovalStatus.Approved)
+			{
+				return Ok(new
+				{
+					Success = true,
+					AlreadyProcessed = true,
+					ApprovalStatus = cancellation.ApprovalStatus.ToString(),
+					RefundStatus = cancellation.RefundStatus.ToString(),
+					Message = "This cancellation has already been approved."
+				});
+			}
+			if (cancellation.ApprovalStatus == GuestHouseCancellationApprovalStatus.Rejected)
+				return BadRequest(new { Success = false, Message = "This cancellation request has already been rejected." });
+
+			switch (booking.BookingStatus)
+			{
+				case GuestHouseBookingStatus.Cancelled:
+					return BadRequest(new { Success = false, Message = "This booking is already cancelled." });
+				case GuestHouseBookingStatus.Completed:
+					return BadRequest(new { Success = false, Message = "A completed stay cannot be cancelled." });
+				case GuestHouseBookingStatus.CheckedIn:
+					return BadRequest(new { Success = false, Message = "The guest is checked in. Check the guest out instead of cancelling." });
+			}
+
+			GuestHouseRefundStatusSync.FinalizeOutcome finalized;
+			try
+			{
+				finalized = await GuestHouseRefundStatusSync.FinalizeApprovalAsync(_db, cancellation.Id, adminName);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Approving cancellation {CancellationId} (booking {BookingId}) failed.", cancellation.Id, booking.Id);
+				return StatusCode(500, new { Success = false, Message = "The approval could not be saved. The booking has NOT been cancelled; please try again." });
+			}
+
+			var current = await _db.Set<GuestHouseBookingCancellation>().AsNoTracking().FirstAsync(c => c.Id == cancellation.Id);
+			if (finalized == GuestHouseRefundStatusSync.FinalizeOutcome.AlreadyFinalized)
+			{
+				if (current.ApprovalStatus == GuestHouseCancellationApprovalStatus.Rejected)
+					return BadRequest(new { Success = false, Message = "This cancellation request has already been rejected." });
+				return Ok(new
+				{
+					Success = true,
+					AlreadyProcessed = true,
+					ApprovalStatus = current.ApprovalStatus.ToString(),
+					RefundStatus = current.RefundStatus.ToString(),
+					Message = "This cancellation has already been approved."
+				});
+			}
+
+			var refundAmount = current.RefundAmount ?? 0m;
+			return Ok(new
+			{
+				Success = true,
+				AlreadyProcessed = false,
+				ApprovalStatus = current.ApprovalStatus.ToString(),
+				RefundStatus = current.RefundStatus.ToString(),
+				RefundAmount = refundAmount,
+				EstimatedRefundDate = current.EstimatedRefundDate,
+				Message = refundAmount > 0
+					? "Cancellation approved and room released. The refund will be processed manually."
+					: "Cancellation approved and room released. No refund was due."
+			});
+		}
+
+		// POST /api/GuestHouseFrontOffice/cancellations/{id}/reject
+		// Records the Admin's rejection only - no refund, the booking stays active and the
+		// room stays held.
+		[HttpPost("cancellations/{id:int}/reject")]
+		public async Task<IActionResult> RejectCancellation(int id, [FromBody] RejectCancellationRequest? request)
+		{
+			var reason = request?.Reason?.Trim();
+			if (string.IsNullOrWhiteSpace(reason))
+				return BadRequest(new { Success = false, Message = "Please enter a reason for rejection." });
+
+			var adminName = User.Identity?.Name;
+			var now = DateTime.Now;
+
+			// Conditional update so a reject can never race an in-flight approval/refund.
+			var updated = await _db.Set<GuestHouseBookingCancellation>()
+				.Where(c => c.Id == id
+					&& c.ApprovalStatus == GuestHouseCancellationApprovalStatus.PendingApproval
+					&& c.RefundStatus != GuestHouseRefundStatus.Processing)
+				.ExecuteUpdateAsync(s => s
+					.SetProperty(c => c.ApprovalStatus, GuestHouseCancellationApprovalStatus.Rejected)
+					.SetProperty(c => c.RejectionReason, reason)
+					.SetProperty(c => c.AdminDecisionBy, adminName)
+					.SetProperty(c => c.AdminDecisionAt, now));
+
+			if (updated == 1)
+				return Ok(new { Success = true, AlreadyProcessed = false, ApprovalStatus = GuestHouseCancellationApprovalStatus.Rejected.ToString(), Message = "Cancellation request rejected." });
+
+			var existing = await _db.Set<GuestHouseBookingCancellation>().AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
+			if (existing == null)
+				return NotFound(new { Success = false, Message = "Cancellation request not found." });
+			if (existing.ApprovalStatus == GuestHouseCancellationApprovalStatus.Rejected)
+				return Ok(new { Success = true, AlreadyProcessed = true, ApprovalStatus = existing.ApprovalStatus.ToString(), Message = "This request has already been rejected." });
+			if (existing.ApprovalStatus == GuestHouseCancellationApprovalStatus.Approved)
+				return BadRequest(new { Success = false, Message = "This request has already been approved and cannot be rejected." });
+			return Conflict(new { Success = false, Message = "A refund for this request is in progress or unconfirmed, so it cannot be rejected now." });
 		}
 
 		// =====================================================================
@@ -1503,5 +1719,43 @@ namespace SpicAPI.Controllers
 		public decimal Amount { get; set; }
 		public GuestHousePaymentStatus PaymentStatus { get; set; }
 		public bool HasBill { get; set; }
+	}
+
+	public class RejectCancellationRequest
+	{
+		public string? Reason { get; set; }
+	}
+
+	public class CancellationRequestListItemDto
+	{
+		public int CancellationId { get; set; }
+		public string? CancellationReference { get; set; }
+		public int BookingId { get; set; }
+		public string BookingReference { get; set; } = "";
+		public string GuestHouseName { get; set; } = "";
+		public string RoomType { get; set; } = "";
+		public string? GuestName { get; set; }
+		public string? EmployeeOrDealerCode { get; set; }
+		public string? PhoneNumber { get; set; }
+		public DateTime? CheckInDate { get; set; }
+		public DateTime? CheckOutDate { get; set; }
+		public string BookingStatus { get; set; } = "";
+		public string PaymentStatus { get; set; } = "";
+		public string PaymentMethod { get; set; } = "";
+		public decimal TotalAmount { get; set; }
+		public decimal CancellationCharge { get; set; }
+		public decimal TaxAdjustment { get; set; }
+		public decimal RefundAmount { get; set; }
+		public string? CancellationReason { get; set; }
+		public string? RequestedBy { get; set; }
+		public DateTime RequestedAt { get; set; }
+		public string ApprovalStatus { get; set; } = "";
+		public string RefundStatus { get; set; } = "";
+		public string? AdminDecisionBy { get; set; }
+		public DateTime? AdminDecisionAt { get; set; }
+		public string? RejectionReason { get; set; }
+		public string? Remarks { get; set; }
+		public string? RefundReference { get; set; }
+		public DateTime? EstimatedRefundDate { get; set; } // 2-working-day target (client requirement)
 	}
 }

@@ -103,6 +103,7 @@ function New-SecretParametersFile {
     $map = @{
         postgresAdminPassword = 'postgres-admin-password'
         jwtKey                = 'jwt-key'
+        telemetryIngestKey    = 'telemetry-ingest-key'   # metrics telemetry: web host -> API ingest (kept across deploys)
         ifmsDeviceKey         = 'ifms-device-key'
         ifmsAutomationKey     = 'ifms-automation-key'
         ifmsConnectionString  = 'ifms-connection'

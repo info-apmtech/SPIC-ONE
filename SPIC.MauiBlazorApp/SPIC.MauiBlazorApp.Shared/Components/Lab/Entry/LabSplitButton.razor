@@ -1,0 +1,130 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Entry
+@using SPIC.Core.DTOs
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+    Split button with a language menu (Figma: "Download All Reports | v", "Download PDF | v").
+    The main part downloads in the first language (English); the chevron opens the list of
+    languages (GET api/Lab/languages). OnPick receives the language code. The menu is placed
+    with position: fixed (LabSplitButton.razor.js) so a scrolling table or a sheet never clips it.
+
+        <LabSplitButton Label="Download PDF" Languages="_languages" OnPick="code => DownloadAsync(row, code)" />
+*@
+<div @ref="_root" class="lsb @(Small ? "lsb--sm" : "") @(Outline ? "lsb--outline" : "") @(_open ? "is-open" : "") @CssClass">
+    <button type="button" class="lsb-main" disabled="@(Busy || Languages is not { Count: > 0 })"
+            title="@($"{Label} ({DefaultName})")" @onclick="() => PickAsync(DefaultCode)">
+        @if (Busy)
+        {
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        }
+        else
+        {
+            <i class="bi @Icon" aria-hidden="true"></i>
+        }
+        <span class="lsb-label">@Label</span>
+    </button>
+    <button type="button" class="lsb-toggle" aria-haspopup="menu" aria-expanded="@(_open ? "true" : "false")"
+            aria-label="@($"{Label}: choose a language")" disabled="@(Busy || Languages is not { Count: > 0 })"
+            @onclick="() => _open = !_open">
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </button>
+
+    @if (_open)
+    {
+        <div class="lsb-backdrop" @ref="_backdrop" @onclick="() => _open = false"></div>
+        <div class="lsb-menu" role="menu" @ref="_menu">
+            @foreach (var lang in Languages!)
+            {
+                <button type="button" role="menuitem" class="lsb-item" @onclick="() => PickAsync(lang.Code)">
+                    <span>@lang.Name</span>
+                    @if (!string.Equals(lang.Name, lang.NativeName, StringComparison.Ordinal))
+                    {
+                        <span class="lsb-native">@lang.NativeName</span>
+                    }
+                </button>
+            }
+            @if (!string.IsNullOrWhiteSpace(ExtraLabel))
+            {
+                <div class="lsb-sep" role="separator"></div>
+                <button type="button" role="menuitem" class="lsb-item lsb-extra" disabled="@ExtraDisabled" @onclick="ExtraAsync">
+                    <span><i class="bi @ExtraIcon" aria-hidden="true"></i> @ExtraLabel</span>
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "Download PDF";
+    [Parameter] public string Icon { get; set; } = "bi-download";
+    [Parameter] public List<LabLanguageDto>? Languages { get; set; }
+    [Parameter] public EventCallback<string> OnPick { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    /// <summary>Compact height for table rows.</summary>
+    [Parameter] public bool Small { get; set; }
+    /// <summary>Outlined (secondary) look instead of the filled green.</summary>
+    [Parameter] public bool Outline { get; set; }
+    [Parameter] public string? CssClass { get; set; }
+    /// <summary>Optional action under the languages (e.g. "Mark printed" on a report row).</summary>
+    [Parameter] public string? ExtraLabel { get; set; }
+    [Parameter] public string ExtraIcon { get; set; } = "bi-printer";
+    [Parameter] public bool ExtraDisabled { get; set; }
+    [Parameter] public EventCallback OnExtra { get; set; }
+
+    private bool _open;
+    private bool _placed;
+    private ElementReference _root, _menu, _backdrop;
+    private IJSObjectReference? _module;
+
+    private string DefaultCode => Languages is { Count: > 0 } ? Languages[0].Code : "en";
+    private string DefaultName => Languages is { Count: > 0 } ? Languages[0].Name : "English";
+
+    private async Task ExtraAsync()
+    {
+        _open = false;
+        await OnExtra.InvokeAsync();
+    }
+
+    private async Task PickAsync(string code)
+    {
+        _open = false;
+        await OnPick.InvokeAsync(code);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_open)
+        {
+            _placed = false;
+            return;
+        }
+        if (_placed) return;
+        _placed = true;
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "./_content/SPIC.MauiBlazorApp.Shared/Components/Lab/Entry/LabSplitButton.razor.js");
+            await _module.InvokeVoidAsync("place", _root, _menu, _backdrop);
+        }
+        catch (Exception)
+        {
+            // without the module the menu keeps its CSS position under the button
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null)
+            {
+                await _module.InvokeVoidAsync("release");
+                await _module.DisposeAsync();
+            }
+        }
+        catch (Exception)
+        {
+            // circuit may already be gone
+        }
+    }
+}

@@ -15,6 +15,22 @@ public interface IRazorpayService
     /// signature == HMAC_SHA256(order_id + "|" + payment_id, key_secret).
     /// </summary>
     bool VerifySignature(string orderId, string paymentId, string signature);
+
+    /// <summary>
+    /// Read-only check of an order's payments (GET /v1/orders/{order_id}/payments), used before
+    /// an abandoned booking is marked Failed. Success = false means the state could not be
+    /// determined (never "no payment").
+    /// </summary>
+    Task<RazorpayOrderPaymentsResult> GetOrderPaymentsAsync(string orderId, CancellationToken cancellationToken = default);
+}
+
+public class RazorpayOrderPaymentsResult
+{
+    public bool Success { get; set; }
+
+    /// <summary>True when any payment on the order is "authorized" or "captured" (money taken or about to be).</summary>
+    public bool HasSuccessfulPayment { get; set; }
+    public string? ErrorMessage { get; set; }
 }
 
 public class RazorpayOrderResult

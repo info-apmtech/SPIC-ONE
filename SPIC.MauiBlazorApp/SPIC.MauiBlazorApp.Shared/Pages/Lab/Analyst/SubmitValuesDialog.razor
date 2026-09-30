@@ -1,0 +1,45 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
+
+@*
+    Screen 16, "Submit Test Values?": the four summary rows and Cancel / Submit. The page does
+    the PUT (Submit=true) in OnSubmit and keeps the dialog open (Busy) until it answers.
+*@
+<LabModal IsOpen="IsOpen" Title="Submit Test Values?" Icon="bi-send-check" Tone="orange" Busy="Busy" OnClose="OnCancel"
+          Message="Once submitted, test values will be locked for report preview. You can edit only before report generation.">
+    <ChildContent>
+        <dl class="lm-rows">
+            <div class="lm-row"><dt>Sample No.</dt><dd>@SampleNo</dd></div>
+            <div class="lm-row"><dt>Farmer Name</dt><dd>@FarmerName</dd></div>
+            <div class="lm-row"><dt>Sample Type</dt><dd>@SampleType</dd></div>
+            <div class="lm-row"><dt>@OverallLabel</dt><dd><LabPill Text="@OverallText" Tone="@OverallTone" /></dd></div>
+        </dl>
+    </ChildContent>
+    <Actions>
+        <button type="button" class="la-btn la-btn-outline" disabled="@Busy" @onclick="OnCancel">Cancel</button>
+        <button type="button" class="la-btn la-btn-primary" disabled="@Busy" @onclick="OnSubmit">
+            @if (Busy)
+            {
+                <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                <span>Submitting...</span>
+            }
+            else
+            {
+                <i class="bi bi-send" aria-hidden="true"></i>
+                <span>Submit</span>
+            }
+        </button>
+    </Actions>
+</LabModal>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public string SampleNo { get; set; } = "";
+    [Parameter] public string FarmerName { get; set; } = "";
+    [Parameter] public string SampleType { get; set; } = "";
+    [Parameter] public string OverallLabel { get; set; } = "Overall Soil Status";
+    [Parameter] public string OverallText { get; set; } = "";
+    [Parameter] public string OverallTone { get; set; } = "grey";
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public EventCallback OnSubmit { get; set; }
+}

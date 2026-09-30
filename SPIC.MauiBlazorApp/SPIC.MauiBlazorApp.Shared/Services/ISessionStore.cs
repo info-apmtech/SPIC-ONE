@@ -12,12 +12,24 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         Task SetAsync(string key, string value);
         Task RemoveAsync(string key);
 
-        /// <summary>Removes every key in <see cref="SessionKeys.All"/>.</summary>
+        /// <summary>
+        /// Writes to persistent storage (localStorage on web; same as SetAsync on MAUI
+        /// since SecureStorage is already persistent).
+        /// </summary>
+        Task SetPersistentAsync(string key, string value) => SetAsync(key, value);
+
+        /// <summary>
+        /// Removes from persistent storage (localStorage on web; same as RemoveAsync on MAUI).
+        /// </summary>
+        Task RemovePersistentAsync(string key) => RemoveAsync(key);
+
+        /// <summary>Removes every key in <see cref="SessionKeys.All"/> from all stores.</summary>
         async Task ClearAsync()
         {
             foreach (var key in SessionKeys.All)
             {
                 await RemoveAsync(key);
+                await RemovePersistentAsync(key);
             }
         }
     }

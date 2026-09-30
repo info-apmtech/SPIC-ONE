@@ -60,3 +60,12 @@
         return invoke('GetCurrentPosition');
     };
 })();
+
+// Native share sheet (Android / iOS / Windows) instead of the Web Share API, which the
+// WebView does not implement.
+window.spic = window.spic || {};
+window.spic.share = function (title, text, url) {
+    return DotNet.invokeMethodAsync('SPIC.MauiBlazorApp', 'ShareText', title || '', text || '', url || '')
+        .then(function (ok) { return ok ? "shared" : "none"; })
+        .catch(function () { return "none"; });
+};

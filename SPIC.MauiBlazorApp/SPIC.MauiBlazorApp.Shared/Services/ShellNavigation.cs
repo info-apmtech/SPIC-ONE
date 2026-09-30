@@ -19,7 +19,8 @@ public sealed record ShellTab(string Key, string Label, string Icon, string Href
     /// <summary>
     /// Optional extra visibility rule that REPLACES the plain <c>CanAccess(PermissionKey)</c> check.
     /// Mirrors the non-trivial conditions in NavMenu.razor (role-only items, Dealer / Director
-    /// special cases). Admin and CorporateAdmin already bypass <c>CanAccess</c> inside LoginState.
+    /// special cases). Admin and CorporateAdmin already bypass <c>CanAccess</c> inside LoginState,
+    /// except for the designation-only SAS Lab / payment keys (those use <c>HasPageStrict</c>).
     /// </summary>
     public Func<LoginState, bool>? Rule { get; init; }
 
@@ -28,6 +29,14 @@ public sealed record ShellTab(string Key, string Label, string Icon, string Href
 
     /// <summary>Short label (about 10 characters) for the tab bar / rail; falls back to <see cref="Label"/>.</summary>
     public string? ShortLabel { get; init; }
+
+    /// <summary>
+    /// More-sheet-only destination: accessible users find it in the "More" sheet and the
+    /// tablet rail never lists it, and it is excluded from the phone bottom tab bar's
+    /// priority/fallback fill. Used for pages grouped only for menu purposes (e.g. the
+    /// Schemes parent) that must not steal a bottom-tab or rail slot by role priority.
+    /// </summary>
+    public bool MoreOnly { get; init; }
 
     public string TabLabel => ShortLabel ?? Label;
 }
@@ -57,6 +66,7 @@ public static class ShellNavigation
     public const string GroupAdminTools = "Admin tools";
     public const string GroupGuestHouse = "Guest House";
     public const string GroupApprovals = "Approvals & Reports";
+    public const string GroupSchemes = "Schemes";
 
     // Convenience so the rules read like NavMenu.razor.
     private static bool IsAdminOrCorporate(LoginState s) => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
@@ -107,6 +117,67 @@ public static class ShellNavigation
             ShortLabel = "Consignments", Group = "SAS Portal"
         },
 
+        // ---- SAS Lab portal (version 2, 2026-09-27) and payments: DESIGNATION only ----
+        // Rule = HasPageStrict: the Admin / CorporateAdmin roles do NOT bypass these (product decision 2026-09-27).
+        new("LabDashboard", "Lab Dashboard", "bi-speedometer", "/Lab", nameof(PagePermission.LabDashboard))
+        {
+            ShortLabel = "Lab", Group = "SAS Lab",
+            Rule = s => s.HasPageStrict(PagePermission.LabDashboard)
+        },
+        new("LabConsignments", "Consignment Details", "bi-boxes", "/Lab/Consignments", nameof(PagePermission.LabConsignments))
+        {
+            ShortLabel = "Consignments", Group = "SAS Lab",
+            Rule = s => s.HasPageStrict(PagePermission.LabConsignments)
+        },
+        new("LabAnalysis", "Analysis Tracking", "bi-clipboard2-pulse", "/Lab/Analysis", nameof(PagePermission.LabAnalysis))
+        {
+            ShortLabel = "Analysis", Group = "SAS Lab",
+            Rule = s => s.HasPageStrict(PagePermission.LabAnalysis)
+        },
+        new("LabReports", "Lab Reports", "bi-file-earmark-bar-graph", "/Lab/Reports", nameof(PagePermission.LabReports))
+        {
+            ShortLabel = "Reports", Group = "SAS Lab",
+            Rule = s => s.HasPageStrict(PagePermission.LabReports)
+        },
+        new("LabTestEntry", "Test Value Entry", "bi-pencil-square", "/Lab/TestEntry", nameof(PagePermission.LabTestEntry))
+        {
+            ShortLabel = "Test Entry", Group = "SAS Lab",
+            Rule = s => s.HasPageStrict(PagePermission.LabTestEntry)
+        },
+        new("LabTracking", "Lab Tracking", "bi-binoculars", "/Lab/Tracking", nameof(PagePermission.LabTracking))
+        {
+            ShortLabel = "Lab Tracking", Group = "SAS Lab",
+            Rule = s => s.HasPageStrict(PagePermission.LabTracking)
+        },
+        new("SasPaymentApproval", "Payment Approval", "bi-cash-coin", "/Sas/Payments", nameof(PagePermission.SasPaymentApproval))
+        {
+            ShortLabel = "Payments", Group = "SAS Portal",
+            Rule = s => s.HasPageStrict(PagePermission.SasPaymentApproval)
+        },
+        new("SasPaymentVerification", "Payment Verification", "bi-patch-check", "/Sas/Payments", nameof(PagePermission.SasPaymentVerification))
+        {
+            ShortLabel = "Verification", Group = "SAS Portal",
+            Rule = s => s.HasPageStrict(PagePermission.SasPaymentVerification)
+        },
+        new("SasPaymentHistory", "Payment History", "bi-clock-history", "/Sas/Payments/History", nameof(PagePermission.SasPaymentVerification))
+        {
+            ShortLabel = "History", Group = "SAS Portal",
+            Rule = s => s.HasPageStrict(PagePermission.SasPaymentVerification)
+        },
+        // Farmer pages (v1 SampleCollection key; the API scopes to the farmer's own samples)
+        new("SasMySamples", "My Samples", "bi-droplet-half", "/Sas/MySamples", nameof(PagePermission.SampleCollection))
+        {
+            ShortLabel = "Samples", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+        },
+        new("SasMyReports", "My Reports", "bi-file-earmark-text", "/Sas/MyReports", nameof(PagePermission.SampleCollection))
+        {
+            ShortLabel = "Reports", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+        },
+        new("SasMyPayments", "Payments", "bi-wallet2", "/Sas/Payments", nameof(PagePermission.SampleCollection))
+        {
+            ShortLabel = "Payments", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+        },
+
         // ---- shell hubs (phone destinations; PageGuard opens them to every signed-in user with a
         //      designation because each hub only LINKS to pages the user can already open) ----
         new("Activities", "My Activities", "bi-clipboard2-pulse-fill", "/Activities", "Activities")
@@ -127,6 +198,13 @@ public static class ShellNavigation
             // Also reachable from the sparkle icon in the phone/tablet top bar. The chat is open to
             // every role; the rest of the Digital Library stays behind CanAccess("DigitalLibrary").
             ShortLabel = "Ask AI", Rule = s => s.IsLoggedIn
+        },
+        // Category master behind the content forms (admin page; PageGuard treats
+        // /DigitalLibrary/categories like /DigitalLibrary/add). Own key so it is never confused
+        // with the Library tab in Find / ActiveKey; the permission is the DigitalLibrary page.
+        new("LibraryCategories", "Library Categories", "bi-tags", "/DigitalLibrary/categories", "DigitalLibrary")
+        {
+            ShortLabel = "Categories", Group = "Digital Library"
         },
 
         // ---- role-specific quick destinations (pages reachable today but not listed in NavMenu) ----
@@ -155,19 +233,19 @@ public static class ShellNavigation
             Rule = s => s.UserRole != AppRole.Dealer
                         && (s.CanAccess(nameof(PagePermission.SchemeApproval)) || s.UserRole == AppRole.Director)
         },
-        new("SMMApprovals", "SMM Approvals", "bi-clipboard2-check-fill", "/SMMApprovals", "SMMApprovals")
+        new("SMMApprovals", "SMM Approvals", "bi-clipboard2-check-fill", "/SMMApprovals", nameof(PagePermission.SMMApprovals))
         {
             ShortLabel = "Approvals", Group = GroupApprovals
         },
-        new("AVPApprovals", "AVP Approvals", "bi-patch-check-fill", "/AVPApprovals", "AVPApprovals")
+        new("AVPApprovals", "AVP Approvals", "bi-patch-check-fill", "/AVPApprovals", nameof(PagePermission.AVPApprovals))
         {
             ShortLabel = "Approvals", Group = GroupApprovals
         },
-        new("RMDValidationQueue", "RMD Validation Queue", "bi-list-check", "/RMDValidationQueue", "RMDValidationQueue")
+        new("RMDValidationQueue", "RMD Validation Queue", "bi-list-check", "/RMDValidationQueue", nameof(PagePermission.RMDValidationQueue))
         {
             ShortLabel = "Queue", Group = GroupMdPortal
         },
-        new("ReportsCenter", "Reports Center", "bi-bar-chart-fill", "/ReportsCenter", "ReportsCenter")
+        new("ReportsCenter", "Reports Center", "bi-bar-chart-fill", "/ReportsCenter", nameof(PagePermission.ReportsCenter))
         {
             ShortLabel = "Reports", Group = GroupApprovals
         },
@@ -175,7 +253,7 @@ public static class ShellNavigation
         {
             ShortLabel = "Logistics", Group = GroupSettings
         },
-        new("LogisticsMaster", "Logistics Master", "bi-box-seam-fill", "/LogisticsMaster", "LogisticsMaster")
+        new("LogisticsMaster", "Logistics Master", "bi-box-seam-fill", "/LogisticsMaster", nameof(PagePermission.LogisticsMaster))
         {
             ShortLabel = "Master", Group = GroupSettings
         },
@@ -183,7 +261,7 @@ public static class ShellNavigation
         {
             ShortLabel = "Reports", Group = GroupApprovals
         },
-        new("UserProfile", "User Profile", "bi-person-fill", "/UserProfile", "UserProfile")
+        new("UserProfile", "User Profile", "bi-person-fill", "/UserProfile", nameof(PagePermission.UserProfile))
         {
             ShortLabel = "Profile"
         },
@@ -199,13 +277,14 @@ public static class ShellNavigation
         },
         new("DataExplorer", "Data Explorer", "bi-database-fill", "/DataExplorer", "DataExplorer")
         {
-            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.Admin or AppRole.SpecialAdmin
+            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.SuperAdmin
         },
-        // NavMenu.razor gates the IFMS Logins link on the dynamically registered "IfmsRelaySetup" key.
-        new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", "IfmsRelaySetup")
+        new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", nameof(PagePermission.IfmsRelaySetup))
         {
             Group = GroupAdminTools
         },
+        // Metrics (NavMenu: Settings accordion). MoreOnly: never takes a tab-bar / rail slot.
+        new("Metrics", "Metrics", "bi-activity", "/Metrics", nameof(PagePermission.Metrics)) { Group = GroupAdminTools, MoreOnly = true },
 
         // ---- Subsidy Management System accordion ----
         new("StockReport", "Stock Report", "bi-table", "/StockReport", nameof(PagePermission.SalesReport)) { Group = GroupSubsidy },
@@ -224,15 +303,15 @@ public static class ShellNavigation
         },
 
         // ---- MD Portal accordion ----
-        new("BudgetOverview", "Budget Overview", "bi-wallet2", "/BudgetOverview", "BudgetOverview") { Group = GroupMdPortal },
-        new("BudgetingManagements", "Budgeting Management", "bi-cash-stack", "/BudgetingManagements", "BudgetingManagements") { Group = GroupMdPortal },
+        new("BudgetOverview", "Budget Overview", "bi-wallet2", "/BudgetOverview", nameof(PagePermission.BudgetOverview)) { Group = GroupMdPortal },
+        new("BudgetingManagements", "Budgeting Management", "bi-cash-stack", "/BudgetingManagements", nameof(PagePermission.BudgetingManagements)) { Group = GroupMdPortal },
         new("BudgetSubmissions", "Budget Submissions", "bi-journal-text", "/BudgetSubmissions", nameof(PagePermission.BudgetSubmissions)) { Group = GroupMdPortal },
         new("CREATE-CSR-1Management", "CSR-1 Create", "bi-file-earmark-text", "/CREATE-CSR-1Management", nameof(PagePermission.CSR1Create)) { Group = GroupMdPortal },
         new("CSR-1List", "CSR-1 Management", "bi-kanban-fill", "/CSR-1List", nameof(PagePermission.CSR1Management)) { Group = GroupMdPortal },
-        new("CSR2", "CSR-2", "bi-layout-text-window-reverse", "/CSR2", "CSR2") { Group = GroupMdPortal },
-        new("FinalReportCSRView", "Final Report CSR", "bi-file-earmark-text", "/FinalReportCSRView", "FinalReportCSRView") { Group = GroupMdPortal },
-        new("MOSubmissionValidation", "MO Submission Validation", "bi-ui-checks-grid", "/MOSubmissionValidation", "MOSubmissionValidation") { Group = GroupMdPortal },
-        new("RMApprovalStatus", "RM Approval Status", "bi-diagram-3", "/RMApprovalStatus", "RMApprovalStatus") { Group = GroupMdPortal },
+        new("CSR2", "CSR-2", "bi-layout-text-window-reverse", "/CSR2", nameof(PagePermission.CSR2)) { Group = GroupMdPortal },
+        new("FinalReportCSRView", "Final Report CSR", "bi-file-earmark-text", "/FinalReportCSRView", nameof(PagePermission.FinalReportCSRView)) { Group = GroupMdPortal },
+        new("MOSubmissionValidation", "MO Submission Validation", "bi-ui-checks-grid", "/MOSubmissionValidation", nameof(PagePermission.MOSubmissionValidation)) { Group = GroupMdPortal },
+        new("RMApprovalStatus", "RM Approval Status", "bi-diagram-3", "/RMApprovalStatus", nameof(PagePermission.RMApprovalStatus)) { Group = GroupMdPortal },
 
         // ---- top level, continued (mirrors NavMenu.razor) ----
         new("Profile", "Profile", "bi-person-circle", "/Profile", nameof(PagePermission.Profile)),
@@ -240,14 +319,31 @@ public static class ShellNavigation
         new("DealerReviewList", "Dealer Application Review", "bi-person-vcard-fill", "/DealerReviewList", nameof(PagePermission.dealerreviewlist)),
         new("CreditLimitSales", "Financial Year Sales Data", "bi-currency-rupee", "/CreditLimitSales", nameof(PagePermission.CreditLimitSales)),
 
+        // ---- Schemes parent menu (10 pages that previously had no menu entry). MoreOnly: these
+        //      must never auto-fill the phone bottom tab bar or tablet rail, only the More sheet. ----
+        new("SchemeOverview", "Scheme Overview", "bi-clipboard-data-fill", "/SchemeOverview", nameof(PagePermission.SchemeOverview)) { Group = GroupSchemes, MoreOnly = true },
+        new("AddScheme", "Add Scheme", "bi-plus-square-fill", "/AddScheme", nameof(PagePermission.AddScheme)) { Group = GroupSchemes, MoreOnly = true },
+        new("Schemes", "Scheme List", "bi-collection-fill", "/Schemes", nameof(PagePermission.Schemes)) { Group = GroupSchemes, MoreOnly = true },
+        new("WinnerPopUp", "Winner PopUp", "bi-gift-fill", "/WinnerPopUp", nameof(PagePermission.WinnerPopUp)) { Group = GroupSchemes, MoreOnly = true },
+        new("WinnerDetails", "Winner Details", "bi-trophy-fill", "/WinnerDetails", nameof(PagePermission.WinnerDetails)) { Group = GroupSchemes, MoreOnly = true },
+        new("Luckydraw", "Lucky Draw", "bi-dice-6-fill", "/Luckydraw", nameof(PagePermission.Luckydraw)) { Group = GroupSchemes, MoreOnly = true },
+        new("LuckyDrawList", "Lucky Draw List", "bi-file-earmark-text-fill", "/LuckyDrawList", nameof(PagePermission.LuckyDrawList)) { Group = GroupSchemes, MoreOnly = true },
+        new("SelectPurchasedProducts", "Select Purchased Products", "bi-bag-check-fill", "/SelectPurchasedProducts", nameof(PagePermission.SelectPurchasedProducts)) { Group = GroupSchemes, MoreOnly = true },
+        new("Scanproduct", "Scan Product", "bi-upc-scan", "/Scanproduct", nameof(PagePermission.Scanproduct)) { Group = GroupSchemes, MoreOnly = true },
+        new("qr-scanner", "QR Scanner", "bi-qr-code-scan", "/qr-scanner", nameof(PagePermission.QRScanner)) { Group = GroupSchemes, MoreOnly = true },
+
         // ---- SDWA accordion (remaining items) ----
-        new("ReportDashboard", "Admin Dashboard", "bi-grid-fill", "/ReportDashboard", "ReportDashboard") { Group = GroupSdwa },
+        new("ReportDashboard", "Admin Dashboard", "bi-grid-fill", "/ReportDashboard", nameof(PagePermission.ReportDashboard)) { Group = GroupSdwa },
         new("SubDealerEmployeeMaster", "Sub Dealer & Employee", "bi-people-fill", "/SubDealerEmployeeMaster", nameof(PagePermission.SubDealerEmployeeMaster)) { Group = GroupSdwa },
         new("GuestHouseMaster", "Guest House Master", "bi-building-fill", "/GuestHouseMaster", "GuestHouseMaster")
         {
             Group = GroupSdwa, Rule = IsAdminOrCorporate
         },
         new("SdwaCompanyMaster", "Company Details", "bi-briefcase-fill", "/SdwaCompanyMaster", "SdwaCompanyMaster")
+        {
+            Group = GroupSdwa, Rule = IsAdminOrCorporate
+        },
+        new("GuestHouseCancellations", "Cancellation Requests", "bi-x-octagon-fill", "/GuestHouseCancellations", "GuestHouseCancellations")
         {
             Group = GroupSdwa, Rule = IsAdminOrCorporate
         },
@@ -259,13 +355,8 @@ public static class ShellNavigation
         new("Agriculture", "Agriculture & Products", "bi-flower1", "/Agriculture", nameof(PagePermission.Agriculture)) { Group = GroupSettings },
         new("Financial", "Financial Master", "bi-bank", "/Financial", nameof(PagePermission.Financial)) { Group = GroupSettings },
         new("Relationship", "Relationship Master", "bi-link-45deg", "/Relationship", nameof(PagePermission.Relationship)) { Group = GroupSettings },
-        new("PageManagement", "Page Management", "bi-sliders", "/PageManagement", "PageManagement")
-        {
-            Group = GroupSettings, Rule = IsAdminOrCorporate
-        },
-
         // ---- Contact ----
-        new("ContactUs", "Contact Us", "bi-headset", "/ContactUs", "ContactUs"),
+        new("ContactUs", "Contact Us", "bi-headset", "/ContactUs", nameof(PagePermission.ContactUs)),
     };
 
     // ---------------------------------------------------------------------------------------------
@@ -362,6 +453,8 @@ public static class ShellNavigation
         foreach (var tab in Candidates)
         {
             if (result.Count >= max) break;
+            // More-only destinations (e.g. Schemes parent pages) never take a tab-bar / rail slot.
+            if (tab.MoreOnly) continue;
             if (!result.Contains(tab) && IsAccessible(state, tab))
                 result.Add(tab);
         }
