@@ -704,5 +704,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<CSR1Products2> CSR1Products2 { get; set; }
 
         public DbSet<CSR1Products3> CSR1Products3 { get; set; }
+
+        // MD Portal - Annual Budgeting master
+        public DbSet<AnnualBudgeting> AnnualBudgetings { get; set; }
     }
 }

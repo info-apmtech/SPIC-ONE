@@ -99,7 +99,9 @@ namespace SPIC.Core.Entities
         [PageModule("SAS")] SasPaymentApproval,
         [PageModule("SAS")] SasPaymentVerification,
         // Usage / error metrics page (2026-09-28, docs/metrics-telemetry-plan.md). Normal CanAccess rule.
-        [PageModule("Administration")] Metrics
+        [PageModule("Administration")] Metrics,
+        // MD Portal - Annual Budgeting master. Appended at the END on purpose.
+        AnnualBudgeting
 
     }
 }
