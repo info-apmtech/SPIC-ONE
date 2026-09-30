@@ -1,268 +1,1202 @@
-﻿@inject NavigationManager NavigationManager
+﻿@using System.Net.Http.Json
+@using System.Globalization
+@using SPIC.Core.DTOs
+
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+
 
 @if (IsOpen)
 {
     <div class="csr-pd-overlay" @onclick="CloseDrawer">
-        <div class="csr-pd-drawer" @onclick:stopPropagation="true">
-            
-            <div class="csr-pd-header">
-                <div class="csr-pd-header-titles">
-                    <h2>CSR-1 Program Details</h2>
-                    <p>Crop Protection Workshop</p>
-                </div>
-                <button class="csr-pd-close-icon" @onclick="CloseDrawer" aria-label="Close">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                </button>
-            </div>
 
-            <div class="csr-pd-body">
-                
-                <div class="csr-pd-section">
-                    <h3>Program Information</h3>
-                    <div class="csr-pd-info-box">
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Program Type:</span>
-                            <span class="csr-pd-value">Training</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Program Name:</span>
-                            <span class="csr-pd-value">Crop Protection Workshop</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Status:</span>
-                            <span class="csr-pd-value">
-                                <span class="csr-pd-badge csr-pd-badge-approved">Approved</span>
-                            </span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Sanction Number:</span>
-                            <span class="csr-pd-value">CSR1-2026-045</span>
-                        </div>
+        <div class="csr-pd-drawer"
+             @onclick:stopPropagation="true">
+
+            @if (isLoading)
+            {
+                <div class="csr-pd-loading">
+                    <div class="spinner-border spinner-border-sm"></div>
+                    <span>Loading CSR-1 details...</span>
+                </div>
+            }
+            else if (details == null)
+            {
+                <div class="csr-pd-loading">
+                    Unable to load CSR-1 details.
+                </div>
+            }
+            else
+            {
+                @* ================================================= *@
+                @* HEADER                                            *@
+                @* ================================================= *@
+
+                <div class="csr-pd-header">
+
+                    <div>
+                        <h2>CSR-1 Program Details</h2>
+
+                        <p>
+                            @(string.IsNullOrWhiteSpace(details.ProgramName)
+                                ? "-"
+                                : details.ProgramName)
+                        </p>
                     </div>
-                </div>
 
-                <div class="csr-pd-section">
-                    <h3>Location Details</h3>
-                    <div class="csr-pd-info-box">
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">District:</span>
-                            <span class="csr-pd-value">Pune</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">HQ:</span>
-                            <span class="csr-pd-value">Pune, Maharashtra</span>
-                        </div>
+                    <div class="csr-pd-header-right">
+
+                        <span class="@GetHeaderStatusClass(details.Status)">
+                            @GetStatusDisplay(details.Status)
+                        </span>
+
+                        <button type="button"
+                                class="csr-pd-close"
+                                @onclick="CloseDrawer">
+
+                            <i class="bi bi-x-lg"></i>
+
+                        </button>
+
                     </div>
+
                 </div>
 
-                <div class="csr-pd-section">
-                    <h3>Budget Details</h3>
-                    <div class="csr-pd-info-box">
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Total Budget:</span>
-                            <span class="csr-pd-value csr-pd-font-bold">₹50,000</span>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="csr-pd-section">
-                    <h3>Expense Breakdown</h3>
-                    <div class="csr-pd-info-box">
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Printing & Stationary:</span>
-                            <span class="csr-pd-value">₹5,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Publicity Material:</span>
-                            <span class="csr-pd-value">₹8,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Stage Arrangements:</span>
-                            <span class="csr-pd-value">₹12,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Service Charges - LCA:</span>
-                            <span class="csr-pd-value">₹7,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Transport / Rent:</span>
-                            <span class="csr-pd-value">₹6,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Jeep Running Expenses:</span>
-                            <span class="csr-pd-value">₹4,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Refreshments:</span>
-                            <span class="csr-pd-value">₹5,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Inputs:</span>
-                            <span class="csr-pd-value">₹0</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Photography:</span>
-                            <span class="csr-pd-value">₹2,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Compliments:</span>
-                            <span class="csr-pd-value">₹1,000</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Others:</span>
-                            <span class="csr-pd-value">₹0</span>
-                        </div>
-                        <div class="csr-pd-row csr-pd-expense-total">
-                            <span class="csr-pd-label" style="font-weight: 700; color: #1e293b;">Total:</span>
-                            <span class="csr-pd-value csr-pd-font-bold">₹50,000</span>
-                        </div>
-                    </div>
-                </div>
+                <div class="csr-pd-content">
 
-                <div class="csr-pd-section">
-                    <h3>Focus Areas</h3>
-                    <div class="csr-pd-info-box">
-                        <div class="csr-pd-row" style="align-items: flex-start; gap: 12px; line-height: normal;">
-                            <span class="csr-pd-label">Focused Crops:</span>
-                            <span class="csr-pd-value">
-                                <span class="csr-pd-pill csr-pd-pill-green">Cotton</span>
-                                <span class="csr-pd-pill csr-pd-pill-green">Wheat</span>
-                                <span class="csr-pd-pill csr-pd-pill-green">Sugarcane</span>
-                            </span>
-                        </div>
-                        <div class="csr-pd-row" style="align-items: flex-start; gap: 12px; line-height: normal;">
-                            <span class="csr-pd-label">Focused Products:</span>
-                            <span class="csr-pd-value">
-                                <span class="csr-pd-pill csr-pd-pill-blue">Insecticide A</span>
-                                <span class="csr-pd-pill csr-pd-pill-blue">Fungicide B</span>
-                                <span class="csr-pd-pill csr-pd-pill-blue">Herbicide C</span>
-                            </span>
-                        </div>
-                    </div>
-                </div>
+                    @* ================================================= *@
+                    @* PROGRAM INFORMATION                               *@
+                    @* ================================================= *@
 
-                <div class="csr-pd-section">
-                    <h3>Budget Details</h3>
-                    <div class="csr-pd-timeline">
-                        <div class="csr-pd-tl-item">
-                            <div class="csr-pd-tl-line"></div>
-                            <div class="csr-pd-tl-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                            </div>
-                            <div class="csr-pd-tl-content">
-                                <h4>Created</h4>
-                                <div class="csr-pd-tl-meta">
-                                    <span>John Doe (MO)</span>
-                                    <span class="csr-pd-date-pill">May 1, 2026</span>
+                    <section class="csr-pd-section">
+
+                        <h3>Program Information</h3>
+
+                        <div class="csr-pd-panel csr-pd-info-grid">
+
+                            <div class="csr-pd-info-column">
+
+                                <div class="csr-pd-field">
+                                    <span>Program Type</span>
+                                    <strong>@ShowValue(details.ProgramType)</strong>
                                 </div>
-                            </div>
-                        </div>
-                        <div class="csr-pd-tl-item">
-                            <div class="csr-pd-tl-line"></div>
-                            <div class="csr-pd-tl-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                            </div>
-                            <div class="csr-pd-tl-content">
-                                <h4>Submitted</h4>
-                                <div class="csr-pd-tl-meta">
-                                    <span>John Doe (MO)</span>
-                                    <span class="csr-pd-date-pill">May 1, 2026</span>
+
+                                <div class="csr-pd-field">
+                                    <span>Program Name</span>
+                                    <strong>@ShowValue(details.ProgramName)</strong>
                                 </div>
-                            </div>
-                        </div>
-                        <div class="csr-pd-tl-item">
-                            <div class="csr-pd-tl-line"></div>
-                            <div class="csr-pd-tl-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                            </div>
-                            <div class="csr-pd-tl-content">
-                                <h4>Validated</h4>
-                                <div class="csr-pd-tl-meta">
-                                    <span>Regional MD</span>
-                                    <span class="csr-pd-date-pill">May 1, 2026</span>
+
+                                <div class="csr-pd-field">
+                                    <span>Number of Programs</span>
+                                    <strong>@details.NumberOfPrograms</strong>
                                 </div>
-                            </div>
-                        </div>
-                        <div class="csr-pd-tl-item">
-                            <div class="csr-pd-tl-line"></div>
-                            <div class="csr-pd-tl-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                            </div>
-                            <div class="csr-pd-tl-content">
-                                <h4>Approved</h4>
-                                <div class="csr-pd-tl-meta">
-                                    <span>State MD</span>
-                                    <span class="csr-pd-date-pill">May 1, 2026</span>
+
+                                <div class="csr-pd-field csr-pd-highlight-green">
+                                    <span>Responsible Person</span>
+                                    <strong>@ShowValue(details.ResponsiblePersonName)</strong>
                                 </div>
+
                             </div>
+
+
+                            <div class="csr-pd-info-column">
+
+                                <div class="csr-pd-field">
+                                    <span>HQ</span>
+                                    <strong>@ShowValue(details.HeadquarterName)</strong>
+                                </div>
+
+                                <div class="csr-pd-field">
+                                    <span>Location</span>
+                                    <strong>@ShowValue(details.LocationName)</strong>
+                                </div>
+
+                                <div class="csr-pd-field">
+                                    <span>Status</span>
+                                    <strong>@GetStatusDisplay(details.Status)</strong>
+                                </div>
+
+                                <div class="csr-pd-field">
+                                    <span>Submission Date</span>
+
+                                    <strong>
+                                        @details.CreatedAt.ToString("dd MMM yyyy")
+                                    </strong>
+                                </div>
+
+                            </div>
+
                         </div>
-                    </div>
+
+                    </section>
+
+
+                    @* ================================================= *@
+                    @* EXPENSE BREAKDOWN                                 *@
+                    @* ================================================= *@
+
+                    <section class="csr-pd-section">
+
+                        <h3>Expense Breakdown</h3>
+
+                        <div class="csr-pd-panel csr-pd-expense-grid">
+
+                            <div class="csr-pd-expense-column">
+
+                                @ExpenseRow(
+                                    "Printing & Stationery",
+                                    details.PrintingAndStationery)
+
+                                @ExpenseRow(
+                                    "Publicity Material",
+                                    details.PublicityMaterial)
+
+                                @ExpenseRow(
+                                    "Stage Material",
+                                    details.StageArrangements)
+
+                                @ExpenseRow(
+                                    "Service Charges - LCA",
+                                    details.ServiceChargesLCA)
+
+                                @ExpenseRow(
+                                    "Transport / Rent",
+                                    details.TransportRent)
+
+                                @ExpenseRow(
+                                    "Jeep Running Expenses",
+                                    details.JeepRunningExpenses)
+
+                            </div>
+
+
+                            <div class="csr-pd-expense-column">
+
+                                @ExpenseRow(
+                                    "Refreshments",
+                                    details.Refreshments)
+
+                                @ExpenseRow(
+                                    "Inputs",
+                                    details.Inputs)
+
+                                @ExpenseRow(
+                                    "Photography",
+                                    details.Photography)
+
+                                @ExpenseRow(
+                                    "Compliments",
+                                    details.Compliments)
+
+                                @ExpenseRow(
+                                    "Others",
+                                    details.Others)
+
+
+                                <div class="csr-pd-expense-row csr-pd-total-row">
+
+                                    <span>Total Budget</span>
+
+                                    <strong>
+                                        @FormatAmount(details.Budget)
+                                    </strong>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </section>
+
+
+                    @* ================================================= *@
+                    @* FOCUS AREAS                                       *@
+                    @* ================================================= *@
+
+                    <section class="csr-pd-section">
+
+                        <h3>Focus Areas</h3>
+
+                        <div class="csr-pd-panel csr-pd-focus-grid">
+
+                            <div class="csr-pd-focus-item">
+
+                                <label>Focused Crops:</label>
+
+                                <div class="csr-pd-pills">
+
+                                    @foreach (var crop in AllFocusCrops)
+                                    {
+                                        <span class="csr-pd-pill csr-pd-pill-green">
+                                            @crop
+                                        </span>
+                                    }
+
+                                    @if (!AllFocusCrops.Any())
+                                    {
+                                        <span class="csr-pd-empty">-</span>
+                                    }
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="csr-pd-focus-item">
+
+                                <label>Focused Products:</label>
+
+                                <div class="csr-pd-pills">
+
+                                    @foreach (var product in AllFocusProducts)
+                                    {
+                                        <span class="csr-pd-pill csr-pd-pill-blue">
+                                            @product
+                                        </span>
+                                    }
+
+                                    @if (!AllFocusProducts.Any())
+                                    {
+                                        <span class="csr-pd-empty">-</span>
+                                    }
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </section>
+
+
+                    @* ================================================= *@
+                    @* BUDGET / WORKFLOW TIMELINE                        *@
+                    @* ================================================= *@
+
+                    <section class="csr-pd-section">
+
+                        <h3>Budget Details</h3>
+
+                        <div class="csr-pd-timeline">
+
+                            <div class="csr-pd-timeline-item">
+
+                                <div class="csr-pd-timeline-marker">
+                                    <i class="bi bi-check"></i>
+                                </div>
+
+                                <div class="csr-pd-timeline-content">
+
+                                    <strong>Created</strong>
+
+                                    <div class="csr-pd-timeline-meta">
+
+                                        <span>
+                                            @ShowValue(details.CreatedBy)
+                                        </span>
+
+                                        <span class="csr-pd-date-pill">
+                                            @details.CreatedAt.ToString("dd MMM yyyy")
+                                        </span>
+
+                                    </div>
+
+                                </div>
+
+                            </div>
+
+
+                            @if (IsSubmittedOrLater)
+                            {
+                                <div class="csr-pd-timeline-item">
+
+                                    <div class="csr-pd-timeline-marker">
+                                        <i class="bi bi-check"></i>
+                                    </div>
+
+                                    <div class="csr-pd-timeline-content">
+
+                                        <strong>Submitted</strong>
+
+                                        <div class="csr-pd-timeline-meta">
+
+                                            <span>
+                                                @ShowValue(details.CreatedBy)
+                                            </span>
+
+                                            <span class="csr-pd-date-pill">
+                                                @details.CreatedAt.ToString("dd MMM yyyy")
+                                            </span>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+                            }
+
+
+                            @if (string.Equals(
+                                details.Status,
+                                "Validated",
+                                StringComparison.OrdinalIgnoreCase)
+                                ||
+                                string.Equals(
+                                    details.Status,
+                                    "Approved",
+                                    StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="csr-pd-timeline-item">
+
+                                    <div class="csr-pd-timeline-marker">
+                                        <i class="bi bi-check"></i>
+                                    </div>
+
+                                    <div class="csr-pd-timeline-content">
+
+                                        <strong>Validated</strong>
+
+                                        <div class="csr-pd-timeline-meta">
+
+                                            <span>
+                                                @ShowValue(details.UpdatedBy)
+                                            </span>
+
+                                            <span class="csr-pd-date-pill">
+
+                                                @(details.UpdatedAt.HasValue
+                                                    ? details.UpdatedAt.Value.ToString("dd MMM yyyy")
+                                                    : "-")
+
+                                            </span>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+                            }
+
+
+                            @if (string.Equals(
+                                details.Status,
+                                "Approved",
+                                StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="csr-pd-timeline-item csr-pd-timeline-last">
+
+                                    <div class="csr-pd-timeline-marker">
+                                        <i class="bi bi-check"></i>
+                                    </div>
+
+                                    <div class="csr-pd-timeline-content">
+
+                                        <strong>Approved</strong>
+
+                                        <div class="csr-pd-timeline-meta">
+
+                                            <span>
+                                                @ShowValue(details.UpdatedBy)
+                                            </span>
+
+                                            <span class="csr-pd-date-pill">
+
+                                                @(details.UpdatedAt.HasValue
+                                                    ? details.UpdatedAt.Value.ToString("dd MMM yyyy")
+                                                    : "-")
+
+                                            </span>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+                            }
+
+                        </div>
+
+                    </section>
+
+
+                    @if (!string.IsNullOrWhiteSpace(details.Remarks))
+                    {
+                        <section class="csr-pd-section">
+
+                            <h3>Remarks</h3>
+
+                            <div class="csr-pd-panel csr-pd-remarks">
+                                @details.Remarks
+                            </div>
+
+                        </section>
+                    }
+
                 </div>
 
-                <div class="csr-pd-section">
-                    <h3>Status History</h3>
-                    <div class="csr-pd-info-box">
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Submitted Date:</span>
-                            <span class="csr-pd-value">May 1, 2026</span>
-                        </div>
-                        <div class="csr-pd-row">
-                            <span class="csr-pd-label">Validation Due:</span>
-                            <span class="csr-pd-value">May 10, 2026</span>
-                        </div>
-                    </div>
+
+                @* ================================================= *@
+                @* FOOTER                                            *@
+                @* ================================================= *@
+
+                <div class="csr-pd-footer">
+
+                    <button type="button"
+                            class="csr-pd-footer-btn csr-pd-footer-outline">
+
+                        <i class="bi bi-download"></i>
+                        Export PDF
+
+                    </button>
+
+
+                    <button type="button"
+                            class="csr-pd-footer-btn csr-pd-footer-outline">
+
+                        <i class="bi bi-printer"></i>
+                        Print
+
+                    </button>
+
+
+                    <button type="button"
+                            class="csr-pd-footer-btn csr-pd-footer-primary"
+                            @onclick="OpenCsr2">
+
+                        <i class="bi bi-box-arrow-up-right"></i>
+                        Open CSR-2
+
+                    </button>
+
                 </div>
+            }
 
-            </div>
-
-            <div class="csr-pd-footer">
-                <button class="csr-pd-btn-action csr-pd-btn-dark" @onclick="OpenCsr2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                        <polyline points="15 3 21 3 21 9"></polyline>
-                        <line x1="10" y1="14" x2="21" y2="3"></line>
-                    </svg>
-                    Open CSR-2
-                </button>
-                <button class="csr-pd-btn-action csr-pd-btn-green">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                        <rect x="6" y="14" width="12" height="8"></rect>
-                    </svg>
-                    Print
-                </button>
-                <button class="csr-pd-btn-action csr-pd-btn-blue">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                    </svg>
-                    Export PDF
-                </button>
-            </div>
         </div>
+
     </div>
 }
 
+
+<style>
+
+    /* =========================================================
+           DRAWER
+           ========================================================= */
+
+    .csr-pd-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1050;
+        background: rgba(15, 23, 42, 0.28);
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .csr-pd-drawer {
+        width: min(820px, 94vw);
+        height: 100vh;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+        box-shadow: -10px 0 30px rgba(15, 23, 42, 0.12);
+        font-family: 'Inter', sans-serif;
+        overflow: hidden;
+    }
+
+
+    /* =========================================================
+           HEADER
+           ========================================================= */
+
+    .csr-pd-header {
+        min-height: 72px;
+        padding: 16px 20px;
+        border-bottom: 1px solid #e8edf3;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        flex-shrink: 0;
+    }
+
+        .csr-pd-header h2 {
+            margin: 0;
+            color: #0f172a;
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        .csr-pd-header p {
+            margin: 4px 0 0;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+    .csr-pd-header-right {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .csr-pd-status {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 24px;
+        padding: 3px 12px;
+        border-radius: 20px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
+    .csr-pd-status-approved {
+        background: #dcfce7;
+        border: 1px solid #bbf7d0;
+        color: #15803d;
+    }
+
+    .csr-pd-status-pending {
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        color: #c2410c;
+    }
+
+    .csr-pd-status-rejected {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #b91c1c;
+    }
+
+    .csr-pd-status-default {
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+    }
+
+    .csr-pd-close {
+        width: 30px;
+        height: 30px;
+        border: 0;
+        background: transparent;
+        border-radius: 6px;
+        color: #64748b;
+        cursor: pointer;
+    }
+
+        .csr-pd-close:hover {
+            background: #f8fafc;
+        }
+
+
+    /* =========================================================
+           CONTENT
+           ========================================================= */
+
+    .csr-pd-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 16px 20px 22px;
+    }
+
+    .csr-pd-section {
+        margin-bottom: 18px;
+    }
+
+        .csr-pd-section h3 {
+            margin: 0 0 8px;
+            color: #059669;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+    .csr-pd-panel {
+        border: 1px solid #eef2f7;
+        background: #fbfcfd;
+        border-radius: 5px;
+    }
+
+
+    /* =========================================================
+           PROGRAM INFO
+           ========================================================= */
+
+    .csr-pd-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 24px;
+        padding: 8px 12px;
+    }
+
+    .csr-pd-info-column {
+        min-width: 0;
+    }
+
+    .csr-pd-field {
+        min-height: 37px;
+        display: grid;
+        grid-template-columns: 125px minmax(0, 1fr);
+        align-items: center;
+        gap: 10px;
+        padding: 5px 7px;
+        border-bottom: 1px solid #edf1f5;
+    }
+
+    .csr-pd-info-column .csr-pd-field:last-child {
+        border-bottom: 0;
+    }
+
+    .csr-pd-field span {
+        color: #64748b;
+        font-size: 9px;
+        font-weight: 500;
+    }
+
+    .csr-pd-field strong {
+        color: #334155;
+        font-size: 9.5px;
+        font-weight: 600;
+    }
+
+    .csr-pd-highlight-green {
+        background: #e9fbf2;
+        border-radius: 4px;
+        border-bottom: 0;
+        margin-top: 2px;
+    }
+
+
+    /* =========================================================
+           EXPENSE
+           ========================================================= */
+
+    .csr-pd-expense-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 24px;
+        padding: 8px 12px;
+    }
+
+    .csr-pd-expense-row {
+        min-height: 34px;
+        padding: 6px 7px;
+        border-bottom: 1px solid #edf1f5;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+    }
+
+        .csr-pd-expense-row span {
+            color: #64748b;
+            font-size: 9px;
+        }
+
+        .csr-pd-expense-row strong {
+            color: #334155;
+            font-size: 9.5px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+    .csr-pd-total-row {
+        border: 0;
+        margin-top: 3px;
+        border-radius: 4px;
+        background: #dcfce7;
+        color: #166534;
+    }
+
+        .csr-pd-total-row span,
+        .csr-pd-total-row strong {
+            color: #166534;
+            font-weight: 700;
+        }
+
+
+    /* =========================================================
+           FOCUS AREA
+           ========================================================= */
+
+    .csr-pd-focus-grid {
+        padding: 12px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+    }
+
+    .csr-pd-focus-item {
+        min-width: 0;
+    }
+
+        .csr-pd-focus-item label {
+            display: block;
+            margin-bottom: 7px;
+            color: #64748b;
+            font-size: 9px;
+            font-weight: 500;
+        }
+
+    .csr-pd-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .csr-pd-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 18px;
+        padding: 2px 9px;
+        border-radius: 12px;
+        font-size: 8.5px;
+        font-weight: 600;
+    }
+
+    .csr-pd-pill-green {
+        background: #dcfce7;
+        color: #16a34a;
+    }
+
+    .csr-pd-pill-blue {
+        background: #dbeafe;
+        color: #2563eb;
+    }
+
+    .csr-pd-empty {
+        color: #94a3b8;
+        font-size: 10px;
+    }
+
+
+    /* =========================================================
+           TIMELINE
+           ========================================================= */
+
+    .csr-pd-timeline {
+        padding: 3px 2px;
+    }
+
+    .csr-pd-timeline-item {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding-bottom: 14px;
+    }
+
+        .csr-pd-timeline-item::after {
+            content: "";
+            position: absolute;
+            top: 20px;
+            bottom: 0;
+            left: 9px;
+            width: 1px;
+            background: #86efac;
+        }
+
+    .csr-pd-timeline-last::after {
+        display: none;
+    }
+
+    .csr-pd-timeline-marker {
+        position: relative;
+        z-index: 2;
+        flex: 0 0 19px;
+        width: 19px;
+        height: 19px;
+        border: 1px solid #22c55e;
+        background: #dcfce7;
+        color: #16a34a;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+    }
+
+    .csr-pd-timeline-content {
+        padding-top: 1px;
+    }
+
+        .csr-pd-timeline-content > strong {
+            display: block;
+            color: #334155;
+            font-size: 10px;
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+
+    .csr-pd-timeline-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        color: #64748b;
+        font-size: 8px;
+    }
+
+    .csr-pd-date-pill {
+        padding: 2px 6px;
+        background: #334155;
+        color: #ffffff;
+        border-radius: 8px;
+        font-size: 7px;
+    }
+
+
+    /* =========================================================
+           REMARKS
+           ========================================================= */
+
+    .csr-pd-remarks {
+        padding: 12px;
+        color: #475569;
+        font-size: 10px;
+        line-height: 1.5;
+    }
+
+
+    /* =========================================================
+           FOOTER
+           ========================================================= */
+
+    .csr-pd-footer {
+        min-height: 60px;
+        padding: 10px 20px;
+        border-top: 1px solid #e8edf3;
+        background: #ffffff;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    .csr-pd-footer-btn {
+        min-height: 32px;
+        padding: 5px 12px;
+        border-radius: 5px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        font-size: 9px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .csr-pd-footer-outline {
+        border: 1px solid #86b89d;
+        background: #ffffff;
+        color: #166534;
+    }
+
+        .csr-pd-footer-outline:hover {
+            background: #f0fdf4;
+        }
+
+    .csr-pd-footer-primary {
+        border: 1px solid #166534;
+        background: #166534;
+        color: #ffffff;
+    }
+
+        .csr-pd-footer-primary:hover {
+            background: #14532d;
+        }
+
+
+    /* =========================================================
+           LOADING
+           ========================================================= */
+
+    .csr-pd-loading {
+        min-height: 300px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        color: #64748b;
+        font-size: 12px;
+    }
+
+
+    /* =========================================================
+           RESPONSIVE
+           ========================================================= */
+
+    @@media (max-width: 768px) {
+
+        .csr-pd-drawer {
+            width: 100vw;
+        }
+
+        .csr-pd-info-grid,
+        .csr-pd-expense-grid,
+        .csr-pd-focus-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .csr-pd-field {
+            grid-template-columns: 110px minmax(0, 1fr);
+        }
+
+        .csr-pd-footer {
+            flex-wrap: wrap;
+        }
+
+        .csr-pd-footer-btn {
+            flex: 1;
+            min-height: 42px;
+        }
+    }
+
+</style>
+
+
 @code {
+
+    // =========================================================
+    // PARAMETERS
+    // =========================================================
+
+    [Parameter]
+    public int CSR1Id { get; set; }
+
     [Parameter]
     public bool IsOpen { get; set; }
 
     [Parameter]
     public EventCallback<bool> IsOpenChanged { get; set; }
 
+
+    // =========================================================
+    // STATE
+    // =========================================================
+
+    private CSR1DetailsDto? details;
+
+    private bool isLoading = false;
+
+    private int lastLoadedId = 0;
+
+
+    // =========================================================
+    // PARAMETER CHANGE
+    // =========================================================
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen &&
+            CSR1Id > 0 &&
+            CSR1Id != lastLoadedId)
+        {
+            await LoadCSR1Details();
+        }
+    }
+
+
+    // =========================================================
+    // LOAD DETAILS
+    // =========================================================
+
+    private async Task LoadCSR1Details()
+    {
+        try
+        {
+            isLoading = true;
+
+            details =
+                await Http.GetFromJsonAsync<CSR1DetailsDto>(
+                    $"api/CSR1/details/{CSR1Id}");
+
+            lastLoadedId =
+                CSR1Id;
+        }
+        catch (Exception ex)
+        {
+            details = null;
+
+            Console.WriteLine(
+                $"CSR1 Details Load Error: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+
+    // =========================================================
+    // FOCUS CROPS
+    // =========================================================
+
+    private List<string> AllFocusCrops
+    {
+        get
+        {
+            if (details == null)
+                return new();
+
+            return details.Focus1
+                .Concat(details.Focus2)
+                .Concat(details.Focus3)
+                .Where(x =>
+                    !string.IsNullOrWhiteSpace(x.CropName))
+                .Select(x =>
+                    x.CropName.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+
+    // =========================================================
+    // FOCUS PRODUCTS
+    // =========================================================
+
+    private List<string> AllFocusProducts
+    {
+        get
+        {
+            if (details == null)
+                return new();
+
+            return details.Focus1
+                .Concat(details.Focus2)
+                .Concat(details.Focus3)
+                .Where(x =>
+                    !string.IsNullOrWhiteSpace(x.ProductName))
+                .Select(x =>
+                    x.ProductName.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+
+    // =========================================================
+    // STATUS FLOW
+    // =========================================================
+
+    private bool IsSubmittedOrLater =>
+        details != null &&
+        !string.Equals(
+            details.Status,
+            "Draft",
+            StringComparison.OrdinalIgnoreCase);
+
+
+    private string GetHeaderStatusClass(
+        string? status)
+    {
+        var css =
+            status?.Trim().ToLowerInvariant() switch
+            {
+                "approved" =>
+                    "csr-pd-status-approved",
+
+                "rejected" =>
+                    "csr-pd-status-rejected",
+
+                "submittedforvalidation" =>
+                    "csr-pd-status-pending",
+
+                "submitted" =>
+                    "csr-pd-status-pending",
+
+                "pending" =>
+                    "csr-pd-status-pending",
+
+                _ =>
+                    "csr-pd-status-default"
+            };
+
+        return $"csr-pd-status {css}";
+    }
+
+
+    private string GetStatusDisplay(
+        string? status)
+    {
+        if (string.Equals(
+            status,
+            "SubmittedForValidation",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return "Pending";
+        }
+
+        return string.IsNullOrWhiteSpace(status)
+            ? "-"
+            : status;
+    }
+
+
+    // =========================================================
+    // FORMATTING
+    // =========================================================
+
+    private string FormatAmount(
+        decimal value)
+    {
+        return $"₹ {value.ToString(
+            "N0",
+            CultureInfo.CreateSpecificCulture("en-IN"))}";
+    }
+
+
+    private string ShowValue(
+        string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? "-"
+            : value;
+    }
+
+
+    // =========================================================
+    // EXPENSE ROW
+    // =========================================================
+
+    private RenderFragment ExpenseRow(
+        string label,
+        decimal value) =>
+        @<div class="csr-pd-expense-row">
+
+            <span>
+                @label
+            </span>
+
+            <strong>
+                @FormatAmount(value)
+            </strong>
+
+        </div>;
+
+
+    // =========================================================
+    // CLOSE
+    // =========================================================
+
     private async Task CloseDrawer()
     {
         IsOpen = false;
-        await IsOpenChanged.InvokeAsync(IsOpen);
+
+        await IsOpenChanged.InvokeAsync(false);
     }
+
+
+    // =========================================================
+    // CSR2
+    // =========================================================
 
     private void OpenCsr2()
     {
-        NavigationManager.NavigateTo("/CSR-2ProgramExecution");
+        NavigationManager.NavigateTo(
+            "/CSR-2ProgramExecution");
     }
 }
