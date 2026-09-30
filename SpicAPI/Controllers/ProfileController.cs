@@ -124,6 +124,20 @@ namespace SpicAPI.Controllers
         [HttpGet]
         public async Task<IActionResult> GetMyProfile()
         {
+            var currentUserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(currentUserId))
+                return NotFound(new { message = "Authenticated user could not be resolved." });
+
+            var currentUser = await _userManager.FindByIdAsync(currentUserId);
+            if (currentUser == null)
+                return NotFound(new { message = "Authenticated user could not be resolved." });
+
+            // Admin/SuperAdmin have no Employeelogin/EmployeeInformation row at all
+            // (they are seeded/created straight into AspNetUsers) so their profile
+            // is served directly from UserInfo instead of the employee chain below.
+            if (IsAdminRole(currentUser.Role))
+                return Ok(MapAdminToDto(currentUser));
+
             var resolved = await ResolveOwnProfileAsync();
             if (resolved.Employee == null)
                 return NotFound(new { message = resolved.Error });
@@ -168,6 +182,15 @@ namespace SpicAPI.Controllers
 
             if (!ModelState.IsValid)
                 return BadRequest(new { message = FirstModelError() });
+
+            // Admin/SuperAdmin edit their own UserInfo row directly and never reach
+            // the employee validation/transaction below.
+            var callingUserId = CurrentUserId;
+            var callingUser = string.IsNullOrWhiteSpace(callingUserId)
+                ? null
+                : await _userManager.FindByIdAsync(callingUserId);
+            if (callingUser != null && IsAdminRole(callingUser.Role))
+                return await UpdateMyAdminProfileAsync(callingUser, request);
 
             var employeeCode = (request.EmployeeCode ?? string.Empty).Trim();
             var name = (request.Name ?? string.Empty).Trim();
@@ -478,6 +501,77 @@ namespace SpicAPI.Controllers
                 return (null, null, null, "No employee record is linked to this login.");
 
             return (user, employee, login, string.Empty);
+        }
+
+        /// <summary>Admin and SuperAdmin are seeded/created straight into
+        /// AspNetUsers with no linked EmployeeInformation/Employeelogin row, so
+        /// they get their own resolution and mapping path instead of
+        /// ResolveOwnProfileAsync/MapToDto below.</summary>
+        private static bool IsAdminRole(AppRole role) => role == AppRole.Admin || role == AppRole.SuperAdmin;
+
+        private static ProfileDto MapAdminToDto(UserInfo user) => new()
+        {
+            LoginId = 0,
+            EmployeeInformationId = 0,
+            EmployeeCode = string.Empty,
+            Name = user.Name ?? string.Empty,
+            Email = user.Email ?? string.Empty,
+            UserName = user.UserName ?? string.Empty,
+            PersonalPhoneNumber = string.Empty,
+            OfficialPhoneNumber = string.Empty,
+            Role = user.Role,
+            DesignationId = user.DesignationId ?? 0,
+            ZoneId = 0,
+            StateId = 0,
+            RegionId = 0,
+            HeadquartersId = 0,
+            IsActive = user.IsActive
+        };
+
+        /// <summary>
+        /// Admin/SuperAdmin self-edit: Name, Email and Designation only. Role,
+        /// UserName and Status are never written here, so they stay read-only for
+        /// Admin exactly as the Admin Profile UI intends. No re-authentication is
+        /// ever required, since none of the security-scoping fields change.
+        /// </summary>
+        private async Task<IActionResult> UpdateMyAdminProfileAsync(UserInfo user, ProfileUpdateDto request)
+        {
+            var name = (request.Name ?? string.Empty).Trim();
+            var email = (request.Email ?? string.Empty).Trim();
+
+            if (name.Length == 0)
+                return BadRequest(new { message = "Name is required." });
+
+            if (email.Length == 0)
+                return BadRequest(new { message = "Email is required." });
+
+            if (request.DesignationId < 0)
+                return BadRequest(new { message = "Select a valid designation." });
+
+            var userWithEmail = await _userManager.FindByEmailAsync(email);
+            if (userWithEmail != null && userWithEmail.Id != user.Id)
+                return BadRequest(new { message = "Email is already used by another account." });
+
+            user.Name = name;
+            user.Email = email;
+            user.DesignationId = request.DesignationId > 0 ? request.DesignationId : null;
+            user.UpdatedAt = DateTime.Now;
+            user.UpdatedBy = CurrentUserAudit;
+
+            var result = await _userManager.UpdateAsync(user);
+            if (!result.Succeeded)
+                return BadRequest(new
+                {
+                    message = result.Errors.FirstOrDefault()?.Description ?? "Profile could not be updated."
+                });
+
+            return Ok(new
+            {
+                message = "Profile updated successfully",
+                requiresReauthentication = false,
+                isActive = user.IsActive,
+                data = MapAdminToDto(user)
+            });
         }
 
         private static ProfileDto MapToDto(EmployeeInformation employee, UserInfo user, Employeelogin login) => new()

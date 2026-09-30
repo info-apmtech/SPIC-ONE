@@ -28,7 +28,12 @@ namespace SPIC.Core.DTOs
     /// </summary>
     public class ProfileUpdateDto
     {
-        [Required(ErrorMessage = "Employee Code is required.")]
+        /// <summary>Employee-only field, required for the Employee branch. Left
+        /// un-annotated (rather than [Required]) because ProfileController's
+        /// UpdateMyProfile enforces this itself for that branch, and the Admin
+        /// branch of the same endpoint never sets it — an attribute here would
+        /// make [ApiController]'s automatic model validation reject the Admin
+        /// payload before the action method ever ran.</summary>
         [StringLength(50, ErrorMessage = "Employee Code cannot exceed 50 characters.")]
         public string EmployeeCode { get; set; } = string.Empty;
 
@@ -41,12 +46,12 @@ namespace SPIC.Core.DTOs
         [StringLength(256, ErrorMessage = "Email cannot exceed 256 characters.")]
         public string Email { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Personal phone number is required.")]
-        [RegularExpression(@"^[0-9]{10}$", ErrorMessage = "Personal phone number must be 10 digits.")]
+        /// <summary>Employee-only field; see the EmployeeCode remark above —
+        /// required-ness and the 10-digit format are enforced in
+        /// ProfileController for the Employee branch instead.</summary>
         public string PersonalPhoneNumber { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Official phone number is required.")]
-        [RegularExpression(@"^[0-9]{10}$", ErrorMessage = "Official phone number must be 10 digits.")]
+        /// <summary>Employee-only field; see the EmployeeCode remark above.</summary>
         public string OfficialPhoneNumber { get; set; } = string.Empty;
 
         /// <summary>Employeelogin.Role. The server range-checks this against
@@ -93,6 +98,10 @@ namespace SPIC.Core.DTOs
         public string EmployeeCode { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+
+        /// <summary>UserInfo.UserName. Only ever populated on the Admin branch
+        /// (Employee/Dealer profiles have no use for it); left empty otherwise.</summary>
+        public string UserName { get; set; } = string.Empty;
         public string PersonalPhoneNumber { get; set; } = string.Empty;
         public string OfficialPhoneNumber { get; set; } = string.Empty;
 

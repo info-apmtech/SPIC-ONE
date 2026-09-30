@@ -313,7 +313,7 @@
                 else
                 {
                     <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#2e7d32;color:#fff;font-size:2rem;font-weight:700;">
-                        @GetInitials(_isDealer ? _headerInfo?.DealerName : _employee?.Name)
+                        @GetInitials(_isDealer ? _headerInfo?.DealerName : (_isAdmin ? _adminProfile?.Name : _employee?.Name))
                     </div>
                 }
             </div>
@@ -357,6 +357,25 @@
                         <button class="dp-btn-outline-white">Change Password</button>
                     </div>
                 }
+                else if (_isAdmin)
+                {
+                    <h2 class="dp-dealer-name">@(_adminProfile?.Name ?? "Admin Profile")</h2>
+
+                    <div class="dp-dealer-meta">
+                        @if (_adminProfile != null)
+                        {
+                            <span>@RoleDisplayText(_adminProfile.Role)</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(LoginState.DesignationName))
+                        {
+                            <span>@LoginState.DesignationName</span>
+                        }
+                    </div>
+
+                    <div class="dp-tag-row">
+                        <span class="dp-tag-outline">SPIC Administrator</span>
+                    </div>
+                }
                 else
                 {
                     <h2 class="dp-dealer-name">@(_employee?.Name ?? "Employee Profile")</h2>
@@ -398,7 +417,7 @@
         else
         {
             <div class="dp-tabs-container">
-                <div class="dp-tab-item @(activeTab == "Employee" ? "active" : "")" @onclick='() => SetTab("Employee")'>Employee</div>
+                <div class="dp-tab-item @(activeTab == "Employee" ? "active" : "")" @onclick='() => SetTab("Employee")'>@(_isAdmin ? "Profile" : "Employee")</div>
             </div>
         }
 
@@ -407,14 +426,54 @@
             <div class="dp-info-card">
                 <div class="dp-card-header">
                     <div class="dp-icon-box dp-icon-green"><i class="bi bi-person-badge"></i></div>
-                    <h3 class="dp-card-title">Employee Details</h3>
+                    <h3 class="dp-card-title">@(_isAdmin ? "Admin Details" : "Employee Details")</h3>
                     <div class="dp-card-header-action">
                         <button type="button" class="dp-btn-outline-green" @onclick="OpenEditModalAsync">
                             <i class="bi bi-pencil-square"></i> Edit Profile
                         </button>
                     </div>
                 </div>
-                @if (_employee != null && _employeeLogin != null)
+                @if (_isAdmin)
+                {
+                    @if (_adminProfile != null)
+                    {
+                        <div class="dp-card-body">
+                            <div class="dp-info-row">
+                                <div class="dp-info-box flex-1-8">
+                                    <div class="dp-box-lbl">Name</div>
+                                    <div class="dp-box-val">@TextOrDash(_adminProfile.Name)</div>
+                                </div>
+                                <div class="dp-info-box flex-1-8">
+                                    <div class="dp-box-lbl">Email</div>
+                                    <div class="dp-box-val">@TextOrDash(_adminProfile.Email)</div>
+                                </div>
+                                <div class="dp-info-box flex-1">
+                                    <div class="dp-box-lbl">User Name</div>
+                                    <div class="dp-box-val">@TextOrDash(_adminProfile.UserName)</div>
+                                </div>
+                            </div>
+                            <div class="dp-info-row">
+                                <div class="dp-info-box flex-1">
+                                    <div class="dp-box-lbl">Role</div>
+                                    <div class="dp-box-val">@RoleDisplayText(_adminProfile.Role)</div>
+                                </div>
+                                <div class="dp-info-box flex-1-2">
+                                    <div class="dp-box-lbl">Designation</div>
+                                    <div class="dp-box-val">@(LoginState.DesignationName ?? "—")</div>
+                                </div>
+                                <div class="dp-info-box flex-1">
+                                    <div class="dp-box-lbl">Status</div>
+                                    <div class="dp-box-val">@(_adminProfile.IsActive ? "Active" : "Inactive")</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="dp-empty-state"><div class="dp-empty-state-icon"><i class="bi bi-person-badge"></i></div>No admin profile information available.</div>
+                    }
+                }
+                else if (_employee != null && _employeeLogin != null)
                 {
                     <div class="dp-card-body">
                         <div class="dp-info-row">
@@ -890,13 +949,23 @@
                     <button type="button" class="btn-close" @onclick="CloseEditModal" disabled="@_isSavingProfile"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-3">
-                        You can update your own employee profile. Changing your <strong>Role</strong>,
-                        <strong>Designation</strong>, <strong>Zone</strong>, <strong>State</strong>,
-                        <strong>Region</strong>, <strong>Headquarter</strong> or <strong>Status</strong>
-                        affects your permissions and data scope, so you will be signed out and asked to log in
-                        again once the change is saved.
-                    </p>
+                    @if (_isAdmin)
+                    {
+                        <p class="text-muted small mb-3">
+                            You can update your <strong>Name</strong>, <strong>Email</strong> and
+                            <strong>Designation</strong>. Role, User Name and Status are not editable here.
+                        </p>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-3">
+                            You can update your own employee profile. Changing your <strong>Role</strong>,
+                            <strong>Designation</strong>, <strong>Zone</strong>, <strong>State</strong>,
+                            <strong>Region</strong>, <strong>Headquarter</strong> or <strong>Status</strong>
+                            affects your permissions and data scope, so you will be signed out and asked to log in
+                            again once the change is saved.
+                        </p>
+                    }
 
                     @if (_editFormError is not null)
                     {
@@ -906,6 +975,32 @@
                     @if (_isLoadingEditForm)
                     {
                         <div class="text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Loading your details...</div>
+                    }
+                    else if (_isAdmin)
+                    {
+                        <p class="text-muted small mb-2 fw-semibold">Personal Details</p>
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <label class="form-lbl">Name</label>
+                                <input type="text" class="form-inp" placeholder="Enter Name"
+                                       @bind="_edit.Name" disabled="@_editDisabled" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-lbl">Email</label>
+                                <input type="email" class="form-inp" placeholder="Enter Email"
+                                       @bind="_edit.Email" disabled="@_editDisabled" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-lbl">Designation</label>
+                                <select class="form-inp" @bind="_edit.DesignationId" disabled="@_editDisabled">
+                                    <option value="0">-- No Designation --</option>
+                                    @foreach (var d in _editDesignations)
+                                    {
+                                        <option value="@d.Id">@d.Name</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
                     }
                     else
                     {
@@ -1142,8 +1237,10 @@
         productName.Trim().Equals("Urea", StringComparison.OrdinalIgnoreCase);
 
     private bool _isDealer = false;
+    private bool _isAdmin = false;
     private EmployeeInformation? _employee;
     private Employeelogin? _employeeLogin;
+    private ProfileDto? _adminProfile;
     private List<LocationItemDto> _zones = new();
 
     // Edit Profile (employee branch only). All 12 fields shown on the Employee tab
@@ -1223,7 +1320,15 @@
         if (!LoginState.IsLoggedIn) { _isLoading = false; return; }
 
         _isDealer = LoginState.UserRole == AppRole.Dealer;
+        _isAdmin = LoginState.UserRole is AppRole.Admin or AppRole.SuperAdmin;
         activeTab = _isDealer ? "DealerInfo" : "Employee";
+
+        if (_isAdmin)
+        {
+            await LoadAdminProfileAsync();
+            _isLoading = false;
+            return;
+        }
 
         if (!_isDealer)
         {
@@ -1560,6 +1665,22 @@
         return pct >= 0 ? $"+{pct.ToString("N2")}%" : $"{pct.ToString("N2")}%";
     }
 
+    /// <summary>
+    /// Admin/SuperAdmin have no EmployeeInformation/Employeelogin row, so their
+    /// card is populated straight from api/Profile's UserInfo-backed response
+    /// instead of LoadEmployeeProfileAsync's employee chain.
+    /// </summary>
+    private async Task LoadAdminProfileAsync()
+    {
+        if (string.IsNullOrWhiteSpace(LoginState.UserId)) return;
+
+        try
+        {
+            _adminProfile = await SafeGetAsync<ProfileDto>("api/Profile");
+        }
+        catch { }
+    }
+
     private async Task LoadEmployeeProfileAsync()
     {
         if (string.IsNullOrWhiteSpace(LoginState.UserId)) return;
@@ -1771,7 +1892,10 @@
 
             // Only the non security-scoped fields changed, so the token is still
             // valid — reload the display straight from the API.
-            await LoadEmployeeProfileAsync();
+            if (_isAdmin)
+                await LoadAdminProfileAsync();
+            else
+                await LoadEmployeeProfileAsync();
         }
         catch (Exception)
         {
