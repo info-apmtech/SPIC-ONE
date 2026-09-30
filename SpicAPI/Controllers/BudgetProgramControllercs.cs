@@ -25,7 +25,7 @@ namespace SpicAPI.Controllers
         private readonly IGenericRepository<State> _stateRepo;
         private readonly IGenericRepository<AnnualBudgeting> _annualBudgetingRepo;
         private readonly AppDbContext _db;
-        private string CurrentUser =>
+        
         private readonly IGenericRepository<ProgramStateBudget> _programStateBudgetRepo;
         private readonly IGenericRepository<StateBudgetAllocation> _stateBudgetAllocationRepo;
         private string CurrentUser =>   
@@ -38,9 +38,8 @@ namespace SpicAPI.Controllers
    IGenericRepository<EmployeeInformation> employeeRepo,
    IGenericRepository<Crop> cropRepo,
    IGenericRepository<Product> productRepo,
-   IGenericRepository<State> stateRepo,
    IGenericRepository<ProgramStateBudget> programStateBudgetRepo,
-   IGenericRepository<StateBudgetAllocation> stateBudgetAllocationRepo)
+   IGenericRepository<StateBudgetAllocation> stateBudgetAllocationRepo,
    IGenericRepository<State> stateRepo,
    IGenericRepository<AnnualBudgeting> annualBudgetingRepo,
    AppDbContext db)
@@ -775,7 +774,7 @@ namespace SpicAPI.Controllers
             var amount = await _stateBudgetAllocationRepo
                 .GetAll()
                 .Where(x => x.StateId == stateId)
-                .Select(x => x.BudgetAmount)
+                .Select(x => x.Amount)
                 .FirstOrDefaultAsync();
 
 
