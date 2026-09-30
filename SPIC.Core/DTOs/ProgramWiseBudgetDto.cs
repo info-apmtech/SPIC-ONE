@@ -9,6 +9,7 @@ namespace SPIC.Core.DTOs
         public int Id { get; set; }
         public int ProgramId { get; set; }
 
+        public int ProgramTypeId { get; set; }
         public string ProgramType { get; set; } = "";
 
         public string ProgramName { get; set; } = "";

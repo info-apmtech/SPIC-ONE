@@ -1,0 +1,454 @@
+﻿@page "/StateBudgetManagement"
+@inject HttpClient Http
+@using System.Net.Http.Json
+
+<div class="budget-page">
+
+    <!-- Header -->
+    <div class="page-header">
+        <h3>State Budgeting Management</h3>
+    </div>
+
+
+    <!-- Summary Cards -->
+    <div class="summary-grid">
+
+        <div class="summary-card green">
+            <div>
+                <span>Total State Budget</span>
+                <h2>₹ @TotalStateBudget.ToString("N2")</h2>
+                <small>7 states</small>
+            </div>
+            <div class="card-icon">◉</div>
+        </div>
+
+
+        <div class="summary-card blue">
+            <div>
+                <span>Allocated Budget</span>
+                <h2>₹ @TotalAllocated.ToString("N2")</h2>
+                <small>94.0% allocated</small>
+            </div>
+            <div class="card-icon">▣</div>
+        </div>
+
+
+        <div class="summary-card purple">
+            <div>
+                <span>Remaining Budget</span>
+                <h2>₹ @RemainingBudget.ToString("N2")</h2>
+                <small>Available to allocate</small>
+            </div>
+            <div class="card-icon">▤</div>
+        </div>
+
+
+        <div class="summary-card orange">
+            <div>
+                <span>Utilized Budget</span>
+                <h2>₹ @UtilizedBudget.ToString("N2")</h2>
+                <small>56.8% utilized</small>
+            </div>
+            <div class="card-icon">▤</div>
+        </div>
+
+    </div>
+
+
+
+    <!-- Allocation Table -->
+    <div class="budget-card">
+
+        <div class="card-header">
+            <h5>
+                State-wise Budget Allocation
+            </h5>
+
+            <span class="fy-badge">
+                FY 2025-26
+            </span>
+        </div>
+
+
+        <table class="budget-table">
+
+            <thead>
+                <tr>
+                    <th>
+                        State
+                    </th>
+
+                    <th>
+                        Budget
+                    </th>
+                </tr>
+            </thead>
+
+
+            <tbody>
+
+                @foreach (var item in States)
+                {
+                    <tr>
+
+                        <td>
+                            @item.StateName
+                        </td>
+
+
+                        <td>
+
+                            <input type="number"
+                                   class="budget-input"
+                                   @bind="item.BudgetAmount"
+                                   @bind:event="oninput" />
+
+                        </td>
+
+                    </tr>
+                }
+
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+
+
+    <!-- Bottom Summary -->
+    <div class="bottom-bar">
+
+
+        <div class="bottom-summary">
+
+            <div class="bottom-item">
+                <label>Total Allocated</label>
+                <strong>
+                    ₹ @TotalAllocated.ToString("N0")
+                </strong>
+            </div>
+
+
+            <div class="bottom-item">
+                <label>Monthly Avg</label>
+                <strong>
+                    ₹ @MonthlyAverage.ToString("N0")
+                </strong>
+            </div>
+
+
+            <div class="alert-box">
+                ⚠ Infrastructure Over - budget
+            </div>
+
+        </div>
+
+
+
+        <div class="action-buttons">
+
+            <button class="btn-draft">
+                Save Draft
+            </button>
+
+
+            <button class="btn-submit">
+                Submit For Validation
+            </button>
+
+        </div>
+
+
+    </div>
+
+
+</div>
+
+<style>
+    .budget-page {
+        background: #f7f9fb;
+        padding: 18px;
+        min-height: 100vh;
+    }
+
+
+    .page-header h3 {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4,1fr);
+        gap: 14px;
+        margin-top: 15px;
+    }
+
+
+
+    .summary-card {
+        background: white;
+        border-radius: 8px;
+        padding: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 3px solid;
+    }
+
+
+
+        .summary-card span {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+
+
+        .summary-card h2 {
+            margin: 6px 0;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+
+
+        .summary-card small {
+            color: #6b7280;
+            font-size: 11px;
+        }
+
+
+
+    .green {
+        border-color: #22c55e;
+    }
+
+
+    .blue {
+        border-color: #3b82f6;
+    }
+
+
+    .purple {
+        border-color: #8b5cf6;
+    }
+
+
+    .orange {
+        border-color: #f97316;
+    }
+
+
+
+    .card-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f3f4f6;
+    }
+
+
+
+    .budget-card {
+        margin-top: 18px;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+    }
+
+
+
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+
+
+        .card-header h5 {
+            margin: 0;
+            font-size: 14px;
+        }
+
+
+
+    .fy-badge {
+        background: #dcfce7;
+        color: #15803d;
+        padding: 5px 12px;
+        border-radius: 15px;
+        font-size: 11px;
+    }
+
+
+
+    .budget-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+
+
+
+        .budget-table th {
+            text-align: left;
+            background: #f3f4f6;
+            padding: 10px;
+            font-size: 12px;
+        }
+
+
+
+        .budget-table td {
+            padding: 8px;
+            border-bottom: 1px solid #edf0f2;
+            font-size: 12px;
+        }
+
+
+
+    .budget-input {
+        width: 100%;
+        height: 28px;
+        border: 1px solid #e5e7eb;
+        padding: 5px;
+        font-size: 12px;
+    }
+
+
+
+    .bottom-bar {
+        margin-top: 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+
+
+    .bottom-summary {
+        display: flex;
+        gap: 12px;
+    }
+
+
+
+    .bottom-item {
+        background: #e8f5ee;
+        padding: 10px 20px;
+        border-radius: 4px;
+    }
+
+
+
+        .bottom-item label {
+            font-size: 11px;
+            display: block;
+        }
+
+
+
+        .bottom-item strong {
+            font-size: 14px;
+        }
+
+
+
+    .alert-box {
+        background: #fee2e2;
+        color: #dc2626;
+        padding: 10px;
+        font-size: 12px;
+    }
+
+
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+    }
+
+
+
+    .btn-draft {
+        background: #e5e7eb;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 5px;
+    }
+
+
+
+    .btn-submit {
+        background: #047857;
+        color: white;
+        border: none;
+        padding: 10px 18px;
+        border-radius: 5px;
+    }
+</style>
+
+@code {
+
+    private List<StateBudgetDto> States = new();
+
+
+    private decimal TotalStateBudget = 0;
+
+    private decimal UtilizedBudget = 21800000;
+
+
+    private decimal TotalAllocated =>
+        States.Sum(x => x.BudgetAmount);
+
+
+    private decimal RemainingBudget =>
+        TotalStateBudget - TotalAllocated;
+
+
+    private decimal MonthlyAverage =>
+        TotalAllocated / 12;
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStates();
+    }
+
+
+
+    private async Task LoadStates()
+    {
+        States =
+        await Http.GetFromJsonAsync<List<StateBudgetDto>>
+        ("api/Budget/states-budget")
+        ?? new();
+
+
+        TotalStateBudget =
+        States.Sum(x => x.BudgetAmount);
+    }
+
+
+
+    public class StateBudgetDto
+    {
+        public int StateId { get; set; }
+
+        public string StateName { get; set; } = "";
+
+        public decimal BudgetAmount { get; set; }
+    }
+
+}
