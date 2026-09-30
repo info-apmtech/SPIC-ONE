@@ -710,80 +710,167 @@
             font-size: 16px; /* prevents iOS zoom-on-focus */
         }
 
-        /* Main list: each row becomes a card, cells show their column label. */
-        .sd-main-table {
+        .sd-list-page .sd-table-head {
+            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 6px 12px;
+        }
+
+        /* Both lists (main + state summary): each row becomes a card that fits the
+           screen width, cells show their column label on the left. */
+        .sd-list-page .sd-table-scroll {
+            overflow-x: hidden;
+        }
+
+        .sd-list-page .sd-table {
+            display: block;
+            width: 100%;
             min-width: 0;
         }
 
-            .sd-main-table thead {
+            .sd-list-page .sd-table thead {
                 display: none;
             }
 
-            .sd-main-table tbody,
-            .sd-main-table tr,
-            .sd-main-table td {
+            .sd-list-page .sd-table tbody,
+            .sd-list-page .sd-table tfoot,
+            .sd-list-page .sd-table tr,
+            .sd-list-page .sd-table td {
                 display: block;
+                width: 100%;
             }
 
-            .sd-main-table tr {
-                padding: 8px 12px;
+            .sd-list-page .sd-table tr {
+                padding: 6px 14px;
                 border-bottom: 8px solid #f1f5f3;
             }
 
-            .sd-main-table td {
-                display: flex;
-                justify-content: space-between;
-                align-items: flex-start;
-                gap: 12px;
-                padding: 7px 0;
-                border-bottom: 1px solid #f1f5f3;
-                text-align: right;
-                font-size: .85rem;
+            .sd-list-page .sd-table tbody tr:hover {
+                background: transparent;
             }
 
-                .sd-main-table td::before {
+            .sd-list-page .sd-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+                min-width: 0;
+                padding: 7px 0;
+                border-bottom: 1px solid #f1f5f3;
+                text-align: right !important;
+                font-size: .8rem;
+                overflow-wrap: anywhere;
+            }
+
+                .sd-list-page .sd-table td::before {
                     content: attr(data-label);
-                    flex: 0 0 38%;
+                    flex: 0 0 40%;
                     text-align: left;
-                    font-size: .72rem;
+                    font-size: .7rem;
                     font-weight: 700;
                     color: #64748b;
                     text-transform: uppercase;
                     letter-spacing: .02em;
                 }
 
-                .sd-main-table td.sd-cell-no {
+                .sd-list-page .sd-table td > * {
+                    min-width: 0;
+                }
+
+                .sd-list-page .sd-table tr > td:last-child {
+                    border-bottom: 0;
+                }
+
+                .sd-list-page .sd-table td.sd-cell-no {
                     display: none;
                 }
 
-                .sd-main-table td.sd-cell-actions {
-                    border-bottom: 0;
-                    padding-top: 10px;
-                }
+        .sd-list-page .sd-name {
+            min-width: 0;
+        }
+
+        /* GST/PAN and Contact: value + second line stacked on the right. */
+        .sd-cell-stack {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        /* State summary: the state name reads as the card title; totals row tinted. */
+        .sd-state-summary-table td.sd-cell-state {
+            font-weight: 700;
+            color: #172033;
+        }
+
+        .sd-state-summary-table tfoot tr {
+            background: #eff8f3;
+            border-bottom: 0;
+        }
+
+            .sd-state-summary-table tfoot td {
+                background: transparent;
+            }
+
+        .sd-state-summary-table td.sd-state-datatable-empty {
+            display: block;
+            height: auto;
+            padding: 20px 0;
+        }
+
+            .sd-state-summary-table td.sd-state-datatable-empty::before {
+                content: none;
+            }
+
+        /* Action buttons: compact 32px icons, right-aligned. */
+        .sd-list-page .sd-table td.sd-cell-actions {
+            padding-top: 8px;
+        }
 
         .sd-action-wrap {
-            gap: 10px;
+            gap: 6px;
         }
 
         .sd-action-btn {
-            width: var(--tap-min, 44px);
-            height: var(--tap-min, 44px);
-            font-size: 1.1rem;
+            width: 32px;
+            height: 32px;
+            border-radius: 7px;
+            font-size: .85rem;
         }
 
-        /* State summary keeps the table; narrower minimum so it scrolls less. */
-        .sd-state-summary-table {
-            min-width: 560px;
+        /* Pagination: one compact row that wraps; page buttons never overflow. */
+        .sd-list-page .sd-pagination {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 14px;
         }
 
-        .sd-page-button {
-            min-width: 40px;
-            height: 40px;
+        .sd-list-page .sd-page-size,
+        .sd-list-page .sd-state-summary-pagination .sd-result-text {
+            font-size: .75rem;
+        }
+
+        .sd-list-page .sd-page-buttons {
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-left: auto;
+        }
+
+        .sd-list-page .sd-page-button {
+            min-width: 30px;
+            height: 30px;
+            padding: 0 6px;
+            border-radius: 6px;
+            font-size: .75rem;
         }
 
         .sd-page-size select,
         .sd-state-page-size select {
-            min-height: 40px;
+            height: 32px;
+            min-height: 32px;
+            font-size: .8rem;
         }
 
         /* Import modal and delete modal slide up as bottom sheets. */
@@ -1084,31 +1171,35 @@
                                 <td data-label="HQ">@HqName(item.HQId)</td>
 
                                 <td data-label="GST / PAN">
-                                    <div>
-                                        @(string.IsNullOrWhiteSpace(item.GSTNumber)
-                                            ? "-"
-                                            : item.GSTNumber)
-                                    </div>
-                                    <div class="sd-small-value mt-1">
-                                        PAN:
-                                        @(string.IsNullOrWhiteSpace(item.PANNo)
-                                            ? "-"
-                                            : item.PANNo)
+                                    <div class="sd-cell-stack">
+                                        <div>
+                                            @(string.IsNullOrWhiteSpace(item.GSTNumber)
+                                                ? "-"
+                                                : item.GSTNumber)
+                                        </div>
+                                        <div class="sd-small-value mt-1">
+                                            PAN:
+                                            @(string.IsNullOrWhiteSpace(item.PANNo)
+                                                ? "-"
+                                                : item.PANNo)
+                                        </div>
                                     </div>
                                 </td>
 
                                 <td data-label="Contact">
-                                    <div>
-                                        @(string.IsNullOrWhiteSpace(item.OfficialContactNumber)
-                                            ? "-"
-                                            : item.OfficialContactNumber)
-                                    </div>
-                                    @if (!string.IsNullOrWhiteSpace(item.WhatsAppNumber))
-                                    {
-                                        <div class="sd-small-value mt-1">
-                                            WA: @item.WhatsAppNumber
+                                    <div class="sd-cell-stack">
+                                        <div>
+                                            @(string.IsNullOrWhiteSpace(item.OfficialContactNumber)
+                                                ? "-"
+                                                : item.OfficialContactNumber)
                                         </div>
-                                    }
+                                        @if (!string.IsNullOrWhiteSpace(item.WhatsAppNumber))
+                                        {
+                                            <div class="sd-small-value mt-1">
+                                                WA: @item.WhatsAppNumber
+                                            </div>
+                                        }
+                                    </div>
                                 </td>
 
                                 <td data-label="Status">
@@ -1329,30 +1420,30 @@
                                 var item = _pagedStateWiseSummary[index];
 
                                 <tr @key="item.StateId">
-                                    <td>@(((_stateSummaryPage - 1) * _stateSummaryPageSize) + index + 1)</td>
-                                    <td>
+                                    <td class="sd-cell-no" data-label="#">@(((_stateSummaryPage - 1) * _stateSummaryPageSize) + index + 1)</td>
+                                    <td class="sd-cell-state" data-label="State">
                                         <div class="sd-name">@item.StateName</div>
                                     </td>
-                                    <td><span class="sd-state-count">@item.TotalSubDealers</span></td>
-                                    <td><span class="sd-state-count">@item.SavedSubDealers</span></td>
-                                    <td><span class="sd-status active">@item.ActiveSubDealers</span></td>
-                                    <td><span class="sd-status inactive">@item.InactiveSubDealers</span></td>
+                                    <td data-label="Total Sub Dealers"><span class="sd-state-count">@item.TotalSubDealers</span></td>
+                                    <td data-label="Total Saved"><span class="sd-state-count">@item.SavedSubDealers</span></td>
+                                    <td data-label="Active"><span class="sd-status active">@item.ActiveSubDealers</span></td>
+                                    <td data-label="Inactive"><span class="sd-status inactive">@item.InactiveSubDealers</span></td>
                                 </tr>
                             }
                         }
                     </tbody>
                     <tfoot>
                         <tr>
-                            <td></td>
-                            <td>
+                            <td class="sd-cell-no"></td>
+                            <td class="sd-cell-state" data-label="State">
                                 @(string.IsNullOrWhiteSpace(_stateSummarySearchText)
                                     ? "Grand Total"
                                     : "Filtered Total")
                             </td>
-                            <td>@_filteredStateWiseSummary.Sum(x => x.TotalSubDealers)</td>
-                            <td>@_filteredStateWiseSummary.Sum(x => x.SavedSubDealers)</td>
-                            <td>@_filteredStateWiseSummary.Sum(x => x.ActiveSubDealers)</td>
-                            <td>@_filteredStateWiseSummary.Sum(x => x.InactiveSubDealers)</td>
+                            <td data-label="Total Sub Dealers">@_filteredStateWiseSummary.Sum(x => x.TotalSubDealers)</td>
+                            <td data-label="Total Saved">@_filteredStateWiseSummary.Sum(x => x.SavedSubDealers)</td>
+                            <td data-label="Active">@_filteredStateWiseSummary.Sum(x => x.ActiveSubDealers)</td>
+                            <td data-label="Inactive">@_filteredStateWiseSummary.Sum(x => x.InactiveSubDealers)</td>
                         </tr>
                     </tfoot>
                 </table>
