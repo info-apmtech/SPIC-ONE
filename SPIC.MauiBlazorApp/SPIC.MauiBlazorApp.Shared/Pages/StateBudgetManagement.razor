@@ -1,6 +1,8 @@
-﻿@page "/StateBudgetManagement"
+@page "/StateBudgetManagement"
 @inject HttpClient Http
 @using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@using DR = SPIC.Core.Entities
 
 <div class="budget-page">
 
@@ -9,7 +11,20 @@
         <h3>State Budgeting Management</h3>
     </div>
 
+    <!-- Section Toggle (same tabs-wrapper/tab-item pattern as LocationMaster) -->
+    <div class="tabs-wrapper">
+        <div class="tabs-container">
+            <div class="tab-item @(_activeSection == "State" ? "active" : "")" @onclick='() => _activeSection = "State"'>
+                State Allocation
+            </div>
+            <div class="tab-item @(_activeSection == "Region" ? "active" : "")" @onclick='() => _activeSection = "Region"'>
+                Region Allocation
+            </div>
+        </div>
+    </div>
 
+    @if (_activeSection == "State")
+    {
     <!-- Summary Cards -->
     <div class="summary-grid">
 
@@ -17,7 +32,7 @@
             <div>
                 <span>Total State Budget</span>
                 <h2>₹ @TotalStateBudget.ToString("N2")</h2>
-                <small>7 states</small>
+                <small>@States.Count states</small>
             </div>
             <div class="card-icon">◉</div>
         </div>
@@ -27,7 +42,7 @@
             <div>
                 <span>Allocated Budget</span>
                 <h2>₹ @TotalAllocated.ToString("N2")</h2>
-                <small>94.0% allocated</small>
+                <small>@AllocatedPercentText allocated</small>
             </div>
             <div class="card-icon">▣</div>
         </div>
@@ -64,11 +79,30 @@
                 State-wise Budget Allocation
             </h5>
 
-            <span class="fy-badge">
-                FY 2025-26
-            </span>
+            @if (_availableFYs.Count > 0)
+            {
+                <select class="fy-badge" @bind="_selectedFY" @bind:after="OnFYChangedAsync">
+                    @foreach (var fy in _availableFYs)
+                    {
+                        <option value="@fy">FY @fy</option>
+                    }
+                </select>
+            }
+            else
+            {
+                <span class="fy-badge">No Annual Budget defined</span>
+            }
         </div>
 
+        @if (!string.IsNullOrEmpty(_validationMessage))
+        {
+            <div class="alert-box">⚠ @_validationMessage</div>
+        }
+
+        @if (!string.IsNullOrEmpty(_successMessage))
+        {
+            <div class="success-box">✓ @_successMessage</div>
+        }
 
         <table class="budget-table">
 
@@ -100,8 +134,10 @@
 
                             <input type="number"
                                    class="budget-input"
+                                   min="0"
                                    @bind="item.BudgetAmount"
-                                   @bind:event="oninput" />
+                                   @bind:event="oninput"
+                                   @bind:after="() => OnAmountChanged(item)" />
 
                         </td>
 
@@ -114,9 +150,133 @@
         </table>
 
     </div>
+    }
 
 
+    @if (_activeSection == "Region")
+    {
+    <!-- Region Allocation -->
+    <div class="budget-card">
 
+        <div class="card-header">
+            <h5>
+                Region-wise Budget Allocation
+            </h5>
+
+            @if (States.Count > 0)
+            {
+                <select class="fy-badge" @bind="_selectedStateId" @bind:after="OnSelectedStateChangedAsync">
+                    <option value="0">Select State</option>
+                    @foreach (var s in States)
+                    {
+                        <option value="@s.StateId">@s.StateName</option>
+                    }
+                </select>
+            }
+        </div>
+
+        @if (_selectedStateId > 0)
+        {
+            @if (!string.IsNullOrEmpty(_regionValidationMessage))
+            {
+                <div class="alert-box">⚠ @_regionValidationMessage</div>
+            }
+
+            @if (!string.IsNullOrEmpty(_regionSuccessMessage))
+            {
+                <div class="success-box">✓ @_regionSuccessMessage</div>
+            }
+
+            @if (SelectedStateAmount <= 0)
+            {
+                <div class="alert-box">⚠ Save this state's allocation above before distributing it to regions.</div>
+            }
+            else if (_regions.Count == 0)
+            {
+                <div class="alert-box">⚠ No regions found for the selected state.</div>
+            }
+            else
+            {
+                <table class="budget-table">
+
+                    <thead>
+                        <tr>
+                            <th>
+                                Region
+                            </th>
+
+                            <th>
+                                Allocation
+                            </th>
+                        </tr>
+                    </thead>
+
+
+                    <tbody>
+
+                        @foreach (var item in _regions)
+                        {
+                            <tr>
+
+                                <td>
+                                    @item.RegionName
+                                </td>
+
+
+                                <td>
+
+                                    <input type="number"
+                                           class="budget-input"
+                                           min="0"
+                                           @bind="item.BudgetAmount"
+                                           @bind:event="oninput"
+                                           @bind:after="() => OnRegionAmountChanged(item)" />
+
+                                </td>
+
+                            </tr>
+                        }
+
+
+                    </tbody>
+
+                </table>
+
+                <div class="bottom-bar">
+                    <div class="bottom-summary">
+                        <div class="bottom-item">
+                            <label>Selected State Budget</label>
+                            <strong>₹ @SelectedStateAmount.ToString("N0")</strong>
+                        </div>
+
+                        <div class="bottom-item">
+                            <label>Total Region Allocation</label>
+                            <strong>₹ @TotalRegionAllocated.ToString("N0")</strong>
+                        </div>
+
+                        <div class="bottom-item">
+                            <label>Remaining State Budget</label>
+                            <strong>₹ @RemainingStateBudget.ToString("N0")</strong>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="btn-draft"
+                                @onclick="SaveRegionAllocationsAsync"
+                                disabled="@(_isSavingRegion || _hasRegionValidationError)">
+                            @(_isSavingRegion ? "Saving..." : "Save Region Allocation")
+                        </button>
+                    </div>
+                </div>
+            }
+        }
+
+    </div>
+    }
+
+
+    @if (_activeSection == "State")
+    {
     <!-- Bottom Summary -->
     <div class="bottom-bar">
 
@@ -149,19 +309,24 @@
 
         <div class="action-buttons">
 
-            <button class="btn-draft">
-                Save Draft
+            <button class="btn-draft"
+                    @onclick="SaveAllocationsAsync"
+                    disabled="@(_isSaving || _isSubmitting || _hasValidationError || _availableFYs.Count == 0)">
+                @(_isSaving ? "Saving..." : "Save Draft")
             </button>
 
 
-            <button class="btn-submit">
-                Submit For Validation
+            <button class="btn-submit"
+                    @onclick="SubmitForValidationAsync"
+                    disabled="@(_isSaving || _isSubmitting || _hasValidationError || _availableFYs.Count == 0 || _currentStatus == "Submitted")">
+                @(_isSubmitting ? "Submitting..." : (_currentStatus == "Submitted" ? "Submitted" : "Submit For Validation"))
             </button>
 
         </div>
 
 
     </div>
+    }
 
 
 </div>
@@ -288,6 +453,7 @@
         padding: 5px 12px;
         border-radius: 15px;
         font-size: 11px;
+        border: none;
     }
 
 
@@ -371,6 +537,14 @@
         font-size: 12px;
     }
 
+    .success-box {
+        background: #dcfce7;
+        color: #15803d;
+        padding: 10px;
+        font-size: 12px;
+        margin-top: 10px;
+    }
+
 
 
     .action-buttons {
@@ -387,6 +561,11 @@
         border-radius: 5px;
     }
 
+        .btn-draft:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
 
 
     .btn-submit {
@@ -400,12 +579,33 @@
 
 @code {
 
+    // Section toggle only - purely a display switch, no data reload/reset on
+    // change (State and Region data are each already loaded/reloaded by their
+    // own existing triggers: FY change and State-dropdown change respectively).
+    private string _activeSection = "State";
+
     private List<StateBudgetDto> States = new();
 
+    private List<string> _availableFYs = new();
+    private string _selectedFY = "";
+    private Dictionary<string, decimal> _annualBudgetByFY = new();
 
-    private decimal TotalStateBudget = 0;
+    private bool _isSaving;
+    private bool _isSubmitting;
+    private string? _validationMessage;
+    private string? _successMessage;
 
-    private decimal UtilizedBudget = 21800000;
+    // "Draft" until Submit For Validation marks every row for the FY "Submitted" -
+    // reuses BudgetProgram.Status's existing string-status convention, not a new one.
+    private string _currentStatus = "Draft";
+
+    private decimal UtilizedBudget = 0;
+
+    // Sourced from the AnnualBudgeting amount for the selected FY - this is the
+    // maximum available budget for state-wise allocation, never a sum of the
+    // states themselves.
+    private decimal TotalStateBudget =>
+        _selectedFY.Length > 0 && _annualBudgetByFY.TryGetValue(_selectedFY, out var amt) ? amt : 0m;
 
 
     private decimal TotalAllocated =>
@@ -419,36 +619,348 @@
     private decimal MonthlyAverage =>
         TotalAllocated / 12;
 
+    private string AllocatedPercentText =>
+        TotalStateBudget > 0 ? (TotalAllocated / TotalStateBudget).ToString("P1") : "0.0%";
+
+    // The single source of truth for "can this be saved": the moment the sum of every
+    // state's amount exceeds the FY's Annual Budget, saving is blocked - regardless of
+    // which row was just edited.
+    private bool _hasValidationError => _selectedFY.Length > 0 && TotalAllocated > TotalStateBudget;
+
+    // ---- Region-wise allocation (distributes one State's own allocated amount) ----
+    private int _selectedStateId;
+    private List<RegionBudgetDto> _regions = new();
+    private bool _isSavingRegion;
+    private string? _regionValidationMessage;
+    private string? _regionSuccessMessage;
+
+    // The State's own saved allocation for the selected FY - never a sum of the
+    // regions themselves - exactly mirroring how TotalStateBudget sources from
+    // AnnualBudgeting rather than summing the states.
+    private decimal SelectedStateAmount =>
+        States.FirstOrDefault(s => s.StateId == _selectedStateId)?.BudgetAmount ?? 0m;
+
+    private decimal TotalRegionAllocated =>
+        _regions.Sum(x => x.BudgetAmount);
+
+    private decimal RemainingStateBudget =>
+        SelectedStateAmount - TotalRegionAllocated;
+
+    private bool _hasRegionValidationError =>
+        _selectedStateId > 0 && TotalRegionAllocated > SelectedStateAmount;
 
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadStates();
+        await LoadAnnualBudgetsAsync();
+        if (_selectedFY.Length > 0)
+        {
+            await LoadStatesAsync();
+            await LoadStatusAsync();
+        }
     }
 
 
-
-    private async Task LoadStates()
+    private async Task LoadAnnualBudgetsAsync()
     {
+        try
+        {
+            var budgets = await Http.GetFromJsonAsync<List<DR.AnnualBudgeting>>("api/AnnualBudgeting") ?? new();
+
+            _annualBudgetByFY = budgets
+                .GroupBy(b => b.FY)
+                .ToDictionary(g => g.Key, g => g.First().Amount);
+
+            _availableFYs = budgets
+                .Select(b => b.FY)
+                .Distinct()
+                .OrderByDescending(fy => fy)
+                .ToList();
+
+            if (_availableFYs.Count > 0 && !_availableFYs.Contains(_selectedFY))
+                _selectedFY = _availableFYs[0];
+        }
+        catch
+        {
+            _availableFYs = new();
+            _annualBudgetByFY = new();
+        }
+    }
+
+
+    private async Task OnFYChangedAsync()
+    {
+        _validationMessage = null;
+        _successMessage = null;
+        await LoadStatesAsync();
+        await LoadStatusAsync();
+
+        // Region allocations are FY-scoped too - never mix one FY's regions with another's.
+        _regionValidationMessage = null;
+        _regionSuccessMessage = null;
+        await LoadRegionsAsync();
+    }
+
+
+    private async Task LoadStatesAsync()
+    {
+        if (_selectedFY.Length == 0)
+        {
+            States = new();
+            return;
+        }
+
         States =
-        await Http.GetFromJsonAsync<List<StateBudgetDto>>
-        ("api/Budget/states-budget")
-        ?? new();
-
-
-        TotalStateBudget =
-        States.Sum(x => x.BudgetAmount);
+            await Http.GetFromJsonAsync<List<StateBudgetDto>>($"api/Budget/states-budget?fy={Uri.EscapeDataString(_selectedFY)}")
+            ?? new();
     }
 
 
-
-    public class StateBudgetDto
+    private async Task LoadStatusAsync()
     {
-        public int StateId { get; set; }
+        if (_selectedFY.Length == 0)
+        {
+            _currentStatus = "Draft";
+            return;
+        }
 
-        public string StateName { get; set; } = "";
+        try
+        {
+            var status = await Http.GetFromJsonAsync<StateBudgetStatusDto>(
+                $"api/Budget/state-budget/status?fy={Uri.EscapeDataString(_selectedFY)}");
+            _currentStatus = status?.Status ?? "Draft";
+        }
+        catch
+        {
+            _currentStatus = "Draft";
+        }
+    }
 
-        public decimal BudgetAmount { get; set; }
+
+    // Negative values are never allowed; while over budget, the message reports the
+    // remaining room excluding the row just edited (its own current amount is not
+    // double-counted against itself).
+    private void OnAmountChanged(StateBudgetDto item)
+    {
+        _successMessage = null;
+
+        if (item.BudgetAmount < 0)
+            item.BudgetAmount = 0;
+
+        if (_hasValidationError)
+        {
+            var otherStatesTotal = TotalAllocated - item.BudgetAmount;
+            var allowedForThisState = Math.Max(0, TotalStateBudget - otherStatesTotal);
+            _validationMessage =
+                $"Allocation amount cannot exceed the remaining budget of ₹{allowedForThisState:N0}.";
+        }
+        else
+        {
+            _validationMessage = null;
+        }
+    }
+
+
+    private async Task SaveAllocationsAsync()
+    {
+        if (_isSaving || _hasValidationError || _selectedFY.Length == 0)
+            return;
+
+        _isSaving = true;
+        try
+        {
+            await TrySaveAllocationsAsync();
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    // Shared by the Save Draft button and by Submit For Validation (which must persist
+    // the current on-screen amounts before marking the FY submitted). Returns true only
+    // when the PUT actually succeeded, so a submit can safely stop if the save failed.
+    private async Task<bool> TrySaveAllocationsAsync()
+    {
+        try
+        {
+            var request = new SaveStateBudgetRequest
+            {
+                FY = _selectedFY,
+                Allocations = States.Select(s => new StateBudgetAllocationRequest
+                {
+                    StateId = s.StateId,
+                    Amount = s.BudgetAmount
+                }).ToList()
+            };
+
+            var response = await Http.PutAsJsonAsync("api/Budget/state-budget", request);
+            if (response.IsSuccessStatusCode)
+            {
+                _validationMessage = null;
+                // Reload from the DB rather than trusting local state, so the page
+                // always shows exactly what was persisted.
+                await LoadStatesAsync();
+                return true;
+            }
+
+            var raw = await response.Content.ReadAsStringAsync();
+            _validationMessage = ExtractMessage(raw);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _validationMessage = $"Failed to save: {ex.Message}";
+            return false;
+        }
+    }
+
+    // Submit For Validation: saves the current amounts first (same validated Save Draft
+    // path, so the submitted data always matches what's on screen), then marks every
+    // saved row for the FY "Submitted". Blocked while already Submitted, over budget, or
+    // saving/submitting is already in progress, so the same allocation can't be submitted twice.
+    private async Task SubmitForValidationAsync()
+    {
+        if (_isSaving || _isSubmitting || _hasValidationError || _selectedFY.Length == 0 || _currentStatus == "Submitted")
+            return;
+
+        _isSubmitting = true;
+        _successMessage = null;
+        try
+        {
+            var saved = await TrySaveAllocationsAsync();
+            if (!saved)
+                return;
+
+            var request = new SubmitStateBudgetRequest { FY = _selectedFY };
+            var response = await Http.PutAsJsonAsync("api/Budget/state-budget/submit", request);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadStatusAsync();
+                _validationMessage = null;
+                _successMessage = $"State budget allocation for FY {_selectedFY} submitted for validation successfully.";
+            }
+            else
+            {
+                var raw = await response.Content.ReadAsStringAsync();
+                _validationMessage = ExtractMessage(raw);
+            }
+        }
+        catch (Exception ex)
+        {
+            _validationMessage = $"Failed to submit: {ex.Message}";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private async Task OnSelectedStateChangedAsync()
+    {
+        _regionValidationMessage = null;
+        _regionSuccessMessage = null;
+        await LoadRegionsAsync();
+    }
+
+    // Loads only the regions belonging to the selected State (existing Region/byState
+    // relationship - no new Region master, nothing hardcoded), merged with whatever
+    // has already been saved for this State + FY so a reload shows exactly the DB state.
+    private async Task LoadRegionsAsync()
+    {
+        if (_selectedStateId <= 0 || _selectedFY.Length == 0)
+        {
+            _regions = new();
+            return;
+        }
+
+        _regions =
+            await Http.GetFromJsonAsync<List<RegionBudgetDto>>(
+                $"api/Budget/regions-budget?stateId={_selectedStateId}&fy={Uri.EscapeDataString(_selectedFY)}")
+            ?? new();
+    }
+
+    // Same convention as OnAmountChanged: negative values are clamped, and while over
+    // the State's own allocated amount, the message reports the remaining room
+    // excluding the region just edited so its own value is never double-counted.
+    private void OnRegionAmountChanged(RegionBudgetDto item)
+    {
+        _regionSuccessMessage = null;
+
+        if (item.BudgetAmount < 0)
+            item.BudgetAmount = 0;
+
+        if (_hasRegionValidationError)
+        {
+            var otherRegionsTotal = TotalRegionAllocated - item.BudgetAmount;
+            var allowedForThisRegion = Math.Max(0, SelectedStateAmount - otherRegionsTotal);
+            _regionValidationMessage =
+                $"Region allocation cannot exceed the remaining state budget of ₹{allowedForThisRegion:N0}.";
+        }
+        else
+        {
+            _regionValidationMessage = null;
+        }
+    }
+
+    // Full replace of every region's allocation for the selected State + FY, same
+    // convention as Save Draft for states - the backend independently re-validates
+    // everything (state/region existence, region-belongs-to-state, negatives, total
+    // vs. the state's own allocated amount) regardless of what the client already checked.
+    private async Task SaveRegionAllocationsAsync()
+    {
+        if (_isSavingRegion || _hasRegionValidationError || _selectedStateId <= 0 || _selectedFY.Length == 0)
+            return;
+
+        _isSavingRegion = true;
+        try
+        {
+            var request = new SaveRegionBudgetRequest
+            {
+                StateId = _selectedStateId,
+                FY = _selectedFY,
+                Allocations = _regions.Select(r => new RegionBudgetAllocationRequest
+                {
+                    RegionId = r.RegionId,
+                    Amount = r.BudgetAmount
+                }).ToList()
+            };
+
+            var response = await Http.PutAsJsonAsync("api/Budget/region-budget", request);
+            if (response.IsSuccessStatusCode)
+            {
+                _regionValidationMessage = null;
+                _regionSuccessMessage = "Region budget allocation saved successfully.";
+                // Reload from the DB rather than trusting local state, so the page
+                // always shows exactly what was persisted.
+                await LoadRegionsAsync();
+            }
+            else
+            {
+                var raw = await response.Content.ReadAsStringAsync();
+                _regionValidationMessage = ExtractMessage(raw);
+            }
+        }
+        catch (Exception ex)
+        {
+            _regionValidationMessage = $"Failed to save: {ex.Message}";
+        }
+        finally
+        {
+            _isSavingRegion = false;
+        }
+    }
+
+    private static string ExtractMessage(string rawJson)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(rawJson);
+            if (doc.RootElement.TryGetProperty("message", out var msg))
+                return msg.GetString() ?? "Save failed.";
+        }
+        catch { }
+        return "Save failed.";
     }
 
 }

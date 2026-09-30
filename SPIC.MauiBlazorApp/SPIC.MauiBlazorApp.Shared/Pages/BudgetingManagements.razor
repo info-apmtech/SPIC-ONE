@@ -49,8 +49,13 @@
                 <!-- Allocated Budget Card -->
                 <div class="bm-stat-card theme-blue">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value">₹ 55,000</span>
-                        <span class="bm-stat-label">Allocated Budget</span>
+                        <span class="bm-stat-value">
+                            ₹ @StateAllocatedBudget.ToString("N0")
+                        </span>
+
+                        <span class="bm-stat-label">
+                            Allocated Budget
+                        </span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -931,7 +936,7 @@
 
 
     private BudgetDashboardDto dashboard = new();
-
+    private decimal StateAllocatedBudget = 0;
     private List<ProgramWiseBudgetDto> programPlans = new();
     private List<ProgramWiseBudgetDto> FilteredProgramPlans = new();
     private bool _isLoading = false;
@@ -960,6 +965,13 @@
             (
                 "api/Budget/dashboard"
             ) ?? new();
+
+            StateAllocatedBudget =
+           await Http.GetFromJsonAsync<decimal>
+           (
+               $"api/Budget/state-allocated-budget?stateId={LoginState.StateId}"
+           );
+
         }
         catch (Exception ex)
         {

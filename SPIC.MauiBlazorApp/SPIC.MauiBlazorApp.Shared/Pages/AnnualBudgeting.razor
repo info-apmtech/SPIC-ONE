@@ -1,0 +1,532 @@
+@page "/AnnualBudgeting"
+@using System.Net.Http.Json
+@using System.Globalization
+@using DR = SPIC.Core.Entities
+@inject HttpClient Http
+@inject LoadingService Loading
+@inject LoginState LoginState
+
+@code {
+    private List<DR.AnnualBudgeting> _budgets = new();
+    private List<DR.AnnualBudgeting> _filtered = new();
+    private DR.AnnualBudgeting _model = new() { FY = "", Amount = 0, IsActive = true };
+
+    private bool _isEditMode;
+    private bool _isSaving;
+    private string _searchText = "";
+    private string _statusFilter = "All";
+    private string? _message;
+    private bool _isError;
+
+    // Deactivate/activate confirmation modal
+    private bool _showDeleteModal;
+    private int _deleteId;
+    private string _deleteFY = "";
+
+    private ElementReference _firstInputRef;
+
+    private static readonly CultureInfo _inr = CultureInfo.CreateSpecificCulture("en-IN");
+
+    private int TotalCount => _budgets.Count;
+    private int ActiveCount => _budgets.Count(b => b.IsActive);
+    private int InactiveCount => _budgets.Count(b => !b.IsActive);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Loading.Show();
+        try
+        {
+            await LoadBudgets();
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    private async Task LoadBudgets()
+    {
+        try
+        {
+            _budgets = await Http.GetFromJsonAsync<List<DR.AnnualBudgeting>>("api/AnnualBudgeting/all") ?? new();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load annual budgeting records: {ex.Message}", true);
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        IEnumerable<DR.AnnualBudgeting> query = _budgets;
+
+        if (!string.IsNullOrWhiteSpace(_searchText))
+            query = query.Where(b => b.FY.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
+
+        if (_statusFilter == "Active") query = query.Where(b => b.IsActive);
+        else if (_statusFilter == "Inactive") query = query.Where(b => !b.IsActive);
+
+        _filtered = query.OrderByDescending(b => b.FY).ToList();
+    }
+
+    private async Task EditBudget(DR.AnnualBudgeting b)
+    {
+        _model = new DR.AnnualBudgeting
+        {
+            Id = b.Id,
+            FY = b.FY,
+            Amount = b.Amount,
+            IsActive = b.IsActive,
+            CreatedBy = b.CreatedBy,
+            CreatedAt = b.CreatedAt
+        };
+
+        _isEditMode = true;
+        _message = null;
+
+        await Task.Yield();
+        await _firstInputRef.FocusAsync();
+    }
+
+    private void ResetForm()
+    {
+        _model = new DR.AnnualBudgeting { FY = "", Amount = 0, IsActive = true };
+        _isEditMode = false;
+        _message = null;
+    }
+
+    private async Task SaveBudget()
+    {
+        if (string.IsNullOrWhiteSpace(_model.FY))
+        {
+            ShowMessage("Financial Year is required", true);
+            return;
+        }
+        if (_model.Amount <= 0)
+        {
+            ShowMessage("Amount must be greater than zero", true);
+            return;
+        }
+
+        // Duplicate check (case-insensitive, excluding the record being edited)
+        bool duplicate = _budgets.Any(b =>
+            b.Id != _model.Id &&
+            b.FY.Trim().Equals(_model.FY.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (duplicate)
+        {
+            ShowMessage($"An Annual Budgeting record for '{_model.FY}' already exists", true);
+            return;
+        }
+
+        _isSaving = true;
+        try
+        {
+            _model.FY = _model.FY.Trim();
+            _model.UpdatedBy = LoginState.UserId ?? "System";
+            _model.UpdatedAt = DateTime.Now;
+
+            HttpResponseMessage response;
+            if (_isEditMode && _model.Id > 0)
+            {
+                response = await Http.PutAsJsonAsync($"api/AnnualBudgeting/{_model.Id}", _model);
+            }
+            else
+            {
+                _model.CreatedBy = LoginState.UserId ?? "System";
+                _model.CreatedAt = DateTime.Now;
+                response = await Http.PostAsJsonAsync("api/AnnualBudgeting", _model);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                ShowMessage(_isEditMode
+                    ? $"Annual Budgeting for '{_model.FY}' updated successfully"
+                    : $"Annual Budgeting for '{_model.FY}' saved successfully", false);
+                ResetFormKeepMessage();
+                await LoadBudgets();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Failed to save: {error}", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+    private void ResetFormKeepMessage()
+    {
+        var msg = _message;
+        var err = _isError;
+        ResetForm();
+        _message = msg;
+        _isError = err;
+    }
+
+    private void OpenDeleteModal(DR.AnnualBudgeting b)
+    {
+        _deleteId = b.Id;
+        _deleteFY = b.FY;
+        _showDeleteModal = true;
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteModal = false;
+        _deleteId = 0;
+        _deleteFY = "";
+    }
+
+    // Soft delete: deactivate instead of hard DELETE, matching Designation's convention.
+    private async Task ConfirmDelete()
+    {
+        var target = _budgets.FirstOrDefault(x => x.Id == _deleteId);
+        if (target == null) { CancelDelete(); return; }
+
+        try
+        {
+            target.IsActive = false;
+            target.UpdatedBy = LoginState.UserId ?? "System";
+            target.UpdatedAt = DateTime.Now;
+
+            var response = await Http.PutAsJsonAsync($"api/AnnualBudgeting/{target.Id}", target);
+            if (response.IsSuccessStatusCode)
+            {
+                ShowMessage($"Annual Budgeting for '{_deleteFY}' deactivated successfully", false);
+                if (_model.Id == _deleteId) ResetFormKeepMessage();
+                await LoadBudgets();
+            }
+            else
+            {
+                target.IsActive = true; // revert local state on failure
+                var error = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Failed to deactivate: {error}", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to deactivate: {ex.Message}", true);
+        }
+        finally
+        {
+            CancelDelete();
+        }
+    }
+
+    private async Task ReactivateBudget(DR.AnnualBudgeting b)
+    {
+        try
+        {
+            b.IsActive = true;
+            b.UpdatedBy = LoginState.UserId ?? "System";
+            b.UpdatedAt = DateTime.Now;
+
+            var response = await Http.PutAsJsonAsync($"api/AnnualBudgeting/{b.Id}", b);
+            if (response.IsSuccessStatusCode)
+            {
+                ShowMessage($"Annual Budgeting for '{b.FY}' activated successfully", false);
+                await LoadBudgets();
+            }
+            else
+            {
+                b.IsActive = false;
+                var error = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Failed to activate: {error}", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to activate: {ex.Message}", true);
+        }
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    private static string FormatAmount(decimal amount) => amount.ToString("C0", _inr);
+
+    private bool CanAddBudget => LoginState.Can("AnnualBudgeting", "Entry");
+    private bool CanEditBudget => LoginState.Can("AnnualBudgeting", "Update");
+    private bool CanDeleteBudget => LoginState.Can("AnnualBudgeting", "Delete");
+}
+
+<style>
+    .ab-page-title { color: #1F2937; font-weight: 700; font-size: 1.4rem; margin: 24px 0; }
+
+    /* --- Add / Edit Card --- */
+    .ab-form-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+    .ab-form-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .ab-form-title { font-size: 1.05rem; font-weight: 700; color: #1F2937; margin: 0; }
+    .ab-form-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 20px; }
+    .ab-field { display: flex; flex-direction: column; }
+    .ab-field label { font-size: 0.78rem; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .ab-field input[type="text"], .ab-field input[type="number"] { width: 240px; max-width: 100%; padding: 9px 12px; border: 1px solid #E5E7EB; border-radius: 8px; background: #F9FAFB; font-size: 0.85rem; color: #1F2937; outline: none; transition: border-color .2s; }
+    .ab-field input[type="text"]:focus, .ab-field input[type="number"]:focus { border-color: #059669; background: #fff; box-shadow: 0 0 0 2px rgba(5,150,105,.1); }
+
+    /* Active toggle pill */
+    .ab-toggle-pill { display: flex; align-items: center; gap: 10px; background: #ECFDF5; border: 1px solid #D1FAE5; border-radius: 10px; padding: 9px 16px; cursor: pointer; user-select: none; }
+    .ab-toggle-pill.inactive { background: #F3F4F6; border-color: #E5E7EB; }
+    .ab-toggle-label { font-size: 0.85rem; font-weight: 600; color: #065F46; }
+    .ab-toggle-pill.inactive .ab-toggle-label { color: #6B7280; }
+    .ab-switch { position: relative; width: 42px; height: 22px; background: #22C55E; border-radius: 22px; transition: background .2s; flex-shrink: 0; }
+    .ab-toggle-pill.inactive .ab-switch { background: #D1D5DB; }
+    .ab-switch::after { content: ''; position: absolute; top: 2px; left: 22px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+    .ab-toggle-pill.inactive .ab-switch::after { left: 2px; }
+
+    /* Form buttons */
+    .ab-form-actions { display: flex; justify-content: flex-end; gap: 12px; }
+    .ab-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: .2s; border: 1px solid transparent; }
+    .ab-btn-cancel { background: #fff; border-color: #D1D5DB; color: #4B5563; }
+    .ab-btn-cancel:hover { background: #F9FAFB; }
+    .ab-btn-save { background: #2563EB; color: #fff; }
+    .ab-btn-save:hover { background: #1D4ED8; }
+    .ab-btn-save:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* --- Stat Cards --- */
+    .ab-stats-row { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .ab-stat-card { flex: 1; min-width: 220px; border: 1px solid #E5E7EB; border-radius: 12px; padding: 18px 20px; }
+    .ab-stat-card.total { background: linear-gradient(135deg, #EEF2FF, #F8FAFF); }
+    .ab-stat-card.active { background: linear-gradient(135deg, #ECFDF5, #F0FDFA); }
+    .ab-stat-card.inactive { background: #F3F4F6; }
+    .ab-stat-label { font-size: 0.82rem; color: #6B7280; font-weight: 600; margin-bottom: 8px; }
+    .ab-stat-value { font-size: 1.5rem; font-weight: 700; color: #1F2937; }
+
+    /* --- List Card --- */
+    .ab-list-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.04); margin-bottom: 40px; }
+    .ab-list-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .ab-list-title { font-size: 1.05rem; font-weight: 700; color: #1F2937; margin: 0; }
+    .ab-list-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .ab-search { padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 8px; background: #F9FAFB; font-size: 0.8rem; outline: none; min-width: 200px; }
+    .ab-search:focus { border-color: #059669; background: #fff; }
+    .ab-status-select { padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 8px; background: #fff; font-size: 0.8rem; outline: none; cursor: pointer; }
+
+    .ab-table { width: 100%; border-collapse: collapse; text-align: center; }
+    .ab-table th { background: #F8FAFC; color: #374151; font-weight: 600; font-size: 0.78rem; padding: 12px 14px; border-bottom: 1px solid #E5E7EB; }
+    .ab-table td { padding: 13px 14px; font-size: 0.8rem; color: #4B5563; border-bottom: 1px solid #F3F4F6; }
+    .ab-table tr:last-child td { border-bottom: none; }
+
+    .ab-badge { display: inline-block; padding: 4px 14px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; }
+    .ab-badge-active { background: #059669; color: #fff; }
+    .ab-badge-inactive { background: #E5E7EB; color: #6B7280; }
+
+    .ab-action-icons { display: flex; gap: 14px; justify-content: center; }
+    .ab-action-icons i { font-size: 1rem; cursor: pointer; }
+    .ab-icon-edit { color: #2563EB; }
+    .ab-icon-delete { color: #DC2626; }
+    .ab-icon-restore { color: #059669; }
+
+    /* --- Deactivate Modal --- */
+    .ab-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1055; padding: 1rem; }
+    .ab-modal { background: #fff; border-radius: 12px; padding: 28px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+    .ab-modal-icon { width: 56px; height: 56px; border-radius: 50%; background: #FEE2E2; color: #DC2626; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
+    .ab-modal-title { font-size: 1.1rem; font-weight: 700; color: #1F2937; margin-bottom: 8px; }
+    .ab-modal-body { font-size: 0.85rem; color: #6B7280; margin-bottom: 4px; }
+    .ab-modal-warning { font-size: 0.78rem; color: #DC2626; font-weight: 600; margin-bottom: 20px; }
+    .ab-modal-actions { display: flex; gap: 12px; justify-content: center; }
+    .ab-btn-delete { background: #DC2626; color: #fff; }
+    .ab-btn-delete:hover { background: #B91C1C; }
+
+    @@media (max-width: 767.98px) {
+        .ab-page .ab-form-card, .ab-page .ab-list-card { padding: 16px; border-radius: 12px; }
+        .ab-page .ab-field { width: 100%; }
+        .ab-page .ab-field input[type="text"], .ab-page .ab-field input[type="number"] { width: 100%; min-height: var(--tap-min, 44px); font-size: 16px; }
+        .ab-page .ab-toggle-pill { min-height: var(--tap-min, 44px); width: 100%; justify-content: space-between; }
+        .ab-page .ab-form-actions .ab-btn { width: 100%; min-height: var(--tap-min, 44px); justify-content: center; }
+        .ab-page .ab-stats-row { gap: 8px; flex-wrap: nowrap; margin-bottom: 16px; }
+        .ab-page .ab-stat-card { min-width: 0; padding: 12px 10px; }
+        .ab-page .ab-list-tools { width: 100%; }
+        .ab-page .ab-search { flex: 1 1 auto; min-width: 0; min-height: var(--tap-min, 44px); font-size: 16px; }
+        .ab-page .ab-status-select { min-height: var(--tap-min, 44px); }
+        .ab-page .ab-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .ab-page .ab-table { min-width: 640px; }
+        .ab-modal { padding: 20px; }
+        .ab-modal-actions .ab-btn { flex: 1 1 0; min-height: var(--tap-min, 44px); justify-content: center; }
+    }
+    @@media (min-width: 768px) and (max-width: 1199.98px) {
+        .ab-page .ab-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .ab-page .ab-table { min-width: 640px; }
+    }
+</style>
+
+<div class="container-fluid py-2 px-0 ab-page">
+
+    <PageHeader Title="Annual Budgeting" Subtitle="Yearly budget amount by financial year" CssClass="ab-page-title" />
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+            @_message
+            <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+        </div>
+    }
+
+    <!-- ============ Add / Edit Annual Budgeting ============ -->
+    @if (CanAddBudget || _isEditMode)
+    {
+        <div class="ab-form-card">
+            <div class="ab-form-header">
+                <h3 class="ab-form-title">@(_isEditMode ? $"Edit Annual Budgeting — {_model.FY}" : "Add Annual Budgeting")</h3>
+            </div>
+
+            <div class="ab-form-row">
+                <div class="ab-field">
+                    <label>Financial Year (FY)</label>
+                    <input type="text" @bind="_model.FY" placeholder="e.g. 2025-2026" maxlength="20" @ref="_firstInputRef" />
+                </div>
+
+                <div class="ab-field">
+                    <label>Amount</label>
+                    <input type="number" @bind="_model.Amount" min="0" step="0.01" placeholder="Enter Amount" />
+                </div>
+
+                <div class="ab-toggle-pill @(_model.IsActive ? "" : "inactive")" @onclick="() => _model.IsActive = !_model.IsActive">
+                    <span class="ab-toggle-label">@(_model.IsActive ? "Active" : "Inactive")</span>
+                    <span class="ab-switch"></span>
+                </div>
+            </div>
+
+            <ActionBar Sticky="false" CssClass="ab-form-actions">
+                <Secondary>
+                    <button type="button" class="ab-btn ab-btn-cancel" @onclick="ResetForm">
+                        <i class="bi bi-x-lg"></i> Cancel
+                    </button>
+                </Secondary>
+                <ChildContent>
+                    <button type="button" class="ab-btn ab-btn-save" @onclick="SaveBudget" disabled="@_isSaving">
+                        <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
+                    </button>
+                </ChildContent>
+            </ActionBar>
+        </div>
+    }
+
+    <!-- ============ Stat Cards ============ -->
+    <div class="ab-stats-row">
+        <div class="ab-stat-card total">
+            <div class="ab-stat-label">Total Count</div>
+            <div class="ab-stat-value">@TotalCount</div>
+        </div>
+        <div class="ab-stat-card active">
+            <div class="ab-stat-label">Active</div>
+            <div class="ab-stat-value">@ActiveCount</div>
+        </div>
+        <div class="ab-stat-card inactive">
+            <div class="ab-stat-label">Inactive</div>
+            <div class="ab-stat-value">@InactiveCount</div>
+        </div>
+    </div>
+
+    <!-- ============ Annual Budgeting List ============ -->
+    <div class="ab-list-card">
+        <div class="ab-list-header">
+            <h3 class="ab-list-title">Existing Annual Budgeting Records</h3>
+            <div class="ab-list-tools">
+                <input type="text" class="ab-search" placeholder="Search by FY..."
+                       @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter" />
+                <select class="ab-status-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+                    <option value="All">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+
+        @if (_filtered.Any())
+        {
+            <div class="table-responsive ab-table-wrap">
+                <table class="ab-table">
+                    <thead>
+                        <tr>
+                            <th>Id</th>
+                            <th>FY</th>
+                            <th>Amount</th>
+                            <th>Created At</th>
+                            <th>Created By</th>
+                            <th>Updated At</th>
+                            <th>Updated By</th>
+                            <th>Is Active</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var b in _filtered)
+                        {
+                            <tr>
+                                <td>@b.Id</td>
+                                <td>@b.FY</td>
+                                <td>@FormatAmount(b.Amount)</td>
+                                <td>@b.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                <td>@(b.CreatedBy ?? "—")</td>
+                                <td>@b.UpdatedAt.ToString("yyyy-MM-dd")</td>
+                                <td>@(b.UpdatedBy ?? "—")</td>
+                                <td>
+                                    <span class="ab-badge @(b.IsActive ? "ab-badge-active" : "ab-badge-inactive")">
+                                        @(b.IsActive ? "Active" : "Inactive")
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="ab-action-icons">
+                                        @if (b.IsActive)
+                                        {
+                                            @if (CanDeleteBudget)
+                                            {
+                                                <i class="bi bi-slash-circle ab-icon-delete" title="Deactivate" @onclick="() => OpenDeleteModal(b)"></i>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            @if (CanEditBudget)
+                                            {
+                                                <i class="bi bi-arrow-counterclockwise ab-icon-restore" title="Activate" @onclick="() => ReactivateBudget(b)"></i>
+                                            }
+                                        }
+                                        @if (CanEditBudget)
+                                        {
+                                            <i class="bi bi-pencil-square ab-icon-edit" title="Edit" @onclick="() => EditBudget(b)"></i>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <EmptyState Icon="bi-wallet2" Title="No Annual Budgeting records found" Message="Add a record using the form above or change the filter." />
+        }
+    </div>
+</div>
+
+<!-- ============ Deactivate Confirmation Modal ============ -->
+@if (_showDeleteModal)
+{
+    <div class="ab-modal-backdrop" @onclick="CancelDelete">
+        <div class="ab-modal" @onclick:stopPropagation="true">
+            <div class="ab-modal-icon">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+            </div>
+            <h3 class="ab-modal-title">Deactivate Annual Budgeting?</h3>
+            <p class="ab-modal-body">You are about to deactivate FY <strong>@_deleteFY</strong></p>
+            <p class="ab-modal-warning">This hides it from active lists. You can reactivate it anytime.</p>
+            <div class="ab-modal-actions">
+                <button type="button" class="ab-btn ab-btn-cancel" @onclick="CancelDelete">Cancel</button>
+                <button type="button" class="ab-btn ab-btn-delete" @onclick="ConfirmDelete">
+                    <i class="bi bi-slash-circle"></i> Deactivate
+                </button>
+            </div>
+        </div>
+    </div>
+}
