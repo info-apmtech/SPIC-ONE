@@ -714,7 +714,9 @@ namespace SpicAPI.Controllers
         }
 
         /// <summary>
-        /// Submit For Validation: marks every saved state allocation for the FY as "Submitted".
+        /// Submit For Validation: marks every saved state allocation for the FY as "Submitted",
+        /// and cascades the same submission to every saved Region allocation for that FY (the
+        /// existing lifecycle is reused as-is - there is no separate Region submission action).
         /// Reuses BudgetProgram.Status's existing string-status convention - no new workflow,
         /// no new status values. Re-validates against the AnnualBudgeting amount independently
         /// of Save Draft (defense in depth) and refuses a second submission for the same FY.
@@ -759,12 +761,150 @@ namespace SpicAPI.Controllers
                 row.UpdatedAt = DateTime.Now;
             }
 
+            var regionRows = await _db.Set<RegionBudgetAllocation>()
+                .Where(a => a.FY == fy && a.Status != "Submitted")
+                .ToListAsync();
+
+            foreach (var row in regionRows)
+            {
+                row.Status = "Submitted";
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = DateTime.Now;
+            }
+
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
             return Ok(new
             {
                 message = $"State budget allocation for FY {fy} submitted for validation successfully."
+            });
+        }
+
+        /// <summary>
+        /// Region-wise budget rows for the State Budget Management page's Region Allocation
+        /// section, scoped to one State + FY. Amount for each region is its persisted
+        /// RegionBudgetAllocation for that FY (0 if none saved yet), so a page reload always
+        /// reflects what was actually saved to the database.
+        /// </summary>
+        [HttpGet("regions-budget")]
+        public async Task<IActionResult> GetRegionsBudget([FromQuery] int stateId, [FromQuery] string? fy)
+        {
+            var allocations = string.IsNullOrWhiteSpace(fy)
+                ? new Dictionary<int, decimal>()
+                : await _db.Set<RegionBudgetAllocation>()
+                    .Where(a => a.StateId == stateId && a.FY == fy)
+                    .ToDictionaryAsync(a => a.RegionId, a => a.Amount);
+
+            var regions = await _db.Set<Region>()
+                .Where(x => x.StateId == stateId && x.IsActive)
+                .OrderBy(x => x.RegionName)
+                .Select(x => new { x.Id, x.RegionName })
+                .ToListAsync();
+
+            var result = regions.Select(x => new RegionBudgetDto
+            {
+                RegionId = x.Id,
+                RegionName = x.RegionName,
+                BudgetAmount = allocations.TryGetValue(x.Id, out var amount) ? amount : 0m
+            }).ToList();
+
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Full replace of every region's allocation for one State+FY (same full-replace
+        /// convention as Save Draft for states, so an edited row's own previous value can
+        /// never be double-counted). Independently validates: FY/State exist, every region
+        /// is valid and belongs to the given State, no negative amounts, no duplicate region
+        /// entries in the request, a State Budget Allocation exists for that FY, and the
+        /// total never exceeds that State's allocated amount for the same FY.
+        /// </summary>
+        [HttpPut("region-budget")]
+        public async Task<IActionResult> SaveRegionBudget([FromBody] SaveRegionBudgetRequest request)
+        {
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            if (request.StateId <= 0)
+                return BadRequest(new { message = "A State must be selected." });
+
+            if (request.Allocations == null || request.Allocations.Count == 0)
+                return BadRequest(new { message = "No region allocations to save." });
+
+            if (request.Allocations.Any(a => a.Amount < 0))
+                return BadRequest(new { message = "Allocation amount cannot be negative." });
+
+            if (request.Allocations.Select(a => a.RegionId).Distinct().Count() != request.Allocations.Count)
+                return BadRequest(new { message = "Duplicate region entries in the request." });
+
+            var state = await _stateRepo.GetAll().FirstOrDefaultAsync(s => s.Id == request.StateId);
+            if (state == null)
+                return BadRequest(new { message = "Selected state is invalid or inactive." });
+
+            var stateAllocation = await _db.Set<StateBudgetAllocation>()
+                .FirstOrDefaultAsync(a => a.StateId == request.StateId && a.FY == fy);
+            if (stateAllocation == null)
+                return BadRequest(new { message = $"No State Budget Allocation is saved for {state.StateName} in FY {fy}." });
+
+            var regionIds = request.Allocations.Select(a => a.RegionId).ToList();
+            var regions = await _db.Set<Region>()
+                .Where(r => regionIds.Contains(r.Id))
+                .ToListAsync();
+
+            if (regions.Count != regionIds.Distinct().Count())
+                return BadRequest(new { message = "One or more regions are invalid." });
+
+            if (regions.Any(r => r.StateId != request.StateId))
+                return BadRequest(new { message = "One or more regions do not belong to the selected state." });
+
+            var totalRequested = request.Allocations.Sum(a => a.Amount);
+            if (totalRequested > stateAllocation.Amount)
+                return BadRequest(new
+                {
+                    message = $"Region allocation cannot exceed the remaining state budget of ₹{stateAllocation.Amount:N0}."
+                });
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            var existing = await _db.Set<RegionBudgetAllocation>()
+                .Where(a => a.FY == fy && regionIds.Contains(a.RegionId))
+                .ToListAsync();
+            var existingByRegionId = existing.ToDictionary(a => a.RegionId);
+
+            foreach (var alloc in request.Allocations)
+            {
+                if (existingByRegionId.TryGetValue(alloc.RegionId, out var row))
+                {
+                    row.Amount = alloc.Amount;
+                    row.UpdatedBy = CurrentUser;
+                    row.UpdatedAt = DateTime.Now;
+                }
+                else
+                {
+                    _db.Set<RegionBudgetAllocation>().Add(new RegionBudgetAllocation
+                    {
+                        StateId = request.StateId,
+                        RegionId = alloc.RegionId,
+                        FY = fy,
+                        Amount = alloc.Amount,
+                        CreatedBy = CurrentUser,
+                        CreatedAt = DateTime.Now,
+                        UpdatedBy = CurrentUser,
+                        UpdatedAt = DateTime.Now
+                    });
+                }
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                message = "Region budget allocation saved successfully",
+                totalAllocated = totalRequested,
+                remaining = stateAllocation.Amount - totalRequested
             });
         }
 
