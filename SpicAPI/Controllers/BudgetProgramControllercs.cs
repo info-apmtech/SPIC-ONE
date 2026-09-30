@@ -22,6 +22,8 @@ namespace SpicAPI.Controllers
         private readonly IGenericRepository<Crop> _cropRepo;
         private readonly IGenericRepository<Product> _productRepo;
         private readonly IGenericRepository<State> _stateRepo;
+        private readonly IGenericRepository<ProgramStateBudget> _programStateBudgetRepo;
+        private readonly IGenericRepository<StateBudgetAllocation> _stateBudgetAllocationRepo;
         private string CurrentUser =>   
     User.Identity?.Name ?? "System";
         public BudgetController(
@@ -32,7 +34,9 @@ namespace SpicAPI.Controllers
    IGenericRepository<EmployeeInformation> employeeRepo,
    IGenericRepository<Crop> cropRepo,
    IGenericRepository<Product> productRepo,
-   IGenericRepository<State> stateRepo)
+   IGenericRepository<State> stateRepo,
+   IGenericRepository<ProgramStateBudget> programStateBudgetRepo,
+   IGenericRepository<StateBudgetAllocation> stateBudgetAllocationRepo)
         {
             _budgetRepo = budgetRepo;
             _programRepo = programRepo;
@@ -42,6 +46,8 @@ namespace SpicAPI.Controllers
             _cropRepo = cropRepo;
             _productRepo = productRepo;
             _stateRepo = stateRepo;
+            _programStateBudgetRepo = programStateBudgetRepo;
+            _stateBudgetAllocationRepo = stateBudgetAllocationRepo;
         }
 
 
@@ -199,147 +205,133 @@ namespace SpicAPI.Controllers
         [HttpGet("program-master-list")]
         public async Task<IActionResult> GetProgramMasterList()
         {
+            // Get logged in user StateId
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+
+
+            if (!int.TryParse(stateClaim, out int stateId))
+            {
+                return Unauthorized("State not assigned for user");
+            }
+
+
             var programs = await _programRepo
                 .GetAll()
                 .Include(x => x.ProgramType)
+
+                // Only programs assigned to logged-in user's state
+                .Where(x => _programStateBudgetRepo
+                    .GetAll()
+                    .Any(psb =>
+                        psb.ProgramId == x.Id &&
+                        psb.StateId == stateId
+                    )
+                )
+
                 .Select(x => new
                 {
                     Program = x,
 
+
+                    // State wise program budget
+                    StateBudget = _programStateBudgetRepo
+                        .GetAll()
+                        .FirstOrDefault(psb =>
+                            psb.ProgramId == x.Id &&
+                            psb.StateId == stateId
+                        ),
+
+
+                    // Existing monthly budget logic
                     Budget = _budgetRepo
                         .GetAll()
                         .Where(b => b.ProgramId == x.Id)
                         .OrderByDescending(b => b.UpdatedAt)
                         .FirstOrDefault()
                 })
+
+
                 .Select(x => new ProgramWiseBudgetDto
                 {
+
                     ProgramId = x.Program.Id,
-                    ProgramTypeId = x.Program.Id,
+
+                    ProgramTypeId = x.Program.ProgramTypeId,
+
+
                     ProgramType = x.Program.ProgramType != null
                         ? x.Program.ProgramType.Name
                         : "",
+
 
                     ProgramName = x.Program.Name,
 
 
                     // =========================================
-                    // Budget
+                    // State Wise Program Budget
+                    // From ProgramStateBudgets table
                     // =========================================
-                    BudgetAmount = x.Program.BudgetAmount,
 
-                    IsChangeAmount = x.Program.BudgetAmount > 0
+                    BudgetAmount = x.StateBudget != null
+                        ? x.StateBudget.BudgetAmount
+                        : 0,
+
+
+                    IsChangeAmount = x.StateBudget != null && x.StateBudget.BudgetAmount > 0
                         ? false
                         : true,
 
+
+                    // =========================================
+                    // Existing Budget
+                    // =========================================
+
                     TotalBudget = x.Budget != null
                         ? x.Budget.TotalBudget
-                        : x.Program.BudgetAmount,
+                        : (x.StateBudget != null
+                            ? x.StateBudget.BudgetAmount
+                            : 0),
 
 
                     // =========================================
                     // Monthly Counts
                     // =========================================
-                    AprilCount = x.Budget != null
-                        ? x.Budget.AprilCount
-                        : 0,
 
-                    MayCount = x.Budget != null
-                        ? x.Budget.MayCount
-                        : 0,
+                    AprilCount = x.Budget != null ? x.Budget.AprilCount : 0,
+                    MayCount = x.Budget != null ? x.Budget.MayCount : 0,
+                    JuneCount = x.Budget != null ? x.Budget.JuneCount : 0,
+                    JulyCount = x.Budget != null ? x.Budget.JulyCount : 0,
+                    AugustCount = x.Budget != null ? x.Budget.AugustCount : 0,
+                    SeptemberCount = x.Budget != null ? x.Budget.SeptemberCount : 0,
+                    OctoberCount = x.Budget != null ? x.Budget.OctoberCount : 0,
+                    NovemberCount = x.Budget != null ? x.Budget.NovemberCount : 0,
+                    DecemberCount = x.Budget != null ? x.Budget.DecemberCount : 0,
+                    JanuaryCount = x.Budget != null ? x.Budget.JanuaryCount : 0,
+                    FebruaryCount = x.Budget != null ? x.Budget.FebruaryCount : 0,
+                    MarchCount = x.Budget != null ? x.Budget.MarchCount : 0,
 
-                    JuneCount = x.Budget != null
-                        ? x.Budget.JuneCount
-                        : 0,
-
-                    JulyCount = x.Budget != null
-                        ? x.Budget.JulyCount
-                        : 0,
-
-                    AugustCount = x.Budget != null
-                        ? x.Budget.AugustCount
-                        : 0,
-
-                    SeptemberCount = x.Budget != null
-                        ? x.Budget.SeptemberCount
-                        : 0,
-
-                    OctoberCount = x.Budget != null
-                        ? x.Budget.OctoberCount
-                        : 0,
-
-                    NovemberCount = x.Budget != null
-                        ? x.Budget.NovemberCount
-                        : 0,
-
-                    DecemberCount = x.Budget != null
-                        ? x.Budget.DecemberCount
-                        : 0,
-
-                    JanuaryCount = x.Budget != null
-                        ? x.Budget.JanuaryCount
-                        : 0,
-
-                    FebruaryCount = x.Budget != null
-                        ? x.Budget.FebruaryCount
-                        : 0,
-
-                    MarchCount = x.Budget != null
-                        ? x.Budget.MarchCount
-                        : 0,
 
 
                     // =========================================
                     // Monthly Budget
+                    // Existing Logic
                     // =========================================
-                    AprilBudget = x.Budget != null
-                        ? x.Budget.April
-                        : 0,
 
-                    MayBudget = x.Budget != null
-                        ? x.Budget.May
-                        : 0,
+                    AprilBudget = x.Budget != null ? x.Budget.April : 0,
+                    MayBudget = x.Budget != null ? x.Budget.May : 0,
+                    JuneBudget = x.Budget != null ? x.Budget.June : 0,
+                    JulyBudget = x.Budget != null ? x.Budget.July : 0,
+                    AugustBudget = x.Budget != null ? x.Budget.August : 0,
+                    SeptemberBudget = x.Budget != null ? x.Budget.September : 0,
+                    OctoberBudget = x.Budget != null ? x.Budget.October : 0,
+                    NovemberBudget = x.Budget != null ? x.Budget.November : 0,
+                    DecemberBudget = x.Budget != null ? x.Budget.December : 0,
+                    JanuaryBudget = x.Budget != null ? x.Budget.January : 0,
+                    FebruaryBudget = x.Budget != null ? x.Budget.February : 0,
+                    MarchBudget = x.Budget != null ? x.Budget.March : 0
 
-                    JuneBudget = x.Budget != null
-                        ? x.Budget.June
-                        : 0,
-
-                    JulyBudget = x.Budget != null
-                        ? x.Budget.July
-                        : 0,
-
-                    AugustBudget = x.Budget != null
-                        ? x.Budget.August
-                        : 0,
-
-                    SeptemberBudget = x.Budget != null
-                        ? x.Budget.September
-                        : 0,
-
-                    OctoberBudget = x.Budget != null
-                        ? x.Budget.October
-                        : 0,
-
-                    NovemberBudget = x.Budget != null
-                        ? x.Budget.November
-                        : 0,
-
-                    DecemberBudget = x.Budget != null
-                        ? x.Budget.December
-                        : 0,
-
-                    JanuaryBudget = x.Budget != null
-                        ? x.Budget.January
-                        : 0,
-
-                    FebruaryBudget = x.Budget != null
-                        ? x.Budget.February
-                        : 0,
-
-                    MarchBudget = x.Budget != null
-                        ? x.Budget.March
-                        : 0
                 })
+
                 .ToListAsync();
 
 
@@ -599,6 +591,19 @@ namespace SpicAPI.Controllers
         public IActionResult SaveStateBudget([FromBody] object data)
         {
             return Ok();
+        }
+
+        [HttpGet("state-allocated-budget")]
+        public async Task<IActionResult> GetStateAllocatedBudget(int stateId)
+        {
+            var amount = await _stateBudgetAllocationRepo
+                .GetAll()
+                .Where(x => x.StateId == stateId)
+                .Select(x => x.BudgetAmount)
+                .FirstOrDefaultAsync();
+
+
+            return Ok(amount);
         }
     }
 
