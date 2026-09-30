@@ -507,6 +507,20 @@ namespace Spic.Infrastructure.Data
 
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
+
+        // MD Portal - State Budget Management: one row per (State, FY), so a save
+        // always upserts rather than creating a duplicate allocation.
+        builder.Entity<StateBudgetAllocation>(entity =>
+        {
+            entity.HasIndex(x => new { x.StateId, x.FY }).IsUnique();
+            entity.HasOne(x => x.State)
+                .WithMany()
+                .HasForeignKey(x => x.StateId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // A DB-level default so adding this column never fails against rows
+            // already saved via Save Draft before Submit For Validation existed.
+            entity.Property(x => x.Status).HasDefaultValue("Draft");
+        });
         }
 
         // Same prettification the existing Designation UI uses (Designation.razor
@@ -707,5 +721,8 @@ namespace Spic.Infrastructure.Data
 
         // MD Portal - Annual Budgeting master
         public DbSet<AnnualBudgeting> AnnualBudgetings { get; set; }
+
+        // MD Portal - State Budget Management (state-wise share of an AnnualBudgeting row)
+        public DbSet<StateBudgetAllocation> StateBudgetAllocations { get; set; }
     }
 }

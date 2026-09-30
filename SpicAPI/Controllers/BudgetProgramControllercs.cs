@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MimeKit.Cryptography;
+using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
@@ -22,7 +23,9 @@ namespace SpicAPI.Controllers
         private readonly IGenericRepository<Crop> _cropRepo;
         private readonly IGenericRepository<Product> _productRepo;
         private readonly IGenericRepository<State> _stateRepo;
-        private string CurrentUser =>   
+        private readonly IGenericRepository<AnnualBudgeting> _annualBudgetingRepo;
+        private readonly AppDbContext _db;
+        private string CurrentUser =>
     User.Identity?.Name ?? "System";
         public BudgetController(
     IGenericRepository<BudgetProgram> budgetRepo,
@@ -32,7 +35,9 @@ namespace SpicAPI.Controllers
    IGenericRepository<EmployeeInformation> employeeRepo,
    IGenericRepository<Crop> cropRepo,
    IGenericRepository<Product> productRepo,
-   IGenericRepository<State> stateRepo)
+   IGenericRepository<State> stateRepo,
+   IGenericRepository<AnnualBudgeting> annualBudgetingRepo,
+   AppDbContext db)
         {
             _budgetRepo = budgetRepo;
             _programRepo = programRepo;
@@ -42,6 +47,8 @@ namespace SpicAPI.Controllers
             _cropRepo = cropRepo;
             _productRepo = productRepo;
             _stateRepo = stateRepo;
+            _annualBudgetingRepo = annualBudgetingRepo;
+            _db = db;
         }
 
 
@@ -577,28 +584,195 @@ namespace SpicAPI.Controllers
             return Ok(products);
         }
 
+        /// <summary>
+        /// State-wise budget rows for State Budget Management. Amount for each state is its
+        /// persisted StateBudgetAllocation for the given FY (0 if none saved yet), so a page
+        /// reload always reflects what was actually saved to the database.
+        /// </summary>
         [HttpGet("states-budget")]
-        public async Task<IActionResult> GetStatesBudget()
+        public async Task<IActionResult> GetStatesBudget([FromQuery] string? fy)
         {
+            var allocations = string.IsNullOrWhiteSpace(fy)
+                ? new Dictionary<int, decimal>()
+                : await _db.Set<StateBudgetAllocation>()
+                    .Where(a => a.FY == fy)
+                    .ToDictionaryAsync(a => a.StateId, a => a.Amount);
+
             var states = await _stateRepo
                 .GetAll()
                 .Where(x => x.IsActive)
-                .Select(x => new
-                {
-                    StateId = x.Id,
-                    StateName = x.StateName,
-                    BudgetAmount = 0
-                })
                 .OrderBy(x => x.StateName)
+                .Select(x => new { x.Id, x.StateName })
                 .ToListAsync();
 
-            return Ok(states);
+            var result = states.Select(x => new StateBudgetDto
+            {
+                StateId = x.Id,
+                StateName = x.StateName,
+                BudgetAmount = allocations.TryGetValue(x.Id, out var amount) ? amount : 0m
+            }).ToList();
+
+            return Ok(result);
         }
 
-        [HttpPost("save-state-budget")]
-        public IActionResult SaveStateBudget([FromBody] object data)
+        /// <summary>
+        /// Full replace of every state's allocation for one FY (the client always submits every
+        /// state's current amount, not just the changed row, so double-counting an edited row
+        /// against its own previous value can't happen). Validated against the AnnualBudgeting
+        /// amount for that FY before anything is written; one DB transaction so a State Budget
+        /// Management save can never partially apply.
+        /// </summary>
+        [HttpPut("state-budget")]
+        public async Task<IActionResult> SaveStateBudget([FromBody] SaveStateBudgetRequest request)
         {
-            return Ok();
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            if (request.Allocations == null || request.Allocations.Count == 0)
+                return BadRequest(new { message = "No state allocations to save." });
+
+            if (request.Allocations.Any(a => a.Amount < 0))
+                return BadRequest(new { message = "Allocation amount cannot be negative." });
+
+            if (request.Allocations.Select(a => a.StateId).Distinct().Count() != request.Allocations.Count)
+                return BadRequest(new { message = "Duplicate state entries in the request." });
+
+            var annualBudget = await _annualBudgetingRepo
+                .GetAll()
+                .FirstOrDefaultAsync(b => b.FY == fy);
+
+            if (annualBudget == null)
+                return BadRequest(new { message = $"No Annual Budget is defined for FY {fy}." });
+
+            var totalRequested = request.Allocations.Sum(a => a.Amount);
+            if (totalRequested > annualBudget.Amount)
+                return BadRequest(new
+                {
+                    message = $"Allocation amount cannot exceed the remaining budget of ₹{annualBudget.Amount:N0}."
+                });
+
+            var stateIds = request.Allocations.Select(a => a.StateId).ToList();
+            var validStateIds = await _stateRepo.GetAll()
+                .Where(s => stateIds.Contains(s.Id))
+                .Select(s => s.Id)
+                .ToListAsync();
+            if (validStateIds.Count != stateIds.Distinct().Count())
+                return BadRequest(new { message = "One or more states are invalid or inactive." });
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            var existing = await _db.Set<StateBudgetAllocation>()
+                .Where(a => a.FY == fy && stateIds.Contains(a.StateId))
+                .ToListAsync();
+            var existingByStateId = existing.ToDictionary(a => a.StateId);
+
+            foreach (var alloc in request.Allocations)
+            {
+                if (existingByStateId.TryGetValue(alloc.StateId, out var row))
+                {
+                    row.Amount = alloc.Amount;
+                    row.UpdatedBy = CurrentUser;
+                    row.UpdatedAt = DateTime.Now;
+                }
+                else
+                {
+                    _db.Set<StateBudgetAllocation>().Add(new StateBudgetAllocation
+                    {
+                        StateId = alloc.StateId,
+                        FY = fy,
+                        Amount = alloc.Amount,
+                        CreatedBy = CurrentUser,
+                        CreatedAt = DateTime.Now,
+                        UpdatedBy = CurrentUser,
+                        UpdatedAt = DateTime.Now
+                    });
+                }
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                message = "State budget allocation saved successfully",
+                totalAllocated = totalRequested,
+                remaining = annualBudget.Amount - totalRequested
+            });
+        }
+
+        /// <summary>
+        /// Current submission status for one FY's state allocations, so the page can disable
+        /// Submit For Validation once it has already been submitted (no separate wiring
+        /// needed elsewhere - every row for an FY is always kept in sync with the same status).
+        /// </summary>
+        [HttpGet("state-budget/status")]
+        public async Task<IActionResult> GetStateBudgetStatus([FromQuery] string fy)
+        {
+            if (string.IsNullOrWhiteSpace(fy))
+                return BadRequest(new { message = "Financial Year is required." });
+
+            var status = await _db.Set<StateBudgetAllocation>()
+                .Where(a => a.FY == fy)
+                .Select(a => a.Status)
+                .FirstOrDefaultAsync();
+
+            return Ok(new StateBudgetStatusDto { Status = status ?? "Draft" });
+        }
+
+        /// <summary>
+        /// Submit For Validation: marks every saved state allocation for the FY as "Submitted".
+        /// Reuses BudgetProgram.Status's existing string-status convention - no new workflow,
+        /// no new status values. Re-validates against the AnnualBudgeting amount independently
+        /// of Save Draft (defense in depth) and refuses a second submission for the same FY.
+        /// </summary>
+        [HttpPut("state-budget/submit")]
+        public async Task<IActionResult> SubmitStateBudget([FromBody] SubmitStateBudgetRequest request)
+        {
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            var annualBudget = await _annualBudgetingRepo
+                .GetAll()
+                .FirstOrDefaultAsync(b => b.FY == fy);
+
+            if (annualBudget == null)
+                return BadRequest(new { message = $"No Annual Budget is defined for FY {fy}." });
+
+            var rows = await _db.Set<StateBudgetAllocation>()
+                .Where(a => a.FY == fy)
+                .ToListAsync();
+
+            if (rows.Count == 0)
+                return BadRequest(new { message = "Save the state allocation before submitting for validation." });
+
+            if (rows.Any(r => r.Status == "Submitted"))
+                return BadRequest(new { message = $"The allocation for FY {fy} has already been submitted for validation." });
+
+            var total = rows.Sum(r => r.Amount);
+            if (total > annualBudget.Amount)
+                return BadRequest(new
+                {
+                    message = $"Allocation amount cannot exceed the remaining budget of ₹{annualBudget.Amount:N0}."
+                });
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            foreach (var row in rows)
+            {
+                row.Status = "Submitted";
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = DateTime.Now;
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                message = $"State budget allocation for FY {fy} submitted for validation successfully."
+            });
         }
     }
 
