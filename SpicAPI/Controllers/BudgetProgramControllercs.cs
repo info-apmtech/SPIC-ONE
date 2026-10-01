@@ -210,8 +210,8 @@ namespace SpicAPI.Controllers
             return Ok(items);
         }
 
-        [HttpGet("program-master-list")]
-        public async Task<IActionResult> GetProgramMasterList()
+        [HttpGet("program-master-listold")]
+        public async Task<IActionResult> GetProgramMasterListOLD()
         {
             // Get logged in user StateId
             var stateClaim = User.FindFirst("spic:state_id")?.Value;
@@ -342,6 +342,333 @@ namespace SpicAPI.Controllers
 
                 .ToListAsync();
 
+
+            return Ok(programs);
+        }
+
+        [Authorize]
+        [HttpGet("program-master-list1")]
+        public async Task<IActionResult> GetProgramMasterList1()
+        {
+            // Get the logged-in user's state.
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+
+            if (!int.TryParse(stateClaim, out int stateId))
+            {
+                return Unauthorized("State not assigned for user");
+            }
+
+            // Map logged-in roles to ProgramMasters access flags.
+            bool isSMDOUser =
+                User.IsInRole(AppRole.SMM.ToString()) ||
+                User.IsInRole(AppRole.SMD.ToString());
+
+            bool isRMDOUser =
+                User.IsInRole(AppRole.RM.ToString()) ||
+                User.IsInRole(AppRole.RMD.ToString());
+
+            bool isMOUser =
+                User.IsInRole(AppRole.MO.ToString()) ||
+                User.IsInRole(AppRole.MDO.ToString()) ||
+                User.IsInRole(AppRole.JMDO.ToString());
+
+            // No automatic access for missing or unmapped roles.
+            if (!isSMDOUser && !isRMDOUser && !isMOUser)
+            {
+                return Forbid();
+            }
+
+            var stateBudgets = _programStateBudgetRepo.GetAll();
+            var existingBudgets = _budgetRepo.GetAll();
+
+            var programs = await _programRepo
+                .GetAll()
+                .Include(x => x.ProgramType)
+
+                // 1. Only programs allocated to the logged-in user's state.
+                .Where(x => stateBudgets.Any(psb =>
+                    psb.ProgramId == x.Id &&
+                    psb.StateId == stateId
+                ))
+
+                // 2. Only programs enabled for the logged-in user's role.
+                .Where(x =>
+                    (isMOUser && x.IsMO == true) ||
+                    (isRMDOUser && x.IsRMDO == true) ||
+                    (isSMDOUser && x.IsSMDO == true)
+                )
+
+                .Select(x => new
+                {
+                    Program = x,
+
+                    // State-wise program budget.
+                    StateBudget = stateBudgets
+                        .FirstOrDefault(psb =>
+                            psb.ProgramId == x.Id &&
+                            psb.StateId == stateId
+                        ),
+
+                    // Existing monthly budget selection: unchanged.
+                    Budget = existingBudgets
+                        .Where(b => b.ProgramId == x.Id)
+                        .OrderByDescending(b => b.UpdatedAt)
+                        .FirstOrDefault()
+                })
+
+                .Select(x => new ProgramWiseBudgetDto
+                {
+                    ProgramId = x.Program.Id,
+
+                    ProgramTypeId = x.Program.ProgramTypeId,
+
+                    ProgramType = x.Program.ProgramType != null
+                        ? x.Program.ProgramType.Name
+                        : "",
+
+                    ProgramName = x.Program.Name,
+
+                    // State-wise program budget: unchanged.
+                    BudgetAmount = x.StateBudget != null
+                        ? x.StateBudget.BudgetAmount
+                        : 0,
+
+                    IsChangeAmount =
+                        x.StateBudget != null &&
+                        x.StateBudget.BudgetAmount > 0
+                            ? false
+                            : true,
+
+                    // Existing total budget logic: unchanged.
+                    TotalBudget = x.Budget != null
+                        ? x.Budget.TotalBudget
+                        : (x.StateBudget != null
+                            ? x.StateBudget.BudgetAmount
+                            : 0),
+
+                    // Monthly counts: unchanged.
+                    AprilCount = x.Budget != null
+                        ? x.Budget.AprilCount : 0,
+
+                    MayCount = x.Budget != null
+                        ? x.Budget.MayCount : 0,
+
+                    JuneCount = x.Budget != null
+                        ? x.Budget.JuneCount : 0,
+
+                    JulyCount = x.Budget != null
+                        ? x.Budget.JulyCount : 0,
+
+                    AugustCount = x.Budget != null
+                        ? x.Budget.AugustCount : 0,
+
+                    SeptemberCount = x.Budget != null
+                        ? x.Budget.SeptemberCount : 0,
+
+                    OctoberCount = x.Budget != null
+                        ? x.Budget.OctoberCount : 0,
+
+                    NovemberCount = x.Budget != null
+                        ? x.Budget.NovemberCount : 0,
+
+                    DecemberCount = x.Budget != null
+                        ? x.Budget.DecemberCount : 0,
+
+                    JanuaryCount = x.Budget != null
+                        ? x.Budget.JanuaryCount : 0,
+
+                    FebruaryCount = x.Budget != null
+                        ? x.Budget.FebruaryCount : 0,
+
+                    MarchCount = x.Budget != null
+                        ? x.Budget.MarchCount : 0,
+
+                    // Monthly budget amounts: unchanged.
+                    AprilBudget = x.Budget != null
+                        ? x.Budget.April : 0,
+
+                    MayBudget = x.Budget != null
+                        ? x.Budget.May : 0,
+
+                    JuneBudget = x.Budget != null
+                        ? x.Budget.June : 0,
+
+                    JulyBudget = x.Budget != null
+                        ? x.Budget.July : 0,
+
+                    AugustBudget = x.Budget != null
+                        ? x.Budget.August : 0,
+
+                    SeptemberBudget = x.Budget != null
+                        ? x.Budget.September : 0,
+
+                    OctoberBudget = x.Budget != null
+                        ? x.Budget.October : 0,
+
+                    NovemberBudget = x.Budget != null
+                        ? x.Budget.November : 0,
+
+                    DecemberBudget = x.Budget != null
+                        ? x.Budget.December : 0,
+
+                    JanuaryBudget = x.Budget != null
+                        ? x.Budget.January : 0,
+
+                    FebruaryBudget = x.Budget != null
+                        ? x.Budget.February : 0,
+
+                    MarchBudget = x.Budget != null
+                        ? x.Budget.March : 0
+                })
+
+                .ToListAsync();
+
+            return Ok(programs);
+        }
+
+        [Authorize]
+        [HttpGet("program-master-list")]
+        public async Task<IActionResult> GetProgramMasterList()
+        {
+            // Get the logged-in user's state.
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+
+            if (!int.TryParse(stateClaim, out int stateId))
+            {
+                return Unauthorized("State not assigned for user");
+            }
+
+            // Get the logged-in user's role name.
+            var roleClaim = User.FindFirst(
+                System.Security.Claims.ClaimTypes.Role
+            )?.Value;
+
+            // Do not allow access when the role is missing.
+            if (string.IsNullOrWhiteSpace(roleClaim))
+            {
+                return Forbid();
+            }
+
+            // SMM / SMD users: check ProgramMasters.IsSMDO.
+            bool isSMDOUser =
+                roleClaim == AppRole.SMM.ToString() ||
+                roleClaim == AppRole.SMD.ToString();
+
+            // RM / RMD users: check ProgramMasters.IsRMDO.
+            bool isRMDOUser =
+                roleClaim == AppRole.RM.ToString() ||
+                roleClaim == AppRole.RMD.ToString();
+
+            // MO / MDO / JMDO users: check ProgramMasters.IsMO.
+            bool isMOUser =
+                roleClaim == AppRole.MO.ToString() ||
+                roleClaim == AppRole.MDO.ToString() ||
+                roleClaim == AppRole.JMDO.ToString();
+
+            // No automatic access for other roles.
+            if (!isSMDOUser && !isRMDOUser && !isMOUser)
+            {
+                return Forbid();
+            }
+
+            var stateBudgets = _programStateBudgetRepo.GetAll();
+            var existingBudgets = _budgetRepo.GetAll();
+
+            var programs = await _programRepo
+                .GetAll()
+                .Include(x => x.ProgramType)
+
+                // 1. Only programs allocated to the logged-in user's state.
+                .Where(x => stateBudgets.Any(psb =>
+                    psb.ProgramId == x.Id &&
+                    psb.StateId == stateId
+                ))
+
+                // 2. Only programs enabled for the logged-in user's role.
+                .Where(x =>
+                    (isMOUser && x.IsMO == true) ||
+                    (isRMDOUser && x.IsRMDO == true) ||
+                    (isSMDOUser && x.IsSMDO == true)
+                )
+
+                .Select(x => new
+                {
+                    Program = x,
+
+                    // State-wise program budget.
+                    StateBudget = stateBudgets
+                        .FirstOrDefault(psb =>
+                            psb.ProgramId == x.Id &&
+                            psb.StateId == stateId
+                        ),
+
+                    // Existing monthly budget selection: unchanged.
+                    Budget = existingBudgets
+                        .Where(b => b.ProgramId == x.Id)
+                        .OrderByDescending(b => b.UpdatedAt)
+                        .FirstOrDefault()
+                })
+
+                .Select(x => new ProgramWiseBudgetDto
+                {
+                    ProgramId = x.Program.Id,
+
+                    ProgramTypeId = x.Program.ProgramTypeId,
+
+                    ProgramType = x.Program.ProgramType != null
+                        ? x.Program.ProgramType.Name
+                        : "",
+
+                    ProgramName = x.Program.Name,
+
+                    // State-wise program budget.
+                    BudgetAmount = x.StateBudget != null
+                        ? x.StateBudget.BudgetAmount
+                        : 0,
+
+                    IsChangeAmount =
+                        x.StateBudget != null &&
+                        x.StateBudget.BudgetAmount > 0
+                            ? false
+                            : true,
+
+                    // Existing total budget logic.
+                    TotalBudget = x.Budget != null
+                        ? x.Budget.TotalBudget
+                        : (x.StateBudget != null
+                            ? x.StateBudget.BudgetAmount
+                            : 0),
+
+                    // Monthly counts.
+                    AprilCount = x.Budget != null ? x.Budget.AprilCount : 0,
+                    MayCount = x.Budget != null ? x.Budget.MayCount : 0,
+                    JuneCount = x.Budget != null ? x.Budget.JuneCount : 0,
+                    JulyCount = x.Budget != null ? x.Budget.JulyCount : 0,
+                    AugustCount = x.Budget != null ? x.Budget.AugustCount : 0,
+                    SeptemberCount = x.Budget != null ? x.Budget.SeptemberCount : 0,
+                    OctoberCount = x.Budget != null ? x.Budget.OctoberCount : 0,
+                    NovemberCount = x.Budget != null ? x.Budget.NovemberCount : 0,
+                    DecemberCount = x.Budget != null ? x.Budget.DecemberCount : 0,
+                    JanuaryCount = x.Budget != null ? x.Budget.JanuaryCount : 0,
+                    FebruaryCount = x.Budget != null ? x.Budget.FebruaryCount : 0,
+                    MarchCount = x.Budget != null ? x.Budget.MarchCount : 0,
+
+                    // Monthly budget amounts.
+                    AprilBudget = x.Budget != null ? x.Budget.April : 0,
+                    MayBudget = x.Budget != null ? x.Budget.May : 0,
+                    JuneBudget = x.Budget != null ? x.Budget.June : 0,
+                    JulyBudget = x.Budget != null ? x.Budget.July : 0,
+                    AugustBudget = x.Budget != null ? x.Budget.August : 0,
+                    SeptemberBudget = x.Budget != null ? x.Budget.September : 0,
+                    OctoberBudget = x.Budget != null ? x.Budget.October : 0,
+                    NovemberBudget = x.Budget != null ? x.Budget.November : 0,
+                    DecemberBudget = x.Budget != null ? x.Budget.December : 0,
+                    JanuaryBudget = x.Budget != null ? x.Budget.January : 0,
+                    FebruaryBudget = x.Budget != null ? x.Budget.February : 0,
+                    MarchBudget = x.Budget != null ? x.Budget.March : 0
+                })
+                .OrderBy(x => x.ProgramType)
+                .ToListAsync();
 
             return Ok(programs);
         }
@@ -715,11 +1042,12 @@ namespace SpicAPI.Controllers
 
         /// <summary>
         /// Submit For Validation: marks every saved state allocation for the FY as "Submitted",
-        /// and cascades the same submission to every saved Region allocation for that FY (the
-        /// existing lifecycle is reused as-is - there is no separate Region submission action).
-        /// Reuses BudgetProgram.Status's existing string-status convention - no new workflow,
-        /// no new status values. Re-validates against the AnnualBudgeting amount independently
-        /// of Save Draft (defense in depth) and refuses a second submission for the same FY.
+        /// and cascades the same submission to every saved Region and Headquarters allocation
+        /// for that FY (the existing lifecycle is reused as-is - there is no separate Region or
+        /// Headquarters submission action). Reuses BudgetProgram.Status's existing string-status
+        /// convention - no new workflow, no new status values. Re-validates against the
+        /// AnnualBudgeting amount independently of Save Draft (defense in depth) and refuses a
+        /// second submission for the same FY.
         /// </summary>
         [HttpPut("state-budget/submit")]
         public async Task<IActionResult> SubmitStateBudget([FromBody] SubmitStateBudgetRequest request)
@@ -766,6 +1094,17 @@ namespace SpicAPI.Controllers
                 .ToListAsync();
 
             foreach (var row in regionRows)
+            {
+                row.Status = "Submitted";
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = DateTime.Now;
+            }
+
+            var hqRows = await _db.Set<HeadquarterBudgetAllocation>()
+                .Where(a => a.FY == fy && a.Status != "Submitted")
+                .ToListAsync();
+
+            foreach (var row in hqRows)
             {
                 row.Status = "Submitted";
                 row.UpdatedBy = CurrentUser;
@@ -905,6 +1244,134 @@ namespace SpicAPI.Controllers
                 message = "Region budget allocation saved successfully",
                 totalAllocated = totalRequested,
                 remaining = stateAllocation.Amount - totalRequested
+            });
+        }
+
+        /// <summary>
+        /// Headquarters-wise budget rows for the State Budget Management page's Headquarters
+        /// Allocation section, scoped to one Region + FY. Amount for each headquarter is its
+        /// persisted HeadquarterBudgetAllocation for that FY (0 if none saved yet), so a page
+        /// reload always reflects what was actually saved to the database.
+        /// </summary>
+        [HttpGet("hq-budget")]
+        public async Task<IActionResult> GetHeadquartersBudget([FromQuery] int regionId, [FromQuery] string? fy)
+        {
+            var allocations = string.IsNullOrWhiteSpace(fy)
+                ? new Dictionary<int, decimal>()
+                : await _db.Set<HeadquarterBudgetAllocation>()
+                    .Where(a => a.RegionId == regionId && a.FY == fy)
+                    .ToDictionaryAsync(a => a.HeadquarterId, a => a.Amount);
+
+            var headquarters = await _headquarterRepo
+                .GetAll()
+                .Where(x => x.RegionId == regionId && x.IsActive)
+                .OrderBy(x => x.HeadquarterName)
+                .Select(x => new { x.Id, x.HeadquarterName })
+                .ToListAsync();
+
+            var result = headquarters.Select(x => new HeadquarterBudgetDto
+            {
+                HeadquarterId = x.Id,
+                HeadquarterName = x.HeadquarterName,
+                BudgetAmount = allocations.TryGetValue(x.Id, out var amount) ? amount : 0m
+            }).ToList();
+
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// Full replace of every headquarter's allocation for one Region+FY (same full-replace
+        /// convention as Save Draft for states/regions, so an edited row's own previous value
+        /// can never be double-counted). Independently validates: FY/Region exist, every
+        /// headquarter is valid and belongs to the given Region, no negative amounts, no
+        /// duplicate headquarter entries in the request, a Region Budget Allocation exists for
+        /// that FY, and the total never exceeds that Region's allocated amount for the same FY.
+        /// </summary>
+        [HttpPut("hq-budget")]
+        public async Task<IActionResult> SaveHeadquarterBudget([FromBody] SaveHeadquarterBudgetRequest request)
+        {
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            if (request.RegionId <= 0)
+                return BadRequest(new { message = "A Region must be selected." });
+
+            if (request.Allocations == null || request.Allocations.Count == 0)
+                return BadRequest(new { message = "No headquarters allocations to save." });
+
+            if (request.Allocations.Any(a => a.Amount < 0))
+                return BadRequest(new { message = "Allocation amount cannot be negative." });
+
+            if (request.Allocations.Select(a => a.HeadquarterId).Distinct().Count() != request.Allocations.Count)
+                return BadRequest(new { message = "Duplicate headquarters entries in the request." });
+
+            var region = await _db.Set<Region>().FirstOrDefaultAsync(r => r.Id == request.RegionId);
+            if (region == null)
+                return BadRequest(new { message = "Selected region is invalid or inactive." });
+
+            var regionAllocation = await _db.Set<RegionBudgetAllocation>()
+                .FirstOrDefaultAsync(a => a.RegionId == request.RegionId && a.FY == fy);
+            if (regionAllocation == null)
+                return BadRequest(new { message = $"No Region Budget Allocation is saved for {region.RegionName} in FY {fy}." });
+
+            var hqIds = request.Allocations.Select(a => a.HeadquarterId).ToList();
+            var headquarters = await _headquarterRepo.GetAll()
+                .Where(h => hqIds.Contains(h.Id))
+                .ToListAsync();
+
+            if (headquarters.Count != hqIds.Distinct().Count())
+                return BadRequest(new { message = "One or more headquarters are invalid." });
+
+            if (headquarters.Any(h => h.RegionId != request.RegionId))
+                return BadRequest(new { message = "One or more headquarters do not belong to the selected region." });
+
+            var totalRequested = request.Allocations.Sum(a => a.Amount);
+            if (totalRequested > regionAllocation.Amount)
+                return BadRequest(new
+                {
+                    message = $"Headquarters allocation cannot exceed the remaining region budget of ₹{regionAllocation.Amount:N0}."
+                });
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            var existing = await _db.Set<HeadquarterBudgetAllocation>()
+                .Where(a => a.FY == fy && hqIds.Contains(a.HeadquarterId))
+                .ToListAsync();
+            var existingByHqId = existing.ToDictionary(a => a.HeadquarterId);
+
+            foreach (var alloc in request.Allocations)
+            {
+                if (existingByHqId.TryGetValue(alloc.HeadquarterId, out var row))
+                {
+                    row.Amount = alloc.Amount;
+                    row.UpdatedBy = CurrentUser;
+                    row.UpdatedAt = DateTime.Now;
+                }
+                else
+                {
+                    _db.Set<HeadquarterBudgetAllocation>().Add(new HeadquarterBudgetAllocation
+                    {
+                        RegionId = request.RegionId,
+                        HeadquarterId = alloc.HeadquarterId,
+                        FY = fy,
+                        Amount = alloc.Amount,
+                        CreatedBy = CurrentUser,
+                        CreatedAt = DateTime.Now,
+                        UpdatedBy = CurrentUser,
+                        UpdatedAt = DateTime.Now
+                    });
+                }
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                message = "Headquarters budget allocation saved successfully",
+                totalAllocated = totalRequested,
+                remaining = regionAllocation.Amount - totalRequested
             });
         }
 
