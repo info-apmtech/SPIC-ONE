@@ -6,6 +6,7 @@ using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using System.Security.Claims;
 using static SPIC.Core.Entities.EmployeeRegistration;
 
 namespace SpicAPI.Controllers
@@ -59,27 +60,308 @@ namespace SpicAPI.Controllers
         }
 
 
+        [Authorize]
         [HttpPost]
-        [HttpPost]
-        public async Task<IActionResult> SaveBudget([FromBody] BudgetProgram model)
+        public async Task<IActionResult> SaveBudget(
+      [FromBody] SaveBudgetBatchRequest request)
         {
             if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-
-            model.CreatedAt = DateTime.Now;
-            model.CreatedBy = CurrentUser;
-            model.UpdatedAt = DateTime.Now;
-
-
-            var created = await _budgetRepo.CreateAsync(model);
-
-
-            return Ok(new
             {
-                message = "Budget created successfully",
-                data = created
-            });
+                return BadRequest(ModelState);
+            }
+
+            if (request == null ||
+                request.Programs == null ||
+                request.Programs.Count == 0)
+            {
+                return BadRequest(new
+                {
+                    message = "At least one program is required."
+                });
+            }
+
+            var financialYear = request.FinancialYear?.Trim();
+
+            if (string.IsNullOrWhiteSpace(financialYear))
+            {
+                return BadRequest(new
+                {
+                    message = "Financial year is required."
+                });
+            }
+
+            if (request.Programs.Any(x => x == null || x.ProgramId <= 0))
+            {
+                return BadRequest(new
+                {
+                    message = "One or more programs are invalid."
+                });
+            }
+
+            var programIds = request.Programs
+                .Select(x => x.ProgramId)
+                .ToList();
+
+            if (programIds.Distinct().Count() != programIds.Count)
+            {
+                return BadRequest(new
+                {
+                    message = "Duplicate programs are not allowed."
+                });
+            }
+
+            // Get the logged-in user's state.
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+
+            if (!int.TryParse(stateClaim, out int stateId) || stateId <= 0)
+            {
+                return Unauthorized(new
+                {
+                    message = "State not assigned for user."
+                });
+            }
+
+            // Get the logged-in user's role.
+            var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
+
+            bool isSMDOUser =
+                roleClaim == AppRole.SMM.ToString() ||
+                roleClaim == AppRole.SMD.ToString();
+
+            bool isRMDOUser =
+                roleClaim == AppRole.RM.ToString() ||
+                roleClaim == AppRole.RMD.ToString();
+
+            bool isMOUser =
+                roleClaim == AppRole.MO.ToString() ||
+                roleClaim == AppRole.MDO.ToString() ||
+                roleClaim == AppRole.JMDO.ToString();
+
+            // Use the same role groups as the program-list endpoint.
+            if (!isSMDOUser && !isRMDOUser && !isMOUser)
+            {
+                return Forbid();
+            }
+
+            try
+            {
+                // Confirm that every submitted program is accessible
+                // to this user's state and role.
+                var stateBudgets = _programStateBudgetRepo.GetAll();
+
+                var allowedProgramCount = await _programRepo
+                    .GetAll()
+                    .Where(x => programIds.Contains(x.Id))
+                    .Where(x => stateBudgets.Any(psb =>
+                        psb.ProgramId == x.Id &&
+                        psb.StateId == stateId
+                    ))
+                    .Where(x =>
+                        (isMOUser && x.IsMO == true) ||
+                        (isRMDOUser && x.IsRMDO == true) ||
+                        (isSMDOUser && x.IsSMDO == true)
+                    )
+                    .CountAsync();
+
+                if (allowedProgramCount != programIds.Count)
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            "One or more programs are invalid or are not " +
+                            "allocated to your state and role."
+                    });
+                }
+
+                // Match the page's existing requirement:
+                // a positive base amount and a positive count for every month.
+                foreach (var item in request.Programs)
+                {
+                    if (item.TotalBudget <= 0)
+                    {
+                        return BadRequest(new
+                        {
+                            message =
+                                $"Budget amount must be greater than zero " +
+                                $"for program {item.ProgramId}."
+                        });
+                    }
+
+                    var monthlyCounts = new[]
+                    {
+                item.AprilCount,
+                item.MayCount,
+                item.JuneCount,
+                item.JulyCount,
+                item.AugustCount,
+                item.SeptemberCount,
+                item.OctoberCount,
+                item.NovemberCount,
+                item.DecemberCount,
+                item.JanuaryCount,
+                item.FebruaryCount,
+                item.MarchCount
+            };
+
+                    if (monthlyCounts.Any(count => count <= 0))
+                    {
+                        return BadRequest(new
+                        {
+                            message =
+                                $"A positive count is required for every month " +
+                                $"for program {item.ProgramId}."
+                        });
+                    }
+
+                    var monthlyAmounts = new[]
+                    {
+                item.April,
+                item.May,
+                item.June,
+                item.July,
+                item.August,
+                item.September,
+                item.October,
+                item.November,
+                item.December,
+                item.January,
+                item.February,
+                item.March
+            };
+
+                    if (monthlyAmounts.Any(amount => amount < 0))
+                    {
+                        return BadRequest(new
+                        {
+                            message =
+                                $"Monthly amounts cannot be negative " +
+                                $"for program {item.ProgramId}."
+                        });
+                    }
+                }
+
+                // Build fresh detail entities.
+                // Do not trust IDs, parent IDs or navigation objects
+                // supplied by the client.
+                var programDetails = request.Programs
+                    .Select(item => new BudgetProgram
+                    {
+                        ProgramId = item.ProgramId,
+
+                        TotalBudget = item.TotalBudget,
+
+                        AprilCount = item.AprilCount,
+                        April = item.April,
+
+                        MayCount = item.MayCount,
+                        May = item.May,
+
+                        JuneCount = item.JuneCount,
+                        June = item.June,
+
+                        JulyCount = item.JulyCount,
+                        July = item.July,
+
+                        AugustCount = item.AugustCount,
+                        August = item.August,
+
+                        SeptemberCount = item.SeptemberCount,
+                        September = item.September,
+
+                        OctoberCount = item.OctoberCount,
+                        October = item.October,
+
+                        NovemberCount = item.NovemberCount,
+                        November = item.November,
+
+                        DecemberCount = item.DecemberCount,
+                        December = item.December,
+
+                        JanuaryCount = item.JanuaryCount,
+                        January = item.January,
+
+                        FebruaryCount = item.FebruaryCount,
+                        February = item.February,
+
+                        MarchCount = item.MarchCount,
+                        March = item.March
+                    })
+                    .ToList();
+
+                // AllocatedAmount = total of all monthly amounts in this batch.
+                decimal allocatedAmount = programDetails.Sum(x =>
+                    x.April +
+                    x.May +
+                    x.June +
+                    x.July +
+                    x.August +
+                    x.September +
+                    x.October +
+                    x.November +
+                    x.December +
+                    x.January +
+                    x.February +
+                    x.March
+                );
+
+                // Create ONE main record.
+                var main = new BudgetProgramMains
+                {
+                    Status = "Draft",
+                    StateId = stateId,
+                    FinancialYear = financialYear,
+
+                    // Audit information is set by the server.
+                    CreatedBy = CurrentUser,
+                    CreatedAt = DateTime.Now,
+
+                    // Validation and approval have not happened yet.
+                    ValidateBy = "",
+                    ValidateAt = null,
+
+                    ApprovedBy = "",
+                    ApprovedAt = null,
+
+                    ApprovedAmount = request.ApprovedAmount,
+                    AllocatedAmount = allocatedAmount,
+                    SIDAmount = request.SIDAmount,
+
+                    // Connect all program details to this main record.
+                    Programs = programDetails
+                };
+
+                // Add the main record and its related details.
+                _db.Set<BudgetProgramMains>().Add(main);
+
+                // Save both tables together.
+                // EF assigns main.Id to BudgetProgram.BudgetProgramMains.
+                await _db.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    message = "Budget created successfully.",
+                    data = new
+                    {
+                        BudgetProgramMainId = main.Id,
+                        main.Status,
+                        main.FinancialYear,
+                        main.AllocatedAmount,
+                        ProgramCount = programDetails.Count
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                // Keep technical exception details in server logs.
+                Console.Error.WriteLine(ex);
+
+                return StatusCode(500, new
+                {
+                    message =
+                        "Budget save could not be confirmed. " +
+                        "Check the saved budget list and server logs before retrying."
+                });
+            }
         }
 
 
@@ -123,8 +405,8 @@ namespace SpicAPI.Controllers
             [FromBody] BudgetProgram entity)
         {
            
-            entity.UpdatedBy = CurrentUser;
-            entity.UpdatedAt = DateTime.Now;
+            //entity.UpdatedBy = CurrentUser;
+            //entity.UpdatedAt = DateTime.Now;
 
             var updated = await _budgetRepo
                 .PatchAsync(id, entity);
@@ -210,322 +492,7 @@ namespace SpicAPI.Controllers
             return Ok(items);
         }
 
-        [HttpGet("program-master-listold")]
-        public async Task<IActionResult> GetProgramMasterListOLD()
-        {
-            // Get logged in user StateId
-            var stateClaim = User.FindFirst("spic:state_id")?.Value;
-
-
-            if (!int.TryParse(stateClaim, out int stateId))
-            {
-                return Unauthorized("State not assigned for user");
-            }
-
-
-            var programs = await _programRepo
-                .GetAll()
-                .Include(x => x.ProgramType)
-
-                // Only programs assigned to logged-in user's state
-                .Where(x => _programStateBudgetRepo
-                    .GetAll()
-                    .Any(psb =>
-                        psb.ProgramId == x.Id &&
-                        psb.StateId == stateId
-                    )
-                )
-
-                .Select(x => new
-                {
-                    Program = x,
-
-
-                    // State wise program budget
-                    StateBudget = _programStateBudgetRepo
-                        .GetAll()
-                        .FirstOrDefault(psb =>
-                            psb.ProgramId == x.Id &&
-                            psb.StateId == stateId
-                        ),
-
-
-                    // Existing monthly budget logic
-                    Budget = _budgetRepo
-                        .GetAll()
-                        .Where(b => b.ProgramId == x.Id)
-                        .OrderByDescending(b => b.UpdatedAt)
-                        .FirstOrDefault()
-                })
-
-
-                .Select(x => new ProgramWiseBudgetDto
-                {
-
-                    ProgramId = x.Program.Id,
-
-                    ProgramTypeId = x.Program.ProgramTypeId,
-
-
-                    ProgramType = x.Program.ProgramType != null
-                        ? x.Program.ProgramType.Name
-                        : "",
-
-
-                    ProgramName = x.Program.Name,
-
-
-                    // =========================================
-                    // State Wise Program Budget
-                    // From ProgramStateBudgets table
-                    // =========================================
-
-                    BudgetAmount = x.StateBudget != null
-                        ? x.StateBudget.BudgetAmount
-                        : 0,
-
-
-                    IsChangeAmount = x.StateBudget != null && x.StateBudget.BudgetAmount > 0
-                        ? false
-                        : true,
-
-
-                    // =========================================
-                    // Existing Budget
-                    // =========================================
-
-                    TotalBudget = x.Budget != null
-                        ? x.Budget.TotalBudget
-                        : (x.StateBudget != null
-                            ? x.StateBudget.BudgetAmount
-                            : 0),
-
-
-                    // =========================================
-                    // Monthly Counts
-                    // =========================================
-
-                    AprilCount = x.Budget != null ? x.Budget.AprilCount : 0,
-                    MayCount = x.Budget != null ? x.Budget.MayCount : 0,
-                    JuneCount = x.Budget != null ? x.Budget.JuneCount : 0,
-                    JulyCount = x.Budget != null ? x.Budget.JulyCount : 0,
-                    AugustCount = x.Budget != null ? x.Budget.AugustCount : 0,
-                    SeptemberCount = x.Budget != null ? x.Budget.SeptemberCount : 0,
-                    OctoberCount = x.Budget != null ? x.Budget.OctoberCount : 0,
-                    NovemberCount = x.Budget != null ? x.Budget.NovemberCount : 0,
-                    DecemberCount = x.Budget != null ? x.Budget.DecemberCount : 0,
-                    JanuaryCount = x.Budget != null ? x.Budget.JanuaryCount : 0,
-                    FebruaryCount = x.Budget != null ? x.Budget.FebruaryCount : 0,
-                    MarchCount = x.Budget != null ? x.Budget.MarchCount : 0,
-
-
-
-                    // =========================================
-                    // Monthly Budget
-                    // Existing Logic
-                    // =========================================
-
-                    AprilBudget = x.Budget != null ? x.Budget.April : 0,
-                    MayBudget = x.Budget != null ? x.Budget.May : 0,
-                    JuneBudget = x.Budget != null ? x.Budget.June : 0,
-                    JulyBudget = x.Budget != null ? x.Budget.July : 0,
-                    AugustBudget = x.Budget != null ? x.Budget.August : 0,
-                    SeptemberBudget = x.Budget != null ? x.Budget.September : 0,
-                    OctoberBudget = x.Budget != null ? x.Budget.October : 0,
-                    NovemberBudget = x.Budget != null ? x.Budget.November : 0,
-                    DecemberBudget = x.Budget != null ? x.Budget.December : 0,
-                    JanuaryBudget = x.Budget != null ? x.Budget.January : 0,
-                    FebruaryBudget = x.Budget != null ? x.Budget.February : 0,
-                    MarchBudget = x.Budget != null ? x.Budget.March : 0
-
-                })
-
-                .ToListAsync();
-
-
-            return Ok(programs);
-        }
-
-        [Authorize]
-        [HttpGet("program-master-list1")]
-        public async Task<IActionResult> GetProgramMasterList1()
-        {
-            // Get the logged-in user's state.
-            var stateClaim = User.FindFirst("spic:state_id")?.Value;
-
-            if (!int.TryParse(stateClaim, out int stateId))
-            {
-                return Unauthorized("State not assigned for user");
-            }
-
-            // Map logged-in roles to ProgramMasters access flags.
-            bool isSMDOUser =
-                User.IsInRole(AppRole.SMM.ToString()) ||
-                User.IsInRole(AppRole.SMD.ToString());
-
-            bool isRMDOUser =
-                User.IsInRole(AppRole.RM.ToString()) ||
-                User.IsInRole(AppRole.RMD.ToString());
-
-            bool isMOUser =
-                User.IsInRole(AppRole.MO.ToString()) ||
-                User.IsInRole(AppRole.MDO.ToString()) ||
-                User.IsInRole(AppRole.JMDO.ToString());
-
-            // No automatic access for missing or unmapped roles.
-            if (!isSMDOUser && !isRMDOUser && !isMOUser)
-            {
-                return Forbid();
-            }
-
-            var stateBudgets = _programStateBudgetRepo.GetAll();
-            var existingBudgets = _budgetRepo.GetAll();
-
-            var programs = await _programRepo
-                .GetAll()
-                .Include(x => x.ProgramType)
-
-                // 1. Only programs allocated to the logged-in user's state.
-                .Where(x => stateBudgets.Any(psb =>
-                    psb.ProgramId == x.Id &&
-                    psb.StateId == stateId
-                ))
-
-                // 2. Only programs enabled for the logged-in user's role.
-                .Where(x =>
-                    (isMOUser && x.IsMO == true) ||
-                    (isRMDOUser && x.IsRMDO == true) ||
-                    (isSMDOUser && x.IsSMDO == true)
-                )
-
-                .Select(x => new
-                {
-                    Program = x,
-
-                    // State-wise program budget.
-                    StateBudget = stateBudgets
-                        .FirstOrDefault(psb =>
-                            psb.ProgramId == x.Id &&
-                            psb.StateId == stateId
-                        ),
-
-                    // Existing monthly budget selection: unchanged.
-                    Budget = existingBudgets
-                        .Where(b => b.ProgramId == x.Id)
-                        .OrderByDescending(b => b.UpdatedAt)
-                        .FirstOrDefault()
-                })
-
-                .Select(x => new ProgramWiseBudgetDto
-                {
-                    ProgramId = x.Program.Id,
-
-                    ProgramTypeId = x.Program.ProgramTypeId,
-
-                    ProgramType = x.Program.ProgramType != null
-                        ? x.Program.ProgramType.Name
-                        : "",
-
-                    ProgramName = x.Program.Name,
-
-                    // State-wise program budget: unchanged.
-                    BudgetAmount = x.StateBudget != null
-                        ? x.StateBudget.BudgetAmount
-                        : 0,
-
-                    IsChangeAmount =
-                        x.StateBudget != null &&
-                        x.StateBudget.BudgetAmount > 0
-                            ? false
-                            : true,
-
-                    // Existing total budget logic: unchanged.
-                    TotalBudget = x.Budget != null
-                        ? x.Budget.TotalBudget
-                        : (x.StateBudget != null
-                            ? x.StateBudget.BudgetAmount
-                            : 0),
-
-                    // Monthly counts: unchanged.
-                    AprilCount = x.Budget != null
-                        ? x.Budget.AprilCount : 0,
-
-                    MayCount = x.Budget != null
-                        ? x.Budget.MayCount : 0,
-
-                    JuneCount = x.Budget != null
-                        ? x.Budget.JuneCount : 0,
-
-                    JulyCount = x.Budget != null
-                        ? x.Budget.JulyCount : 0,
-
-                    AugustCount = x.Budget != null
-                        ? x.Budget.AugustCount : 0,
-
-                    SeptemberCount = x.Budget != null
-                        ? x.Budget.SeptemberCount : 0,
-
-                    OctoberCount = x.Budget != null
-                        ? x.Budget.OctoberCount : 0,
-
-                    NovemberCount = x.Budget != null
-                        ? x.Budget.NovemberCount : 0,
-
-                    DecemberCount = x.Budget != null
-                        ? x.Budget.DecemberCount : 0,
-
-                    JanuaryCount = x.Budget != null
-                        ? x.Budget.JanuaryCount : 0,
-
-                    FebruaryCount = x.Budget != null
-                        ? x.Budget.FebruaryCount : 0,
-
-                    MarchCount = x.Budget != null
-                        ? x.Budget.MarchCount : 0,
-
-                    // Monthly budget amounts: unchanged.
-                    AprilBudget = x.Budget != null
-                        ? x.Budget.April : 0,
-
-                    MayBudget = x.Budget != null
-                        ? x.Budget.May : 0,
-
-                    JuneBudget = x.Budget != null
-                        ? x.Budget.June : 0,
-
-                    JulyBudget = x.Budget != null
-                        ? x.Budget.July : 0,
-
-                    AugustBudget = x.Budget != null
-                        ? x.Budget.August : 0,
-
-                    SeptemberBudget = x.Budget != null
-                        ? x.Budget.September : 0,
-
-                    OctoberBudget = x.Budget != null
-                        ? x.Budget.October : 0,
-
-                    NovemberBudget = x.Budget != null
-                        ? x.Budget.November : 0,
-
-                    DecemberBudget = x.Budget != null
-                        ? x.Budget.December : 0,
-
-                    JanuaryBudget = x.Budget != null
-                        ? x.Budget.January : 0,
-
-                    FebruaryBudget = x.Budget != null
-                        ? x.Budget.February : 0,
-
-                    MarchBudget = x.Budget != null
-                        ? x.Budget.March : 0
-                })
-
-                .ToListAsync();
-
-            return Ok(programs);
-        }
-
+        
         [Authorize]
         [HttpGet("program-master-list")]
         public async Task<IActionResult> GetProgramMasterList()
@@ -605,7 +572,7 @@ namespace SpicAPI.Controllers
                     // Existing monthly budget selection: unchanged.
                     Budget = existingBudgets
                         .Where(b => b.ProgramId == x.Id)
-                        .OrderByDescending(b => b.UpdatedAt)
+                        //.OrderByDescending(b => b.UpdatedAt)
                         .FirstOrDefault()
                 })
 
@@ -682,9 +649,9 @@ namespace SpicAPI.Controllers
             var existing = await _budgetRepo
                 .GetAll()
                 .FirstOrDefaultAsync(x =>
-                    x.ProgramId == model.ProgramId &&
-                    x.FinancialYear == model.FinancialYear &&
-                    x.Status == "Draft"
+                    x.ProgramId == model.ProgramId //&&
+                    //x.FinancialYear == model.FinancialYear &&
+                    //x.Status == "Draft"
                 );
 
 
@@ -698,16 +665,16 @@ namespace SpicAPI.Controllers
                 existing.MayCount = model.MayCount;
                 existing.May = model.May;
 
-                existing.UpdatedBy = CurrentUser;
-                existing.UpdatedAt = DateTime.Now;
+                //existing.UpdatedBy = CurrentUser;
+               // existing.UpdatedAt = DateTime.Now;
 
 
                 await _budgetRepo.UpdateAsync(existing);
             }
             else
             {
-                model.Status = "Draft";
-                model.CreatedBy = CurrentUser;
+                //model.Status = "Draft";
+                //model.CreatedBy = CurrentUser;
                 await _budgetRepo.CreateAsync(model);
             }
 
@@ -723,7 +690,7 @@ namespace SpicAPI.Controllers
         {
             var drafts = await _budgetRepo
                 .GetAll()
-                .Where(x => x.Status == "Draft")
+                //.Where(x => x.Status == "Draft")
                 .ToListAsync();
 
             return Ok(drafts);
@@ -759,12 +726,12 @@ namespace SpicAPI.Controllers
                         x.TotalBudget,
 
 
-                    SubmittedDate =
-                        x.CreatedAt,
+                   // SubmittedDate =
+                        //x.CreatedAt,
 
 
-                    Status =
-                        x.Status,
+                    //Status =
+                       // x.Status,
 
 
                     ValidationDue = null
@@ -791,20 +758,20 @@ namespace SpicAPI.Controllers
                         x.Count(),
 
 
-                    Approved =
-                        x.Count(a => a.Status == "Approved"),
+                    Approved =0,
+                        //x.Count(a => a.Status == "Approved"),
 
 
-                    Pending =
-                        x.Count(a => a.Status == "Pending"),
+                    Pending =0,
+                        //x.Count(a => a.Status == "Pending"),
 
 
-                    Rejected =
-                        x.Count(a => a.Status == "Rejected"),
+                    Rejected =0,
+                       // x.Count(a => a.Status == "Rejected"),
 
 
-                    Draft =
-                        x.Count(a => a.Status == "Draft")
+                    Draft =0
+                      //  x.Count(a => a.Status == "Draft")
 
                 })
                 .FirstOrDefaultAsync();

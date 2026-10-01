@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001071829_v12RemovedBudgetProgramMainscolumns")]
+    partial class v12RemovedBudgetProgramMainscolumns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2193,9 +2196,6 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<decimal>("SIDAmount")
                         .HasColumnType("numeric");
-
-                    b.Property<int>("StateId")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Status")
                         .IsRequired()

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001064255_v11AddBudgetProgramMains")]
+    partial class v11AddBudgetProgramMains
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2081,7 +2084,10 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("AugustCount")
                         .HasColumnType("numeric");
 
-                    b.Property<int>("BudgetProgramMainId")
+                    b.Property<int>("BudgetProgramMains")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("BudgetProgramMainsId")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("December")
@@ -2152,7 +2158,7 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BudgetProgramMainId");
+                    b.HasIndex("BudgetProgramMainsId");
 
                     b.HasIndex("ProgramId");
 
@@ -2193,9 +2199,6 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<decimal>("SIDAmount")
                         .HasColumnType("numeric");
-
-                    b.Property<int>("StateId")
-                        .HasColumnType("integer");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -10537,19 +10540,15 @@ namespace Spic.Infrastructure.Migrations
 
             modelBuilder.Entity("SPIC.Core.Entities.BudgetProgram", b =>
                 {
-                    b.HasOne("SPIC.Core.Entities.BudgetProgramMains", "BudgetProgramMain")
+                    b.HasOne("SPIC.Core.Entities.BudgetProgramMains", null)
                         .WithMany("Programs")
-                        .HasForeignKey("BudgetProgramMainId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("BudgetProgramMainsId");
 
                     b.HasOne("SPIC.Core.Entities.ProgramMaster", "Program")
                         .WithMany()
                         .HasForeignKey("ProgramId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("BudgetProgramMain");
 
                     b.Navigation("Program");
                 });
