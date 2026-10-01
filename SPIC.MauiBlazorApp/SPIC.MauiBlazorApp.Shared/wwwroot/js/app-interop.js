@@ -89,6 +89,41 @@ window.openFileInNewWindow = (base64Data, contentType) => {
 // ---------------------------------------------------------------------------
 window.spic = window.spic || {};
 
+// Close a Bootstrap offcanvas (e.g. #mobileSidebar) automatically when a real
+// nav link inside it is clicked - without touching Blazor's navigation at all.
+// Two earlier approaches didn't work:
+//   - data-bs-dismiss="offcanvas" on the links: Bootstrap's dismiss handler
+//     calls event.preventDefault(), and Blazor's click-interception bails out
+//     of its SPA navigation whenever event.defaultPrevented is already true,
+//     so the sidebar closed but the page never changed.
+//   - NavigationManager.LocationChanged + JS interop from C#: depends on
+//     Blazor Server's event-dispatch timing and never reliably fired.
+// This listener never calls preventDefault, so Blazor's own click-interception
+// still runs normally and this doesn't depend on any C#/circuit round-trip.
+// Idempotent: binding twice (e.g. across soft navigations) is a no-op.
+window.spic.initMobileSidebarAutoClose = function (elementId) {
+    try {
+        var el = document.getElementById(elementId);
+        if (!el || el.__spicAutoCloseBound) return;
+        el.__spicAutoCloseBound = true;
+
+        el.addEventListener('click', function (event) {
+            var link = event.target.closest('a');
+            if (!link) return;
+
+            var href = link.getAttribute('href') || '';
+            // The expand/collapse section headers (Schemes, Settings, ...) use
+            // href="javascript:void(0);" - only real nav links close the sidebar.
+            if (!href || href.indexOf('javascript:') === 0) return;
+
+            if (!window.bootstrap || !window.bootstrap.Offcanvas) return;
+            window.bootstrap.Offcanvas.getOrCreateInstance(el).hide();
+        });
+    } catch (e) {
+        // bootstrap unavailable: nothing to bind
+    }
+};
+
 // Move the user profile menu into document.body on small viewports so it is
 // independent from the offcanvas/sidebar stacking context.
 window.spic.reparentUserMenu = function (menuId, open) {
