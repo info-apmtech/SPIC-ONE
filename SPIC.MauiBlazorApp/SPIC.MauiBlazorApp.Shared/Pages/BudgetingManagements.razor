@@ -329,7 +329,11 @@
                     </svg>
                     Save Draft
                 </button>
-                <button class="bm-btn-primary" @onclick="HandleSubmitValidation">
+                <button type="button"
+                        class="bm-btn-primary"
+                        @onclick="HandleSubmitValidation"
+                        disabled="@_isSavingBudget">
+                    @(_isSavingBudget ? "Saving..." : "Save")
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
                         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -1122,13 +1126,13 @@
                     March = item.MarchBudget,
 
 
-                    FinancialYear = GetCurrentFinancialYear(),
+                    // FinancialYear = GetCurrentFinancialYear(),
 
-                    Status = "Draft",
+                    // Status = "Draft",
 
-                    CreatedBy = LoginState.UserId ?? "System",
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
+                    // CreatedBy = LoginState.UserId ?? "System",
+                    // CreatedAt = DateTime.Now,
+                    // UpdatedAt = DateTime.Now
                 };
 
 
@@ -1151,82 +1155,142 @@
     }
 
 
+    private bool _isSavingBudget = false;
+
     private async Task HandleSubmitValidation()
     {
-        if (!ValidateBudgetData())
+        // Prevent overlapping save requests from repeated clicks.
+        if (_isSavingBudget)
         {
             return;
         }
+
+        _isSavingBudget = true;
+
         try
         {
-            foreach (var item in FilteredProgramPlans)
+            if (FilteredProgramPlans == null ||
+                FilteredProgramPlans.Count == 0)
             {
-                var budget = new BudgetProgram
-                {
-                    ProgramId = item.ProgramId,
-
-                    TotalBudget = item.BudgetAmount,
-
-                    AprilCount = item.AprilCount,
-                    April = item.AprilBudget,
-
-                    MayCount = item.MayCount,
-                    May = item.MayBudget,
-
-                    JuneCount = item.JuneCount,
-                    June = item.JuneBudget,
-
-                    JulyCount = item.JulyCount,
-                    July = item.JulyBudget,
-
-                    AugustCount = item.AugustCount,
-                    August = item.AugustBudget,
-
-                    SeptemberCount = item.SeptemberCount,
-                    September = item.SeptemberBudget,
-
-                    OctoberCount = item.OctoberCount,
-                    October = item.OctoberBudget,
-
-                    NovemberCount = item.NovemberCount,
-                    November = item.NovemberBudget,
-
-                    DecemberCount = item.DecemberCount,
-                    December = item.DecemberBudget,
-
-                    JanuaryCount = item.JanuaryCount,
-                    January = item.JanuaryBudget,
-
-                    FebruaryCount = item.FebruaryCount,
-                    February = item.FebruaryBudget,
-
-                    MarchCount = item.MarchCount,
-                    March = item.MarchBudget,
-
-                    FinancialYear = GetCurrentFinancialYear(),
-
-                    CreatedBy = LoginState.UserId ?? "System",
-                    CreatedAt = DateTime.Now,
-                    UpdatedAt = DateTime.Now
-                };
-
-
-                await Http.PostAsJsonAsync(
-                    "api/Budget",
-                    budget
-                );
+                Toast.Error("No programs available to save.");
+                return;
             }
 
+            // Keep the current filtered-list behavior.
+            var selectedPrograms = FilteredProgramPlans.ToList();
 
-            // ONLY ONE TIME
-            Toast.Success("Budget created successfully");
+            // Refresh monthly calculations using your existing method.
+            foreach (var item in selectedPrograms)
+            {
+                CalculateBudget(item);
+            }
 
+            // Keep your existing validation.
+            if (!ValidateBudgetData())
+            {
+                return;
+            }
+
+            // Create ONE request containing all selected programs.
+            var request = new SaveBudgetBatchRequest
+            {
+                FinancialYear = GetCurrentFinancialYear(),
+                ApprovedAmount = StateApprovedBudget,
+                SIDAmount = RemainingBudget,
+
+                Programs = selectedPrograms
+                    .Select(item => new BudgetProgram
+                    {
+                        ProgramId = item.ProgramId,
+
+                        // Preserve editable amounts.
+                        TotalBudget = item.IsChangeAmount
+                            ? item.TotalBudget
+                            : item.BudgetAmount,
+
+                        AprilCount = item.AprilCount,
+                        April = item.AprilBudget,
+
+                        MayCount = item.MayCount,
+                        May = item.MayBudget,
+
+                        JuneCount = item.JuneCount,
+                        June = item.JuneBudget,
+
+                        JulyCount = item.JulyCount,
+                        July = item.JulyBudget,
+
+                        AugustCount = item.AugustCount,
+                        August = item.AugustBudget,
+
+                        SeptemberCount = item.SeptemberCount,
+                        September = item.SeptemberBudget,
+
+                        OctoberCount = item.OctoberCount,
+                        October = item.OctoberBudget,
+
+                        NovemberCount = item.NovemberCount,
+                        November = item.NovemberBudget,
+
+                        DecemberCount = item.DecemberCount,
+                        December = item.DecemberBudget,
+
+                        JanuaryCount = item.JanuaryCount,
+                        January = item.JanuaryBudget,
+
+                        FebruaryCount = item.FebruaryCount,
+                        February = item.FebruaryBudget,
+
+                        MarchCount = item.MarchCount,
+                        March = item.MarchBudget
+
+                        // No FinancialYear, Status or audit fields here.
+                        // Those belong to BudgetProgramMains.
+                        //
+                        // Do not assign BudgetProgramMains here.
+                        // The API creates and links the main record.
+                    })
+                    .ToList()
+            };
+
+            // IMPORTANT: only ONE API call, outside any foreach loop.
+            using var response = await Http.PostAsJsonAsync(
+                "api/Budget",
+                request
+            );
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine(
+                    $"Budget save error ({(int)response.StatusCode}): " +
+                    errorBody
+                );
+
+                Toast.Error(
+                    $"Budget save was not successful " +
+                    $"(HTTP {(int)response.StatusCode})."
+                );
+
+                return;
+            }
+
+            // Show success only after a successful API response.
+            Toast.Success("Budget created successfully.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
+            Console.WriteLine(ex);
 
-            Toast.Error("Budget creation failed");
+            Toast.Error(
+                "Budget save could not be confirmed. " +
+                "Check the saved budget list before retrying."
+            );
+        }
+        finally
+        {
+            _isSavingBudget = false;
         }
     }
 }

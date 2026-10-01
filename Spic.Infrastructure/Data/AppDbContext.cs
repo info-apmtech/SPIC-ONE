@@ -778,6 +778,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<ProgramMaster> ProgramMasters { get; set; }
         public DbSet<BudgetProgram> BudgetPrograms { get; set; }
 
+        public DbSet<BudgetProgramMains> BudgetProgramMains { get; set; }
+
         public DbSet<CSR1> CSR1 { get; set; }
         public DbSet<CSR1Products1> CSR1Products1 { get; set; }
         public DbSet<CSR1Products2> CSR1Products2 { get; set; }
