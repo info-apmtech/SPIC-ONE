@@ -29,8 +29,37 @@ namespace SpicAPI.Controllers
         
         private readonly IGenericRepository<ProgramStateBudget> _programStateBudgetRepo;
         private readonly IGenericRepository<StateBudgetAllocation> _stateBudgetAllocationRepo;
-        private string CurrentUser =>   
+        private string CurrentUser =>
     User.Identity?.Name ?? "System";
+
+        /// <summary>
+        /// True for the "Admin" role group used throughout the app (mirrors LoginState.IsAdmin):
+        /// Admin/SuperAdmin/CorporateAdmin/Director/AVP. Same role-claim pattern already used by
+        /// GetProgramMasterList above. Level 1 (State) budget summary access.
+        /// </summary>
+        private bool IsAdminUser()
+        {
+            var roleClaim = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            return roleClaim == AppRole.Admin.ToString()
+                || roleClaim == AppRole.SuperAdmin.ToString()
+                || roleClaim == AppRole.CorporateAdmin.ToString()
+                || roleClaim == AppRole.Director.ToString()
+                || roleClaim == AppRole.AVP.ToString();
+        }
+
+        /// <summary>True for the "SM" role group (mirrors LoginState.IsStateRole: SMD/SMM). Level 2 (Region) budget summary access.</summary>
+        private bool IsSmUser()
+        {
+            var roleClaim = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            return roleClaim == AppRole.SMD.ToString() || roleClaim == AppRole.SMM.ToString();
+        }
+
+        /// <summary>True for the "RM" role group (mirrors LoginState.IsRegionRole: RM/RMD). Level 3 (Headquarters) budget summary access.</summary>
+        private bool IsRmUser()
+        {
+            var roleClaim = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            return roleClaim == AppRole.RM.ToString() || roleClaim == AppRole.RMD.ToString();
+        }
         public BudgetController(
     IGenericRepository<BudgetProgram> budgetRepo,
     IGenericRepository<ProgramMaster> programRepo,
@@ -1152,6 +1181,47 @@ namespace SpicAPI.Controllers
                 _db.Set<HeadquarterBudgetAllocationHistory>().Add(ToHeadquarterHistory(row, "Validated"));
             }
 
+            // Same FY-wide cascade, applied to the Total Budget / Allocated / Remaining
+            // summary rows alongside the detail allocation rows above - no separate
+            // approval workflow, just the existing one reaching the summary records too.
+            var stateSummary = await _db.Set<StateBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.FY == fy && s.Status == "Submitted");
+            if (stateSummary != null)
+            {
+                stateSummary.Status = "Validated";
+                stateSummary.ValidatedBy = CurrentUser;
+                stateSummary.ValidatedDate = now;
+                stateSummary.UpdatedBy = CurrentUser;
+                stateSummary.UpdatedAt = now;
+                _db.Set<StateBudgetSummaryHistory>().Add(ToStateSummaryHistory(stateSummary, "Validated"));
+            }
+
+            var regionSummaries = await _db.Set<RegionBudgetSummary>()
+                .Where(s => s.FY == fy && s.Status == "Submitted")
+                .ToListAsync();
+            foreach (var row in regionSummaries)
+            {
+                row.Status = "Validated";
+                row.ValidatedBy = CurrentUser;
+                row.ValidatedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<RegionBudgetSummaryHistory>().Add(ToRegionSummaryHistory(row, "Validated"));
+            }
+
+            var hqSummaries = await _db.Set<HeadquarterBudgetSummary>()
+                .Where(s => s.FY == fy && s.Status == "Submitted")
+                .ToListAsync();
+            foreach (var row in hqSummaries)
+            {
+                row.Status = "Validated";
+                row.ValidatedBy = CurrentUser;
+                row.ValidatedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<HeadquarterBudgetSummaryHistory>().Add(ToHeadquarterSummaryHistory(row, "Validated"));
+            }
+
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -1220,6 +1290,47 @@ namespace SpicAPI.Controllers
                 row.UpdatedBy = CurrentUser;
                 row.UpdatedAt = now;
                 _db.Set<HeadquarterBudgetAllocationHistory>().Add(ToHeadquarterHistory(row, "Approved"));
+            }
+
+            // Same FY-wide cascade, applied to the Total Budget / Allocated / Remaining
+            // summary rows alongside the detail allocation rows above - no separate
+            // approval workflow, just the existing one reaching the summary records too.
+            var stateSummary = await _db.Set<StateBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.FY == fy && s.Status == "Validated");
+            if (stateSummary != null)
+            {
+                stateSummary.Status = "Approved";
+                stateSummary.ApprovedBy = CurrentUser;
+                stateSummary.ApprovedDate = now;
+                stateSummary.UpdatedBy = CurrentUser;
+                stateSummary.UpdatedAt = now;
+                _db.Set<StateBudgetSummaryHistory>().Add(ToStateSummaryHistory(stateSummary, "Approved"));
+            }
+
+            var regionSummaries = await _db.Set<RegionBudgetSummary>()
+                .Where(s => s.FY == fy && s.Status == "Validated")
+                .ToListAsync();
+            foreach (var row in regionSummaries)
+            {
+                row.Status = "Approved";
+                row.ApprovedBy = CurrentUser;
+                row.ApprovedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<RegionBudgetSummaryHistory>().Add(ToRegionSummaryHistory(row, "Approved"));
+            }
+
+            var hqSummaries = await _db.Set<HeadquarterBudgetSummary>()
+                .Where(s => s.FY == fy && s.Status == "Validated")
+                .ToListAsync();
+            foreach (var row in hqSummaries)
+            {
+                row.Status = "Approved";
+                row.ApprovedBy = CurrentUser;
+                row.ApprovedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<HeadquarterBudgetSummaryHistory>().Add(ToHeadquarterSummaryHistory(row, "Approved"));
             }
 
             await _db.SaveChangesAsync();
@@ -1551,6 +1662,400 @@ namespace SpicAPI.Controllers
 
             return Ok(amount);
         }
+
+        // ================================================================================
+        // 3-level budget allocation SUMMARY (Total Budget / Allocated / Remaining Amount).
+        // Separate from the *BudgetAllocation detail tables above (state-budget, region-budget,
+        // hq-budget), which keep working unchanged for the individual State/Region/HQ rows.
+        // All three values here are plain manually-entered fields - Remaining Amount is never
+        // recalculated from Total - Allocated, on either the client or the server.
+        // ================================================================================
+
+        /// <summary>Level 1 (Admin) summary for one FY. Zero/"Draft" when nothing has been saved yet.</summary>
+        [HttpGet("state-budget-summary")]
+        public async Task<IActionResult> GetStateBudgetSummary([FromQuery] string fy)
+        {
+            if (string.IsNullOrWhiteSpace(fy))
+                return BadRequest(new { message = "Financial Year is required." });
+
+            var summary = await _db.Set<StateBudgetSummary>().FirstOrDefaultAsync(s => s.FY == fy);
+
+            return Ok(new StateBudgetSummaryDto
+            {
+                FY = fy,
+                TotalBudget = summary?.TotalBudget ?? 0m,
+                AllocatedAmount = summary?.AllocatedAmount ?? 0m,
+                RemainingAmount = summary?.RemainingAmount ?? 0m,
+                Status = summary?.Status ?? "Draft"
+            });
+        }
+
+        /// <summary>
+        /// Save (Draft) the Level 1 summary for one FY. Admin-only. All three values are
+        /// persisted exactly as submitted.
+        /// </summary>
+        [HttpPut("state-budget-summary")]
+        public async Task<IActionResult> SaveStateBudgetSummary([FromBody] SaveStateBudgetSummaryRequest request)
+        {
+            if (!IsAdminUser())
+                return Forbid();
+
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            if (request.TotalBudget < 0 || request.AllocatedAmount < 0 || request.RemainingAmount < 0)
+                return BadRequest(new { message = "Amounts cannot be negative." });
+
+            var summary = await _db.Set<StateBudgetSummary>().FirstOrDefaultAsync(s => s.FY == fy);
+            if (summary == null)
+            {
+                summary = new StateBudgetSummary
+                {
+                    FY = fy,
+                    CreatedBy = CurrentUser,
+                    CreatedAt = DateTime.Now
+                };
+                _db.Set<StateBudgetSummary>().Add(summary);
+            }
+
+            summary.TotalBudget = request.TotalBudget;
+            summary.AllocatedAmount = request.AllocatedAmount;
+            summary.RemainingAmount = request.RemainingAmount;
+            summary.UpdatedBy = CurrentUser;
+            summary.UpdatedAt = DateTime.Now;
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "State budget summary saved successfully." });
+        }
+
+        /// <summary>
+        /// Submit the Level 1 summary for one FY. Admin-only. Re-validates TotalBudget =
+        /// AllocatedAmount + RemainingAmount server-side (mandatory - the frontend check is UX
+        /// only) before marking it "Submitted" and writing a history snapshot.
+        /// </summary>
+        [HttpPut("state-budget-summary/submit")]
+        public async Task<IActionResult> SubmitStateBudgetSummary([FromBody] SubmitStateBudgetSummaryRequest request)
+        {
+            if (!IsAdminUser())
+                return Forbid();
+
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            var summary = await _db.Set<StateBudgetSummary>().FirstOrDefaultAsync(s => s.FY == fy);
+            if (summary == null)
+                return BadRequest(new { message = $"Save the state budget summary for FY {fy} before submitting." });
+
+            if (summary.TotalBudget != summary.AllocatedAmount + summary.RemainingAmount)
+                return BadRequest(new
+                {
+                    message = $"Total Budget (₹{summary.TotalBudget:N0}) must equal Allocated to State (₹{summary.AllocatedAmount:N0}) + Remaining Amount (₹{summary.RemainingAmount:N0})."
+                });
+
+            summary.Status = "Submitted";
+            summary.UpdatedBy = CurrentUser;
+            summary.UpdatedAt = DateTime.Now;
+            _db.Set<StateBudgetSummaryHistory>().Add(ToStateSummaryHistory(summary, "Submitted"));
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = $"State budget summary for FY {fy} submitted successfully." });
+        }
+
+        /// <summary>Level 2 (SM) summary for one State+FY. Zero/"Draft" when nothing has been saved yet.</summary>
+        [HttpGet("region-budget-summary")]
+        public async Task<IActionResult> GetRegionBudgetSummary([FromQuery] int stateId, [FromQuery] string fy)
+        {
+            if (string.IsNullOrWhiteSpace(fy))
+                return BadRequest(new { message = "Financial Year is required." });
+
+            var summary = await _db.Set<RegionBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.StateId == stateId && s.FY == fy);
+
+            return Ok(new RegionBudgetSummaryDto
+            {
+                StateId = stateId,
+                FY = fy,
+                TotalBudget = summary?.TotalBudget ?? 0m,
+                AllocatedAmount = summary?.AllocatedAmount ?? 0m,
+                RemainingAmount = summary?.RemainingAmount ?? 0m,
+                Status = summary?.Status ?? "Draft"
+            });
+        }
+
+        /// <summary>
+        /// Save (Draft) the Level 2 summary for one State+FY. Admin or SM. All three values are
+        /// persisted exactly as submitted.
+        /// </summary>
+        [HttpPut("region-budget-summary")]
+        public async Task<IActionResult> SaveRegionBudgetSummary([FromBody] SaveRegionBudgetSummaryRequest request)
+        {
+            if (!IsAdminUser() && !IsSmUser())
+                return Forbid();
+
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            if (request.StateId <= 0)
+                return BadRequest(new { message = "A State must be selected." });
+
+            if (request.TotalBudget < 0 || request.AllocatedAmount < 0 || request.RemainingAmount < 0)
+                return BadRequest(new { message = "Amounts cannot be negative." });
+
+            var state = await _stateRepo.GetAll().FirstOrDefaultAsync(s => s.Id == request.StateId);
+            if (state == null)
+                return BadRequest(new { message = "Selected state is invalid or inactive." });
+
+            var summary = await _db.Set<RegionBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.StateId == request.StateId && s.FY == fy);
+            if (summary == null)
+            {
+                summary = new RegionBudgetSummary
+                {
+                    StateId = request.StateId,
+                    FY = fy,
+                    CreatedBy = CurrentUser,
+                    CreatedAt = DateTime.Now
+                };
+                _db.Set<RegionBudgetSummary>().Add(summary);
+            }
+
+            summary.TotalBudget = request.TotalBudget;
+            summary.AllocatedAmount = request.AllocatedAmount;
+            summary.RemainingAmount = request.RemainingAmount;
+            summary.UpdatedBy = CurrentUser;
+            summary.UpdatedAt = DateTime.Now;
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "Region budget summary saved successfully." });
+        }
+
+        /// <summary>
+        /// Submit the Level 2 summary for one State+FY. Admin or SM. Re-validates TotalBudget =
+        /// AllocatedAmount + RemainingAmount, and that TotalBudget does not exceed the
+        /// applicable State's own allocated amount (StateBudgetAllocation.Amount), before
+        /// marking it "Submitted" and writing a history snapshot.
+        /// </summary>
+        [HttpPut("region-budget-summary/submit")]
+        public async Task<IActionResult> SubmitRegionBudgetSummary([FromBody] SubmitRegionBudgetSummaryRequest request)
+        {
+            if (!IsAdminUser() && !IsSmUser())
+                return Forbid();
+
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            if (request.StateId <= 0)
+                return BadRequest(new { message = "A State must be selected." });
+
+            var summary = await _db.Set<RegionBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.StateId == request.StateId && s.FY == fy);
+            if (summary == null)
+                return BadRequest(new { message = $"Save the region budget summary for FY {fy} before submitting." });
+
+            if (summary.TotalBudget != summary.AllocatedAmount + summary.RemainingAmount)
+                return BadRequest(new
+                {
+                    message = $"Total Budget (₹{summary.TotalBudget:N0}) must equal Allocated to Region (₹{summary.AllocatedAmount:N0}) + Remaining Amount (₹{summary.RemainingAmount:N0})."
+                });
+
+            var stateAllocation = await _db.Set<StateBudgetAllocation>()
+                .FirstOrDefaultAsync(a => a.StateId == request.StateId && a.FY == fy);
+            if (stateAllocation != null && summary.TotalBudget > stateAllocation.Amount)
+                return BadRequest(new
+                {
+                    message = $"Total Budget cannot exceed the applicable State budget of ₹{stateAllocation.Amount:N0}."
+                });
+
+            summary.Status = "Submitted";
+            summary.UpdatedBy = CurrentUser;
+            summary.UpdatedAt = DateTime.Now;
+            _db.Set<RegionBudgetSummaryHistory>().Add(ToRegionSummaryHistory(summary, "Submitted"));
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = $"Region budget summary for FY {fy} submitted successfully." });
+        }
+
+        /// <summary>Level 3 (RM) summary for one Region+FY. Zero/"Draft" when nothing has been saved yet.</summary>
+        [HttpGet("hq-budget-summary")]
+        public async Task<IActionResult> GetHeadquarterBudgetSummary([FromQuery] int regionId, [FromQuery] string fy)
+        {
+            if (string.IsNullOrWhiteSpace(fy))
+                return BadRequest(new { message = "Financial Year is required." });
+
+            var summary = await _db.Set<HeadquarterBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.RegionId == regionId && s.FY == fy);
+
+            return Ok(new HeadquarterBudgetSummaryDto
+            {
+                RegionId = regionId,
+                FY = fy,
+                TotalBudget = summary?.TotalBudget ?? 0m,
+                AllocatedAmount = summary?.AllocatedAmount ?? 0m,
+                RemainingAmount = summary?.RemainingAmount ?? 0m,
+                Status = summary?.Status ?? "Draft"
+            });
+        }
+
+        /// <summary>
+        /// Save (Draft) the Level 3 summary for one Region+FY. Admin or RM. All three values
+        /// are persisted exactly as submitted.
+        /// </summary>
+        [HttpPut("hq-budget-summary")]
+        public async Task<IActionResult> SaveHeadquarterBudgetSummary([FromBody] SaveHeadquarterBudgetSummaryRequest request)
+        {
+            if (!IsAdminUser() && !IsRmUser())
+                return Forbid();
+
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            if (request.RegionId <= 0)
+                return BadRequest(new { message = "A Region must be selected." });
+
+            if (request.TotalBudget < 0 || request.AllocatedAmount < 0 || request.RemainingAmount < 0)
+                return BadRequest(new { message = "Amounts cannot be negative." });
+
+            var region = await _db.Set<Region>().FirstOrDefaultAsync(r => r.Id == request.RegionId);
+            if (region == null)
+                return BadRequest(new { message = "Selected region is invalid or inactive." });
+
+            var summary = await _db.Set<HeadquarterBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.RegionId == request.RegionId && s.FY == fy);
+            if (summary == null)
+            {
+                summary = new HeadquarterBudgetSummary
+                {
+                    RegionId = request.RegionId,
+                    FY = fy,
+                    CreatedBy = CurrentUser,
+                    CreatedAt = DateTime.Now
+                };
+                _db.Set<HeadquarterBudgetSummary>().Add(summary);
+            }
+
+            summary.TotalBudget = request.TotalBudget;
+            summary.AllocatedAmount = request.AllocatedAmount;
+            summary.RemainingAmount = request.RemainingAmount;
+            summary.UpdatedBy = CurrentUser;
+            summary.UpdatedAt = DateTime.Now;
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "Headquarters budget summary saved successfully." });
+        }
+
+        /// <summary>
+        /// Submit the Level 3 summary for one Region+FY. Admin or RM. Re-validates TotalBudget =
+        /// AllocatedAmount + RemainingAmount, and that TotalBudget does not exceed the
+        /// applicable Region's own allocated amount (RegionBudgetAllocation.Amount), before
+        /// marking it "Submitted" and writing a history snapshot.
+        /// </summary>
+        [HttpPut("hq-budget-summary/submit")]
+        public async Task<IActionResult> SubmitHeadquarterBudgetSummary([FromBody] SubmitHeadquarterBudgetSummaryRequest request)
+        {
+            if (!IsAdminUser() && !IsRmUser())
+                return Forbid();
+
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            if (request.RegionId <= 0)
+                return BadRequest(new { message = "A Region must be selected." });
+
+            var summary = await _db.Set<HeadquarterBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.RegionId == request.RegionId && s.FY == fy);
+            if (summary == null)
+                return BadRequest(new { message = $"Save the headquarters budget summary for FY {fy} before submitting." });
+
+            if (summary.TotalBudget != summary.AllocatedAmount + summary.RemainingAmount)
+                return BadRequest(new
+                {
+                    message = $"Total Budget (₹{summary.TotalBudget:N0}) must equal Allocated to Headquarters (₹{summary.AllocatedAmount:N0}) + Remaining Amount (₹{summary.RemainingAmount:N0})."
+                });
+
+            var regionAllocation = await _db.Set<RegionBudgetAllocation>()
+                .FirstOrDefaultAsync(a => a.RegionId == request.RegionId && a.FY == fy);
+            if (regionAllocation != null && summary.TotalBudget > regionAllocation.Amount)
+                return BadRequest(new
+                {
+                    message = $"Total Budget cannot exceed the applicable Region budget of ₹{regionAllocation.Amount:N0}."
+                });
+
+            summary.Status = "Submitted";
+            summary.UpdatedBy = CurrentUser;
+            summary.UpdatedAt = DateTime.Now;
+            _db.Set<HeadquarterBudgetSummaryHistory>().Add(ToHeadquarterSummaryHistory(summary, "Submitted"));
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = $"Headquarters budget summary for FY {fy} submitted successfully." });
+        }
+
+        private static StateBudgetSummaryHistory ToStateSummaryHistory(StateBudgetSummary row, string action) => new()
+        {
+            StateBudgetSummaryId = row.Id,
+            FY = row.FY,
+            TotalBudget = row.TotalBudget,
+            AllocatedAmount = row.AllocatedAmount,
+            RemainingAmount = row.RemainingAmount,
+            Status = row.Status,
+            CreatedBy = row.CreatedBy,
+            CreatedAt = row.CreatedAt,
+            ValidatedBy = row.ValidatedBy,
+            ValidatedDate = row.ValidatedDate,
+            ApprovedBy = row.ApprovedBy,
+            ApprovedDate = row.ApprovedDate,
+            Action = action,
+            ActionDate = DateTime.Now
+        };
+
+        private static RegionBudgetSummaryHistory ToRegionSummaryHistory(RegionBudgetSummary row, string action) => new()
+        {
+            RegionBudgetSummaryId = row.Id,
+            StateId = row.StateId,
+            FY = row.FY,
+            TotalBudget = row.TotalBudget,
+            AllocatedAmount = row.AllocatedAmount,
+            RemainingAmount = row.RemainingAmount,
+            Status = row.Status,
+            CreatedBy = row.CreatedBy,
+            CreatedAt = row.CreatedAt,
+            ValidatedBy = row.ValidatedBy,
+            ValidatedDate = row.ValidatedDate,
+            ApprovedBy = row.ApprovedBy,
+            ApprovedDate = row.ApprovedDate,
+            Action = action,
+            ActionDate = DateTime.Now
+        };
+
+        private static HeadquarterBudgetSummaryHistory ToHeadquarterSummaryHistory(HeadquarterBudgetSummary row, string action) => new()
+        {
+            HeadquarterBudgetSummaryId = row.Id,
+            RegionId = row.RegionId,
+            FY = row.FY,
+            TotalBudget = row.TotalBudget,
+            AllocatedAmount = row.AllocatedAmount,
+            RemainingAmount = row.RemainingAmount,
+            Status = row.Status,
+            CreatedBy = row.CreatedBy,
+            CreatedAt = row.CreatedAt,
+            ValidatedBy = row.ValidatedBy,
+            ValidatedDate = row.ValidatedDate,
+            ApprovedBy = row.ApprovedBy,
+            ApprovedDate = row.ApprovedDate,
+            Action = action,
+            ActionDate = DateTime.Now
+        };
     }
 
 
