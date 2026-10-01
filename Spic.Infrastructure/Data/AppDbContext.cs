@@ -507,6 +507,36 @@ namespace Spic.Infrastructure.Data
 
         // The IFMS automation keeps its own tables in its own database; see
         // IfmsDbContext. They are deliberately not reachable from here.
+
+        // MD Portal - State Budget Management: one row per (State, FY), so a save
+        // always upserts rather than creating a duplicate allocation.
+        builder.Entity<StateBudgetAllocation>(entity =>
+        {
+            entity.HasIndex(x => new { x.StateId, x.FY }).IsUnique();
+            entity.HasOne(x => x.State)
+                .WithMany()
+                .HasForeignKey(x => x.StateId)
+                .OnDelete(DeleteBehavior.Restrict);
+            // A DB-level default so adding this column never fails against rows
+            // already saved via Save Draft before Submit For Validation existed.
+            entity.Property(x => x.Status).HasDefaultValue("Draft");
+        });
+
+        // MD Portal - Region-wise share of a StateBudgetAllocation. RegionId alone
+        // determines the State (Region.StateId), so RegionId+FY is the unique key.
+        builder.Entity<RegionBudgetAllocation>(entity =>
+        {
+            entity.HasIndex(x => new { x.RegionId, x.FY }).IsUnique();
+            entity.HasOne(x => x.State)
+                .WithMany()
+                .HasForeignKey(x => x.StateId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Region)
+                .WithMany()
+                .HasForeignKey(x => x.RegionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.Status).HasDefaultValue("Draft");
+        });
         }
 
         // Same prettification the existing Designation UI uses (Designation.razor
@@ -700,9 +730,19 @@ namespace Spic.Infrastructure.Data
 
         public DbSet<CSR1> CSR1 { get; set; }
         public DbSet<CSR1Products1> CSR1Products1 { get; set; }
-
         public DbSet<CSR1Products2> CSR1Products2 { get; set; }
-
         public DbSet<CSR1Products3> CSR1Products3 { get; set; }
+        public DbSet<ProgramStateBudget> ProgramStateBudgets { get; set; }
+        public DbSet<ProgramRegionBudget> ProgramRegionBudgets { get; set; }
+        public DbSet<ProgramHQBudget> ProgramHQBudgets { get; set; }
+
+        // MD Portal - Annual Budgeting master
+        public DbSet<AnnualBudgeting> AnnualBudgetings { get; set; }
+
+        // MD Portal - State Budget Management (state-wise share of an AnnualBudgeting row)
+        public DbSet<StateBudgetAllocation> StateBudgetAllocations { get; set; }
+
+        // MD Portal - Region Budget Allocation (region-wise share of a StateBudgetAllocation row)
+        public DbSet<RegionBudgetAllocation> RegionBudgetAllocations { get; set; }
     }
 }

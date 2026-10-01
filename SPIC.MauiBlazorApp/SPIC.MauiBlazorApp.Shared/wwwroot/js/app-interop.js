@@ -235,3 +235,54 @@ window.spic.telemetry = (function () {
         report: report
     };
 })();
+
+// ---------------------------------------------------------------------------
+// Viewport watcher: tells a component whether the viewport is phone width
+// (<= 767.98px, the shell's phone breakpoint) now and whenever that changes,
+// so pages that swap phone/desktop markup never get stuck in the wrong mode.
+// ---------------------------------------------------------------------------
+window.spicViewport = (function () {
+    var watchers = {};
+    var nextId = 1;
+    var query = '(max-width: 767.98px)';
+
+    return {
+        watchPhone: function (dotNetRef, method) {
+            var mq = window.matchMedia(query);
+            var id = nextId++;
+            var last = mq.matches;
+            var frame = 0;
+
+            // Only report real changes; the resize listener is a backup for environments
+            // where the MediaQueryList change event is missed (e.g. DevTools device toggle).
+            var check = function () {
+                frame = 0;
+                var now = mq.matches;
+                if (now === last) return;
+                last = now;
+                dotNetRef.invokeMethodAsync(method, now).catch(function (err) {
+                    console.warn('[spicViewport] ' + method + ' failed', err);
+                });
+            };
+            var onResize = function () {
+                if (!frame) frame = requestAnimationFrame(check);
+            };
+
+            if (mq.addEventListener) mq.addEventListener('change', check);
+            else mq.addListener(check);
+            window.addEventListener('resize', onResize);
+
+            watchers[id] = { mq: mq, check: check, onResize: onResize };
+            return { id: id, isPhone: last };
+        },
+
+        unwatch: function (id) {
+            var w = watchers[id];
+            if (!w) return;
+            if (w.mq.removeEventListener) w.mq.removeEventListener('change', w.check);
+            else w.mq.removeListener(w.check);
+            window.removeEventListener('resize', w.onResize);
+            delete watchers[id];
+        }
+    };
+})();

@@ -308,6 +308,7 @@ public static class ShellNavigation
         new("BudgetOverview", "Budget Overview", "bi-wallet2", "/BudgetOverview", nameof(PagePermission.BudgetOverview)) { Group = GroupMdPortal },
         new("BudgetingManagements", "Budgeting Management", "bi-cash-stack", "/BudgetingManagements", nameof(PagePermission.BudgetingManagements)) { Group = GroupMdPortal },
         new("BudgetSubmissions", "Budget Submissions", "bi-journal-text", "/BudgetSubmissions", nameof(PagePermission.BudgetSubmissions)) { Group = GroupMdPortal },
+        new("AnnualBudgeting", "Annual Budgeting", "bi-wallet-fill", "/AnnualBudgeting", nameof(PagePermission.AnnualBudgeting)) { Group = GroupMdPortal },
         new("CREATE-CSR-1Management", "CSR-1 Create", "bi-file-earmark-text", "/CREATE-CSR-1Management", nameof(PagePermission.CSR1Create)) { Group = GroupMdPortal },
         new("CSR-1List", "CSR-1 Management", "bi-kanban-fill", "/CSR-1List", nameof(PagePermission.CSR1Management)) { Group = GroupMdPortal },
         new("CSR2", "CSR-2", "bi-layout-text-window-reverse", "/CSR2", nameof(PagePermission.CSR2)) { Group = GroupMdPortal },
