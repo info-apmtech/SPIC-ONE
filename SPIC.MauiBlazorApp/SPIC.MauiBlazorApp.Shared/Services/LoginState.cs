@@ -19,16 +19,31 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         /// <summary>Where a signed-in user lands: used after login and when a stored session is restored.</summary>
         public string LandingPage => UserRole switch
         {
+            // Admin bypasses page permissions entirely (PageAuthorization.RoleModels), so it needs no
+            // designation and lands on its own default screen. Listed first so the no-designation arm
+            // below can never claim it: Admin has full access with an empty RoleAccess.
+            AppRole.Admin => AdminLandingPath,
             AppRole.Dealer => "/SDWADashboard",
             AppRole.SpecialAdmin => CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome",
-            // A designation-driven role has no implicit page access of its own, so /Dashboard may not
-            // be granted; landing there would make PageGuard bounce straight back to /Dashboard.
-            // /Welcome is always reachable, so it is the safe landing page. Keyed off the MODEL, not
-            // off a role name, so any role added to PageAuthorization.RoleModels as
-            // DesignationOnly inherits this automatically.
-            _ when IsDesignationDrivenRole => CanAccess(PagePermission.Dashboard) ? "/Dashboard" : "/Welcome",
-            _ => "/Dashboard"
+            // No designation assigned at all => /Welcome, the existing screen that tells the user to
+            // contact an administrator. Same signal PageGuard uses for its own no-designation branch,
+            // and keyed off the designation data rather than a role name.
+            _ when AllowedPages.Count == 0 => "/Welcome",
+            // Has a designation => the default landing page. It is NOT a PagePermission and is not in
+            // anyone's RoleAccess: it is a common landing screen, so it must not depend on which pages
+            // the designation happens to grant. A designation that omits Dashboard still lands here.
+            _ => DefaultLandingPath
         };
+
+        // Default landing page for every non-Admin role that has a designation: a plain
+        // "Welcome to SPIC ONE" screen with no dashboard content. Shared with PageGuard's always-open
+        // set so the route and the route that is permitted cannot drift apart.
+        public const string DefaultLandingPath = "/DefaultWelcome";
+
+        // Default landing page for AppRole.Admin. Admin bypasses page permissions, so it never
+        // depends on a designation.
+        public const string AdminLandingPath = "/DefaultAdmin";
+
         public event Action? OnChange;
 
         public string? Token

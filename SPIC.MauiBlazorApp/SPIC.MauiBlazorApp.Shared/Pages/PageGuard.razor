@@ -16,7 +16,14 @@
         "error",
         "notfound",
         "forbidden",
-        "Welcome"
+        "Welcome",
+        // Default landing pages (LoginState). Each is the destination of LandingPage for the role it
+        // belongs to, so both must be open to every signed-in user; otherwise the redirect at the
+        // bottom of Check() sends the user back to LandingPage - the very route - and loops. These
+        // are common landing screens, NOT designation permissions: they are not PagePermission
+        // members and appear in no RoleAccess. Listed without the leading slash, matching above.
+        LoginState.DefaultLandingPath.TrimStart('/'),
+        LoginState.AdminLandingPath.TrimStart('/')
     };
 
     // Shell hub pages (phone tab bar / top bar destinations). Each hub only LINKS to pages the
@@ -144,8 +151,19 @@
                                     || firstSegment.Equals("WelfareSchemes", StringComparison.OrdinalIgnoreCase)
                                     || firstSegment.Equals("ApplyWelfareScheme", StringComparison.OrdinalIgnoreCase)
                                     || firstSegment.Equals("WellfareApplication", StringComparison.OrdinalIgnoreCase));
+            // The default landing routes are in _alwaysOpen so users WITH a designation (and Admin,
+            // who bypasses this branch entirely) can reach them, so they are excluded here to keep
+            // this branch's existing behaviour: a user with no designation still lands on /Welcome,
+            // the screen telling them to contact an administrator. /Welcome is allowed, so this
+            // cannot loop. Listed as data so a new landing route is covered by adding one entry.
+            bool isDefaultLanding = firstSegment.Equals(
+                                        LoginState.DefaultLandingPath.TrimStart('/'), StringComparison.OrdinalIgnoreCase)
+                                    || firstSegment.Equals(
+                                        LoginState.AdminLandingPath.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
+
             bool isInfra = _alwaysOpen.Contains(firstSegment)
-                           && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase);
+                           && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase)
+                           && !isDefaultLanding;
 
             if (!isWelcome && !isDealerDash && !isInfra && !isDirectorSchemeApproval)
             {
