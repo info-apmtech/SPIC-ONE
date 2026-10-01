@@ -94,17 +94,18 @@ public static class ShellNavigation
         new("DigitalLibrary", "Digital Library", "bi-collection-play", "/DigitalLibrary", "DigitalLibrary")
         {
             ShortLabel = "Library",
-            // Gated by the DigitalLibrary page permission (Admin / CorporateAdmin bypass CanAccess).
-            // Content is viewable by everyone; adding/editing needs the DigitalLibrary page (checked in the pages).
-            Rule = s => s.IsLoggedIn
+            // No Rule: resolved by CanAccess("DigitalLibrary"), the same call NavMenu and PageGuard use.
+            // Read-only content is open to every signed-in user (PageAuthorization.OpenAccessPages);
+            // adding/editing content needs the DigitalLibrary page (checked in the pages). A
+            // designation-driven role such as CommonRole needs the DigitalLibrary page grant.
         },
 
         new("Community", "Knowledge Community", "bi-people-fill", "/Community", "Community")
         {
             ShortLabel = "Community",
             // Live module: the PagePermission key exists, so the designation decides (mirrors NavMenu).
-            // Usable by every signed-in user (product decision 2026-09-20).
-            Rule = s => s.IsLoggedIn
+            // Open to every signed-in user (product decision 2026-09-20); a designation-driven role
+            // such as CommonRole reaches it only through its designation.
         },
 
         // ---- SAS portal (page-permission gated; write actions are checked inside the pages) ----
@@ -191,13 +192,14 @@ public static class ShellNavigation
         new("Alerts", "Alerts", "bi-bell-fill", "/Alerts", "Alerts")
         {
             // Also reachable from the bell in the phone/tablet top bar.
-            Rule = s => s.IsLoggedIn
+            // No Rule: resolved by CanAccess("Alerts"); open to every signed-in user for the
+            // default employee roles (PageAuthorization.OpenAccessPages).
         },
         new("AskAI", "Ask SPIC AI", "bi-stars", "/DigitalLibrary/chat", "DigitalLibrary")
         {
-            // Also reachable from the sparkle icon in the phone/tablet top bar. The chat is open to
-            // every role; the rest of the Digital Library stays behind CanAccess("DigitalLibrary").
-            ShortLabel = "Ask AI", Rule = s => s.IsLoggedIn
+            // Also reachable from the sparkle icon in the phone/tablet top bar. The chat is part of the
+            // DigitalLibrary page, so it follows the same CanAccess decision.
+            ShortLabel = "Ask AI"
         },
         // Category master behind the content forms (admin page; PageGuard treats
         // /DigitalLibrary/categories like /DigitalLibrary/add). Own key so it is never confused

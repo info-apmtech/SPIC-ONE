@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930115931_v13AddHeadquarterBudgetAllocation")]
+    partial class v13AddHeadquarterBudgetAllocation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2081,8 +2084,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("AugustCount")
                         .HasColumnType("numeric");
 
-                    b.Property<int>("BudgetProgramMainId")
-                        .HasColumnType("integer");
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<decimal>("December")
                         .HasColumnType("numeric");
@@ -2095,6 +2102,10 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<decimal>("FebruaryCount")
                         .HasColumnType("numeric");
+
+                    b.Property<string>("FinancialYear")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<decimal>("January")
                         .HasColumnType("numeric");
@@ -2147,70 +2158,24 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("SeptemberCount")
                         .HasColumnType("numeric");
 
-                    b.Property<decimal>("TotalBudget")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BudgetProgramMainId");
-
-                    b.HasIndex("ProgramId");
-
-                    b.ToTable("BudgetPrograms");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgramMains", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("AllocatedAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("ApprovedAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime?>("ApprovedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("ApprovedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("FinancialYear")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("SIDAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<int>("StateId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("ValidateAt")
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("ValidateBy")
-                        .IsRequired()
+                    b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.ToTable("BudgetProgramMains");
+                    b.HasIndex("ProgramId");
+
+                    b.ToTable("BudgetPrograms");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR1", b =>
@@ -5390,12 +5355,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
-                    b.Property<string>("ApprovedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ApprovedDate")
-                        .HasColumnType("timestamp without time zone");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -5424,12 +5383,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
-                    b.Property<string>("ValidatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ValidatedDate")
-                        .HasColumnType("timestamp without time zone");
-
                     b.HasKey("Id");
 
                     b.HasIndex("RegionId");
@@ -5438,68 +5391,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("HeadquarterBudgetAllocations");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetAllocationHistory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("ActionDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("ApprovedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ApprovedDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("FY")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("HeadquarterBudgetAllocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("HeadquarterId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ValidatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ValidatedDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HeadquarterBudgetAllocationId");
-
-                    b.HasIndex("HeadquarterId", "FY");
-
-                    b.ToTable("HeadquarterBudgetAllocationHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.IfmsDealer", b =>
@@ -7532,15 +7423,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsMO")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsRMDO")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsSMDO")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -7871,12 +7753,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
-                    b.Property<string>("ApprovedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ApprovedDate")
-                        .HasColumnType("timestamp without time zone");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -7905,12 +7781,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
-                    b.Property<string>("ValidatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ValidatedDate")
-                        .HasColumnType("timestamp without time zone");
-
                     b.HasKey("Id");
 
                     b.HasIndex("StateId");
@@ -7919,68 +7789,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("RegionBudgetAllocations");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetAllocationHistory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("ActionDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("ApprovedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ApprovedDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("FY")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("RegionBudgetAllocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("RegionId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("StateId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ValidatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ValidatedDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RegionBudgetAllocationId");
-
-                    b.HasIndex("RegionId", "FY");
-
-                    b.ToTable("RegionBudgetAllocationHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Relationship", b =>
@@ -9421,12 +9229,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
-                    b.Property<string>("ApprovedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ApprovedDate")
-                        .HasColumnType("timestamp without time zone");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -9452,77 +9254,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
-                    b.Property<string>("ValidatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ValidatedDate")
-                        .HasColumnType("timestamp without time zone");
-
                     b.HasKey("Id");
 
                     b.HasIndex("StateId", "FY")
                         .IsUnique();
 
                     b.ToTable("StateBudgetAllocations");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetAllocationHistory", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("ActionDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("ApprovedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ApprovedDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("FY")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("StateBudgetAllocationId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("StateId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ValidatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ValidatedDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StateBudgetAllocationId");
-
-                    b.HasIndex("StateId", "FY");
-
-                    b.ToTable("StateBudgetAllocationHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.StateGlobalStockReconciliation", b =>
@@ -10756,19 +10493,11 @@ namespace Spic.Infrastructure.Migrations
 
             modelBuilder.Entity("SPIC.Core.Entities.BudgetProgram", b =>
                 {
-                    b.HasOne("SPIC.Core.Entities.BudgetProgramMains", "BudgetProgramMain")
-                        .WithMany("Programs")
-                        .HasForeignKey("BudgetProgramMainId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("SPIC.Core.Entities.ProgramMaster", "Program")
                         .WithMany()
                         .HasForeignKey("ProgramId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("BudgetProgramMain");
 
                     b.Navigation("Program");
                 });
@@ -11078,17 +10807,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Region");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetAllocationHistory", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.HeadquarterBudgetAllocation", "HeadquarterBudgetAllocation")
-                        .WithMany()
-                        .HasForeignKey("HeadquarterBudgetAllocationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("HeadquarterBudgetAllocation");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.SampleBatch", "Batch")
@@ -11298,17 +11016,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("State");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetAllocationHistory", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.RegionBudgetAllocation", "RegionBudgetAllocation")
-                        .WithMany()
-                        .HasForeignKey("RegionBudgetAllocationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("RegionBudgetAllocation");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.SampleCollection", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.SampleConsignment", "Consignment")
@@ -11411,17 +11118,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("State");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetAllocationHistory", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.StateBudgetAllocation", "StateBudgetAllocation")
-                        .WithMany()
-                        .HasForeignKey("StateBudgetAllocationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("StateBudgetAllocation");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.SubDistrict", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.District", "District")
@@ -11485,11 +11181,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("WelfareApplication");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgramMains", b =>
-                {
-                    b.Navigation("Programs");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CommunityPost", b =>

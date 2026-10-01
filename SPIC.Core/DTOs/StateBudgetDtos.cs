@@ -27,6 +27,18 @@ namespace SPIC.Core.DTOs
         public string FY { get; set; } = string.Empty;
     }
 
+    /// <summary>Validate request: marks every "Submitted" allocation for one FY as Validated.</summary>
+    public class ValidateStateBudgetRequest
+    {
+        public string FY { get; set; } = string.Empty;
+    }
+
+    /// <summary>Approve request: marks every "Validated" allocation for one FY as Approved.</summary>
+    public class ApproveStateBudgetRequest
+    {
+        public string FY { get; set; } = string.Empty;
+    }
+
     /// <summary>Current submission status for one FY's state allocations ("Draft" if none saved yet).</summary>
     public class StateBudgetStatusDto
     {

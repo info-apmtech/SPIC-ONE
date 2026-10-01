@@ -1,25 +1,25 @@
 namespace SPIC.Core.Entities
 {
     /// <summary>
-    /// Region-wise share of a StateBudgetAllocation amount for a given FY. One row per
-    /// (RegionId, FY) - enforced by a unique index in AppDbContext - so a save always
-    /// upserts rather than creating duplicates. RegionId alone is enough for uniqueness
-    /// since a Region always belongs to exactly one State (Region.StateId).
+    /// Headquarters-wise share of a RegionBudgetAllocation amount for a given FY. One row
+    /// per (HeadquarterId, FY) - enforced by a unique index in AppDbContext - so a save
+    /// always upserts rather than creating duplicates. HeadquarterId alone is enough for
+    /// uniqueness since a Headquarter always belongs to exactly one Region (Headquarter.RegionId).
     /// </summary>
-    public class RegionBudgetAllocation
+    public class HeadquarterBudgetAllocation
     {
         public int Id { get; set; }
-        public int StateId { get; set; }
-        public State? State { get; set; }
         public int RegionId { get; set; }
         public Region? Region { get; set; }
+        public int HeadquarterId { get; set; }
+        public Headquarter? Headquarter { get; set; }
         public required string FY { get; set; }
         public decimal Amount { get; set; }
 
         /// <summary>
-        /// Mirrors StateBudgetAllocation.Status's convention. Cascaded to "Submitted"/
-        /// "Validated"/"Approved" by the same State-level workflow action that moves the
-        /// parent State row for the same FY - there is no separate Region workflow.
+        /// Mirrors StateBudgetAllocation/RegionBudgetAllocation.Status's convention. Cascaded
+        /// to "Submitted"/"Validated"/"Approved" by the same State-level workflow action that
+        /// moves the parent State and Region rows for the same FY - there is no separate HQ workflow.
         /// </summary>
         public string Status { get; set; } = "Draft";
 
@@ -38,19 +38,19 @@ namespace SPIC.Core.Entities
     }
 
     /// <summary>
-    /// Append-only audit trail for RegionBudgetAllocation. One row is written per workflow
+    /// Append-only audit trail for HeadquarterBudgetAllocation. One row is written per workflow
     /// transition (Submitted/Validated/Approved) as a snapshot of the main row at that
-    /// moment - the main RegionBudgetAllocation table remains the only source of current/live data.
+    /// moment - the main HeadquarterBudgetAllocation table remains the only source of current/live data.
     /// </summary>
-    public class RegionBudgetAllocationHistory
+    public class HeadquarterBudgetAllocationHistory
     {
         public int Id { get; set; }
 
-        public int RegionBudgetAllocationId { get; set; }
-        public RegionBudgetAllocation? RegionBudgetAllocation { get; set; }
+        public int HeadquarterBudgetAllocationId { get; set; }
+        public HeadquarterBudgetAllocation? HeadquarterBudgetAllocation { get; set; }
 
-        public int StateId { get; set; }
         public int RegionId { get; set; }
+        public int HeadquarterId { get; set; }
         public required string FY { get; set; }
         public decimal Amount { get; set; }
         public string Status { get; set; } = "Draft";
