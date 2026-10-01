@@ -554,6 +554,39 @@ namespace Spic.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Status).HasDefaultValue("Draft");
         });
+
+        // MD Portal - approval/history audit trail for the three allocation levels above.
+        // Each history row is an immutable snapshot written by the Submit/Validate/Approve
+        // workflow actions; the allocation tables themselves remain the only current/live data.
+        builder.Entity<StateBudgetAllocationHistory>(entity =>
+        {
+            entity.HasOne(x => x.StateBudgetAllocation)
+                .WithMany()
+                .HasForeignKey(x => x.StateBudgetAllocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.StateBudgetAllocationId);
+            entity.HasIndex(x => new { x.StateId, x.FY });
+        });
+
+        builder.Entity<RegionBudgetAllocationHistory>(entity =>
+        {
+            entity.HasOne(x => x.RegionBudgetAllocation)
+                .WithMany()
+                .HasForeignKey(x => x.RegionBudgetAllocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.RegionBudgetAllocationId);
+            entity.HasIndex(x => new { x.RegionId, x.FY });
+        });
+
+        builder.Entity<HeadquarterBudgetAllocationHistory>(entity =>
+        {
+            entity.HasOne(x => x.HeadquarterBudgetAllocation)
+                .WithMany()
+                .HasForeignKey(x => x.HeadquarterBudgetAllocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.HeadquarterBudgetAllocationId);
+            entity.HasIndex(x => new { x.HeadquarterId, x.FY });
+        });
         }
 
         // Same prettification the existing Designation UI uses (Designation.razor
@@ -766,5 +799,10 @@ namespace Spic.Infrastructure.Data
 
         // MD Portal - Headquarters Budget Allocation (HQ-wise share of a RegionBudgetAllocation row)
         public DbSet<HeadquarterBudgetAllocation> HeadquarterBudgetAllocations { get; set; }
+
+        // MD Portal - approval/history audit trail (one per allocation level; see OnModelCreating)
+        public DbSet<StateBudgetAllocationHistory> StateBudgetAllocationHistories { get; set; }
+        public DbSet<RegionBudgetAllocationHistory> RegionBudgetAllocationHistories { get; set; }
+        public DbSet<HeadquarterBudgetAllocationHistory> HeadquarterBudgetAllocationHistories { get; set; }
     }
 }

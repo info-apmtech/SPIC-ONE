@@ -1054,6 +1054,7 @@ namespace SpicAPI.Controllers
                 row.Status = "Submitted";
                 row.UpdatedBy = CurrentUser;
                 row.UpdatedAt = DateTime.Now;
+                _db.Set<StateBudgetAllocationHistory>().Add(ToStateHistory(row, "Submitted"));
             }
 
             var regionRows = await _db.Set<RegionBudgetAllocation>()
@@ -1065,6 +1066,7 @@ namespace SpicAPI.Controllers
                 row.Status = "Submitted";
                 row.UpdatedBy = CurrentUser;
                 row.UpdatedAt = DateTime.Now;
+                _db.Set<RegionBudgetAllocationHistory>().Add(ToRegionHistory(row, "Submitted"));
             }
 
             var hqRows = await _db.Set<HeadquarterBudgetAllocation>()
@@ -1076,6 +1078,7 @@ namespace SpicAPI.Controllers
                 row.Status = "Submitted";
                 row.UpdatedBy = CurrentUser;
                 row.UpdatedAt = DateTime.Now;
+                _db.Set<HeadquarterBudgetAllocationHistory>().Add(ToHeadquarterHistory(row, "Submitted"));
             }
 
             await _db.SaveChangesAsync();
@@ -1086,6 +1089,200 @@ namespace SpicAPI.Controllers
                 message = $"State budget allocation for FY {fy} submitted for validation successfully."
             });
         }
+
+        /// <summary>
+        /// Validate: moves every "Submitted" State/Region/Headquarters allocation for the FY to
+        /// "Validated" (same State-level cascade convention as Submit For Validation - there is
+        /// no separate Region or Headquarters validation action). Writes one history snapshot per
+        /// row transitioned, preserving the complete approval trail.
+        /// </summary>
+        [HttpPut("state-budget/validate")]
+        public async Task<IActionResult> ValidateStateBudget([FromBody] ValidateStateBudgetRequest request)
+        {
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            var rows = await _db.Set<StateBudgetAllocation>()
+                .Where(a => a.FY == fy && a.Status == "Submitted")
+                .ToListAsync();
+
+            if (rows.Count == 0)
+                return BadRequest(new { message = $"No submitted allocation found for FY {fy} to validate." });
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            var now = DateTime.Now;
+
+            foreach (var row in rows)
+            {
+                row.Status = "Validated";
+                row.ValidatedBy = CurrentUser;
+                row.ValidatedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<StateBudgetAllocationHistory>().Add(ToStateHistory(row, "Validated"));
+            }
+
+            var regionRows = await _db.Set<RegionBudgetAllocation>()
+                .Where(a => a.FY == fy && a.Status == "Submitted")
+                .ToListAsync();
+
+            foreach (var row in regionRows)
+            {
+                row.Status = "Validated";
+                row.ValidatedBy = CurrentUser;
+                row.ValidatedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<RegionBudgetAllocationHistory>().Add(ToRegionHistory(row, "Validated"));
+            }
+
+            var hqRows = await _db.Set<HeadquarterBudgetAllocation>()
+                .Where(a => a.FY == fy && a.Status == "Submitted")
+                .ToListAsync();
+
+            foreach (var row in hqRows)
+            {
+                row.Status = "Validated";
+                row.ValidatedBy = CurrentUser;
+                row.ValidatedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<HeadquarterBudgetAllocationHistory>().Add(ToHeadquarterHistory(row, "Validated"));
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                message = $"State budget allocation for FY {fy} validated successfully."
+            });
+        }
+
+        /// <summary>
+        /// Approve: moves every "Validated" State/Region/Headquarters allocation for the FY to
+        /// "Approved" (same State-level cascade convention as Submit/Validate). Writes one
+        /// history snapshot per row transitioned, preserving the complete approval trail.
+        /// </summary>
+        [HttpPut("state-budget/approve")]
+        public async Task<IActionResult> ApproveStateBudget([FromBody] ApproveStateBudgetRequest request)
+        {
+            var fy = (request.FY ?? string.Empty).Trim();
+            if (fy.Length == 0)
+                return BadRequest(new { message = "Financial Year is required." });
+
+            var rows = await _db.Set<StateBudgetAllocation>()
+                .Where(a => a.FY == fy && a.Status == "Validated")
+                .ToListAsync();
+
+            if (rows.Count == 0)
+                return BadRequest(new { message = $"No validated allocation found for FY {fy} to approve." });
+
+            await using var transaction = await _db.Database.BeginTransactionAsync();
+
+            var now = DateTime.Now;
+
+            foreach (var row in rows)
+            {
+                row.Status = "Approved";
+                row.ApprovedBy = CurrentUser;
+                row.ApprovedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<StateBudgetAllocationHistory>().Add(ToStateHistory(row, "Approved"));
+            }
+
+            var regionRows = await _db.Set<RegionBudgetAllocation>()
+                .Where(a => a.FY == fy && a.Status == "Validated")
+                .ToListAsync();
+
+            foreach (var row in regionRows)
+            {
+                row.Status = "Approved";
+                row.ApprovedBy = CurrentUser;
+                row.ApprovedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<RegionBudgetAllocationHistory>().Add(ToRegionHistory(row, "Approved"));
+            }
+
+            var hqRows = await _db.Set<HeadquarterBudgetAllocation>()
+                .Where(a => a.FY == fy && a.Status == "Validated")
+                .ToListAsync();
+
+            foreach (var row in hqRows)
+            {
+                row.Status = "Approved";
+                row.ApprovedBy = CurrentUser;
+                row.ApprovedDate = now;
+                row.UpdatedBy = CurrentUser;
+                row.UpdatedAt = now;
+                _db.Set<HeadquarterBudgetAllocationHistory>().Add(ToHeadquarterHistory(row, "Approved"));
+            }
+
+            await _db.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                message = $"State budget allocation for FY {fy} approved successfully."
+            });
+        }
+
+        private static StateBudgetAllocationHistory ToStateHistory(StateBudgetAllocation row, string action) => new()
+        {
+            StateBudgetAllocationId = row.Id,
+            StateId = row.StateId,
+            FY = row.FY,
+            Amount = row.Amount,
+            Status = row.Status,
+            CreatedBy = row.CreatedBy,
+            CreatedAt = row.CreatedAt,
+            ValidatedBy = row.ValidatedBy,
+            ValidatedDate = row.ValidatedDate,
+            ApprovedBy = row.ApprovedBy,
+            ApprovedDate = row.ApprovedDate,
+            Action = action,
+            ActionDate = DateTime.Now
+        };
+
+        private static RegionBudgetAllocationHistory ToRegionHistory(RegionBudgetAllocation row, string action) => new()
+        {
+            RegionBudgetAllocationId = row.Id,
+            StateId = row.StateId,
+            RegionId = row.RegionId,
+            FY = row.FY,
+            Amount = row.Amount,
+            Status = row.Status,
+            CreatedBy = row.CreatedBy,
+            CreatedAt = row.CreatedAt,
+            ValidatedBy = row.ValidatedBy,
+            ValidatedDate = row.ValidatedDate,
+            ApprovedBy = row.ApprovedBy,
+            ApprovedDate = row.ApprovedDate,
+            Action = action,
+            ActionDate = DateTime.Now
+        };
+
+        private static HeadquarterBudgetAllocationHistory ToHeadquarterHistory(HeadquarterBudgetAllocation row, string action) => new()
+        {
+            HeadquarterBudgetAllocationId = row.Id,
+            RegionId = row.RegionId,
+            HeadquarterId = row.HeadquarterId,
+            FY = row.FY,
+            Amount = row.Amount,
+            Status = row.Status,
+            CreatedBy = row.CreatedBy,
+            CreatedAt = row.CreatedAt,
+            ValidatedBy = row.ValidatedBy,
+            ValidatedDate = row.ValidatedDate,
+            ApprovedBy = row.ApprovedBy,
+            ApprovedDate = row.ApprovedDate,
+            Action = action,
+            ActionDate = DateTime.Now
+        };
 
         /// <summary>
         /// Region-wise budget rows for the State Budget Management page's Region Allocation
