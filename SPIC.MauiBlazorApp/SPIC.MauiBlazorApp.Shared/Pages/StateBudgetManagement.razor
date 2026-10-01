@@ -1,5 +1,6 @@
 @page "/StateBudgetManagement"
 @inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
 @using DR = SPIC.Core.Entities
@@ -11,22 +12,39 @@
         <h3>State Budgeting Management</h3>
     </div>
 
-    <!-- Section Toggle (same tabs-wrapper/tab-item pattern as LocationMaster) -->
+    <!-- Section Toggle (same tabs-wrapper/tab-item pattern as LocationMaster). Each tab is
+         shown only to the role responsible for that level (Admin/SM/RM), reusing the existing
+         LoginState role-group helpers - Admin can see every level, same bypass convention as
+         LoginState.Can/CanAccess elsewhere in the app. -->
     <div class="tabs-wrapper">
         <div class="tabs-container">
-            <div class="tab-item @(_activeSection == "State" ? "active" : "")" @onclick='() => _activeSection = "State"'>
-                State Allocation
-            </div>
-            <div class="tab-item @(_activeSection == "Region" ? "active" : "")" @onclick='() => _activeSection = "Region"'>
-                Region Allocation
-            </div>
-            <div class="tab-item @(_activeSection == "Headquarters" ? "active" : "")" @onclick='() => _activeSection = "Headquarters"'>
-                Headquarters Allocation
-            </div>
+            @if (CanSeeStateTab)
+            {
+                <div class="tab-item @(_activeSection == "State" ? "active" : "")" @onclick='() => _activeSection = "State"'>
+                    State Allocation
+                </div>
+            }
+            @if (CanSeeRegionTab)
+            {
+                <div class="tab-item @(_activeSection == "Region" ? "active" : "")" @onclick='() => _activeSection = "Region"'>
+                    Region Allocation
+                </div>
+            }
+            @if (CanSeeHeadquartersTab)
+            {
+                <div class="tab-item @(_activeSection == "Headquarters" ? "active" : "")" @onclick='() => _activeSection = "Headquarters"'>
+                    Headquarters Allocation
+                </div>
+            }
         </div>
     </div>
 
-    @if (_activeSection == "State")
+    @if (!CanSeeStateTab && !CanSeeRegionTab && !CanSeeHeadquartersTab)
+    {
+        <div class="alert-box">⚠ You do not have access to any budget allocation level.</div>
+    }
+
+    @if (_activeSection == "State" && CanSeeStateTab)
     {
     <!-- Selection -->
     <div class="main-card">
@@ -48,6 +66,58 @@
                 }
             </div>
         </div>
+    </div>
+
+    <!-- Budget Summary: Total Budget / Allocated to State / Remaining Amount - all three are
+         plain manually-entered fields; Remaining is never auto-calculated from Total - Allocated. -->
+    <div class="main-card">
+
+        <div class="section-header">
+            <h3 class="section-title">Budget Summary</h3>
+            <span class="fy-badge">@_stateSummaryStatus</span>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_stateSummaryValidationMessage))
+        {
+            <div class="alert-box">⚠ @_stateSummaryValidationMessage</div>
+        }
+
+        @if (!string.IsNullOrEmpty(_stateSummarySuccessMessage))
+        {
+            <div class="success-box">✓ @_stateSummarySuccessMessage</div>
+        }
+
+        <div class="row g-3">
+            <div class="col-12 col-sm-4">
+                <label class="form-label-custom">Total Budget</label>
+                <input type="number" class="form-control-custom w-100" min="0"
+                       @bind="_stateSummaryTotalBudget" @bind:event="oninput" />
+            </div>
+            <div class="col-12 col-sm-4">
+                <label class="form-label-custom">Allocated to State</label>
+                <input type="number" class="form-control-custom w-100" min="0"
+                       @bind="_stateSummaryAllocated" @bind:event="oninput" />
+            </div>
+            <div class="col-12 col-sm-4">
+                <label class="form-label-custom">Remaining Amount</label>
+                <input type="number" class="form-control-custom w-100" min="0"
+                       @bind="_stateSummaryRemaining" @bind:event="oninput" />
+            </div>
+        </div>
+
+        <div class="action-buttons" style="margin-top:14px;">
+            <button class="btn-draft"
+                    @onclick="SaveStateBudgetSummaryAsync"
+                    disabled="@(_isSavingStateSummary || _selectedFY.Length == 0)">
+                @(_isSavingStateSummary ? "Saving..." : "Save Budget Summary")
+            </button>
+            <button class="btn-submit"
+                    @onclick="SubmitStateBudgetSummaryAsync"
+                    disabled="@(_isSavingStateSummary || _isSubmittingStateSummary || _selectedFY.Length == 0 || _stateSummaryStatus == "Submitted")">
+                @(_isSubmittingStateSummary ? "Submitting..." : (_stateSummaryStatus == "Submitted" ? "Submitted" : "Submit"))
+            </button>
+        </div>
+
     </div>
 
     <!-- Summary Cards -->
@@ -161,7 +231,7 @@
     }
 
 
-    @if (_activeSection == "Region")
+    @if (_activeSection == "Region" && CanSeeRegionTab)
     {
     <!-- Selection -->
     <div class="main-card">
@@ -198,6 +268,59 @@
 
     @if (_selectedStateId > 0)
     {
+        <!-- Budget Summary: Total Budget / Allocated to Region / Remaining Amount - all three
+             are plain manually-entered fields; Remaining is never auto-calculated from
+             Total - Allocated. -->
+        <div class="main-card">
+
+            <div class="section-header">
+                <h3 class="section-title">Budget Summary</h3>
+                <span class="fy-badge">@_regionSummaryStatus</span>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_regionSummaryValidationMessage))
+            {
+                <div class="alert-box">⚠ @_regionSummaryValidationMessage</div>
+            }
+
+            @if (!string.IsNullOrEmpty(_regionSummarySuccessMessage))
+            {
+                <div class="success-box">✓ @_regionSummarySuccessMessage</div>
+            }
+
+            <div class="row g-3">
+                <div class="col-12 col-sm-4">
+                    <label class="form-label-custom">Total Budget</label>
+                    <input type="number" class="form-control-custom w-100" min="0"
+                           @bind="_regionSummaryTotalBudget" @bind:event="oninput" />
+                </div>
+                <div class="col-12 col-sm-4">
+                    <label class="form-label-custom">Allocated to Region</label>
+                    <input type="number" class="form-control-custom w-100" min="0"
+                           @bind="_regionSummaryAllocated" @bind:event="oninput" />
+                </div>
+                <div class="col-12 col-sm-4">
+                    <label class="form-label-custom">Remaining Amount</label>
+                    <input type="number" class="form-control-custom w-100" min="0"
+                           @bind="_regionSummaryRemaining" @bind:event="oninput" />
+                </div>
+            </div>
+
+            <div class="action-buttons" style="margin-top:14px;">
+                <button class="btn-draft"
+                        @onclick="SaveRegionBudgetSummaryAsync"
+                        disabled="@(_isSavingRegionSummary || _selectedFY.Length == 0)">
+                    @(_isSavingRegionSummary ? "Saving..." : "Save Budget Summary")
+                </button>
+                <button class="btn-submit"
+                        @onclick="SubmitRegionBudgetSummaryAsync"
+                        disabled="@(_isSavingRegionSummary || _isSubmittingRegionSummary || _selectedFY.Length == 0 || _regionSummaryStatus == "Submitted")">
+                    @(_isSubmittingRegionSummary ? "Submitting..." : (_regionSummaryStatus == "Submitted" ? "Submitted" : "Submit"))
+                </button>
+            </div>
+
+        </div>
+
         <!-- Summary Cards -->
         <div class="row g-3 mb-4">
 
@@ -347,7 +470,7 @@
     }
 
 
-    @if (_activeSection == "Headquarters")
+    @if (_activeSection == "Headquarters" && CanSeeHeadquartersTab)
     {
     <!-- Selection -->
     <div class="main-card">
@@ -405,6 +528,59 @@
 
         @if (_hqSelectedRegionId > 0)
         {
+            <!-- Budget Summary: Total Budget / Allocated to Headquarters / Remaining Amount -
+                 all three are plain manually-entered fields; Remaining is never auto-calculated
+                 from Total - Allocated. -->
+            <div class="main-card">
+
+                <div class="section-header">
+                    <h3 class="section-title">Budget Summary</h3>
+                    <span class="fy-badge">@_hqSummaryStatus</span>
+                </div>
+
+                @if (!string.IsNullOrEmpty(_hqSummaryValidationMessage))
+                {
+                    <div class="alert-box">⚠ @_hqSummaryValidationMessage</div>
+                }
+
+                @if (!string.IsNullOrEmpty(_hqSummarySuccessMessage))
+                {
+                    <div class="success-box">✓ @_hqSummarySuccessMessage</div>
+                }
+
+                <div class="row g-3">
+                    <div class="col-12 col-sm-4">
+                        <label class="form-label-custom">Total Budget</label>
+                        <input type="number" class="form-control-custom w-100" min="0"
+                               @bind="_hqSummaryTotalBudget" @bind:event="oninput" />
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <label class="form-label-custom">Allocated to Headquarters</label>
+                        <input type="number" class="form-control-custom w-100" min="0"
+                               @bind="_hqSummaryAllocated" @bind:event="oninput" />
+                    </div>
+                    <div class="col-12 col-sm-4">
+                        <label class="form-label-custom">Remaining Amount</label>
+                        <input type="number" class="form-control-custom w-100" min="0"
+                               @bind="_hqSummaryRemaining" @bind:event="oninput" />
+                    </div>
+                </div>
+
+                <div class="action-buttons" style="margin-top:14px;">
+                    <button class="btn-draft"
+                            @onclick="SaveHeadquarterBudgetSummaryAsync"
+                            disabled="@(_isSavingHqSummary || _selectedFY.Length == 0)">
+                        @(_isSavingHqSummary ? "Saving..." : "Save Budget Summary")
+                    </button>
+                    <button class="btn-submit"
+                            @onclick="SubmitHeadquarterBudgetSummaryAsync"
+                            disabled="@(_isSavingHqSummary || _isSubmittingHqSummary || _selectedFY.Length == 0 || _hqSummaryStatus == "Submitted")">
+                        @(_isSubmittingHqSummary ? "Submitting..." : (_hqSummaryStatus == "Submitted" ? "Submitted" : "Submit"))
+                    </button>
+                </div>
+
+            </div>
+
             <!-- Summary Cards -->
             <div class="row g-3 mb-4">
 
@@ -555,7 +731,7 @@
     }
 
 
-    @if (_activeSection == "State")
+    @if (_activeSection == "State" && CanSeeStateTab)
     {
     <!-- Bottom Summary -->
     <div class="main-card bottom-bar">
@@ -644,6 +820,16 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+    }
+
+    /* Small Draft/Submitted status pill next to the Budget Summary section title. */
+    .fy-badge {
+        background: #dcfce7;
+        color: #15803d;
+        padding: 5px 12px;
+        border-radius: 15px;
+        font-size: 11px;
+        border: none;
     }
 
 
@@ -774,6 +960,13 @@
     // own existing triggers: FY change and State-dropdown change respectively).
     private string _activeSection = "State";
 
+    // Role-gated tab visibility, reusing the existing LoginState role-group helpers (no new
+    // permission architecture): Admin -> State, SM (SMD/SMM) -> Region, RM (RM/RMD) -> Headquarters.
+    // Admin can also see Region/Headquarters, same bypass convention as LoginState.Can/CanAccess.
+    private bool CanSeeStateTab => LoginState.IsAdmin;
+    private bool CanSeeRegionTab => LoginState.IsAdmin || LoginState.IsStateRole;
+    private bool CanSeeHeadquartersTab => LoginState.IsAdmin || LoginState.IsRegionRole;
+
     private List<StateBudgetDto> States = new();
 
     private List<string> _availableFYs = new();
@@ -817,6 +1010,139 @@
     // which row was just edited.
     private bool _hasValidationError => _selectedFY.Length > 0 && TotalAllocated > TotalStateBudget;
 
+    // ---- Level 1 (Admin) Budget Summary: Total Budget / Allocated to State / Remaining Amount.
+    // Separate from the State-wise allocation table above: all three fields here are plain
+    // manually-entered values, persisted as their own StateBudgetSummary row - Remaining is
+    // never computed from Total - Allocated, client or server side. ----
+    private decimal _stateSummaryTotalBudget;
+    private decimal _stateSummaryAllocated;
+    private decimal _stateSummaryRemaining;
+    private string _stateSummaryStatus = "Draft";
+    private bool _isSavingStateSummary;
+    private bool _isSubmittingStateSummary;
+    private string? _stateSummaryValidationMessage;
+    private string? _stateSummarySuccessMessage;
+
+    private async Task LoadStateBudgetSummaryAsync()
+    {
+        if (_selectedFY.Length == 0)
+        {
+            _stateSummaryTotalBudget = 0;
+            _stateSummaryAllocated = 0;
+            _stateSummaryRemaining = 0;
+            _stateSummaryStatus = "Draft";
+            return;
+        }
+
+        try
+        {
+            var dto = await Http.GetFromJsonAsync<StateBudgetSummaryDto>(
+                $"api/Budget/state-budget-summary?fy={Uri.EscapeDataString(_selectedFY)}");
+            _stateSummaryTotalBudget = dto?.TotalBudget ?? 0;
+            _stateSummaryAllocated = dto?.AllocatedAmount ?? 0;
+            _stateSummaryRemaining = dto?.RemainingAmount ?? 0;
+            _stateSummaryStatus = dto?.Status ?? "Draft";
+        }
+        catch
+        {
+            _stateSummaryStatus = "Draft";
+        }
+    }
+
+    private async Task SaveStateBudgetSummaryAsync()
+    {
+        if (_isSavingStateSummary || _selectedFY.Length == 0)
+            return;
+
+        _isSavingStateSummary = true;
+        try
+        {
+            await TrySaveStateBudgetSummaryAsync();
+        }
+        finally
+        {
+            _isSavingStateSummary = false;
+        }
+    }
+
+    private async Task<bool> TrySaveStateBudgetSummaryAsync()
+    {
+        try
+        {
+            var request = new SaveStateBudgetSummaryRequest
+            {
+                FY = _selectedFY,
+                TotalBudget = _stateSummaryTotalBudget,
+                AllocatedAmount = _stateSummaryAllocated,
+                RemainingAmount = _stateSummaryRemaining
+            };
+
+            var response = await Http.PutAsJsonAsync("api/Budget/state-budget-summary", request);
+            if (response.IsSuccessStatusCode)
+            {
+                _stateSummaryValidationMessage = null;
+                await LoadStateBudgetSummaryAsync();
+                return true;
+            }
+
+            var raw = await response.Content.ReadAsStringAsync();
+            _stateSummaryValidationMessage = ExtractMessage(raw);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _stateSummaryValidationMessage = $"Failed to save: {ex.Message}";
+            return false;
+        }
+    }
+
+    // On Submit, Total Budget must equal Allocated to State + Remaining Amount. This client-side
+    // check is for immediate UX feedback only - the server independently re-validates the same
+    // rule and is the authority (see BudgetController.SubmitStateBudgetSummary).
+    private async Task SubmitStateBudgetSummaryAsync()
+    {
+        if (_isSavingStateSummary || _isSubmittingStateSummary || _selectedFY.Length == 0 || _stateSummaryStatus == "Submitted")
+            return;
+
+        if (_stateSummaryTotalBudget != _stateSummaryAllocated + _stateSummaryRemaining)
+        {
+            _stateSummaryValidationMessage =
+                $"Total Budget (₹{_stateSummaryTotalBudget:N0}) must equal Allocated to State (₹{_stateSummaryAllocated:N0}) + Remaining Amount (₹{_stateSummaryRemaining:N0}).";
+            return;
+        }
+
+        _isSubmittingStateSummary = true;
+        _stateSummarySuccessMessage = null;
+        try
+        {
+            var saved = await TrySaveStateBudgetSummaryAsync();
+            if (!saved)
+                return;
+
+            var request = new SubmitStateBudgetSummaryRequest { FY = _selectedFY };
+            var response = await Http.PutAsJsonAsync("api/Budget/state-budget-summary/submit", request);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadStateBudgetSummaryAsync();
+                _stateSummaryValidationMessage = null;
+                _stateSummarySuccessMessage = $"State budget summary for FY {_selectedFY} submitted successfully.";
+            }
+            else
+            {
+                var raw = await response.Content.ReadAsStringAsync();
+                _stateSummaryValidationMessage = ExtractMessage(raw);
+            }
+        }
+        catch (Exception ex)
+        {
+            _stateSummaryValidationMessage = $"Failed to submit: {ex.Message}";
+        }
+        finally
+        {
+            _isSubmittingStateSummary = false;
+        }
+    }
+
     // ---- Region-wise allocation (distributes one State's own allocated amount) ----
     private int _selectedStateId;
     private List<RegionBudgetDto> _regions = new();
@@ -838,6 +1164,141 @@
 
     private bool _hasRegionValidationError =>
         _selectedStateId > 0 && TotalRegionAllocated > SelectedStateAmount;
+
+    // ---- Level 2 (SM) Budget Summary: Total Budget / Allocated to Region / Remaining Amount,
+    // scoped to the selected State + FY. Separate from the Region-wise allocation table above:
+    // all three fields here are plain manually-entered values, persisted as their own
+    // RegionBudgetSummary row - Remaining is never computed from Total - Allocated. ----
+    private decimal _regionSummaryTotalBudget;
+    private decimal _regionSummaryAllocated;
+    private decimal _regionSummaryRemaining;
+    private string _regionSummaryStatus = "Draft";
+    private bool _isSavingRegionSummary;
+    private bool _isSubmittingRegionSummary;
+    private string? _regionSummaryValidationMessage;
+    private string? _regionSummarySuccessMessage;
+
+    private async Task LoadRegionBudgetSummaryAsync()
+    {
+        if (_selectedStateId <= 0 || _selectedFY.Length == 0)
+        {
+            _regionSummaryTotalBudget = 0;
+            _regionSummaryAllocated = 0;
+            _regionSummaryRemaining = 0;
+            _regionSummaryStatus = "Draft";
+            return;
+        }
+
+        try
+        {
+            var dto = await Http.GetFromJsonAsync<RegionBudgetSummaryDto>(
+                $"api/Budget/region-budget-summary?stateId={_selectedStateId}&fy={Uri.EscapeDataString(_selectedFY)}");
+            _regionSummaryTotalBudget = dto?.TotalBudget ?? 0;
+            _regionSummaryAllocated = dto?.AllocatedAmount ?? 0;
+            _regionSummaryRemaining = dto?.RemainingAmount ?? 0;
+            _regionSummaryStatus = dto?.Status ?? "Draft";
+        }
+        catch
+        {
+            _regionSummaryStatus = "Draft";
+        }
+    }
+
+    private async Task SaveRegionBudgetSummaryAsync()
+    {
+        if (_isSavingRegionSummary || _selectedStateId <= 0 || _selectedFY.Length == 0)
+            return;
+
+        _isSavingRegionSummary = true;
+        try
+        {
+            await TrySaveRegionBudgetSummaryAsync();
+        }
+        finally
+        {
+            _isSavingRegionSummary = false;
+        }
+    }
+
+    private async Task<bool> TrySaveRegionBudgetSummaryAsync()
+    {
+        try
+        {
+            var request = new SaveRegionBudgetSummaryRequest
+            {
+                StateId = _selectedStateId,
+                FY = _selectedFY,
+                TotalBudget = _regionSummaryTotalBudget,
+                AllocatedAmount = _regionSummaryAllocated,
+                RemainingAmount = _regionSummaryRemaining
+            };
+
+            var response = await Http.PutAsJsonAsync("api/Budget/region-budget-summary", request);
+            if (response.IsSuccessStatusCode)
+            {
+                _regionSummaryValidationMessage = null;
+                await LoadRegionBudgetSummaryAsync();
+                return true;
+            }
+
+            var raw = await response.Content.ReadAsStringAsync();
+            _regionSummaryValidationMessage = ExtractMessage(raw);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _regionSummaryValidationMessage = $"Failed to save: {ex.Message}";
+            return false;
+        }
+    }
+
+    // On Submit, Total Budget must equal Allocated to Region + Remaining Amount. This
+    // client-side check is for immediate UX feedback only - the server independently
+    // re-validates the same rule, plus that Total Budget doesn't exceed the applicable
+    // State's own allocated amount (see BudgetController.SubmitRegionBudgetSummary).
+    private async Task SubmitRegionBudgetSummaryAsync()
+    {
+        if (_isSavingRegionSummary || _isSubmittingRegionSummary || _selectedStateId <= 0 || _selectedFY.Length == 0 || _regionSummaryStatus == "Submitted")
+            return;
+
+        if (_regionSummaryTotalBudget != _regionSummaryAllocated + _regionSummaryRemaining)
+        {
+            _regionSummaryValidationMessage =
+                $"Total Budget (₹{_regionSummaryTotalBudget:N0}) must equal Allocated to Region (₹{_regionSummaryAllocated:N0}) + Remaining Amount (₹{_regionSummaryRemaining:N0}).";
+            return;
+        }
+
+        _isSubmittingRegionSummary = true;
+        _regionSummarySuccessMessage = null;
+        try
+        {
+            var saved = await TrySaveRegionBudgetSummaryAsync();
+            if (!saved)
+                return;
+
+            var request = new SubmitRegionBudgetSummaryRequest { StateId = _selectedStateId, FY = _selectedFY };
+            var response = await Http.PutAsJsonAsync("api/Budget/region-budget-summary/submit", request);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadRegionBudgetSummaryAsync();
+                _regionSummaryValidationMessage = null;
+                _regionSummarySuccessMessage = $"Region budget summary for FY {_selectedFY} submitted successfully.";
+            }
+            else
+            {
+                var raw = await response.Content.ReadAsStringAsync();
+                _regionSummaryValidationMessage = ExtractMessage(raw);
+            }
+        }
+        catch (Exception ex)
+        {
+            _regionSummaryValidationMessage = $"Failed to submit: {ex.Message}";
+        }
+        finally
+        {
+            _isSubmittingRegionSummary = false;
+        }
+    }
 
     // ---- Headquarters-wise allocation (distributes one Region's own allocated amount) ----
     // Kept independent from the Region Allocation section's own _selectedStateId/_regions
@@ -864,14 +1325,157 @@
     private bool _hasHqValidationError =>
         _hqSelectedRegionId > 0 && TotalHeadquartersAllocated > SelectedRegionAmount;
 
+    // ---- Level 3 (RM) Budget Summary: Total Budget / Allocated to Headquarters / Remaining
+    // Amount, scoped to the selected Region + FY. Separate from the Headquarters-wise allocation
+    // table above: all three fields here are plain manually-entered values, persisted as their
+    // own HeadquarterBudgetSummary row - Remaining is never computed from Total - Allocated. ----
+    private decimal _hqSummaryTotalBudget;
+    private decimal _hqSummaryAllocated;
+    private decimal _hqSummaryRemaining;
+    private string _hqSummaryStatus = "Draft";
+    private bool _isSavingHqSummary;
+    private bool _isSubmittingHqSummary;
+    private string? _hqSummaryValidationMessage;
+    private string? _hqSummarySuccessMessage;
+
+    private async Task LoadHeadquarterBudgetSummaryAsync()
+    {
+        if (_hqSelectedRegionId <= 0 || _selectedFY.Length == 0)
+        {
+            _hqSummaryTotalBudget = 0;
+            _hqSummaryAllocated = 0;
+            _hqSummaryRemaining = 0;
+            _hqSummaryStatus = "Draft";
+            return;
+        }
+
+        try
+        {
+            var dto = await Http.GetFromJsonAsync<HeadquarterBudgetSummaryDto>(
+                $"api/Budget/hq-budget-summary?regionId={_hqSelectedRegionId}&fy={Uri.EscapeDataString(_selectedFY)}");
+            _hqSummaryTotalBudget = dto?.TotalBudget ?? 0;
+            _hqSummaryAllocated = dto?.AllocatedAmount ?? 0;
+            _hqSummaryRemaining = dto?.RemainingAmount ?? 0;
+            _hqSummaryStatus = dto?.Status ?? "Draft";
+        }
+        catch
+        {
+            _hqSummaryStatus = "Draft";
+        }
+    }
+
+    private async Task SaveHeadquarterBudgetSummaryAsync()
+    {
+        if (_isSavingHqSummary || _hqSelectedRegionId <= 0 || _selectedFY.Length == 0)
+            return;
+
+        _isSavingHqSummary = true;
+        try
+        {
+            await TrySaveHeadquarterBudgetSummaryAsync();
+        }
+        finally
+        {
+            _isSavingHqSummary = false;
+        }
+    }
+
+    private async Task<bool> TrySaveHeadquarterBudgetSummaryAsync()
+    {
+        try
+        {
+            var request = new SaveHeadquarterBudgetSummaryRequest
+            {
+                RegionId = _hqSelectedRegionId,
+                FY = _selectedFY,
+                TotalBudget = _hqSummaryTotalBudget,
+                AllocatedAmount = _hqSummaryAllocated,
+                RemainingAmount = _hqSummaryRemaining
+            };
+
+            var response = await Http.PutAsJsonAsync("api/Budget/hq-budget-summary", request);
+            if (response.IsSuccessStatusCode)
+            {
+                _hqSummaryValidationMessage = null;
+                await LoadHeadquarterBudgetSummaryAsync();
+                return true;
+            }
+
+            var raw = await response.Content.ReadAsStringAsync();
+            _hqSummaryValidationMessage = ExtractMessage(raw);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _hqSummaryValidationMessage = $"Failed to save: {ex.Message}";
+            return false;
+        }
+    }
+
+    // On Submit, Total Budget must equal Allocated to Headquarters + Remaining Amount. This
+    // client-side check is for immediate UX feedback only - the server independently
+    // re-validates the same rule, plus that Total Budget doesn't exceed the applicable
+    // Region's own allocated amount (see BudgetController.SubmitHeadquarterBudgetSummary).
+    private async Task SubmitHeadquarterBudgetSummaryAsync()
+    {
+        if (_isSavingHqSummary || _isSubmittingHqSummary || _hqSelectedRegionId <= 0 || _selectedFY.Length == 0 || _hqSummaryStatus == "Submitted")
+            return;
+
+        if (_hqSummaryTotalBudget != _hqSummaryAllocated + _hqSummaryRemaining)
+        {
+            _hqSummaryValidationMessage =
+                $"Total Budget (₹{_hqSummaryTotalBudget:N0}) must equal Allocated to Headquarters (₹{_hqSummaryAllocated:N0}) + Remaining Amount (₹{_hqSummaryRemaining:N0}).";
+            return;
+        }
+
+        _isSubmittingHqSummary = true;
+        _hqSummarySuccessMessage = null;
+        try
+        {
+            var saved = await TrySaveHeadquarterBudgetSummaryAsync();
+            if (!saved)
+                return;
+
+            var request = new SubmitHeadquarterBudgetSummaryRequest { RegionId = _hqSelectedRegionId, FY = _selectedFY };
+            var response = await Http.PutAsJsonAsync("api/Budget/hq-budget-summary/submit", request);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadHeadquarterBudgetSummaryAsync();
+                _hqSummaryValidationMessage = null;
+                _hqSummarySuccessMessage = $"Headquarters budget summary for FY {_selectedFY} submitted successfully.";
+            }
+            else
+            {
+                var raw = await response.Content.ReadAsStringAsync();
+                _hqSummaryValidationMessage = ExtractMessage(raw);
+            }
+        }
+        catch (Exception ex)
+        {
+            _hqSummaryValidationMessage = $"Failed to submit: {ex.Message}";
+        }
+        finally
+        {
+            _isSubmittingHqSummary = false;
+        }
+    }
+
 
     protected override async Task OnInitializedAsync()
     {
+        // Land each role on the one level it's responsible for (Admin still defaults to State,
+        // matching the page's original default), rather than on a tab it can't see.
+        _activeSection = CanSeeStateTab ? "State"
+            : CanSeeRegionTab ? "Region"
+            : CanSeeHeadquartersTab ? "Headquarters"
+            : "State";
+
         await LoadAnnualBudgetsAsync();
         if (_selectedFY.Length > 0)
         {
             await LoadStatesAsync();
             await LoadStatusAsync();
+            await LoadStateBudgetSummaryAsync();
         }
     }
 
@@ -910,10 +1514,18 @@
         await LoadStatesAsync();
         await LoadStatusAsync();
 
+        _stateSummaryValidationMessage = null;
+        _stateSummarySuccessMessage = null;
+        await LoadStateBudgetSummaryAsync();
+
         // Region allocations are FY-scoped too - never mix one FY's regions with another's.
         _regionValidationMessage = null;
         _regionSuccessMessage = null;
         await LoadRegionsAsync();
+
+        _regionSummaryValidationMessage = null;
+        _regionSummarySuccessMessage = null;
+        await LoadRegionBudgetSummaryAsync();
 
         // Headquarters allocations are FY-scoped too - reload whatever state/region is
         // already selected in the Headquarters Allocation section for the new FY.
@@ -921,6 +1533,10 @@
         _hqSuccessMessage = null;
         await LoadHqRegionsAsync();
         await LoadHeadquartersAsync();
+
+        _hqSummaryValidationMessage = null;
+        _hqSummarySuccessMessage = null;
+        await LoadHeadquarterBudgetSummaryAsync();
     }
 
 
@@ -1083,6 +1699,10 @@
         _regionValidationMessage = null;
         _regionSuccessMessage = null;
         await LoadRegionsAsync();
+
+        _regionSummaryValidationMessage = null;
+        _regionSummarySuccessMessage = null;
+        await LoadRegionBudgetSummaryAsync();
     }
 
     // Loads only the regions belonging to the selected State (existing Region/byState
@@ -1180,6 +1800,10 @@
         _hqValidationMessage = null;
         _hqSuccessMessage = null;
         await LoadHqRegionsAsync();
+
+        _hqSummaryValidationMessage = null;
+        _hqSummarySuccessMessage = null;
+        await LoadHeadquarterBudgetSummaryAsync();
     }
 
     // Reuses the existing regions-budget endpoint (Region + its already-saved allocation
@@ -1204,6 +1828,10 @@
         _hqValidationMessage = null;
         _hqSuccessMessage = null;
         await LoadHeadquartersAsync();
+
+        _hqSummaryValidationMessage = null;
+        _hqSummarySuccessMessage = null;
+        await LoadHeadquarterBudgetSummaryAsync();
     }
 
     // Loads only the headquarters belonging to the selected Region (existing
