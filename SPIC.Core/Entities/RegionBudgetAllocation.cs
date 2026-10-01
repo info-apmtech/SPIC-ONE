@@ -17,15 +17,55 @@ namespace SPIC.Core.Entities
         public decimal Amount { get; set; }
 
         /// <summary>
-        /// Mirrors StateBudgetAllocation.Status's convention. Cascaded to "Submitted" by
-        /// the same Submit For Validation action that submits the parent State row for
-        /// the same FY - there is no separate Region submission workflow.
+        /// Mirrors StateBudgetAllocation.Status's convention. Cascaded to "Submitted"/
+        /// "Validated"/"Approved" by the same State-level workflow action that moves the
+        /// parent State row for the same FY - there is no separate Region workflow.
         /// </summary>
         public string Status { get; set; } = "Draft";
+
+        /// <summary>Set when a Validator moves this allocation from "Submitted" to "Validated".</summary>
+        public string? ValidatedBy { get; set; }
+        public DateTime? ValidatedDate { get; set; }
+
+        /// <summary>Set when an Approver moves this allocation from "Validated" to "Approved".</summary>
+        public string? ApprovedBy { get; set; }
+        public DateTime? ApprovedDate { get; set; }
 
         public string? CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; }
         public string? UpdatedBy { get; set; }
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
+    }
+
+    /// <summary>
+    /// Append-only audit trail for RegionBudgetAllocation. One row is written per workflow
+    /// transition (Submitted/Validated/Approved) as a snapshot of the main row at that
+    /// moment - the main RegionBudgetAllocation table remains the only source of current/live data.
+    /// </summary>
+    public class RegionBudgetAllocationHistory
+    {
+        public int Id { get; set; }
+
+        public int RegionBudgetAllocationId { get; set; }
+        public RegionBudgetAllocation? RegionBudgetAllocation { get; set; }
+
+        public int StateId { get; set; }
+        public int RegionId { get; set; }
+        public required string FY { get; set; }
+        public decimal Amount { get; set; }
+        public string Status { get; set; } = "Draft";
+
+        public string? CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; }
+
+        public string? ValidatedBy { get; set; }
+        public DateTime? ValidatedDate { get; set; }
+
+        public string? ApprovedBy { get; set; }
+        public DateTime? ApprovedDate { get; set; }
+
+        /// <summary>The workflow transition this snapshot records, e.g. "Submitted"/"Validated"/"Approved".</summary>
+        public required string Action { get; set; }
+        public DateTime ActionDate { get; set; }
     }
 }
