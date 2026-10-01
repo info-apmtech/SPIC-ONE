@@ -110,7 +110,7 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            // Get the logged-in user's state.
+            // Logged-in user's StateId
             var stateClaim = User.FindFirst("spic:state_id")?.Value;
 
             if (!int.TryParse(stateClaim, out int stateId) || stateId <= 0)
@@ -121,7 +121,7 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            // Get the logged-in user's role.
+            // Logged-in user's role
             var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
 
             bool isSMDOUser =
@@ -137,7 +137,6 @@ namespace SpicAPI.Controllers
                 roleClaim == AppRole.MDO.ToString() ||
                 roleClaim == AppRole.JMDO.ToString();
 
-            // Use the same role groups as the program-list endpoint.
             if (!isSMDOUser && !isRMDOUser && !isMOUser)
             {
                 return Forbid();
@@ -145,8 +144,7 @@ namespace SpicAPI.Controllers
 
             try
             {
-                // Confirm that every submitted program is accessible
-                // to this user's state and role.
+                // Validate programs based on State + Role
                 var stateBudgets = _programStateBudgetRepo.GetAll();
 
                 var allowedProgramCount = await _programRepo
@@ -173,16 +171,21 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                // Match the page's existing requirement:
-                // a positive base amount and a positive count for every month.
+                /*
+                 * Monthly counts are NOT mandatory.
+                 *
+                 * 0 = allowed
+                 * Positive value = allowed
+                 * Negative value = not allowed
+                 */
                 foreach (var item in request.Programs)
                 {
-                    if (item.TotalBudget <= 0)
+                    if (item.TotalBudget < 0)
                     {
                         return BadRequest(new
                         {
                             message =
-                                $"Budget amount must be greater than zero " +
+                                $"Budget amount cannot be negative " +
                                 $"for program {item.ProgramId}."
                         });
                     }
@@ -203,12 +206,12 @@ namespace SpicAPI.Controllers
                 item.MarchCount
             };
 
-                    if (monthlyCounts.Any(count => count <= 0))
+                    if (monthlyCounts.Any(count => count < 0))
                     {
                         return BadRequest(new
                         {
                             message =
-                                $"A positive count is required for every month " +
+                                $"Monthly counts cannot be negative " +
                                 $"for program {item.ProgramId}."
                         });
                     }
@@ -240,9 +243,7 @@ namespace SpicAPI.Controllers
                     }
                 }
 
-                // Build fresh detail entities.
-                // Do not trust IDs, parent IDs or navigation objects
-                // supplied by the client.
+                // Build fresh BudgetProgram child records
                 var programDetails = request.Programs
                     .Select(item => new BudgetProgram
                     {
@@ -288,7 +289,7 @@ namespace SpicAPI.Controllers
                     })
                     .ToList();
 
-                // AllocatedAmount = total of all monthly amounts in this batch.
+                // Total allocated amount of all programs / months
                 decimal allocatedAmount = programDetails.Sum(x =>
                     x.April +
                     x.May +
@@ -304,18 +305,38 @@ namespace SpicAPI.Controllers
                     x.March
                 );
 
-                // Create ONE main record.
+                /*
+                 * MAIN VALIDATION
+                 *
+                 * Approved Budget must exactly equal Allocated Budget.
+                 */
+                if (allocatedAmount != request.ApprovedAmount)
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            $"Allocated Budget ₹{allocatedAmount:N0} must be equal to " +
+                            $"Approved Budget ₹{request.ApprovedAmount:N0}."
+                    });
+                }
+
+                // Since allocation equals approved budget,
+                // remaining/SID amount should normally be zero.
+                decimal sidAmount =
+                    request.ApprovedAmount - allocatedAmount;
+
+                // Create one parent record
                 var main = new BudgetProgramMains
                 {
                     Status = "Draft",
+
                     StateId = stateId,
+
                     FinancialYear = financialYear,
 
-                    // Audit information is set by the server.
                     CreatedBy = CurrentUser,
                     CreatedAt = DateTime.Now,
 
-                    // Validation and approval have not happened yet.
                     ValidateBy = "",
                     ValidateAt = null,
 
@@ -323,18 +344,16 @@ namespace SpicAPI.Controllers
                     ApprovedAt = null,
 
                     ApprovedAmount = request.ApprovedAmount,
-                    AllocatedAmount = allocatedAmount,
-                    SIDAmount = request.SIDAmount,
 
-                    // Connect all program details to this main record.
+                    AllocatedAmount = allocatedAmount,
+
+                    SIDAmount = sidAmount,
+
                     Programs = programDetails
                 };
 
-                // Add the main record and its related details.
                 _db.Set<BudgetProgramMains>().Add(main);
 
-                // Save both tables together.
-                // EF assigns main.Id to BudgetProgram.BudgetProgramMains.
                 await _db.SaveChangesAsync();
 
                 return Ok(new
@@ -343,16 +362,18 @@ namespace SpicAPI.Controllers
                     data = new
                     {
                         BudgetProgramMainId = main.Id,
+                        main.StateId,
                         main.Status,
                         main.FinancialYear,
+                        main.ApprovedAmount,
                         main.AllocatedAmount,
+                        main.SIDAmount,
                         ProgramCount = programDetails.Count
                     }
                 });
             }
             catch (Exception ex)
             {
-                // Keep technical exception details in server logs.
                 Console.Error.WriteLine(ex);
 
                 return StatusCode(500, new
@@ -363,7 +384,6 @@ namespace SpicAPI.Controllers
                 });
             }
         }
-
 
         [HttpGet]
         public async Task<IActionResult> GetAll()
