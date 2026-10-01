@@ -20,6 +20,12 @@ namespace SPIC.Core.Entities
         [ForeignKey(nameof(ProgramTypeId))]
         public ProgramType? ProgramType { get; set; }
 
+        public bool IsMO { get; set; } = false;
+
+        public bool IsRMDO { get; set; } = false;
+
+        public bool IsSMDO { get; set; } = false;
+
         public ICollection<ProgramStateBudget> StateBudgets { get; set; }
             = new List<ProgramStateBudget>();
         public string CreatedBy { get; set; } = "";

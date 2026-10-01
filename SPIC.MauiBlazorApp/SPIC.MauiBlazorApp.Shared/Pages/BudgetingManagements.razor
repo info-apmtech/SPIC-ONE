@@ -33,7 +33,7 @@
                 <!-- Approved Budget Card -->
                 <div class="bm-stat-card theme-green">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value">₹ 50,00,000</span>
+                        <span class="bm-stat-value"> ₹ @StateApprovedBudget.ToString("N0")</span>
                         <span class="bm-stat-label">Approved Budget</span>
                     </div>
                     <div class="bm-stat-icon">
@@ -50,7 +50,7 @@
                 <div class="bm-stat-card theme-blue">
                     <div class="bm-stat-content">
                         <span class="bm-stat-value">
-                            ₹ @StateAllocatedBudget.ToString("N0")
+                            ₹ @TotalAllocatedProgramBudget.ToString("N0")
                         </span>
 
                         <span class="bm-stat-label">
@@ -69,7 +69,7 @@
                 <!-- Remaining Budget Card -->
                 <div class="bm-stat-card theme-purple">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value">₹ 49,45,000</span>
+                        <span class="bm-stat-value">  ₹ @RemainingBudget.ToString("N0")</span>
                         <span class="bm-stat-label">Remaining Budget</span>
                     </div>
                     <div class="bm-stat-icon">
@@ -937,6 +937,7 @@
 
     private BudgetDashboardDto dashboard = new();
     private decimal StateAllocatedBudget = 0;
+     private decimal StateApprovedBudget = 0;
     private List<ProgramWiseBudgetDto> programPlans = new();
     private List<ProgramWiseBudgetDto> FilteredProgramPlans = new();
     private bool _isLoading = false;
@@ -966,7 +967,7 @@
                 "api/Budget/dashboard"
             ) ?? new();
 
-            StateAllocatedBudget =
+            StateApprovedBudget =
            await Http.GetFromJsonAsync<decimal>
            (
                $"api/Budget/state-allocated-budget?stateId={LoginState.StateId}"
@@ -1028,6 +1029,38 @@
     {
         try
         {
+            // Total program budget entered by user
+        // decimal totalPlannedBudget = FilteredProgramPlans
+        //     .Sum(x =>
+        //         x.IsChangeAmount
+        //             ? x.TotalBudget
+        //             : x.BudgetAmount
+        //     );
+        decimal totalPlannedBudget = FilteredProgramPlans.Sum(x =>
+            x.AprilBudget +
+            x.MayBudget +
+            x.JuneBudget +
+            x.JulyBudget +
+            x.AugustBudget +
+            x.SeptemberBudget +
+            x.OctoberBudget +
+            x.NovemberBudget +
+            x.DecemberBudget +
+            x.JanuaryBudget +
+            x.FebruaryBudget +
+            x.MarchBudget);
+
+        // Validate against allocated state budget
+        if (totalPlannedBudget > StateApprovedBudget)
+        {
+            Toast.Error(
+                $"Total budget ({totalPlannedBudget:N0}) cannot exceed allocated budget ({StateApprovedBudget:N0})"
+            );
+
+            return;
+        }
+
+
             foreach (var item in FilteredProgramPlans)
             {
 
@@ -1295,6 +1328,8 @@
         item.JanuaryBudget = baseAmount * item.JanuaryCount;
         item.FebruaryBudget = baseAmount * item.FebruaryCount;
         item.MarchBudget = baseAmount * item.MarchCount;
+
+        StateHasChanged();
     }
 
     public class ApiResponse
@@ -1516,4 +1551,24 @@
             );
         }
     }
+
+    private decimal TotalAllocatedProgramBudget =>
+    FilteredProgramPlans.Sum(x =>
+        x.AprilBudget +
+        x.MayBudget +
+        x.JuneBudget +
+        x.JulyBudget +
+        x.AugustBudget +
+        x.SeptemberBudget +
+        x.OctoberBudget +
+        x.NovemberBudget +
+        x.DecemberBudget +
+        x.JanuaryBudget +
+        x.FebruaryBudget +
+        x.MarchBudget
+    );
+
+
+private decimal RemainingBudget =>
+    StateApprovedBudget - TotalAllocatedProgramBudget;
 }

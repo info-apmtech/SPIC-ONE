@@ -210,8 +210,8 @@ namespace SpicAPI.Controllers
             return Ok(items);
         }
 
-        [HttpGet("program-master-list")]
-        public async Task<IActionResult> GetProgramMasterList()
+        [HttpGet("program-master-listold")]
+        public async Task<IActionResult> GetProgramMasterListOLD()
         {
             // Get logged in user StateId
             var stateClaim = User.FindFirst("spic:state_id")?.Value;
@@ -342,6 +342,333 @@ namespace SpicAPI.Controllers
 
                 .ToListAsync();
 
+
+            return Ok(programs);
+        }
+
+        [Authorize]
+        [HttpGet("program-master-list1")]
+        public async Task<IActionResult> GetProgramMasterList1()
+        {
+            // Get the logged-in user's state.
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+
+            if (!int.TryParse(stateClaim, out int stateId))
+            {
+                return Unauthorized("State not assigned for user");
+            }
+
+            // Map logged-in roles to ProgramMasters access flags.
+            bool isSMDOUser =
+                User.IsInRole(AppRole.SMM.ToString()) ||
+                User.IsInRole(AppRole.SMD.ToString());
+
+            bool isRMDOUser =
+                User.IsInRole(AppRole.RM.ToString()) ||
+                User.IsInRole(AppRole.RMD.ToString());
+
+            bool isMOUser =
+                User.IsInRole(AppRole.MO.ToString()) ||
+                User.IsInRole(AppRole.MDO.ToString()) ||
+                User.IsInRole(AppRole.JMDO.ToString());
+
+            // No automatic access for missing or unmapped roles.
+            if (!isSMDOUser && !isRMDOUser && !isMOUser)
+            {
+                return Forbid();
+            }
+
+            var stateBudgets = _programStateBudgetRepo.GetAll();
+            var existingBudgets = _budgetRepo.GetAll();
+
+            var programs = await _programRepo
+                .GetAll()
+                .Include(x => x.ProgramType)
+
+                // 1. Only programs allocated to the logged-in user's state.
+                .Where(x => stateBudgets.Any(psb =>
+                    psb.ProgramId == x.Id &&
+                    psb.StateId == stateId
+                ))
+
+                // 2. Only programs enabled for the logged-in user's role.
+                .Where(x =>
+                    (isMOUser && x.IsMO == true) ||
+                    (isRMDOUser && x.IsRMDO == true) ||
+                    (isSMDOUser && x.IsSMDO == true)
+                )
+
+                .Select(x => new
+                {
+                    Program = x,
+
+                    // State-wise program budget.
+                    StateBudget = stateBudgets
+                        .FirstOrDefault(psb =>
+                            psb.ProgramId == x.Id &&
+                            psb.StateId == stateId
+                        ),
+
+                    // Existing monthly budget selection: unchanged.
+                    Budget = existingBudgets
+                        .Where(b => b.ProgramId == x.Id)
+                        .OrderByDescending(b => b.UpdatedAt)
+                        .FirstOrDefault()
+                })
+
+                .Select(x => new ProgramWiseBudgetDto
+                {
+                    ProgramId = x.Program.Id,
+
+                    ProgramTypeId = x.Program.ProgramTypeId,
+
+                    ProgramType = x.Program.ProgramType != null
+                        ? x.Program.ProgramType.Name
+                        : "",
+
+                    ProgramName = x.Program.Name,
+
+                    // State-wise program budget: unchanged.
+                    BudgetAmount = x.StateBudget != null
+                        ? x.StateBudget.BudgetAmount
+                        : 0,
+
+                    IsChangeAmount =
+                        x.StateBudget != null &&
+                        x.StateBudget.BudgetAmount > 0
+                            ? false
+                            : true,
+
+                    // Existing total budget logic: unchanged.
+                    TotalBudget = x.Budget != null
+                        ? x.Budget.TotalBudget
+                        : (x.StateBudget != null
+                            ? x.StateBudget.BudgetAmount
+                            : 0),
+
+                    // Monthly counts: unchanged.
+                    AprilCount = x.Budget != null
+                        ? x.Budget.AprilCount : 0,
+
+                    MayCount = x.Budget != null
+                        ? x.Budget.MayCount : 0,
+
+                    JuneCount = x.Budget != null
+                        ? x.Budget.JuneCount : 0,
+
+                    JulyCount = x.Budget != null
+                        ? x.Budget.JulyCount : 0,
+
+                    AugustCount = x.Budget != null
+                        ? x.Budget.AugustCount : 0,
+
+                    SeptemberCount = x.Budget != null
+                        ? x.Budget.SeptemberCount : 0,
+
+                    OctoberCount = x.Budget != null
+                        ? x.Budget.OctoberCount : 0,
+
+                    NovemberCount = x.Budget != null
+                        ? x.Budget.NovemberCount : 0,
+
+                    DecemberCount = x.Budget != null
+                        ? x.Budget.DecemberCount : 0,
+
+                    JanuaryCount = x.Budget != null
+                        ? x.Budget.JanuaryCount : 0,
+
+                    FebruaryCount = x.Budget != null
+                        ? x.Budget.FebruaryCount : 0,
+
+                    MarchCount = x.Budget != null
+                        ? x.Budget.MarchCount : 0,
+
+                    // Monthly budget amounts: unchanged.
+                    AprilBudget = x.Budget != null
+                        ? x.Budget.April : 0,
+
+                    MayBudget = x.Budget != null
+                        ? x.Budget.May : 0,
+
+                    JuneBudget = x.Budget != null
+                        ? x.Budget.June : 0,
+
+                    JulyBudget = x.Budget != null
+                        ? x.Budget.July : 0,
+
+                    AugustBudget = x.Budget != null
+                        ? x.Budget.August : 0,
+
+                    SeptemberBudget = x.Budget != null
+                        ? x.Budget.September : 0,
+
+                    OctoberBudget = x.Budget != null
+                        ? x.Budget.October : 0,
+
+                    NovemberBudget = x.Budget != null
+                        ? x.Budget.November : 0,
+
+                    DecemberBudget = x.Budget != null
+                        ? x.Budget.December : 0,
+
+                    JanuaryBudget = x.Budget != null
+                        ? x.Budget.January : 0,
+
+                    FebruaryBudget = x.Budget != null
+                        ? x.Budget.February : 0,
+
+                    MarchBudget = x.Budget != null
+                        ? x.Budget.March : 0
+                })
+
+                .ToListAsync();
+
+            return Ok(programs);
+        }
+
+        [Authorize]
+        [HttpGet("program-master-list")]
+        public async Task<IActionResult> GetProgramMasterList()
+        {
+            // Get the logged-in user's state.
+            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+
+            if (!int.TryParse(stateClaim, out int stateId))
+            {
+                return Unauthorized("State not assigned for user");
+            }
+
+            // Get the logged-in user's role name.
+            var roleClaim = User.FindFirst(
+                System.Security.Claims.ClaimTypes.Role
+            )?.Value;
+
+            // Do not allow access when the role is missing.
+            if (string.IsNullOrWhiteSpace(roleClaim))
+            {
+                return Forbid();
+            }
+
+            // SMM / SMD users: check ProgramMasters.IsSMDO.
+            bool isSMDOUser =
+                roleClaim == AppRole.SMM.ToString() ||
+                roleClaim == AppRole.SMD.ToString();
+
+            // RM / RMD users: check ProgramMasters.IsRMDO.
+            bool isRMDOUser =
+                roleClaim == AppRole.RM.ToString() ||
+                roleClaim == AppRole.RMD.ToString();
+
+            // MO / MDO / JMDO users: check ProgramMasters.IsMO.
+            bool isMOUser =
+                roleClaim == AppRole.MO.ToString() ||
+                roleClaim == AppRole.MDO.ToString() ||
+                roleClaim == AppRole.JMDO.ToString();
+
+            // No automatic access for other roles.
+            if (!isSMDOUser && !isRMDOUser && !isMOUser)
+            {
+                return Forbid();
+            }
+
+            var stateBudgets = _programStateBudgetRepo.GetAll();
+            var existingBudgets = _budgetRepo.GetAll();
+
+            var programs = await _programRepo
+                .GetAll()
+                .Include(x => x.ProgramType)
+
+                // 1. Only programs allocated to the logged-in user's state.
+                .Where(x => stateBudgets.Any(psb =>
+                    psb.ProgramId == x.Id &&
+                    psb.StateId == stateId
+                ))
+
+                // 2. Only programs enabled for the logged-in user's role.
+                .Where(x =>
+                    (isMOUser && x.IsMO == true) ||
+                    (isRMDOUser && x.IsRMDO == true) ||
+                    (isSMDOUser && x.IsSMDO == true)
+                )
+
+                .Select(x => new
+                {
+                    Program = x,
+
+                    // State-wise program budget.
+                    StateBudget = stateBudgets
+                        .FirstOrDefault(psb =>
+                            psb.ProgramId == x.Id &&
+                            psb.StateId == stateId
+                        ),
+
+                    // Existing monthly budget selection: unchanged.
+                    Budget = existingBudgets
+                        .Where(b => b.ProgramId == x.Id)
+                        .OrderByDescending(b => b.UpdatedAt)
+                        .FirstOrDefault()
+                })
+
+                .Select(x => new ProgramWiseBudgetDto
+                {
+                    ProgramId = x.Program.Id,
+
+                    ProgramTypeId = x.Program.ProgramTypeId,
+
+                    ProgramType = x.Program.ProgramType != null
+                        ? x.Program.ProgramType.Name
+                        : "",
+
+                    ProgramName = x.Program.Name,
+
+                    // State-wise program budget.
+                    BudgetAmount = x.StateBudget != null
+                        ? x.StateBudget.BudgetAmount
+                        : 0,
+
+                    IsChangeAmount =
+                        x.StateBudget != null &&
+                        x.StateBudget.BudgetAmount > 0
+                            ? false
+                            : true,
+
+                    // Existing total budget logic.
+                    TotalBudget = x.Budget != null
+                        ? x.Budget.TotalBudget
+                        : (x.StateBudget != null
+                            ? x.StateBudget.BudgetAmount
+                            : 0),
+
+                    // Monthly counts.
+                    AprilCount = x.Budget != null ? x.Budget.AprilCount : 0,
+                    MayCount = x.Budget != null ? x.Budget.MayCount : 0,
+                    JuneCount = x.Budget != null ? x.Budget.JuneCount : 0,
+                    JulyCount = x.Budget != null ? x.Budget.JulyCount : 0,
+                    AugustCount = x.Budget != null ? x.Budget.AugustCount : 0,
+                    SeptemberCount = x.Budget != null ? x.Budget.SeptemberCount : 0,
+                    OctoberCount = x.Budget != null ? x.Budget.OctoberCount : 0,
+                    NovemberCount = x.Budget != null ? x.Budget.NovemberCount : 0,
+                    DecemberCount = x.Budget != null ? x.Budget.DecemberCount : 0,
+                    JanuaryCount = x.Budget != null ? x.Budget.JanuaryCount : 0,
+                    FebruaryCount = x.Budget != null ? x.Budget.FebruaryCount : 0,
+                    MarchCount = x.Budget != null ? x.Budget.MarchCount : 0,
+
+                    // Monthly budget amounts.
+                    AprilBudget = x.Budget != null ? x.Budget.April : 0,
+                    MayBudget = x.Budget != null ? x.Budget.May : 0,
+                    JuneBudget = x.Budget != null ? x.Budget.June : 0,
+                    JulyBudget = x.Budget != null ? x.Budget.July : 0,
+                    AugustBudget = x.Budget != null ? x.Budget.August : 0,
+                    SeptemberBudget = x.Budget != null ? x.Budget.September : 0,
+                    OctoberBudget = x.Budget != null ? x.Budget.October : 0,
+                    NovemberBudget = x.Budget != null ? x.Budget.November : 0,
+                    DecemberBudget = x.Budget != null ? x.Budget.December : 0,
+                    JanuaryBudget = x.Budget != null ? x.Budget.January : 0,
+                    FebruaryBudget = x.Budget != null ? x.Budget.February : 0,
+                    MarchBudget = x.Budget != null ? x.Budget.March : 0
+                })
+                .OrderBy(x => x.ProgramType)
+                .ToListAsync();
 
             return Ok(programs);
         }
