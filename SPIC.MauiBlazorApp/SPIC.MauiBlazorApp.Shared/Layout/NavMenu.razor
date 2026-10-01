@@ -24,11 +24,10 @@
         </NavLink>
     }
 
-    @* Digital Library: gated by the DigitalLibrary page permission (Admin / CorporateAdmin
-       bypass CanAccess, so they keep seeing it without an assignment). *@
-    @* Content is viewable by every signed-in user; adding/editing is gated inside the pages by the
-       DigitalLibrary page permission. *@
-    @if (loginState.IsLoggedIn)
+    @* Digital Library: content is viewable by every signed-in user
+       (PageAuthorization.OpenAccessPages); adding/editing content and the category master need
+       the DigitalLibrary page. Resolved by the SAME CanAccess call the route guard uses. *@
+    @if (loginState.CanAccess(PagePermission.DigitalLibrary))
     {
         <NavLink class="@NavLinkClass("Digital Library")" href="/DigitalLibrary">
             <i class="bi bi-collection-play SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
@@ -44,9 +43,11 @@
         </NavLink>
     }
 
-    @* Knowledge Community: usable by every signed-in user (product decision 2026-09-20). The older
-       entry further down this file sits inside a commented-out farmer-portal block. *@
-    @if (loginState.IsLoggedIn)
+    @* Knowledge Community: open to every signed-in user for the default employee roles
+       (product decision 2026-09-20); a designation-driven role such as CommonRole sees it only
+       through its designation. The older entry further down this file sits inside a
+       commented-out farmer-portal block. *@
+    @if (loginState.CanAccess(PagePermission.Community))
     {
         <NavLink class="@NavLinkClass("Community")" href="/Community">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/Community.svg" class="SideBariconimg" />
@@ -651,6 +652,12 @@
         </div>
     }
 
+    @* Demo documentation subtree: open to every signed-in user for the default employee roles
+       (PageAuthorization.OpenAccessPages). A designation-driven role such as CommonRole sees this
+       block only when its designation grants the keys. Gated through CanAccess so this menu and
+       PageGuard answer identically. *@
+    @if (loginState.CanAccess("DemoDocumentation"))
+    {
     <div class="settings-menu-wrapper">
 
         <a href="javascript:void(0);"
@@ -737,16 +744,23 @@
         }
 
     </div>
+    }
 
-    <NavLink class="@NavLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
-        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
-        Sales Audit
-    </NavLink>
+    @if (loginState.CanAccess("SalesAudit"))
+    {
+        <NavLink class="@NavLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+            Sales Audit
+        </NavLink>
+    }
 
-    <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
-        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
-        Extension Requests
-    </NavLink>
+    @if (loginState.CanAccess("ExtensionRequests"))
+    {
+        <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
+            Extension Requests
+        </NavLink>
+    }
      @if (loginState.CanAccess(PagePermission.ContactUs))
     {
         <NavLink class="@NavLinkClass("ContactUs")" href="/ContactUs">
