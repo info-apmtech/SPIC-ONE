@@ -537,6 +537,23 @@ namespace Spic.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Status).HasDefaultValue("Draft");
         });
+
+        // MD Portal - Headquarters-wise share of a RegionBudgetAllocation. HeadquarterId
+        // alone determines the Region (Headquarter.RegionId), so HeadquarterId+FY is the
+        // unique key - same pattern as RegionBudgetAllocation one level up.
+        builder.Entity<HeadquarterBudgetAllocation>(entity =>
+        {
+            entity.HasIndex(x => new { x.HeadquarterId, x.FY }).IsUnique();
+            entity.HasOne(x => x.Region)
+                .WithMany()
+                .HasForeignKey(x => x.RegionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Headquarter)
+                .WithMany()
+                .HasForeignKey(x => x.HeadquarterId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.Status).HasDefaultValue("Draft");
+        });
         }
 
         // Same prettification the existing Designation UI uses (Designation.razor
@@ -744,5 +761,8 @@ namespace Spic.Infrastructure.Data
 
         // MD Portal - Region Budget Allocation (region-wise share of a StateBudgetAllocation row)
         public DbSet<RegionBudgetAllocation> RegionBudgetAllocations { get; set; }
+
+        // MD Portal - Headquarters Budget Allocation (HQ-wise share of a RegionBudgetAllocation row)
+        public DbSet<HeadquarterBudgetAllocation> HeadquarterBudgetAllocations { get; set; }
     }
 }
