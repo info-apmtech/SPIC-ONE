@@ -35,7 +35,7 @@
                 <div class="bm-stat-card theme-green">
                     <div class="bm-stat-content">
                         <span class="bm-stat-value"> ₹ @SMMAllocatedBudget.ToString("N0") </span>
-                        <span class="bm-stat-label">  SMM Allotted Budget </span>
+                        <span class="bm-stat-label">@RoleBudgetLabel</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -660,8 +660,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                                   watermarks (::before/::after) that leak onto these tiles and sit on top
-                                   of the label text. Neutralise them for this page only. */
+                                       watermarks (::before/::after) that leak onto these tiles and sit on top
+                                       of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -1115,7 +1115,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                                       on screen (it used to sit off the right edge of a 720px table). */
+                                           on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1214,6 +1214,8 @@
     private decimal StateTotalBudget = 0;
     private decimal SMMAllocatedBudget = 0;
     private decimal SMDOAllocatedBudget = 0;
+    private string RoleBudgetLabel = "Available Budget";
+    private string RoleBudgetSource = string.Empty;
     private List<ProgramWiseBudgetDto> programPlans = new();
     private List<ProgramWiseBudgetDto> FilteredProgramPlans = new();
     private bool _isLoading = false;
@@ -1246,147 +1248,173 @@
 
     private async Task LoadBudgetDashboard()
     {
+        SMMAllocatedBudget = 0;
+        SMDOAllocatedBudget = 0;
+        StateTotalBudget = 0;
+        RoleBudgetLabel = "Available Budget";
+        RoleBudgetSource = string.Empty;
+
+        // Load dashboard independently.
+        // IMPORTANT: an empty/204 dashboard response must NOT stop role-budget from loading.
         try
         {
-            SMMAllocatedBudget = 0;
-            SMDOAllocatedBudget = 0;
-            StateTotalBudget = 0;
+            using var dashboardResponse =
+                await Http.GetAsync("api/Budget/dashboard");
 
-            dashboard =
-                await Http.GetFromJsonAsync<BudgetDashboardDto>(
-                    "api/Budget/dashboard"
-                ) ?? new();
-
-            if (string.IsNullOrWhiteSpace(_selectedFY))
+            if (dashboardResponse.IsSuccessStatusCode)
             {
-                Console.WriteLine("Selected FY is empty.");
-                return;
-            }
+                var dashboardJson =
+                    await dashboardResponse.Content.ReadAsStringAsync();
 
-            var role =
-                LoginState.UserRole?.ToString() ?? string.Empty;
-
-            Console.WriteLine(
-                $"Budget Load => Role: {role}, " +
-                $"StateId: {LoginState.StateId}, " +
-                $"RegionId: {LoginState.RegionId}, " +
-                $"FY: {_selectedFY}"
-            );
-
-            // ==================================================
-            // SMM
-            // Reads StateBudgetAllocation.Amount
-            // ==================================================
-            if (role == "SMM")
-            {
-                var result =
-                    await Http.GetFromJsonAsync<RoleBudgetDto>(
-                        $"api/Budget/role-budget" +
-                        $"?fy={Uri.EscapeDataString(_selectedFY)}"
-                    );
-
-                if (result != null)
+                if (!string.IsNullOrWhiteSpace(dashboardJson))
                 {
-                    SMMAllocatedBudget =
-                        result.BudgetAmount;
-
-                    StateTotalBudget =
-                        result.BudgetAmount;
+                    dashboard =
+                        System.Text.Json.JsonSerializer.Deserialize<BudgetDashboardDto>(
+                            dashboardJson,
+                            new System.Text.Json.JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            }) ?? new();
                 }
+                else
+                {
+                    dashboard = new();
+                    Console.WriteLine(
+                        $"Dashboard API returned empty body. Status={(int)dashboardResponse.StatusCode}");
+                }
+            }
+            else
+            {
+                dashboard = new();
+
+                var dashboardError =
+                    await dashboardResponse.Content.ReadAsStringAsync();
 
                 Console.WriteLine(
-                    $"SMM Budget => {SMMAllocatedBudget}"
-                );
-
-                return;
-            }
-
-            // ==================================================
-            // SMD
-            // Reads RegionBudgetSummary.RemainingAmount
-            // ==================================================
-            if (role == "SMD")
-            {
-                var result =
-                    await Http.GetFromJsonAsync<RoleBudgetDto>(
-                        $"api/Budget/role-budget" +
-                        $"?fy={Uri.EscapeDataString(_selectedFY)}"
-                    );
-
-                if (result != null)
-                {
-                    SMDOAllocatedBudget =
-                        result.BudgetAmount;
-
-                    SMMAllocatedBudget =
-                        result.BudgetAmount;
-
-                    StateTotalBudget =
-                        result.BudgetAmount;
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // RM
-            // Reads RegionBudgetAllocation.Amount
-            // ==================================================
-            if (role == "RM")
-            {
-                var result =
-                    await Http.GetFromJsonAsync<RoleBudgetDto>(
-                        $"api/Budget/role-budget" +
-                        $"?fy={Uri.EscapeDataString(_selectedFY)}"
-                    );
-
-                if (result != null)
-                {
-                    SMMAllocatedBudget =
-                        result.BudgetAmount;
-
-                    StateTotalBudget =
-                        result.BudgetAmount;
-                }
-
-                return;
-            }
-
-            // ==================================================
-            // RMD
-            // Reads HeadquarterBudgetSummary.RemainingAmount
-            // ==================================================
-            if (role == "RMD")
-            {
-                var result =
-                    await Http.GetFromJsonAsync<RoleBudgetDto>(
-                        $"api/Budget/role-budget" +
-                        $"?fy={Uri.EscapeDataString(_selectedFY)}"
-                    );
-
-                if (result != null)
-                {
-                    SMMAllocatedBudget =
-                        result.BudgetAmount;
-
-                    StateTotalBudget =
-                        result.BudgetAmount;
-                }
-
-                return;
+                    $"Dashboard API failed. Status={(int)dashboardResponse.StatusCode}, Body={dashboardError}");
             }
         }
         catch (Exception ex)
         {
+            // Do not return here. Role budget must still be loaded.
+            dashboard = new();
+            Console.WriteLine($"Dashboard load error: {ex.Message}");
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedFY))
+        {
+            Console.WriteLine("Selected FY is empty.");
+            return;
+        }
+
+        var role =
+            LoginState.UserRole?.ToString() ?? string.Empty;
+
+        Console.WriteLine(
+            $"Budget Load => Role: {role}, " +
+            $"StateId: {LoginState.StateId}, " +
+            $"RegionId: {LoginState.RegionId}, " +
+            $"FY: {_selectedFY}"
+        );
+
+        try
+        {
+            // Single role-budget API call for SMM / SMD / RM / RMD.
+            using var response =
+                await Http.GetAsync(
+                    $"api/Budget/role-budget?fy={Uri.EscapeDataString(_selectedFY)}"
+                );
+
+            var body =
+                await response.Content.ReadAsStringAsync();
+
             Console.WriteLine(
-                $"LoadBudgetDashboard Error: {ex}"
+                $"Role Budget API => Status={(int)response.StatusCode} {response.StatusCode}, Body={body}"
             );
 
-            dashboard = new();
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine(
+                    $"Role budget API failed for role {role}."
+                );
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                Console.WriteLine(
+                    $"Role budget API returned empty body for role {role}."
+                );
+                return;
+            }
+
+            var result =
+                System.Text.Json.JsonSerializer.Deserialize<RoleBudgetDto>(
+                    body,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }
+                );
+
+            if (result == null)
+            {
+                Console.WriteLine("RoleBudgetDto deserialization returned null.");
+                return;
+            }
+
+            RoleBudgetLabel =
+                string.IsNullOrWhiteSpace(result.BudgetLabel)
+                    ? "Available Budget"
+                    : result.BudgetLabel;
+
+            RoleBudgetSource =
+                result.Source ?? string.Empty;
+
+            switch (role)
+            {
+                case "SMM":
+                    SMMAllocatedBudget = result.BudgetAmount;
+                    StateTotalBudget = result.BudgetAmount;
+                    break;
+
+                case "SMD":
+                    // Existing validation/save logic uses SMMAllocatedBudget as the
+                    // available-budget variable, so mirror the SMD budget into it.
+                    SMDOAllocatedBudget = result.BudgetAmount;
+                    SMMAllocatedBudget = result.BudgetAmount;
+                    StateTotalBudget = result.BudgetAmount;
+                    break;
+
+                case "RM":
+                    SMMAllocatedBudget = result.BudgetAmount;
+                    StateTotalBudget = result.BudgetAmount;
+                    break;
+
+                case "RMD":
+                    SMMAllocatedBudget = result.BudgetAmount;
+                    StateTotalBudget = result.BudgetAmount;
+                    break;
+
+                default:
+                    Console.WriteLine($"Unsupported Budget Role: {role}");
+                    break;
+            }
+
+            Console.WriteLine(
+                $"Budget Loaded => Role={role}, FY={_selectedFY}, " +
+                $"Budget={result.BudgetAmount}, Label={result.BudgetLabel}, Source={result.Source}"
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Role budget load error: {ex}");
 
             StateTotalBudget = 0;
             SMMAllocatedBudget = 0;
             SMDOAllocatedBudget = 0;
+            RoleBudgetLabel = "Available Budget";
+            RoleBudgetSource = string.Empty;
         }
     }
 
