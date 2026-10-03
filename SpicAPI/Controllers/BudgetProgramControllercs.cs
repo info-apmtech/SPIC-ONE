@@ -1571,6 +1571,52 @@ namespace SpicAPI.Controllers
 
             return Ok(amount);
         }
+
+        //[HttpGet("state-budget-summary")]
+        //public async Task<IActionResult> GetStateBudgetSummary(int stateId)
+        //{
+        //    var summary = await _stateBudgetSummaryRepo
+        //        .GetAll()
+        //        .Where(x => x.StateId == stateId && x.IsActive)
+        //        .OrderByDescending(x => x.Id)
+        //        .Select(x => new StateBudgetSummaryDto
+        //        {
+        //            StateId = x.StateId,
+        //            AllottedAmount = x.AllottedAmount,
+        //            RemainingAmount = x.RemainingAmount
+        //        })
+        //        .FirstOrDefaultAsync();
+
+        //    if (summary == null)
+        //    {
+        //        return NotFound("State budget summary not found.");
+        //    }
+
+        //    return Ok(summary);
+        //}
+
+        //[HttpGet("region-budget-summary")]
+        //public async Task<IActionResult> GetRegionBudgetSummary(int regionId)
+        //{
+        //    var summary = await _regionBudgetSummaryRepo
+        //        .GetAll()
+        //        .Where(x => x.RegionId == regionId && x.IsActive)
+        //        .OrderByDescending(x => x.Id)
+        //        .Select(x => new RegionBudgetSummaryDto
+        //        {
+        //            RegionId = x.RegionId,
+        //            AllottedAmount = x.AllottedAmount,
+        //            RemainingAmount = x.RemainingAmount
+        //        })
+        //        .FirstOrDefaultAsync();
+
+        //    if (summary == null)
+        //    {
+        //        return NotFound("Region budget summary not found.");
+        //    }
+
+        //    return Ok(summary);
+        //}
     }
 
 
