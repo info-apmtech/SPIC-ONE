@@ -1,0 +1,133 @@
+@page "/MdoDashboard"
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject NavigationManager Navigation
+
+<div class="container-fluid py-4 px-0 mdo-page">
+
+    <div class="mdo-header-row">
+        <div>
+            <h2 class="mdo-title">Dashboard</h2>
+            <p class="mdo-subtitle">Overview of task creation, assignment and field progress across your JMDOs.</p>
+        </div>
+
+        <div class="mdo-header-actions">
+            <button type="button" class="mdo-btn mdo-btn-outline" @onclick="Refresh">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+            <button type="button" class="mdo-btn mdo-btn-primary" @onclick="OpenAllocationRequests">
+                <i class="bi bi-person-check"></i> Allocation Requests
+            </button>
+        </div>
+    </div>
+
+    <div class="mdo-stats-grid">
+        <div class="mdo-stat-card mdo-stat-total">
+            <div class="mdo-stat-top">
+                <span class="mdo-stat-label">Total Tasks</span>
+                <span class="mdo-stat-icon"><i class="bi bi-clipboard"></i></span>
+            </div>
+            <div class="mdo-stat-number">14</div>
+            <div class="mdo-stat-desc">Across all statuses</div>
+        </div>
+
+        <div class="mdo-stat-card mdo-stat-unassigned">
+            <div class="mdo-stat-top">
+                <span class="mdo-stat-label">Unassigned</span>
+                <span class="mdo-stat-icon"><i class="bi bi-people"></i></span>
+            </div>
+            <div class="mdo-stat-number">2</div>
+            <div class="mdo-stat-desc">Awaiting assignment</div>
+        </div>
+
+        <div class="mdo-stat-card mdo-stat-requested">
+            <div class="mdo-stat-top">
+                <span class="mdo-stat-label">Requested by JMDO</span>
+                <span class="mdo-stat-icon"><i class="bi bi-person-check"></i></span>
+            </div>
+            <div class="mdo-stat-number">1</div>
+            <div class="mdo-stat-desc">Needs your approval</div>
+        </div>
+
+        <div class="mdo-stat-card mdo-stat-approved">
+            <div class="mdo-stat-top">
+                <span class="mdo-stat-label">Approved &middot; Today</span>
+                <span class="mdo-stat-icon"><i class="bi bi-check-circle"></i></span>
+            </div>
+            <div class="mdo-stat-number">4</div>
+            <div class="mdo-stat-desc">In today's work queue</div>
+        </div>
+
+        <div class="mdo-stat-card mdo-stat-progress">
+            <div class="mdo-stat-top">
+                <span class="mdo-stat-label">In Progress</span>
+                <span class="mdo-stat-icon"><i class="bi bi-clock"></i></span>
+            </div>
+            <div class="mdo-stat-number">2</div>
+            <div class="mdo-stat-desc">Being worked right now</div>
+        </div>
+
+        <div class="mdo-stat-card mdo-stat-completed">
+            <div class="mdo-stat-top">
+                <span class="mdo-stat-label">Completed</span>
+                <span class="mdo-stat-icon"><i class="bi bi-bullseye"></i></span>
+            </div>
+            <div class="mdo-stat-number">4</div>
+            <div class="mdo-stat-desc">Closed this week</div>
+        </div>
+    </div>
+
+    <div class="mdo-table-card">
+        <h3 class="mdo-table-title">JMDO-wise summary</h3>
+        <p class="mdo-table-subtitle">Task load and progress per field officer in your region.</p>
+
+        <div class="mdo-table-scroll">
+            <table class="mdo-table">
+                <thead>
+                    <tr>
+                        <th>JMDO</th>
+                        <th>Status</th>
+                        <th>Assigned</th>
+                        <th>In Progress</th>
+                        <th>Completed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var jmdo in Jmdos)
+                    {
+                        <tr>
+                            <td class="mdo-cell-header">
+                                <div class="mdo-jmdo-name">@jmdo.Name</div>
+                                <div class="mdo-jmdo-sub">@jmdo.Code &middot; @jmdo.Location</div>
+                            </td>
+                            <td data-label="Status"><span class="mdo-status-pill @(jmdo.OnLeave ? "mdo-status-leave" : "mdo-status-active")"><span class="mdo-status-dot"></span>@(jmdo.OnLeave ? "On Leave" : "Active")</span></td>
+                            <td data-label="Assigned">@jmdo.Assigned</td>
+                            <td data-label="In Progress">@jmdo.InProgress</td>
+                            <td data-label="Completed">@jmdo.Completed</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    private sealed record JmdoSummary(string Name, string Code, string Location, bool OnLeave, int Assigned, int InProgress, int Completed);
+
+    // Static placeholder: no team/allocation-approval API exists yet - this
+    // mirrors the JMDOs a Coimbatore-region MDO would oversee (Karthik Raja
+    // is the same JMDO used as the signed-in field exec elsewhere).
+    private static readonly List<JmdoSummary> Jmdos = new()
+    {
+        new("Karthik Raja", "JMDO-104", "Coimbatore", false, 4, 2, 0),
+        new("Selvam M", "JMDO-108", "Pollachi", false, 3, 0, 1),
+        new("Priya Dharshini", "JMDO-112", "Udumalpet", false, 3, 0, 1),
+        new("Ganesh Kumar", "JMDO-119", "Mettupalayam", true, 2, 0, 2),
+        new("Lakshmi Narayanan", "JMDO-121", "Annur", false, 0, 0, 0)
+    };
+
+    private void Refresh() => Toast.Info("Dashboard refreshed.");
+
+    private void OpenAllocationRequests() => Navigation.NavigateTo("/AllocationRequests");
+}

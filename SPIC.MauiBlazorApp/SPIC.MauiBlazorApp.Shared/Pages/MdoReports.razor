@@ -1,0 +1,186 @@
+@page "/MdoReports"
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<div class="container-fluid py-4 px-0 mdr-page">
+
+    <div class="mdr-header-row">
+        <div>
+            <h2 class="mdr-title">Reports</h2>
+            <p class="mdr-subtitle">Region performance across tasks, soil samples, farmer coverage and sales.</p>
+        </div>
+
+        <div class="mdr-header-actions">
+            <button type="button" class="mdr-btn mdr-btn-outline" @onclick='() => ExportAs("Excel")'>
+                <i class="bi bi-download"></i> Excel
+            </button>
+            <button type="button" class="mdr-btn mdr-btn-outline" @onclick='() => ExportAs("PDF")'>
+                <i class="bi bi-download"></i> PDF
+            </button>
+        </div>
+    </div>
+
+    <div class="mdr-filter-card">
+        <div class="mdr-filter-title"><i class="bi bi-funnel"></i> Report Filters</div>
+
+        <div class="mdr-filter-grid">
+            <div class="mdr-filter-field">
+                <label class="mdr-field-label" for="mdr-report-type">Report Type</label>
+                <select id="mdr-report-type" class="mdr-select" @bind="reportType">
+                    <option>Task Summary</option>
+                    <option>Soil Sample Report</option>
+                    <option>Farmer Coverage</option>
+                    <option>Sales Report</option>
+                </select>
+            </div>
+            <div class="mdr-filter-field">
+                <label class="mdr-field-label" for="mdr-jmdo">JMDO</label>
+                <select id="mdr-jmdo" class="mdr-select" @bind="jmdoFilter">
+                    <option>All JMDOs</option>
+                    @foreach (var jmdo in JmdoNames)
+                    {
+                        <option>@jmdo</option>
+                    }
+                </select>
+            </div>
+            <div class="mdr-filter-field">
+                <label class="mdr-field-label" for="mdr-date-range">Date Range</label>
+                <input id="mdr-date-range" type="date" class="mdr-select" @bind="dateRange" />
+            </div>
+        </div>
+
+        <div class="mdr-filter-footer">
+            <button type="button" class="mdr-btn mdr-btn-primary" @onclick="GenerateReport">
+                Generate Report
+            </button>
+        </div>
+    </div>
+
+    <div class="mdr-stats-grid">
+        <div class="mdr-stat-card mdr-stat-tasks">
+            <div class="mdr-stat-top">
+                <span class="mdr-stat-label">Tasks Closed</span>
+                <span class="mdr-stat-icon"><i class="bi bi-clipboard"></i></span>
+            </div>
+            <div class="mdr-stat-number">96</div>
+            <div class="mdr-stat-desc">This month</div>
+        </div>
+
+        <div class="mdr-stat-card mdr-stat-turnaround">
+            <div class="mdr-stat-top">
+                <span class="mdr-stat-label">Avg. Turnaround</span>
+                <span class="mdr-stat-icon"><i class="bi bi-clock"></i></span>
+            </div>
+            <div class="mdr-stat-number">1.8 days</div>
+            <div class="mdr-stat-desc">Assign to close</div>
+        </div>
+
+        <div class="mdr-stat-card mdr-stat-soil">
+            <div class="mdr-stat-top">
+                <span class="mdr-stat-label">Soil Samples</span>
+                <span class="mdr-stat-icon"><i class="bi bi-eyedropper"></i></span>
+            </div>
+            <div class="mdr-stat-number">200</div>
+            <div class="mdr-stat-desc">Free + paid</div>
+        </div>
+
+        <div class="mdr-stat-card mdr-stat-farmers">
+            <div class="mdr-stat-top">
+                <span class="mdr-stat-label">Farmers Covered</span>
+                <span class="mdr-stat-icon"><i class="bi bi-leaf"></i></span>
+            </div>
+            <div class="mdr-stat-number">412</div>
+            <div class="mdr-stat-desc">Region-wide</div>
+        </div>
+    </div>
+
+    <div class="mdr-table-card">
+        <div class="mdr-table-scroll">
+            <table class="mdr-table">
+                <thead>
+                    <tr>
+                        <th>JMDO</th>
+                        <th>Tasks Closed</th>
+                        <th>On-time %</th>
+                        <th>Soil Samples</th>
+                        <th>Farmers Added</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var jmdo in JmdoNames)
+                    {
+                        <tr>
+                            <td class="mdr-jmdo-name mdr-cell-header">@jmdo</td>
+                            <td data-label="Tasks Closed">8</td>
+                            <td data-label="On-time %">82%</td>
+                            <td data-label="Soil Samples">23</td>
+                            <td data-label="Farmers Added">38</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mdr-table-card">
+        <h3 class="mdr-table-title">Detailed Task Report</h3>
+        <p class="mdr-table-subtitle">Every task worked on this period, broken down by JMDO &mdash; what it was about, the resolution, and hours taken.</p>
+
+        <div class="mdr-table-scroll">
+            <table class="mdr-table">
+                <thead>
+                    <tr>
+                        <th>JMDO</th>
+                        <th>Type</th>
+                        <th>Task Summary</th>
+                        <th>Resolution</th>
+                        <th>Status</th>
+                        <th>Hours Taken</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in DetailedTasks)
+                    {
+                        <tr>
+                            <td class="mdr-jmdo-name mdr-cell-header">@row.Jmdo</td>
+                            <td data-label="Type"><span class="mdr-type-pill @row.TypeClass">@row.Type</span></td>
+                            <td data-label="Task Summary">@row.Summary</td>
+                            <td class="mdr-resolution" data-label="Resolution">@row.Resolution</td>
+                            <td data-label="Status"><span class="mdr-status @row.StatusClass"><span class="mdr-status-dot"></span>@row.Status</span></td>
+                            <td data-label="Hours Taken">@row.HoursTaken</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    // Static placeholder: no Reports API exists yet. JMDO names reuse the
+    // same 5 field officers from MdoDashboard's JMDO-wise summary table.
+    private static readonly string[] JmdoNames =
+    {
+        "Karthik Raja", "Selvam M", "Priya Dharshini", "Ganesh Kumar", "Lakshmi Narayanan"
+    };
+
+    private string reportType = "Task Summary";
+    private string jmdoFilter = "All JMDOs";
+    private DateTime? dateRange;
+
+    private void ExportAs(string format) => Toast.Info($"{format} export isn't built yet.");
+
+    private void GenerateReport() => Toast.Success("Report generated.");
+
+    private sealed record DetailedTaskRow(string Jmdo, string Type, string TypeClass, string Summary, string Resolution, string Status, string StatusClass, string HoursTaken);
+
+    private static readonly List<DetailedTaskRow> DetailedTasks = new()
+    {
+        new("Ganesh Kumar", "SPCM", "mdr-type-blue", "Target - 100", "Discrepancy found and escalated before closing task.", "Completed", "mdr-status-completed", "5.0"),
+        new("Ganesh Kumar", "Dealer", "mdr-type-green", "Hanumesh Trading Co", "Collection completed in full; receipt shared with dealer.", "Partially Completed", "mdr-status-partial", "5.0"),
+        new("Karthik Raja", "MD Program", "mdr-type-blue", "Crop Protection Workshop", "Work started — remarks and closure pending.", "In Progress", "mdr-status-progress", "1.5"),
+        new("Karthik Raja", "Soil Sample", "mdr-type-orange", "Today's target - 100", "Not yet taken up.", "Not Started", "mdr-status-notstarted", "—"),
+        new("Karthik Raja", "SPCM", "mdr-type-blue", "Target - 120", "Work started — remarks and closure pending.", "In Progress", "mdr-status-progress", "1.0"),
+        new("Selvam M", "MD Program", "mdr-type-blue", "Farmer Awareness Training", "Partial payment collected — balance follow-up scheduled next visit.", "Completed", "mdr-status-completed", "5.5")
+    };
+}

@@ -9,6 +9,51 @@
 
 <nav class="nav nav-pills flex-column nav-section">
 
+    @if (loginState.UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO)
+    {
+        <NavLink class="@NavLinkClass("My Dashboard")" href="/FieldDashboard" Match="NavLinkMatch.All">
+            <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            My Dashboard
+        </NavLink>
+        <NavLink class="@NavLinkClass("My Reports")" href="/FieldReports" Match="NavLinkMatch.All">
+            <i class="bi bi-file-earmark-bar-graph SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            My Reports
+        </NavLink>
+    }
+    @* Team Dashboard / Allocation Requests / Reports: the MDO/MO-level rollup of their
+       JMDOs' task load, approval queue and region reporting - distinct from "My
+       Dashboard"/"My Reports" above, which are each field officer's own personal view. *@
+    @if (loginState.UserRole is AppRole.MO or AppRole.MDO)
+    {
+        <NavLink class="@NavLinkClass("Team Dashboard")" href="/MdoDashboard" Match="NavLinkMatch.All">
+            <i class="bi bi-diagram-3 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Team Dashboard
+        </NavLink>
+        <NavLink class="@NavLinkClass("Allocation Requests")" href="/AllocationRequests" Match="NavLinkMatch.All">
+            <i class="bi bi-person-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Allocation Requests
+        </NavLink>
+        <NavLink class="@NavLinkClass("Task Monitoring")" href="/TaskMonitoring" Match="NavLinkMatch.All">
+            <i class="bi bi-list-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Task Monitoring
+        </NavLink>
+        <NavLink class="@NavLinkClass("Performance Tracker")" href="/PerformanceTracker" Match="NavLinkMatch.All">
+            <i class="bi bi-trophy SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Performance Tracker
+        </NavLink>
+        <NavLink class="@NavLinkClass("Target / Achievement")" href="/TargetAchievement" Match="NavLinkMatch.All">
+            <i class="bi bi-bullseye SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Target / Achievement
+        </NavLink>
+        <NavLink class="@NavLinkClass("Farmer Data")" href="/FarmerData" Match="NavLinkMatch.All">
+            <i class="bi bi-people SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Farmer Data
+        </NavLink>
+        <NavLink class="@NavLinkClass("Reports")" href="/MdoReports" Match="NavLinkMatch.All">
+            <i class="bi bi-bar-chart SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Reports
+        </NavLink>
+    }
     @if (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.Dashboard))
     {
         <NavLink class="@NavLinkClass("Dashboard")" href="/Dashboard" Match="NavLinkMatch.All">
@@ -24,11 +69,10 @@
         </NavLink>
     }
 
-    @* Digital Library: gated by the DigitalLibrary page permission (Admin / CorporateAdmin
-       bypass CanAccess, so they keep seeing it without an assignment). *@
-    @* Content is viewable by every signed-in user; adding/editing is gated inside the pages by the
-       DigitalLibrary page permission. *@
-    @if (loginState.IsLoggedIn)
+    @* Digital Library: content is viewable by every signed-in user
+       (PageAuthorization.OpenAccessPages); adding/editing content and the category master need
+       the DigitalLibrary page. Resolved by the SAME CanAccess call the route guard uses. *@
+    @if (loginState.CanAccess(PagePermission.DigitalLibrary))
     {
         <NavLink class="@NavLinkClass("Digital Library")" href="/DigitalLibrary">
             <i class="bi bi-collection-play SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
@@ -44,9 +88,11 @@
         </NavLink>
     }
 
-    @* Knowledge Community: usable by every signed-in user (product decision 2026-09-20). The older
-       entry further down this file sits inside a commented-out farmer-portal block. *@
-    @if (loginState.IsLoggedIn)
+    @* Knowledge Community: open to every signed-in user for the default employee roles
+       (product decision 2026-09-20); a designation-driven role such as CommonRole sees it only
+       through its designation. The older entry further down this file sits inside a
+       commented-out farmer-portal block. *@
+    @if (loginState.CanAccess(PagePermission.Community))
     {
         <NavLink class="@NavLinkClass("Community")" href="/Community">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/Community.svg" class="SideBariconimg" />
@@ -657,6 +703,12 @@
         </div>
     }
 
+    @* Demo documentation subtree: open to every signed-in user for the default employee roles
+       (PageAuthorization.OpenAccessPages). A designation-driven role such as CommonRole sees this
+       block only when its designation grants the keys. Gated through CanAccess so this menu and
+       PageGuard answer identically. *@
+    @if (loginState.CanAccess("DemoDocumentation"))
+    {
     <div class="settings-menu-wrapper">
 
         <a href="javascript:void(0);"
@@ -743,16 +795,23 @@
         }
 
     </div>
+    }
 
-    <NavLink class="@NavLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
-        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
-        Sales Audit
-    </NavLink>
+    @if (loginState.CanAccess("SalesAudit"))
+    {
+        <NavLink class="@NavLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+            Sales Audit
+        </NavLink>
+    }
 
-    <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
-        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
-        Extension Requests
-    </NavLink>
+    @if (loginState.CanAccess("ExtensionRequests"))
+    {
+        <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
+            Extension Requests
+        </NavLink>
+    }
      @if (loginState.CanAccess(PagePermission.ContactUs))
     {
         <NavLink class="@NavLinkClass("ContactUs")" href="/ContactUs">

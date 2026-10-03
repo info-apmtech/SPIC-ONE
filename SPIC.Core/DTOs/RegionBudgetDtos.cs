@@ -26,4 +26,43 @@ namespace SPIC.Core.DTOs
         public string FY { get; set; } = string.Empty;
         public List<RegionBudgetAllocationRequest> Allocations { get; set; } = new();
     }
+
+    /// <summary>
+    /// Level 2 (SM) summary for one State+FY: the Total Budget / Allocated to Region /
+    /// Remaining Amount triple from RegionBudgetSummary. All three are plain persisted values -
+    /// never recomputed from each other - returned as 0/"Draft" when nothing has been saved yet.
+    /// </summary>
+    public class RegionBudgetSummaryDto
+    {
+        public int StateId { get; set; }
+        public string FY { get; set; } = string.Empty;
+        public decimal TotalBudget { get; set; }
+        public decimal AllocatedAmount { get; set; }
+        public decimal RemainingAmount { get; set; }
+        public string Status { get; set; } = "Draft";
+    }
+
+    /// <summary>
+    /// Save (Draft) request for the Level 2 summary. All three values are whatever the SM
+    /// typed - no server-side recomputation of RemainingAmount from TotalBudget - AllocatedAmount.
+    /// </summary>
+    public class SaveRegionBudgetSummaryRequest
+    {
+        public int StateId { get; set; }
+        public string FY { get; set; } = string.Empty;
+        public decimal TotalBudget { get; set; }
+        public decimal AllocatedAmount { get; set; }
+        public decimal RemainingAmount { get; set; }
+    }
+
+    /// <summary>
+    /// Submit request for the Level 2 summary: re-validates TotalBudget = AllocatedAmount +
+    /// RemainingAmount, and that TotalBudget does not exceed the applicable State's own
+    /// allocated amount (StateBudgetAllocation.Amount for the same State+FY).
+    /// </summary>
+    public class SubmitRegionBudgetSummaryRequest
+    {
+        public int StateId { get; set; }
+        public string FY { get; set; } = string.Empty;
+    }
 }

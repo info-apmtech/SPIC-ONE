@@ -34,7 +34,7 @@ namespace SPIC.Core.Entities
     }
     public enum AppRole
     {
-        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin, SuperAdmin
+        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin, SuperAdmin, CommonRole
     }
     public enum PagePermission
     {
@@ -59,10 +59,14 @@ namespace SPIC.Core.Entities
         [PageModule("Employee Management")] EmployeeRegistration, 
         dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, SDWADashboard, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
-        Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration, SubDealerList , SchemeApproval,
+        [OpenToAll] Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration, SubDealerList , SchemeApproval,
         SubDealerEmployeeMaster,SDWA,SDWAAdmin,GuestHouse,GuestHouseBooking,Rooms,RoomDetails,GuestDetails,Payment, MyBookings,BookingPreview,BookingDetails,FrontOffice,GenerateBill,BillList,LogisticsReport, DealerStateSummary,
         // Appended at the END on purpose: ApplicationPage seed ids are enum-index based (see AppDbContext).
-        [PageModule("Digital Library")] DigitalLibrary,
+        // OpenToAll: the product opens the read-only Digital Library to every signed-in user.
+        // Adding/editing CONTENT still needs the DigitalLibrary page permission (checked inside
+        // the pages), which is why it is still configurable on a designation. Flagged rather than
+        // special-cased so PageAuthorization can treat it as data - see OpenToAllAttribute.
+        [PageModule("Digital Library")] [OpenToAll] DigitalLibrary,
         [PageModule("SAS")] SampleCollection,
         [PageModule("SAS")] ConsignmentHistory,
         IfmsRelaySetup,
@@ -101,6 +105,7 @@ namespace SPIC.Core.Entities
         // Usage / error metrics page (2026-09-28, docs/metrics-telemetry-plan.md). Normal CanAccess rule.
         [PageModule("Administration")] Metrics,
         // MD Portal - Annual Budgeting master. Appended at the END on purpose.
+        AnnualBudgeting, StateBudgetManagement
         AnnualBudgeting, MDODashboard
 
     }

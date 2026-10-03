@@ -520,6 +520,13 @@ namespace Spic.Infrastructure.Data
             // A DB-level default so adding this column never fails against rows
             // already saved via Save Draft before Submit For Validation existed.
             entity.Property(x => x.Status).HasDefaultValue("Draft");
+            // Summary-to-Detail relationship key (replaces FY-only matching) - nullable
+            // since pre-existing rows are backfilled, not recreated; see v16AddBudgetSummaryIdForeignKey.
+            entity.HasIndex(x => x.StateBudgetSummaryId);
+            entity.HasOne(x => x.StateBudgetSummary)
+                .WithMany(s => s.StateBudgetAllocations)
+                .HasForeignKey(x => x.StateBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // MD Portal - Region-wise share of a StateBudgetAllocation. RegionId alone
@@ -536,6 +543,130 @@ namespace Spic.Infrastructure.Data
                 .HasForeignKey(x => x.RegionId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Status).HasDefaultValue("Draft");
+            // Summary-to-Detail relationship key (replaces FY-only matching) - nullable
+            // since pre-existing rows are backfilled, not recreated; see v16AddBudgetSummaryIdForeignKey.
+            entity.HasIndex(x => x.RegionBudgetSummaryId);
+            entity.HasOne(x => x.RegionBudgetSummary)
+                .WithMany(s => s.RegionBudgetAllocations)
+                .HasForeignKey(x => x.RegionBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // MD Portal - Headquarters-wise share of a RegionBudgetAllocation. HeadquarterId
+        // alone determines the Region (Headquarter.RegionId), so HeadquarterId+FY is the
+        // unique key - same pattern as RegionBudgetAllocation one level up.
+        builder.Entity<HeadquarterBudgetAllocation>(entity =>
+        {
+            entity.HasIndex(x => new { x.HeadquarterId, x.FY }).IsUnique();
+            entity.HasOne(x => x.Region)
+                .WithMany()
+                .HasForeignKey(x => x.RegionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Headquarter)
+                .WithMany()
+                .HasForeignKey(x => x.HeadquarterId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.Status).HasDefaultValue("Draft");
+            // Summary-to-Detail relationship key (replaces FY-only matching) - nullable
+            // since pre-existing rows are backfilled, not recreated; see v16AddBudgetSummaryIdForeignKey.
+            entity.HasIndex(x => x.HeadquarterBudgetSummaryId);
+            entity.HasOne(x => x.HeadquarterBudgetSummary)
+                .WithMany(s => s.HeadquarterBudgetAllocations)
+                .HasForeignKey(x => x.HeadquarterBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // MD Portal - approval/history audit trail for the three allocation levels above.
+        // Each history row is an immutable snapshot written by the Submit/Validate/Approve
+        // workflow actions; the allocation tables themselves remain the only current/live data.
+        builder.Entity<StateBudgetAllocationHistory>(entity =>
+        {
+            entity.HasOne(x => x.StateBudgetAllocation)
+                .WithMany()
+                .HasForeignKey(x => x.StateBudgetAllocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.StateBudgetAllocationId);
+            entity.HasIndex(x => new { x.StateId, x.FY });
+        });
+
+        builder.Entity<RegionBudgetAllocationHistory>(entity =>
+        {
+            entity.HasOne(x => x.RegionBudgetAllocation)
+                .WithMany()
+                .HasForeignKey(x => x.RegionBudgetAllocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.RegionBudgetAllocationId);
+            entity.HasIndex(x => new { x.RegionId, x.FY });
+        });
+
+        builder.Entity<HeadquarterBudgetAllocationHistory>(entity =>
+        {
+            entity.HasOne(x => x.HeadquarterBudgetAllocation)
+                .WithMany()
+                .HasForeignKey(x => x.HeadquarterBudgetAllocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.HeadquarterBudgetAllocationId);
+            entity.HasIndex(x => new { x.HeadquarterId, x.FY });
+        });
+
+        // MD Portal - 3-level budget allocation SUMMARY (Total Budget / Allocated / Remaining,
+        // all three manually entered - see StateBudgetSummary/RegionBudgetSummary/
+        // HeadquarterBudgetSummary doc comments). Separate from the *BudgetAllocation detail
+        // tables above, which keep working unchanged for the individual State/Region/HQ rows.
+        builder.Entity<StateBudgetSummary>(entity =>
+        {
+            entity.HasIndex(x => x.FY).IsUnique();
+            entity.Property(x => x.Status).HasDefaultValue("Draft");
+        });
+
+        builder.Entity<RegionBudgetSummary>(entity =>
+        {
+            entity.HasIndex(x => new { x.StateId, x.FY }).IsUnique();
+            entity.HasOne(x => x.State)
+                .WithMany()
+                .HasForeignKey(x => x.StateId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.Status).HasDefaultValue("Draft");
+        });
+
+        builder.Entity<HeadquarterBudgetSummary>(entity =>
+        {
+            entity.HasIndex(x => new { x.RegionId, x.FY }).IsUnique();
+            entity.HasOne(x => x.Region)
+                .WithMany()
+                .HasForeignKey(x => x.RegionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.Status).HasDefaultValue("Draft");
+        });
+
+        builder.Entity<StateBudgetSummaryHistory>(entity =>
+        {
+            entity.HasOne(x => x.StateBudgetSummary)
+                .WithMany()
+                .HasForeignKey(x => x.StateBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.StateBudgetSummaryId);
+            entity.HasIndex(x => x.FY);
+        });
+
+        builder.Entity<RegionBudgetSummaryHistory>(entity =>
+        {
+            entity.HasOne(x => x.RegionBudgetSummary)
+                .WithMany()
+                .HasForeignKey(x => x.RegionBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.RegionBudgetSummaryId);
+            entity.HasIndex(x => new { x.StateId, x.FY });
+        });
+
+        builder.Entity<HeadquarterBudgetSummaryHistory>(entity =>
+        {
+            entity.HasOne(x => x.HeadquarterBudgetSummary)
+                .WithMany()
+                .HasForeignKey(x => x.HeadquarterBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.HeadquarterBudgetSummaryId);
+            entity.HasIndex(x => new { x.RegionId, x.FY });
         });
         }
 
@@ -728,6 +859,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<ProgramMaster> ProgramMasters { get; set; }
         public DbSet<BudgetProgram> BudgetPrograms { get; set; }
 
+        public DbSet<BudgetProgramMains> BudgetProgramMains { get; set; }
+
         public DbSet<CSR1> CSR1 { get; set; }
         public DbSet<CSR1Products1> CSR1Products1 { get; set; }
         public DbSet<CSR1Products2> CSR1Products2 { get; set; }
@@ -744,5 +877,22 @@ namespace Spic.Infrastructure.Data
 
         // MD Portal - Region Budget Allocation (region-wise share of a StateBudgetAllocation row)
         public DbSet<RegionBudgetAllocation> RegionBudgetAllocations { get; set; }
+
+        // MD Portal - Headquarters Budget Allocation (HQ-wise share of a RegionBudgetAllocation row)
+        public DbSet<HeadquarterBudgetAllocation> HeadquarterBudgetAllocations { get; set; }
+
+        // MD Portal - approval/history audit trail (one per allocation level; see OnModelCreating)
+        public DbSet<StateBudgetAllocationHistory> StateBudgetAllocationHistories { get; set; }
+        public DbSet<RegionBudgetAllocationHistory> RegionBudgetAllocationHistories { get; set; }
+        public DbSet<HeadquarterBudgetAllocationHistory> HeadquarterBudgetAllocationHistories { get; set; }
+
+        // MD Portal - 3-level budget allocation summary (Total Budget / Allocated / Remaining
+        // triple per level; see OnModelCreating) and its approval/history audit trail
+        public DbSet<StateBudgetSummary> StateBudgetSummaries { get; set; }
+        public DbSet<RegionBudgetSummary> RegionBudgetSummaries { get; set; }
+        public DbSet<HeadquarterBudgetSummary> HeadquarterBudgetSummaries { get; set; }
+        public DbSet<StateBudgetSummaryHistory> StateBudgetSummaryHistories { get; set; }
+        public DbSet<RegionBudgetSummaryHistory> RegionBudgetSummaryHistories { get; set; }
+        public DbSet<HeadquarterBudgetSummaryHistory> HeadquarterBudgetSummaryHistories { get; set; }
     }
 }

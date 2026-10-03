@@ -1,0 +1,199 @@
+@page "/FarmerData"
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<div class="container-fluid py-4 px-0 fmd-page">
+
+    <h2 class="fmd-title">Farmer Data</h2>
+    <p class="fmd-subtitle">Region-wise farmer master maintained by your JMDOs.</p>
+
+    <div class="fmd-grid">
+        <div class="fmd-card">
+            <div class="fmd-table-scroll">
+                <table class="fmd-table">
+                    <thead>
+                        <tr>
+                            <th>Farmer</th>
+                            <th>Contact</th>
+                            <th>Location</th>
+                            <th>Crop(s)</th>
+                            <th>Acres</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var farmer in Farmers)
+                        {
+                            <tr>
+                                <td class="fmd-farmer-name fmd-cell-header">@farmer.Name</td>
+                                <td data-label="Contact">@farmer.Contact</td>
+                                <td data-label="Location">@farmer.Location</td>
+                                <td data-label="Crop(s)">@farmer.Crops</td>
+                                <td data-label="Acres">@farmer.Acres</td>
+                                <td class="fmd-row-actions fmd-cell-actions">
+                                    <button type="button" class="fmd-icon-btn" title="View farmer" @onclick="() => ViewFarmer(farmer)">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button type="button" class="fmd-icon-btn" title="Edit farmer" @onclick="() => EditFarmer(farmer)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="fmd-card fmd-form-card">
+            <h3 class="fmd-card-title">Add Farmer Entry</h3>
+            <p class="fmd-meta">@ViewerRegion / @ViewerHq</p>
+
+            <div class="fmd-field-row">
+                <div class="fmd-field">
+                    <label class="fmd-field-label" for="fmd-mohq">MO H.Q.</label>
+                    <select id="fmd-mohq" class="fmd-select" @bind="MoHq">
+                        <option>Coimbatore</option>
+                        <option>Pollachi</option>
+                        <option>Udumalpet</option>
+                        <option>Mettupalayam</option>
+                        <option>Annur</option>
+                    </select>
+                </div>
+                <div class="fmd-field">
+                    <label class="fmd-field-label" for="fmd-month">Month</label>
+                    <select id="fmd-month" class="fmd-select" @bind="month">
+                        @foreach (var m in Months)
+                        {
+                            <option>@m</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <label class="fmd-field-label" for="fmd-programme">Programme</label>
+            <select id="fmd-programme" class="fmd-select fmd-mb">
+                <option>Soil Health</option>
+                <option>Crop Protection</option>
+                <option>Farmer Awareness</option>
+            </select>
+
+            <label class="fmd-field-label" for="fmd-name">Farmer Name<span class="fmd-required">*</span></label>
+            <input id="fmd-name" type="text" class="fmd-select fmd-mb" placeholder="Full name" @bind="farmerName" @bind:event="oninput" />
+
+            <div class="fmd-field-row">
+                <div class="fmd-field">
+                    <label class="fmd-field-label" for="fmd-contact">Contact Number</label>
+                    <input id="fmd-contact" type="text" class="fmd-select" placeholder="10-digit mobile" @bind="contactNumber" @bind:event="oninput" />
+                </div>
+                <div class="fmd-field">
+                    <label class="fmd-field-label" for="fmd-location">Location</label>
+                    <input id="fmd-location" type="text" class="fmd-select" placeholder="Village / town" @bind="location" @bind:event="oninput" />
+                </div>
+            </div>
+
+            <label class="fmd-field-label" for="fmd-address">Contact Address</label>
+            <input id="fmd-address" type="text" class="fmd-select fmd-mb" placeholder="Village / street" @bind="contactAddress" @bind:event="oninput" />
+
+            <div class="fmd-field-row fmd-field-row-three">
+                <div class="fmd-field">
+                    <label class="fmd-field-label" for="fmd-acres">Acres</label>
+                    <input id="fmd-acres" type="number" min="0" step="0.1" class="fmd-select" @bind="acres" @bind:event="oninput" />
+                </div>
+                <div class="fmd-field">
+                    <label class="fmd-field-label" for="fmd-crop1">Crop 1</label>
+                    <input id="fmd-crop1" type="text" class="fmd-select" placeholder="e.g. Banana" @bind="crop1" @bind:event="oninput" />
+                </div>
+                <div class="fmd-field">
+                    <label class="fmd-field-label" for="fmd-crop2">Crop 2</label>
+                    <input id="fmd-crop2" type="text" class="fmd-select" placeholder="Optional" @bind="crop2" @bind:event="oninput" />
+                </div>
+            </div>
+
+            <button type="button" class="fmd-btn-save" disabled="@string.IsNullOrWhiteSpace(farmerName)" @onclick="SaveFarmerEntry">
+                Save farmer entry
+            </button>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    // Static placeholder: no Farmer Data API exists yet.
+    private sealed class FarmerRow
+    {
+        public string Name { get; init; } = "";
+        public string Contact { get; init; } = "";
+        public string Location { get; init; } = "";
+        public string Crops { get; init; } = "";
+        public string Acres { get; init; } = "";
+    }
+
+    private readonly List<FarmerRow> Farmers = new()
+    {
+        new() { Name = "Muthu Kuman", Contact = "98421 55210", Location = "Anaimalai", Crops = "Banana", Acres = "3.5" },
+        new() { Name = "Selvi R", Contact = "97891 34210", Location = "Sirumugai", Crops = "Turmeric", Acres = "2.0" },
+        new() { Name = "Rajendran K", Contact = "99440 11298", Location = "Karamadai", Crops = "Coconut", Acres = "5.0" },
+        new() { Name = "Vasanthi M", Contact = "96001 78654", Location = "Anaimalai", Crops = "Maize, Banana", Acres = "4.2" }
+    };
+
+    private static readonly string[] Months =
+    {
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    };
+
+    // Static placeholder for the signed-in MDO's own Region/HQ (matches
+    // Karthik Raja's Region/JMDO H.Q. used elsewhere, e.g. TasksAllocation) -
+    // independent of the "MO H.Q." field below, which picks the HQ for the
+    // new farmer entry rather than describing the viewer.
+    private const string ViewerRegion = "Coimbatore";
+    private const string ViewerHq = "Coimbatore";
+
+    private string MoHq = "Coimbatore";
+    private string month = "September";
+    private string farmerName = "";
+    private string contactNumber = "";
+    private string location = "";
+    private string contactAddress = "";
+    private string acres = "0";
+    private string crop1 = "";
+    private string crop2 = "";
+
+    private void ViewFarmer(FarmerRow farmer) => Toast.Info($"Detailed view for {farmer.Name} isn't built yet.");
+
+    private void EditFarmer(FarmerRow farmer)
+    {
+        farmerName = farmer.Name;
+        contactNumber = farmer.Contact;
+        location = farmer.Location;
+        acres = farmer.Acres;
+        var crops = farmer.Crops.Split(',', StringSplitOptions.TrimEntries);
+        crop1 = crops.ElementAtOrDefault(0) ?? "";
+        crop2 = crops.ElementAtOrDefault(1) ?? "";
+    }
+
+    private void SaveFarmerEntry()
+    {
+        if (string.IsNullOrWhiteSpace(farmerName)) return;
+
+        var crops = string.Join(", ", new[] { crop1, crop2 }.Where(c => !string.IsNullOrWhiteSpace(c)));
+        Farmers.Add(new FarmerRow
+        {
+            Name = farmerName,
+            Contact = string.IsNullOrWhiteSpace(contactNumber) ? "-" : contactNumber,
+            Location = string.IsNullOrWhiteSpace(location) ? "-" : location,
+            Crops = string.IsNullOrWhiteSpace(crops) ? "-" : crops,
+            Acres = string.IsNullOrWhiteSpace(acres) ? "0" : acres
+        });
+
+        Toast.Success($"{farmerName} added to the farmer master.");
+
+        farmerName = "";
+        contactNumber = "";
+        location = "";
+        contactAddress = "";
+        acres = "0";
+        crop1 = "";
+        crop2 = "";
+    }
+}

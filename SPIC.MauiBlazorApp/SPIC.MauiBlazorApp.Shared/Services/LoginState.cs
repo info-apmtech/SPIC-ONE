@@ -19,10 +19,31 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         /// <summary>Where a signed-in user lands: used after login and when a stored session is restored.</summary>
         public string LandingPage => UserRole switch
         {
+            // Admin bypasses page permissions entirely (PageAuthorization.RoleModels), so it needs no
+            // designation and lands on its own default screen. Listed first so the no-designation arm
+            // below can never claim it: Admin has full access with an empty RoleAccess.
+            AppRole.Admin => AdminLandingPath,
             AppRole.Dealer => "/SDWADashboard",
             AppRole.SpecialAdmin => CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome",
-            _ => "/Dashboard"
+            // No designation assigned at all => /Welcome, the existing screen that tells the user to
+            // contact an administrator. Same signal PageGuard uses for its own no-designation branch,
+            // and keyed off the designation data rather than a role name.
+            _ when AllowedPages.Count == 0 => "/Welcome",
+            // Has a designation => the default landing page. It is NOT a PagePermission and is not in
+            // anyone's RoleAccess: it is a common landing screen, so it must not depend on which pages
+            // the designation happens to grant. A designation that omits Dashboard still lands here.
+            _ => DefaultLandingPath
         };
+
+        // Default landing page for every non-Admin role that has a designation: a plain
+        // "Welcome to SPIC ONE" screen with no dashboard content. Shared with PageGuard's always-open
+        // set so the route and the route that is permitted cannot drift apart.
+        public const string DefaultLandingPath = "/DefaultWelcome";
+
+        // Default landing page for AppRole.Admin. Admin bypasses page permissions, so it never
+        // depends on a designation.
+        public const string AdminLandingPath = "/DefaultAdmin";
+
         public event Action? OnChange;
 
         public string? Token
@@ -70,6 +91,32 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         }
 
         public bool IsAdmin => UserRole is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
+
+        // Single source of truth for the whole application: SPIC.Core's PageAuthorization.
+        // NavMenu, MobileSidebar, PageGuard and ShellNavigation all funnel through CanAccess /
+        // Can below, so they cannot drift apart. Re-resolving per call is cheap and correct even
+        // though AllowedPages and UserRole both change over the session.
+        private EffectivePagePermissions EffectivePermissions =>
+            PageAuthorization.GetEffectivePagePermissions(UserRole, AllowedPages);
+
+        // True when this user's role uses PageAccessModel.DesignationOnly - i.e. its effective page
+        // permissions are EXACTLY the pages configured on its Designation.RoleAccess, with no
+        // union with any default, role-wide or open-to-all page. Today that is AppRole.CommonRole.
+        // Derived from the MODEL rather than hardcoding a role name, so a role added to
+        // PageAuthorization.RoleModels as DesignationOnly is picked up here automatically, and
+        // used wherever a designation-driven role needs different handling (LandingPage, and the
+        // shell-hub / read-only-library short-circuits in PageGuard).
+        public bool IsDesignationDrivenRole =>
+            PageAuthorization.ModelFor(UserRole) == PageAccessModel.DesignationOnly;
+
+        // Convenience alias for the one role that currently uses the designation-driven model.
+        public bool IsCommonRole => IsDesignationDrivenRole;
+
+        // SAS Lab / payment pages resolved through the DESIGNATION only (product decision 2026-09-27):
+        // the Admin / CorporateAdmin roles do NOT bypass these. Owned by PageAuthorization now;
+        // exposed here for the existing callers (PageGuard, and any page).
+        public static IReadOnlySet<string> DesignationOnlyPages => PageAuthorization.DesignationOnlyPages;
+
         public bool IsStateRole => UserRole is AppRole.SMD or AppRole.SMM;
         public bool IsRegionRole => UserRole is AppRole.RM or AppRole.RMD;
         public bool IsHQRole => UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
@@ -128,70 +175,31 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             return result;
         }
 
-        // SAS Lab / payment pages reached through the DESIGNATION only (product decision 2026-09-27):
-        // the Admin / CorporateAdmin roles do NOT bypass these; an admin needs a designation that
-        // grants the key like every other user. Everything else keeps the admin bypass below.
-        public static readonly IReadOnlySet<string> DesignationOnlyPages = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            nameof(PagePermission.LabDashboard),
-            nameof(PagePermission.LabConsignments),
-            nameof(PagePermission.LabAnalysis),
-            nameof(PagePermission.LabReports),
-            nameof(PagePermission.LabTestEntry),
-            nameof(PagePermission.LabTracking),
-            nameof(PagePermission.SasPaymentApproval),
-            nameof(PagePermission.SasPaymentVerification)
-        };
+        // ---- Single permission decision (SPIC.Core.Entities.PageAuthorization) -------------
+        // These four members are the ONLY entry points used by NavMenu, MobileSidebar, PageGuard,
+        // ShellNavigation and individual pages. All policy lives in PageAuthorization, so adding a
+        // designation or assigning pages to one needs no change in any of those components.
 
+        // Raw designation matching: any token for the page, no role bypass, no open-to-all grant,
+        // no key normalization. Drives the SAS Lab / payment pages today; semantics unchanged
+        // from the pre-existing implementation.
         public bool HasPageStrict(PagePermission page) => HasPageStrict(page.ToString());
 
-        // Page-level, designation only: true when the designation holds any token for the page
-        // (same PagePart matching as CanAccess) - NO Admin / CorporateAdmin bypass.
         public bool HasPageStrict(string pageKey) =>
-            AllowedPages.Any(t => string.Equals(PagePart(t), pageKey, StringComparison.OrdinalIgnoreCase));
+            PageAuthorization.HasPageStrict(EffectivePermissions, pageKey);
 
+        // Page-level: can the user REACH this page at all? Used by the route guard, menu
+        // visibility and tab visibility.
         public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
 
-        // Page-level: can the user REACH this page at all?
-        // True if they hold any permission token for that page (any action, or a
-        // legacy bare page token). Used by the route guard and menu visibility.
-        public bool CanAccess(string pageKey)
-        {
-            // Designation-only pages (SAS Lab / payments): no role bypass
-            if (DesignationOnlyPages.Contains(pageKey)) return HasPageStrict(pageKey);
-            // Admin and CorporateAdmin bypass everything else
-            if (UserRole is AppRole.Admin or AppRole.CorporateAdmin or AppRole.SuperAdmin) return true;
-            // No designation assigned => access ONLY the Welcome page (nothing else)
-            if (AllowedPages.Count == 0)
-                return string.Equals(pageKey, "Welcome", StringComparison.OrdinalIgnoreCase);
-
-            return AllowedPages.Any(t =>
-                string.Equals(RoleAccessPermissions.NormalizePageKey(PagePart(t)), pageKey, StringComparison.OrdinalIgnoreCase));
-        }
+        public bool CanAccess(string pageKey) => EffectivePermissions.CanReach(pageKey);
 
         // Action-level: can the user perform a specific action on a page?
         // Use inside pages to show/hide Add / Edit / Delete buttons.
         // e.g. LoginState.Can("Register", "Update")
         public bool Can(PagePermission page, string action) => Can(RoleAccessPermissions.KeyFor(page), action);
 
-        public bool Can(string pageKey, string action)
-        {
-            // Admin and CorporateAdmin bypass everything except the designation-only pages
-            if ((UserRole is AppRole.Admin or AppRole.CorporateAdmin) && !DesignationOnlyPages.Contains(pageKey)) return true;
-            if (AllowedPages.Count == 0) return false;
-            return AllowedPages.Any(t =>
-            {
-                var dot = t.IndexOf('.');
-                var tokenPage = dot < 0 ? t : t.Substring(0, dot);
-                if (!string.Equals(
-                        RoleAccessPermissions.NormalizePageKey(tokenPage),
-                        pageKey,
-                        StringComparison.OrdinalIgnoreCase))
-                    return false;
-
-                return dot < 0 || string.Equals(t.Substring(dot + 1), action, StringComparison.OrdinalIgnoreCase);
-            });
-        }
+        public bool Can(string pageKey, string action) => EffectivePermissions.CanPerformAction(UserRole, pageKey, action);
 
         // -------------------------------------------------------------------------------------
 
