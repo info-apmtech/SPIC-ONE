@@ -33,8 +33,8 @@
                 <!-- Approved Budget Card -->
                 <div class="bm-stat-card theme-green">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value"> ₹ @StateApprovedBudget.ToString("N0")</span>
-                        <span class="bm-stat-label">Approved Budget</span>
+                        <span class="bm-stat-value"> ₹ @SMMAllocatedBudget.ToString("N0") </span>
+                        <span class="bm-stat-label">  SMM Allotted Budget </span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -70,7 +70,7 @@
                 <div class="bm-stat-card theme-purple">
                     <div class="bm-stat-content">
                         <span class="bm-stat-value">  ₹ @RemainingBudget.ToString("N0")</span>
-                        <span class="bm-stat-label">Remaining Budget</span>
+                        <span class="bm-stat-label">SMM Balance</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -80,11 +80,11 @@
                     </div>
                 </div>
 
-                <!-- Planning Deadline Card -->
+                <!-- SMDO Budget Card -->
                 <div class="bm-stat-card theme-orange">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value">May 20,2026</span>
-                        <span class="bm-stat-label">Planning Deadline</span>
+                        <span class="bm-stat-value">₹ @SMDOAllocatedBudget.ToString("N0")</span>
+                        <span class="bm-stat-label">SMDO Budget</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -639,8 +639,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                           watermarks (::before/::after) that leak onto these tiles and sit on top
-                           of the label text. Neutralise them for this page only. */
+                               watermarks (::before/::after) that leak onto these tiles and sit on top
+                               of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -1076,7 +1076,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                               on screen (it used to sit off the right edge of a 720px table). */
+                                   on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1141,6 +1141,7 @@
             gap: 10px;
         }
     }
+
     .budget-column-hidden {
         display: none !important;
     }
@@ -1168,8 +1169,9 @@
 
 
     private BudgetDashboardDto dashboard = new();
-    private decimal StateAllocatedBudget = 0;
-     private decimal StateApprovedBudget = 0;
+    private decimal StateTotalBudget = 0;
+    private decimal SMMAllocatedBudget = 0;
+    private decimal SMDOAllocatedBudget = 0;
     private List<ProgramWiseBudgetDto> programPlans = new();
     private List<ProgramWiseBudgetDto> FilteredProgramPlans = new();
     private bool _isLoading = false;
@@ -1194,22 +1196,36 @@
     {
         try
         {
-            dashboard = await Http.GetFromJsonAsync<BudgetDashboardDto>
-            (
-                "api/Budget/dashboard"
-            ) ?? new();
+            dashboard =
+                await Http.GetFromJsonAsync<BudgetDashboardDto>(
+                    "api/Budget/dashboard"
+                ) ?? new();
 
-            StateApprovedBudget =
-           await Http.GetFromJsonAsync<decimal>
-           (
-               $"api/Budget/state-allocated-budget?stateId={LoginState.StateId}"
-           );
+            var stateBudget =
+                await Http.GetFromJsonAsync<StateBudgetSummaryDto>(
+                    $"api/Budget/state-budget-summary?stateId={LoginState.StateId}"
+                );
 
+            if (stateBudget != null)
+            {
+                SMMAllocatedBudget = stateBudget.AllocatedAmount;
+
+                SMDOAllocatedBudget = stateBudget.RemainingAmount;
+
+                StateTotalBudget =
+                    stateBudget.AllocatedAmount +
+                    stateBudget.RemainingAmount;
+            }
         }
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
+
             dashboard = new();
+
+            StateTotalBudget = 0;
+            SMMAllocatedBudget = 0;
+            SMDOAllocatedBudget = 0;
         }
     }
 
@@ -1242,7 +1258,7 @@
     }
 
     private decimal TotalAllocated =>
-        dashboard.AllocatedBudget;
+        TotalAllocatedProgramBudget;
 
 
     private string TotalAllocatedFormatted =>
@@ -1262,35 +1278,36 @@
         try
         {
             // Total program budget entered by user
-        // decimal totalPlannedBudget = FilteredProgramPlans
-        //     .Sum(x =>
-        //         x.IsChangeAmount
-        //             ? x.TotalBudget
-        //             : x.BudgetAmount
-        //     );
-        decimal totalPlannedBudget = FilteredProgramPlans.Sum(x =>
-            x.AprilBudget +
-            x.MayBudget +
-            x.JuneBudget +
-            x.JulyBudget +
-            x.AugustBudget +
-            x.SeptemberBudget +
-            x.OctoberBudget +
-            x.NovemberBudget +
-            x.DecemberBudget +
-            x.JanuaryBudget +
-            x.FebruaryBudget +
-            x.MarchBudget);
+            // decimal totalPlannedBudget = FilteredProgramPlans
+            //     .Sum(x =>
+            //         x.IsChangeAmount
+            //             ? x.TotalBudget
+            //             : x.BudgetAmount
+            //     );
+            decimal totalPlannedBudget = FilteredProgramPlans.Sum(x =>
+                x.AprilBudget +
+                x.MayBudget +
+                x.JuneBudget +
+                x.JulyBudget +
+                x.AugustBudget +
+                x.SeptemberBudget +
+                x.OctoberBudget +
+                x.NovemberBudget +
+                x.DecemberBudget +
+                x.JanuaryBudget +
+                x.FebruaryBudget +
+                x.MarchBudget);
 
-        // Validate against allocated state budget
-        if (totalPlannedBudget > StateApprovedBudget)
-        {
-            Toast.Error(
-                $"Total budget ({totalPlannedBudget:N0}) cannot exceed allocated budget ({StateApprovedBudget:N0})"
-            );
+            // Validate against SMM allotted budget from StateBudgetSummaries
+            if (totalPlannedBudget > SMMAllocatedBudget)
+            {
+                Toast.Error(
+                    $"Total planned budget ₹{totalPlannedBudget:N0} " +
+                    $"cannot exceed SMM allotted budget ₹{SMMAllocatedBudget:N0}."
+                );
 
-            return;
-        }
+                return;
+            }
 
 
             foreach (var item in FilteredProgramPlans)
@@ -1423,62 +1440,59 @@
             var request = new SaveBudgetBatchRequest
             {
                 FinancialYear = GetCurrentFinancialYear(),
-                ApprovedAmount = StateApprovedBudget,
-                SIDAmount = RemainingBudget,
+
+                ApprovedAmount = SMMAllocatedBudget,
+
+                RemainingAmount =
+          SMMAllocatedBudget -
+          TotalAllocatedProgramBudget,
 
                 Programs = selectedPrograms
-                    .Select(item => new BudgetProgram
-                    {
-                        ProgramId = item.ProgramId,
+          .Select(item => new BudgetProgram
+          {
+              ProgramId = item.ProgramId,
 
-                        // Preserve editable amounts.
-                        TotalBudget = item.IsChangeAmount
-                            ? item.TotalBudget
-                            : item.BudgetAmount,
+              TotalBudget = item.IsChangeAmount
+                  ? item.TotalBudget
+                  : item.BudgetAmount,
 
-                        AprilCount = item.AprilCount,
-                        April = item.AprilBudget,
+              AprilCount = item.AprilCount,
+              April = item.AprilBudget,
 
-                        MayCount = item.MayCount,
-                        May = item.MayBudget,
+              MayCount = item.MayCount,
+              May = item.MayBudget,
 
-                        JuneCount = item.JuneCount,
-                        June = item.JuneBudget,
+              JuneCount = item.JuneCount,
+              June = item.JuneBudget,
 
-                        JulyCount = item.JulyCount,
-                        July = item.JulyBudget,
+              JulyCount = item.JulyCount,
+              July = item.JulyBudget,
 
-                        AugustCount = item.AugustCount,
-                        August = item.AugustBudget,
+              AugustCount = item.AugustCount,
+              August = item.AugustBudget,
 
-                        SeptemberCount = item.SeptemberCount,
-                        September = item.SeptemberBudget,
+              SeptemberCount = item.SeptemberCount,
+              September = item.SeptemberBudget,
 
-                        OctoberCount = item.OctoberCount,
-                        October = item.OctoberBudget,
+              OctoberCount = item.OctoberCount,
+              October = item.OctoberBudget,
 
-                        NovemberCount = item.NovemberCount,
-                        November = item.NovemberBudget,
+              NovemberCount = item.NovemberCount,
+              November = item.NovemberBudget,
 
-                        DecemberCount = item.DecemberCount,
-                        December = item.DecemberBudget,
+              DecemberCount = item.DecemberCount,
+              December = item.DecemberBudget,
 
-                        JanuaryCount = item.JanuaryCount,
-                        January = item.JanuaryBudget,
+              JanuaryCount = item.JanuaryCount,
+              January = item.JanuaryBudget,
 
-                        FebruaryCount = item.FebruaryCount,
-                        February = item.FebruaryBudget,
+              FebruaryCount = item.FebruaryCount,
+              February = item.FebruaryBudget,
 
-                        MarchCount = item.MarchCount,
-                        March = item.MarchBudget
-
-                        // No FinancialYear, Status or audit fields here.
-                        // Those belong to BudgetProgramMains.
-                        //
-                        // Do not assign BudgetProgramMains here.
-                        // The API creates and links the main record.
-                    })
-                    .ToList()
+              MarchCount = item.MarchCount,
+              March = item.MarchBudget
+          })
+          .ToList()
             };
 
             // IMPORTANT: only ONE API call, outside any foreach loop.
@@ -1632,28 +1646,38 @@
     }
     private bool ValidateBudgetData()
     {
-        // Recalculate all rows first
         foreach (var item in FilteredProgramPlans)
         {
             CalculateBudget(item);
         }
 
-        decimal approvedBudget = StateApprovedBudget;
+        decimal availableBudget = SMMAllocatedBudget;
 
         decimal allocatedBudget = TotalAllocatedProgramBudget;
 
-        // Approved Budget must exist
-        if (approvedBudget <= 0)
+        if (availableBudget <= 0)
         {
-            Toast.Error("Approved budget is not available.");
+            Toast.Error(
+                "SMM allotted budget is not available."
+            );
+
             return false;
         }
 
-        // Allocation must exactly match Approved Budget
-        if (allocatedBudget != approvedBudget)
+        if (allocatedBudget <= 0)
         {
             Toast.Error(
-                $"Allocated Budget ₹{allocatedBudget:N0} must be equal to Approved Budget ₹{approvedBudget:N0}."
+                "Please allocate budget for at least one program."
+            );
+
+            return false;
+        }
+
+        if (allocatedBudget > availableBudget)
+        {
+            Toast.Error(
+                $"Program allocation ₹{allocatedBudget:N0} " +
+                $"cannot exceed SMM allotted budget ₹{availableBudget:N0}."
             );
 
             return false;
@@ -1822,8 +1846,8 @@
     );
 
 
-private decimal RemainingBudget =>
-    StateApprovedBudget - TotalAllocatedProgramBudget;
+    private decimal RemainingBudget =>
+        SMMAllocatedBudget - TotalAllocatedProgramBudget;
 
     private decimal GetRowTotalBudget(ProgramWiseBudgetDto item)
     {

@@ -135,7 +135,7 @@ namespace SpicAPI.Controllers
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> SaveBudget(
-      [FromBody] SaveBudgetBatchRequest request)
+     [FromBody] SaveBudgetBatchRequest request)
         {
             if (!ModelState.IsValid)
             {
@@ -162,7 +162,9 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            if (request.Programs.Any(x => x == null || x.ProgramId <= 0))
+            if (request.Programs.Any(x =>
+                x == null ||
+                x.ProgramId <= 0))
             {
                 return BadRequest(new
                 {
@@ -182,10 +184,21 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            // Logged-in user's StateId
-            var stateClaim = User.FindFirst("spic:state_id")?.Value;
+            // =====================================================
+            // LOGGED-IN USER LOCATION
+            // =====================================================
 
-            if (!int.TryParse(stateClaim, out int stateId) || stateId <= 0)
+            var stateClaim =
+                User.FindFirst("spic:state_id")?.Value;
+
+            var regionClaim =
+                User.FindFirst("spic:region_id")?.Value;
+
+            if (!int.TryParse(
+                    stateClaim,
+                    out int stateId)
+                ||
+                stateId <= 0)
             {
                 return Unauthorized(new
                 {
@@ -193,15 +206,39 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            // Logged-in user's role
-            var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
+            int? regionId = null;
 
-            bool isSMDOUser =
-                roleClaim == AppRole.SMM.ToString() ||
+            if (int.TryParse(
+                    regionClaim,
+                    out int parsedRegionId)
+                &&
+                parsedRegionId > 0)
+            {
+                regionId = parsedRegionId;
+            }
+
+            // =====================================================
+            // LOGGED-IN USER ROLE
+            // =====================================================
+
+            var roleClaim =
+                User.FindFirst(ClaimTypes.Role)?.Value;
+
+            if (string.IsNullOrWhiteSpace(roleClaim))
+            {
+                return Forbid();
+            }
+
+            bool isSMMUser =
+                roleClaim == AppRole.SMM.ToString();
+
+            bool isSMDUser =
                 roleClaim == AppRole.SMD.ToString();
 
-            bool isRMDOUser =
-                roleClaim == AppRole.RM.ToString() ||
+            bool isRMUser =
+                roleClaim == AppRole.RM.ToString();
+
+            bool isRMDUser =
                 roleClaim == AppRole.RMD.ToString();
 
             bool isMOUser =
@@ -209,29 +246,71 @@ namespace SpicAPI.Controllers
                 roleClaim == AppRole.MDO.ToString() ||
                 roleClaim == AppRole.JMDO.ToString();
 
-            if (!isSMDOUser && !isRMDOUser && !isMOUser)
+            bool isStateRole =
+                isSMMUser ||
+                isSMDUser;
+
+            bool isRegionRole =
+                isRMUser ||
+                isRMDUser;
+
+            if (!isStateRole &&
+                !isRegionRole &&
+                !isMOUser)
             {
                 return Forbid();
             }
 
+            // Region roles must have RegionId.
+            if (isRegionRole &&
+                !regionId.HasValue)
+            {
+                return Unauthorized(new
+                {
+                    message = "Region not assigned for user."
+                });
+            }
+
             try
             {
-                // Validate programs based on State + Role
-                var stateBudgets = _programStateBudgetRepo.GetAll();
+                // =================================================
+                // VALIDATE PROGRAMS AGAINST STATE + ROLE
+                // =================================================
 
-                var allowedProgramCount = await _programRepo
-                    .GetAll()
-                    .Where(x => programIds.Contains(x.Id))
-                    .Where(x => stateBudgets.Any(psb =>
-                        psb.ProgramId == x.Id &&
-                        psb.StateId == stateId
-                    ))
-                    .Where(x =>
-                        (isMOUser && x.IsMO == true) ||
-                        (isRMDOUser && x.IsRMDO == true) ||
-                        (isSMDOUser && x.IsSMDO == true)
-                    )
-                    .CountAsync();
+                var stateBudgets =
+                    _programStateBudgetRepo.GetAll();
+
+                var allowedProgramCount =
+                    await _programRepo
+                        .GetAll()
+
+                        .Where(x =>
+                            programIds.Contains(x.Id))
+
+                        .Where(x =>
+                            stateBudgets.Any(psb =>
+                                psb.ProgramId == x.Id &&
+                                psb.StateId == stateId
+                            ))
+
+                        .Where(x =>
+                            (
+                                isMOUser &&
+                                x.IsMO == true
+                            )
+                            ||
+                            (
+                                isRegionRole &&
+                                x.IsRMDO == true
+                            )
+                            ||
+                            (
+                                isStateRole &&
+                                x.IsSMDO == true
+                            )
+                        )
+
+                        .CountAsync();
 
                 if (allowedProgramCount != programIds.Count)
                 {
@@ -243,13 +322,10 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                /*
-                 * Monthly counts are NOT mandatory.
-                 *
-                 * 0 = allowed
-                 * Positive value = allowed
-                 * Negative value = not allowed
-                 */
+                // =================================================
+                // VALIDATE PROGRAM VALUES
+                // =================================================
+
                 foreach (var item in request.Programs)
                 {
                     if (item.TotalBudget < 0)
@@ -278,7 +354,7 @@ namespace SpicAPI.Controllers
                 item.MarchCount
             };
 
-                    if (monthlyCounts.Any(count => count < 0))
+                    if (monthlyCounts.Any(x => x < 0))
                     {
                         return BadRequest(new
                         {
@@ -304,7 +380,7 @@ namespace SpicAPI.Controllers
                 item.March
             };
 
-                    if (monthlyAmounts.Any(amount => amount < 0))
+                    if (monthlyAmounts.Any(x => x < 0))
                     {
                         return BadRequest(new
                         {
@@ -315,132 +391,265 @@ namespace SpicAPI.Controllers
                     }
                 }
 
-                // Build fresh BudgetProgram child records
-                var programDetails = request.Programs
-                    .Select(item => new BudgetProgram
-                    {
-                        ProgramId = item.ProgramId,
+                // =================================================
+                // BUILD PROGRAM DETAIL RECORDS
+                // =================================================
 
-                        TotalBudget = item.TotalBudget,
+                var programDetails =
+                    request.Programs
+                        .Select(item =>
+                            new BudgetProgram
+                            {
+                                ProgramId =
+                                    item.ProgramId,
 
-                        AprilCount = item.AprilCount,
-                        April = item.April,
+                                TotalBudget =
+                                    item.TotalBudget,
 
-                        MayCount = item.MayCount,
-                        May = item.May,
+                                AprilCount =
+                                    item.AprilCount,
 
-                        JuneCount = item.JuneCount,
-                        June = item.June,
+                                April =
+                                    item.April,
 
-                        JulyCount = item.JulyCount,
-                        July = item.July,
+                                MayCount =
+                                    item.MayCount,
 
-                        AugustCount = item.AugustCount,
-                        August = item.August,
+                                May =
+                                    item.May,
 
-                        SeptemberCount = item.SeptemberCount,
-                        September = item.September,
+                                JuneCount =
+                                    item.JuneCount,
 
-                        OctoberCount = item.OctoberCount,
-                        October = item.October,
+                                June =
+                                    item.June,
 
-                        NovemberCount = item.NovemberCount,
-                        November = item.November,
+                                JulyCount =
+                                    item.JulyCount,
 
-                        DecemberCount = item.DecemberCount,
-                        December = item.December,
+                                July =
+                                    item.July,
 
-                        JanuaryCount = item.JanuaryCount,
-                        January = item.January,
+                                AugustCount =
+                                    item.AugustCount,
 
-                        FebruaryCount = item.FebruaryCount,
-                        February = item.February,
+                                August =
+                                    item.August,
 
-                        MarchCount = item.MarchCount,
-                        March = item.March
-                    })
-                    .ToList();
+                                SeptemberCount =
+                                    item.SeptemberCount,
 
-                // Total allocated amount of all programs / months
-                decimal allocatedAmount = programDetails.Sum(x =>
-                    x.April +
-                    x.May +
-                    x.June +
-                    x.July +
-                    x.August +
-                    x.September +
-                    x.October +
-                    x.November +
-                    x.December +
-                    x.January +
-                    x.February +
-                    x.March
-                );
+                                September =
+                                    item.September,
 
-                /*
-                 * MAIN VALIDATION
-                 *
-                 * Approved Budget must exactly equal Allocated Budget.
-                 */
-                if (allocatedAmount != request.ApprovedAmount)
+                                OctoberCount =
+                                    item.OctoberCount,
+
+                                October =
+                                    item.October,
+
+                                NovemberCount =
+                                    item.NovemberCount,
+
+                                November =
+                                    item.November,
+
+                                DecemberCount =
+                                    item.DecemberCount,
+
+                                December =
+                                    item.December,
+
+                                JanuaryCount =
+                                    item.JanuaryCount,
+
+                                January =
+                                    item.January,
+
+                                FebruaryCount =
+                                    item.FebruaryCount,
+
+                                February =
+                                    item.February,
+
+                                MarchCount =
+                                    item.MarchCount,
+
+                                March =
+                                    item.March
+                            })
+                        .ToList();
+
+                // =================================================
+                // CALCULATE TOTAL PROGRAM ALLOCATION
+                // =================================================
+
+                decimal allocatedAmount =
+                    programDetails.Sum(x =>
+                        x.April +
+                        x.May +
+                        x.June +
+                        x.July +
+                        x.August +
+                        x.September +
+                        x.October +
+                        x.November +
+                        x.December +
+                        x.January +
+                        x.February +
+                        x.March
+                    );
+
+                // =================================================
+                // VALIDATE AVAILABLE ROLE BUDGET
+                // =================================================
+
+                if (request.ApprovedAmount <= 0)
                 {
                     return BadRequest(new
                     {
                         message =
-                            $"Allocated Budget ₹{allocatedAmount:N0} must be equal to " +
-                            $"Approved Budget ₹{request.ApprovedAmount:N0}."
+                            "Available budget must be greater than 0."
                     });
                 }
 
-                // Since allocation equals approved budget,
-                // remaining/SID amount should normally be zero.
-                decimal sidAmount =
-                    request.ApprovedAmount - allocatedAmount;
-
-                // Create one parent record
-                var main = new BudgetProgramMains
+                if (allocatedAmount <= 0)
                 {
-                    Status = "Draft",
+                    return BadRequest(new
+                    {
+                        message =
+                            "Please allocate budget for at least one program."
+                    });
+                }
 
-                    StateId = stateId,
+                /*
+                 * IMPORTANT:
+                 *
+                 * User does NOT have to consume the full budget.
+                 *
+                 * Example:
+                 * Available = 20L
+                 * Allocated = 15L
+                 * Remaining = 5L
+                 *
+                 * This is valid.
+                 */
+                if (allocatedAmount > request.ApprovedAmount)
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            $"Allocated Budget ₹{allocatedAmount:N0} " +
+                            $"cannot exceed Available Budget " +
+                            $"₹{request.ApprovedAmount:N0}."
+                    });
+                }
 
-                    FinancialYear = financialYear,
+                decimal remainingAmount =
+                    request.ApprovedAmount -
+                    allocatedAmount;
 
-                    CreatedBy = CurrentUser,
-                    CreatedAt = DateTime.Now,
+                // =================================================
+                // CREATE PARENT BUDGET RECORD
+                // =================================================
 
-                    ValidateBy = "",
-                    ValidateAt = null,
+                var main =
+                    new BudgetProgramMains
+                    {
+                        Status = "Draft",
 
-                    ApprovedBy = "",
-                    ApprovedAt = null,
+                        StateId =
+                            stateId,
 
-                    ApprovedAmount = request.ApprovedAmount,
+                        /*
+                         * RegionId:
+                         *
+                         * RM / RMD -> actual RegionId
+                         * SMM / SMD / MO -> nullable
+                         *
+                         * If you want MO also tied to Region,
+                         * this can simply remain regionId.
+                         */
+                        RegionId =
+                            regionId,
 
-                    AllocatedAmount = allocatedAmount,
+                        FinancialYear =
+                            financialYear,
 
-                    SIDAmount = sidAmount,
+                        CreatedBy =
+                            CurrentUser,
 
-                    Programs = programDetails
-                };
+                        CreatedAt =
+                            DateTime.Now,
 
-                _db.Set<BudgetProgramMains>().Add(main);
+                        ValidateBy =
+                            "",
+
+                        ValidateAt =
+                            null,
+
+                        ApprovedBy =
+                            "",
+
+                        ApprovedAt =
+                            null,
+
+                        // Role's available budget
+                        ApprovedAmount =
+                            request.ApprovedAmount,
+
+                        // Amount distributed into programs
+                        AllocatedAmount =
+                            allocatedAmount,
+
+                        // Balance after program allocation
+                        SIDAmount =
+                            remainingAmount,
+
+                        Programs =
+                            programDetails
+                    };
+
+                _db.Set<BudgetProgramMains>()
+                    .Add(main);
 
                 await _db.SaveChangesAsync();
 
+                // =================================================
+                // RESPONSE
+                // =================================================
+
                 return Ok(new
                 {
-                    message = "Budget created successfully.",
+                    message =
+                        "Budget created successfully.",
+
                     data = new
                     {
-                        BudgetProgramMainId = main.Id,
+                        BudgetProgramMainId =
+                            main.Id,
+
                         main.StateId,
+
+                        main.RegionId,
+
+                        Role =
+                            roleClaim,
+
                         main.Status,
+
                         main.FinancialYear,
-                        main.ApprovedAmount,
+
+                        AvailableBudget =
+                            main.ApprovedAmount,
+
                         main.AllocatedAmount,
-                        main.SIDAmount,
-                        ProgramCount = programDetails.Count
+
+                        RemainingAmount =
+                            main.SIDAmount,
+
+                        ProgramCount =
+                            programDetails.Count
                     }
                 });
             }
@@ -448,12 +657,15 @@ namespace SpicAPI.Controllers
             {
                 Console.Error.WriteLine(ex);
 
-                return StatusCode(500, new
-                {
-                    message =
-                        "Budget save could not be confirmed. " +
-                        "Check the saved budget list and server logs before retrying."
-                });
+                return StatusCode(
+                    500,
+                    new
+                    {
+                        message =
+                            "Budget save could not be confirmed. " +
+                            "Check the saved budget list and " +
+                            "server logs before retrying."
+                    });
             }
         }
 
@@ -1044,6 +1256,11 @@ namespace SpicAPI.Controllers
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
+            // Link to the Level 1 summary for this FY, if one already exists (Summary-to-Detail
+            // relationship key - see StateBudgetSummaryId doc comment). Saving the summary itself
+            // backfills this the other way round, so it stays correct regardless of save order.
+            var stateSummaryForLink = await _db.Set<StateBudgetSummary>().FirstOrDefaultAsync(s => s.FY == fy);
+
             var existing = await _db.Set<StateBudgetAllocation>()
                 .Where(a => a.FY == fy && stateIds.Contains(a.StateId))
                 .ToListAsync();
@@ -1056,6 +1273,7 @@ namespace SpicAPI.Controllers
                     row.Amount = alloc.Amount;
                     row.UpdatedBy = CurrentUser;
                     row.UpdatedAt = DateTime.Now;
+                    row.StateBudgetSummary = stateSummaryForLink;
                 }
                 else
                 {
@@ -1064,6 +1282,7 @@ namespace SpicAPI.Controllers
                         StateId = alloc.StateId,
                         FY = fy,
                         Amount = alloc.Amount,
+                        StateBudgetSummary = stateSummaryForLink,
                         CreatedBy = CurrentUser,
                         CreatedAt = DateTime.Now,
                         UpdatedBy = CurrentUser,
@@ -1551,6 +1770,12 @@ namespace SpicAPI.Controllers
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
+            // Link to the Level 2 summary for this State+FY, if one already exists (Summary-to-Detail
+            // relationship key - see RegionBudgetSummaryId doc comment). Saving the summary itself
+            // backfills this the other way round, so it stays correct regardless of save order.
+            var regionSummaryForLink = await _db.Set<RegionBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.StateId == request.StateId && s.FY == fy);
+
             var existing = await _db.Set<RegionBudgetAllocation>()
                 .Where(a => a.FY == fy && regionIds.Contains(a.RegionId))
                 .ToListAsync();
@@ -1563,6 +1788,7 @@ namespace SpicAPI.Controllers
                     row.Amount = alloc.Amount;
                     row.UpdatedBy = CurrentUser;
                     row.UpdatedAt = DateTime.Now;
+                    row.RegionBudgetSummary = regionSummaryForLink;
                 }
                 else
                 {
@@ -1572,6 +1798,7 @@ namespace SpicAPI.Controllers
                         RegionId = alloc.RegionId,
                         FY = fy,
                         Amount = alloc.Amount,
+                        RegionBudgetSummary = regionSummaryForLink,
                         CreatedBy = CurrentUser,
                         CreatedAt = DateTime.Now,
                         UpdatedBy = CurrentUser,
@@ -1682,6 +1909,12 @@ namespace SpicAPI.Controllers
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
+            // Link to the Level 3 summary for this Region+FY, if one already exists (Summary-to-Detail
+            // relationship key - see HeadquarterBudgetSummaryId doc comment). Saving the summary itself
+            // backfills this the other way round, so it stays correct regardless of save order.
+            var hqSummaryForLink = await _db.Set<HeadquarterBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.RegionId == request.RegionId && s.FY == fy);
+
             var existing = await _db.Set<HeadquarterBudgetAllocation>()
                 .Where(a => a.FY == fy && hqIds.Contains(a.HeadquarterId))
                 .ToListAsync();
@@ -1694,6 +1927,7 @@ namespace SpicAPI.Controllers
                     row.Amount = alloc.Amount;
                     row.UpdatedBy = CurrentUser;
                     row.UpdatedAt = DateTime.Now;
+                    row.HeadquarterBudgetSummary = hqSummaryForLink;
                 }
                 else
                 {
@@ -1703,6 +1937,7 @@ namespace SpicAPI.Controllers
                         HeadquarterId = alloc.HeadquarterId,
                         FY = fy,
                         Amount = alloc.Amount,
+                        HeadquarterBudgetSummary = hqSummaryForLink,
                         CreatedBy = CurrentUser,
                         CreatedAt = DateTime.Now,
                         UpdatedBy = CurrentUser,
@@ -1798,6 +2033,16 @@ namespace SpicAPI.Controllers
             summary.RemainingAmount = request.RemainingAmount;
             summary.UpdatedBy = CurrentUser;
             summary.UpdatedAt = DateTime.Now;
+
+            // Save flow: link this summary to every existing detail row for the same FY (Summary-to-
+            // Detail relationship key - see StateBudgetSummaryId doc comment). Uses the navigation,
+            // not summary.Id directly, so EF fixes up the FK even for a brand new summary whose Id
+            // isn't assigned until SaveChangesAsync below.
+            var stateDetailRows = await _db.Set<StateBudgetAllocation>().Where(a => a.FY == fy).ToListAsync();
+            foreach (var detailRow in stateDetailRows)
+            {
+                detailRow.StateBudgetSummary = summary;
+            }
 
             await _db.SaveChangesAsync();
 
@@ -1912,6 +2157,18 @@ namespace SpicAPI.Controllers
             summary.RemainingAmount = request.RemainingAmount;
             summary.UpdatedBy = CurrentUser;
             summary.UpdatedAt = DateTime.Now;
+
+            // Save flow: link this summary to every existing detail row for the same State+FY
+            // (Summary-to-Detail relationship key - see RegionBudgetSummaryId doc comment). Uses the
+            // navigation, not summary.Id directly, so EF fixes up the FK even for a brand new summary
+            // whose Id isn't assigned until SaveChangesAsync below.
+            var regionDetailRows = await _db.Set<RegionBudgetAllocation>()
+                .Where(a => a.StateId == request.StateId && a.FY == fy)
+                .ToListAsync();
+            foreach (var detailRow in regionDetailRows)
+            {
+                detailRow.RegionBudgetSummary = summary;
+            }
 
             await _db.SaveChangesAsync();
 
@@ -2039,6 +2296,18 @@ namespace SpicAPI.Controllers
             summary.RemainingAmount = request.RemainingAmount;
             summary.UpdatedBy = CurrentUser;
             summary.UpdatedAt = DateTime.Now;
+
+            // Save flow: link this summary to every existing detail row for the same Region+FY
+            // (Summary-to-Detail relationship key - see HeadquarterBudgetSummaryId doc comment). Uses
+            // the navigation, not summary.Id directly, so EF fixes up the FK even for a brand new
+            // summary whose Id isn't assigned until SaveChangesAsync below.
+            var hqDetailRows = await _db.Set<HeadquarterBudgetAllocation>()
+                .Where(a => a.RegionId == request.RegionId && a.FY == fy)
+                .ToListAsync();
+            foreach (var detailRow in hqDetailRows)
+            {
+                detailRow.HeadquarterBudgetSummary = summary;
+            }
 
             await _db.SaveChangesAsync();
 
@@ -2182,6 +2451,166 @@ namespace SpicAPI.Controllers
                 state = badState,
                 region = badRegion,
                 headquarters = badHq
+            });
+        }
+
+        
+
+        [HttpGet("role-budget/state")]
+        public async Task<IActionResult> GetStateRoleBudget(
+    [FromQuery] int stateId,
+    [FromQuery] string fy)
+        {
+            if (stateId <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "State is required."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(fy))
+            {
+                return BadRequest(new
+                {
+                    message = "Financial Year is required."
+                });
+            }
+
+            var stateAllocation = await _db
+                .Set<StateBudgetAllocation>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.StateId == stateId &&
+                    x.FY == fy);
+
+            if (stateAllocation == null)
+            {
+                return Ok(new RoleBudgetDto
+                {
+                    BudgetAmount = 0,
+                    Source = "StateBudgetAllocation"
+                });
+            }
+
+            return Ok(new RoleBudgetDto
+            {
+                BudgetAmount = stateAllocation.Amount,
+                Source = "StateBudgetAllocation"
+            });
+        }
+
+        [HttpGet("role-budget/state-remaining")]
+        public async Task<IActionResult> GetStateRemainingBudget(
+    [FromQuery] int stateId,
+    [FromQuery] string fy)
+        {
+            if (stateId <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "State is required."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(fy))
+            {
+                return BadRequest(new
+                {
+                    message = "Financial Year is required."
+                });
+            }
+
+            var summary = await _db
+                .Set<RegionBudgetSummary>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.StateId == stateId &&
+                    x.FY == fy);
+
+            return Ok(new RoleBudgetDto
+            {
+                BudgetAmount =
+                    summary?.RemainingAmount ?? 0,
+
+                Source =
+                    "RegionBudgetSummary.RemainingAmount"
+            });
+        }
+
+        [HttpGet("role-budget/region")]
+        public async Task<IActionResult> GetRegionRoleBudget(
+    [FromQuery] int regionId,
+    [FromQuery] string fy)
+        {
+            if (regionId <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Region is required."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(fy))
+            {
+                return BadRequest(new
+                {
+                    message = "Financial Year is required."
+                });
+            }
+
+            var regionAllocation = await _db
+                .Set<RegionBudgetAllocation>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.RegionId == regionId &&
+                    x.FY == fy);
+
+            return Ok(new RoleBudgetDto
+            {
+                BudgetAmount =
+                    regionAllocation?.Amount ?? 0,
+
+                Source =
+                    "RegionBudgetAllocation"
+            });
+        }
+
+        [HttpGet("role-budget/region-remaining")]
+        public async Task<IActionResult> GetRegionRemainingBudget(
+    [FromQuery] int regionId,
+    [FromQuery] string fy)
+        {
+            if (regionId <= 0)
+            {
+                return BadRequest(new
+                {
+                    message = "Region is required."
+                });
+            }
+
+            if (string.IsNullOrWhiteSpace(fy))
+            {
+                return BadRequest(new
+                {
+                    message = "Financial Year is required."
+                });
+            }
+
+            var summary = await _db
+                .Set<HeadquarterBudgetSummary>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x =>
+                    x.RegionId == regionId &&
+                    x.FY == fy);
+
+            return Ok(new RoleBudgetDto
+            {
+                BudgetAmount =
+                    summary?.RemainingAmount ?? 0,
+
+                Source =
+                    "HeadquarterBudgetSummary.RemainingAmount"
             });
         }
     }
