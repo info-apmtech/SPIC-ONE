@@ -1,0 +1,234 @@
+@page "/MarkAttendance"
+@inject NavigationManager Navigation
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.FieldAttendanceState AttendanceState
+
+<div class="container-fluid py-4 px-0 ma-page">
+
+    <h2 class="ma-title">Mark Attendance</h2>
+    <p class="ma-subtitle">Today's visited area &amp; attendance status.</p>
+
+    @if (showTrackingState)
+    {
+        <div class="ma-tracking-card">
+            <div class="ma-tracking-header">
+                <div class="ma-tracking-left">
+                    <span class="ma-tracking-icon"><i class="bi bi-geo-alt-fill"></i></span>
+                    <div>
+                        <div class="ma-tracking-title">Tracking Active <span class="ma-tracking-dot"></span></div>
+                        <div class="ma-tracking-sub">Your location and team members are being tracked in real-time</div>
+                    </div>
+                </div>
+
+                <div class="ma-tracking-actions">
+                    <button type="button" class="ma-btn-stop" @onclick="StopTracking">
+                        <i class="bi bi-stop-circle-fill"></i> Stop Tracking
+                    </button>
+                    <span class="ma-timer-badge"><i class="bi bi-stopwatch"></i> 00:12:34</span>
+                </div>
+            </div>
+
+            <div class="ma-map" role="img" aria-label="Map showing today's tracked route">
+                <svg class="ma-map-route-svg" viewBox="0 0 1000 400" preserveAspectRatio="none">
+                    <path d="M120,330 L120,260 Q120,230 150,215 L430,215 Q460,215 460,185 L460,120 Q460,90 490,80 L760,80" />
+                </svg>
+
+                <span class="ma-map-pin-start"><i class="bi bi-person-fill"></i></span>
+                <span class="ma-map-label">JMDO<br />Karthik Raja</span>
+                <span class="ma-map-pin-end"><i class="bi bi-geo-alt-fill"></i></span>
+
+                <div class="ma-map-zoom">
+                    <button type="button" aria-label="Zoom in"><i class="bi bi-plus-lg"></i></button>
+                    <button type="button" aria-label="Zoom out"><i class="bi bi-dash-lg"></i></button>
+                </div>
+                <button type="button" class="ma-map-locate" aria-label="Center on my location"><i class="bi bi-cursor-fill"></i></button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="ma-grid">
+            <div class="ma-card">
+                <p class="ma-meta">Region: @FieldExecRegion &middot; JMDO H.Q: @FieldExecJmdoHq</p>
+
+                @if (showStoppedState)
+                {
+                    <div class="ma-success-banner">
+                        <span class="ma-success-icon"><i class="bi bi-check-lg"></i></span>
+                        <div class="ma-success-text">
+                            <div class="ma-success-title-row">
+                                <span class="ma-success-title">Location tracking stopped successfully!</span>
+                                <span class="ma-success-time">23 Sep 2026, 04:32 PM</span>
+                            </div>
+                            <div class="ma-success-sub">Your location has been recorded.</div>
+                        </div>
+                    </div>
+
+                    <div class="ma-stats-row">
+                        <div class="ma-stat">
+                            <div class="ma-stat-top"><i class="bi bi-check-circle"></i> <span class="ma-stat-pct">100%</span></div>
+                            <div class="ma-stat-label">Attendance Completed</div>
+                        </div>
+                        <div class="ma-stat">
+                            <div class="ma-stat-top"><i class="bi bi-geo-alt"></i> <span class="ma-stat-pct">100%</span></div>
+                            <div class="ma-stat-label">Location Point Saved</div>
+                        </div>
+                        <div class="ma-stat">
+                            <div class="ma-stat-top"><i class="bi bi-clipboard-check"></i> <span class="ma-stat-pct">100%</span></div>
+                            <div class="ma-stat-label">Today Task Completed</div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="ma-btn-submit" @onclick='() => Navigation.NavigateTo("/MarkAttendance?view=tracking")'>
+                        <i class="bi bi-map"></i> View Tracking Details
+                    </button>
+                }
+                else
+                {
+                    @if (isLate)
+                    {
+                        <div class="ma-late-banner">
+                            <i class="bi bi-exclamation-circle-fill"></i>
+                            Submitted late for today &mdash; you can still update the details below.
+                        </div>
+                    }
+
+                    <label class="ma-field-label" for="ma-date">Date<span class="ma-required">*</span></label>
+                    <input id="ma-date" type="date" class="ma-input" @bind="visitDate" />
+
+                    <label class="ma-field-label" for="ma-area">Visit Area / Place<span class="ma-required">*</span></label>
+                    <input id="ma-area" type="text" class="ma-input" placeholder="e.g. Anaimalai" @bind="visitArea" @bind:event="oninput" />
+
+                    <label class="ma-field-label" for="ma-status">Attendance Status</label>
+                    <select id="ma-status" class="ma-input" @bind="attendanceStatus">
+                        <option>Present</option>
+                        <option>Half Day</option>
+                        <option>On Leave</option>
+                    </select>
+
+                    <div class="ma-location-row">
+                        <i class="bi bi-check-circle-fill"></i> Location captured (&plusmn;400m) &middot;
+                        <button type="button" class="ma-link-btn" @onclick="ViewOnMap">view on map</button>
+                    </div>
+
+                    <button type="button" class="ma-btn-submit" disabled="@string.IsNullOrWhiteSpace(visitArea)" @onclick="UpdateAttendance">
+                        Update Attendance
+                    </button>
+                }
+            </div>
+
+            <div class="ma-card ma-profile-card">
+                <div class="ma-profile-top">
+                    <span class="ma-role-badge">JMDO</span>
+                    <h3 class="ma-profile-name">Karthik Raja</h3>
+                </div>
+
+                <div class="ma-info-rows">
+                    <div class="ma-info-row">
+                        <span class="ma-info-key"><i class="bi bi-calendar3"></i> This week</span>
+                        <span class="ma-info-val">16 Sep 2026 - 22 Sep 2026</span>
+                    </div>
+                    <div class="ma-info-row">
+                        <span class="ma-info-key"><i class="bi bi-person-check"></i> Current Status</span>
+                        <span class="ma-info-val"><span class="@(showStoppedState ? "ma-dot ma-dot-off" : "ma-dot")"></span>@(showStoppedState ? "Off Duty" : "On Duty")</span>
+                    </div>
+                    <div class="ma-info-row">
+                        <span class="ma-info-key"><i class="bi bi-person"></i> Current Location</span>
+                        <span class="ma-info-val ma-info-val-stack">
+                            <span>Near Coimbatore, Tamil Nadu</span>
+                            <span class="ma-info-sub">(22 Sep 2026, 10:42 AM)</span>
+                        </span>
+                    </div>
+                </div>
+
+                <h4 class="ma-weekly-title">Weekly Summary</h4>
+                <div class="ma-weekly-list">
+                    @foreach (var day in WeeklySummary)
+                    {
+                        var locations = showStoppedState && day.Label.StartsWith("Sun") ? 0 : day.Locations;
+                        <div class="ma-weekly-row">
+                            <span class="ma-weekly-dot"></span>
+                            <span class="ma-weekly-day">@day.Label</span>
+                            <span class="ma-weekly-hours">@day.Hours</span>
+                            <span class="ma-weekly-sep">-</span>
+                            <span class="ma-weekly-locations">@locations location</span>
+                            <span class="ma-weekly-km">@day.Km</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+    // Static placeholder: matches Karthik Raja's profile elsewhere in the app
+    // (FieldDashboard) - no logged-in-user hierarchy lookup exists yet. The
+    // Figma frame's own profile card said "Ravi Kumar", which would
+    // contradict the rest of the app's example data, so this uses the name
+    // that's consistent everywhere else instead.
+    private const string FieldExecRegion = "COIMBATORE";
+    private const string FieldExecJmdoHq = "COIMBATORE";
+
+    // Three states behind one route/title: the usual mark-attendance form,
+    // the post-stop confirmation summary (reached from FieldDashboard's
+    // "Stop Tracking" confirm), and the full tracking map (reached from the
+    // confirmation's own "View Tracking Details" button).
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? ViewQuery { get; set; }
+
+    private bool showStoppedState;
+    private bool showTrackingState;
+
+    // OnParametersSet, not OnInitialized: every transition here (form ->
+    // stopped -> tracking -> stopped -> ...) stays on the /MarkAttendance
+    // route and only changes the "view" query string, so Blazor's router
+    // reuses the same component instance instead of creating a new one.
+    // OnInitialized only runs once for that instance - computing these flags
+    // there meant later "view" changes were silently ignored.
+    protected override void OnParametersSet()
+    {
+        showStoppedState = string.Equals(ViewQuery, "stopped", StringComparison.OrdinalIgnoreCase);
+        showTrackingState = string.Equals(ViewQuery, "tracking", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool isLate = true;
+
+    private DateTime visitDate = new(2026, 9, 22);
+    private string visitArea = "Anaimalai";
+    private string attendanceStatus = "Present";
+
+    private sealed record WeeklyDay(string Label, string Hours, int Locations, string Km);
+
+    private static readonly List<WeeklyDay> WeeklySummary = new()
+    {
+        new("Mon, 16 Sep 2026", "6h 12m", 3, "25.4 km"),
+        new("Tue, 17 Sep 2026", "5h 42m", 3, "22.4 km"),
+        new("Wed, 18 Sep 2026", "6h 25m", 4, "25.4 km"),
+        new("Thu, 19 Sep 2026", "7h 56m", 5, "25.4 km"),
+        new("Fri, 20 Sep 2026", "3h 45m", 2, "25.4 km"),
+        new("Sat, 21 Sep 2026", "2h 14m", 1, "25.4 km"),
+        new("Sun, 22 Sep 2026", "1h 12m", 1, "5.02 km")
+    };
+
+    private void ViewOnMap() => Toast.Info("Map view isn't built yet.");
+
+    // No confirmation modal on this frame (unlike FieldDashboard's own Stop
+    // Tracking button) - stops immediately and lands on the same
+    // post-stop summary that FieldDashboard's confirm flow uses.
+    private void StopTracking()
+    {
+        AttendanceState.IsOnDuty = false;
+        Navigation.NavigateTo("/MarkAttendance?view=stopped");
+    }
+
+    private void UpdateAttendance()
+    {
+        if (string.IsNullOrWhiteSpace(visitArea)) return;
+
+        AttendanceState.IsOnDuty = true;
+        Toast.Success("Attendance updated.");
+        Navigation.NavigateTo("/FieldDashboard");
+    }
+}

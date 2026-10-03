@@ -380,6 +380,44 @@
     gap: 16px;
 }
 
+/* Collapsible filter card (desktop / tablet): the header toggles the body. */
+.ar-filter-header {
+    cursor: pointer;
+}
+
+.ar-filter-chevron {
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.ar-filter-card--collapsed .ar-filter-chevron {
+    transform: rotate(-90deg);
+}
+
+.ar-filter-card--collapsed .ar-filter-header {
+    border-bottom: 0;
+}
+
+.ar-filter-card--collapsed .ar-filter-body {
+    display: none;
+}
+
+/* Active-filter count shown next to "Filters" while the card is collapsed. */
+.ar-filter-card .ar-filter-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: #3b82f6;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+}
+
 .ar-filter-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -770,16 +808,6 @@
             justify-content: center;
         }
 
-    .ar-pagination {
-        flex-direction: column;
-        align-items: center;
-        gap: 16px;
-    }
-
-    .ar-page-controls {
-        flex-wrap: wrap;
-        justify-content: center;
-    }
 }
 
 /* =========================================================
@@ -1475,7 +1503,32 @@ select.ar-form-select[multiple]:not(.select2-hidden-accessible) {
         gap: 16px;
     }
 
-    .ar-page-container .ar-filter-sheet select.ar-form-select[multiple] {
+    /* Select2 runs inside the sheet; each dropdown is attached to its field's form
+       group (dropdownParent), which is its positioning context. The open field is
+       lifted above the fields that follow so the list is not painted under them. */
+    .ar-filter-sheet .ar-form-group {
+        position: relative;
+    }
+
+    .ar-filter-sheet .ar-form-group:has(.select2-container--open) {
+        z-index: 5;
+    }
+
+    .ar-filter-sheet .select2-container {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    .ar-filter-sheet .select2-dropdown {
+        font-size: 14px;
+    }
+
+    .ar-filter-sheet .select2-results__options {
+        max-height: 220px;
+    }
+
+    /* Fallback only: a native multi-select that Select2 has not (yet) taken over. */
+    .ar-page-container .ar-filter-sheet select.ar-form-select[multiple]:not(.select2-hidden-accessible) {
         display: block !important;
         width: 100% !important;
         height: auto !important;
@@ -1655,20 +1708,29 @@ select.ar-form-select[multiple]:not(.select2-hidden-accessible) {
         display: inline;
     }
 
-    /* Pagination: stacked, 40px targets */
+    /* Pagination: one row - Items Per Page left, pager right - same as the
+       other list pages. Only prev / current / next stay visible. */
     .ar-pagination {
-        flex-direction: column;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: space-between;
         align-items: center;
-        gap: 12px;
+        gap: 8px;
     }
 
     .ar-page-controls {
-        justify-content: center;
+        justify-content: flex-end;
+        flex-wrap: nowrap;
     }
 
     .ar-page-btn {
-        min-width: 40px;
-        height: 40px;
+        min-width: 28px;
+        height: 28px;
+        flex: 0 0 auto;
+    }
+
+    .ar-page-controls .ar-page-btn:not(.active):not(:first-child):not(:last-child) {
+        display: none;
     }
 }
 
