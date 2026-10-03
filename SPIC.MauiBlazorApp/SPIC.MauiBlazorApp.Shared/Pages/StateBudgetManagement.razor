@@ -68,58 +68,6 @@
         </div>
     </div>
 
-    <!-- Budget Summary: Total Budget / Allocated to State / Remaining Amount - all three are
-         plain manually-entered fields; Remaining is never auto-calculated from Total - Allocated. -->
-    <div class="main-card">
-
-        <div class="section-header">
-            <h3 class="section-title">Budget Summary</h3>
-            <span class="fy-badge">@_stateSummaryStatus</span>
-        </div>
-
-        @if (!string.IsNullOrEmpty(_stateSummaryValidationMessage))
-        {
-            <div class="alert-box">⚠ @_stateSummaryValidationMessage</div>
-        }
-
-        @if (!string.IsNullOrEmpty(_stateSummarySuccessMessage))
-        {
-            <div class="success-box">✓ @_stateSummarySuccessMessage</div>
-        }
-
-        <div class="row g-3">
-            <div class="col-12 col-sm-4">
-                <label class="form-label-custom">Total Budget</label>
-                <input type="number" class="form-control-custom w-100" min="0"
-                       @bind="_stateSummaryTotalBudget" @bind:event="oninput" />
-            </div>
-            <div class="col-12 col-sm-4">
-                <label class="form-label-custom">Allocated to State</label>
-                <input type="number" class="form-control-custom w-100" min="0"
-                       @bind="_stateSummaryAllocated" @bind:event="oninput" />
-            </div>
-            <div class="col-12 col-sm-4">
-                <label class="form-label-custom">Remaining Amount</label>
-                <input type="number" class="form-control-custom w-100" min="0"
-                       @bind="_stateSummaryRemaining" @bind:event="oninput" />
-            </div>
-        </div>
-
-        <div class="action-buttons" style="margin-top:14px;">
-            <button class="btn-draft"
-                    @onclick="SaveStateBudgetSummaryAsync"
-                    disabled="@(_isSavingStateSummary || _selectedFY.Length == 0)">
-                @(_isSavingStateSummary ? "Saving..." : "Save Budget Summary")
-            </button>
-            <button class="btn-submit"
-                    @onclick="SubmitStateBudgetSummaryAsync"
-                    disabled="@(_isSavingStateSummary || _isSubmittingStateSummary || _selectedFY.Length == 0 || _stateSummaryStatus == "Submitted")">
-                @(_isSubmittingStateSummary ? "Submitting..." : (_stateSummaryStatus == "Submitted" ? "Submitted" : "Submit"))
-            </button>
-        </div>
-
-    </div>
-
     <!-- Summary Cards -->
     <div class="row g-3 mb-4">
 
@@ -225,6 +173,27 @@
 
             </tbody>
 
+            <!-- Total Budget / Allocated to State are the existing Annual Budget and the sum of
+                 the rows above - reused as-is, never re-entered. Remaining Amount is the only
+                 manually-entered summary value, saved into StateBudgetSummary alongside them
+                 whenever the allocation above is saved - no auto-calculation, no separate form. -->
+            <tfoot>
+                <tr class="budget-table-total-row">
+                    <td><strong>Total Allocated to State</strong></td>
+                    <td><strong>₹ @TotalAllocated.ToString("N0")</strong></td>
+                </tr>
+                <tr>
+                    <td><strong>Remaining Amount</strong></td>
+                    <td>
+                        <input type="number"
+                               class="budget-input"
+                               min="0"
+                               @bind="_stateSummaryRemaining"
+                               @bind:event="oninput" />
+                    </td>
+                </tr>
+            </tfoot>
+
         </table>
 
     </div>
@@ -268,59 +237,6 @@
 
     @if (_selectedStateId > 0)
     {
-        <!-- Budget Summary: Total Budget / Allocated to Region / Remaining Amount - all three
-             are plain manually-entered fields; Remaining is never auto-calculated from
-             Total - Allocated. -->
-        <div class="main-card">
-
-            <div class="section-header">
-                <h3 class="section-title">Budget Summary</h3>
-                <span class="fy-badge">@_regionSummaryStatus</span>
-            </div>
-
-            @if (!string.IsNullOrEmpty(_regionSummaryValidationMessage))
-            {
-                <div class="alert-box">⚠ @_regionSummaryValidationMessage</div>
-            }
-
-            @if (!string.IsNullOrEmpty(_regionSummarySuccessMessage))
-            {
-                <div class="success-box">✓ @_regionSummarySuccessMessage</div>
-            }
-
-            <div class="row g-3">
-                <div class="col-12 col-sm-4">
-                    <label class="form-label-custom">Total Budget</label>
-                    <input type="number" class="form-control-custom w-100" min="0"
-                           @bind="_regionSummaryTotalBudget" @bind:event="oninput" />
-                </div>
-                <div class="col-12 col-sm-4">
-                    <label class="form-label-custom">Allocated to Region</label>
-                    <input type="number" class="form-control-custom w-100" min="0"
-                           @bind="_regionSummaryAllocated" @bind:event="oninput" />
-                </div>
-                <div class="col-12 col-sm-4">
-                    <label class="form-label-custom">Remaining Amount</label>
-                    <input type="number" class="form-control-custom w-100" min="0"
-                           @bind="_regionSummaryRemaining" @bind:event="oninput" />
-                </div>
-            </div>
-
-            <div class="action-buttons" style="margin-top:14px;">
-                <button class="btn-draft"
-                        @onclick="SaveRegionBudgetSummaryAsync"
-                        disabled="@(_isSavingRegionSummary || _selectedFY.Length == 0)">
-                    @(_isSavingRegionSummary ? "Saving..." : "Save Budget Summary")
-                </button>
-                <button class="btn-submit"
-                        @onclick="SubmitRegionBudgetSummaryAsync"
-                        disabled="@(_isSavingRegionSummary || _isSubmittingRegionSummary || _selectedFY.Length == 0 || _regionSummaryStatus == "Submitted")">
-                    @(_isSubmittingRegionSummary ? "Submitting..." : (_regionSummaryStatus == "Submitted" ? "Submitted" : "Submit"))
-                </button>
-            </div>
-
-        </div>
-
         <!-- Summary Cards -->
         <div class="row g-3 mb-4">
 
@@ -435,6 +351,27 @@
 
                     </tbody>
 
+                    <!-- Total Budget / Allocated to Region are the existing applicable State
+                         budget and the sum of the rows above - reused as-is, never re-entered.
+                         Remaining Amount is the only manually-entered summary value, saved into
+                         RegionBudgetSummary alongside them whenever this allocation is saved. -->
+                    <tfoot>
+                        <tr class="budget-table-total-row">
+                            <td><strong>Allocated to Region</strong></td>
+                            <td><strong>₹ @TotalRegionAllocated.ToString("N0")</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Remaining Amount</strong></td>
+                            <td>
+                                <input type="number"
+                                       class="budget-input"
+                                       min="0"
+                                       @bind="_regionSummaryRemaining"
+                                       @bind:event="oninput" />
+                            </td>
+                        </tr>
+                    </tfoot>
+
                 </table>
 
                 <div class="bottom-bar">
@@ -528,59 +465,6 @@
 
         @if (_hqSelectedRegionId > 0)
         {
-            <!-- Budget Summary: Total Budget / Allocated to Headquarters / Remaining Amount -
-                 all three are plain manually-entered fields; Remaining is never auto-calculated
-                 from Total - Allocated. -->
-            <div class="main-card">
-
-                <div class="section-header">
-                    <h3 class="section-title">Budget Summary</h3>
-                    <span class="fy-badge">@_hqSummaryStatus</span>
-                </div>
-
-                @if (!string.IsNullOrEmpty(_hqSummaryValidationMessage))
-                {
-                    <div class="alert-box">⚠ @_hqSummaryValidationMessage</div>
-                }
-
-                @if (!string.IsNullOrEmpty(_hqSummarySuccessMessage))
-                {
-                    <div class="success-box">✓ @_hqSummarySuccessMessage</div>
-                }
-
-                <div class="row g-3">
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label-custom">Total Budget</label>
-                        <input type="number" class="form-control-custom w-100" min="0"
-                               @bind="_hqSummaryTotalBudget" @bind:event="oninput" />
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label-custom">Allocated to Headquarters</label>
-                        <input type="number" class="form-control-custom w-100" min="0"
-                               @bind="_hqSummaryAllocated" @bind:event="oninput" />
-                    </div>
-                    <div class="col-12 col-sm-4">
-                        <label class="form-label-custom">Remaining Amount</label>
-                        <input type="number" class="form-control-custom w-100" min="0"
-                               @bind="_hqSummaryRemaining" @bind:event="oninput" />
-                    </div>
-                </div>
-
-                <div class="action-buttons" style="margin-top:14px;">
-                    <button class="btn-draft"
-                            @onclick="SaveHeadquarterBudgetSummaryAsync"
-                            disabled="@(_isSavingHqSummary || _selectedFY.Length == 0)">
-                        @(_isSavingHqSummary ? "Saving..." : "Save Budget Summary")
-                    </button>
-                    <button class="btn-submit"
-                            @onclick="SubmitHeadquarterBudgetSummaryAsync"
-                            disabled="@(_isSavingHqSummary || _isSubmittingHqSummary || _selectedFY.Length == 0 || _hqSummaryStatus == "Submitted")">
-                        @(_isSubmittingHqSummary ? "Submitting..." : (_hqSummaryStatus == "Submitted" ? "Submitted" : "Submit"))
-                    </button>
-                </div>
-
-            </div>
-
             <!-- Summary Cards -->
             <div class="row g-3 mb-4">
 
@@ -694,6 +578,28 @@
 
 
                         </tbody>
+
+                        <!-- Total Budget / Allocated to Headquarters are the existing applicable
+                             Region budget and the sum of the rows above - reused as-is, never
+                             re-entered. Remaining Amount is the only manually-entered summary
+                             value, saved into HeadquarterBudgetSummary alongside them whenever
+                             this allocation is saved. -->
+                        <tfoot>
+                            <tr class="budget-table-total-row">
+                                <td><strong>Allocated to Headquarters</strong></td>
+                                <td><strong>₹ @TotalHeadquartersAllocated.ToString("N0")</strong></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Remaining Amount</strong></td>
+                                <td>
+                                    <input type="number"
+                                           class="budget-input"
+                                           min="0"
+                                           @bind="_hqSummaryRemaining"
+                                           @bind:event="oninput" />
+                                </td>
+                            </tr>
+                        </tfoot>
 
                     </table>
 
@@ -822,18 +728,6 @@
         align-items: center;
     }
 
-    /* Small Draft/Submitted status pill next to the Budget Summary section title. */
-    .fy-badge {
-        background: #dcfce7;
-        color: #15803d;
-        padding: 5px 12px;
-        border-radius: 15px;
-        font-size: 11px;
-        border: none;
-    }
-
-
-
     .budget-table {
         width: 100%;
         border-collapse: collapse;
@@ -854,6 +748,14 @@
         .budget-table td {
             padding: 8px;
             border-bottom: 1px solid #edf0f2;
+            font-size: 12px;
+        }
+
+        .budget-table tfoot td {
+            padding: 8px;
+            border-top: 2px solid #e5e7eb;
+            border-bottom: none;
+            background: #f9fafb;
             font-size: 12px;
         }
 
@@ -1010,27 +912,19 @@
     // which row was just edited.
     private bool _hasValidationError => _selectedFY.Length > 0 && TotalAllocated > TotalStateBudget;
 
-    // ---- Level 1 (Admin) Budget Summary: Total Budget / Allocated to State / Remaining Amount.
-    // Separate from the State-wise allocation table above: all three fields here are plain
-    // manually-entered values, persisted as their own StateBudgetSummary row - Remaining is
-    // never computed from Total - Allocated, client or server side. ----
-    private decimal _stateSummaryTotalBudget;
-    private decimal _stateSummaryAllocated;
+    // ---- Level 1 (Admin) Budget Summary (StateBudgetSummary): Total Budget and Allocated to
+    // State are never entered here - they're the existing Annual Budget (TotalStateBudget) and
+    // the existing State-wise allocation total (TotalAllocated), saved automatically whenever the
+    // allocation table below is saved/submitted. Remaining Amount is the one value still entered
+    // by hand, in the table's own "Remaining Amount" row - never computed from Total - Allocated,
+    // client or server side. ----
     private decimal _stateSummaryRemaining;
-    private string _stateSummaryStatus = "Draft";
-    private bool _isSavingStateSummary;
-    private bool _isSubmittingStateSummary;
-    private string? _stateSummaryValidationMessage;
-    private string? _stateSummarySuccessMessage;
 
     private async Task LoadStateBudgetSummaryAsync()
     {
         if (_selectedFY.Length == 0)
         {
-            _stateSummaryTotalBudget = 0;
-            _stateSummaryAllocated = 0;
             _stateSummaryRemaining = 0;
-            _stateSummaryStatus = "Draft";
             return;
         }
 
@@ -1038,33 +932,21 @@
         {
             var dto = await Http.GetFromJsonAsync<StateBudgetSummaryDto>(
                 $"api/Budget/state-budget-summary?fy={Uri.EscapeDataString(_selectedFY)}");
-            _stateSummaryTotalBudget = dto?.TotalBudget ?? 0;
-            _stateSummaryAllocated = dto?.AllocatedAmount ?? 0;
+            // Only the previously-saved Remaining Amount is loaded into the editable row - Total
+            // Budget/Allocated are re-derived fresh from TotalStateBudget/TotalAllocated every
+            // time they're saved, so there's nothing stale to load for them here.
             _stateSummaryRemaining = dto?.RemainingAmount ?? 0;
-            _stateSummaryStatus = dto?.Status ?? "Draft";
         }
         catch
         {
-            _stateSummaryStatus = "Draft";
+            _stateSummaryRemaining = 0;
         }
     }
 
-    private async Task SaveStateBudgetSummaryAsync()
-    {
-        if (_isSavingStateSummary || _selectedFY.Length == 0)
-            return;
-
-        _isSavingStateSummary = true;
-        try
-        {
-            await TrySaveStateBudgetSummaryAsync();
-        }
-        finally
-        {
-            _isSavingStateSummary = false;
-        }
-    }
-
+    // Persists Total Budget (TotalStateBudget, from AnnualBudgeting) and Allocated to State
+    // (TotalAllocated, the just-saved sum of the table above) into StateBudgetSummary alongside
+    // whatever Remaining Amount the Admin has typed into the table's own row. Called automatically
+    // from TrySaveAllocationsAsync - there is no separate "Save Budget Summary" button anymore.
     private async Task<bool> TrySaveStateBudgetSummaryAsync()
     {
         try
@@ -1072,74 +954,62 @@
             var request = new SaveStateBudgetSummaryRequest
             {
                 FY = _selectedFY,
-                TotalBudget = _stateSummaryTotalBudget,
-                AllocatedAmount = _stateSummaryAllocated,
+                TotalBudget = TotalStateBudget,
+                AllocatedAmount = TotalAllocated,
                 RemainingAmount = _stateSummaryRemaining
             };
 
             var response = await Http.PutAsJsonAsync("api/Budget/state-budget-summary", request);
             if (response.IsSuccessStatusCode)
-            {
-                _stateSummaryValidationMessage = null;
-                await LoadStateBudgetSummaryAsync();
                 return true;
-            }
 
             var raw = await response.Content.ReadAsStringAsync();
-            _stateSummaryValidationMessage = ExtractMessage(raw);
+            _validationMessage = ExtractMessage(raw);
             return false;
         }
         catch (Exception ex)
         {
-            _stateSummaryValidationMessage = $"Failed to save: {ex.Message}";
+            _validationMessage = $"Failed to save budget summary: {ex.Message}";
             return false;
         }
     }
 
-    // On Submit, Total Budget must equal Allocated to State + Remaining Amount. This client-side
-    // check is for immediate UX feedback only - the server independently re-validates the same
-    // rule and is the authority (see BudgetController.SubmitStateBudgetSummary).
-    private async Task SubmitStateBudgetSummaryAsync()
+    // Validates (server-side, authoritative) that TotalBudget == AllocatedAmount + RemainingAmount
+    // and marks the StateBudgetSummary "Submitted". Called from SubmitForValidationAsync, right
+    // after the detail allocation is saved and before it's marked Submitted - a mismatch here
+    // blocks the whole Submit action via the existing _validationMessage, same as any other
+    // submit failure on this page. The TotalBudget/AllocatedAmount checks below mirror the
+    // server's own (authoritative) checks purely for immediate UX feedback - the server
+    // re-validates independently and cannot be bypassed by calling the API directly.
+    private async Task<bool> TrySubmitStateBudgetSummaryAsync()
     {
-        if (_isSavingStateSummary || _isSubmittingStateSummary || _selectedFY.Length == 0 || _stateSummaryStatus == "Submitted")
-            return;
-
-        if (_stateSummaryTotalBudget != _stateSummaryAllocated + _stateSummaryRemaining)
+        if (TotalStateBudget <= 0)
         {
-            _stateSummaryValidationMessage =
-                $"Total Budget (₹{_stateSummaryTotalBudget:N0}) must equal Allocated to State (₹{_stateSummaryAllocated:N0}) + Remaining Amount (₹{_stateSummaryRemaining:N0}).";
-            return;
+            _validationMessage = "Total Budget must be greater than 0.";
+            return false;
         }
 
-        _isSubmittingStateSummary = true;
-        _stateSummarySuccessMessage = null;
+        if (TotalAllocated <= 0)
+        {
+            _validationMessage = "Allocated Amount must be greater than 0.";
+            return false;
+        }
+
         try
         {
-            var saved = await TrySaveStateBudgetSummaryAsync();
-            if (!saved)
-                return;
-
             var request = new SubmitStateBudgetSummaryRequest { FY = _selectedFY };
             var response = await Http.PutAsJsonAsync("api/Budget/state-budget-summary/submit", request);
             if (response.IsSuccessStatusCode)
-            {
-                await LoadStateBudgetSummaryAsync();
-                _stateSummaryValidationMessage = null;
-                _stateSummarySuccessMessage = $"State budget summary for FY {_selectedFY} submitted successfully.";
-            }
-            else
-            {
-                var raw = await response.Content.ReadAsStringAsync();
-                _stateSummaryValidationMessage = ExtractMessage(raw);
-            }
+                return true;
+
+            var raw = await response.Content.ReadAsStringAsync();
+            _validationMessage = ExtractMessage(raw);
+            return false;
         }
         catch (Exception ex)
         {
-            _stateSummaryValidationMessage = $"Failed to submit: {ex.Message}";
-        }
-        finally
-        {
-            _isSubmittingStateSummary = false;
+            _validationMessage = $"Failed to submit budget summary: {ex.Message}";
+            return false;
         }
     }
 
@@ -1165,27 +1035,19 @@
     private bool _hasRegionValidationError =>
         _selectedStateId > 0 && TotalRegionAllocated > SelectedStateAmount;
 
-    // ---- Level 2 (SM) Budget Summary: Total Budget / Allocated to Region / Remaining Amount,
-    // scoped to the selected State + FY. Separate from the Region-wise allocation table above:
-    // all three fields here are plain manually-entered values, persisted as their own
-    // RegionBudgetSummary row - Remaining is never computed from Total - Allocated. ----
-    private decimal _regionSummaryTotalBudget;
-    private decimal _regionSummaryAllocated;
+    // ---- Level 2 (SM) Budget Summary (RegionBudgetSummary), scoped to the selected State + FY.
+    // Total Budget and Allocated to Region are never entered here - they're the applicable
+    // State's own allocation (SelectedStateAmount) and the existing Region-wise allocation total
+    // (TotalRegionAllocated), saved automatically whenever the allocation table below is saved.
+    // Remaining Amount is the one value still entered by hand, in the table's own "Remaining
+    // Amount" row - never computed from Total - Allocated, client or server side. ----
     private decimal _regionSummaryRemaining;
-    private string _regionSummaryStatus = "Draft";
-    private bool _isSavingRegionSummary;
-    private bool _isSubmittingRegionSummary;
-    private string? _regionSummaryValidationMessage;
-    private string? _regionSummarySuccessMessage;
 
     private async Task LoadRegionBudgetSummaryAsync()
     {
         if (_selectedStateId <= 0 || _selectedFY.Length == 0)
         {
-            _regionSummaryTotalBudget = 0;
-            _regionSummaryAllocated = 0;
             _regionSummaryRemaining = 0;
-            _regionSummaryStatus = "Draft";
             return;
         }
 
@@ -1193,33 +1055,21 @@
         {
             var dto = await Http.GetFromJsonAsync<RegionBudgetSummaryDto>(
                 $"api/Budget/region-budget-summary?stateId={_selectedStateId}&fy={Uri.EscapeDataString(_selectedFY)}");
-            _regionSummaryTotalBudget = dto?.TotalBudget ?? 0;
-            _regionSummaryAllocated = dto?.AllocatedAmount ?? 0;
+            // Only the previously-saved Remaining Amount is loaded into the editable row - Total
+            // Budget/Allocated are re-derived fresh every time they're saved, so there's nothing
+            // stale to load for them here.
             _regionSummaryRemaining = dto?.RemainingAmount ?? 0;
-            _regionSummaryStatus = dto?.Status ?? "Draft";
         }
         catch
         {
-            _regionSummaryStatus = "Draft";
+            _regionSummaryRemaining = 0;
         }
     }
 
-    private async Task SaveRegionBudgetSummaryAsync()
-    {
-        if (_isSavingRegionSummary || _selectedStateId <= 0 || _selectedFY.Length == 0)
-            return;
-
-        _isSavingRegionSummary = true;
-        try
-        {
-            await TrySaveRegionBudgetSummaryAsync();
-        }
-        finally
-        {
-            _isSavingRegionSummary = false;
-        }
-    }
-
+    // Persists Total Budget (the applicable State's own allocation) and Allocated to Region (the
+    // just-saved sum of the table above) into RegionBudgetSummary alongside whatever Remaining
+    // Amount the SM has typed into the table's own row. Called automatically from
+    // SaveRegionAllocationsAsync - there is no separate "Save Budget Summary" button anymore.
     private async Task<bool> TrySaveRegionBudgetSummaryAsync()
     {
         try
@@ -1228,75 +1078,61 @@
             {
                 StateId = _selectedStateId,
                 FY = _selectedFY,
-                TotalBudget = _regionSummaryTotalBudget,
-                AllocatedAmount = _regionSummaryAllocated,
+                TotalBudget = SelectedStateAmount,
+                AllocatedAmount = TotalRegionAllocated,
                 RemainingAmount = _regionSummaryRemaining
             };
 
             var response = await Http.PutAsJsonAsync("api/Budget/region-budget-summary", request);
             if (response.IsSuccessStatusCode)
-            {
-                _regionSummaryValidationMessage = null;
-                await LoadRegionBudgetSummaryAsync();
                 return true;
-            }
 
             var raw = await response.Content.ReadAsStringAsync();
-            _regionSummaryValidationMessage = ExtractMessage(raw);
+            _regionValidationMessage = ExtractMessage(raw);
             return false;
         }
         catch (Exception ex)
         {
-            _regionSummaryValidationMessage = $"Failed to save: {ex.Message}";
+            _regionValidationMessage = $"Failed to save budget summary: {ex.Message}";
             return false;
         }
     }
 
-    // On Submit, Total Budget must equal Allocated to Region + Remaining Amount. This
-    // client-side check is for immediate UX feedback only - the server independently
-    // re-validates the same rule, plus that Total Budget doesn't exceed the applicable
-    // State's own allocated amount (see BudgetController.SubmitRegionBudgetSummary).
-    private async Task SubmitRegionBudgetSummaryAsync()
+    // Validates (server-side, authoritative) that TotalBudget == AllocatedAmount + RemainingAmount
+    // (and that it doesn't exceed the applicable State's own allocation) and marks the
+    // RegionBudgetSummary "Submitted". Called right after SaveRegionAllocationsAsync's own save
+    // succeeds - a mismatch surfaces through the existing _regionValidationMessage, same as any
+    // other save/submit failure in this section. The TotalBudget/AllocatedAmount checks below
+    // mirror the server's own (authoritative) checks purely for immediate UX feedback.
+    private async Task<bool> TrySubmitRegionBudgetSummaryAsync()
     {
-        if (_isSavingRegionSummary || _isSubmittingRegionSummary || _selectedStateId <= 0 || _selectedFY.Length == 0 || _regionSummaryStatus == "Submitted")
-            return;
-
-        if (_regionSummaryTotalBudget != _regionSummaryAllocated + _regionSummaryRemaining)
+        if (SelectedStateAmount <= 0)
         {
-            _regionSummaryValidationMessage =
-                $"Total Budget (₹{_regionSummaryTotalBudget:N0}) must equal Allocated to Region (₹{_regionSummaryAllocated:N0}) + Remaining Amount (₹{_regionSummaryRemaining:N0}).";
-            return;
+            _regionValidationMessage = "Total Budget must be greater than 0.";
+            return false;
         }
 
-        _isSubmittingRegionSummary = true;
-        _regionSummarySuccessMessage = null;
+        if (TotalRegionAllocated <= 0)
+        {
+            _regionValidationMessage = "Allocated Amount must be greater than 0.";
+            return false;
+        }
+
         try
         {
-            var saved = await TrySaveRegionBudgetSummaryAsync();
-            if (!saved)
-                return;
-
             var request = new SubmitRegionBudgetSummaryRequest { StateId = _selectedStateId, FY = _selectedFY };
             var response = await Http.PutAsJsonAsync("api/Budget/region-budget-summary/submit", request);
             if (response.IsSuccessStatusCode)
-            {
-                await LoadRegionBudgetSummaryAsync();
-                _regionSummaryValidationMessage = null;
-                _regionSummarySuccessMessage = $"Region budget summary for FY {_selectedFY} submitted successfully.";
-            }
-            else
-            {
-                var raw = await response.Content.ReadAsStringAsync();
-                _regionSummaryValidationMessage = ExtractMessage(raw);
-            }
+                return true;
+
+            var raw = await response.Content.ReadAsStringAsync();
+            _regionValidationMessage = ExtractMessage(raw);
+            return false;
         }
         catch (Exception ex)
         {
-            _regionSummaryValidationMessage = $"Failed to submit: {ex.Message}";
-        }
-        finally
-        {
-            _isSubmittingRegionSummary = false;
+            _regionValidationMessage = $"Failed to submit budget summary: {ex.Message}";
+            return false;
         }
     }
 
@@ -1325,27 +1161,19 @@
     private bool _hasHqValidationError =>
         _hqSelectedRegionId > 0 && TotalHeadquartersAllocated > SelectedRegionAmount;
 
-    // ---- Level 3 (RM) Budget Summary: Total Budget / Allocated to Headquarters / Remaining
-    // Amount, scoped to the selected Region + FY. Separate from the Headquarters-wise allocation
-    // table above: all three fields here are plain manually-entered values, persisted as their
-    // own HeadquarterBudgetSummary row - Remaining is never computed from Total - Allocated. ----
-    private decimal _hqSummaryTotalBudget;
-    private decimal _hqSummaryAllocated;
+    // ---- Level 3 (RM) Budget Summary (HeadquarterBudgetSummary), scoped to the selected Region +
+    // FY. Total Budget and Allocated to Headquarters are never entered here - they're the
+    // applicable Region's own allocation (SelectedRegionAmount) and the existing HQ-wise
+    // allocation total (TotalHeadquartersAllocated), saved automatically whenever the allocation
+    // table below is saved. Remaining Amount is the one value still entered by hand, in the
+    // table's own "Remaining Amount" row - never computed from Total - Allocated. ----
     private decimal _hqSummaryRemaining;
-    private string _hqSummaryStatus = "Draft";
-    private bool _isSavingHqSummary;
-    private bool _isSubmittingHqSummary;
-    private string? _hqSummaryValidationMessage;
-    private string? _hqSummarySuccessMessage;
 
     private async Task LoadHeadquarterBudgetSummaryAsync()
     {
         if (_hqSelectedRegionId <= 0 || _selectedFY.Length == 0)
         {
-            _hqSummaryTotalBudget = 0;
-            _hqSummaryAllocated = 0;
             _hqSummaryRemaining = 0;
-            _hqSummaryStatus = "Draft";
             return;
         }
 
@@ -1353,33 +1181,22 @@
         {
             var dto = await Http.GetFromJsonAsync<HeadquarterBudgetSummaryDto>(
                 $"api/Budget/hq-budget-summary?regionId={_hqSelectedRegionId}&fy={Uri.EscapeDataString(_selectedFY)}");
-            _hqSummaryTotalBudget = dto?.TotalBudget ?? 0;
-            _hqSummaryAllocated = dto?.AllocatedAmount ?? 0;
+            // Only the previously-saved Remaining Amount is loaded into the editable row - Total
+            // Budget/Allocated are re-derived fresh every time they're saved, so there's nothing
+            // stale to load for them here.
             _hqSummaryRemaining = dto?.RemainingAmount ?? 0;
-            _hqSummaryStatus = dto?.Status ?? "Draft";
         }
         catch
         {
-            _hqSummaryStatus = "Draft";
+            _hqSummaryRemaining = 0;
         }
     }
 
-    private async Task SaveHeadquarterBudgetSummaryAsync()
-    {
-        if (_isSavingHqSummary || _hqSelectedRegionId <= 0 || _selectedFY.Length == 0)
-            return;
-
-        _isSavingHqSummary = true;
-        try
-        {
-            await TrySaveHeadquarterBudgetSummaryAsync();
-        }
-        finally
-        {
-            _isSavingHqSummary = false;
-        }
-    }
-
+    // Persists Total Budget (the applicable Region's own allocation) and Allocated to
+    // Headquarters (the just-saved sum of the table above) into HeadquarterBudgetSummary
+    // alongside whatever Remaining Amount the RM has typed into the table's own row. Called
+    // automatically from SaveHeadquarterAllocationsAsync - there is no separate "Save Budget
+    // Summary" button anymore.
     private async Task<bool> TrySaveHeadquarterBudgetSummaryAsync()
     {
         try
@@ -1388,78 +1205,63 @@
             {
                 RegionId = _hqSelectedRegionId,
                 FY = _selectedFY,
-                TotalBudget = _hqSummaryTotalBudget,
-                AllocatedAmount = _hqSummaryAllocated,
+                TotalBudget = SelectedRegionAmount,
+                AllocatedAmount = TotalHeadquartersAllocated,
                 RemainingAmount = _hqSummaryRemaining
             };
 
             var response = await Http.PutAsJsonAsync("api/Budget/hq-budget-summary", request);
             if (response.IsSuccessStatusCode)
-            {
-                _hqSummaryValidationMessage = null;
-                await LoadHeadquarterBudgetSummaryAsync();
                 return true;
-            }
 
             var raw = await response.Content.ReadAsStringAsync();
-            _hqSummaryValidationMessage = ExtractMessage(raw);
+            _hqValidationMessage = ExtractMessage(raw);
             return false;
         }
         catch (Exception ex)
         {
-            _hqSummaryValidationMessage = $"Failed to save: {ex.Message}";
+            _hqValidationMessage = $"Failed to save budget summary: {ex.Message}";
             return false;
         }
     }
 
-    // On Submit, Total Budget must equal Allocated to Headquarters + Remaining Amount. This
-    // client-side check is for immediate UX feedback only - the server independently
-    // re-validates the same rule, plus that Total Budget doesn't exceed the applicable
-    // Region's own allocated amount (see BudgetController.SubmitHeadquarterBudgetSummary).
-    private async Task SubmitHeadquarterBudgetSummaryAsync()
+    // Validates (server-side, authoritative) that TotalBudget == AllocatedAmount + RemainingAmount
+    // (and that it doesn't exceed the applicable Region's own allocation) and marks the
+    // HeadquarterBudgetSummary "Submitted". Called right after SaveHeadquarterAllocationsAsync's
+    // own save succeeds - a mismatch surfaces through the existing _hqValidationMessage, same as
+    // any other save/submit failure in this section. The TotalBudget/AllocatedAmount checks below
+    // mirror the server's own (authoritative) checks purely for immediate UX feedback.
+    private async Task<bool> TrySubmitHeadquarterBudgetSummaryAsync()
     {
-        if (_isSavingHqSummary || _isSubmittingHqSummary || _hqSelectedRegionId <= 0 || _selectedFY.Length == 0 || _hqSummaryStatus == "Submitted")
-            return;
-
-        if (_hqSummaryTotalBudget != _hqSummaryAllocated + _hqSummaryRemaining)
+        if (SelectedRegionAmount <= 0)
         {
-            _hqSummaryValidationMessage =
-                $"Total Budget (₹{_hqSummaryTotalBudget:N0}) must equal Allocated to Headquarters (₹{_hqSummaryAllocated:N0}) + Remaining Amount (₹{_hqSummaryRemaining:N0}).";
-            return;
+            _hqValidationMessage = "Total Budget must be greater than 0.";
+            return false;
         }
 
-        _isSubmittingHqSummary = true;
-        _hqSummarySuccessMessage = null;
+        if (TotalHeadquartersAllocated <= 0)
+        {
+            _hqValidationMessage = "Allocated Amount must be greater than 0.";
+            return false;
+        }
+
         try
         {
-            var saved = await TrySaveHeadquarterBudgetSummaryAsync();
-            if (!saved)
-                return;
-
             var request = new SubmitHeadquarterBudgetSummaryRequest { RegionId = _hqSelectedRegionId, FY = _selectedFY };
             var response = await Http.PutAsJsonAsync("api/Budget/hq-budget-summary/submit", request);
             if (response.IsSuccessStatusCode)
-            {
-                await LoadHeadquarterBudgetSummaryAsync();
-                _hqSummaryValidationMessage = null;
-                _hqSummarySuccessMessage = $"Headquarters budget summary for FY {_selectedFY} submitted successfully.";
-            }
-            else
-            {
-                var raw = await response.Content.ReadAsStringAsync();
-                _hqSummaryValidationMessage = ExtractMessage(raw);
-            }
+                return true;
+
+            var raw = await response.Content.ReadAsStringAsync();
+            _hqValidationMessage = ExtractMessage(raw);
+            return false;
         }
         catch (Exception ex)
         {
-            _hqSummaryValidationMessage = $"Failed to submit: {ex.Message}";
-        }
-        finally
-        {
-            _isSubmittingHqSummary = false;
+            _hqValidationMessage = $"Failed to submit budget summary: {ex.Message}";
+            return false;
         }
     }
-
 
     protected override async Task OnInitializedAsync()
     {
@@ -1513,18 +1315,12 @@
         _successMessage = null;
         await LoadStatesAsync();
         await LoadStatusAsync();
-
-        _stateSummaryValidationMessage = null;
-        _stateSummarySuccessMessage = null;
         await LoadStateBudgetSummaryAsync();
 
         // Region allocations are FY-scoped too - never mix one FY's regions with another's.
         _regionValidationMessage = null;
         _regionSuccessMessage = null;
         await LoadRegionsAsync();
-
-        _regionSummaryValidationMessage = null;
-        _regionSummarySuccessMessage = null;
         await LoadRegionBudgetSummaryAsync();
 
         // Headquarters allocations are FY-scoped too - reload whatever state/region is
@@ -1533,9 +1329,6 @@
         _hqSuccessMessage = null;
         await LoadHqRegionsAsync();
         await LoadHeadquartersAsync();
-
-        _hqSummaryValidationMessage = null;
-        _hqSummarySuccessMessage = null;
         await LoadHeadquarterBudgetSummaryAsync();
     }
 
@@ -1618,8 +1411,20 @@
     // Shared by the Save Draft button and by Submit For Validation (which must persist
     // the current on-screen amounts before marking the FY submitted). Returns true only
     // when the PUT actually succeeded, so a submit can safely stop if the save failed.
+    //
+    // Validated BEFORE anything is sent to the server: if the on-screen Total Budget / Allocated
+    // to State / Remaining Amount don't reconcile, neither the detail allocation rows nor the
+    // StateBudgetSummary are touched at all - this is a UX shortcut only, the server
+    // independently re-validates the identical rule in both SaveStateBudgetSummary and
+    // SubmitStateBudgetSummary and remains the sole authority.
     private async Task<bool> TrySaveAllocationsAsync()
     {
+        if (!TryValidateSummaryAmounts(TotalStateBudget, TotalAllocated, _stateSummaryRemaining, out var preCheckError))
+        {
+            _validationMessage = preCheckError;
+            return false;
+        }
+
         try
         {
             var request = new SaveStateBudgetRequest
@@ -1639,7 +1444,10 @@
                 // Reload from the DB rather than trusting local state, so the page
                 // always shows exactly what was persisted.
                 await LoadStatesAsync();
-                return true;
+
+                // Keep StateBudgetSummary's Total Budget/Allocated to State in sync with what was
+                // just persisted above, every time the allocation is saved (Save Draft or Submit).
+                return await TrySaveStateBudgetSummaryAsync();
             }
 
             var raw = await response.Content.ReadAsStringAsync();
@@ -1668,6 +1476,13 @@
         {
             var saved = await TrySaveAllocationsAsync();
             if (!saved)
+                return;
+
+            // Validates TotalBudget == AllocatedAmount + RemainingAmount server-side and marks the
+            // StateBudgetSummary Submitted - a mismatch blocks the whole Submit here, before the
+            // detail allocation below is ever marked Submitted, via the same _validationMessage.
+            var summarySubmitted = await TrySubmitStateBudgetSummaryAsync();
+            if (!summarySubmitted)
                 return;
 
             var request = new SubmitStateBudgetRequest { FY = _selectedFY };
@@ -1699,9 +1514,6 @@
         _regionValidationMessage = null;
         _regionSuccessMessage = null;
         await LoadRegionsAsync();
-
-        _regionSummaryValidationMessage = null;
-        _regionSummarySuccessMessage = null;
         await LoadRegionBudgetSummaryAsync();
     }
 
@@ -1749,10 +1561,23 @@
     // convention as Save Draft for states - the backend independently re-validates
     // everything (state/region existence, region-belongs-to-state, negatives, total
     // vs. the state's own allocated amount) regardless of what the client already checked.
+    //
+    // Validated BEFORE anything is sent to the server: if Total Budget (the applicable State's
+    // own allocation) / Allocated to Region / Remaining Amount don't reconcile, neither the
+    // detail allocation rows nor the RegionBudgetSummary are touched, and no success message is
+    // shown - this is a UX shortcut only, the server independently re-validates the identical
+    // rule in both SaveRegionBudgetSummary and SubmitRegionBudgetSummary.
     private async Task SaveRegionAllocationsAsync()
     {
         if (_isSavingRegion || _hasRegionValidationError || _selectedStateId <= 0 || _selectedFY.Length == 0)
             return;
+
+        if (!TryValidateSummaryAmounts(SelectedStateAmount, TotalRegionAllocated, _regionSummaryRemaining, out var preCheckError))
+        {
+            _regionValidationMessage = preCheckError;
+            _regionSuccessMessage = null;
+            return;
+        }
 
         _isSavingRegion = true;
         try
@@ -1772,10 +1597,19 @@
             if (response.IsSuccessStatusCode)
             {
                 _regionValidationMessage = null;
-                _regionSuccessMessage = "Region budget allocation saved successfully.";
                 // Reload from the DB rather than trusting local state, so the page
                 // always shows exactly what was persisted.
                 await LoadRegionsAsync();
+
+                // Keep RegionBudgetSummary's Total Budget/Allocated to Region in sync with what
+                // was just persisted above, then validate+submit it (TotalBudget ==
+                // AllocatedAmount + RemainingAmount) every time the allocation is saved - Region
+                // has no separate Draft/Submit buttons, so this single save does both. The success
+                // message only appears once the WHOLE operation (detail + summary save + summary
+                // submit) has gone through - never on a partial/rejected save.
+                var summarySaved = await TrySaveRegionBudgetSummaryAsync();
+                if (summarySaved && await TrySubmitRegionBudgetSummaryAsync())
+                    _regionSuccessMessage = "Region budget allocation saved successfully.";
             }
             else
             {
@@ -1800,9 +1634,6 @@
         _hqValidationMessage = null;
         _hqSuccessMessage = null;
         await LoadHqRegionsAsync();
-
-        _hqSummaryValidationMessage = null;
-        _hqSummarySuccessMessage = null;
         await LoadHeadquarterBudgetSummaryAsync();
     }
 
@@ -1828,9 +1659,6 @@
         _hqValidationMessage = null;
         _hqSuccessMessage = null;
         await LoadHeadquartersAsync();
-
-        _hqSummaryValidationMessage = null;
-        _hqSummarySuccessMessage = null;
         await LoadHeadquarterBudgetSummaryAsync();
     }
 
@@ -1880,10 +1708,23 @@
     // re-validates everything (region/headquarter existence, headquarter-belongs-to-region,
     // negatives, total vs. the region's own allocated amount) regardless of what the client
     // already checked.
+    //
+    // Validated BEFORE anything is sent to the server: if Total Budget (the applicable Region's
+    // own allocation) / Allocated to Headquarters / Remaining Amount don't reconcile, neither the
+    // detail allocation rows nor the HeadquarterBudgetSummary are touched, and no success message
+    // is shown - this is a UX shortcut only, the server independently re-validates the identical
+    // rule in both SaveHeadquarterBudgetSummary and SubmitHeadquarterBudgetSummary.
     private async Task SaveHeadquarterAllocationsAsync()
     {
         if (_isSavingHq || _hasHqValidationError || _hqSelectedRegionId <= 0 || _selectedFY.Length == 0)
             return;
+
+        if (!TryValidateSummaryAmounts(SelectedRegionAmount, TotalHeadquartersAllocated, _hqSummaryRemaining, out var preCheckError))
+        {
+            _hqValidationMessage = preCheckError;
+            _hqSuccessMessage = null;
+            return;
+        }
 
         _isSavingHq = true;
         try
@@ -1903,10 +1744,19 @@
             if (response.IsSuccessStatusCode)
             {
                 _hqValidationMessage = null;
-                _hqSuccessMessage = "Headquarters budget allocation saved successfully.";
                 // Reload from the DB rather than trusting local state, so the page
                 // always shows exactly what was persisted.
                 await LoadHeadquartersAsync();
+
+                // Keep HeadquarterBudgetSummary's Total Budget/Allocated to Headquarters in sync
+                // with what was just persisted above, then validate+submit it (TotalBudget ==
+                // AllocatedAmount + RemainingAmount) every time the allocation is saved -
+                // Headquarters has no separate Draft/Submit buttons, so this single save does
+                // both. The success message only appears once the WHOLE operation (detail +
+                // summary save + summary submit) has gone through - never on a partial/rejected save.
+                var summarySaved = await TrySaveHeadquarterBudgetSummaryAsync();
+                if (summarySaved && await TrySubmitHeadquarterBudgetSummaryAsync())
+                    _hqSuccessMessage = "Headquarters budget allocation saved successfully.";
             }
             else
             {
@@ -1934,6 +1784,43 @@
         }
         catch { }
         return "Save failed.";
+    }
+
+    // Mirrors BudgetController.TryValidateSummaryAmounts exactly, for immediate UX feedback only -
+    // the server independently re-validates the same rules on every Save and Submit endpoint and
+    // is the sole authority; this client copy can never be the only thing standing between an
+    // unreconciled row and the database.
+    private static bool TryValidateSummaryAmounts(decimal totalBudget, decimal allocatedAmount, decimal remainingAmount, out string error)
+    {
+        if (totalBudget <= 0)
+        {
+            error = "Total Budget must be greater than 0.";
+            return false;
+        }
+
+        if (allocatedAmount <= 0)
+        {
+            error = "Allocated Amount must be greater than 0.";
+            return false;
+        }
+
+        if (remainingAmount < 0)
+        {
+            error = "Remaining Amount cannot be negative.";
+            return false;
+        }
+
+        if (totalBudget != allocatedAmount + remainingAmount)
+        {
+            var expectedRemaining = totalBudget - allocatedAmount;
+            error = expectedRemaining >= 0
+                ? $"Remaining Amount must be ₹{expectedRemaining:N0}. Current entered amount is ₹{remainingAmount:N0}."
+                : $"Allocated Amount (₹{allocatedAmount:N0}) cannot exceed Total Budget (₹{totalBudget:N0}).";
+            return false;
+        }
+
+        error = "";
+        return true;
     }
 
 }

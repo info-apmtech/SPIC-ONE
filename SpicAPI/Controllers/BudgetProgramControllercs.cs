@@ -60,6 +60,49 @@ namespace SpicAPI.Controllers
             var roleClaim = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
             return roleClaim == AppRole.RM.ToString() || roleClaim == AppRole.RMD.ToString();
         }
+
+        /// <summary>
+        /// Single authoritative rule set shared by every level's Save AND Submit endpoint for the
+        /// Total Budget / Allocated / Remaining Amount summary - Save and Submit must never apply
+        /// different rules, since that mismatch previously let an unreconciled row (e.g. Total=100,
+        /// Allocated=20, Remaining=2) get written to the database by Save despite being rejected by
+        /// Submit. TotalBudget/AllocatedAmount must be strictly positive, RemainingAmount may be
+        /// zero but never negative, and the three must reconcile exactly.
+        /// </summary>
+        private static bool TryValidateSummaryAmounts(
+            decimal totalBudget, decimal allocatedAmount, decimal remainingAmount, out string error)
+        {
+            if (totalBudget <= 0)
+            {
+                error = "Total Budget must be greater than 0.";
+                return false;
+            }
+
+            if (allocatedAmount <= 0)
+            {
+                error = "Allocated Amount must be greater than 0.";
+                return false;
+            }
+
+            if (remainingAmount < 0)
+            {
+                error = "Remaining Amount cannot be negative.";
+                return false;
+            }
+
+            if (totalBudget != allocatedAmount + remainingAmount)
+            {
+                var expectedRemaining = totalBudget - allocatedAmount;
+                error = expectedRemaining >= 0
+                    ? $"Remaining Amount must be ₹{expectedRemaining:N0}. Current entered amount is ₹{remainingAmount:N0}."
+                    : $"Allocated Amount (₹{allocatedAmount:N0}) cannot exceed Total Budget (₹{totalBudget:N0}).";
+                return false;
+            }
+
+            error = "";
+            return true;
+        }
+
         public BudgetController(
     IGenericRepository<BudgetProgram> budgetRepo,
     IGenericRepository<ProgramMaster> programRepo,
@@ -139,7 +182,7 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            // Get the logged-in user's state.
+            // Logged-in user's StateId
             var stateClaim = User.FindFirst("spic:state_id")?.Value;
 
             if (!int.TryParse(stateClaim, out int stateId) || stateId <= 0)
@@ -150,7 +193,7 @@ namespace SpicAPI.Controllers
                 });
             }
 
-            // Get the logged-in user's role.
+            // Logged-in user's role
             var roleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
 
             bool isSMDOUser =
@@ -166,7 +209,6 @@ namespace SpicAPI.Controllers
                 roleClaim == AppRole.MDO.ToString() ||
                 roleClaim == AppRole.JMDO.ToString();
 
-            // Use the same role groups as the program-list endpoint.
             if (!isSMDOUser && !isRMDOUser && !isMOUser)
             {
                 return Forbid();
@@ -174,8 +216,7 @@ namespace SpicAPI.Controllers
 
             try
             {
-                // Confirm that every submitted program is accessible
-                // to this user's state and role.
+                // Validate programs based on State + Role
                 var stateBudgets = _programStateBudgetRepo.GetAll();
 
                 var allowedProgramCount = await _programRepo
@@ -202,16 +243,21 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                // Match the page's existing requirement:
-                // a positive base amount and a positive count for every month.
+                /*
+                 * Monthly counts are NOT mandatory.
+                 *
+                 * 0 = allowed
+                 * Positive value = allowed
+                 * Negative value = not allowed
+                 */
                 foreach (var item in request.Programs)
                 {
-                    if (item.TotalBudget <= 0)
+                    if (item.TotalBudget < 0)
                     {
                         return BadRequest(new
                         {
                             message =
-                                $"Budget amount must be greater than zero " +
+                                $"Budget amount cannot be negative " +
                                 $"for program {item.ProgramId}."
                         });
                     }
@@ -232,12 +278,12 @@ namespace SpicAPI.Controllers
                 item.MarchCount
             };
 
-                    if (monthlyCounts.Any(count => count <= 0))
+                    if (monthlyCounts.Any(count => count < 0))
                     {
                         return BadRequest(new
                         {
                             message =
-                                $"A positive count is required for every month " +
+                                $"Monthly counts cannot be negative " +
                                 $"for program {item.ProgramId}."
                         });
                     }
@@ -269,9 +315,7 @@ namespace SpicAPI.Controllers
                     }
                 }
 
-                // Build fresh detail entities.
-                // Do not trust IDs, parent IDs or navigation objects
-                // supplied by the client.
+                // Build fresh BudgetProgram child records
                 var programDetails = request.Programs
                     .Select(item => new BudgetProgram
                     {
@@ -317,7 +361,7 @@ namespace SpicAPI.Controllers
                     })
                     .ToList();
 
-                // AllocatedAmount = total of all monthly amounts in this batch.
+                // Total allocated amount of all programs / months
                 decimal allocatedAmount = programDetails.Sum(x =>
                     x.April +
                     x.May +
@@ -333,18 +377,38 @@ namespace SpicAPI.Controllers
                     x.March
                 );
 
-                // Create ONE main record.
+                /*
+                 * MAIN VALIDATION
+                 *
+                 * Approved Budget must exactly equal Allocated Budget.
+                 */
+                if (allocatedAmount != request.ApprovedAmount)
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            $"Allocated Budget ₹{allocatedAmount:N0} must be equal to " +
+                            $"Approved Budget ₹{request.ApprovedAmount:N0}."
+                    });
+                }
+
+                // Since allocation equals approved budget,
+                // remaining/SID amount should normally be zero.
+                decimal sidAmount =
+                    request.ApprovedAmount - allocatedAmount;
+
+                // Create one parent record
                 var main = new BudgetProgramMains
                 {
                     Status = "Draft",
+
                     StateId = stateId,
+
                     FinancialYear = financialYear,
 
-                    // Audit information is set by the server.
                     CreatedBy = CurrentUser,
                     CreatedAt = DateTime.Now,
 
-                    // Validation and approval have not happened yet.
                     ValidateBy = "",
                     ValidateAt = null,
 
@@ -352,18 +416,16 @@ namespace SpicAPI.Controllers
                     ApprovedAt = null,
 
                     ApprovedAmount = request.ApprovedAmount,
-                    AllocatedAmount = allocatedAmount,
-                    SIDAmount = request.SIDAmount,
 
-                    // Connect all program details to this main record.
+                    AllocatedAmount = allocatedAmount,
+
+                    SIDAmount = sidAmount,
+
                     Programs = programDetails
                 };
 
-                // Add the main record and its related details.
                 _db.Set<BudgetProgramMains>().Add(main);
 
-                // Save both tables together.
-                // EF assigns main.Id to BudgetProgram.BudgetProgramMains.
                 await _db.SaveChangesAsync();
 
                 return Ok(new
@@ -372,16 +434,18 @@ namespace SpicAPI.Controllers
                     data = new
                     {
                         BudgetProgramMainId = main.Id,
+                        main.StateId,
                         main.Status,
                         main.FinancialYear,
+                        main.ApprovedAmount,
                         main.AllocatedAmount,
+                        main.SIDAmount,
                         ProgramCount = programDetails.Count
                     }
                 });
             }
             catch (Exception ex)
             {
-                // Keep technical exception details in server logs.
                 Console.Error.WriteLine(ex);
 
                 return StatusCode(500, new
@@ -392,7 +456,6 @@ namespace SpicAPI.Controllers
                 });
             }
         }
-
 
         [HttpGet]
         public async Task<IActionResult> GetAll()
@@ -961,6 +1024,9 @@ namespace SpicAPI.Controllers
             if (annualBudget == null)
                 return BadRequest(new { message = $"No Annual Budget is defined for FY {fy}." });
 
+            if (annualBudget.Amount <= 0)
+                return BadRequest(new { message = "Total Budget must be greater than 0." });
+
             var totalRequested = request.Allocations.Sum(a => a.Amount);
             if (totalRequested > annualBudget.Amount)
                 return BadRequest(new
@@ -1462,6 +1528,9 @@ namespace SpicAPI.Controllers
             if (stateAllocation == null)
                 return BadRequest(new { message = $"No State Budget Allocation is saved for {state.StateName} in FY {fy}." });
 
+            if (stateAllocation.Amount <= 0)
+                return BadRequest(new { message = "Total Budget must be greater than 0." });
+
             var regionIds = request.Allocations.Select(a => a.RegionId).ToList();
             var regions = await _db.Set<Region>()
                 .Where(r => regionIds.Contains(r.Id))
@@ -1590,6 +1659,9 @@ namespace SpicAPI.Controllers
             if (regionAllocation == null)
                 return BadRequest(new { message = $"No Region Budget Allocation is saved for {region.RegionName} in FY {fy}." });
 
+            if (regionAllocation.Amount <= 0)
+                return BadRequest(new { message = "Total Budget must be greater than 0." });
+
             var hqIds = request.Allocations.Select(a => a.HeadquarterId).ToList();
             var headquarters = await _headquarterRepo.GetAll()
                 .Where(h => hqIds.Contains(h.Id))
@@ -1704,8 +1776,10 @@ namespace SpicAPI.Controllers
             if (fy.Length == 0)
                 return BadRequest(new { message = "Financial Year is required." });
 
-            if (request.TotalBudget < 0 || request.AllocatedAmount < 0 || request.RemainingAmount < 0)
-                return BadRequest(new { message = "Amounts cannot be negative." });
+            // Save is just as authoritative as Submit: a row that doesn't reconcile is never
+            // written to the database at all, Draft or otherwise.
+            if (!TryValidateSummaryAmounts(request.TotalBudget, request.AllocatedAmount, request.RemainingAmount, out var validationError))
+                return BadRequest(new { message = validationError });
 
             var summary = await _db.Set<StateBudgetSummary>().FirstOrDefaultAsync(s => s.FY == fy);
             if (summary == null)
@@ -1749,11 +1823,10 @@ namespace SpicAPI.Controllers
             if (summary == null)
                 return BadRequest(new { message = $"Save the state budget summary for FY {fy} before submitting." });
 
-            if (summary.TotalBudget != summary.AllocatedAmount + summary.RemainingAmount)
-                return BadRequest(new
-                {
-                    message = $"Total Budget (₹{summary.TotalBudget:N0}) must equal Allocated to State (₹{summary.AllocatedAmount:N0}) + Remaining Amount (₹{summary.RemainingAmount:N0})."
-                });
+            // Same rule set as Save - re-validated independently here since Submit is the
+            // authoritative gate for progressing Status, regardless of what Save already enforced.
+            if (!TryValidateSummaryAmounts(summary.TotalBudget, summary.AllocatedAmount, summary.RemainingAmount, out var validationError))
+                return BadRequest(new { message = validationError });
 
             summary.Status = "Submitted";
             summary.UpdatedBy = CurrentUser;
@@ -1803,12 +1876,22 @@ namespace SpicAPI.Controllers
             if (request.StateId <= 0)
                 return BadRequest(new { message = "A State must be selected." });
 
-            if (request.TotalBudget < 0 || request.AllocatedAmount < 0 || request.RemainingAmount < 0)
-                return BadRequest(new { message = "Amounts cannot be negative." });
+            // Save is just as authoritative as Submit: a row that doesn't reconcile is never
+            // written to the database at all, Draft or otherwise.
+            if (!TryValidateSummaryAmounts(request.TotalBudget, request.AllocatedAmount, request.RemainingAmount, out var validationError))
+                return BadRequest(new { message = validationError });
 
             var state = await _stateRepo.GetAll().FirstOrDefaultAsync(s => s.Id == request.StateId);
             if (state == null)
                 return BadRequest(new { message = "Selected state is invalid or inactive." });
+
+            var stateAllocationForSave = await _db.Set<StateBudgetAllocation>()
+                .FirstOrDefaultAsync(a => a.StateId == request.StateId && a.FY == fy);
+            if (stateAllocationForSave != null && request.TotalBudget > stateAllocationForSave.Amount)
+                return BadRequest(new
+                {
+                    message = $"Total Budget cannot exceed the applicable State budget of ₹{stateAllocationForSave.Amount:N0}."
+                });
 
             var summary = await _db.Set<RegionBudgetSummary>()
                 .FirstOrDefaultAsync(s => s.StateId == request.StateId && s.FY == fy);
@@ -1859,11 +1942,10 @@ namespace SpicAPI.Controllers
             if (summary == null)
                 return BadRequest(new { message = $"Save the region budget summary for FY {fy} before submitting." });
 
-            if (summary.TotalBudget != summary.AllocatedAmount + summary.RemainingAmount)
-                return BadRequest(new
-                {
-                    message = $"Total Budget (₹{summary.TotalBudget:N0}) must equal Allocated to Region (₹{summary.AllocatedAmount:N0}) + Remaining Amount (₹{summary.RemainingAmount:N0})."
-                });
+            // Same rule set as Save - re-validated independently here since Submit is the
+            // authoritative gate for progressing Status, regardless of what Save already enforced.
+            if (!TryValidateSummaryAmounts(summary.TotalBudget, summary.AllocatedAmount, summary.RemainingAmount, out var validationError))
+                return BadRequest(new { message = validationError });
 
             var stateAllocation = await _db.Set<StateBudgetAllocation>()
                 .FirstOrDefaultAsync(a => a.StateId == request.StateId && a.FY == fy);
@@ -1921,12 +2003,22 @@ namespace SpicAPI.Controllers
             if (request.RegionId <= 0)
                 return BadRequest(new { message = "A Region must be selected." });
 
-            if (request.TotalBudget < 0 || request.AllocatedAmount < 0 || request.RemainingAmount < 0)
-                return BadRequest(new { message = "Amounts cannot be negative." });
+            // Save is just as authoritative as Submit: a row that doesn't reconcile is never
+            // written to the database at all, Draft or otherwise.
+            if (!TryValidateSummaryAmounts(request.TotalBudget, request.AllocatedAmount, request.RemainingAmount, out var validationError))
+                return BadRequest(new { message = validationError });
 
             var region = await _db.Set<Region>().FirstOrDefaultAsync(r => r.Id == request.RegionId);
             if (region == null)
                 return BadRequest(new { message = "Selected region is invalid or inactive." });
+
+            var regionAllocationForSave = await _db.Set<RegionBudgetAllocation>()
+                .FirstOrDefaultAsync(a => a.RegionId == request.RegionId && a.FY == fy);
+            if (regionAllocationForSave != null && request.TotalBudget > regionAllocationForSave.Amount)
+                return BadRequest(new
+                {
+                    message = $"Total Budget cannot exceed the applicable Region budget of ₹{regionAllocationForSave.Amount:N0}."
+                });
 
             var summary = await _db.Set<HeadquarterBudgetSummary>()
                 .FirstOrDefaultAsync(s => s.RegionId == request.RegionId && s.FY == fy);
@@ -1977,11 +2069,10 @@ namespace SpicAPI.Controllers
             if (summary == null)
                 return BadRequest(new { message = $"Save the headquarters budget summary for FY {fy} before submitting." });
 
-            if (summary.TotalBudget != summary.AllocatedAmount + summary.RemainingAmount)
-                return BadRequest(new
-                {
-                    message = $"Total Budget (₹{summary.TotalBudget:N0}) must equal Allocated to Headquarters (₹{summary.AllocatedAmount:N0}) + Remaining Amount (₹{summary.RemainingAmount:N0})."
-                });
+            // Same rule set as Save - re-validated independently here since Submit is the
+            // authoritative gate for progressing Status, regardless of what Save already enforced.
+            if (!TryValidateSummaryAmounts(summary.TotalBudget, summary.AllocatedAmount, summary.RemainingAmount, out var validationError))
+                return BadRequest(new { message = validationError });
 
             var regionAllocation = await _db.Set<RegionBudgetAllocation>()
                 .FirstOrDefaultAsync(a => a.RegionId == request.RegionId && a.FY == fy);
@@ -2056,6 +2147,43 @@ namespace SpicAPI.Controllers
             Action = action,
             ActionDate = DateTime.Now
         };
+
+        /// <summary>
+        /// Read-only diagnostic for data that may already have been written while
+        /// Save didn't yet enforce the full TotalBudget/AllocatedAmount/RemainingAmount rule (fixed
+        /// in this change - see TryValidateSummaryAmounts). Lists every existing summary row at all
+        /// three levels that fails the rule today, so it can be reviewed and corrected manually;
+        /// this endpoint never modifies or deletes anything itself.
+        /// </summary>
+        [HttpGet("budget-summary-audit")]
+        public async Task<IActionResult> GetBudgetSummaryAudit()
+        {
+            var badState = await _db.Set<StateBudgetSummary>()
+                .Where(s => s.TotalBudget <= 0 || s.AllocatedAmount <= 0 || s.RemainingAmount < 0
+                    || s.TotalBudget != s.AllocatedAmount + s.RemainingAmount)
+                .Select(s => new { Level = "State", s.Id, s.FY, s.TotalBudget, s.AllocatedAmount, s.RemainingAmount, s.Status })
+                .ToListAsync();
+
+            var badRegion = await _db.Set<RegionBudgetSummary>()
+                .Where(s => s.TotalBudget <= 0 || s.AllocatedAmount <= 0 || s.RemainingAmount < 0
+                    || s.TotalBudget != s.AllocatedAmount + s.RemainingAmount)
+                .Select(s => new { Level = "Region", s.Id, s.StateId, s.FY, s.TotalBudget, s.AllocatedAmount, s.RemainingAmount, s.Status })
+                .ToListAsync();
+
+            var badHq = await _db.Set<HeadquarterBudgetSummary>()
+                .Where(s => s.TotalBudget <= 0 || s.AllocatedAmount <= 0 || s.RemainingAmount < 0
+                    || s.TotalBudget != s.AllocatedAmount + s.RemainingAmount)
+                .Select(s => new { Level = "Headquarters", s.Id, s.RegionId, s.FY, s.TotalBudget, s.AllocatedAmount, s.RemainingAmount, s.Status })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                totalInvalidRecords = badState.Count + badRegion.Count + badHq.Count,
+                state = badState,
+                region = badRegion,
+                headquarters = badHq
+            });
+        }
     }
 
 
