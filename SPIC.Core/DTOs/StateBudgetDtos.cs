@@ -44,4 +44,36 @@ namespace SPIC.Core.DTOs
     {
         public string Status { get; set; } = "Draft";
     }
+
+    /// <summary>
+    /// Level 1 (Admin) summary for one FY: the Total Budget / Allocated to State / Remaining
+    /// Amount triple from StateBudgetSummary. All three are plain persisted values - never
+    /// recomputed from each other - returned as 0/"Draft" when nothing has been saved yet.
+    /// </summary>
+    public class StateBudgetSummaryDto
+    {
+        public string FY { get; set; } = string.Empty;
+        public decimal TotalBudget { get; set; }
+        public decimal AllocatedAmount { get; set; }
+        public decimal RemainingAmount { get; set; }
+        public string Status { get; set; } = "Draft";
+    }
+
+    /// <summary>
+    /// Save (Draft) request for the Level 1 summary. All three values are whatever the Admin
+    /// typed - no server-side recomputation of RemainingAmount from TotalBudget - AllocatedAmount.
+    /// </summary>
+    public class SaveStateBudgetSummaryRequest
+    {
+        public string FY { get; set; } = string.Empty;
+        public decimal TotalBudget { get; set; }
+        public decimal AllocatedAmount { get; set; }
+        public decimal RemainingAmount { get; set; }
+    }
+
+    /// <summary>Submit request for the Level 1 summary: re-validates TotalBudget = AllocatedAmount + RemainingAmount.</summary>
+    public class SubmitStateBudgetSummaryRequest
+    {
+        public string FY { get; set; } = string.Empty;
+    }
 }

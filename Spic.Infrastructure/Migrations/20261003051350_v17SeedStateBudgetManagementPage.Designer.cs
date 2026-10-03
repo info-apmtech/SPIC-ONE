@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261003051350_v17SeedStateBudgetManagementPage")]
+    partial class v17SeedStateBudgetManagementPage
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2094,8 +2097,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("AugustCount")
                         .HasColumnType("numeric");
 
-                    b.Property<int>("BudgetProgramMainId")
-                        .HasColumnType("integer");
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<decimal>("December")
                         .HasColumnType("numeric");
@@ -2108,6 +2115,10 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<decimal>("FebruaryCount")
                         .HasColumnType("numeric");
+
+                    b.Property<string>("FinancialYear")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<decimal>("January")
                         .HasColumnType("numeric");
@@ -2160,70 +2171,24 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("SeptemberCount")
                         .HasColumnType("numeric");
 
-                    b.Property<decimal>("TotalBudget")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BudgetProgramMainId");
-
-                    b.HasIndex("ProgramId");
-
-                    b.ToTable("BudgetPrograms");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgramMains", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("AllocatedAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("ApprovedAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<DateTime?>("ApprovedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("ApprovedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("FinancialYear")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("SIDAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<int>("StateId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("ValidateAt")
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("ValidateBy")
-                        .IsRequired()
+                    b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.ToTable("BudgetProgramMains");
+                    b.HasIndex("ProgramId");
+
+                    b.ToTable("BudgetPrograms");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR1", b =>
@@ -11159,19 +11124,11 @@ namespace Spic.Infrastructure.Migrations
 
             modelBuilder.Entity("SPIC.Core.Entities.BudgetProgram", b =>
                 {
-                    b.HasOne("SPIC.Core.Entities.BudgetProgramMains", "BudgetProgramMain")
-                        .WithMany("Programs")
-                        .HasForeignKey("BudgetProgramMainId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("SPIC.Core.Entities.ProgramMaster", "Program")
                         .WithMany()
                         .HasForeignKey("ProgramId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("BudgetProgramMain");
 
                     b.Navigation("Program");
                 });
@@ -11964,11 +11921,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("WelfareApplication");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgramMains", b =>
-                {
-                    b.Navigation("Programs");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CommunityPost", b =>
