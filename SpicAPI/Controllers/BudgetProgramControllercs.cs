@@ -2613,6 +2613,189 @@ namespace SpicAPI.Controllers
                     "HeadquarterBudgetSummary.RemainingAmount"
             });
         }
+
+        [Authorize]
+        [HttpGet("role-budget")]
+        public async Task<IActionResult> GetRoleBudget(
+    [FromQuery] string fy)
+        {
+            if (string.IsNullOrWhiteSpace(fy))
+            {
+                return BadRequest(new
+                {
+                    message = "Financial Year is required."
+                });
+            }
+
+            var role =
+                User.FindFirst(ClaimTypes.Role)?.Value;
+
+            var stateClaim =
+                User.FindFirst("spic:state_id")?.Value;
+
+            var regionClaim =
+                User.FindFirst("spic:region_id")?.Value;
+
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                return Forbid();
+            }
+
+            if (!int.TryParse(
+                    stateClaim,
+                    out int stateId))
+            {
+                stateId = 0;
+            }
+
+            if (!int.TryParse(
+                    regionClaim,
+                    out int regionId))
+            {
+                regionId = 0;
+            }
+
+            Console.WriteLine(
+                $"ROLE BUDGET API => " +
+                $"Role={role}, " +
+                $"StateId={stateId}, " +
+                $"RegionId={regionId}, " +
+                $"FY={fy}"
+            );
+
+            // ===========================================
+            // SMM
+            // State allocation given by Admin
+            // ===========================================
+            if (role == AppRole.SMM.ToString())
+            {
+                if (stateId <= 0)
+                {
+                    return BadRequest(new
+                    {
+                        message = "State is not assigned."
+                    });
+                }
+
+                var allocation =
+                    await _db
+                        .Set<StateBudgetAllocation>()
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x =>
+                            x.StateId == stateId &&
+                            x.FY == fy
+                        );
+
+                Console.WriteLine(
+                    allocation == null
+                        ? $"No StateBudgetAllocation found. StateId={stateId}, FY={fy}"
+                        : $"StateBudgetAllocation found. Amount={allocation.Amount}"
+                );
+
+                return Ok(new RoleBudgetDto
+                {
+                    BudgetAmount =
+                        allocation?.Amount ?? 0,
+
+                    BudgetLabel =
+                        "SMM Allotted Budget",
+
+                    Source =
+                        "StateBudgetAllocation.Amount"
+                });
+            }
+
+            // ===========================================
+            // SMD
+            // State remaining amount
+            // ===========================================
+            if (role == AppRole.SMD.ToString())
+            {
+                var summary =
+                    await _db
+                        .Set<RegionBudgetSummary>()
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x =>
+                            x.StateId == stateId &&
+                            x.FY == fy
+                        );
+
+                return Ok(new RoleBudgetDto
+                {
+                    BudgetAmount =
+                        summary?.RemainingAmount ?? 0,
+
+                    BudgetLabel =
+                        "SMDO Budget",
+
+                    Source =
+                        "RegionBudgetSummary.RemainingAmount"
+                });
+            }
+
+            // ===========================================
+            // RM
+            // Region allocation
+            // ===========================================
+            if (role == AppRole.RM.ToString())
+            {
+                var allocation =
+                    await _db
+                        .Set<RegionBudgetAllocation>()
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x =>
+                            x.RegionId == regionId &&
+                            x.FY == fy
+                        );
+
+                return Ok(new RoleBudgetDto
+                {
+                    BudgetAmount =
+                        allocation?.Amount ?? 0,
+
+                    BudgetLabel =
+                        "RM Allotted Budget",
+
+                    Source =
+                        "RegionBudgetAllocation.Amount"
+                });
+            }
+
+            // ===========================================
+            // RMD
+            // Region remaining amount
+            // ===========================================
+            if (role == AppRole.RMD.ToString())
+            {
+                var summary =
+                    await _db
+                        .Set<HeadquarterBudgetSummary>()
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x =>
+                            x.RegionId == regionId &&
+                            x.FY == fy
+                        );
+
+                return Ok(new RoleBudgetDto
+                {
+                    BudgetAmount =
+                        summary?.RemainingAmount ?? 0,
+
+                    BudgetLabel =
+                        "RMDO Budget",
+
+                    Source =
+                        "HeadquarterBudgetSummary.RemainingAmount"
+                });
+            }
+
+            return Ok(new RoleBudgetDto
+            {
+                BudgetAmount = 0,
+                BudgetLabel = "Available Budget",
+                Source = string.Empty
+            });
+        }
     }
 
 

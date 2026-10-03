@@ -7,6 +7,7 @@
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
+@using DR = SPIC.Core.Entities
 
 <div class="container-fluid py-4 px-0">
     <div class="bm-wrapper">
@@ -105,7 +106,7 @@
                     <div class="bm-stat-content">
                         <span class="bm-stat-value">₹ 4.85 Cr</span>
                         <span class="bm-stat-label">Total Regional Budget</span>
-                        <span class="bm-stat-sub">FY GetCurrentFinancialYear()</span>
+                        <span class="bm-stat-sub">FY @(_selectedFY.Length > 0 ? _selectedFY : "-")</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -169,7 +170,27 @@
         <!-- Section Header -->
         <div class="bm-section-header">
             <h2>Program-wise Budget Planning</h2>
-            <span class="bm-year-badge">FY @GetCurrentFinancialYear()</span>
+            @if (_availableFYs.Count > 0)
+            {
+                <select class="bm-year-select"
+                        @bind="_selectedFY"
+                        @bind:after="OnFYChangedAsync">
+
+                    @foreach (var fy in _availableFYs)
+                    {
+                        <option value="@fy">
+                            FY @fy
+                        </option>
+                    }
+
+                </select>
+            }
+            else
+            {
+                <span class="bm-year-badge">
+                    No FY Available
+                </span>
+            }
         </div>
 
         <!-- Input Table -->
@@ -639,8 +660,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                               watermarks (::before/::after) that leak onto these tiles and sit on top
-                               of the label text. Neutralise them for this page only. */
+                                   watermarks (::before/::after) that leak onto these tiles and sit on top
+                                   of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -762,6 +783,24 @@
         padding: 4px 10px;
         border-radius: 6px;
     }
+
+    .bm-year-select {
+        background-color: #e6fcf1;
+        color: #047857;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 6px 30px 6px 10px;
+        border-radius: 6px;
+        border: 1px solid #d1fae5;
+        outline: none;
+        cursor: pointer;
+        min-width: 130px;
+    }
+
+        .bm-year-select:focus {
+            border-color: #10b981;
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.12);
+        }
 
     .bm-table-card {
         background-color: #ffffff;
@@ -1076,7 +1115,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                                   on screen (it used to sit off the right edge of a 720px table). */
+                                       on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1160,6 +1199,9 @@
         ProgramWise
     }
 
+    private List<string> _availableFYs = new();
+    private string _selectedFY = string.Empty;
+
     private BudgetPlanningView currentView = BudgetPlanningView.ProgramWise;
 
     private void SetView(BudgetPlanningView view)
@@ -1187,8 +1229,18 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadFinancialYearsAsync();
         await LoadBudgetDashboard();
         await LoadProgramBudget();
+    }
+
+    private async Task OnFYChangedAsync()
+    {
+        await LoadBudgetDashboard();
+
+        await LoadProgramBudget();
+
+        StateHasChanged();
     }
 
 
@@ -1196,30 +1248,139 @@
     {
         try
         {
+            SMMAllocatedBudget = 0;
+            SMDOAllocatedBudget = 0;
+            StateTotalBudget = 0;
+
             dashboard =
                 await Http.GetFromJsonAsync<BudgetDashboardDto>(
                     "api/Budget/dashboard"
                 ) ?? new();
 
-            var stateBudget =
-                await Http.GetFromJsonAsync<StateBudgetSummaryDto>(
-                    $"api/Budget/state-budget-summary?stateId={LoginState.StateId}"
+            if (string.IsNullOrWhiteSpace(_selectedFY))
+            {
+                Console.WriteLine("Selected FY is empty.");
+                return;
+            }
+
+            var role =
+                LoginState.UserRole?.ToString() ?? string.Empty;
+
+            Console.WriteLine(
+                $"Budget Load => Role: {role}, " +
+                $"StateId: {LoginState.StateId}, " +
+                $"RegionId: {LoginState.RegionId}, " +
+                $"FY: {_selectedFY}"
+            );
+
+            // ==================================================
+            // SMM
+            // Reads StateBudgetAllocation.Amount
+            // ==================================================
+            if (role == "SMM")
+            {
+                var result =
+                    await Http.GetFromJsonAsync<RoleBudgetDto>(
+                        $"api/Budget/role-budget" +
+                        $"?fy={Uri.EscapeDataString(_selectedFY)}"
+                    );
+
+                if (result != null)
+                {
+                    SMMAllocatedBudget =
+                        result.BudgetAmount;
+
+                    StateTotalBudget =
+                        result.BudgetAmount;
+                }
+
+                Console.WriteLine(
+                    $"SMM Budget => {SMMAllocatedBudget}"
                 );
 
-            if (stateBudget != null)
+                return;
+            }
+
+            // ==================================================
+            // SMD
+            // Reads RegionBudgetSummary.RemainingAmount
+            // ==================================================
+            if (role == "SMD")
             {
-                SMMAllocatedBudget = stateBudget.AllocatedAmount;
+                var result =
+                    await Http.GetFromJsonAsync<RoleBudgetDto>(
+                        $"api/Budget/role-budget" +
+                        $"?fy={Uri.EscapeDataString(_selectedFY)}"
+                    );
 
-                SMDOAllocatedBudget = stateBudget.RemainingAmount;
+                if (result != null)
+                {
+                    SMDOAllocatedBudget =
+                        result.BudgetAmount;
 
-                StateTotalBudget =
-                    stateBudget.AllocatedAmount +
-                    stateBudget.RemainingAmount;
+                    SMMAllocatedBudget =
+                        result.BudgetAmount;
+
+                    StateTotalBudget =
+                        result.BudgetAmount;
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // RM
+            // Reads RegionBudgetAllocation.Amount
+            // ==================================================
+            if (role == "RM")
+            {
+                var result =
+                    await Http.GetFromJsonAsync<RoleBudgetDto>(
+                        $"api/Budget/role-budget" +
+                        $"?fy={Uri.EscapeDataString(_selectedFY)}"
+                    );
+
+                if (result != null)
+                {
+                    SMMAllocatedBudget =
+                        result.BudgetAmount;
+
+                    StateTotalBudget =
+                        result.BudgetAmount;
+                }
+
+                return;
+            }
+
+            // ==================================================
+            // RMD
+            // Reads HeadquarterBudgetSummary.RemainingAmount
+            // ==================================================
+            if (role == "RMD")
+            {
+                var result =
+                    await Http.GetFromJsonAsync<RoleBudgetDto>(
+                        $"api/Budget/role-budget" +
+                        $"?fy={Uri.EscapeDataString(_selectedFY)}"
+                    );
+
+                if (result != null)
+                {
+                    SMMAllocatedBudget =
+                        result.BudgetAmount;
+
+                    StateTotalBudget =
+                        result.BudgetAmount;
+                }
+
+                return;
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
+            Console.WriteLine(
+                $"LoadBudgetDashboard Error: {ex}"
+            );
 
             dashboard = new();
 
@@ -1371,7 +1532,7 @@
                     March = item.MarchBudget,
 
 
-                    // FinancialYear = GetCurrentFinancialYear(),
+                    // FinancialYear = _selectedFY,
 
                     // Status = "Draft",
 
@@ -1439,7 +1600,7 @@
             // Create ONE request containing all selected programs.
             var request = new SaveBudgetBatchRequest
             {
-                FinancialYear = GetCurrentFinancialYear(),
+                FinancialYear = _selectedFY,
 
                 ApprovedAmount = SMMAllocatedBudget,
 
@@ -1539,24 +1700,6 @@
 
 
 @code {
-    private string GetCurrentFinancialYear()
-    {
-        var today = DateTime.Now;
-
-        int startYear;
-
-        if (today.Month >= 4) // April to December
-        {
-            startYear = today.Year;
-        }
-        else // January to March
-        {
-            startYear = today.Year - 1;
-        }
-
-        return $"{startYear}-{(startYear + 1).ToString().Substring(2)}";
-    }
-
     private void ApplyBudgetFilter()
     {
         if (string.IsNullOrWhiteSpace(_searchText))
@@ -1864,5 +2007,38 @@
             item.JanuaryBudget +
             item.FebruaryBudget +
             item.MarchBudget;
+    }
+
+    private async Task LoadFinancialYearsAsync()
+    {
+        try
+        {
+            var budgets =
+                await Http.GetFromJsonAsync<List<DR.AnnualBudgeting>>(
+                    "api/AnnualBudgeting"
+                ) ?? new();
+
+            _availableFYs = budgets
+                .Where(x => !string.IsNullOrWhiteSpace(x.FY))
+                .Select(x => x.FY)
+                .Distinct()
+                .OrderByDescending(x => x)
+                .ToList();
+
+            if (_availableFYs.Count > 0 &&
+                !_availableFYs.Contains(_selectedFY))
+            {
+                _selectedFY = _availableFYs[0];
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"FY Load Error: {ex.Message}"
+            );
+
+            _availableFYs = new();
+            _selectedFY = string.Empty;
+        }
     }
 }
