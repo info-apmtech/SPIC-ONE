@@ -1,0 +1,198 @@
+@page "/TaskMonitoring"
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<div class="container-fluid py-4 px-0 tm-page">
+
+    <div class="tm-header-row">
+        <div>
+            <h2 class="tm-title">Task Monitoring</h2>
+            <p class="tm-subtitle">Follow up on every task across your JMDOs &mdash; who has it, where it stands, and since when.</p>
+        </div>
+
+        <div class="tm-header-actions">
+            <button type="button" class="tm-btn tm-btn-outline" @onclick="ExportExcel">
+                <i class="bi bi-download"></i> Excel
+            </button>
+            <button type="button" class="tm-btn tm-btn-outline" @onclick="Refresh">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="tm-filter-card">
+        <div class="tm-filter-title"><i class="bi bi-funnel"></i> Filters</div>
+
+        <div class="tm-filter-grid">
+            <div class="tm-filter-field">
+                <label class="tm-field-label" for="tm-jmdo">JMDO</label>
+                <select id="tm-jmdo" class="tm-select" @bind="jmdoFilter">
+                    <option>All JMDOs</option>
+                    @foreach (var jmdo in JmdoNames)
+                    {
+                        <option>@jmdo</option>
+                    }
+                </select>
+            </div>
+            <div class="tm-filter-field">
+                <label class="tm-field-label" for="tm-type">Task Type</label>
+                <select id="tm-type" class="tm-select" @bind="typeFilter">
+                    <option>All Types</option>
+                    @foreach (var type in TaskTypes)
+                    {
+                        <option>@type</option>
+                    }
+                </select>
+            </div>
+            <div class="tm-filter-field">
+                <label class="tm-field-label" for="tm-status">Status</label>
+                <select id="tm-status" class="tm-select" @bind="statusFilter">
+                    <option>All Status</option>
+                    @foreach (var status in Statuses)
+                    {
+                        <option>@status</option>
+                    }
+                </select>
+            </div>
+            <div class="tm-filter-field">
+                <label class="tm-field-label" for="tm-state">State</label>
+                <select id="tm-state" class="tm-select">
+                    <option value="">Select</option>
+                    <option>Tamil Nadu</option>
+                </select>
+            </div>
+            <div class="tm-filter-field">
+                <label class="tm-field-label" for="tm-region">Region</label>
+                <select id="tm-region" class="tm-select">
+                    <option value="">Select</option>
+                    @foreach (var location in Locations)
+                    {
+                        <option>@location</option>
+                    }
+                </select>
+            </div>
+            <div class="tm-filter-field">
+                <label class="tm-field-label" for="tm-date-range">Date Range</label>
+                <input id="tm-date-range" type="date" class="tm-select" />
+            </div>
+        </div>
+
+        <div class="tm-filter-footer">
+            <button type="button" class="tm-btn tm-btn-outline" @onclick="ClearAll">Clear All</button>
+            <button type="button" class="tm-btn tm-btn-primary" @onclick="ApplyFilters">Apply Filters</button>
+        </div>
+    </div>
+
+    <div class="tm-table-card">
+        <div class="tm-table-scroll">
+            <table class="tm-table">
+                <thead>
+                    <tr>
+                        <th>JMDO</th>
+                        <th>Type</th>
+                        <th>Location</th>
+                        <th>Due</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in FilteredRows)
+                    {
+                        <tr>
+                            <td class="tm-jmdo-name tm-cell-header">@row.Jmdo</td>
+                            <td data-label="Type"><span class="tm-type-pill">@row.Type</span></td>
+                            <td data-label="Location">@row.Location</td>
+                            <td data-label="Due">@row.Due</td>
+                            <td data-label="Status"><span class="tm-status @row.StatusClass"><span class="tm-status-dot"></span>@row.Status</span></td>
+                            <td class="tm-cell-actions">
+                                <button type="button" class="tm-icon-btn" title="View task" @onclick="() => ViewTask(row)">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+
+                    @if (!FilteredRows.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="tm-empty-cell">No tasks match these filters.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    // Static placeholder: no Task Monitoring API exists yet. JMDO names and
+    // locations reuse the same 5 field officers / regions from
+    // MdoDashboard's JMDO-wise summary table.
+    private static readonly string[] JmdoNames =
+    {
+        "Karthik Raja", "Selvam M", "Priya Dharshini", "Ganesh Kumar", "Lakshmi Narayanan"
+    };
+
+    private static readonly string[] TaskTypes = { "Dealer", "SPCM", "Soil Sample", "MD Program", "PoS Liquidation" };
+
+    private static readonly string[] Statuses = { "Requested", "Assigned", "Yet to Start", "In Progress", "Completed" };
+
+    private static readonly string[] Locations = { "Coimbatore", "Pollachi", "Udumalpet", "Annur", "Mettupalayam" };
+
+    private sealed record TaskRow(string Jmdo, string Type, string Location, string Due, string Status, string StatusClass);
+
+    private static readonly List<TaskRow> AllRows = new()
+    {
+        new("Karthik Raja", "Dealer", "Coimbatore", "23 Sep 2026", "In Progress", "tm-status-progress"),
+        new("Karthik Raja", "Dealer", "Pollachi", "22 Sep 2026", "Yet to Start", "tm-status-yettostart"),
+        new("Karthik Raja", "Dealer", "Udumalpet", "22 Sep 2026", "In Progress", "tm-status-progress"),
+        new("Karthik Raja", "Dealer", "Annur", "28 Sep 2026", "Requested", "tm-status-requested"),
+        new("Selvam M", "Dealer", "Udumalpet", "24 Sep 2026", "Completed", "tm-status-completed"),
+        new("Selvam M", "Dealer", "Annur", "25 Sep 2026", "Requested", "tm-status-requested"),
+        new("Selvam M", "Dealer", "Mettupalayam", "29 Sep 2026", "Assigned", "tm-status-assigned"),
+        new("Priya Dharshini", "Dealer", "Mettupalayam", "23 Sep 2026", "Requested", "tm-status-requested"),
+        new("Priya Dharshini", "Dealer", "Coimbatore", "26 Sep 2026", "Requested", "tm-status-requested"),
+        new("Priya Dharshini", "Dealer", "Coimbatore", "19 Sep 2026", "Completed", "tm-status-completed"),
+        new("Ganesh Kumar", "Dealer", "Pollachi", "21 Sep 2026", "Completed", "tm-status-completed")
+    };
+
+    private string jmdoFilter = "All JMDOs";
+    private string typeFilter = "All Types";
+    private string statusFilter = "All Status";
+
+    // JMDO/Task Type/Status filter against real columns; State/Region/Date
+    // Range have no corresponding data on these placeholder rows, so they
+    // stay UI-only for now (same as several other filter bars in this app).
+    private string appliedJmdo = "All JMDOs";
+    private string appliedType = "All Types";
+    private string appliedStatus = "All Status";
+
+    private IEnumerable<TaskRow> FilteredRows => AllRows.Where(r =>
+        (appliedJmdo == "All JMDOs" || r.Jmdo == appliedJmdo) &&
+        (appliedType == "All Types" || r.Type == appliedType) &&
+        (appliedStatus == "All Status" || r.Status == appliedStatus));
+
+    private void ApplyFilters()
+    {
+        appliedJmdo = jmdoFilter;
+        appliedType = typeFilter;
+        appliedStatus = statusFilter;
+    }
+
+    private void ClearAll()
+    {
+        jmdoFilter = "All JMDOs";
+        typeFilter = "All Types";
+        statusFilter = "All Status";
+        appliedJmdo = "All JMDOs";
+        appliedType = "All Types";
+        appliedStatus = "All Status";
+    }
+
+    private void ExportExcel() => Toast.Info("Excel export isn't built yet.");
+
+    private void Refresh() => Toast.Info("Task list refreshed.");
+
+    private void ViewTask(TaskRow row) => Toast.Info($"Detailed view for {row.Jmdo}'s {row.Type} task isn't built yet.");
+}

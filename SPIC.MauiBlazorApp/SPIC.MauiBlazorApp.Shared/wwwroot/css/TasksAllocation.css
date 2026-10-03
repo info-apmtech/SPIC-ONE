@@ -1,0 +1,1036 @@
+/* Tasks Allocation page. Scoped under .ta-page - see FieldDashboard.css for
+   why every selector here is prefixed (this stylesheet loads globally, and
+   generic names collide with other pages' own globally-loaded CSS). */
+
+.ta-page {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2937;
+}
+
+.ta-header-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 20px;
+}
+
+.ta-title {
+    margin: 0 0 4px;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.ta-subtitle {
+    margin: 0;
+    font-size: 0.92rem;
+    color: #6b7280;
+}
+
+.ta-content-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem 1.5rem;
+}
+
+/* ---------- Tabs ---------- */
+.ta-tabs {
+    display: flex;
+    gap: 28px;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: 1.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.ta-tab {
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0 0 12px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+    .ta-tab.active {
+        color: #15803d;
+        border-bottom-color: #15803d;
+    }
+
+/* ---------- Pending-approval status card (All Allocations) ---------- */
+.ta-status-card {
+    text-align: center;
+    border-radius: 10px;
+    padding: 2.5rem 1.5rem;
+}
+
+.ta-status-pending {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+}
+
+.ta-status-icon {
+    font-size: 1.6rem;
+    color: #6366f1;
+    margin-bottom: 10px;
+}
+
+.ta-status-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #4f46e5;
+    margin-bottom: 8px;
+}
+
+.ta-status-summary {
+    font-size: 0.88rem;
+    color: #6b7280;
+}
+
+/* ---------- Wizard shell ---------- */
+.ta-wizard {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    position: relative;
+}
+
+.ta-stepper {
+    flex: 0 0 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px;
+    margin-right: 14px;
+    transition: flex-basis 0.15s ease;
+}
+
+.ta-stepper-collapsed {
+    flex-basis: 56px;
+}
+
+    .ta-stepper-collapsed .ta-step-label {
+        display: none;
+    }
+
+    .ta-stepper-collapsed .ta-step-item {
+        justify-content: center;
+    }
+
+.ta-step-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: left;
+    cursor: pointer;
+    color: #6b7280;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+    .ta-step-item:hover {
+        background: #f9fafb;
+    }
+
+    .ta-step-item.active {
+        border-color: #15803d;
+        color: #15803d;
+        background: #f0fdf4;
+    }
+
+.ta-step-num {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #e5e7eb;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.ta-step-item.active .ta-step-num {
+    background: #15803d;
+    color: #fff;
+}
+
+.ta-stepper-toggle {
+    flex-shrink: 0;
+    width: 22px;
+    height: 44px;
+    margin-top: 10px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    color: #6b7280;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+    .ta-stepper-toggle:hover {
+        background: #e5e7eb;
+    }
+
+.ta-wizard-content {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-left: 14px;
+}
+
+.ta-step-instruction {
+    font-size: 0.95rem;
+    color: #374151;
+    margin: 0 0 1rem;
+}
+
+/* ---------- Steps 2-3: single-target cards (SPCM / Soil Sample) ---------- */
+.ta-target-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    max-width: 520px;
+}
+
+/* PoS liquidation (step 5): four fields side by side needs more room than
+   the single-input SPCM/Soil Sample cards. */
+.ta-target-card-wide {
+    max-width: none;
+}
+
+.ta-target-input-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem 3rem;
+}
+
+.ta-target-field {
+    min-width: 0;
+}
+
+.ta-target-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+}
+
+    .ta-target-header i {
+        color: #111827;
+    }
+
+    .ta-target-header h4 {
+        margin: 0;
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #111827;
+    }
+
+.ta-target-meta {
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin: 0 0 1.25rem;
+}
+
+.ta-target-label {
+    display: block;
+    font-size: 0.85rem;
+    color: #6b7280;
+    margin-bottom: 6px;
+}
+
+.ta-target-input {
+    width: 100%;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.95rem;
+    color: #111827;
+    outline: none;
+}
+
+    .ta-target-input:focus {
+        background: #fff;
+        border-color: #15803d;
+    }
+
+/* ---------- Step 1: dealer selection ---------- */
+.ta-step-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.ta-search-box {
+    flex: 1 1 320px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    color: #9ca3af;
+}
+
+    .ta-search-box input {
+        flex: 1 1 auto;
+        border: none;
+        background: transparent;
+        outline: none;
+        font-size: 0.9rem;
+        color: #111827;
+    }
+
+.ta-filter-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+}
+
+.ta-dealer-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 18px;
+    margin-bottom: 1.5rem;
+}
+
+.ta-dealer-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+    .ta-dealer-card.selected {
+        border: 2px solid #16a34a;
+        padding: calc(1rem - 1px);
+    }
+
+.ta-dealer-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.ta-checkbox {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.85rem;
+}
+
+    .ta-checkbox.checked {
+        background: #16a34a;
+        border-color: #16a34a;
+    }
+
+.ta-type-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #dcfce7;
+    color: #15803d;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 12px;
+    padding: 3px 10px;
+}
+
+.ta-type-pill-purple {
+    background: #ede9fe;
+    color: #6d28d9;
+}
+
+.ta-dealer-name {
+    margin: 0 0 8px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #111827;
+    text-transform: uppercase;
+}
+
+/* MD program cards reuse .ta-dealer-name but keep title case, unlike
+   dealer company names which are uppercased. */
+.ta-program-name {
+    text-transform: none;
+}
+
+.ta-dealer-code-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: #6b7280;
+    margin-bottom: 10px;
+}
+
+    .ta-dealer-code-row strong {
+        color: #15803d;
+        font-size: 0.85rem;
+    }
+
+.ta-copy-btn {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 2px 4px;
+}
+
+    .ta-copy-btn:hover {
+        color: #374151;
+    }
+
+.ta-dealer-info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.82rem;
+    color: #6b7280;
+    padding: 4px 0;
+}
+
+    .ta-dealer-info-row strong {
+        color: #111827;
+        font-size: 0.88rem;
+    }
+
+.ta-dealer-stats-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.ta-mini-stat {
+    flex: 1 1 0;
+    border-radius: 8px;
+    padding: 8px 10px;
+}
+
+.ta-mini-stat-dues {
+    background: #fef3e2;
+}
+
+.ta-mini-stat-pending {
+    background: #e0edff;
+}
+
+.ta-mini-stat-programs {
+    background: #dcfce7;
+}
+
+.ta-mini-stat-budget {
+    background: #e0e7ff;
+}
+
+.ta-mini-stat-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.ta-mini-stat-dues .ta-mini-stat-label {
+    color: #b45309;
+}
+
+.ta-mini-stat-pending .ta-mini-stat-label {
+    color: #1d4ed8;
+}
+
+.ta-mini-stat-programs .ta-mini-stat-label {
+    color: #15803d;
+}
+
+.ta-mini-stat-budget .ta-mini-stat-label {
+    color: #4338ca;
+}
+
+.ta-mini-stat-val {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+    .ta-mini-stat-val span {
+        font-size: 0.72rem;
+        font-weight: 500;
+        color: #6b7280;
+    }
+
+.ta-step-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.ta-step-footer-simple {
+    justify-content: flex-start;
+    margin-top: 1.25rem;
+}
+
+.ta-selected-summary {
+    font-size: 0.82rem;
+    color: #6b7280;
+    flex: 1 1 320px;
+    min-width: 0;
+}
+
+.ta-step-footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+    .ta-step-footer-actions .ta-btn-prev {
+        margin-right: 0;
+    }
+
+    .ta-step-footer-actions .ta-btn-next {
+        margin-left: 0;
+    }
+
+.ta-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    padding: 0.65rem 1.2rem;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+    .ta-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+.ta-btn-next,
+.ta-btn-submit {
+    background: #15803d;
+    color: #fff;
+    margin-left: auto;
+}
+
+    .ta-btn-next:hover:not(:disabled),
+    .ta-btn-submit:hover {
+        background: #166534;
+    }
+
+.ta-btn-prev {
+    background: #f3f4f6;
+    color: #374151;
+    margin-right: auto;
+}
+
+    .ta-btn-prev:hover {
+        background: #e5e7eb;
+    }
+
+/* ---------- Today's Allocation tab ---------- */
+.ta-today-bell {
+    position: relative;
+    margin-left: auto;
+    flex-shrink: 0;
+    color: #9ca3af;
+    font-size: 1rem;
+}
+
+.ta-step-item.active .ta-today-bell {
+    color: #15803d;
+}
+
+.ta-today-badge {
+    position: absolute;
+    top: -6px;
+    right: -8px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 16px;
+    text-align: center;
+}
+
+.ta-today-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    align-items: stretch;
+}
+
+/* Status theme: each card/button below reads these custom properties
+   instead of a hardcoded color, so switching status (Yet to Start / In
+   Progress / Completed) only means swapping the modifier class - orange is
+   the default (Yet to Start) and the other two statuses override it. */
+.ta-today-card {
+    --ta-status-accent: #ea8c2e;
+    --ta-status-bg-1: #fff7ed;
+    --ta-status-bg-2: #ffedd5;
+    --ta-status-btn: #c2662a;
+    --ta-status-btn-hover: #a8551f;
+
+    grid-column: span 1;
+    background: linear-gradient(160deg, var(--ta-status-bg-1), var(--ta-status-bg-2));
+    border: 1px solid var(--ta-status-accent);
+    border-radius: 10px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.ta-today-card.ta-status-inprogress {
+    --ta-status-accent: #16a34a;
+    --ta-status-bg-1: #f0fdf4;
+    --ta-status-bg-2: #dcfce7;
+    --ta-status-btn: #15803d;
+    --ta-status-btn-hover: #166534;
+}
+
+.ta-today-card.ta-status-completed {
+    --ta-status-accent: #7c3aed;
+    --ta-status-bg-1: #f5f3ff;
+    --ta-status-bg-2: #ede9fe;
+    --ta-status-btn: #6d28d9;
+    --ta-status-btn-hover: #5b21b6;
+}
+
+.ta-today-card-narrow {
+    max-width: 340px;
+}
+
+.ta-today-card-wide {
+    grid-column: span 2;
+}
+
+.ta-type-pill-blue {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.ta-type-pill-today {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.ta-type-pill-outline {
+    background: #fff;
+    color: #6b7280;
+    border: 1px solid #e5e7eb;
+}
+
+.ta-type-pill-teal {
+    background: #ccfbf1;
+    color: #0f766e;
+}
+
+.ta-type-pill-orange {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.ta-type-pill-grey {
+    background: #e5e7eb;
+    color: #4b5563;
+}
+
+.ta-today-card .ta-dealer-top {
+    margin-bottom: 10px;
+}
+
+/* Dealer code / sanction number are green in the wizard's dealer/program
+   cards; here they take this card's own status accent color instead. */
+.ta-today-card .ta-dealer-code-row strong {
+    color: var(--ta-status-accent);
+}
+
+.ta-today-target-box {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #fff;
+    border: 1px solid var(--ta-status-accent);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 10px 0 14px;
+}
+
+.ta-today-target-icon {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    border: 1px solid var(--ta-status-accent);
+    background: #fff;
+    color: var(--ta-status-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+}
+
+.ta-today-target-val {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.2;
+}
+
+.ta-today-products-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 4px 0 10px;
+}
+
+.ta-today-products-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.ta-today-product-tile {
+    flex: 1 1 0;
+    background: #fff;
+    border: 1px solid var(--ta-status-accent);
+    border-radius: 8px;
+    padding: 0.9rem;
+    text-align: center;
+}
+
+.ta-today-product-name {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--ta-status-accent);
+    margin-bottom: 4px;
+}
+
+.ta-today-product-val {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.ta-start-btn {
+    margin-top: auto;
+    background: var(--ta-status-btn, #c2662a);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.65rem 1rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+    .ta-start-btn:hover {
+        background: var(--ta-status-btn-hover, #a8551f);
+    }
+
+.ta-today-jump-btn {
+    margin-top: 1.5rem;
+    background: #15803d;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 0.6rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    float: right;
+}
+
+    .ta-today-jump-btn:hover {
+        background: #166534;
+    }
+
+/* Completed has no "next" status to jump to, so a plain Back button (to Yet
+   to Start) takes the jump button's place instead - left-aligned, not
+   floated, since it's not pointing forward at anything. */
+.ta-today-back-btn {
+    margin-top: 1.5rem;
+    background: #fff;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 0.6rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+    .ta-today-back-btn:hover {
+        background: #f9fafb;
+    }
+
+/* ---------- Tablet (768px - 1199.98px) ---------- */
+@media (min-width: 768px) and (max-width: 1199.98px) {
+    .ta-tabs {
+        gap: 20px;
+    }
+
+    .ta-stepper {
+        flex-basis: 220px;
+    }
+
+    .ta-dealer-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+
+    .ta-today-grid {
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+
+    .ta-today-card-wide {
+        grid-column: span 2;
+    }
+}
+
+/* ---------- Phone (<= 767.98px) ---------- */
+@media (max-width: 767.98px) {
+    .ta-page {
+        padding-top: 12px !important;
+        padding-bottom: calc(16px + var(--safe-bottom, 0px)) !important;
+    }
+
+    .ta-header-card {
+        padding: 1rem 1.1rem;
+    }
+
+    .ta-title {
+        font-size: 1.15rem;
+    }
+
+    .ta-subtitle {
+        font-size: 0.85rem;
+    }
+
+    .ta-content-card {
+        padding: 1rem 1rem 1.25rem;
+    }
+
+    .ta-tabs {
+        gap: 16px;
+    }
+
+    .ta-tab {
+        font-size: 0.85rem;
+        padding-bottom: 10px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+    }
+
+    .ta-status-card {
+        padding: 1.75rem 1rem;
+    }
+
+    .ta-status-title {
+        font-size: 1rem;
+    }
+
+    /* Wizard: the 280px step sidebar can't sit beside content on a phone
+       screen, so it becomes a horizontal, scrollable step strip above the
+       content instead. The collapse toggle only makes sense for the
+       side-by-side desktop layout, so it's hidden here and labels are
+       forced back on regardless of the (irrelevant) collapsed state. */
+    .ta-wizard {
+        flex-direction: column;
+    }
+
+    .ta-stepper {
+        flex-direction: row;
+        flex-basis: auto;
+        margin-right: 0;
+        margin-bottom: 14px;
+        gap: 6px;
+        padding: 8px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .ta-stepper-collapsed {
+        flex-basis: auto;
+    }
+
+    .ta-step-item,
+    .ta-stepper-collapsed .ta-step-item {
+        flex: 0 0 auto;
+        flex-direction: column;
+        justify-content: center;
+        gap: 4px;
+        padding: 8px 12px;
+        min-height: 44px;
+    }
+
+    .ta-step-label,
+    .ta-stepper-collapsed .ta-step-label {
+        display: block !important;
+        font-size: 0.72rem;
+        white-space: nowrap;
+    }
+
+    .ta-stepper-toggle {
+        display: none;
+    }
+
+    .ta-wizard-content {
+        padding-left: 0;
+    }
+
+    .ta-step-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ta-search-box input {
+        font-size: 16px; /* prevents iOS zoom on focus */
+    }
+
+    .ta-target-card {
+        max-width: none;
+        padding: 1rem 1.1rem;
+    }
+
+    .ta-target-input-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .ta-target-input {
+        font-size: 16px; /* prevents iOS zoom on focus */
+    }
+
+    .ta-filter-btn {
+        justify-content: center;
+        min-height: 44px;
+    }
+
+    .ta-dealer-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ta-today-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ta-today-card-wide,
+    .ta-today-card-narrow {
+        grid-column: span 1;
+        max-width: none;
+    }
+
+    .ta-today-products-row {
+        flex-direction: column;
+    }
+
+    .ta-start-btn {
+        min-height: 44px;
+    }
+
+    .ta-today-jump-btn,
+    .ta-today-back-btn {
+        float: none;
+        width: 100%;
+        justify-content: center;
+        min-height: 44px;
+        margin-top: 1rem;
+    }
+
+    .ta-step-footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ta-selected-summary {
+        order: 2;
+        text-align: center;
+    }
+
+    .ta-step-footer-actions {
+        flex-direction: column-reverse;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .ta-btn-next,
+    .ta-btn-submit,
+    .ta-btn-prev {
+        width: 100%;
+        min-height: 44px;
+        justify-content: center;
+        margin: 0;
+    }
+
+    .ta-step-footer-simple {
+        flex-direction: column-reverse;
+        gap: 10px;
+    }
+}
