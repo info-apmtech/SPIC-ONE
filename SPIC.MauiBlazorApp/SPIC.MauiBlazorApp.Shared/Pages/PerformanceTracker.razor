@@ -1,0 +1,150 @@
+@page "/PerformanceTracker"
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<div class="container-fluid py-4 px-0 pt-page">
+
+    <h2 class="pt-title">Performance Tracker</h2>
+    <p class="pt-subtitle">Compare JMDO performance &mdash; best to least performing.</p>
+
+    <div class="pt-filter-card">
+        <button type="button" class="pt-filter-header" @onclick="() => filtersCollapsed = !filtersCollapsed">
+            <span class="pt-filter-title"><i class="bi bi-funnel"></i> Filters</span>
+            <i class="bi @(filtersCollapsed ? "bi-chevron-down" : "bi-chevron-up")"></i>
+        </button>
+
+        @if (!filtersCollapsed)
+        {
+            <div class="pt-filter-grid">
+                <div class="pt-filter-field">
+                    <label class="pt-field-label" for="pt-state">State</label>
+                    <select id="pt-state" class="pt-select">
+                        <option>All States</option>
+                        <option>Tamil Nadu</option>
+                    </select>
+                </div>
+                <div class="pt-filter-field">
+                    <label class="pt-field-label" for="pt-region">Region / HQ</label>
+                    <select id="pt-region" class="pt-select">
+                        <option>All Regions</option>
+                        @foreach (var location in Locations)
+                        {
+                            <option>@location</option>
+                        }
+                    </select>
+                </div>
+                <div class="pt-filter-field">
+                    <label class="pt-field-label" for="pt-jmdo">JMDO</label>
+                    <select id="pt-jmdo" class="pt-select" @bind="jmdoFilter">
+                        <option>All JMDOs</option>
+                        @foreach (var jmdo in JmdoNames)
+                        {
+                            <option>@jmdo</option>
+                        }
+                    </select>
+                </div>
+                <div class="pt-filter-field">
+                    <label class="pt-field-label" for="pt-date-range">Date Range</label>
+                    <input id="pt-date-range" type="date" class="pt-select" />
+                </div>
+            </div>
+
+            <div class="pt-filter-footer">
+                <button type="button" class="pt-btn pt-btn-outline" @onclick="ClearAll">Clear All</button>
+                <button type="button" class="pt-btn pt-btn-primary" @onclick="ApplyFilters">Apply Filters</button>
+            </div>
+        }
+    </div>
+
+    <p class="pt-helper-text">Ranked best performing &rarr; least performing, visible to RM / SMM / ZM at State &amp; Region HQ level.</p>
+
+    <div class="pt-table-card">
+        <div class="pt-table-scroll">
+            <table class="pt-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>JMDO</th>
+                        <th>SPCM Achv.</th>
+                        <th>Soil Achv.</th>
+                        <th>Attendance</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in FilteredRows)
+                    {
+                        <tr>
+                            <td data-label="Rank"><span class="pt-rank-pill @RankClass(row.Rank)"><span class="pt-rank-dot"></span>#@row.Rank</span></td>
+                            <td class="pt-cell-header">
+                                <div class="pt-jmdo-cell">
+                                    <span class="pt-avatar">@row.Initials</span>
+                                    <div>
+                                        <div class="pt-jmdo-name">@row.Name</div>
+                                        <div class="pt-jmdo-sub">@row.Code &middot; @row.Location</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td data-label="SPCM Achv.">@row.SpcmAchv%</td>
+                            <td data-label="Soil Achv.">@row.SoilAchv%</td>
+                            <td data-label="Attendance">@row.Attendance%</td>
+                            <td class="pt-cell-actions">
+                                <button type="button" class="pt-icon-btn" title="View JMDO" @onclick="() => ViewJmdo(row)">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    // Static placeholder: no Performance Tracker API exists yet. Reuses the
+    // same 5 JMDOs/codes/locations from MdoDashboard's JMDO-wise summary
+    // table, here ranked best -> least performing.
+    private sealed record PerfRow(int Rank, string Initials, string Name, string Code, string Location, int SpcmAchv, int SoilAchv, int Attendance);
+
+    private static readonly string[] JmdoNames =
+    {
+        "Karthik Raja", "Selvam M", "Priya Dharshini", "Ganesh Kumar", "Lakshmi Narayanan"
+    };
+
+    private static readonly string[] Locations = { "Coimbatore", "Pollachi", "Udumalpet", "Mettupalayam", "Annur" };
+
+    private static readonly List<PerfRow> AllRows = new()
+    {
+        new(1, "LN", "Lakshmi Narayanan", "JMDO-121", "Annur", 89, 78, 91),
+        new(2, "SM", "Selvam M", "JMDO-108", "Pollachi", 68, 85, 94),
+        new(3, "GK", "Ganesh Kumar", "JMDO-119", "Mettupalayam", 82, 67, 88),
+        new(4, "PD", "Priya Dharshini", "JMDO-112", "Udumalpet", 75, 56, 97),
+        new(5, "KR", "Karthik Raja", "JMDO-104", "Coimbatore", 61, 74, 91)
+    };
+
+    private bool filtersCollapsed;
+
+    private string jmdoFilter = "All JMDOs";
+    private string appliedJmdo = "All JMDOs";
+
+    private IEnumerable<PerfRow> FilteredRows => AllRows.Where(r => appliedJmdo == "All JMDOs" || r.Name == appliedJmdo);
+
+    private static string RankClass(int rank)
+    {
+        var maxRank = AllRows.Count;
+        if (rank == 1) return "pt-rank-top";
+        if (rank == maxRank) return "pt-rank-bottom";
+        return "pt-rank-mid";
+    }
+
+    private void ApplyFilters() => appliedJmdo = jmdoFilter;
+
+    private void ClearAll()
+    {
+        jmdoFilter = "All JMDOs";
+        appliedJmdo = "All JMDOs";
+    }
+
+    private void ViewJmdo(PerfRow row) => Toast.Info($"Detailed performance view for {row.Name} isn't built yet.");
+}

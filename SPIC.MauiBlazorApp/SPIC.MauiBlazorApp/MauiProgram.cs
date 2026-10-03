@@ -37,6 +37,7 @@ namespace SPIC.MauiBlazorApp
 
             builder.Services.AddMauiBlazorWebView();
 			builder.Services.AddScoped<LoginState>();
+			builder.Services.AddScoped<FieldAttendanceState>();
 			// Shell state shared by MainLayout and the parameterless Components/Shell components.
 			builder.Services.AddScoped<ShellSession>();
 			builder.Services.AddScoped<LoadingService>();
