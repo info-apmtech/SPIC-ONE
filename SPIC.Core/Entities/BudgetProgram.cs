@@ -63,26 +63,16 @@ namespace SPIC.Core.Entities
 
     public class BudgetProgramMains
     {
-        [Key]
         public int Id { get; set; }
 
         public int StateId { get; set; }
 
+        // Add this
+        public int? RegionId { get; set; }
+
+        public string FinancialYear { get; set; } = string.Empty;
+
         public string Status { get; set; } = "Draft";
-
-        public string FinancialYear { get; set; } = "";
-
-        public string CreatedBy { get; set; } = "";
-
-        public DateTime CreatedAt { get; set; } = DateTime.Now;
-
-        public string ValidateBy { get; set; } = "";
-
-        public DateTime? ValidateAt { get; set; }
-
-        public string ApprovedBy { get; set; } = "";
-
-        public DateTime? ApprovedAt { get; set; }
 
         public decimal ApprovedAmount { get; set; }
 
@@ -90,7 +80,18 @@ namespace SPIC.Core.Entities
 
         public decimal SIDAmount { get; set; }
 
-        public ICollection<BudgetProgram> Programs { get; set; }
-            = new List<BudgetProgram>();
+        public string? CreatedBy { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public string? ValidateBy { get; set; }
+
+        public DateTime? ValidateAt { get; set; }
+
+        public string? ApprovedBy { get; set; }
+
+        public DateTime? ApprovedAt { get; set; }
+
+        public ICollection<BudgetProgram>? Programs { get; set; }
     }
 }
