@@ -304,10 +304,26 @@ else
 
     private CancellationTokenSource? _cts;
 
-    // Phone is measured once from window.innerWidth (same pattern as the report pages):
+    // Phone (<= 767.98px) is tracked live through spicViewport.watchPhone (matchMedia):
     // on phone Enter inserts a newline and the send button posts.
     private bool _isPhone;
     private bool _viewportChecked;
+    private int _viewportWatchId;
+    private DotNetObjectReference<CommunityDiscussionDetail>? _viewportRef;
+
+    public sealed class ViewportWatch
+    {
+        public int Id { get; set; }
+        public bool IsPhone { get; set; }
+    }
+
+    [JSInvokable]
+    public Task OnViewportChanged(bool isPhone)
+    {
+        if (isPhone == _isPhone) return Task.CompletedTask;
+        _isPhone = isPhone;
+        return InvokeAsync(StateHasChanged);
+    }
 
     private List<CommunityReply> Replies => _d?.Replies ?? new List<CommunityReply>();
 
@@ -384,19 +400,23 @@ else
     {
         if (!_viewportChecked)
         {
-            _viewportChecked = true;
             try
             {
-                var width = await JS.InvokeAsync<int>("eval", "window.innerWidth");
-                if (width > 0 && width < 768)
+                _viewportRef ??= DotNetObjectReference.Create(this);
+                var watch = await JS.InvokeAsync<ViewportWatch>(
+                    "spicViewport.watchPhone", _viewportRef, nameof(OnViewportChanged));
+                _viewportChecked = true;
+                _viewportWatchId = watch.Id;
+
+                if (watch.IsPhone != _isPhone)
                 {
-                    _isPhone = true;
+                    _isPhone = watch.IsPhone;
                     StateHasChanged();
                 }
             }
-            catch
+            catch (Exception ex) when (ex is JSException or InvalidOperationException or TaskCanceledException)
             {
-                // JS not available (prerender / MAUI start-up): keep the desktop behaviour.
+                // JS not available yet (prerender / MAUI start-up): try again on the next render.
             }
         }
 
@@ -711,5 +731,14 @@ else
     {
         _cts?.Cancel();
         _cts?.Dispose();
+
+        if (_viewportWatchId > 0)
+        {
+            // Fire-and-forget: the circuit / WebView may already be gone.
+            _ = JS.InvokeVoidAsync("spicViewport.unwatch", _viewportWatchId).AsTask()
+                .ContinueWith(_ => { }, TaskScheduler.Default);
+        }
+
+        _viewportRef?.Dispose();
     }
 }

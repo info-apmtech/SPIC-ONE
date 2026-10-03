@@ -5,6 +5,7 @@
 
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 @*
     FULL MENU OFFCANVAS (phone + tablet). Lifted out of MainLayout unchanged.
@@ -87,9 +88,9 @@
 
 
             @* ================= DIGITAL LIBRARY (mirrors NavMenu.razor) ================= *@
-            @* Content is viewable by every signed-in user; the category master needs the
-               DigitalLibrary page (Admin / CorporateAdmin bypass CanAccess). *@
-            @if (LoginState.IsLoggedIn)
+            @* Read-only content is open to every signed-in user (PageAuthorization.OpenAccessPages); the
+               category master needs the DigitalLibrary page. Same CanAccess call as NavMenu/PageGuard. *@
+            @if (LoginState.CanAccess(PagePermission.DigitalLibrary))
             {
                 <NavLink class="nav-link"
                          href="/DigitalLibrary">
@@ -1331,6 +1332,32 @@
 
 
     private void OnLoginStateChanged() => InvokeAsync(StateHasChanged);
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Close the offcanvas when a real nav link is clicked, without touching
+        // Blazor's own navigation handling at all:
+        //   - data-bs-dismiss="offcanvas" on the links was tried first, but
+        //     Bootstrap's dismiss handler calls event.preventDefault(), and
+        //     Blazor's click-interception bails out of the SPA navigation
+        //     whenever event.defaultPrevented is already true - so the sidebar
+        //     closed but the page never changed.
+        //   - Navigation.LocationChanged + JS interop was tried next, but it
+        //     depends on Blazor Server's event-dispatch timing and never
+        //     reliably fired the JS call.
+        // A plain JS click listener scoped to #mobileSidebar sidesteps both:
+        // it never calls preventDefault, so Blazor's own click-interception
+        // still runs normally, and it does not depend on any C#/circuit
+        // round-trip at all.
+        try
+        {
+            await JS.InvokeVoidAsync("spic.initMobileSidebarAutoClose", "mobileSidebar");
+        }
+        catch (JSDisconnectedException) { }
+    }
 
 
     /* =========================================================

@@ -56,12 +56,24 @@
     }
     else
     {
-        <div class="sd-card">
-            <div class="sd-filters-header">
-                <span><i class="bi bi-filter-left"></i> Filters</span>
-                <i class="bi bi-chevron-down"></i>
+        <div class="sd-card sd-filters-card @(_filtersCollapsed ? "sd-filters-card--collapsed" : "")">
+            <div class="sd-filters-header"
+                 role="button"
+                 tabindex="0"
+                 aria-expanded="@(!_filtersCollapsed ? "true" : "false")"
+                 aria-controls="sd-filters-body"
+                 @onclick="() => _filtersCollapsed = !_filtersCollapsed"
+                 @onkeydown="OnFilterHeaderKeyDown">
+                <span>
+                    <i class="bi bi-filter-left"></i> Filters
+                    @if (_filtersCollapsed && ActiveFilterCount > 0)
+                    {
+                        <span class="sd-filter-count">@ActiveFilterCount</span>
+                    }
+                </span>
+                <i class="bi bi-chevron-down sd-filters-chevron"></i>
             </div>
-            <div class="sd-filters-body">
+            <div class="sd-filters-body" id="sd-filters-body">
                 @FilterFields
                 <div class="sd-filter-actions">
                     <button class="btn-custom" disabled="@(_isLoading || !_masterDataLoaded)" @onclick="ClearAll"><i class="bi bi-x"></i> Clear All</button>
@@ -331,6 +343,16 @@
     private bool _isPhone;
     private bool _viewportChecked;
     private bool _filterSheetOpen;
+
+    // Desktop filter card: the header toggles the body. Hidden with CSS (not @if) so
+    // the Select2 widgets survive a collapse / expand.
+    private bool _filtersCollapsed;
+
+    private void OnFilterHeaderKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or " ")
+            _filtersCollapsed = !_filtersCollapsed;
+    }
 
     private int ActiveFilterCount =>
         _selFinancialYears.Count + _selStates.Count + _selRegions.Count + _selHqs.Count + _selProductKeys.Count +
