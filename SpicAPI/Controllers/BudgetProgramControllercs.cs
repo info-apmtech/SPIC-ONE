@@ -1057,6 +1057,11 @@ namespace SpicAPI.Controllers
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
+            // Link to the Level 1 summary for this FY, if one already exists (Summary-to-Detail
+            // relationship key - see StateBudgetSummaryId doc comment). Saving the summary itself
+            // backfills this the other way round, so it stays correct regardless of save order.
+            var stateSummaryForLink = await _db.Set<StateBudgetSummary>().FirstOrDefaultAsync(s => s.FY == fy);
+
             var existing = await _db.Set<StateBudgetAllocation>()
                 .Where(a => a.FY == fy && stateIds.Contains(a.StateId))
                 .ToListAsync();
@@ -1069,6 +1074,7 @@ namespace SpicAPI.Controllers
                     row.Amount = alloc.Amount;
                     row.UpdatedBy = CurrentUser;
                     row.UpdatedAt = DateTime.Now;
+                    row.StateBudgetSummary = stateSummaryForLink;
                 }
                 else
                 {
@@ -1077,6 +1083,7 @@ namespace SpicAPI.Controllers
                         StateId = alloc.StateId,
                         FY = fy,
                         Amount = alloc.Amount,
+                        StateBudgetSummary = stateSummaryForLink,
                         CreatedBy = CurrentUser,
                         CreatedAt = DateTime.Now,
                         UpdatedBy = CurrentUser,
@@ -1564,6 +1571,12 @@ namespace SpicAPI.Controllers
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
+            // Link to the Level 2 summary for this State+FY, if one already exists (Summary-to-Detail
+            // relationship key - see RegionBudgetSummaryId doc comment). Saving the summary itself
+            // backfills this the other way round, so it stays correct regardless of save order.
+            var regionSummaryForLink = await _db.Set<RegionBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.StateId == request.StateId && s.FY == fy);
+
             var existing = await _db.Set<RegionBudgetAllocation>()
                 .Where(a => a.FY == fy && regionIds.Contains(a.RegionId))
                 .ToListAsync();
@@ -1576,6 +1589,7 @@ namespace SpicAPI.Controllers
                     row.Amount = alloc.Amount;
                     row.UpdatedBy = CurrentUser;
                     row.UpdatedAt = DateTime.Now;
+                    row.RegionBudgetSummary = regionSummaryForLink;
                 }
                 else
                 {
@@ -1585,6 +1599,7 @@ namespace SpicAPI.Controllers
                         RegionId = alloc.RegionId,
                         FY = fy,
                         Amount = alloc.Amount,
+                        RegionBudgetSummary = regionSummaryForLink,
                         CreatedBy = CurrentUser,
                         CreatedAt = DateTime.Now,
                         UpdatedBy = CurrentUser,
@@ -1695,6 +1710,12 @@ namespace SpicAPI.Controllers
 
             await using var transaction = await _db.Database.BeginTransactionAsync();
 
+            // Link to the Level 3 summary for this Region+FY, if one already exists (Summary-to-Detail
+            // relationship key - see HeadquarterBudgetSummaryId doc comment). Saving the summary itself
+            // backfills this the other way round, so it stays correct regardless of save order.
+            var hqSummaryForLink = await _db.Set<HeadquarterBudgetSummary>()
+                .FirstOrDefaultAsync(s => s.RegionId == request.RegionId && s.FY == fy);
+
             var existing = await _db.Set<HeadquarterBudgetAllocation>()
                 .Where(a => a.FY == fy && hqIds.Contains(a.HeadquarterId))
                 .ToListAsync();
@@ -1707,6 +1728,7 @@ namespace SpicAPI.Controllers
                     row.Amount = alloc.Amount;
                     row.UpdatedBy = CurrentUser;
                     row.UpdatedAt = DateTime.Now;
+                    row.HeadquarterBudgetSummary = hqSummaryForLink;
                 }
                 else
                 {
@@ -1716,6 +1738,7 @@ namespace SpicAPI.Controllers
                         HeadquarterId = alloc.HeadquarterId,
                         FY = fy,
                         Amount = alloc.Amount,
+                        HeadquarterBudgetSummary = hqSummaryForLink,
                         CreatedBy = CurrentUser,
                         CreatedAt = DateTime.Now,
                         UpdatedBy = CurrentUser,
@@ -1811,6 +1834,16 @@ namespace SpicAPI.Controllers
             summary.RemainingAmount = request.RemainingAmount;
             summary.UpdatedBy = CurrentUser;
             summary.UpdatedAt = DateTime.Now;
+
+            // Save flow: link this summary to every existing detail row for the same FY (Summary-to-
+            // Detail relationship key - see StateBudgetSummaryId doc comment). Uses the navigation,
+            // not summary.Id directly, so EF fixes up the FK even for a brand new summary whose Id
+            // isn't assigned until SaveChangesAsync below.
+            var stateDetailRows = await _db.Set<StateBudgetAllocation>().Where(a => a.FY == fy).ToListAsync();
+            foreach (var detailRow in stateDetailRows)
+            {
+                detailRow.StateBudgetSummary = summary;
+            }
 
             await _db.SaveChangesAsync();
 
@@ -1925,6 +1958,18 @@ namespace SpicAPI.Controllers
             summary.RemainingAmount = request.RemainingAmount;
             summary.UpdatedBy = CurrentUser;
             summary.UpdatedAt = DateTime.Now;
+
+            // Save flow: link this summary to every existing detail row for the same State+FY
+            // (Summary-to-Detail relationship key - see RegionBudgetSummaryId doc comment). Uses the
+            // navigation, not summary.Id directly, so EF fixes up the FK even for a brand new summary
+            // whose Id isn't assigned until SaveChangesAsync below.
+            var regionDetailRows = await _db.Set<RegionBudgetAllocation>()
+                .Where(a => a.StateId == request.StateId && a.FY == fy)
+                .ToListAsync();
+            foreach (var detailRow in regionDetailRows)
+            {
+                detailRow.RegionBudgetSummary = summary;
+            }
 
             await _db.SaveChangesAsync();
 
@@ -2052,6 +2097,18 @@ namespace SpicAPI.Controllers
             summary.RemainingAmount = request.RemainingAmount;
             summary.UpdatedBy = CurrentUser;
             summary.UpdatedAt = DateTime.Now;
+
+            // Save flow: link this summary to every existing detail row for the same Region+FY
+            // (Summary-to-Detail relationship key - see HeadquarterBudgetSummaryId doc comment). Uses
+            // the navigation, not summary.Id directly, so EF fixes up the FK even for a brand new
+            // summary whose Id isn't assigned until SaveChangesAsync below.
+            var hqDetailRows = await _db.Set<HeadquarterBudgetAllocation>()
+                .Where(a => a.RegionId == request.RegionId && a.FY == fy)
+                .ToListAsync();
+            foreach (var detailRow in hqDetailRows)
+            {
+                detailRow.HeadquarterBudgetSummary = summary;
+            }
 
             await _db.SaveChangesAsync();
 

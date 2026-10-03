@@ -17,6 +17,15 @@ namespace SPIC.Core.Entities
         public decimal Amount { get; set; }
 
         /// <summary>
+        /// FK to the Level 3 (RM) HeadquarterBudgetSummary (for this row's RegionId+FY) this
+        /// row belongs to. The authoritative Summary-to-Detail link - FY itself remains on
+        /// both tables for display/filtering only. Nullable because older rows saved before
+        /// this column existed may not yet be backfilled (see v16AddBudgetSummaryIdForeignKey migration).
+        /// </summary>
+        public int? HeadquarterBudgetSummaryId { get; set; }
+        public HeadquarterBudgetSummary? HeadquarterBudgetSummary { get; set; }
+
+        /// <summary>
         /// Mirrors StateBudgetAllocation/RegionBudgetAllocation.Status's convention. Cascaded
         /// to "Submitted"/"Validated"/"Approved" by the same State-level workflow action that
         /// moves the parent State and Region rows for the same FY - there is no separate HQ workflow.
@@ -101,6 +110,9 @@ namespace SPIC.Core.Entities
         public DateTime CreatedAt { get; set; }
         public string? UpdatedBy { get; set; }
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
+        /// <summary>Inverse of HeadquarterBudgetAllocation.HeadquarterBudgetSummary - every headquarter's detail row for this Region+FY.</summary>
+        public ICollection<HeadquarterBudgetAllocation>? HeadquarterBudgetAllocations { get; set; }
     }
 
     /// <summary>

@@ -14,6 +14,15 @@ namespace SPIC.Core.Entities
         public decimal Amount { get; set; }
 
         /// <summary>
+        /// FK to the Level 1 (Admin) StateBudgetSummary this row's FY belongs to. The
+        /// authoritative Summary-to-Detail link - FY itself remains on both tables for
+        /// display/filtering only. Nullable because older rows saved before this column
+        /// existed may not yet be backfilled (see v16AddBudgetSummaryIdForeignKey migration).
+        /// </summary>
+        public int? StateBudgetSummaryId { get; set; }
+        public StateBudgetSummary? StateBudgetSummary { get; set; }
+
+        /// <summary>
         /// Reuses BudgetProgram.Status's existing plain-string convention (no dedicated
         /// enum exists in this codebase) - "Draft" until Submit For Validation sets every
         /// row for the FY to "Submitted", then "Validated"/"Approved" as the workflow
@@ -95,6 +104,9 @@ namespace SPIC.Core.Entities
         public DateTime CreatedAt { get; set; }
         public string? UpdatedBy { get; set; }
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
+        /// <summary>Inverse of StateBudgetAllocation.StateBudgetSummary - every state's detail row for this FY.</summary>
+        public ICollection<StateBudgetAllocation>? StateBudgetAllocations { get; set; }
     }
 
     /// <summary>

@@ -17,6 +17,15 @@ namespace SPIC.Core.Entities
         public decimal Amount { get; set; }
 
         /// <summary>
+        /// FK to the Level 2 (SM) RegionBudgetSummary (for this row's StateId+FY) this row
+        /// belongs to. The authoritative Summary-to-Detail link - FY itself remains on both
+        /// tables for display/filtering only. Nullable because older rows saved before this
+        /// column existed may not yet be backfilled (see v16AddBudgetSummaryIdForeignKey migration).
+        /// </summary>
+        public int? RegionBudgetSummaryId { get; set; }
+        public RegionBudgetSummary? RegionBudgetSummary { get; set; }
+
+        /// <summary>
         /// Mirrors StateBudgetAllocation.Status's convention. Cascaded to "Submitted"/
         /// "Validated"/"Approved" by the same State-level workflow action that moves the
         /// parent State row for the same FY - there is no separate Region workflow.
@@ -100,6 +109,9 @@ namespace SPIC.Core.Entities
         public DateTime CreatedAt { get; set; }
         public string? UpdatedBy { get; set; }
         public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
+        /// <summary>Inverse of RegionBudgetAllocation.RegionBudgetSummary - every region's detail row for this State+FY.</summary>
+        public ICollection<RegionBudgetAllocation>? RegionBudgetAllocations { get; set; }
     }
 
     /// <summary>
