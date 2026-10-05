@@ -305,16 +305,199 @@
 
     protected override async Task OnInitializedAsync()
     {
-        submissions =
-            await Http.GetFromJsonAsync<List<BudgetSubmissionDto>>
-            ("api/Budget/submissions") ?? new();
+        _isLoading = true;
 
+        try
+        {
+            await LoadSubmissionsAsync();
+            await LoadSubmissionSummaryAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"BudgetSubmissions initialization error: {ex}"
+            );
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    private async Task LoadSubmissionsAsync()
+    {
+        try
+        {
+            using var response =
+                await Http.GetAsync(
+                    "api/Budget/submissions"
+                );
 
-        summary =
-            await Http.GetFromJsonAsync<BudgetSubmissionSummaryDto>
-            ("api/Budget/submission-summary") ?? new();
+            var body =
+                await response.Content.ReadAsStringAsync();
+
+            Console.WriteLine(
+                $"SUBMISSIONS API => " +
+                $"Status={(int)response.StatusCode} " +
+                $"{response.StatusCode}"
+            );
+
+            Console.WriteLine(
+                $"SUBMISSIONS BODY => [{body}]"
+            );
+
+            if (!response.IsSuccessStatusCode)
+            {
+                submissions = new();
+
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                Console.WriteLine(
+                    "SUBMISSIONS API returned empty body."
+                );
+
+                submissions = new();
+
+                return;
+            }
+
+            submissions =
+                System.Text.Json.JsonSerializer.Deserialize<
+                    List<BudgetSubmissionDto>>(
+                    body,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }
+                )
+                ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"LoadSubmissionsAsync ERROR => {ex}"
+            );
+
+            submissions = new();
+        }
     }
 
+    private async Task LoadSubmissionSummaryAsync()
+    {
+        try
+        {
+            using var response =
+                await Http.GetAsync(
+                    "api/Budget/submission-summary"
+                );
+
+            var body =
+                await response.Content.ReadAsStringAsync();
+
+            Console.WriteLine(
+                $"SUMMARY API => " +
+                $"Status={(int)response.StatusCode} " +
+                $"{response.StatusCode}"
+            );
+
+            Console.WriteLine(
+                $"SUMMARY BODY => [{body}]"
+            );
+
+            if (!response.IsSuccessStatusCode)
+            {
+                summary =
+                    BuildSummaryFromSubmissions();
+
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                Console.WriteLine(
+                    "SUMMARY API returned empty body."
+                );
+
+                summary =
+                    BuildSummaryFromSubmissions();
+
+                return;
+            }
+
+            summary =
+                System.Text.Json.JsonSerializer.Deserialize<
+                    BudgetSubmissionSummaryDto>(
+                    body,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }
+                )
+                ?? BuildSummaryFromSubmissions();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"LoadSubmissionSummaryAsync ERROR => {ex}"
+            );
+
+            summary =
+                BuildSummaryFromSubmissions();
+        }
+    }
+
+    private BudgetSubmissionSummaryDto BuildSummaryFromSubmissions()
+    {
+        var items =
+            submissions
+            ?? new List<BudgetSubmissionDto>();
+
+        return new BudgetSubmissionSummaryDto
+        {
+            Total =
+                items.Count,
+
+            Approved =
+                items.Count(x =>
+                    string.Equals(
+                        x.Status,
+                        "Approved",
+                        StringComparison.OrdinalIgnoreCase
+                    )),
+
+            Pending =
+                items.Count(x =>
+                    string.Equals(
+                        x.Status,
+                        "Submitted",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                    ||
+                    string.Equals(
+                        x.Status,
+                        "Validated",
+                        StringComparison.OrdinalIgnoreCase
+                    )),
+
+            Rejected =
+                items.Count(x =>
+                    string.Equals(
+                        x.Status,
+                        "Rejected",
+                        StringComparison.OrdinalIgnoreCase
+                    )),
+
+            Draft =
+                items.Count(x =>
+                    string.Equals(
+                        x.Status,
+                        "Draft",
+                        StringComparison.OrdinalIgnoreCase
+                    ))
+        };
+    }
 
     private IEnumerable<BudgetSubmissionDto> FilteredSubmissions =>
       submissions
