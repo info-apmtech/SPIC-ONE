@@ -1,0 +1,776 @@
+@page "/FrontOffice"
+
+@inject HttpClient Http
+@inject LoginState LoginState
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@using System.Globalization
+
+<div class="container-fluid py-4 px-3 px-md-4 fo-wrapper">
+
+    <div class="fo-header">
+        <div class="fo-header-text">
+            <h1>Front Office</h1>
+            <p>Room availability, check-in and check-out management</p>
+        </div>
+        <div class="fo-header-actions">
+            <button class="fo-btn fo-btn-secondary" @onclick="GoToGenerateBill"><i class="bi bi-receipt"></i> Generate Bill</button>
+            <button class="fo-btn fo-btn-secondary" @onclick="LoadRoomsAsync"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+        </div>
+    </div>
+
+    @if (_isLoading)
+    {
+        <div class="fo-loading">Loading room availability...</div>
+    }
+    else if (!string.IsNullOrWhiteSpace(_loadError))
+    {
+        <div class="fo-error-card">@_loadError</div>
+    }
+    else
+    {
+        <div class="fo-summary-grid">
+            <div class="fo-stat-card fo-stat-total">
+                <div class="fo-stat-title">Total Rooms</div>
+                <div class="fo-stat-value">@TotalRoomsCount</div>
+                <div class="fo-stat-icon"><i class="bi bi-door-closed"></i></div>
+            </div>
+            <div class="fo-stat-card fo-stat-available">
+                <div class="fo-stat-title">Available</div>
+                <div class="fo-stat-value">@AvailableCount</div>
+                <div class="fo-stat-icon"><i class="bi bi-check-circle"></i></div>
+            </div>
+            <div class="fo-stat-card fo-stat-reserved">
+                <div class="fo-stat-title">Reserved</div>
+                <div class="fo-stat-value">@ReservedCount</div>
+                <div class="fo-stat-icon"><i class="bi bi-bookmark-check"></i></div>
+            </div>
+            <div class="fo-stat-card fo-stat-checkedin">
+                <div class="fo-stat-title">Checked-In</div>
+                <div class="fo-stat-value">@CheckedInCount</div>
+                <div class="fo-stat-icon"><i class="bi bi-person-check"></i></div>
+            </div>
+        </div>
+
+        <div class="fo-tabs-container">
+            <button class="fo-tab @(_statusFilter == "All" ? "active" : "")" @onclick='() => SetFilter("All")'>All</button>
+            <button class="fo-tab @(_statusFilter == "Available" ? "active" : "")" @onclick='() => SetFilter("Available")'>Available</button>
+            <button class="fo-tab @(_statusFilter == "Reserved" ? "active" : "")" @onclick='() => SetFilter("Reserved")'>Reserved / Booked</button>
+            <button class="fo-tab @(_statusFilter == "CheckedIn" ? "active" : "")" @onclick='() => SetFilter("CheckedIn")'>Checked-In</button>
+        </div>
+
+        <SpicDataTable Items="FilteredRooms"
+                       Title="Rooms"
+                       FileName="FrontOffice_Rooms"
+                       ExportColumns="GetExportColumns()"
+                       SearchText="@_searchText">
+
+            <FilterControls>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" placeholder="Search rooms..."
+                           @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+                </div>
+                <select class="filter-select" @bind="_guestHouseFilter">
+                    <option value="All">All Guest Houses</option>
+                    @foreach (var gh in _houses.Select(h => h.GuestHouseName).Distinct())
+                    {
+                        <option value="@gh">@gh</option>
+                    }
+                </select>
+            </FilterControls>
+
+            <TableHeader>
+                <th>Guest House</th>
+                <th>Room No</th>
+                <th>Room Type</th>
+                <th>Status</th>
+                <th>Booking / Guest</th>
+                <th>Check-in</th>
+                <th>Check-out</th>
+                <th>Actions</th>
+            </TableHeader>
+
+            <TableRow Context="room">
+                <td>@room.GuestHouseName</td>
+                <td><span class="fo-room-no">@(string.IsNullOrEmpty(room.RoomNumber) ? "-" : room.RoomNumber)</span></td>
+                <td>
+                    <span class="fo-room-type">@room.RoomType</span>
+                    <div class="fo-room-capacity">Capacity: @(room.Capacity?.ToString() ?? "-")</div>
+                </td>
+                <td><span class="fo-badge @StatusBadge(room.StatusKey)">@room.StatusText</span></td>
+                <td>
+                    @if (room.CurrentBookingId.HasValue)
+                    {
+                        <div class="fo-guest-strong">@room.BookingReference</div>
+                        <div class="fo-guest-muted">@(string.IsNullOrEmpty(room.GuestName) ? "-" : room.GuestName)</div>
+                    }
+                    else
+                    {
+                        <span class="fo-muted">-</span>
+                    }
+                </td>
+                <td><span class="fo-date-value">@FormatDate(room.CheckInDate)</span></td>
+                <td><span class="fo-date-value">@FormatDate(room.CheckOutDate)</span></td>
+                <td style="white-space:nowrap;">
+                    @if (room.StatusKey == "Reserved")
+                    {
+                        <button class="fo-btn fo-btn-checkin" @onclick="() => OpenCheckIn(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-in-right"></i> Check-In</button>
+                    }
+                    else if (room.StatusKey == "CheckedIn")
+                    {
+                        <button class="fo-btn fo-btn-checkout" @onclick="() => OpenCheckOut(room.CurrentBookingId.GetValueOrDefault())"><i class="bi bi-box-arrow-right"></i> Check-Out</button>
+                    }
+                </td>
+            </TableRow>
+        </SpicDataTable>
+    }
+</div>
+
+@* ------------------------- CHECK-IN MODAL ------------------------- *@
+@if (_showCheckIn)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+                <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
+                    <h5 class="modal-title" style="font-weight:700;">Check-In</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCheckIn"></button>
+                </div>
+                <div class="modal-body" style="padding: 24px;">
+                    @if (_checkInMessage != null)
+                    {
+                        <div class="fo-alert-success fo-modal-message">@_checkInMessage</div>
+                    }
+                    @if (_checkInError != null)
+                    {
+                        <div class="fo-alert-warning fo-modal-message">@_checkInError</div>
+                    }
+
+                    @if (_checkInBooking != null)
+                    {
+                        <div class="fo-kv"><span class="fo-kv-label">Booking ID</span><span class="fo-kv-value">@_checkInBooking.BookingReference</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Guest Name</span><span class="fo-kv-value">@(string.IsNullOrEmpty(_checkInBooking.GuestName) ? "-" : _checkInBooking.GuestName)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Room Type</span><span class="fo-kv-value">@_checkInBooking.RoomType</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Guest House</span><span class="fo-kv-value">@_checkInBooking.GuestHouseName</span></div>
+                        @if (_checkInBooking.Documents.Count > 0)
+                        {
+                            var idProof = _checkInBooking.Documents[0];
+                            <div class="fo-kv">
+                                <span class="fo-kv-label">ID Proof</span>
+                                <span class="fo-kv-value d-flex align-items-center gap-2 justify-content-end flex-wrap">
+                                    <span class="text-truncate" style="max-width:120px;" title="@idProof.FileName">@idProof.FileName</span>
+                                    <button type="button" class="fo-btn fo-btn-secondary" style="padding:4px 10px; font-size:0.72rem;" @onclick="() => ViewDocumentAsync(idProof.DocumentId, idProof.ContentType)" disabled="@_isDocumentBusy">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                    <button type="button" class="fo-btn fo-btn-secondary" style="padding:4px 10px; font-size:0.72rem;" @onclick="() => DownloadDocumentAsync(idProof.DocumentId, idProof.FileName)" disabled="@_isDocumentBusy">
+                                        <i class="bi bi-download"></i> Download
+                                    </button>
+                                </span>
+                            </div>
+                        }
+                        <div class="fo-divider"></div>
+
+                        @if (!_checkInBooking.CanCheckIn)
+                        {
+                            <div class="fo-alert-warning fo-modal-message">@_checkInBooking.CheckInMessage</div>
+                        }
+                        else
+                        {
+                            <div class="fo-form-grid">
+                                <div>
+                                    <label class="fo-field-label">Number of Persons</label>
+                                    <input type="number" class="fo-input" min="1" @bind="_checkInPersons" />
+                                </div>
+                                <div>
+                                    <label class="fo-field-label">Number of Extra Beds</label>
+                                    <input type="number" class="fo-input" min="0" @bind="_checkInExtraBeds" />
+                                </div>
+                            </div>
+                            <div class="fo-kv"><span class="fo-kv-label">Scheduled Check-in</span><span class="fo-kv-value">@FormatDate(_checkInBooking.CheckInDate)</span></div>
+                            <div class="fo-kv"><span class="fo-kv-label">Scheduled Check-out</span><span class="fo-kv-value">@FormatDate(_checkInBooking.CheckOutDate)</span></div>
+
+                            @* Exact physical room assignment - the Front Office explicitly
+                               selects one room number per booked room at check-in. *@
+                            <div style="margin-top:16px;">
+                                <label class="fo-field-label">Assign Physical Room(s) &mdash; select @_checkInBooking.RequiredRoomNumbers room(s)</label>
+                                @if (_checkInBooking.AvailableRoomNumbers.Count > 0)
+                                {
+                                    <div class="fo-room-pick">
+                                        @foreach (var num in _checkInBooking.AvailableRoomNumbers)
+                                        {
+                                            var selected = _checkInSelectedRooms.Contains(num);
+                                            <button type="button"
+                                                    class="fo-room-chip @(selected ? "selected" : "")"
+                                                    @onclick="() => ToggleCheckInRoom(num)">
+                                                @num
+                                            </button>
+                                        }
+                                    </div>
+                                    <div class="fo-muted" style="font-size:0.75rem; margin-top:6px;">
+                                        Selected: @_checkInSelectedRooms.Count / @_checkInBooking.RequiredRoomNumbers
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="fo-alert-warning fo-modal-message">No physical rooms are currently free for the booked stay period. Please contact the booker or choose another room type.</div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #e5e7eb;">
+                    <button class="fo-btn fo-btn-secondary" @onclick="CloseCheckIn">Cancel</button>
+                    @if (_checkInBooking != null && _checkInBooking.CanCheckIn)
+                    {
+                        <button class="fo-btn fo-btn-checkin" @onclick="ConfirmCheckIn" disabled="@_isSubmitting">
+                            @(_isSubmitting ? "Checking in..." : "Confirm Check-In")
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ------------------------- CHECK-OUT MODAL ------------------------- *@
+@if (_showCheckOut)
+{
+    <div class="modal d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content" style="border-radius: 14px; border: none; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+                <div class="modal-header" style="border-bottom: 1px solid #e5e7eb;">
+                    <h5 class="modal-title" style="font-weight:700;">Check-Out &amp; Payment</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCheckOut"></button>
+                </div>
+                <div class="modal-body" style="padding: 24px;">
+                    @if (_checkOutMessage != null)
+                    {
+                        <div class="fo-alert-success fo-modal-message">@_checkOutMessage</div>
+                    }
+                    @if (_checkOutError != null)
+                    {
+                        <div class="fo-alert-warning fo-modal-message">@_checkOutError</div>
+                    }
+
+                    @if (_checkOutBooking != null)
+                    {
+                        <div class="fo-kv"><span class="fo-kv-label">Booking ID</span><span class="fo-kv-value">@_checkOutBooking.BookingReference</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Guest Name</span><span class="fo-kv-value">@(string.IsNullOrEmpty(_checkOutBooking.GuestName) ? "-" : _checkOutBooking.GuestName)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Room Number</span><span class="fo-kv-value">@(string.IsNullOrEmpty(_checkOutBooking.RoomNumber) ? "-" : _checkOutBooking.RoomNumber)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Check-in</span><span class="fo-kv-value">@FormatDate(_checkOutBooking.CheckInDate)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Check-out</span><span class="fo-kv-value">@FormatDate(_checkOutBooking.CheckOutDate)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Number of Persons</span><span class="fo-kv-value">@(_checkOutBooking.NumberOfPersons?.ToString() ?? "-")</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Extra Beds</span><span class="fo-kv-value">@_checkOutBooking.ExtraBeds</span></div>
+                        <div class="fo-divider"></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Total Amount</span><span class="fo-kv-value fo-total-value">@_money(_checkOutBooking.TotalAmount)</span></div>
+                        <div class="fo-kv"><span class="fo-kv-label">Payment Method</span><span class="fo-kv-value">@PaymentMethodText(_checkOutBooking.PaymentMethod)</span></div>
+                        <div class="fo-kv">
+                            <span class="fo-kv-label">Payment Status</span>
+                            <span class="fo-kv-value">
+                                <span class="fo-badge @(_checkOutBooking.PaymentReceived ? "fo-badge-paid" : "fo-badge-pending")">
+                                    @(_checkOutBooking.PaymentReceived ? "Paid" : PaymentStatusText(_checkOutBooking.PaymentStatus))
+                                </span>
+                            </span>
+                        </div>
+
+                    }
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid #e5e7eb;">
+                    <button class="fo-btn fo-btn-secondary" @onclick="CloseCheckOut">Cancel</button>
+                    @if (_checkOutBooking != null)
+                    {
+                        @if (!_checkOutBooking.PaymentReceived)
+                        {
+                            <button class="fo-btn fo-btn-checkin" @onclick="ConfirmPayment" disabled="@_isSubmitting">
+                                @(_isSubmitting ? "Recording payment..." : "Confirm Payment Received")
+                            </button>
+                        }
+                        else
+                        {
+                            <button class="fo-btn fo-btn-checkout" @onclick="ConfirmCheckOut" disabled="@_isSubmitting">
+                                @(_isSubmitting ? "Checking out..." : "Confirm Check-Out")
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<FrontOfficeHouseDto> _houses = new();
+    private bool _isLoading = true;
+    private string? _loadError;
+    private string _statusFilter = "All";
+    private string _guestHouseFilter = "All";
+    private string _searchText = "";
+
+    // Check-in modal state
+    private bool _showCheckIn;
+    private FrontOfficeBookingDto? _checkInBooking;
+    private int _checkInPersons = 1;
+    private int _checkInExtraBeds = 0;
+    private List<string> _checkInSelectedRooms = new();
+    private string? _checkInMessage;
+    private string? _checkInError;
+
+    // Check-out modal state
+    private bool _showCheckOut;
+    private CheckOutSummaryDto? _checkOutBooking;
+    private string? _checkOutMessage;
+    private string? _checkOutError;
+
+    private bool _isSubmitting;
+    private bool _isDocumentBusy;
+
+    // Summary counts derived purely from the loaded room data (no hardcoding, no extra API calls)
+    private int TotalRoomsCount => _houses.SelectMany(h => h.Rooms).Count();
+    private int AvailableCount => _houses.SelectMany(h => h.Rooms).Count(r => r.StatusKey == "Available");
+    private int ReservedCount => _houses.SelectMany(h => h.Rooms).Count(r => r.StatusKey == "Reserved");
+    private int CheckedInCount => _houses.SelectMany(h => h.Rooms).Count(r => r.StatusKey == "CheckedIn");
+
+    // Flattened room list (across every Guest House) feeding the single LocationMaster-style
+    // DataTable. Guest House is preserved as its own column/filter rather than a section
+    // grouping. Same underlying _houses data - no API/query change.
+    private List<FrontOfficeRoomDto> FilteredRooms => _houses
+        .SelectMany(h => h.Rooms)
+        .Where(r => _statusFilter == "All" || r.StatusKey == _statusFilter)
+        .Where(r => _guestHouseFilter == "All" || r.GuestHouseName == _guestHouseFilter)
+        .ToList();
+
+    private List<ExportColumn<FrontOfficeRoomDto>> GetExportColumns()
+    {
+        return new List<ExportColumn<FrontOfficeRoomDto>>
+        {
+            new() { Header = "Guest House", ValueSelector = r => r.GuestHouseName },
+            new() { Header = "Room No", ValueSelector = r => r.RoomNumber ?? "-" },
+            new() { Header = "Room Type", ValueSelector = r => r.RoomType },
+            new() { Header = "Status", ValueSelector = r => r.StatusText },
+            new() { Header = "Booking Ref", ValueSelector = r => r.BookingReference ?? "-" },
+            new() { Header = "Guest Name", ValueSelector = r => r.GuestName ?? "-" },
+            new() { Header = "Check-in", ValueSelector = r => FormatDate(r.CheckInDate) },
+            new() { Header = "Check-out", ValueSelector = r => FormatDate(r.CheckOutDate) },
+        };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoomsAsync();
+    }
+
+    private async Task LoadRoomsAsync()
+    {
+        _isLoading = true;
+        _loadError = null;
+        try
+        {
+            var response = await Http.GetAsync("api/GuestHouseFrontOffice/rooms");
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<List<FrontOfficeHouseDto>>();
+                _houses = result ?? new();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                || response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                _loadError = "You do not have permission to access the Front Office.";
+            }
+            else
+            {
+                _loadError = "We could not load room availability. Please try again.";
+            }
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not load room availability. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void SetFilter(string filter) => _statusFilter = filter;
+
+    private void GoToGenerateBill() => Navigation.NavigateTo("/GenerateBill");
+
+    // ---------------------------- CHECK-IN ----------------------------
+    private async Task OpenCheckIn(int bookingId)
+    {
+        ResetCheckIn();
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseFrontOffice/bookings/{bookingId}");
+            if (response.IsSuccessStatusCode)
+            {
+                _checkInBooking = await response.Content.ReadFromJsonAsync<FrontOfficeBookingDto>();
+                _checkInPersons = _checkInBooking?.NumberOfPersons ?? 1;
+                _checkInExtraBeds = _checkInBooking?.ExtraBeds ?? 0;
+                _showCheckIn = true;
+            }
+            else
+            {
+                _loadError = "Could not load booking for check-in.";
+            }
+        }
+        catch (Exception)
+        {
+            _loadError = "Could not load booking for check-in.";
+        }
+    }
+
+    private async Task ConfirmCheckIn()
+    {
+        if (_checkInBooking == null) return;
+
+        if (_checkInSelectedRooms.Count != _checkInBooking.RequiredRoomNumbers)
+        {
+            _checkInError = $"Please select exactly {_checkInBooking.RequiredRoomNumbers} physical room(s) before confirming check-in.";
+            return;
+        }
+
+        _isSubmitting = true;
+        _checkInError = null;
+        _checkInMessage = null;
+        try
+        {
+            var payload = new
+            {
+                BookingId = _checkInBooking.BookingId,
+                NumberOfPersons = _checkInPersons,
+                ExtraBeds = _checkInExtraBeds,
+                SelectedRoomNumbers = _checkInSelectedRooms
+            };
+            var response = await Http.PostAsJsonAsync("api/GuestHouseFrontOffice/checkin", payload);
+            var result = await response.Content.ReadFromJsonAsync<SimpleResult>();
+            if (response.IsSuccessStatusCode && result?.Success == true)
+            {
+                _checkInMessage = result.Message ?? "Guest checked in successfully.";
+                await Task.Delay(800);
+                _showCheckIn = false;
+                await LoadRoomsAsync();
+            }
+            else
+            {
+                _checkInError = result?.Message ?? "Check-in could not be completed.";
+            }
+        }
+        catch (Exception)
+        {
+            _checkInError = "Check-in could not be completed.";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void ToggleCheckInRoom(string roomNumber)
+    {
+        if (_checkInSelectedRooms.Contains(roomNumber))
+            _checkInSelectedRooms.Remove(roomNumber);
+        else
+            _checkInSelectedRooms.Add(roomNumber);
+    }
+
+    private void CloseCheckIn()
+    {
+        _showCheckIn = false;
+        ResetCheckIn();
+    }
+
+    private void ResetCheckIn()
+    {
+        _checkInBooking = null;
+        _checkInPersons = 1;
+        _checkInExtraBeds = 0;
+        _checkInSelectedRooms = new();
+        _checkInMessage = null;
+        _checkInError = null;
+    }
+
+    // ---------------------------- CHECK-OUT ----------------------------
+    private async Task OpenCheckOut(int bookingId)
+    {
+        ResetCheckOut();
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseFrontOffice/checkout/{bookingId}");
+            if (response.IsSuccessStatusCode)
+            {
+                _checkOutBooking = await response.Content.ReadFromJsonAsync<CheckOutSummaryDto>();
+                _showCheckOut = true;
+            }
+            else
+            {
+                _loadError = "Could not load booking for check-out.";
+            }
+        }
+        catch (Exception)
+        {
+            _loadError = "Could not load booking for check-out.";
+        }
+    }
+
+    private async Task ConfirmPayment()
+    {
+        if (_checkOutBooking == null) return;
+        _isSubmitting = true;
+        _checkOutError = null;
+        _checkOutMessage = null;
+        try
+        {
+            var payload = new { BookingId = _checkOutBooking.BookingId };
+            var response = await Http.PostAsJsonAsync("api/GuestHouseFrontOffice/pay", payload);
+            var result = await response.Content.ReadFromJsonAsync<SimpleResult>();
+            if (response.IsSuccessStatusCode && result?.Success == true)
+            {
+                _checkOutMessage = result.Message ?? "Payment received and confirmed.";
+                var summaryResponse = await Http.GetAsync($"api/GuestHouseFrontOffice/checkout/{_checkOutBooking.BookingId}");
+                if (summaryResponse.IsSuccessStatusCode)
+                {
+                    _checkOutBooking = await summaryResponse.Content.ReadFromJsonAsync<CheckOutSummaryDto>();
+                }
+            }
+            else
+            {
+                _checkOutError = result?.Message ?? "Payment could not be recorded.";
+            }
+        }
+        catch (Exception)
+        {
+            _checkOutError = "Payment could not be recorded.";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private async Task ConfirmCheckOut()
+    {
+        _isSubmitting = true;
+        _checkOutError = null;
+        _checkOutMessage = null;
+        try
+        {
+            var payload = new { BookingId = _checkOutBooking!.BookingId };
+            var response = await Http.PostAsJsonAsync("api/GuestHouseFrontOffice/checkout", payload);
+            var result = await response.Content.ReadFromJsonAsync<SimpleResult>();
+            if (response.IsSuccessStatusCode && result?.Success == true)
+            {
+                _checkOutMessage = result.Message ?? "Check-out completed.";
+                await Task.Delay(800);
+                _showCheckOut = false;
+                await LoadRoomsAsync();
+            }
+            else
+            {
+                _checkOutError = result?.Message ?? "Check-out could not be completed.";
+            }
+        }
+        catch (Exception)
+        {
+            _checkOutError = "Check-out could not be completed.";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void CloseCheckOut()
+    {
+        _showCheckOut = false;
+        ResetCheckOut();
+    }
+
+    private void ResetCheckOut()
+    {
+        _checkOutBooking = null;
+        _checkOutMessage = null;
+        _checkOutError = null;
+    }
+
+    // ---------------------------- ID PROOF VIEW / DOWNLOAD ----------------------------
+    // Same authenticated-fetch + JS-interop pattern used elsewhere (GenerateBill.razor's
+    // View/Print, BookingDetails.razor's Download Invoice). Authorization for Front Office
+    // access is enforced server-side (Admin/CorporateAdmin role check in the shared
+    // GuestHouseBooking documents endpoints).
+    private async Task ViewDocumentAsync(int documentId, string? contentType)
+    {
+        if (_isDocumentBusy) return;
+        _isDocumentBusy = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/documents/{documentId}/view");
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadError = "Could not open the ID proof document.";
+                return;
+            }
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("openFileInNewWindow", base64, contentType ?? "application/octet-stream");
+        }
+        catch (Exception)
+        {
+            _loadError = "Could not open the ID proof document.";
+        }
+        finally
+        {
+            _isDocumentBusy = false;
+        }
+    }
+
+    private async Task DownloadDocumentAsync(int documentId, string? fileName)
+    {
+        if (_isDocumentBusy) return;
+        _isDocumentBusy = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/documents/{documentId}/download");
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadError = "Could not download the ID proof document.";
+                return;
+            }
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", string.IsNullOrWhiteSpace(fileName) ? "document" : fileName, contentType, base64);
+        }
+        catch (Exception)
+        {
+            _loadError = "Could not download the ID proof document.";
+        }
+        finally
+        {
+            _isDocumentBusy = false;
+        }
+    }
+
+    // ---------------------------- Helpers ----------------------------
+    private static string StatusBadge(string statusKey) => statusKey switch
+    {
+        "CheckedIn" => "fo-badge-checkedin",
+        "Reserved" => "fo-badge-reserved",
+        _ => "fo-badge-available"
+    };
+
+    private static string FormatDate(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string _money(decimal value) => "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+
+    private static string PaymentMethodText(int? method)
+    {
+        return method switch
+        {
+            0 => "Razorpay",
+            1 => "UPI",
+            2 => "Card",
+            3 => "Net Banking",
+            4 => "Pay After Stay",
+            _ => "-"
+        };
+    }
+
+    private static string PaymentStatusText(int? status)
+    {
+        return status switch
+        {
+            1 => "Paid",
+            _ => "Pending"
+        };
+    }
+
+    public class SimpleResult
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public int BookingId { get; set; }
+        public string? BookingReference { get; set; }
+    }
+
+    public class FrontOfficeHouseDto
+    {
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public List<FrontOfficeRoomDto> Rooms { get; set; } = new();
+    }
+
+    public class FrontOfficeRoomDto
+    {
+        public int RoomId { get; set; }
+        public string? RoomNumber { get; set; }
+        public string RoomType { get; set; } = "";
+        public int GuestHouseId { get; set; }
+        public string GuestHouseName { get; set; } = "";
+        public int? Capacity { get; set; }
+        public decimal PricePerNight { get; set; }
+        public int AvailableQuantity { get; set; }
+        public int RoomStatus { get; set; }
+        public string StatusText { get; set; } = "";
+        public string StatusKey => RoomStatus switch { 1 => "Reserved", 2 => "CheckedIn", _ => "Available" };
+        public int? CurrentBookingId { get; set; }
+        public string? BookingReference { get; set; }
+        public string? GuestName { get; set; }
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+    }
+
+    public class FrontOfficeBookingDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public string GuestHouseName { get; set; } = "";
+        public string RoomType { get; set; } = "";
+        public string? RoomNumber { get; set; }
+        public string? GuestName { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public int ExtraBeds { get; set; }
+        public int? Capacity { get; set; }
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public int BookingStatus { get; set; }
+        public bool CanCheckIn { get; set; }
+        public string CheckInMessage { get; set; } = "";
+        public int RequiredRoomNumbers { get; set; }
+        public List<string> AvailableRoomNumbers { get; set; } = new();
+        public List<string> AllocatedRoomNumbers { get; set; } = new();
+        public List<FrontOfficeBookingDocumentDto> Documents { get; set; } = new();
+    }
+
+    public class FrontOfficeBookingDocumentDto
+    {
+        public int DocumentId { get; set; }
+        public string? DocumentType { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? FileSize { get; set; }
+    }
+
+    public class CheckOutSummaryDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public string GuestHouseName { get; set; } = "";
+        public string? GuestName { get; set; }
+        public string? RoomNumber { get; set; }
+        public string RoomType { get; set; } = "";
+        public DateTime? CheckInDate { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public int ExtraBeds { get; set; }
+        public decimal TotalAmount { get; set; }
+        public int PaymentStatus { get; set; }
+        public int? PaymentMethod { get; set; }
+        public bool PaymentReceived { get; set; }
+    }
+}

@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
@@ -13,7 +14,7 @@ using static SPIC.Core.Entities.EmployeeRegistration;
 namespace Spic.Infrastructure.Data
 {
     public class AppDbContext : IdentityDbContext<UserInfo>
-	{
+    {
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
         }
@@ -35,6 +36,46 @@ namespace Spic.Infrastructure.Data
                 .WithMany()
                 .HasForeignKey(u => u.DesignationId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Seed LyingWithMaster
+            var staticDate = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            builder.Entity<LyingWithMaster>().HasData(
+                new LyingWithMaster { Id = 1, Name = "Retailer", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" },
+                new LyingWithMaster { Id = 2, Name = "Wholesaler", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" },
+                new LyingWithMaster { Id = 3, Name = "Rake Point", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" },
+                new LyingWithMaster { Id = 4, Name = "Warehouse", IsActive = true, CreatedAt = staticDate, UpdatedAt = staticDate, UpdatedBy = "System" }
+            );
+
+            // Guest House physical room allocation. The no-double-allocation overlap rule
+            // (same physical RoomNumber cannot be shared by two active stays) is enforced by
+            // a PostgreSQL EXCLUDE constraint on (GuestHouseRoomId, RoomNumber, date range)
+            // that must be created with the required migration + btree_gist extension.
+            // EF cannot express EXCLUDE constraints, so at runtime the invariant is also
+            // re-verified inside a serializable transaction before allocation rows are saved.
+            builder.Entity<GuestHouseRoomAllocation>(entity =>
+            {
+                entity.HasKey(a => a.Id);
+
+                entity.HasOne(a => a.GuestHouseBooking)
+                    .WithMany(b => b.RoomAllocations)
+                    .HasForeignKey(a => a.GuestHouseBookingId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(a => a.GuestHouseRoom)
+                    .WithMany(r => r.Allocations)
+                    .HasForeignKey(a => a.GuestHouseRoomId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(a => a.GuestHouse)
+                    .WithMany()
+                    .HasForeignKey(a => a.GuestHouseId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.Property(a => a.RoomNumber).IsRequired().HasMaxLength(50);
+                entity.HasIndex(a => a.GuestHouseBookingId);
+                entity.HasIndex(a => new { a.GuestHouseRoomId, a.RoomNumber });
+            });
+
+        // The IFMS automation keeps its own tables in its own database; see
+        // IfmsDbContext. They are deliberately not reachable from here.
         }
 
         // User related
@@ -54,17 +95,36 @@ namespace Spic.Infrastructure.Data
         public DbSet<Sector> Sectors { get; set; }
         public DbSet<Unit> Units { get; set; }
         public DbSet<Category> Categories { get; set; }
+        public DbSet<ProductGroup> ProductGroups { get; set; }
         public DbSet<Product> Products { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
-        public DbSet<RackPoint> RackPoints { get; set; }
+        //public DbSet<CandFWarehouse> CandFWarehouses { get; set; }
+        public DbSet<LyingWithMaster> LyingWithMasters { get; set; }
+
+        public DbSet<SalesWholesaler> SalesWholesalers { get; set; }//  IFMS Wholesaler sales
+		public DbSet<SalesAndReceipt> SalesAndReceipts { get; set; }//  IFMS sales and receipt
+		public DbSet<SalesCompanySale> SalesCompanySales { get; set; }//  IFMS Company sales
+		public DbSet<DptReport> DptReports { get; set; }//  IFMS DPT Report
+		public DbSet<WholesalerStockAsOnToday> WholesalerStockAsOnTodays { get; set; }//  IFMS Wholesaler stock as on today
+		public DbSet<RackPoint> RackPoints { get; set; }
         public DbSet<Port> Ports { get; set; }
         public DbSet<Bank> Banks { get; set; }
         public DbSet<FinancialYear> FinancialYears { get; set; }
         public DbSet<Relationship> Relationships { get; set; }
         public DbSet<DealerRegistration> DealerRegistrations { get; set; }
+        public DbSet<Plant> Plants { get; set; }//  IFMS Plant Master
+		public DbSet<DealerType> DealerTypes { get; set; }//  IFMS Dealer Type Master
+		public DbSet<Status> Statuses { get; set; }//  IFMS Status Master
+		public DbSet<IfmsDealer> IfmsDealers { get; set; }//  IFMS Dealer Master
+		public DbSet<Company> Companies { get; set; } 
+        public DbSet<DealershipNature> DealershipNatures { get; set; }//  IFMS DealershipNatures 
+		public DbSet<TxnType> TxnTypes { get; set; }//  IFMS TxnTypes
+		public DbSet<AckThrough> AckThroughs { get; set; }//  IFMS AckThroughs
+        public DbSet<StateGlobalStockReconciliation> StateGlobalStockReconciliations { get; set; }//  IFMS State Global Stock Reconciliation
+		public DbSet<WarehouseDistrictGlobalStockReconciliation> WarehouseDistrictGlobalStockReconciliations { get; set; }//  IFMS Warehouse District Global Stock Reconciliation
 
-        // Dealer Registration Sub-Entities
-        public DbSet<DealerExperience> DealerExperiences { get; set; }
+		// Dealer Registration Sub-Entities
+		public DbSet<DealerExperience> DealerExperiences { get; set; }
         public DbSet<AnnualSaleDataLastFYofDealerRegistration> AnnualSaleDataLastFY { get; set; }
         public DbSet<DealerWarehouseFacilities> DealerWarehouseFacilities { get; set; }
         public DbSet<DealerRailFacilities> DealerRailFacilities { get; set; }
@@ -81,9 +141,53 @@ namespace Spic.Infrastructure.Data
         public DbSet<DealerLoanLiabilities> DealerLoanLiabilities { get; set; }
         public DbSet<DealerCreditLimitProposal> DealerCreditLimitProposals { get; set; }
         public DbSet<DealerCreditLimitSalesPerformance> DealerCreditLimitSalesPerformances { get; set; }
+        public DbSet<CreditLimitHistory> CreditLimitHistories { get; set; }
         public DbSet<DealerRegistrationDocuments> DealerRegistrationDocuments { get; set; }
         public DbSet<DealerApprovalHistory> DealerApprovalHistories { get; set; }
         public DbSet<EmployeeInformation> EmployeeInformation { get; set; }
         public DbSet<Employeelogin> Employeelogins { get; set; }
-    }
+        public DbSet<DealerCreditLimitSales> DealerCreditLimitSalesData { get; set; }
+        public DbSet<IfmsProduct> IfmsProducts { get; set; }
+		public DbSet<PVTMaster> PVTMasters { get; set; }
+		public DbSet<RakePointMaster> RakePointMasters { get; set; }
+        public DbSet<SubDealerRegistration> SubDealerRegistrations { get; set; }
+		public DbSet<LogisticsApprovalHistory> LogisticsHistory { get; set; }
+
+		//// Sub Dealer & Employee Beneficiary Master
+		public DbSet<SubDealerBeneficiary> SubDealerBeneficiaries { get; set; }
+		public DbSet<EmployeeBeneficiary> EmployeeBeneficiaries { get; set; }
+
+		//// SpecialAdmin multi-location assignments
+		public DbSet<SpecialAdminLocations> SpecialAdminLocations { get; set; }
+
+		//// Welfare Scheme
+		public DbSet<WelfareApplication> WelfareApplications { get; set; }
+		public DbSet<WelfareApplicationDocument> WelfareApplicationDocuments { get; set; }
+		public DbSet<WelfareApplicationApproval> WelfareApplicationApprovals { get; set; }
+		public DbSet<WelfareApplicationActionLog> WelfareApplicationActionLogs { get; set; }
+
+		//// Guest House Master Data
+		public DbSet<GuestHouse> GuestHouses { get; set; }
+		public DbSet<GuestHouseRoom> GuestHouseRooms { get; set; }
+		public DbSet<GuestHouseImage> GuestHouseImages { get; set; }
+		//public DbSet<GuestHouseRoomImage> GuestHouseRoomImages { get; set; }
+		//public DbSet<GuestHouseRoomAmenity> GuestHouseRoomAmenities { get; set; }
+		public DbSet<GuestHouseRoomAvailability> GuestHouseRoomAvailabilities { get; set; }
+		public DbSet<GuestHouseBooking> GuestHouseBookings { get; set; }
+		public DbSet<GuestHouseBookingGuest> GuestHouseBookingGuests { get; set; }
+		//public DbSet<GuestHouseBookingDocument> GuestHouseBookingDocuments { get; set; }
+		public DbSet<GuestHouseBookingPayment> GuestHouseBookingPayments { get; set; }
+		//public DbSet<GuestHouseCancellationPolicy> GuestHouseCancellationPolicies { get; set; }
+		//public DbSet<GuestHouseBookingCancellation> GuestHouseBookingCancellations { get; set; }
+		//public DbSet<GuestHouseBookingRefund> GuestHouseBookingRefunds { get; set; }
+		public DbSet<GuestHouseBill> GuestHouseBills { get; set; }
+		public DbSet<GuestHouseBillLineItem> GuestHouseBillLineItems { get; set; }
+		public DbSet<GuestHouseRoomAllocation> GuestHouseRoomAllocations { get; set; }
+
+		//// Contact Us
+		//public DbSet<ContactUsMessage> ContactUsMessages { get; set; }
+
+        // The IFMS automation keeps its own tables in its own database; see
+        // IfmsDbContext. They are deliberately not reachable from here.
+	}
 }

@@ -1,0 +1,923 @@
+﻿@page "/Payment"
+
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
+
+@using System.Globalization
+@using System.Net.Http.Json
+
+<style>
+    :root {
+        --bg-body: #f4f6f8;
+        --bg-card: #ffffff;
+        --text-main: #1f2937;
+        --text-muted: #6b7280;
+        --border-light: #e5e7eb;
+        --primary-blue: #3b82f6;
+        
+        /* Card Theme Colors */
+        --header-bg-green: #eef4ea; 
+        --header-text-green: #3f4e42;
+        --bg-pink-alert: #fbecec;
+        --bg-orange-alert: #fff7ed;
+    }
+
+    body {
+        background-color: var(--bg-body);
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        color: var(--text-main);
+    }
+
+    /* --- Page Header --- */
+    .page-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 0.25rem;
+    }
+    .page-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 1.5rem;
+    }
+
+    /* --- Custom Card Base --- */
+    .payment-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        margin-bottom: 1.25rem;
+        overflow: hidden; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .payment-card-header {
+        background-color: var(--header-bg-green);
+        padding: 14px 20px;
+        border-bottom: 1px solid #dce4d6;
+    }
+
+    .payment-card-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--header-text-green);
+        margin: 0;
+    }
+
+    .payment-card-body {
+        padding: 20px;
+    }
+
+    /* --- Payment Options List --- */
+    .payment-option {
+        display: flex;
+        align-items: center;
+        border: 1px solid var(--border-light);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+        background-color: #ffffff;
+    }
+    .payment-option:last-child {
+        margin-bottom: 0;
+    }
+    .payment-option:hover {
+        border-color: #d1d5db;
+        background-color: #f9fafb;
+    }
+    .payment-option.active {
+        border-color: var(--primary-blue);
+        background-color: #f8fafc;
+        box-shadow: 0 2px 4px rgba(59, 130, 246, 0.05);
+    }
+
+    /* Option Icons */
+    .pay-icon-box {
+        width: 46px;
+        height: 46px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        margin-right: 16px;
+        flex-shrink: 0;
+    }
+    .icon-razorpay { background-color: #eff6ff; color: #3b82f6; }
+    .icon-upi { background-color: #eff6ff; color: #3b82f6; }
+    .icon-card { background-color: #faf5ff; color: #a855f7; }
+    .icon-bank { background-color: #f0fdf4; color: #22c55e; }
+    .icon-paylater { background-color: #eff6ff; color: #b45309; }
+
+    /* Option Text */
+    .pay-details {
+        flex-grow: 1;
+    }
+    .pay-name {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: var(--text-main);
+        margin-bottom: 2px;
+    }
+    .pay-desc {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        margin: 0;
+    }
+
+    /* Custom Radio Button */
+    .custom-radio {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid #cbd5e1;
+        position: relative;
+        flex-shrink: 0;
+        transition: all 0.2s;
+    }
+    .payment-option.active .custom-radio {
+        border-color: var(--primary-blue);
+    }
+    .payment-option.active .custom-radio::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background-color: var(--primary-blue);
+    }
+
+    /* --- Info Alert (Pay After Stay) --- */
+    .info-alert {
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        display: flex;
+        gap: 12px;
+        line-height: 1.5;
+    }
+    .info-alert i { font-size: 1.1rem; }
+    .info-alert-green {
+        background-color: #f0fdf4;
+        border: 1px solid #dcfce7;
+        color: #16a34a;
+    }
+    .info-alert-orange {
+        background-color: #fff7ed;
+        border: 1px solid #ffedd5;
+        color: #c2410c;
+    }
+
+    /* --- Booking Summary Key Value Pairs --- */
+    .kv-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    .kv-row:last-child { margin-bottom: 0; }
+    
+    .kv-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #4b5563;
+        flex-shrink: 0;
+        padding-right: 16px;
+    }
+    .kv-value {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-main);
+        text-align: right;
+        word-break: break-word;
+    }
+
+    .summary-divider {
+        height: 1px;
+        background-color: var(--border-light);
+        margin: 16px 0;
+    }
+
+    .total-lbl {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .total-val {
+        color: var(--primary-blue);
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    /* --- Bottom Actions --- */
+    .bottom-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 1rem;
+        padding-bottom: 2rem;
+    }
+    .btn-outline-back {
+        background-color: #ffffff;
+        border: 1px solid var(--border-light);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-outline-back:hover { background-color: #f9fafb; }
+
+    .btn-primary-continue {
+        background-color: var(--primary-blue);
+        border: 1px solid var(--primary-blue);
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-primary-continue:hover { background-color: #2563eb; }
+
+    .btn-primary-continue:disabled {
+        background-color: #93b4e8;
+        border-color: #93b4e8;
+        cursor: not-allowed;
+    }
+
+    /* --- Error Alert --- */
+    .error-alert {
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        background-color: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #b91c1c;
+        margin-bottom: 1rem;
+        display: flex;
+        gap: 10px;
+    }
+
+    /* --- Popup Modal CSS --- */
+    .modal-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(2px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+    }
+
+    .modal-card {
+        background-color: #ffffff;
+        border-radius: 16px;
+        width: 90%;
+        max-width: 520px;
+        padding: 24px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        max-height: 95vh;
+        overflow-y: auto;
+        animation: scaleIn 0.3s ease-out;
+    }
+
+    @@keyframes scaleIn {
+        from { transform: scale(0.95); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+    }
+
+    /* Modal Success Header */
+    .modal-success-header {
+        border: 1px solid #e5e7eb;
+        border-bottom: 5px solid #166534;
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+    .success-icon-circle {
+        width: 48px;
+        height: 48px;
+        background-color: #22c55e;
+        color: #ffffff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        flex-shrink: 0;
+    }
+    .success-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0 0 4px 0;
+    }
+    .success-subtitle {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    /* Modal Boxes */
+    .modal-box {
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+
+    .status-pill-confirmed {
+        background-color: #dcfce7;
+        color: #16a34a;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+    .status-pill-pending {
+        background-color: #fef3c7;
+        color: #b45309;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    /* Modal Alerts */
+    .modal-alert {
+        padding: 12px 16px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        display: flex;
+        gap: 12px;
+        margin-bottom: 12px;
+        line-height: 1.5;
+    }
+    .modal-alert i { font-size: 1.1rem; }
+    .modal-alert-green {
+        background-color: #f0fdf4;
+        border: 1px solid #dcfce7;
+        color: #16a34a;
+    }
+    .modal-alert-orange {
+        background-color: #fff7ed;
+        border: 1px solid #ffedd5;
+        color: #c2410c;
+    }
+
+    /* Modal Footer Buttons */
+    .modal-actions {
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        margin-top: 24px;
+    }
+    .btn-modal-outline {
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.8rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-modal-outline:hover { background-color: #f9fafb; }
+    
+    .btn-modal-solid {
+        background-color: #2563eb;
+        border: 1px solid #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.8rem;
+        padding: 8px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+    .btn-modal-solid:hover { background-color: #1d4ed8; }
+
+    /* Tiny details for modal rows */
+    .m-lbl { font-size: 0.8rem; color: #6b7280; font-weight: 500; }
+    .m-val { font-size: 0.85rem; color: #1f2937; font-weight: 500; text-align: right; }
+    .m-row { display: flex; justify-content: space-between; margin-bottom: 12px; }
+    .m-row:last-child { margin-bottom: 0; }
+</style>
+
+<div class="container-fluid py-4 px-0">
+    
+    <div class="mb-4">
+        <h1 class="page-title">Payment</h1>
+        <p class="page-subtitle">Select a payment method to complete your booking</p>
+    </div>
+
+    @if (_submitError != null)
+    {
+        <div class="error-alert">
+            <i class="bi bi-exclamation-circle"></i>
+            <div>@_submitError</div>
+        </div>
+    }
+
+    <div class="row g-4">
+        
+        <div class="col-lg-6">
+            
+            <div class="payment-card">
+                <div class="payment-card-header">
+                    <h3 class="payment-card-title">Select Payment Method</h3>
+                </div>
+                <div class="payment-card-body">
+                    
+                    <div class="payment-option @(selectedMethod == "Razorpay" ? "active" : "")" @onclick='() => SelectPaymentMethod("Razorpay")'>
+                        <div class="pay-icon-box icon-razorpay">
+                            <i class="bi bi-shield-check"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">Razorpay</div>
+                            <div class="pay-desc">Pay securely using Razorpay</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                    <div class="payment-option @(selectedMethod == "UPI" ? "active" : "")" @onclick='() => SelectPaymentMethod("UPI")'>
+                        <div class="pay-icon-box icon-upi">
+                            <i class="bi bi-qr-code-scan"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">UPI</div>
+                            <div class="pay-desc">Pay using UPI ID or QR code</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                    <div class="payment-option @(selectedMethod == "Card" ? "active" : "")" @onclick='() => SelectPaymentMethod("Card")'>
+                        <div class="pay-icon-box icon-card">
+                            <i class="bi bi-credit-card"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">Credit / Debit Card</div>
+                            <div class="pay-desc">Visa, Mastercard, Rupay</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                    <div class="payment-option @(selectedMethod == "NetBanking" ? "active" : "")" @onclick='() => SelectPaymentMethod("NetBanking")'>
+                        <div class="pay-icon-box icon-bank">
+                            <i class="bi bi-bank"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">Net Banking</div>
+                            <div class="pay-desc">All major banks supported</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                    <div class="payment-option @(selectedMethod == "PayAfterStay" ? "active" : "")" @onclick='() => SelectPaymentMethod("PayAfterStay")'>
+                        <div class="pay-icon-box icon-paylater">
+                            <i class="bi bi-cash-coin"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">Pay After Stay</div>
+                            <div class="pay-desc">No online payment now. Pay at the guest house.</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            @if (selectedMethod == "PayAfterStay")
+            {
+                <div class="payment-card">
+                    <div class="payment-card-header">
+                        <h3 class="payment-card-title">Pay After Stay</h3>
+                    </div>
+                    <div class="payment-card-body">
+                        <div class="info-alert info-alert-green">
+                            <i class="bi bi-info-circle"></i>
+                            <div>
+                                No online payment is required now. Your booking will be confirmed and
+                                the amount of <strong>@_money(BookingState.Total)</strong> can be paid at the
+                                guest house reception after your stay.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="payment-card">
+                    <div class="payment-card-header">
+                        <h3 class="payment-card-title">Payment Details</h3>
+                    </div>
+                    <div class="payment-card-body">
+                        <div class="info-alert info-alert-orange">
+                            <i class="bi bi-exclamation-circle"></i>
+                            <div>
+                                Payment gateways are not yet integrated. Your booking will be recorded with
+                                a <strong>Pending Payment</strong> status and you can complete the payment at the
+                                guest house or once the online gateway becomes available.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+        </div>
+
+        <div class="col-lg-6">
+            
+            <div class="payment-card">
+                <div class="payment-card-header">
+                    <h3 class="payment-card-title">Booking Summary</h3>
+                </div>
+                <div class="payment-card-body">
+                    
+                    <div class="kv-row">
+                        <span class="kv-label">Guest House</span>
+                        <span class="kv-value">@BookingState.GuestHouseName</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Room Type</span>
+                        <span class="kv-value">@BookingState.RoomType</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Number of Rooms</span>
+                        <span class="kv-value">@BookingState.NumberOfRooms</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Number of Nights</span>
+                        <span class="kv-value">@BookingState.NumberOfNights</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Check-in</span>
+                        <span class="kv-value">@_formatDateTime(BookingState.CheckInDate)</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">Check-out</span>
+                        <span class="kv-value">@_formatDateTime(BookingState.CheckOutDate)</span>
+                    </div>
+                    @if (BookingState.ExtraBeds > 0)
+                    {
+                        <div class="kv-row">
+                            <span class="kv-label">Additional Bed(s)</span>
+                            <span class="kv-value">@BookingState.ExtraBeds</span>
+                        </div>
+                    }
+                    
+                    <div class="summary-divider"></div>
+                    
+                    <div class="kv-row">
+                        <span class="kv-label">Room Cost</span>
+                        <span class="kv-value">@_money(BookingState.RoomCost)</span>
+                    </div>
+                    @if (BookingState.ExtraBeds > 0)
+                    {
+                        <div class="kv-row">
+                            <span class="kv-label">Additional Bed Charges</span>
+                            <span class="kv-value">@_money(BookingState.ExtraBedCost)</span>
+                        </div>
+                    }
+                    <div class="kv-row">
+                        <span class="kv-label">Subtotal</span>
+                        <span class="kv-value">@_money(BookingState.Subtotal)</span>
+                    </div>
+                    <div class="kv-row">
+                        <span class="kv-label">GST (5%)</span>
+                        <span class="kv-value">@_money(BookingState.Tax)</span>
+                    </div>
+
+                    <div class="summary-divider"></div>
+
+                    <div class="kv-row mt-3">
+                        <span class="kv-label total-lbl">Total</span>
+                        <span class="kv-value total-val">@_money(BookingState.Total)</span>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    @if (!BookingState.IsInitialized)
+    {
+        <div class="error-alert">
+            <i class="bi bi-exclamation-circle"></i>
+            <div>No booking details found. Please start the booking again.</div>
+        </div>
+    }
+
+    <div class="bottom-actions">
+        <button class="btn-outline-back" @onclick="GoBack">Back</button>
+        <button class="btn-primary-continue" @onclick="SubmitBooking"
+                disabled="@(!BookingState.IsInitialized || _isSubmitting)">
+            @(_isSubmitting ? "Submitting..." : "Complete Booking")
+        </button>
+    </div>
+
+</div>
+
+@if (isBookingConfirmed)
+{
+    <div class="modal-overlay" @onclick="ClosePopup">
+        <div class="modal-card" @onclick:stopPropagation="true">
+            
+            <div class="modal-success-header">
+                <div class="success-icon-circle">
+                    <i class="bi bi-check-lg"></i>
+                </div>
+                <div>
+                    <h2 class="success-title">Booking Confirmed!</h2>
+                    <p class="success-subtitle">Your reservation has been successfully completed</p>
+                </div>
+            </div>
+
+            <div class="modal-box d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="m-lbl mb-1">Booking ID</div>
+                    <div class="m-val fs-6 text-start">@_bookingReference</div>
+                </div>
+                <div>
+                    <div class="m-lbl mb-1 text-end">Payment Status</div>
+                    @if (IsPayAfterStay)
+                    {
+                        <span class="status-pill-pending">Pay After Stay</span>
+                    }
+                    else
+                    {
+                        <span class="status-pill-pending">Pending</span>
+                    }
+                </div>
+            </div>
+
+            <div class="modal-box">
+                <div class="m-row">
+                    <span class="m-lbl">Guest Name</span>
+                    <span class="m-val">@BookingState.GuestName</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Room Type</span>
+                    <span class="m-val">@BookingState.RoomType</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Rooms × Nights</span>
+                    <span class="m-val">@BookingState.NumberOfRooms room(s) × @BookingState.NumberOfNights night(s)</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Check-in</span>
+                    <span class="m-val">@_formatDateTime(BookingState.CheckInDate)</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Check-out</span>
+                    <span class="m-val">@_formatDateTime(BookingState.CheckOutDate)</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Guest House</span>
+                    <span class="m-val">@BookingState.GuestHouseName</span>
+                </div>
+                <div class="m-row">
+                    <span class="m-lbl">Total Amount</span>
+                    <span class="m-val">@_money(BookingState.Total)</span>
+                </div>
+            </div>
+
+            @if (IsPayAfterStay)
+            {
+                <div class="modal-alert modal-alert-green">
+                    <i class="bi bi-info-circle"></i>
+                    <div>No online payment was taken. Please pay <strong>@_money(BookingState.Total)</strong> at the guest house reception after your stay.</div>
+                </div>
+            }
+            else
+            {
+                <div class="modal-alert modal-alert-orange">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <div>Your booking is recorded with <strong>Payment Pending</strong> status. The online payment gateway is not yet integrated.</div>
+                </div>
+            }
+
+            <div class="modal-alert modal-alert-orange">
+                <i class="bi bi-exclamation-circle"></i>
+                <div>Please carry a valid ID proof (Aadhaar/Passport) at the time of check-in.</div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_documentWarning))
+            {
+                <div class="modal-alert modal-alert-orange">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <div>@_documentWarning</div>
+                </div>
+            }
+
+            <div class="modal-actions">
+                <button class="btn-modal-solid" @onclick="GoToMyBookings">View My Bookings</button>
+                <button class="btn-modal-outline" @onclick="ClosePopup">New Booking</button>
+            </div>
+
+        </div>
+    </div>
+}
+
+@code {
+    private string selectedMethod = "Razorpay";
+    private bool isBookingConfirmed = false;
+    private bool _isSubmitting = false;
+    private string? _submitError;
+    private string _bookingReference = "";
+    private string? _documentWarning;
+    private bool IsPayAfterStay => selectedMethod == "PayAfterStay";
+
+    protected override void OnInitialized()
+    {
+        if (!BookingState.IsInitialized)
+        {
+            _submitError = "No booking details found. Please start the booking from the Guest House section.";
+        }
+    }
+
+    private void SelectPaymentMethod(string method)
+    {
+        selectedMethod = method;
+        _submitError = null;
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/BookingPreview");
+    }
+
+    private async Task SubmitBooking()
+    {
+        if (!BookingState.IsInitialized)
+        {
+            _submitError = "No booking details found. Please start the booking again.";
+            return;
+        }
+
+        _submitError = null;
+        _isSubmitting = true;
+
+        try
+        {
+            var paymentMethod = selectedMethod switch
+            {
+                "PayAfterStay" => 4,      // GuestHousePaymentMethod.PayAfterStay
+                "UPI" => 1,               // UPI
+                "Card" => 2,              // Card
+                "NetBanking" => 3,        // NetBanking
+                _ => 0                    // Razorpay
+            };
+
+            var request = new CreateBookingRequest
+            {
+                GuestHouseId = BookingState.GuestHouseId,
+                RoomTypeId = BookingState.RoomTypeId,
+                CheckInDate = BookingState.CheckInDate,
+                CheckInTime = BookingState.CheckInDate?.TimeOfDay,
+                CheckOutDate = BookingState.CheckOutDate,
+                CheckOutTime = BookingState.CheckOutDate?.TimeOfDay,
+                NumberOfRooms = BookingState.NumberOfRooms,
+                ExtraBeds = BookingState.ExtraBeds,
+                NumberOfPersons = BookingState.NumberOfPersons,
+                NumberOfAdults = BookingState.NumberOfAdults,
+                NumberOfChildren = BookingState.NumberOfChildren,
+                EmployeeOrDealerCode = BookingState.EmployeeOrDealerCode,
+                GuestName = BookingState.GuestName,
+                CompanyName = BookingState.CompanyName,
+                PhoneNumber = BookingState.PhoneNumber,
+                Email = BookingState.Email,
+                AadhaarOrPassportNumber = BookingState.AadhaarOrPassport,
+                Nationality = BookingState.Nationality,
+                Address = BookingState.Address,
+                PaymentMethod = paymentMethod,
+                IdProofTempToken = BookingState.IdProofTempToken,
+                IdProofFileName = BookingState.IdProofFileName
+            };
+
+            var response = await Http.PostAsJsonAsync("api/GuestHouseBooking/book", request);
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<BookingResultDto>();
+                if (result != null)
+                {
+                    _bookingReference = result.BookingReference;
+                    _documentWarning = result.DocumentWarning;
+                    isBookingConfirmed = true;
+                }
+                else
+                {
+                    _submitError = "The booking could not be confirmed. Please try again.";
+                }
+            }
+            else
+            {
+                try
+                {
+                    var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+                    _submitError = error?.Message ?? "The booking could not be completed. Please try again.";
+                }
+                catch
+                {
+                    _submitError = "The booking could not be completed. Please try again.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _submitError = $"The booking could not be completed: {ex.Message}";
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    private void ClosePopup()
+    {
+        isBookingConfirmed = false;
+        BookingState.Clear();
+        Navigation.NavigateTo("/GuestHouse");
+    }
+
+    private void GoToMyBookings()
+    {
+        isBookingConfirmed = false;
+        BookingState.Clear();
+        Navigation.NavigateTo("/MyBookings");
+    }
+
+    private static string _money(decimal value)
+    {
+        return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    private static string _formatDateTime(DateTime? value)
+    {
+        if (!value.HasValue) return "-";
+        return value.Value.ToString("dd MMM yyyy, hh:mm tt", CultureInfo.InvariantCulture);
+    }
+
+    public class CreateBookingRequest
+    {
+        public int GuestHouseId { get; set; }
+        public int RoomTypeId { get; set; }
+        public DateTime? CheckInDate { get; set; }
+        public TimeSpan? CheckInTime { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public TimeSpan? CheckOutTime { get; set; }
+        public int? NumberOfRooms { get; set; }
+        public int? ExtraBeds { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public int? NumberOfAdults { get; set; }
+        public int? NumberOfChildren { get; set; }
+        public string? EmployeeOrDealerCode { get; set; }
+        public string? GuestName { get; set; }
+        public string? CompanyName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string? AadhaarOrPassportNumber { get; set; }
+        public string? Nationality { get; set; }
+        public string? Address { get; set; }
+        public int PaymentMethod { get; set; }
+        public string? IdProofTempToken { get; set; }
+        public string? IdProofFileName { get; set; }
+    }
+
+    public class BookingResultDto
+    {
+        public bool Success { get; set; }
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public string GuestHouseName { get; set; } = "";
+        public string RoomType { get; set; } = "";
+        public int NumberOfRooms { get; set; }
+        public int NumberOfNights { get; set; }
+        public decimal TotalAmount { get; set; }
+        public int PaymentMethod { get; set; }
+        public string? DocumentWarning { get; set; }
+    }
+
+    public class ErrorResponse
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+    }
+}

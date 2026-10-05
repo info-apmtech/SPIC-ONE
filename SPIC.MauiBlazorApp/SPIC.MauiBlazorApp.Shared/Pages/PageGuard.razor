@@ -1,0 +1,153 @@
+@implements IDisposable
+@inject NavigationManager Nav
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
+@using System.Linq
+@using SPIC.Core.Entities
+
+@code {
+    private static readonly HashSet<string> _alwaysOpen = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "",
+        "login",
+        "AccountSelector",
+        "error",
+        "notfound",
+        "forbidden",
+        "Welcome"
+    };
+
+    private bool _restored;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Nav.LocationChanged += OnLocationChanged;
+        LoginState.OnChange += OnLoginStateChanged;
+
+        // Restore role access from sessionStorage BEFORE the first check,
+        // so a hard navigation (URL typed into address bar) doesn't slip through.
+        try
+        {
+            var roleAccess = await JS.InvokeAsync<string?>("sessionStorage.getItem", "spic_role_access");
+            if (roleAccess != null)
+            {
+                LoginState.SetAllowedPages(roleAccess);
+            }
+        }
+        catch { /* JS interop may not be ready yet — OnChange handler will catch up */ }
+
+        _restored = true;
+        Check(Nav.Uri);
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+        => Check(e.Location);
+
+    private void OnLoginStateChanged()
+    {
+        // Re-check the current URL whenever LoginState changes (e.g. after login,
+        // or after MainLayout restores AllowedPages from sessionStorage).
+        if (_restored) Check(Nav.Uri);
+    }
+
+    private void Check(string url)
+    {
+        if (!LoginState.IsLoggedIn) return;
+
+        // Admin and CorporateAdmin bypass everything
+        if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin) return;
+
+        var path = (new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri
+                ? new Uri(url).AbsolutePath
+                : url)
+            .Split('?', '#')[0]
+            .TrimStart('/')
+            .TrimEnd('/');
+
+        // Match on the FIRST path segment only, so routes WITH parameters
+        var firstSegment = path
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault() ?? "";
+
+        // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
+        // but must NEVER reach the SchemeApproval page.
+        if (LoginState.UserRole == AppRole.Dealer)
+        {
+            if (firstSegment.Equals("SchemeApproval", StringComparison.OrdinalIgnoreCase))
+            {
+                Nav.NavigateTo("/SDWADashboard", replace: true);
+                return;
+            }
+
+            if (firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("WelfareSchemes", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("ApplyWelfareScheme", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("WellfareApplication", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+        }
+
+        // Director (existing AppRole) needs to reach SchemeApproval / ApprovalDetail
+        // for the OPTIONAL post-SDWA Director review, independent of whatever
+        // Designation.RoleAccess they may or may not hold - this is an AppRole-based
+        // capability, not a Designation/PagePermission one (see WelfareSchemeApprovalController.
+        // ViewerRoles, which already grants Director read access to every application).
+        bool isDirectorSchemeApproval = LoginState.UserRole == AppRole.Director
+            && (firstSegment.Equals("SchemeApproval", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("ApprovalDetail", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("MOApproval", StringComparison.OrdinalIgnoreCase));
+
+        // Users with NO designation assigned (no allowed pages) can ONLY see the
+        // Welcome page. Infrastructure pages (login / AccountSelector / error /
+        // notfound / forbidden) stay reachable so the login and multi-role flows
+        // still work, but Dashboard and every feature page are blocked.
+        if (LoginState.AllowedPages.Count == 0)
+        {
+            bool isWelcome = firstSegment.Equals("Welcome", StringComparison.OrdinalIgnoreCase);
+            bool isDealerDash = LoginState.UserRole == AppRole.Dealer
+                                && (firstSegment.Equals("SDWADashboard", StringComparison.OrdinalIgnoreCase)
+                                    || firstSegment.Equals("WelfareSchemes", StringComparison.OrdinalIgnoreCase)
+                                    || firstSegment.Equals("ApplyWelfareScheme", StringComparison.OrdinalIgnoreCase)
+                                    || firstSegment.Equals("WellfareApplication", StringComparison.OrdinalIgnoreCase));
+            bool isInfra = _alwaysOpen.Contains(firstSegment)
+                           && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase);
+
+            if (!isWelcome && !isDealerDash && !isInfra && !isDirectorSchemeApproval)
+            {
+                Nav.NavigateTo("/Welcome", replace: true);
+            }
+            return;
+        }
+
+        if (_alwaysOpen.Contains(firstSegment)) return;
+
+        // ApprovalDetail (and its legacy MOApproval alias) is a dedicated
+        // full-page route for approval details shared by all roles;
+        // it uses the same SchemeApproval permission.
+        if (firstSegment.Equals("MOApproval", StringComparison.OrdinalIgnoreCase)
+            || firstSegment.Equals("ApprovalDetail", StringComparison.OrdinalIgnoreCase))
+        {
+            firstSegment = "SchemeApproval";
+        }
+
+        // CanAccess understands "Page.Action" tokens (page reachable if any action
+        // is granted) as well as legacy bare page tokens.
+        if (!LoginState.CanAccess(firstSegment) && !isDirectorSchemeApproval)
+        {
+            string fallback;
+            if (LoginState.UserRole == AppRole.Dealer)
+                fallback = "/SDWADashboard";
+            else if (LoginState.UserRole == AppRole.SpecialAdmin)
+                fallback = LoginState.CanAccess("Logistics") ? "/Logistics" : "/Welcome";
+            else
+                fallback = "/Dashboard";
+            Nav.NavigateTo(fallback, replace: true);
+        }
+    }
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        LoginState.OnChange -= OnLoginStateChanged;
+    }
+}

@@ -1,0 +1,608 @@
+﻿@page "/SchemeApproval"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
+
+<style>
+    /* Role-wise approval flow indicator (MO → RM → SM → AVP) — visual only */
+    .ap-flow {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: 0;
+        white-space: nowrap;
+    }
+
+    .ap-flow-step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 3px;
+        min-width: 26px;
+    }
+
+    .ap-flow-node {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.6rem;
+        font-weight: 700;
+        line-height: 1;
+        box-sizing: border-box;
+        letter-spacing: 0.02em;
+    }
+
+    .ap-flow-done {
+        background: #16A34A;
+        border: 1px solid #15803D;
+    }
+
+    .ap-flow-check {
+        width: 9px;
+        height: 5px;
+        border-left: 2px solid #fff;
+        border-bottom: 2px solid #fff;
+        transform: rotate(-45deg) translateY(-1px);
+    }
+
+    .ap-flow-rejected {
+        background: #DC2626;
+        border: 1px solid #B91C1C;
+    }
+
+    .ap-flow-cross {
+        position: relative;
+        width: 10px;
+        height: 10px;
+    }
+
+        .ap-flow-cross::before,
+        .ap-flow-cross::after {
+            content: '';
+            position: absolute;
+            left: -1px;
+            top: 4px;
+            width: 12px;
+            height: 2px;
+            background: #fff;
+            border-radius: 1px;
+        }
+
+        .ap-flow-cross::before {
+            transform: rotate(45deg);
+        }
+
+        .ap-flow-cross::after {
+            transform: rotate(-45deg);
+        }
+
+    .ap-flow-active {
+        background: #EFF6FF;
+        border: 2px solid #2563EB;
+        color: #1D4ED8;
+    }
+
+    .ap-flow-pending {
+        background: #F9FAFB;
+        border: 1px dashed #CBD5E1;
+        color: #94A3B8;
+    }
+
+    .ap-flow-stopped {
+        background: #F3F4F6;
+        border: 1px solid #E5E7EB;
+        color: #B0B7C3;
+        text-decoration: line-through;
+    }
+
+    .ap-flow-label {
+        font-size: 0.58rem;
+        font-weight: 600;
+        color: #64748B;
+    }
+
+    .ap-flow-link {
+        width: 14px;
+        height: 2px;
+        margin-top: 10px;
+        background: #E2E8F0;
+    }
+
+    .ap-flow-link-done {
+        background: #16A34A;
+    }
+</style>
+
+<div class="container-fluid py-4 px-0">
+
+    <!-- HEADER -->
+    <div class="ap-header-row">
+        <div class="ap-header-text">
+            <h1>Approval</h1>
+            <p>Manage and approve welfare applications efficiently</p>
+        </div>
+        <div class="ap-header-actions">
+            <button class="ap-btn-outline">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="8" y1="13" x2="16" y2="13" />
+                    <line x1="8" y1="17" x2="16" y2="17" />
+                </svg>
+                Excel
+            </button>
+            <button class="ap-btn-outline">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                </svg>
+                PDF
+            </button>
+            <button class="ap-btn-outline">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 6 2 18 2 18 9" />
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                    <rect x="6" y="14" width="12" height="8" />
+                </svg>
+                Print
+            </button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="ap-loading-state">
+            <div class="spinner-border text-success" role="status"></div>
+            <span>Loading approval queue…</span>
+        </div>
+    }
+    else if (_error != null)
+    {
+        <div class="ap-loading-state ap-error-state">
+            <div>@_error</div>
+            <button class="ap-btn-outline" @onclick='() => LoadPageAsync(_activeTab)'>Retry</button>
+        </div>
+    }
+    else if (_page != null)
+    {
+
+    <!-- STATS -->
+    <div class="ap-stats-grid">
+
+        <!-- Purple — Total Applications -->
+        <div class="ap-stat-card ap-stat-purple">
+            <div class="ap-stat-left">
+                <div class="ap-stat-title">Total Applications</div>
+                <div class="ap-stat-value">@_page.Stats.TotalApplications</div>
+            </div>
+            <div class="ap-stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="9" y1="13" x2="15" y2="13" />
+                    <line x1="9" y1="17" x2="15" y2="17" />
+                    <line x1="9" y1="9" x2="11" y2="9" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- Orange — Pending My Stage -->
+        <div class="ap-stat-card ap-stat-orange">
+            <div class="ap-stat-left">
+                <div class="ap-stat-title">Pending @(StageLabel)</div>
+                <div class="ap-stat-value">@_page.Stats.PendingMyStage</div>
+            </div>
+            <div class="ap-stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M5 3h14l1 7H4L5 3z" />
+                    <path d="M4 10c0 5 3.5 9 8 11 4.5-2 8-6 8-11" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- Cyan — Validated by MO -->
+        <div class="ap-stat-card ap-stat-cyan">
+            <div class="ap-stat-left">
+                <div class="ap-stat-title">Validated by MO</div>
+                <div class="ap-stat-value">@_page.Stats.ValidatedByMO</div>
+            </div>
+            <div class="ap-stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <circle cx="10.5" cy="14.5" r="2.5" />
+                    <line x1="12.5" y1="16.5" x2="15" y2="19" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- Red — Rejected -->
+        <div class="ap-stat-card ap-stat-red">
+            <div class="ap-stat-left">
+                <div class="ap-stat-title">Rejected</div>
+                <div class="ap-stat-value">@_page.Stats.Rejected</div>
+            </div>
+            <div class="ap-stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="9" y1="12" x2="15" y2="18" />
+                    <line x1="15" y1="12" x2="9" y2="18" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- Green — Completed -->
+        <div class="ap-stat-card ap-stat-green">
+            <div class="ap-stat-left">
+                <div class="ap-stat-title">Completed</div>
+                <div class="ap-stat-value">@_page.Stats.Completed</div>
+            </div>
+            <div class="ap-stat-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <polyline points="9 15 11 17 15 13" />
+                </svg>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="ap-tabs-row">
+        @foreach (var t in _page.Tabs)
+        {
+            var key = t.Key;
+            <button class="ap-tab @(_activeTab == key ? "active" : "")" @onclick="@(() => SetActiveTab(key))">@t.Label (@t.Count)</button>
+        }
+    </div>
+
+    <div class="ap-table-card">
+
+        <div class="ap-table-header">
+            <h3>@GetTableTitle()</h3>
+            <div class="ap-table-controls">
+                <div class="ap-search-wrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input type="text" placeholder="Search dealer / application..." @bind="_search" />
+                </div>
+                <select class="ap-select" @bind="_schemeFilter">
+                    <option>All Schemes</option>
+                    @foreach (var scheme in _schemes)
+                    {
+                        <option>@scheme</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="ap-table-wrap">
+            <table class="ap-table">
+                <thead>
+                    <tr>
+                        <th>Application ID</th>
+                        <th>Dealer Code</th>
+                        <th>Dealer Name</th>
+                        <th>Welfare Scheme</th>
+                        <th>Beneficiary</th>
+                        <th>Submitted Date</th>
+                        <th>Status</th>
+                        <th>Approval Flow (MO → RM → SM → SDWA → SDWA Admin)</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var app in PagedApplications())
+                    {
+                        <tr>
+                            <td>@(app.ApplicationNumber ?? "-")</td>
+                            <td>@(app.DealerCode ?? "-")</td>
+                            <td>
+                                <div class="ap-dealer-cell">
+                                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/Profile1.png" style="width: 24px; height: 24px; border-radius: 50%;" />
+                                    @(app.DealerName ?? "-")
+                                </div>
+                            </td>
+                            <td class="ap-td-teal">@app.SchemeName</td>
+                            <td>@(app.BeneficiaryName ?? "-")</td>
+                            <td>@app.ApplicationDate.ToString("yyyy-MM-dd")</td>
+                            <td><span class="@GetStatusClass(app)">@app.StatusDisplay</span></td>
+                            <td>
+                                @* Role-wise flow from data already in the list response
+                                   (Status + Approvals) — no extra request per row. *@
+                                @{ var flowSteps = BuildFlowSteps(app); }
+                                <div class="ap-flow" title="@GetFlowSummary(app)">
+                                    @for (var i = 0; i < flowSteps.Count; i++)
+                                    {
+                                        var step = flowSteps[i];
+                                        <div class="ap-flow-step">
+                                            <div class="@GetFlowNodeClass(step.State)">
+                                                @if (step.State == FlowState.Done)
+                                                {
+                                                    <span class="ap-flow-check"></span>
+                                                }
+                                                else if (step.State == FlowState.Rejected)
+                                                {
+                                                    <span class="ap-flow-cross"></span>
+                                                }
+                                                else
+                                                {
+                                                    @step.Code
+                                                }
+                                            </div>
+                                            <div class="ap-flow-label">@step.Code</div>
+                                        </div>
+                                        @if (i < flowSteps.Count - 1)
+                                        {
+                                            <div class="@(step.State == FlowState.Done ? "ap-flow-link ap-flow-link-done" : "ap-flow-link")"></div>
+                                        }
+                                    }
+                                </div>
+                            </td>
+                            <td>
+                                <div class="ap-row-actions">
+                                    <button class="ap-icon-btn ap-icon-view" @onclick="() => OpenDetail(app)" title="View">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    @if (FilteredApplications().Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" style="text-align:center; padding:28px; color:#94A3B8;">No applications found for this view.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="ap-pagination">
+            <div class="ap-page-size">
+                <span>Items Per Page</span>
+                <select class="ap-select-sm" @bind="_pageSize">
+                    <option>16</option>
+                    <option>32</option>
+                    <option>64</option>
+                </select>
+            </div>
+            <div class="ap-page-nav">
+                <button class="ap-page-btn ap-page-arrow" disabled="@(_pageIndex <= 1)" @onclick="GoToPrevPage">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                </button>
+                <span class="ap-page-dots">Page @_pageIndex of @Math.Max(TotalPages(), 1)</span>
+                <button class="ap-page-btn ap-page-arrow" disabled="@(_pageIndex >= TotalPages())" @onclick="GoToNextPage">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+    </div>
+    }
+</div>
+
+@code {
+    private bool _loading = true;
+    private string? _error;
+    private WelfareApprovalPageDto? _page;
+    private string _activeTab = "pending";
+
+    private string _search = "";
+    private string _schemeFilter = "All Schemes";
+    private List<string> _schemes = new();
+    private int _pageSize = 16;
+    private int _pageIndex = 1;
+
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+    [SupplyParameterFromQuery] public string? Tab { get; set; }
+
+    // Stage label for the stat card, e.g. MO / RM / SM / SDWA / SDWA Admin.
+    // SDWA / SDWA Admin are resolved from the user's EXISTING RoleAccess permissions
+    // (PagePermission.SDWA / PagePermission.SDWAAdmin), not AppRole, so they take
+    // precedence when present (a user can also be MO/RM/SM at the same time).
+    private string StageLabel => loginState.CanAccess(PagePermission.SDWAAdmin)
+        ? "SDWA Admin"
+        : loginState.CanAccess(PagePermission.SDWA)
+            ? "SDWA"
+            : loginState.UserRole switch
+            {
+                AppRole.MO => "MO",
+                AppRole.RM => "RM",
+                AppRole.SMM => "SM",
+                _ => ""
+            };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPageAsync(string.IsNullOrWhiteSpace(Tab) ? "pending" : Tab);
+    }
+
+    private async Task LoadPageAsync(string tab)
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _page = await Http.GetFromJsonAsync<WelfareApprovalPageDto>(
+                $"api/WelfareSchemeApproval/applications?tab={Uri.EscapeDataString(tab)}");
+
+            _activeTab = _page?.ActiveTab ?? "pending";
+            _schemes = (_page?.Applications ?? new())
+                .Select(a => a.SchemeName)
+                .Distinct()
+                .OrderBy(s => s)
+                .ToList();
+            _pageIndex = 1;
+        }
+        catch
+        {
+            _error = "Unable to load the approval queue. Please try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SetActiveTab(string key)
+    {
+        if (key == _activeTab && _page != null) return;
+        await LoadPageAsync(key);
+    }
+
+    private void OpenDetail(WelfareApprovalApplicationDto app)
+    {
+        Nav.NavigateTo($"/ApprovalDetail/{app.Id}?tab={Uri.EscapeDataString(_activeTab)}");
+    }
+
+    // ------------------------------------------------------------------
+    // Filtering / paging (client side within the active tab's rows)
+    // ------------------------------------------------------------------
+
+    private List<WelfareApprovalApplicationDto> FilteredApplications()
+    {
+        IEnumerable<WelfareApprovalApplicationDto> query = _page?.Applications ?? new();
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var q = _search.Trim().ToLowerInvariant();
+            query = query.Where(a =>
+                (a.ApplicationNumber ?? "").ToLowerInvariant().Contains(q) ||
+                (a.DealerCode ?? "").ToLowerInvariant().Contains(q) ||
+                (a.DealerName ?? "").ToLowerInvariant().Contains(q));
+        }
+
+        if (_schemeFilter != "All Schemes")
+            query = query.Where(a => a.SchemeName == _schemeFilter);
+
+        return query.ToList();
+    }
+
+    private List<WelfareApprovalApplicationDto> PagedApplications() =>
+        FilteredApplications()
+            .Skip((_pageIndex - 1) * _pageSize)
+            .Take(_pageSize)
+            .ToList();
+
+    private int TotalPages()
+    {
+        var count = FilteredApplications().Count;
+        return (int)Math.Ceiling(count / (double)_pageSize);
+    }
+
+    private void GoToPrevPage() { if (_pageIndex > 1) { _pageIndex--; } }
+    private void GoToNextPage() { if (_pageIndex < TotalPages()) { _pageIndex++; } }
+
+    private string GetTableTitle()
+    {
+        var label = _page?.Tabs.FirstOrDefault(t => t.Key == _activeTab)?.Label;
+        return $"{label ?? _activeTab} Applications List";
+    }
+
+    private static string GetStatusClass(WelfareApprovalApplicationDto app)
+    {
+        if (app.Status == 5 || app.StatusDisplay.StartsWith("Approved by ", StringComparison.OrdinalIgnoreCase))
+            return "ap-status ap-status-completed";
+
+        return app.Status is 6 or 7
+            ? "ap-status ap-status-rejected"
+            : "ap-status ap-status-pending";
+    }
+
+    // ------------------------------------------------------------------
+    // Role-wise approval flow (MO → RM → SM → AVP)
+    // Derived purely from the row's Status + Approvals that the list
+    // endpoint already returns — same rules as the drawer's BuildSteps,
+    // so recorded Approved/Rejected steps always win over what the status
+    // alone implies (keeps reverse-rejection cycles displayed correctly).
+    // ------------------------------------------------------------------
+
+    private enum FlowState { Pending, Active, Done, Rejected, Stopped }
+
+    private sealed record ApprovalFlowStep(string Code, FlowState State);
+
+    private static readonly (string Code, int Index)[] FlowStageOrder =
+        { ("MO", 0), ("RM", 1), ("SM", 2), ("SDWA", 3), ("SDWA Admin", 4) };
+
+    private List<ApprovalFlowStep> BuildFlowSteps(WelfareApprovalApplicationDto app)
+    {
+        var currentIndex = app.Status switch
+        {
+            1 or 2 => 0,   // Pending MO
+            3 => 1,        // Pending RM
+            4 => 2,        // Pending SM
+            8 => 3,        // Pending SDWA
+            10 => 4,       // Pending SDWA Admin
+            5 => 5,        // Fully approved
+            _ => -1        // Rejected / returned / cancelled
+        };
+
+        var steps = new List<ApprovalFlowStep>();
+
+        foreach (var (code, index) in FlowStageOrder)
+        {
+            var approval = app.Approvals?.FirstOrDefault(a =>
+                string.Equals(a.ApprovalLevel, code, StringComparison.OrdinalIgnoreCase));
+
+            var state =
+                approval != null && string.Equals(approval.ApprovalStatus, "Approved", StringComparison.OrdinalIgnoreCase) ? FlowState.Done :
+                approval != null && string.Equals(approval.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase) ? FlowState.Rejected :
+                app.Status == 5 || currentIndex > index ? FlowState.Done :
+                currentIndex == index ? FlowState.Active :
+                (app.Status is 6 or 9 && currentIndex == -1) ? FlowState.Stopped :
+                FlowState.Pending;
+
+            steps.Add(new ApprovalFlowStep(code, state));
+        }
+
+        return steps;
+    }
+
+    private string GetFlowSummary(WelfareApprovalApplicationDto app)
+    {
+        if (app.Status == 5)
+            return "Approved by all levels (MO → RM → SM → SDWA → SDWA Admin)";
+
+        var rejection = app.Approvals?
+            .Where(a => string.Equals(a.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(a => a.ApprovedAt)
+            .FirstOrDefault();
+
+        if (rejection != null)
+        {
+            return app.Status == 9
+                ? $"Returned to dealer by {rejection.ApprovalLevel} for correction"
+                : $"Rejected by {rejection.ApprovalLevel}";
+        }
+
+        return app.Status switch
+        {
+            1 or 2 => "Pending at MO",
+            3 => "Pending at RM",
+            4 => "Pending at SM",
+            8 => "Pending at SDWA",
+            10 => "Pending at SDWA Admin",
+            _ => "Approval flow"
+        };
+    }
+
+    private static string GetFlowNodeClass(FlowState state) => state switch
+    {
+        FlowState.Done => "ap-flow-node ap-flow-done",
+        FlowState.Rejected => "ap-flow-node ap-flow-rejected",
+        FlowState.Active => "ap-flow-node ap-flow-active",
+        FlowState.Stopped => "ap-flow-node ap-flow-stopped",
+        _ => "ap-flow-node ap-flow-pending"
+    };
+}

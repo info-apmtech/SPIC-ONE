@@ -1,0 +1,3816 @@
+@page "/Register"
+@* REQUIRED-VALIDATION BUILD: Parent Dealer and every visible starred field are enforced before navigation. *@
+@implements IDisposable
+@using System.Net.Http.Json
+@using System.Text.RegularExpressions
+@using Microsoft.AspNetCore.Components
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject HttpClient Http
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject LoadingService Loading
+@inject LoginState LoginState
+@inject LookupCacheService LookupCache
+<style>
+    fieldset:disabled .file-remove-x {
+        display: none !important;
+    }
+
+    .input-with-loader {
+        position: relative;
+    }
+
+        .input-with-loader .form-control-sm {
+            padding-right: 2rem;
+        }
+
+        .input-with-loader .field-loader-icon {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(calc(-50% - 2px));
+            font-size: 1rem;
+            color: #6c757d;
+            z-index: 4;
+            pointer-events: none;
+        }
+
+    .ocr-warning {
+        font-size: 0.75rem;
+        color: #856404;
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        padding: 4px 8px;
+        margin-top: 4px;
+    }
+
+    .upload-area.is-invalid {
+        border-color: #dc3545 !important;
+        box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.12);
+    }
+    /* Searchable Dropdown Styles */
+    .searchable-select-input {
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 32px;
+    }
+
+    .searchable-dropdown-container {
+        position: absolute;
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #059669;
+        border-radius: 6px;
+        max-height: 220px;
+        overflow-y: auto;
+        z-index: 1050;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        margin-top: 4px;
+    }
+
+    .searchable-dropdown-item {
+        padding: 10px 14px;
+        font-size: 0.85rem;
+        color: #374151;
+        cursor: pointer;
+        border-bottom: 1px solid #F3F4F6;
+        transition: background-color 0.1s ease;
+    }
+
+        .searchable-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .searchable-dropdown-item:hover {
+            background-color: #DCFCE7;
+            color: #059669;
+        }
+</style>
+<div class="container-fluid py-4 px-0">
+    <FormLoader IsSingleStep="IsRestrictedNavFlow || IsDepartmentSelected" IsRestrictedFlow="IsInactiveToBeTerminated" />
+
+   
+    <fieldset disabled="@IsViewOnly" style="@(IsViewOnly ? "border:0;padding:0;margin:0;" : "border:0;padding:0;margin:0;")">
+
+
+        <h5 class="fw-bold mb-4 reg-page-heading">Dealer Registration</h5>
+
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show mb-3" role="alert">
+                @_message
+                <button type="button" class="btn-close" @onclick='() => _message = null'></button>
+            </div>
+        }
+
+        <form @onsubmit:preventDefault>
+            @if (status == "Active" || status == "Inactive" || status == "Terminated")
+            {
+                <div class="basic-info-card">
+                    <div class="basic-info-header">
+                        <h3 class="basic-info-title">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                                 class="formicon"
+                                 alt="icon" /> Basic Information
+                        </h3>
+
+                        <div class="btn-group-toggle">
+                            <button type="button"
+                                    class="btn @(selected == "Dealer" ? "active" : "")"
+                                    @onclick='() => Select("Dealer")'>
+                                Dealer
+                            </button>
+
+                            <button type="button"
+                                    class="btn @(selected == "Department" ? "active" : "")"
+                                    @onclick='() => Select("Department")'>
+                                Department
+                            </button>
+
+                            <button type="button"
+                                    class="btn @(selected == "Institution" ? "active" : "")"
+                                    @onclick='() => Select("Institution")'>
+                                Institution
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row g-4 align-items-center">
+                        <div class="col-12 col-md-5">
+                            <div class="row g-3 h-100">
+
+                                <div class="col-6">
+                                    <div class="logo-card spic @(isSpic ? "active" : "")"
+                                         @onclick="ToggleSpic">
+                                        <div class="card-checkbox">
+                                            <i class="bi bi-check-lg"></i>
+                                        </div>
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
+                                        <span>SPIC</span>
+                                    </div>
+                                </div>
+
+                                <div class="col-6">
+                                    <div class="logo-card green-star @(isGreenStar ? "active" : "")"
+                                         @onclick="ToggleGreenStar">
+                                        <div class="card-checkbox">
+                                            <i class="bi bi-check-lg"></i>
+                                        </div>
+                                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
+                                        <span>GREEN STAR</span>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-7">
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">State <span class="text-danger">*</span></label>
+                                    <select class="form-select-custom w-100 @(_errors.ContainsKey("StateId") ? "is-invalid" : "")" @bind="_basicInfoStateId" @bind:after="OnBasicInfoStateChanged" disabled="@_isStateLocked">
+                                        <option value="0">-- Select State --</option>
+                                        @foreach (var state in _statesAll)
+                                        {
+                                            <option value="@state.Id">@state.StateName</option>
+                                        }
+                                    </select>
+                                    @if (_errors.ContainsKey("StateId"))
+                                    {
+                                        <div class="field-error">@_errors["StateId"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Region <span class="text-danger">*</span></label>
+                                    <select class="form-select-custom w-100 @(_errors.ContainsKey("Region") ? "is-invalid" : "")"
+                                            @bind="_basicInfoRegionId"
+                                            @bind:after="OnBasicInfoRegionChanged"
+                                            disabled="@_isRegionLocked">
+                                        <option value="0">-- Select Region --</option>
+                                        @foreach (var region in _filteredRegions)
+                                        {
+                                            <option value="@region.Id">@region.RegionName</option>
+                                        }
+                                    </select>
+                                    @if (_errors.ContainsKey("Region"))
+                                    {
+                                        <div class="field-error">@_errors["Region"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">HQ <span class="text-danger">*</span></label>
+                                    <select class="form-select-custom w-100 @(_errors.ContainsKey("HQ") ? "is-invalid" : "")"
+                                            @bind="_basicInfoHqId"
+                                            @bind:after='() => ValidateFieldOnChange("HQ", _basicInfoHqId > 0)'
+                                            disabled="@_isHqLocked">
+                                        <option value="0">-- Select HQ --</option>
+                                        @foreach (var hq in _filteredHeadquarters)
+                                        {
+                                            <option value="@hq.Id">@hq.HeadquarterName</option>
+                                        }
+                                    </select>
+                                    @if (_errors.ContainsKey("HQ"))
+                                    {
+                                        <div class="field-error">@_errors["HQ"]</div>
+                                    }
+                                </div>
+                                @if (!IsNewDealerFlow)
+                                {
+                                    <div class="col-12 col-sm-6">
+                                        <label class="form-label-custom">Status</label>
+
+                                        <div class="status-btn-group">
+                                            <button type="button"
+                                                    class="btn btn_active @(status == "Active" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Active")'>
+                                                Active
+                                            </button>
+
+                                            <button type="button"
+                                                    class="btn btn_inactive @(status == "Inactive" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Inactive")'>
+                                                Inactive
+                                            </button>
+
+                                            <button type="button"
+                                                    class="btn btn_terminated @(status == "Terminated" ? "active" : "")"
+                                                    @onclick='() => SelectStatus("Terminated")'>
+                                                Terminated
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+
+            <div class="basic-info-card business-info-card">
+                <div class="business-info-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg" class="formicon" alt="icon" />
+                        <h5 class="fw-semibold m-0 business-info-title">Business Information</h5>
+                    </div>
+                    @if (_isEditMode)
+                    {
+                        <span class="business-info-pill business-info-pill-edit">
+                            <i class="bi bi-pencil-square me-1"></i>Editing
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="business-info-pill business-info-pill-new">
+                            <i class="bi bi-plus-circle me-1"></i>New Entry
+                        </span>
+                    }
+                </div>
+
+                <div class="business-info-body">
+                    <div class="row g-3 mb-3">
+                        @if (!IsNewDealerFlow)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Dealer Code & Name <span class="text-danger">*</span></label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerCode") ? "is-invalid" : "")"
+                                           placeholder="-- New Entry --"
+                                           @bind="_dealerSearchText"
+                                           @bind:event="oninput"
+                                           @onfocus="() => _showDealerDropdown = true"
+                                           @onblur="HideDealerDropdown" />
+                                    @if (_showDealerDropdown)
+                                    {
+                                        <div class="searchable-dropdown-container">
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(0, "")'>
+                                                -- New Entry --
+                                            </div>
+                                            @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_dealerSearchText) ||
+                                                $"{d.DealerCode} - {d.FirmName}".Contains(_dealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                <div class="searchable-dropdown-item" @onmousedown='() => SelectDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                                    @dealer.DealerCode - @dealer.FirmName
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                @if (_errors.ContainsKey("DealerCode"))
+                                {
+                                    <div class="field-error">@_errors["DealerCode"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">
+                                    Parent Dealer Code & Name
+                                    <span style="color:#dc3545;font-weight:700;" aria-hidden="true">*</span>
+                                </label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("ParentDealer") ? "is-invalid" : "")"
+                                           placeholder="-- Select Parent Dealer --"
+                                           required
+                                           aria-required="true"
+                                           aria-invalid="@_errors.ContainsKey("ParentDealer")"
+                                           aria-describedby="parentDealerError"
+                                           @bind="_parentDealerSearchText"
+                                           @bind:event="oninput"
+                                           @bind:after="OnParentDealerSearchChanged"
+                                           @onfocus="() => _showParentDealerDropdown = true"
+                                           @onblur="HideParentDealerDropdown" />
+                                    @if (_showParentDealerDropdown)
+                                    {
+                                        <div class="searchable-dropdown-container">
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(0, "")'>
+                                                -- Select Parent Dealer --
+                                            </div>
+                                            @foreach (var dealer in _filteredDealers.Where(d => string.IsNullOrWhiteSpace(_parentDealerSearchText) ||
+                                                $"{d.DealerCode} - {d.FirmName}".Contains(_parentDealerSearchText, StringComparison.OrdinalIgnoreCase)))
+                                            {
+                                                <div class="searchable-dropdown-item" @onmousedown='() => SelectParentDealer(dealer.Id, $"{dealer.DealerCode} - {dealer.FirmName}")'>
+                                                    @dealer.DealerCode - @dealer.FirmName
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                                @if (_errors.ContainsKey("ParentDealer"))
+                                {
+                                    <div id="parentDealerError" class="field-error" role="alert">@_errors["ParentDealer"]</div>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label-custom">Firm Name <span class="text-danger">*</span> <small class="text-muted fw-normal">(As per Fertilizer License@*  or GST Trade Name *@)</small></label>
+                            <div class="firm-name-input-wrap">
+                                <span class="firm-name-prefix">M/s.</span>
+                                <input type="text" class="form-control-custom w-100 firm-name-input @(_errors.ContainsKey("FirmName") ? "is-invalid" : "")" @bind="_model.FirmName" @bind:after="SanitizeFirmName" placeholder="Enter Firm Business Name">
+                            </div>
+                            @if (_errors.ContainsKey("FirmName"))
+                            {
+                                <div class="field-error">@_errors["FirmName"]</div>
+                            }
+                        </div>
+                       @if (isSpic && !IsNewDealerFlow)
+{
+    <div class="col-12 col-md-3">
+        <label class="form-label-custom">
+            Date of Appointment for SPIC
+            <span class="text-danger">*</span>
+        </label>
+
+        <input type="date"
+               class="form-control-custom w-100 @(_errors.ContainsKey("DateOfAppointment") ? "is-invalid" : "")"
+               value="@_dateOfAppointmentText"
+               @onchange="OnDateOfAppointmentChanged">
+
+        @if (_errors.ContainsKey("DateOfAppointment"))
+        {
+            <div class="field-error">
+                @_errors["DateOfAppointment"]
+            </div>
+        }
+    </div>
+}
+
+@if (isGreenStar && !IsNewDealerFlow)
+{
+    <div class="col-12 col-md-3">
+        <label class="form-label-custom">
+            Date of Appointment for Greenstar
+            <span class="text-danger">*</span>
+        </label>
+
+        <input type="date"
+               class="form-control-custom w-100 @(_errors.ContainsKey("GreenstarDateOfAppointment") ? "is-invalid" : "")"
+               value="@_greenstarDateOfAppointmentText"
+               @onchange="OnGreenstarDateOfAppointmentChanged">
+
+        @if (_errors.ContainsKey("GreenstarDateOfAppointment"))
+        {
+            <div class="field-error">
+                @_errors["GreenstarDateOfAppointment"]
+            </div>
+        }
+    </div>
+}
+                    </div>
+                </div>
+            </div>
+
+            @if (ShowTerminatedStatus)
+            {
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/InactiveStatus.svg"
+                             class="formicon"
+                             alt="icon" /> Terminated Status
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Final Amount Status</label>
+                            <div class="status-btn-group">
+                                <button type="button"
+                                        class="btn btn_active @(_model.IsFinalAmountSettled == true ? "active" : "")"
+                                        @onclick='() => _model.IsFinalAmountSettled = true'>
+                                    Settled
+                                </button>
+                                <button type="button"
+                                        class="btn btn_inactive @(_model.IsFinalAmountSettled == false ? "active" : "")"
+                                        @onclick='() => _model.IsFinalAmountSettled = false'>
+                                    Not Settled
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Final Approval Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("FinalApprovalDate") ? "is-invalid" : "")"
+                                   value="@_finalApprovalDateText"
+                                   @onchange="OnFinalApprovalDateChanged">
+                            @if (_errors.ContainsKey("FinalApprovalDate"))
+                            {
+                                <div class="field-error">@_errors["FinalApprovalDate"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Settlement Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SettlementDate") ? "is-invalid" : "")"
+                                   value="@_settlementDateText"
+                                   @onchange="OnSettlementDateChanged">
+                            @if (_errors.ContainsKey("SettlementDate"))
+                            {
+                                <div class="field-error">@_errors["SettlementDate"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Settlement Amount (Lakhs)</label>
+                            <div class="input-icon-left-wrapper">
+                                <span class="input-icon-left">₹</span>
+                                <input type="number"
+                                       class="form-control-custom w-100 input-with-left-icon"
+                                       placeholder="0.00"
+                                       step="0.01"
+                                       @bind="_model.SettlementAmount">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+
+            @if (ShowInactiveStatus)
+            {
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/InactiveStatus.svg"
+                             class="formicon"
+                             alt="icon" /> Inactive Status
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Last Transaction Date @if (!IsRestrictedNavFlow) { <span class="text-danger">*</span> }</label>
+                            <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("LastTransactionDate") ? "is-invalid" : "")"
+                                   value="@_lastTransactionDateText"
+                                   @onchange="OnLastTransactionDateChanged">
+                            @if (_errors.ContainsKey("LastTransactionDate"))
+                            {
+                                <div class="field-error">@_errors["LastTransactionDate"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Transaction Type</label>
+                            <div class="status-btn-group">
+                                <button type="button"
+                                        class="btn btn_active @(_model.IsLastTransactionIsSale == true ? "active" : "")"
+                                        @onclick='() => _model.IsLastTransactionIsSale = true'>
+                                    Sales
+                                </button>
+                                <button type="button"
+                                        class="btn btn_inactive @(_model.IsLastTransactionIsSale == false ? "active" : "")"
+                                        @onclick='() => _model.IsLastTransactionIsSale = false'>
+                                    Collection
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Future Business Proposal</label>
+                            <select class="form-select-custom w-100"
+                                    @bind="_inactiveProposal">
+                                <option value="@FutureBusinessProposal.FutureBusiness">Future Business</option>
+                                <option value="@FutureBusinessProposal.Terminated">To Be Terminated</option>
+                                <option value="@FutureBusinessProposal.NotTraceable">Not Traceable</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (ShowFullRegistrationSections)
+            {
+                <div class="form-card">
+                    <div class="primary-location-header">
+                        <div class="card-header-title mb-0">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg" alt="Location" class="formicon" />Primary Location
+                        </div>
+                        <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 card-header-title use-current-loc-btn" @onclick="UseCurrentLocation" disabled="@_isGettingLocation">
+                            @if (_isGettingLocation)
+                            {
+                                <i class="bi bi-arrow-repeat spin"></i> <span>Getting Location...</span>
+                            }
+                            else
+                            {
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg" alt="Current Location" class="verifyicon" /> <span>Use Current Location</span>
+                            }
+                        </button>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_locationMessage))
+                    {
+                        <div class="alert @(_locationSuccess ? "alert-success" : "alert-warning") py-1 px-2 small mb-2">@_locationMessage</div>
+                    }
+
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <div class="map-box-wrap">
+                                <div id="leafletMap" class="leaflet-map-el"></div>
+                                <button type="button" class="btn btn-sm btn-success rounded-pill px-3 shadow-sm map-loc-btn" @onclick="UseCurrentLocation" disabled="@_isGettingLocation"><i class="bi bi-crosshair"></i> Use current location</button>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-8">
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Google Map URL @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("GoogleMapURL") ? "is-invalid" : "")" @bind="_model.GoogleMapURL" @bind:after="OnGoogleMapUrlChanged" placeholder="Click map or Paste Google Maps link">
+                                    @if (_errors.ContainsKey("GoogleMapURL"))
+                                    {
+                                        <div class="field-error">@_errors["GoogleMapURL"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Latitude & Longitude @if (ShowLocationRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Latitude") || _errors.ContainsKey("Longitude") ? "is-invalid" : "")"
+                                           value="@_latitudeLongitudeText"
+                                           @onchange="OnLatitudeLongitudeChanged"
+                                           placeholder="e.g. 10.7905, 78.7047">
+                                    @if (_errors.ContainsKey("Latitude"))
+                                    {
+                                        <div class="field-error">@_errors["Latitude"]</div>
+                                    }
+                                    @if (_errors.ContainsKey("Longitude"))
+                                    {
+                                        <div class="field-error">@_errors["Longitude"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Shop No / Room No / Block No @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("ShopNo") ? "is-invalid" : "")" @bind="_model.ShopNoORRoomNoOrBlockNo" @bind:after='() => ValidateFieldOnChange("ShopNo", !string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo))' placeholder="">
+                                    @if (_errors.ContainsKey("ShopNo"))
+                                    {
+                                        <div class="field-error">@_errors["ShopNo"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Street / Area / Locality @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Street") ? "is-invalid" : "")" @bind="_model.Street" @bind:after='() => ValidateFieldOnChange("Street", !string.IsNullOrWhiteSpace(_model.Street))' placeholder="">
+                                    @if (_errors.ContainsKey("Street"))
+                                    {
+                                        <div class="field-error">@_errors["Street"]</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Sub Village @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("SubVillage") ? "is-invalid" : "")" @bind="_model.SubVillage" @bind:after='() => ValidateFieldOnChange("SubVillage", !string.IsNullOrWhiteSpace(_model.SubVillage))' placeholder="Enter Sub Village">
+                                    @if (_errors.ContainsKey("SubVillage"))
+                                    {
+                                        <div class="field-error">@_errors["SubVillage"]</div>
+                                    }
+                                </div>
+
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Pincode @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <input type="text"
+                                           class="form-control-custom w-100 @(_errors.ContainsKey("PinCode") ? "is-invalid" : "")"
+                                           @bind="_model.PinCode"
+                                           @bind:event="oninput"
+                                           @bind:after="OnPincodeChanged"
+                                           placeholder="Enter Pincode"
+                                           maxlength="6"
+                                           inputmode="numeric">
+                                    @if (_isPincodeLookup)
+                                    {
+                                        <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+                                    }
+                                    @if (_errors.ContainsKey("PinCode"))
+                                    {
+                                        <div class="field-error">@_errors["PinCode"]</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(_pincodeMessage))
+                                    {
+                                        <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
+                                    }
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Village @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Village") ? "is-invalid" : "")" @bind="_model.Village" @bind:after='() => ValidateFieldOnChange("Village", !string.IsNullOrWhiteSpace(_model.Village))' placeholder="Village">
+                                    @if (_errors.ContainsKey("Village"))
+                                    {
+                                        <div class="field-error">@_errors["Village"]</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-6 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Block @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Block") ? "is-invalid" : "")" @bind="_model.Block" @bind:after='() => ValidateFieldOnChange("Block", !string.IsNullOrWhiteSpace(_model.Block))' placeholder="Enter Block">
+                            @if (_errors.ContainsKey("Block"))
+                            {
+                                <div class="field-error">@_errors["Block"]</div>
+                            }
+                        </div>
+                        <div class="col-6 col-sm-6 col-md-3">
+                            <label class="form-label-custom">Taluk @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Taluk") ? "is-invalid" : "")" @bind="_model.Taluk" @bind:after='() => ValidateFieldOnChange("Taluk", !string.IsNullOrWhiteSpace(_model.Taluk))' placeholder="Enter Taluk">
+                            @if (_errors.ContainsKey("Taluk"))
+                            {
+                                <div class="field-error">@_errors["Taluk"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">District @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")"
+                                       placeholder="-- Select District --"
+                                       @bind="_districtSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showDistrictDropdown = true"
+                                       @onblur="HideDistrictDropdown" />
+                                @if (_showDistrictDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(0, "")'>
+                                            -- Select District --
+                                        </div>
+                                        @foreach (var district in _DistrictAll.Where(d => d.StateId == _model.DealerStateId &&
+                                            (string.IsNullOrWhiteSpace(_districtSearchText) ||
+                                            d.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase))))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(district.Id, district.DistrictName)'>
+                                                @district.DistrictName
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (_errors.ContainsKey("DistrictId"))
+                            {
+                                <div class="field-error">@_errors["DistrictId"]</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-sm-6 col-md-3">
+                            <label class="form-label-custom">State @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("DealerStateId") ? "is-invalid" : "")"
+                                       placeholder="-- Select State --"
+                                       @bind="_stateSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showStateDropdown = true"
+                                       @onblur="HideStateDropdown" />
+                                @if (_showStateDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectState(0, "")'>
+                                            -- Select State --
+                                        </div>
+                                        @foreach (var state in _statesAll.Where(s => string.IsNullOrWhiteSpace(_stateSearchText) ||
+                                            s.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectState(state.Id, state.StateName)'>
+                                                @state.StateName
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (_errors.ContainsKey("DealerStateId"))
+                            {
+                                <div class="field-error">@_errors["DealerStateId"]</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label-custom">Official Contact Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="tel"
+                                   inputmode="numeric"
+                                   pattern="[0-9]*"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("OfficialContactNumber") ? "is-invalid" : "")"
+                                   @bind="_model.OfficialContactNumber"
+                                   @bind:after="SanitizeOfficialContact"
+                                   placeholder="10-digit mobile number"
+                                   maxlength="10"
+                                   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+
+                            @if (_errors.ContainsKey("OfficialContactNumber"))
+                            {
+                                <div class="field-error">@_errors["OfficialContactNumber"]</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label-custom">WhatsApp Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="tel"
+                                   inputmode="numeric"
+                                   pattern="[0-9]*"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("WhatsAppNumber") ? "is-invalid" : "")"
+                                   @bind="_model.WhatsAppNumber"
+                                   @bind:after="SanitizeWhatsAppNumber"
+                                   placeholder="10-digit mobile number"
+                                   maxlength="10"
+                                   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+
+                            @if (_errors.ContainsKey("WhatsAppNumber"))
+                            {
+                                <div class="field-error">@_errors["WhatsAppNumber"]</div>
+                            }
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <label class="form-label-custom">Alternative Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="tel"
+                                   inputmode="numeric"
+                                   pattern="[0-9]*"
+                                   class="form-control-custom w-100 @(_errors.ContainsKey("AlternativeNumber") ? "is-invalid" : "")"
+                                   @bind="_model.AlternativeNumber"
+                                   @bind:after="SanitizeAlternativeNumber"
+                                   placeholder="10-digit mobile number"
+                                   maxlength="10"
+                                   oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                            @if (_errors.ContainsKey("AlternativeNumber"))
+                            {
+                                <div class="field-error">@_errors["AlternativeNumber"]</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @if (isSpic)
+                {
+                    <div class="basic-info-card">
+                        <div class="card-header-title mb-2">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                                 class="formicon"
+                                 alt="icon" /> Security Deposit Details for SPIC
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Security Deposit Amount</label>
+                                <div class="input-icon-left-wrapper">
+                                    <span class="input-icon-left">₹</span>
+                                    <input type="number" class="form-control-custom w-100 input-with-left-icon @(_errors.ContainsKey("SpicSecurityDepositAmount") ? "is-invalid" : "")" placeholder="0.00" step="0.01" @bind="_model.SpicSecurityDepositAmount" @bind:after='() => ValidateFieldOnChange("SpicSecurityDepositAmount", (_model.SpicSecurityDepositAmount ?? 0) >= 0)'>
+                                </div>
+                                @if (_errors.ContainsKey("SpicSecurityDepositAmount"))
+                                {
+                                    <div class="field-error">@_errors["SpicSecurityDepositAmount"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Security Deposit Receipt No</label>
+                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("SpicSecurityDepositReceiptNo") ? "is-invalid" : "")" @bind="_model.SpicSecurityDepositReceiptNo" @bind:after='() => ValidateFieldOnChange("SpicSecurityDepositReceiptNo", !string.IsNullOrWhiteSpace(_model.SpicSecurityDepositReceiptNo))' placeholder="Enter Security Deposit Receipt Number">
+                                @if (_errors.ContainsKey("SpicSecurityDepositReceiptNo"))
+                                {
+                                    <div class="field-error">@_errors["SpicSecurityDepositReceiptNo"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Security Deposit Date</label>
+                                <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("SpicSecurityDepositDate") ? "is-invalid" : "")"
+                                       value="@_securityDepositDateText"
+                                       @onchange="OnSecurityDepositDateChanged">
+                                @if (_errors.ContainsKey("SpicSecurityDepositDate"))
+                                {
+                                    <div class="field-error">@_errors["SpicSecurityDepositDate"]</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (isSpic && !IsNewDealerFlow)
+                {
+                    <div class="basic-info-card">
+                        <div class="card-header-title mb-2">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                                 class="formicon"
+                                 alt="icon" /> Trade Deposit Details for SPIC
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Trade Deposit Amount (₹ in lakhs) @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <div class="input-icon-left-wrapper">
+                                    <span class="input-icon-left">₹</span>
+                                    <input type="number" class="form-control-custom w-100 input-with-left-icon @(_errors.ContainsKey("TradeDepositAmount") ? "is-invalid" : "")" placeholder="0.00" step="0.01" @bind="_model.TradeDepositAmount" @bind:after='() => ValidateFieldOnChange("TradeDepositAmount", _model.TradeDepositAmount >= 0)'>
+                                </div>
+                                @if (_errors.ContainsKey("TradeDepositAmount"))
+                                {
+                                    <div class="field-error">@_errors["TradeDepositAmount"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Receipt No @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("TradeDepositReceiptNo") ? "is-invalid" : "")" @bind="_model.TradeDepositReceiptNo" @bind:after='() => ValidateFieldOnChange("TradeDepositReceiptNo", !string.IsNullOrWhiteSpace(_model.TradeDepositReceiptNo))' placeholder="Enter Receipt Number">
+                                @if (_errors.ContainsKey("TradeDepositReceiptNo"))
+                                {
+                                    <div class="field-error">@_errors["TradeDepositReceiptNo"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Deposit Date @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("TradeDepositDate") ? "is-invalid" : "")"
+                                       value="@_tradeDepositDateText"
+                                       @onchange="OnTradeDepositDateChanged">
+                                @if (_errors.ContainsKey("TradeDepositDate"))
+                                {
+                                    <div class="field-error">@_errors["TradeDepositDate"]</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (isGreenStar && !IsNewDealerFlow)
+                {
+                    <div class="basic-info-card">
+                        <div class="card-header-title mb-2">
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                                 class="formicon"
+                                 alt="icon" /> Trade Deposit Details for Greenstar
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Trade Deposit Amount (₹ in lakhs) @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <div class="input-icon-left-wrapper">
+                                    <span class="input-icon-left">₹</span>
+                                    <input type="number" class="form-control-custom w-100 input-with-left-icon @(_errors.ContainsKey("GreenstarTradeDepositAmountReg") ? "is-invalid" : "")" placeholder="0.00" step="0.01" @bind="_model.GreenstarTradeDepositAmountReg" @bind:after='() => ValidateFieldOnChange("GreenstarTradeDepositAmountReg", (_model.GreenstarTradeDepositAmountReg ?? 0) >= 0)'>
+                                </div>
+                                @if (_errors.ContainsKey("GreenstarTradeDepositAmountReg"))
+                                {
+                                    <div class="field-error">@_errors["GreenstarTradeDepositAmountReg"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Receipt No @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("GreenstarTradeDepositReceiptNoReg") ? "is-invalid" : "")" @bind="_model.GreenstarTradeDepositReceiptNoReg" @bind:after='() => ValidateFieldOnChange("GreenstarTradeDepositReceiptNoReg", !string.IsNullOrWhiteSpace(_model.GreenstarTradeDepositReceiptNoReg))' placeholder="Enter Receipt Number">
+                                @if (_errors.ContainsKey("GreenstarTradeDepositReceiptNoReg"))
+                                {
+                                    <div class="field-error">@_errors["GreenstarTradeDepositReceiptNoReg"]</div>
+                                }
+                            </div>
+                            <div class="col-12 col-sm-6 col-md-4">
+                                <label class="form-label-custom">Deposit Date @if (ShowTradeDepositRequiredMarks) { <span class="text-danger">*</span> }</label>
+                                <input type="date" class="form-control-custom w-100 @(_errors.ContainsKey("GreenstarTradeDepositDateReg") ? "is-invalid" : "")"
+                                       value="@_greenstarTradeDepositDateText"
+                                       @onchange="OnGreenstarTradeDepositDateChanged">
+                                @if (_errors.ContainsKey("GreenstarTradeDepositDateReg"))
+                                {
+                                    <div class="field-error">@_errors["GreenstarTradeDepositDateReg"]</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                             class="formicon"
+                             alt="icon" /> Bank Details
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label-custom">Account Holder Name @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("AccountHolderName") ? "is-invalid" : "")" @bind="_model.AccountHolderName" @bind:after='() => ValidateFieldOnChange("AccountHolderName", !string.IsNullOrWhiteSpace(_model.AccountHolderName))' placeholder="Enter Account Holder Name">
+                            @if (_errors.ContainsKey("AccountHolderName"))
+                            {
+                                <div class="field-error">@_errors["AccountHolderName"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label-custom">Account Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("AccountNumber") ? "is-invalid" : "")" @bind="_model.AccountNumber" @bind:after='() => ValidateFieldOnChange("AccountNumber", !string.IsNullOrWhiteSpace(_model.AccountNumber))' placeholder="Enter Account Number">
+                            @if (_errors.ContainsKey("AccountNumber"))
+                            {
+                                <div class="field-error">@_errors["AccountNumber"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Bank Name @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <div class="position-relative">
+                                <input type="text" class="form-select-custom searchable-select-input w-100 @(_errors.ContainsKey("BankId") ? "is-invalid" : "")"
+                                       placeholder="-- Select Bank --"
+                                       @bind="_bankSearchText"
+                                       @bind:event="oninput"
+                                       @onfocus="() => _showBankDropdown = true"
+                                       @onblur="HideBankDropdown" />
+                                @if (_showBankDropdown)
+                                {
+                                    <div class="searchable-dropdown-container">
+                                        <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(0, "")'>
+                                            -- Select Bank --
+                                        </div>
+                                        @foreach (var bank in _banksAll.Where(b => string.IsNullOrWhiteSpace(_bankSearchText) ||
+                                            b.Name.Contains(_bankSearchText, StringComparison.OrdinalIgnoreCase)))
+                                        {
+                                            <div class="searchable-dropdown-item" @onmousedown='() => SelectBank(bank.Id, bank.Name)'>
+                                                @bank.Name
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (_errors.ContainsKey("BankId"))
+                            {
+                                <div class="field-error">@_errors["BankId"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">Bank Branch @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("Branch") ? "is-invalid" : "")" @bind="_model.Branch" @bind:after='() => ValidateFieldOnChange("Branch", !string.IsNullOrWhiteSpace(_model.Branch))' placeholder="Enter Bank Branch">
+                            @if (_errors.ContainsKey("Branch"))
+                            {
+                                <div class="field-error">@_errors["Branch"]</div>
+                            }
+                        </div>
+                        <div class="col-12 col-sm-6 col-md-4">
+                            <label class="form-label-custom">IFSC Code @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</label>
+                            <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("IFSC") ? "is-invalid" : "")" @bind="_model.IFSC" @bind:after='() => ValidateFieldOnChange("IFSC", !string.IsNullOrWhiteSpace(_model.IFSC))' placeholder="Enter IFSC Code">
+                            @if (_errors.ContainsKey("IFSC"))
+                            {
+                                <div class="field-error">@_errors["IFSC"]</div>
+                            }
+                        </div>
+                        <div class="col-12">
+                            <div class="cheque-upload-wrap">
+                                <label class="upload-area">
+                                    <i class="bi bi-cloud-arrow-up text-secondary"></i>
+                                    <span class="small text-secondary fw-600">Upload Cheque (PDF or Image)</span>
+                                    <InputFile OnChange="HandleChequeUpload" accept=".pdf,.jpg,.jpeg,.png,.webp" hidden />
+                                    @if (_errors.ContainsKey("ChequeFile"))
+                                    {
+                                        <div class="field-error">@_errors["ChequeFile"]</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(_model.ChequeFilePath))
+                                    {
+                                        <div class="mt-1 small text-success file-name-display">
+                                            <i class="bi bi-check-circle"></i> @_model.ChequeFilePath
+                                            @if (CanDelete)
+                                            {
+                                                <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveChequeFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                            }
+                                        </div>
+                                    }
+                                </label>
+                                @if (_isExtractingCheque)
+                                {
+                                    <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Extracting bank details from cheque...</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningCheque))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningCheque</div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="basic-info-card">
+                    <div class="card-header-title mb-2">
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/TaxComplience.svg"
+                             class="formicon"
+                             alt="icon" /> Tax & Compliance
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <div class="compliance-card gst">
+                                <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-text text-success me-2"></i>GST Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</div>
+                                <label class="form-label-custom">GST Number</label>
+                                <div class="input-with-loader">
+                                    <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("GSTNumber") ? "is-invalid" : "")" @bind="_model.GSTNumber" @bind:after="OnGSTNumberChanged" placeholder="15-character GST Number" maxlength="15" style="text-transform: uppercase">
+                                    @if (_isExtractingGst)
+                                    {
+                                        <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    }
+                                </div>
+                                 @if (_errors.ContainsKey("GSTNumber"))
+                                {
+                                    <div class="field-error">@_errors["GSTNumber"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningGst))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningGst</div>
+                                }
+                                <label class="form-label-custom mt-2">Legal Name</label>
+<input type="text" class="form-control form-control-sm"
+      @bind="_model.GSTLegalName"/>
+
+<label class="form-label-custom mt-2">Trade Name</label>
+<input type="text" class="form-control form-control-sm"
+       @bind="_model.GSTTradeName"/>
+
+<label class="form-label-custom mt-2">Constitution of Business</label>
+<input type="text" class="form-control form-control-sm"
+      @bind="_model.GSTConstitutionofBusiness"/>
+                               
+                                <div class="mt-2">
+                                    <label class="upload-area @(_errors.ContainsKey("GSTFile") ? "is-invalid" : "")">
+                                        <i class="bi bi-cloud-arrow-up text-success"></i>
+                                        <span class="small text-success fw-600">Upload GST Certificate (PDF)@(ShowFullSectionRequiredMarks ? " *" : "")</span>
+                                        <InputFile OnChange="HandleGstUpload" accept=".pdf" hidden />
+                                        @if (_errors.ContainsKey("GSTFile"))
+                                        {
+                                            <div class="field-error">@_errors["GSTFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.GSTFilePath))
+                                        {
+                                            <div class="mt-1 small text-success file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.GSTFilePath
+                                                @if (CanDelete)
+                                                {
+                                                    <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveGstFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <div class="compliance-card pan">
+                                <div class="fw-bold small mb-2"><i class="bi bi-person-badge text-primary me-2"></i>PAN Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</div>
+                                <label class="form-label-custom">PAN Number</label>
+                                <div class="input-with-loader">
+                                    <input type="text" class="form-control form-control-sm @(_errors.ContainsKey("PANNumber") ? "is-invalid" : "")" @bind="_model.PANNumber" @bind:after="OnPANNumberChanged" placeholder="10-character PAN Number" maxlength="10" style="text-transform: uppercase">
+                                    @if (_isExtractingPan)
+                                    {
+                                        <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    }
+                                </div>
+                                @if (_errors.ContainsKey("PANNumber"))
+                                {
+                                    <div class="field-error">@_errors["PANNumber"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningPan))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningPan</div>
+                                }
+                                <div class="mt-2">
+                                    <label class="upload-area @(_errors.ContainsKey("PANFile") ? "is-invalid" : "")">
+                                        <i class="bi bi-cloud-arrow-up text-primary"></i>
+                                        <span class="small text-primary fw-600">Upload PAN Card (PDF)@(ShowFullSectionRequiredMarks ? " *" : "")</span>
+                                        <InputFile OnChange="HandlePanUpload" accept=".pdf" hidden />
+                                        @if (_errors.ContainsKey("PANFile"))
+                                        {
+                                            <div class="field-error">@_errors["PANFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.PANFilePath))
+                                        {
+                                            <div class="mt-1 small text-primary file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.PANFilePath
+                                                @if (CanDelete)
+                                                {
+                                                    <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemovePanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-4 d-flex flex-column gap-3">
+                            <div class="compliance-card aadhaar flex-fill">
+                                <div class="fw-bold small mb-2"><i class="bi bi-fingerprint text-danger me-2"></i>Aadhaar Number @if (ShowFullSectionRequiredMarks) { <span class="text-danger">*</span> }</div>
+                                <label class="form-label-custom">Aadhaar Number</label>
+                                <div class="input-with-loader">
+                                    <input type="text"
+                                           class="form-control form-control-sm @(_errors.ContainsKey("AadhaarNumber") ? "is-invalid" : "")"
+                                           @bind="_model.AadhaarNumber"
+                                           @bind:after="OnAadhaarNumberChanged"
+                                           placeholder="12-digit Aadhaar"
+                                           maxlength="12"
+                                           oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+                                    @if (_isExtractingAadhaar)
+                                    {
+                                        <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    }
+                                </div>
+
+                                @if (_errors.ContainsKey("AadhaarNumber"))
+                                {
+                                    <div class="field-error">@_errors["AadhaarNumber"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningAadhaar))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningAadhaar</div>
+                                }
+
+                                <div class="mt-2">
+                                    <label class="upload-area @(_errors.ContainsKey("AadhaarFile") ? "is-invalid" : "")">
+                                        <i class="bi bi-cloud-arrow-up text-danger"></i>
+                                        <span class="small text-danger fw-600">Upload E-Aadhaar Card (PDF)@(ShowFullSectionRequiredMarks ? " *" : "")</span>
+                                        <InputFile OnChange="HandleAadhaarUpload" accept=".pdf" hidden />
+                                        @if (_errors.ContainsKey("AadhaarFile"))
+                                        {
+                                            <div class="field-error">@_errors["AadhaarFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.AadhaarFilePath))
+                                        {
+                                            <div class="mt-1 small text-danger file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.AadhaarFilePath
+                                                @if (CanDelete)
+                                                {
+                                                    <i class="bi bi-x-circle text-dark ms-2 file-remove-x" @onclick="RemoveAadhaarFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+
+                            </div>
+
+                            <div class="compliance-card tan flex-fill">
+                                <div class="fw-bold small mb-2"><i class="bi bi-file-earmark-person text-warning me-2"></i>TAN Number</div>
+                                <label class="form-label-custom">TAN Number</label>
+                                <div class="input-with-loader">
+                                    <input type="text"
+                                           class="form-control form-control-sm @(_errors.ContainsKey("TANNumber") ? "is-invalid" : "")"
+                                           @bind="_model.TANNumber"
+                                           @bind:after="OnTANNumberChanged"
+                                           placeholder="10-character TAN Number"
+                                           maxlength="10"
+                                           style="text-transform: uppercase">
+                                    @if (_isExtractingTan)
+                                    {
+                                        <i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+                                    }
+                                </div>
+
+                                @if (_errors.ContainsKey("TANNumber"))
+                                {
+                                    <div class="field-error">@_errors["TANNumber"]</div>
+                                }
+                                @if (!string.IsNullOrEmpty(_ocrWarningTan))
+                                {
+                                    <div class="ocr-warning">@_ocrWarningTan</div>
+                                }
+
+                                <div class="mt-2">
+                                    <label class="upload-area">
+                                        <i class="bi bi-cloud-arrow-up text-warning"></i>
+                                        <span class="small text-warning fw-600">Upload TAN Document (PDF)</span>
+                                        <InputFile OnChange="HandleTanUpload" accept=".pdf" hidden />
+                                        @if (_errors.ContainsKey("TANFile"))
+                                        {
+                                            <div class="field-error">@_errors["TANFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.TANFilePath))
+                                        {
+                                            <div class="mt-1 small text-warning file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.TANFilePath
+                                                @if (CanDelete)
+                                                {
+                                                    <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveTanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-4 mb-4">
+                    @if (_errors.ContainsKey("FertilizerLicense"))
+                    {
+                        <div class="col-12">
+                            <div class="alert alert-warning py-2 mb-0"><i class="bi bi-exclamation-triangle me-2"></i>@_errors["FertilizerLicense"]</div>
+                        </div>
+                    }
+                    <div class="col-12 col-md-6">
+                        <div class="form-card mb-0 h-100">
+                            <div class="card-header-title">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Wholesale Fertilizer Details (as per iFMS)
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Wholesale Fertilizer License Details</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("FertilizerLicense") && string.IsNullOrWhiteSpace(_model.WholeSaleFertilizerLicenseNumber) ? "is-invalid" : "")" @bind="_model.WholeSaleFertilizerLicenseNumber" @bind:after="OnFertilizerLicenseChanged" placeholder="Asper Fertilizer License Number">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Expiry Date</label>
+                                    <input type="date" class="form-control-custom w-100"
+                                           value="@_wholesaleLicenseExpiryDateText"
+                                           @onchange="OnWholesaleLicenseExpiryDateChanged">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">mFMS ID</label>
+                                    <input type="text" class="form-control-custom w-100" @bind="_model.WholesalemFMSCode" placeholder="Enter mFMS ID">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="file-upload-box">
+                                        <span><i class="bi bi-upload"></i> Choose file</span>
+                                        <small>Upload License Certificate</small>
+                                        <InputFile OnChange="HandleWholesaleFileUpload" hidden accept=".pdf" />
+                                        @if (_errors.ContainsKey("WholesaleFile"))
+                                        {
+                                            <div class="field-error">@_errors["WholesaleFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.WholesaleLicenseFilePath))
+                                        {
+                                            <div class="mt-2 small text-success file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.WholesaleLicenseFilePath
+                                                @if (CanDelete)
+                                                {
+                                                    <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveWholesaleFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <div class="form-card mb-0 h-100">
+                            <div class="card-header-title">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/WholeSale.svg" alt="WholeSale" class="formicon" /> Retail Fertilizer Details (as per iFMS)
+                            </div>
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Retail Fertilizer License Details</label>
+                                    <input type="text" class="form-control-custom w-100 @(_errors.ContainsKey("FertilizerLicense") && string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber) ? "is-invalid" : "")" @bind="_model.RetailFertilizerLicenseNumber" @bind:after="OnFertilizerLicenseChanged" placeholder="Asper Fertilizer License Number">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">Expiry Date</label>
+                                    <input type="date" class="form-control-custom w-100"
+                                           value="@_retailLicenseExpiryDateText"
+                                           @onchange="OnRetailLicenseExpiryDateChanged">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="form-label-custom">mFMS ID</label>
+                                    <input type="text" class="form-control-custom w-100" @bind="_model.RetailmFMSCode" placeholder="Enter mFMS ID">
+                                </div>
+                                <div class="col-12 col-sm-6">
+                                    <label class="file-upload-box">
+                                        <span><i class="bi bi-upload"></i> Choose file</span>
+                                        <small>Upload License Certificate</small>
+                                        <InputFile OnChange="HandleRetailFileUpload" hidden accept=".pdf" />
+                                        @if (_errors.ContainsKey("RetailFile"))
+                                        {
+                                            <div class="field-error">@_errors["RetailFile"]</div>
+                                        }
+                                        @if (!string.IsNullOrEmpty(_model.RetailLicenseFilePath))
+                                        {
+                                            <div class="mt-2 small text-success file-name-display">
+                                                <i class="bi bi-check-circle"></i> @_model.RetailLicenseFilePath
+                                                @if (CanDelete)
+                                                {
+                                                    <i class="bi bi-x-circle text-danger ms-2 file-remove-x" @onclick="RemoveRetailFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+                                                }
+                                            </div>
+                                        }
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-md-6">
+                        <div class="form-card h-100">
+                            <div class="fw-bold mb-3 card-header-title"><img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/OfficeAutomation.svg" alt="OfficeAutomation" class="formicon" /> Office Automation</div>
+                            <div class="row g-3 align-items-end office-auto-row">
+                                <div class="col-auto">
+                                    <label class="small text-muted mb-2 d-block">Do you have office automation?</label>
+                                    <div class="yes-no-group">
+                                        <button type="button"
+                                                class="btn-yes @(_model.IsOfficeAutomation == true ? "active" : "")"
+                                                @onclick='() => _model.IsOfficeAutomation = true'>
+                                            Yes
+                                        </button>
+                                        <button type="button"
+                                                class="btn-no @(_model.IsOfficeAutomation == false ? "active" : "")"
+                                                @onclick='() => _model.IsOfficeAutomation = false'>
+                                            No
+                                        </button>
+                                    </div>
+                                </div>
+                                @if (_model.IsOfficeAutomation == false)
+                                {
+                                    <div class="col-12 col-sm">
+                                        <label class="form-label-custom">Expected Office Automation Date</label>
+                                        <input type="date" class="form-control-custom w-100" @bind="_model.ExpectedOfficeAutomationDate" />
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                    @if (!IsNewDealerFlow)
+                    {
+                        <div class="col-12 col-md-6">
+                            <div class="small-card h-100">
+                                <div class="fw-bold mb-3 card-header-title">
+                                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/EnrollmentStatus.svg"
+                                         class="formicon" /> Enrollment Status
+                                </div>
+                                <label class="form text-muted mb-2 d-block">Are you Enrolled in SDWA?</label>
+                                <div class="yes-no-group">
+                                    <button type="button"
+                                            class="btn-yes @(_model.IsSDWA == true ? "active" : "")"
+                                            @onclick='() => _model.IsSDWA = true'>
+                                        Yes
+                                    </button>
+                                    <button type="button"
+                                            class="btn-no @(_model.IsSDWA == false ? "active" : "")"
+                                            @onclick='() => _model.IsSDWA = false'>
+                                        No
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+        </form>
+    </fieldset>
+
+    <CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" NextButtonText="@(IsRestrictedNavFlow || IsDepartmentSelected ? "Submit" : null)" />
+</div>
+
+@if (_showDeleteModal)
+{
+    <div class="del-modal-backdrop" @onclick="CancelDelete">
+        <div class="del-modal" @onclick:stopPropagation="true">
+            <div class="del-modal-icon">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+            </div>
+            <h3 class="del-modal-title">Delete @_deleteDisplayName?</h3>
+            <p class="del-modal-body">
+                You are about to delete <strong>@_deleteFileNameDisplay</strong>
+            </p>
+            <p class="del-modal-warning">This action cannot be undone.</p>
+            <div class="del-modal-actions">
+                <button type="button" class="del-btn del-btn-cancel" @onclick="CancelDelete">
+                    Cancel
+                </button>
+                @if (CanDelete)
+                {
+                    <button type="button" class="del-btn del-btn-delete" @onclick="ConfirmDelete">
+                        <i class="bi bi-trash3-fill"></i> Delete
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "dealerId")]
+    public int? DealerIdFromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
+
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+    // Dashboard-only maintenance route used after a New Dealer has completed AVP approval.
+    // It intentionally renders this approved record through the normal Existing Dealer UI,
+    // but does NOT erase its permanent IsNewDealerRegistration source/history flag.
+    private bool IsApprovedNewDealerMaintenanceRequested =>
+        string.Equals(Flow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+
+    private bool _approvedNewDealerMaintenanceMode;
+
+    private bool IsApprovedNewDealerExistingMaintenanceFlow =>
+        _approvedNewDealerMaintenanceMode;
+
+    // Backward-compatible recovery for approved New Dealers that were created in
+    // the New Dealer flow but whose permanent flag was accidentally cleared by an
+    // older maintenance build. These fields belong only to the New Dealer commercial
+    // application/trade-deposit flow, so normal Existing Dealers are not reclassified.
+    private static bool HasNewDealerRegistrationEvidence(DealerFormModel dealer)
+    {
+        if (dealer.IsNewDealerRegistration)
+            return true;
+
+        return
+            dealer.DealershipApplicationFeeBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeDDNumber) ||
+            dealer.DealershipApplicationFeeDDDate.HasValue ||
+            (dealer.DealershipApplicationFeeAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.DealershipApplicationFeeFilePath) ||
+            dealer.SpicTradeDepositDDBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.SpicTradeDepositDDNumber) ||
+            dealer.SpicTradeDepositDDDate.HasValue ||
+            (dealer.SpicTradeDepositDDAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.SpicTradeDepositFilePath) ||
+            dealer.GflTradeDepositDDBankId.HasValue ||
+            !string.IsNullOrWhiteSpace(dealer.GflTradeDepositDDNumber) ||
+            dealer.GflTradeDepositDDDate.HasValue ||
+            (dealer.GflTradeDepositDDAmount ?? 0m) > 0m ||
+            !string.IsNullOrWhiteSpace(dealer.GflTradeDepositFilePath);
+    }
+
+    // New Dealer Creation flow: no existing dealer is selected. Dealer ID is generated
+    // when the record is first saved and Dealer Code is only assigned after final approval.
+    // An approved New Dealer opened from Dashboard with flow=existing-maintenance is the
+    // only exception: it uses Existing Dealer maintenance fields after approval.
+    private bool IsNewDealerFlow =>
+        !IsApprovedNewDealerExistingMaintenanceFlow &&
+        (string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) || _model.IsNewDealerRegistration);
+
+    // Preserve the maintenance marker while the approved New Dealer moves through the
+    // normal Existing Dealer registration pages. The permanent DB source flag remains true.
+    private string RegistrationFlowParam =>
+        IsApprovedNewDealerExistingMaintenanceFlow
+            ? "&flow=existing-maintenance"
+            : IsNewDealerFlow
+                ? "&flow=new"
+                : string.Empty;
+
+    // Controls whether the FULL registration page (Location/Bank/Tax/License/etc.) is hidden.
+    // Only pure Terminated status hides these — Inactive+Terminated still shows the full page.
+    private bool IsRestrictedFlow => status == "Terminated";
+
+   // Controls NAVIGATION + submit for the PURE Terminated case ONLY:
+    // single Register page, "Terminated Status" card, submit straight to Dashboard.
+    private bool IsRestrictedNavFlow => status == "Terminated" || IsInactiveNotTraceable;
+
+    // Inactive dealer whose Future Business Proposal is "To Be Terminated".
+    // Uses a restricted 3-PAGE flow (Register -> Proprietor -> Investment):
+    // Next on Register goes to Proprietor (NOT Experience), and IsSubmittedForReview
+    // is set only on the FINAL restricted page — so this stays Draft/Editable here.
+    private bool IsInactiveToBeTerminated =>
+        status == "Inactive" && _inactiveProposal == FutureBusinessProposal.Terminated;
+
+    private bool IsInactiveNotTraceable =>
+        status == "Inactive" && _inactiveProposal == FutureBusinessProposal.NotTraceable;
+
+   private DealerFormModel _model = new()
+{
+    // DateOfAppointment intentionally blank - user must select it
+    // GreenstarDateOfAppointment intentionally blank - user must select it
+
+    LastTransactionDate = DateTime.Today,
+    FinalApprovalDate = DateTime.Today,
+    SettlementDate = DateTime.Today,
+    TradeDepositDate = DateTime.Today,
+    GreenstarTradeDepositDateReg = DateTime.Today,
+    WholesaleLicenseExpiryDate = DateTime.Today,
+    RetailLicenseExpiryDate = DateTime.Today
+};
+    private bool _isEditMode;
+    private bool _isSaving;
+    private Dictionary<string, string> _errors = new();
+
+    private string selected = "Dealer";
+    private string status = "Active";
+    private DealerStatus _originalStatus = DealerStatus.Active;
+    private FutureBusinessProposal _inactiveProposal = FutureBusinessProposal.FutureBusiness;
+
+    private bool _entityTypeManuallySet;
+    private bool _statusManuallySet;
+
+    private bool IsDealerSelected => selected == "Dealer";
+    private bool IsDepartmentSelected => selected == "Department";
+    private bool IsInstitutionSelected => selected == "Institution";
+
+    // Mirrors the mandatory-field conditions used in Validate(): full sections shown for
+    // Dealer/Institution/Department-active, but location/bank/tax fields are only required
+    // for Dealer and Institution (Department skips them, as does Inactive Not Traceable).
+    private bool ShowFullSectionRequiredMarks => !IsDepartmentSelected && !IsInactiveNotTraceable;
+
+    // Latitude & Longitude are additionally required only for the New Dealer flow or an
+    // existing Dealer selected from Dealer Code & Name (same rule as Validate()).
+    private bool ShowLocationRequiredMarks => ShowFullSectionRequiredMarks && (IsNewDealerFlow || IsDealerSelected);
+
+    // Trade Deposit Details (SPIC/Greenstar) are mandatory only when registration type = Dealer.
+    private bool ShowTradeDepositRequiredMarks => IsDealerSelected && ShowFullRegistrationSections && !IsInactiveNotTraceable;
+
+    private bool ShowInactiveStatus => status == "Inactive";
+    private bool ShowTerminatedStatus => status == "Terminated";
+
+    private bool ShowDealerFullSections => IsDealerSelected && status != "Terminated";
+
+    // Department Active: show full sections
+    // Department Inactive: show full sections too (same as Dealer/Institution)
+    private bool ShowDepartmentActiveSections => IsDepartmentSelected && status != "Terminated";
+    private bool ShowDepartmentBusinessOnlyWhenInactive => false;
+
+    // Institution Active/Inactive: show full sections
+    private bool ShowInstitutionFullSections => IsInstitutionSelected && status != "Terminated";
+
+    private bool ShowFullRegistrationSections => !IsRestrictedFlow && (ShowDealerFullSections || ShowDepartmentActiveSections || ShowInstitutionFullSections);
+    private bool isSpic = true;
+    private bool isGreenStar = true;
+    private bool _isStateLocked;
+    private bool _isRegionLocked;
+    private bool _isHqLocked;
+
+    private bool _isExtractingGst;
+    private bool _isExtractingPan;
+    private bool _isExtractingAadhaar;
+    private bool _isExtractingTan;
+    private bool _isExtractingCheque;
+    private string? _ocrWarningGst;
+    private string? _ocrWarningPan;
+    private string? _ocrWarningAadhaar;
+    private string? _ocrWarningTan;
+    private string? _ocrWarningCheque;
+    private bool _ocrPopulatedGst;
+    private bool _ocrPopulatedPan;
+    private bool _ocrPopulatedAadhaar;
+    private bool _ocrPopulatedTan;
+    private bool _ocrPopulatedCheque;
+
+    private IBrowserFile? _gstFile;
+    private IBrowserFile? _panFile;
+    private IBrowserFile? _aadhaarFile;
+    private IBrowserFile? _tanFile;
+    private IBrowserFile? _chequeFile;
+    private IBrowserFile? _wholesaleFile;
+    private IBrowserFile? _retailFile;
+
+    private bool _showDeleteModal = false;
+    private string _deleteDocType = "";
+    private string _deleteDisplayName = "";
+    private string _deleteFileNameDisplay = "";
+    private string _deleteFilePathToDelete = "";
+
+    private bool _isGettingLocation;
+    private string? _locationMessage;
+    private bool _locationSuccess;
+
+    private DotNetObjectReference<Register>? _objRef;
+
+    private List<LocationItemDto> _statesAll = new();
+    private List<LocationItemDto> _DistrictAll = new();
+    private List<LocationItemDto> _regionsAll = new();
+    private List<LocationItemDto> _headquartersAll = new();
+    private List<BankItemDto> _banksAll = new();
+    private List<DealerItemDto> _dealersAll = new();
+
+    private List<LocationItemDto> _filteredRegions = new();
+    private List<LocationItemDto> _filteredHeadquarters = new();
+    private List<DealerItemDto> _filteredDealers = new();
+
+    private int _basicInfoStateId;
+    private int _basicInfoRegionId;
+    private int _basicInfoHqId;
+    private int _dealerCodeId;
+    private int _parentDealerId;
+
+    private string _dealerSearchText = "";
+    private bool _showDealerDropdown;
+    private string _parentDealerSearchText = "";
+    private bool _showParentDealerDropdown;
+    private string _stateSearchText = "";
+    private bool _showStateDropdown;
+    private string _districtSearchText = "";
+    private bool _showDistrictDropdown;
+    private string _bankSearchText = "";
+    private bool _showBankDropdown;
+
+    private string? _message;
+    private bool _isError;
+    private bool _isPincodeLookup;
+    private string? _pincodeMessage;
+    private bool _pincodeSuccess;
+    private string _dateOfAppointmentText = "";
+    private string _greenstarDateOfAppointmentText = "";
+    private string _lastTransactionDateText = "";
+    private string _finalApprovalDateText = "";
+    private string _settlementDateText = "";
+    private string _tradeDepositDateText = "";
+    private string _greenstarTradeDepositDateText = "";
+    private string _securityDepositDateText = "";
+    private string _wholesaleLicenseExpiryDateText = "";
+    private string _retailLicenseExpiryDateText = "";
+    private string _latitudeLongitudeText = "";
+    protected override void OnInitialized()
+    {
+        SyncDateBuffersFromModel();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _objRef = DotNetObjectReference.Create(this);
+        Loading.Show();
+        try
+        {
+            Task<DealerFormModel?>? dealerTask = null;
+            if (DealerIdFromQuery.HasValue && DealerIdFromQuery.Value > 0)
+            {
+                _dealerCodeId = DealerIdFromQuery.Value;
+                dealerTask = Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
+            }
+
+            await LoadData();
+            ApplyEmployeeLocationDefaults();
+
+            if (IsNewDealerFlow && !_isEditMode)
+            {
+                isSpic = false;
+                isGreenStar = false;
+            }
+
+            if (dealerTask != null)
+            {
+                try
+                {
+                    var dealer = await dealerTask;
+                    await ApplyDealerToForm(dealer, preserveCompanySelection: false);
+                }
+                catch (Exception ex)
+                {
+                    ShowMessage($"Failed to load dealer: {ex.Message}", true);
+                    _isEditMode = false;
+                }
+            }
+        }
+        finally
+        {
+            Loading.Hide();
+        }
+    }
+
+    public void Dispose() => _objRef?.Dispose();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("initLeafletMap", "leafletMap", _objRef);
+            if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            {
+                await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+            }
+        }
+    }
+    private async Task ApplyDealerToForm(DealerFormModel? dealer, bool preserveCompanySelection = false)
+    {
+        if (dealer == null) return;
+
+        _model = dealer;
+
+        // Only a genuinely approved New Dealer with an allocated Dealer Code may switch
+        // to Existing Dealer maintenance UI. A manually crafted query string cannot turn
+        // a pending New Dealer into the Existing Dealer flow.
+        _approvedNewDealerMaintenanceMode =
+            IsApprovedNewDealerMaintenanceRequested &&
+            HasNewDealerRegistrationEvidence(_model) &&
+            _model.AVPApproved == true &&
+            !string.IsNullOrWhiteSpace(_model.DealerCode);
+
+        // if (!_model.DateOfAppointment.HasValue || _model.DateOfAppointment.Value == DateTime.MinValue)
+        //     _model.DateOfAppointment = DateTime.Today;
+        // if (!_model.GreenstarDateOfAppointment.HasValue || _model.GreenstarDateOfAppointment.Value == DateTime.MinValue)
+        //     _model.GreenstarDateOfAppointment = DateTime.Today;
+        if (!_model.LastTransactionDate.HasValue || _model.LastTransactionDate.Value == DateTime.MinValue)
+            _model.LastTransactionDate = DateTime.Today;
+        if (!_model.FinalApprovalDate.HasValue || _model.FinalApprovalDate.Value == DateTime.MinValue)
+            _model.FinalApprovalDate = DateTime.Today;
+        if (!_model.SettlementDate.HasValue || _model.SettlementDate.Value == DateTime.MinValue)
+            _model.SettlementDate = DateTime.Today;
+        if (!_model.TradeDepositDate.HasValue || _model.TradeDepositDate.Value == DateTime.MinValue)
+            _model.TradeDepositDate = DateTime.Today;
+        if (!_model.GreenstarTradeDepositDateReg.HasValue || _model.GreenstarTradeDepositDateReg.Value == DateTime.MinValue)
+            _model.GreenstarTradeDepositDateReg = DateTime.Today;
+        if (!_model.WholesaleLicenseExpiryDate.HasValue || _model.WholesaleLicenseExpiryDate.Value == DateTime.MinValue)
+            _model.WholesaleLicenseExpiryDate = DateTime.Today;
+        if (!_model.RetailLicenseExpiryDate.HasValue || _model.RetailLicenseExpiryDate.Value == DateTime.MinValue)
+            _model.RetailLicenseExpiryDate = DateTime.Today;
+        SyncDateBuffersFromModel();
+        SyncLatitudeLongitudeText();
+
+        _isEditMode = true;
+        _originalStatus = _model.Status;
+
+        int? entityCode = null;
+
+        if (_model.DealerType is 0 or 1 or 2)
+            entityCode = _model.DealerType;
+        else if (_model.EntityType is 0 or 1 or 2)
+            entityCode = _model.EntityType;
+
+        if (!_entityTypeManuallySet)
+        {
+            selected = entityCode switch
+            {
+                0 => "Dealer",
+                1 => "Department",
+                2 => "Institution",
+                _ => (_model.IsDealer ? "Dealer" : "Department")
+            };
+        }
+
+        if (!preserveCompanySelection)
+        {
+            isSpic = _model.InSpic;
+            isGreenStar = _model.InGreenStar;
+        }
+        _basicInfoStateId = _model.StateId;
+        _basicInfoRegionId = _model.Region;
+        _basicInfoHqId = _model.HQ;
+        _parentDealerId = _model.ParentDealer;
+
+        if (!_statusManuallySet)
+        {
+            status = _model.Status switch
+            {
+                DealerStatus.Active => "Active",
+                DealerStatus.InActive => "Inactive",
+                DealerStatus.Terminated => "Terminated",
+                _ => "Active"
+            };
+
+            _inactiveProposal = _model.InactiveProposal ?? FutureBusinessProposal.FutureBusiness;
+        }
+
+
+        _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
+        _filteredHeadquarters = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
+        _filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
+        InitializeSearchTexts();
+        ApplyLockedEmployeeLocation();
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+        {
+            await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+        }
+    }
+    private async Task TriggerMapUpdate(double lat, double lng)
+    {
+        try { await JS.InvokeVoidAsync("updateLeafletMap", "leafletMap", lat, lng); }
+        catch (Exception ex) { Console.WriteLine($"Map update failed: {ex.Message}"); }
+    }
+
+    [JSInvokable]
+    public void UpdateLocationFromMap(double lat, double lng)
+    {
+        _model.Latitude = lat;
+        _model.Longitude = lng;
+        SyncLatitudeLongitudeText();
+        _model.GoogleMapURL = $"http://maps.google.com/maps?q={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lng.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        _errors.Remove("GoogleMapURL");
+        _errors.Remove("Latitude");
+        _errors.Remove("Longitude");
+        _locationMessage = $"Location selected from Map: {lat:F6}, {lng:F6}";
+        _locationSuccess = true;
+        StateHasChanged();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var cacheTask = LookupCache.EnsureLoadedAsync();
+            var dealersTask = Http.GetFromJsonAsync<List<DealerItemDto>>("api/DealerRegistration/lookup");
+
+            await Task.WhenAll(cacheTask, dealersTask);
+
+            _statesAll = LookupCache.States;
+            _DistrictAll = LookupCache.Districts;
+            _regionsAll = LookupCache.Regions;
+            _headquartersAll = LookupCache.Headquarters;
+            _banksAll = LookupCache.Banks;
+            _dealersAll = dealersTask.Result ?? new();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load data: {ex.Message}", true);
+        }
+    }
+
+    void Select(string type)
+    {
+        selected = type;
+        _entityTypeManuallySet = true;
+    }
+    void SelectStatus(string value)
+    {
+        status = value;
+        _statusManuallySet = true;
+        if (value != "Inactive")
+            _inactiveProposal = FutureBusinessProposal.FutureBusiness;
+    }
+
+    private void ApplyEmployeeLocationDefaults()
+    {
+        ApplyLockedEmployeeLocation();
+    }
+
+  void ToggleSpic()
+{
+    isSpic = !isSpic;
+
+    // SPIC is no longer selected, so its appointment date
+    // must not block saving.
+    if (!isSpic)
+    {
+        _errors.Remove("DateOfAppointment");
+    }
+}
+
+void ToggleGreenStar()
+{
+    isGreenStar = !isGreenStar;
+
+    // Greenstar is no longer selected, so its appointment date
+    // must not block saving.
+    if (!isGreenStar)
+    {
+        _errors.Remove("GreenstarDateOfAppointment");
+    }
+}
+
+    private void OnBasicInfoStateChanged()
+    {
+        if (_basicInfoStateId > 0) _errors.Remove("StateId");
+        _basicInfoRegionId = 0;
+        _basicInfoHqId = 0;
+        _dealerCodeId = 0;
+        _parentDealerId = 0;
+        _dealerSearchText = "";
+        _parentDealerSearchText = "";
+        _filteredRegions = _regionsAll.Where(r => r.StateId == _basicInfoStateId).ToList();
+        _filteredHeadquarters = new();
+        _filteredDealers = _dealersAll.Where(d => d.StateId == _basicInfoStateId).ToList();
+        if (!_isEditMode)
+        {
+            _model = new();
+            SyncLatitudeLongitudeText();
+        }
+    }
+
+    private void OnBasicInfoRegionChanged()
+    {
+        if (_basicInfoRegionId > 0) _errors.Remove("Region");
+        _basicInfoHqId = 0;
+        _filteredHeadquarters = _headquartersAll.Where(h => h.RegionId == _basicInfoRegionId).ToList();
+    }
+
+    private void ValidateFieldOnChange(string key, bool isValid) { if (isValid) _errors.Remove(key); }
+
+    private void SanitizeOfficialContact()
+    {
+        _model.OfficialContactNumber = new string(_model.OfficialContactNumber?.Where(char.IsDigit).ToArray() ?? []);
+        ValidateFieldOnChange("OfficialContactNumber", _model.OfficialContactNumber?.Length == 10);
+    }
+
+    private void SanitizeWhatsAppNumber()
+    {
+        _model.WhatsAppNumber = new string(_model.WhatsAppNumber?.Where(char.IsDigit).ToArray() ?? []);
+        ValidateFieldOnChange("WhatsAppNumber", _model.WhatsAppNumber?.Length == 10);
+    }
+
+    private void SanitizeAlternativeNumber()
+    {
+        _model.AlternativeNumber = new string(_model.AlternativeNumber?.Where(char.IsDigit).ToArray() ?? []);
+        ValidateFieldOnChange("AlternativeNumber", _model.AlternativeNumber?.Length == 10);
+    }
+
+    private void SanitizeFirmName()
+    {
+        if (!string.IsNullOrEmpty(_model.FirmName))
+            _model.FirmName = _model.FirmName.ToUpperInvariant();
+        ValidateFieldOnChange("FirmName", !string.IsNullOrWhiteSpace(_model.FirmName));
+    }
+
+    private void OnGSTNumberChanged()
+    {
+        if (_ocrPopulatedGst)
+        {
+            _ocrPopulatedGst = false;
+        }
+        else
+        {
+            _ocrWarningGst = null;
+        }
+        if (!string.IsNullOrEmpty(_model.GSTNumber))
+            _model.GSTNumber = _model.GSTNumber.ToUpper();
+        if (!string.IsNullOrWhiteSpace(_model.GSTNumber) && Regex.IsMatch(_model.GSTNumber, @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
+            _errors.Remove("GSTNumber");
+    }
+
+    private void OnPANNumberChanged()
+    {
+        if (_ocrPopulatedPan)
+        {
+            _ocrPopulatedPan = false;
+        }
+        else
+        {
+            _ocrWarningPan = null;
+        }
+        if (!string.IsNullOrEmpty(_model.PANNumber))
+            _model.PANNumber = _model.PANNumber.ToUpper();
+        if (!string.IsNullOrWhiteSpace(_model.PANNumber) && Regex.IsMatch(_model.PANNumber, @"^[A-Z]{5}[0-9]{4}[A-Z]{1}$"))
+            _errors.Remove("PANNumber");
+    }
+
+    private void OnAadhaarNumberChanged()
+    {
+        if (_ocrPopulatedAadhaar)
+        {
+            _ocrPopulatedAadhaar = false;
+        }
+        else
+        {
+            _ocrWarningAadhaar = null;
+        }
+        if (!string.IsNullOrWhiteSpace(_model.AadhaarNumber) && Regex.IsMatch(_model.AadhaarNumber, @"^[0-9]{12}$"))
+            _errors.Remove("AadhaarNumber");
+    }
+
+    private void OnTANNumberChanged()
+    {
+        if (_ocrPopulatedTan)
+        {
+            _ocrPopulatedTan = false;
+        }
+        else
+        {
+            _ocrWarningTan = null;
+        }
+        if (!string.IsNullOrEmpty(_model.TANNumber))
+            _model.TANNumber = _model.TANNumber.ToUpper();
+        if (!string.IsNullOrWhiteSpace(_model.TANNumber) && Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
+            _errors.Remove("TANNumber");
+    }
+
+    private void OnFertilizerLicenseChanged()
+    {
+        if (!string.IsNullOrWhiteSpace(_model.WholeSaleFertilizerLicenseNumber) || !string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber))
+            _errors.Remove("FertilizerLicense");
+    }
+
+    private async Task OnPincodeChanged()
+    {
+        _pincodeMessage = null;
+        _pincodeSuccess = false;
+        _errors.Remove("PinCode");
+
+        if (!string.IsNullOrEmpty(_model.PinCode))
+        {
+            var digitsOnly = new string(_model.PinCode.Where(char.IsDigit).ToArray());
+            if (digitsOnly != _model.PinCode)
+                _model.PinCode = digitsOnly;
+        }
+
+        if (string.IsNullOrWhiteSpace(_model.PinCode) || _model.PinCode.Length != 6)
+            return;
+
+        _isPincodeLookup = true;
+        StateHasChanged();
+
+        try
+        {
+            using var response = await Http.GetAsync($"api/PincodeLookup/{_model.PinCode}");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                _pincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+                return;
+            }
+
+            var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+            var result = results?.FirstOrDefault();
+
+            if (result == null
+                || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
+                || result.PostOffice == null
+                || result.PostOffice.Count == 0)
+            {
+                _pincodeMessage = $"No data found for pincode {_model.PinCode}";
+                return;
+            }
+
+            var postOffice = result.PostOffice[0];
+
+            var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
+            var matchedState = _statesAll.FirstOrDefault(s =>
+                s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+            if (matchedState != null)
+            {
+                _model.DealerStateId = matchedState.Id;
+                _stateSearchText = matchedState.StateName;
+            }
+
+            var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
+            var matchedDistrict = _DistrictAll.FirstOrDefault(d =>
+                d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+            if (matchedDistrict != null)
+            {
+                _model.DistrictId = matchedDistrict.Id;
+                _districtSearchText = matchedDistrict.DistrictName;
+            }
+
+            if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+            {
+                _model.Block = postOffice.Block;
+                _model.Taluk = postOffice.Block;
+            }
+            else if (!string.IsNullOrWhiteSpace(postOffice.Division))
+            {
+                _model.Taluk = postOffice.Division;
+            }
+
+            if (!string.IsNullOrWhiteSpace(postOffice.Name))
+            {
+                _model.Village = postOffice.Name;
+            }
+
+            var details = new List<string>();
+            if (!string.IsNullOrWhiteSpace(postOffice.Name))
+                details.Add($"Village: {postOffice.Name}");
+            if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+                details.Add($"Block: {postOffice.Block}");
+            if (!string.IsNullOrWhiteSpace(_model.Taluk))
+                details.Add($"Taluk: {_model.Taluk}");
+            if (matchedDistrict != null)
+                details.Add($"District: {matchedDistrict.DistrictName}");
+            if (matchedState != null)
+                details.Add($"State: {matchedState.StateName}");
+
+            _pincodeSuccess = true;
+            _pincodeMessage = "Auto-filled: " + string.Join(", ", details);
+        }
+        catch (HttpRequestException httpEx)
+        {
+            _pincodeMessage = $"Network error: {httpEx.Message}";
+        }
+        catch (TaskCanceledException)
+        {
+            _pincodeMessage = "Lookup timed out — try again.";
+        }
+        catch (Exception ex)
+        {
+            _pincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
+        }
+        finally
+        {
+            _isPincodeLookup = false;
+        }
+    }
+
+    private async Task OnDealerCodeChanged()
+    {
+        _errors.Clear();
+        _message = null;
+
+        if (_dealerCodeId > 0)
+        {
+            try
+            {
+                var dealer = await Http.GetFromJsonAsync<DealerFormModel>($"api/DealerRegistration/{_dealerCodeId}");
+                await ApplyDealerToForm(dealer, preserveCompanySelection: false);
+                InitializeSearchTexts();
+            }
+            catch (Exception ex)
+            {
+                ShowMessage($"Failed to load dealer: {ex.Message}", true);
+                _isEditMode = false;
+            }
+        }
+        else
+        {
+          _model = new()
+{
+    LastTransactionDate = DateTime.Today,
+    FinalApprovalDate = DateTime.Today,
+    SettlementDate = DateTime.Today,
+    TradeDepositDate = DateTime.Today,
+    GreenstarTradeDepositDateReg = DateTime.Today,
+    WholesaleLicenseExpiryDate = DateTime.Today,
+    RetailLicenseExpiryDate = DateTime.Today
+};
+            SyncDateBuffersFromModel();
+            SyncLatitudeLongitudeText();
+
+            isSpic = true;
+            isGreenStar = true;
+            _isEditMode = false;
+
+            ApplyLockedEmployeeLocation();
+
+            selected = "Dealer";
+        }
+    }
+
+    private void OnDealerStateChanged()
+    {
+        if (_model.DistrictId > 0)
+        {
+            var districtBelongsToState = _DistrictAll.Any(d =>
+                d.Id == _model.DistrictId &&
+                d.StateId == _model.DealerStateId);
+
+            if (!districtBelongsToState)
+            {
+                _model.DistrictId = 0;
+                _districtSearchText = "";
+            }
+        }
+    }
+    private void InitializeSearchTexts()
+    {
+        var dealer = _filteredDealers.FirstOrDefault(d => d.Id == _dealerCodeId);
+        _dealerSearchText = dealer != null ? $"{dealer.DealerCode} - {dealer.FirmName}" : "";
+
+        var parentDealer = _filteredDealers.FirstOrDefault(d => d.Id == _parentDealerId);
+        _parentDealerSearchText = parentDealer != null ? $"{parentDealer.DealerCode} - {parentDealer.FirmName}" : "";
+
+        var state = _statesAll.FirstOrDefault(s => s.Id == _model.DealerStateId);
+        _stateSearchText = state?.StateName ?? "";
+
+        var district = _DistrictAll.FirstOrDefault(d => d.Id == _model.DistrictId);
+        _districtSearchText = district?.DistrictName ?? "";
+
+        var bank = _banksAll.FirstOrDefault(b => b.Id == _model.BankId);
+        _bankSearchText = bank?.Name ?? "";
+    }
+
+    private async Task SelectDealer(int id, string displayText)
+    {
+        _dealerSearchText = displayText;
+        _showDealerDropdown = false;
+        _dealerCodeId = id;
+        if (id > 0) _errors.Remove("DealerCode");
+        await OnDealerCodeChanged();
+        StateHasChanged();
+    }
+
+    private void SelectParentDealer(int id, string displayText)
+    {
+        _parentDealerSearchText = displayText;
+        _showParentDealerDropdown = false;
+        _parentDealerId = id;
+        if (id > 0) _errors.Remove("ParentDealer");
+    }
+
+    private void OnParentDealerSearchChanged()
+    {
+        var selectedParent = _filteredDealers.FirstOrDefault(d => d.Id == _parentDealerId);
+        var selectedDisplayText = selectedParent == null
+            ? ""
+            : $"{selectedParent.DealerCode} - {selectedParent.FirmName}";
+
+        if (!string.Equals(_parentDealerSearchText.Trim(), selectedDisplayText, StringComparison.OrdinalIgnoreCase))
+            _parentDealerId = 0;
+    }
+
+    private void SelectState(int id, string displayText)
+    {
+        _stateSearchText = displayText;
+        _showStateDropdown = false;
+        _model.DealerStateId = id;
+        ValidateFieldOnChange("DealerStateId", _model.DealerStateId > 0);
+        OnDealerStateChanged();
+    }
+
+    private void SelectDistrict(int id, string displayText)
+    {
+        _districtSearchText = displayText;
+        _showDistrictDropdown = false;
+        _model.DistrictId = id;
+        ValidateFieldOnChange("DistrictId", _model.DistrictId > 0);
+    }
+
+    private void SelectBank(int id, string displayText)
+    {
+        _bankSearchText = displayText;
+        _showBankDropdown = false;
+        _model.BankId = id;
+        ValidateFieldOnChange("BankId", _model.BankId > 0);
+    }
+
+    private void AutoSelectBankByIfscPrefix(string ifscCode)
+    {
+        if (string.IsNullOrWhiteSpace(ifscCode) || ifscCode.Length < 4)
+            return;
+
+        var prefix = ifscCode[..4].ToUpperInvariant();
+        var bank = _banksAll.FirstOrDefault(b =>
+            string.Equals(b.IFSCPrefix, prefix, StringComparison.OrdinalIgnoreCase));
+
+        if (bank != null)
+            SelectBank(bank.Id, bank.Name);
+    }
+
+    private async Task HideDealerDropdown() { await Task.Delay(200); _showDealerDropdown = false; StateHasChanged(); }
+    private async Task HideParentDealerDropdown() { await Task.Delay(200); _showParentDealerDropdown = false; StateHasChanged(); }
+    private async Task HideStateDropdown() { await Task.Delay(200); _showStateDropdown = false; StateHasChanged(); }
+    private async Task HideDistrictDropdown() { await Task.Delay(200); _showDistrictDropdown = false; StateHasChanged(); }
+    private async Task HideBankDropdown() { await Task.Delay(200); _showBankDropdown = false; StateHasChanged(); }
+
+    private void ResetForm()
+    {
+       _model = new()
+{
+    LastTransactionDate = DateTime.Today,
+    FinalApprovalDate = DateTime.Today,
+    SettlementDate = DateTime.Today,
+    TradeDepositDate = DateTime.Today,
+    GreenstarTradeDepositDateReg = DateTime.Today,
+    WholesaleLicenseExpiryDate = DateTime.Today,
+    RetailLicenseExpiryDate = DateTime.Today
+};
+        _isEditMode = false;
+        _dealerCodeId = 0;
+        _parentDealerId = 0;
+        _basicInfoStateId = 0;
+        _basicInfoRegionId = 0;
+        _basicInfoHqId = 0;
+       selected = "New Dealer";
+        status = "Active";
+        _inactiveProposal = FutureBusinessProposal.FutureBusiness;
+        _entityTypeManuallySet = false;
+        _statusManuallySet = false;
+        isSpic = true;
+        isGreenStar = true;
+        _filteredRegions = new();
+        _filteredHeadquarters = new();
+        _filteredDealers = new();
+        _dealerSearchText = "";
+        _parentDealerSearchText = "";
+        _stateSearchText = "";
+        _districtSearchText = "";
+        _bankSearchText = "";
+        _gstFile = null;
+        _panFile = null;
+        _aadhaarFile = null;
+        _tanFile = null;
+        _chequeFile = null;
+        _wholesaleFile = null;
+        _retailFile = null;
+        _isExtractingGst = false;
+        _isExtractingPan = false;
+        _isExtractingAadhaar = false;
+        _isExtractingTan = false;
+        _isExtractingCheque = false;
+        _ocrWarningGst = null;
+        _ocrWarningPan = null;
+        _ocrWarningAadhaar = null;
+        _ocrWarningTan = null;
+        _ocrWarningCheque = null;
+        _ocrPopulatedGst = false;
+        _ocrPopulatedPan = false;
+        _ocrPopulatedAadhaar = false;
+        _ocrPopulatedTan = false;
+        _ocrPopulatedCheque = false;
+        _errors.Clear();
+        _message = null;
+        SyncDateBuffersFromModel();
+
+    }
+
+    private bool Validate()
+    {
+        _errors.Clear();
+
+        if (_basicInfoStateId == 0) _errors["StateId"] = "State is required in Basic Information";
+        if (_basicInfoRegionId == 0) _errors["Region"] = "Region is required in Basic Information";
+        if (_basicInfoHqId == 0) _errors["HQ"] = "HQ is required in Basic Information";
+        if (!IsNewDealerFlow && _dealerCodeId == 0) _errors["DealerCode"] = "Dealer Code & Name is required";
+        if (!IsNewDealerFlow && (_parentDealerId == 0 || string.IsNullOrWhiteSpace(_parentDealerSearchText)))
+            _errors["ParentDealer"] = "Parent Dealer Code & Name is required";
+
+        if (string.IsNullOrWhiteSpace(_model.FirmName)) _errors["FirmName"] = "Firm Name is required";
+
+        // Date of Appointment is mandatory based on selected company.
+// These fields are currently available only in Existing Dealer flow.
+if (!IsNewDealerFlow)
+{
+    if (isSpic &&
+        (!_model.DateOfAppointment.HasValue ||
+         _model.DateOfAppointment.Value == DateTime.MinValue))
+    {
+        _errors["DateOfAppointment"] =
+            "Date of Appointment for SPIC is required";
+    }
+
+    if (isGreenStar &&
+        (!_model.GreenstarDateOfAppointment.HasValue ||
+         _model.GreenstarDateOfAppointment.Value == DateTime.MinValue))
+    {
+        _errors["GreenstarDateOfAppointment"] =
+            "Date of Appointment for Greenstar is required";
+    }
+}
+
+       if (status == "Inactive" && !IsRestrictedNavFlow)
+        {
+            if (_model.LastTransactionDate == null) _errors["LastTransactionDate"] = "Last Transaction Date is required";
+        }
+     if (ShowTerminatedStatus)
+        {
+            if (_model.FinalApprovalDate == null)
+                _errors["FinalApprovalDate"] = "Final Approval Date is required";
+
+            if (_model.SettlementDate == null)
+                _errors["SettlementDate"] = "Settlement Date is required";
+        }
+        bool isDept = IsDepartmentSelected;
+
+        if (ShowFullRegistrationSections && !isDept && !IsInactiveNotTraceable)
+        {
+            if (string.IsNullOrWhiteSpace(_model.GoogleMapURL)) _errors["GoogleMapURL"] = "Google Map URL is required";
+            if (string.IsNullOrWhiteSpace(_model.ShopNoORRoomNoOrBlockNo)) _errors["ShopNo"] = "Shop No / Room No / Block No is required";
+            if (string.IsNullOrWhiteSpace(_model.Street)) _errors["Street"] = "Street / Area / Locality is required";
+            if (string.IsNullOrWhiteSpace(_model.SubVillage)) _errors["SubVillage"] = "Sub Village is required";
+            if (string.IsNullOrWhiteSpace(_model.Village)) _errors["Village"] = "Village is required";
+            if (string.IsNullOrWhiteSpace(_model.Block)) _errors["Block"] = "Block is required";
+            if (string.IsNullOrWhiteSpace(_model.Taluk)) _errors["Taluk"] = "Taluk is required";
+            // Location is mandatory for both:
+            // 1) the existing New Dealer flow, and
+            // 2) an Existing Dealer selected/edited from Dealer Code & Name.
+            // Keep Institution/Department legacy behaviour unchanged unless it is already
+            // part of the New Dealer flow.
+            if (IsNewDealerFlow || IsDealerSelected)
+            {
+                if (!_model.Latitude.HasValue)
+                    _errors["Latitude"] = "Latitude is required (click the map or use current location)";
+
+                if (!_model.Longitude.HasValue)
+                    _errors["Longitude"] = "Longitude is required (click the map or use current location)";
+            }
+            if (string.IsNullOrWhiteSpace(_model.PinCode)) _errors["PinCode"] = "Pincode is required";
+            else if (_model.PinCode.Length != 6) _errors["PinCode"] = "Pincode must be 6 digits";
+           if ((_model.DistrictId ?? 0) == 0) _errors["DistrictId"] = "District is required in Primary Location";
+            if ((_model.DealerStateId ?? 0) == 0) _errors["DealerStateId"] = "State is required in Primary Location";
+            if (string.IsNullOrWhiteSpace(_model.OfficialContactNumber)) _errors["OfficialContactNumber"] = "Official Contact Number is required";
+            else if (_model.OfficialContactNumber.Length != 10) _errors["OfficialContactNumber"] = "Official Contact Number must be 10 digits";
+            if (string.IsNullOrWhiteSpace(_model.WhatsAppNumber)) _errors["WhatsAppNumber"] = "WhatsApp Number is required";
+            else if (_model.WhatsAppNumber.Length != 10) _errors["WhatsAppNumber"] = "WhatsApp Number must be 10 digits";
+            if (string.IsNullOrWhiteSpace(_model.AlternativeNumber)) _errors["AlternativeNumber"] = "Alternative Number is required";
+            else if (_model.AlternativeNumber.Length != 10) _errors["AlternativeNumber"] = "Alternative Number must be 10 digits";
+
+            if (string.IsNullOrWhiteSpace(_model.AccountHolderName)) _errors["AccountHolderName"] = "Account Holder Name is required";
+            if (string.IsNullOrWhiteSpace(_model.AccountNumber)) _errors["AccountNumber"] = "Account Number is required";
+           if ((_model.BankId ?? 0) == 0) _errors["BankId"] = "Bank is required";
+            if (string.IsNullOrWhiteSpace(_model.Branch)) _errors["Branch"] = "Bank Branch is required";
+            if (string.IsNullOrWhiteSpace(_model.IFSC)) _errors["IFSC"] = "IFSC Code is required";
+
+            if (string.IsNullOrWhiteSpace(_model.GSTNumber)) _errors["GSTNumber"] = "GST Number is required";
+            else if (!Regex.IsMatch(_model.GSTNumber, @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
+                _errors["GSTNumber"] = "Invalid GST format (e.g., 22AAAAA0000A1Z5)";
+            if (string.IsNullOrEmpty(_model.GSTFilePath)) _errors["GSTFile"] = "GST Certificate PDF is required";
+
+            if (string.IsNullOrWhiteSpace(_model.PANNumber)) _errors["PANNumber"] = "PAN Number is required";
+            else if (!Regex.IsMatch(_model.PANNumber, @"^[A-Z]{5}[0-9]{4}[A-Z]{1}$"))
+                _errors["PANNumber"] = "Invalid PAN format (e.g., ABCDE1234F)";
+            if (string.IsNullOrEmpty(_model.PANFilePath)) _errors["PANFile"] = "PAN Card PDF is required";
+
+            if (string.IsNullOrWhiteSpace(_model.AadhaarNumber)) _errors["AadhaarNumber"] = "Aadhaar Number is required";
+            else if (!Regex.IsMatch(_model.AadhaarNumber, @"^[0-9]{12}$"))
+                _errors["AadhaarNumber"] = "Aadhaar must be exactly 12 digits";
+            if (string.IsNullOrEmpty(_model.AadhaarFilePath)) _errors["AadhaarFile"] = "Aadhaar Card PDF is required";
+
+            if (!string.IsNullOrWhiteSpace(_model.TANNumber) && !Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
+            {
+                _errors["TANNumber"] = "Invalid TAN format (e.g., ABCD12345E)";
+            }
+
+            bool hasWholesale = !string.IsNullOrWhiteSpace(_model.WholeSaleFertilizerLicenseNumber);
+            bool hasRetail = !string.IsNullOrWhiteSpace(_model.RetailFertilizerLicenseNumber);
+
+            if (!hasWholesale && !hasRetail)
+            {
+                _errors["FertilizerLicense"] = "At least one Fertilizer License (Wholesale or Retail) is required";
+            }
+            else
+            {
+                if (hasWholesale && string.IsNullOrEmpty(_model.WholesaleLicenseFilePath))
+                    _errors["WholesaleFile"] = "Wholesale License Certificate PDF is required";
+                if (hasRetail && string.IsNullOrEmpty(_model.RetailLicenseFilePath))
+                    _errors["RetailFile"] = "Retail License Certificate PDF is required";
+            }
+        }
+
+        // Trade Deposit Details (SPIC/Greenstar) are mandatory ONLY for the Dealer type.
+        // Department and Institution can save without them.
+        if (ShowTradeDepositRequiredMarks)
+        {
+            if (isSpic && !IsNewDealerFlow)
+            {
+                if (_model.TradeDepositAmount < 0) _errors["TradeDepositAmount"] = "Trade Deposit Amount is required";
+                if (string.IsNullOrWhiteSpace(_model.TradeDepositReceiptNo)) _errors["TradeDepositReceiptNo"] = "Trade Deposit Receipt No is required";
+                if (!_model.TradeDepositDate.HasValue) _errors["TradeDepositDate"] = "Trade Deposit Date is required";
+            }
+
+            if (isGreenStar && !IsNewDealerFlow)
+            {
+                if (!_model.GreenstarTradeDepositAmountReg.HasValue || _model.GreenstarTradeDepositAmountReg < 0) _errors["GreenstarTradeDepositAmountReg"] = "Trade Deposit Amount is required";
+                if (string.IsNullOrWhiteSpace(_model.GreenstarTradeDepositReceiptNoReg)) _errors["GreenstarTradeDepositReceiptNoReg"] = "Trade Deposit Receipt No is required";
+                if (!_model.GreenstarTradeDepositDateReg.HasValue) _errors["GreenstarTradeDepositDateReg"] = "Trade Deposit Date is required";
+            }
+        }
+
+        return _errors.Count == 0;
+    }
+
+    private async Task<bool> SaveDealer()
+    {
+        if (!Validate()) return false;
+
+        _isSaving = true;
+        _message = null;
+        var success = false;
+
+        try
+        {
+            _model.IsDealer = selected == "Dealer";
+
+            // Preserve the permanent source identity for an approved dealer that originally
+            // came through Create New Dealer. The maintenance screen behaves like Existing
+            // Dealer, but the New/Existing Dashboard filter must continue to classify it by
+            // how it was originally registered. All other flows keep the previous assignment.
+            if (IsApprovedNewDealerExistingMaintenanceFlow)
+                _model.IsNewDealerRegistration = true;
+            else
+                _model.IsNewDealerRegistration = IsNewDealerFlow;
+
+            _model.DealerType = selected switch
+            {
+                "Dealer" => 0,
+                "Department" => 1,
+                "Institution" => 2,
+                _ => (selected == "Dealer" ? 0 : 1)
+            };
+
+            _model.EntityType = _model.DealerType;
+            _model.InSpic = isSpic;
+            _model.InGreenStar = isGreenStar;
+            _model.StateId = _basicInfoStateId;
+            _model.Region = _basicInfoRegionId;
+            _model.HQ = _basicInfoHqId;
+            _model.ParentDealer = _parentDealerId;
+            if (_model.DealerStateId == 0) _model.DealerStateId = null;
+            if (_model.DistrictId == 0)    _model.DistrictId = null;
+            if (_model.BankId == 0)        _model.BankId = null;
+           _model.InactiveProposal = status == "Inactive"
+    ? _inactiveProposal
+    : null;
+
+            _model.Status = status switch
+            {
+                "Active" => DealerStatus.Active,
+                "Inactive" => DealerStatus.InActive,
+                "Terminated" => DealerStatus.Terminated,
+                _ => DealerStatus.Active
+            };
+
+            if (_isEditMode && _originalStatus != DealerStatus.Terminated && _model.Status == DealerStatus.Terminated)
+            {
+                _model.RMApproved = null;
+                _model.SMApproved = null;
+                _model.AVPApproved = null;
+            }
+
+            _model.FirmName ??= "";
+            _model.ShopNoORRoomNoOrBlockNo ??= "";
+            _model.Village ??= "";
+            _model.PinCode ??= "";
+            _model.OfficialContactNumber ??= "";
+            _model.WhatsAppNumber ??= "";
+            _model.AccountHolderName ??= "";
+            _model.AccountNumber ??= "";
+            _model.Branch ??= "";
+            _model.IFSC ??= "";
+            _model.UpdatedBy = LoginState.UserId ?? "System";
+            _model.UpdatedAt = DateTime.Now;
+
+            _model.DateOfAppointment ??= DateTime.MinValue;
+            _model.WholesaleLicenseExpiryDate ??= DateTime.MinValue;
+            _model.RetailLicenseExpiryDate ??= DateTime.MinValue;
+            _model.IsOfficeAutomation ??= false;
+            _model.IsSDWA ??= false;
+
+            HttpResponseMessage response;
+
+            if (_isEditMode)
+            {
+                response = await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{_model.Id}", _model);
+            }
+            else
+            {
+                _model.CreatedAt = DateTime.Now;
+                _model.CreatedBy = LoginState.UserId ?? "System";
+                response = await Http.PostAsJsonAsync("api/DealerRegistration", _model);
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                int dealerId = _model.Id;
+                
+                if (!_isEditMode)
+                {
+                    var result = await response.Content.ReadFromJsonAsync<CreateResponse>();
+                    if (result?.Data != null)
+                    {
+                        dealerId = result.Data.Id;
+                        _model.Id = dealerId;
+                        _model.UserTableId = result.Data.UserTableId;
+                    }
+                }
+                else
+                {
+                    var result = await response.Content.ReadFromJsonAsync<DealerFormModel>();
+                    if (result != null)
+                    {
+                        _model.UserTableId = result.UserTableId;
+                    }
+                }
+
+                bool filesUpdated = false;
+                if (dealerId > 0)
+                {
+                    var uploads = new List<Task>();
+
+                    if (_gstFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "GST", _gstFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.GSTFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.GST) && string.IsNullOrWhiteSpace(_model.GSTNumber)) { _model.GSTNumber = t.Result.GST; OnGSTNumberChanged(); } filesUpdated = true; } }));
+                    if (_panFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "PAN", _panFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.PANFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.PAN) && string.IsNullOrWhiteSpace(_model.PANNumber)) { _model.PANNumber = t.Result.PAN; OnPANNumberChanged(); } filesUpdated = true; } }));
+                    if (_aadhaarFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "Aadhaar", _aadhaarFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.AadhaarFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.Aadhaar) && string.IsNullOrWhiteSpace(_model.AadhaarNumber)) { _model.AadhaarNumber = t.Result.Aadhaar; OnAadhaarNumberChanged(); } filesUpdated = true; } }));
+                    if (_tanFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "TAN", _tanFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.TANFilePath = t.Result.FilePath; if (!string.IsNullOrEmpty(t.Result.TAN) && string.IsNullOrWhiteSpace(_model.TANNumber)) { _model.TANNumber = t.Result.TAN; OnTANNumberChanged(); } filesUpdated = true; } }));
+                    if (_chequeFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "Cheque", _chequeFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.ChequeFilePath = t.Result.FilePath; filesUpdated = true; } }));
+                    if (_wholesaleFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "WholesaleLicense", _wholesaleFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.WholesaleLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
+                    if (_retailFile != null)
+                        uploads.Add(UploadFileToServer(dealerId, "RetailLicense", _retailFile)
+                            .ContinueWith(t => { if (t.Result != null) { _model.RetailLicenseFilePath = t.Result.FilePath; filesUpdated = true; } }));
+
+                    await Task.WhenAll(uploads);
+
+                    if (filesUpdated)
+                        await Http.PutAsJsonAsync($"api/DealerRegistration/update-with-user/{dealerId}", _model);
+                }
+
+                _gstFile = null;
+                _panFile = null;
+                _aadhaarFile = null;
+                _tanFile = null;
+                _chequeFile = null;
+                _wholesaleFile = null;
+                _retailFile = null;
+
+                ShowMessage(_isEditMode ? "Dealer updated successfully!" : "Dealer registered successfully!", false);
+                success = true;
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                ShowMessage($"Failed to save: {error}", true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Error: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+
+        return success;
+    }
+
+  private async Task HandleNext()
+    {
+        if (IsViewOnly)
+        {
+            if (IsRestrictedNavFlow)
+                return;
+
+            Loading.Show();
+
+            // Inactive + To-Be-Terminated uses the restricted flow even in view mode.
+            if (IsInactiveToBeTerminated)
+            {
+                var viewNextRestricted = SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData
+                    .GetNextRoute("/Register", _model.InGreenStar, true);
+                Nav.NavigateTo($"{viewNextRestricted}?dealerId={_model.Id}&mode=view&flow=restricted");
+                return;
+            }
+
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}&mode=view{RegistrationFlowParam}");
+            return;
+        }
+
+        // Block every editable flow before navigation when a visible required field is invalid.
+        if (!Validate())
+        {
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, true);
+            return;
+        }
+
+        // Pure Terminated + Department: single step, submit straight to Dashboard.
+        if (IsRestrictedNavFlow || IsDepartmentSelected)
+        {
+            if (IsDepartmentSelected || IsRestrictedNavFlow)
+            {
+                _model.IsSubmittedForReview = true;
+                if (_model.AVPApproved == false) _model.AVPApproved = null;
+                else if (_model.SMApproved == false) { _model.SMApproved = null; _model.AVPApproved = null; }
+                else if (_model.RMApproved == false) { _model.RMApproved = null; _model.SMApproved = null; _model.AVPApproved = null; }
+            }
+
+            var deptSaved = await SaveDealer();
+            if (deptSaved)
+                Nav.NavigateTo("/Dashboard");
+            return;
+        }
+
+        // Inactive + To-Be-Terminated: restricted 3-page flow. Save this page then move
+        // to the next restricted step (Proprietor) instead of Experience. Do NOT set
+        // IsSubmittedForReview here — that happens on the final restricted page.
+        if (IsInactiveToBeTerminated)
+        {
+            var termSaved = await SaveDealer();
+            if (termSaved)
+            {
+                SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
+                Loading.Show();
+                var nextRestricted = SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData
+                    .GetNextRoute("/Register", _model.InGreenStar, true);
+                Nav.NavigateTo($"{nextRestricted}?dealerId={_model.Id}&flow=restricted");
+            }
+            else
+            {
+                SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, _errors.Count > 0);
+            }
+            return;
+        }
+
+        var saved = await SaveDealer();
+        if (saved)
+        {
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, false);
+            Loading.Show();
+            var flowParam = RegistrationFlowParam;
+            Nav.NavigateTo($"/Experience?dealerId={_model.Id}{flowParam}");
+        }
+        else
+        {
+            SPIC.MauiBlazorApp.Shared.FormFlow.FormStepData.MarkStepError(1, _errors.Count > 0);
+        }
+    }
+
+    async Task HandleGstUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _errors.Remove("GSTFile");
+
+        if (Path.GetExtension(file.Name).ToLowerInvariant() != ".pdf")
+        {
+            _errors["GSTFile"] = "Only PDF files are allowed for GST Certificate";
+            _gstFile = null;
+            _model.GSTFilePath = null;
+            return;
+        }
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errors["GSTFile"] = "File size must be less than 5 MB";
+            _gstFile = null;
+            _model.GSTFilePath = null;
+            return;
+        }
+
+        _gstFile = file;
+        _model.GSTFilePath = file.Name;
+
+        if (_ocrPopulatedGst)
+        {
+            _model.GSTNumber = null;
+            _ocrPopulatedGst = false;
+        }
+        _ocrWarningGst = null;
+
+        _isExtractingGst = true;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+              if (!string.IsNullOrEmpty(result?.GSTLegalName))
+    _model.GSTLegalName = result.GSTLegalName;
+
+if (!string.IsNullOrEmpty(result?.GSTTradeName))
+    _model.GSTTradeName = result.GSTTradeName;
+
+if (!string.IsNullOrEmpty(result?.GSTConstitutionofBusiness))
+    _model.GSTConstitutionofBusiness = result.GSTConstitutionofBusiness;
+                if (!string.IsNullOrEmpty(result?.GST))
+                {
+                    _model.GSTNumber = result.GST;
+                    _ocrPopulatedGst = true;
+                    _ocrWarningGst = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+                    OnGSTNumberChanged();
+                }
+                else
+                {
+                    _ocrWarningGst = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+                }
+            }
+            else
+            {
+                _ocrWarningGst = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+            }
+        }
+        catch
+        {
+            _ocrWarningGst = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+        }
+        finally
+        {
+            _isExtractingGst = false;
+        }
+    }
+
+    private void RemoveGstFile()
+    {
+        if (string.IsNullOrEmpty(_model.GSTFilePath)) return;
+        OpenDeleteModal("GST", "GST Certificate", _model.GSTFilePath);
+    }
+
+    async Task HandlePanUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _errors.Remove("PANFile");
+
+        if (Path.GetExtension(file.Name).ToLowerInvariant() != ".pdf")
+        {
+            _errors["PANFile"] = "Only PDF files are allowed for PAN Card";
+            _panFile = null;
+            _model.PANFilePath = null;
+            return;
+        }
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errors["PANFile"] = "File size must be less than 5 MB";
+            _panFile = null;
+            _model.PANFilePath = null;
+            return;
+        }
+
+        _panFile = file;
+        _model.PANFilePath = file.Name;
+
+        if (_ocrPopulatedPan)
+        {
+            _model.PANNumber = null;
+            _ocrPopulatedPan = false;
+        }
+        _ocrWarningPan = null;
+
+        _isExtractingPan = true;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+                if (!string.IsNullOrEmpty(result?.PAN))
+                {
+                    _model.PANNumber = result.PAN;
+                    _ocrPopulatedPan = true;
+                    _ocrWarningPan = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+                    OnPANNumberChanged();
+                }
+                else
+                {
+                    _ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+                }
+            }
+            else
+            {
+                _ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+            }
+        }
+        catch
+        {
+            _ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+        }
+        finally
+        {
+            _isExtractingPan = false;
+        }
+    }
+
+    private void RemovePanFile()
+    {
+        if (string.IsNullOrEmpty(_model.PANFilePath)) return;
+        OpenDeleteModal("PAN", "PAN Card", _model.PANFilePath);
+    }
+
+    async Task HandleAadhaarUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _errors.Remove("AadhaarFile");
+
+        if (Path.GetExtension(file.Name).ToLowerInvariant() != ".pdf")
+        {
+            _errors["AadhaarFile"] = "Only PDF files are allowed for Aadhaar Card";
+            _aadhaarFile = null;
+            _model.AadhaarFilePath = null;
+            return;
+        }
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errors["AadhaarFile"] = "File size must be less than 5 MB";
+            _aadhaarFile = null;
+            _model.AadhaarFilePath = null;
+            return;
+        }
+
+        _aadhaarFile = file;
+        _model.AadhaarFilePath = file.Name;
+
+        if (_ocrPopulatedAadhaar)
+        {
+            _model.AadhaarNumber = null;
+            _ocrPopulatedAadhaar = false;
+        }
+        _ocrWarningAadhaar = null;
+
+        _isExtractingAadhaar = true;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+                if (!string.IsNullOrEmpty(result?.Aadhaar))
+                {
+                    _model.AadhaarNumber = result.Aadhaar;
+                    _ocrPopulatedAadhaar = true;
+                    _ocrWarningAadhaar = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+                    OnAadhaarNumberChanged();
+                }
+                else
+                {
+                    _ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+                }
+            }
+            else
+            {
+                _ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+            }
+        }
+        catch
+        {
+            _ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+        }
+        finally
+        {
+            _isExtractingAadhaar = false;
+        }
+    }
+
+    private void RemoveAadhaarFile()
+    {
+        if (string.IsNullOrEmpty(_model.AadhaarFilePath)) return;
+        OpenDeleteModal("Aadhaar", "Aadhaar Card", _model.AadhaarFilePath);
+    }
+
+    async Task HandleTanUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _errors.Remove("TANFile");
+
+        if (Path.GetExtension(file.Name).ToLowerInvariant() != ".pdf")
+        {
+            _errors["TANFile"] = "Only PDF files are allowed for TAN Document";
+            _tanFile = null;
+            _model.TANFilePath = null;
+            return;
+        }
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errors["TANFile"] = "File size must be less than 5 MB";
+            _tanFile = null;
+            _model.TANFilePath = null;
+            return;
+        }
+
+        _tanFile = file;
+        _model.TANFilePath = file.Name;
+
+        if (_ocrPopulatedTan)
+        {
+            _model.TANNumber = null;
+            _ocrPopulatedTan = false;
+        }
+        _ocrWarningTan = null;
+
+        _isExtractingTan = true;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+                if (!string.IsNullOrEmpty(result?.TAN))
+                {
+                    _model.TANNumber = result.TAN;
+                    _ocrPopulatedTan = true;
+                    if (Regex.IsMatch(_model.TANNumber, @"^[A-Z]{4}[0-9]{5}[A-Z]{1}$"))
+                    {
+                        _ocrWarningTan = "⚠️ This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+                    }
+                    else
+                    {
+                        _ocrWarningTan = "⚠️ Invalid TAN document. Please upload a valid TAN document.";
+                    }
+                    OnTANNumberChanged();
+                }
+                else
+                {
+                    _ocrWarningTan = "⚠️ Unable to detect TAN from the uploaded document. Please upload a clear TAN document.";
+                }
+            }
+            else
+            {
+                _ocrWarningTan = "⚠️ Unable to detect TAN from the uploaded document. Please upload a clear TAN document.";
+            }
+        }
+        catch
+        {
+            _ocrWarningTan = "⚠️ Unable to detect TAN from the uploaded document. Please upload a clear TAN document.";
+        }
+        finally
+        {
+            _isExtractingTan = false;
+        }
+    }
+
+    private void RemoveTanFile()
+    {
+        if (string.IsNullOrEmpty(_model.TANFilePath)) return;
+        OpenDeleteModal("TAN", "TAN Document", _model.TANFilePath);
+    }
+
+    async Task HandleChequeUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _errors.Remove("ChequeFile");
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        var allowedExts = new[] { ".pdf", ".jpg", ".jpeg", ".png", ".webp" };
+        if (!allowedExts.Contains(ext))
+        {
+            _errors["ChequeFile"] = "Only PDF, JPG, PNG, or WEBP files are allowed for Cheque";
+            _chequeFile = null;
+            _model.ChequeFilePath = null;
+            return;
+        }
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            _errors["ChequeFile"] = "File size must be less than 5 MB";
+            _chequeFile = null;
+            _model.ChequeFilePath = null;
+            return;
+        }
+
+        _chequeFile = file;
+        _model.ChequeFilePath = file.Name;
+
+        if (_ocrPopulatedCheque)
+        {
+            _model.AccountHolderName = null;
+            _model.AccountNumber = null;
+            _model.IFSC = null;
+            _model.Branch = null;
+            _ocrPopulatedCheque = false;
+        }
+        _ocrWarningCheque = null;
+
+        _isExtractingCheque = true;
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+            var response = await Http.PostAsync("api/DealerFile/ocr-extract-cheque", content);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<ChequeOcrResult>();
+                if (result != null)
+                {
+                    if (!string.IsNullOrEmpty(result.AccountNumber) && string.IsNullOrWhiteSpace(_model.AccountNumber))
+                        _model.AccountNumber = result.AccountNumber;
+                    if (!string.IsNullOrEmpty(result.IFSC) && string.IsNullOrWhiteSpace(_model.IFSC))
+                    {
+                        _model.IFSC = result.IFSC;
+                        AutoSelectBankByIfscPrefix(_model.IFSC);
+                    }
+                    if (!string.IsNullOrEmpty(result.AccountHolderName) && string.IsNullOrWhiteSpace(_model.AccountHolderName))
+                        _model.AccountHolderName = result.AccountHolderName;
+
+                    if (!string.IsNullOrEmpty(result.AccountNumber) || !string.IsNullOrEmpty(result.IFSC) || !string.IsNullOrEmpty(result.AccountHolderName))
+                    {
+                        _ocrPopulatedCheque = true;
+                        _ocrWarningCheque = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+                    }
+                    else
+                    {
+                        _ocrWarningCheque = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+                    }
+                }
+                else
+                {
+                    _ocrWarningCheque = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+                }
+            }
+            else
+            {
+                _ocrWarningCheque = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+            }
+        }
+        catch
+        {
+            _ocrWarningCheque = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+        }
+        finally
+        {
+            _isExtractingCheque = false;
+        }
+    }
+
+    private void RemoveChequeFile()
+    {
+        if (string.IsNullOrEmpty(_model.ChequeFilePath)) return;
+        OpenDeleteModal("Cheque", "Cancelled Cheque", _model.ChequeFilePath);
+    }
+
+    async Task HandleWholesaleFileUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (Path.GetExtension(file.Name).ToLowerInvariant() != ".pdf") return;
+        if (file.Size > 5 * 1024 * 1024) return;
+
+        _wholesaleFile = file;
+        _model.WholesaleLicenseFilePath = file.Name;
+    }
+
+    private void RemoveWholesaleFile()
+    {
+        if (string.IsNullOrEmpty(_model.WholesaleLicenseFilePath)) return;
+        OpenDeleteModal("WholesaleLicense", "Wholesale License", _model.WholesaleLicenseFilePath);
+    }
+
+    async Task HandleRetailFileUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (Path.GetExtension(file.Name).ToLowerInvariant() != ".pdf") return;
+        if (file.Size > 5 * 1024 * 1024) return;
+
+        _retailFile = file;
+        _model.RetailLicenseFilePath = file.Name;
+    }
+
+    private void RemoveRetailFile()
+    {
+        if (string.IsNullOrEmpty(_model.RetailLicenseFilePath)) return;
+        OpenDeleteModal("RetailLicense", "Retail License", _model.RetailLicenseFilePath);
+    }
+
+    private async Task<FileUploadResponse?> UploadFileToServer(int dealerId, string docType, IBrowserFile file)
+    {
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            var stream = file.OpenReadStream(5 * 1024 * 1024);
+            content.Add(new StreamContent(stream), "file", file.Name);
+
+            var response = await Http.PostAsync($"api/DealerFile/upload/{dealerId}/{docType}", content);
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadFromJsonAsync<FileUploadResponse>();
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private void OpenDeleteModal(string docType, string displayName, string filePath)
+    {
+        _deleteDocType = docType;
+        _deleteDisplayName = displayName;
+        _deleteFilePathToDelete = filePath;
+        _deleteFileNameDisplay = filePath.Contains("/")
+            ? filePath.Substring(filePath.LastIndexOf('/') + 1)
+            : filePath;
+        _showDeleteModal = true;
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteModal = false;
+        _deleteDocType = "";
+        _deleteDisplayName = "";
+        _deleteFileNameDisplay = "";
+        _deleteFilePathToDelete = "";
+    }
+
+    private async Task ConfirmDelete()
+    {
+        try
+        {
+            bool isServerFile = !string.IsNullOrEmpty(_deleteFilePathToDelete)
+                                && _deleteFilePathToDelete.Contains("/");
+
+            if (isServerFile)
+            {
+                await Http.DeleteAsync($"api/DealerFile/delete?filePath={Uri.EscapeDataString(_deleteFilePathToDelete)}");
+            }
+
+            switch (_deleteDocType)
+            {
+                case "GST":
+                    _gstFile = null;
+                    _model.GSTFilePath = null;
+                    _errors.Remove("GSTFile");
+                    break;
+                case "PAN":
+                    _panFile = null;
+                    _model.PANFilePath = null;
+                    _errors.Remove("PANFile");
+                    break;
+                case "Aadhaar":
+                    _aadhaarFile = null;
+                    _model.AadhaarFilePath = null;
+                    _errors.Remove("AadhaarFile");
+                    break;
+                case "TAN":
+                    _tanFile = null;
+                    _model.TANFilePath = null;
+                    _errors.Remove("TANFile");
+                    break;
+                case "WholesaleLicense":
+                    _wholesaleFile = null;
+                    _model.WholesaleLicenseFilePath = null;
+                    _errors.Remove("WholesaleFile");
+                    break;
+                case "RetailLicense":
+                    _retailFile = null;
+                    _model.RetailLicenseFilePath = null;
+                    _errors.Remove("RetailFile");
+                    break;
+                case "Cheque":
+                    _chequeFile = null;
+                    _model.ChequeFilePath = null;
+                    _errors.Remove("ChequeFile");
+                    break;
+            }
+
+            if (_model.Id > 0)
+            {
+                await Http.PutAsJsonAsync($"api/DealerRegistration/{_model.Id}", _model);
+            }
+
+            ShowMessage($"{_deleteDisplayName} deleted successfully", false);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to delete file: {ex.Message}", true);
+        }
+        finally
+        {
+            CancelDelete();
+        }
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    private async Task OnGoogleMapUrlChanged()
+    {
+        _locationMessage = null;
+        if (string.IsNullOrWhiteSpace(_model.GoogleMapURL))
+        {
+            _model.Latitude = null;
+            _model.Longitude = null;
+            SyncLatitudeLongitudeText();
+            return;
+        }
+
+        _errors.Remove("GoogleMapURL");
+
+        var url = _model.GoogleMapURL.Trim();
+
+        if (url.Contains("goo.gl") || url.Contains("maps.app.goo.gl"))
+        {
+            _locationMessage = "Shortened URL detected. Please open the link in browser, copy the full URL from address bar, and paste it here.";
+            _locationSuccess = false;
+            return;
+        }
+
+        var match = Regex.Match(url, @"@(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"/dir//(-?\d+\.\d+),(-?\d+\.\d+)");
+        if (!match.Success) match = Regex.Match(url, @"(-?\d+\.\d+),\s*(-?\d+\.\d+)");
+
+        if (match.Success
+            && double.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lat)
+            && double.TryParse(match.Groups[2].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lng))
+        {
+            _model.Latitude = lat;
+            _model.Longitude = lng;
+            SyncLatitudeLongitudeText();
+            _locationMessage = $"Coordinates extracted: {lat:F6}, {lng:F6}";
+            _locationSuccess = true;
+            await TriggerMapUpdate(lat, lng);
+        }
+        else
+        {
+            _model.Latitude = null;
+            _model.Longitude = null;
+            SyncLatitudeLongitudeText();
+            _locationMessage = "Could not extract coordinates from this URL. Try pasting the full Google Maps link.";
+            _locationSuccess = false;
+        }
+    }
+
+    private async Task OnLatitudeChanged()
+    {
+        if (_model.Latitude.HasValue)
+            _errors.Remove("Latitude");
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+    }
+
+    private async Task OnLongitudeChanged()
+    {
+        if (_model.Longitude.HasValue)
+            _errors.Remove("Longitude");
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            await TriggerMapUpdate(_model.Latitude.Value, _model.Longitude.Value);
+    }
+
+    private void OnLatitudeLongitudeChanged(ChangeEventArgs e)
+    {
+        _latitudeLongitudeText = e.Value?.ToString() ?? "";
+        _errors.Remove("Latitude");
+        _errors.Remove("Longitude");
+
+        var text = _latitudeLongitudeText.Trim();
+        var parts = text.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+        double? lat = null;
+        double? lng = null;
+        if (parts.Length >= 2
+            && double.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedLat)
+            && double.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedLng))
+        {
+            lat = parsedLat;
+            lng = parsedLng;
+        }
+
+        _model.Latitude = lat;
+        _model.Longitude = lng;
+
+        if (!lat.HasValue || !lng.HasValue)
+        {
+            _errors["Latitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+            _errors["Longitude"] = "Enter Latitude & Longitude as e.g. 10.7905, 78.7047";
+        }
+        else
+        {
+            _ = TriggerMapUpdate(lat.Value, lng.Value);
+        }
+    }
+
+    private void SyncLatitudeLongitudeText()
+    {
+        string Fmt(double d) => d.ToString("G17", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (_model.Latitude.HasValue && _model.Longitude.HasValue)
+            _latitudeLongitudeText = $"{Fmt(_model.Latitude.Value)}, {Fmt(_model.Longitude.Value)}";
+        else if (_model.Latitude.HasValue)
+            _latitudeLongitudeText = Fmt(_model.Latitude.Value);
+        else if (_model.Longitude.HasValue)
+            _latitudeLongitudeText = Fmt(_model.Longitude.Value);
+        else
+            _latitudeLongitudeText = "";
+    }
+
+    private async Task UseCurrentLocation()
+    {
+        _isGettingLocation = true;
+        _locationMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await JS.InvokeAsync<GeoLocationResult>("getCurrentPosition");
+            if (!string.IsNullOrEmpty(result.Error))
+            {
+                _locationMessage = $"Location error: {result.Error}";
+                _locationSuccess = false;
+            }
+            else
+            {
+                _model.Latitude = result.Latitude;
+                _model.Longitude = result.Longitude;
+                SyncLatitudeLongitudeText();
+                _model.GoogleMapURL = $"http://maps.google.com/maps?q={result.Latitude.ToString(System.Globalization.CultureInfo.InvariantCulture)},{result.Longitude.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+                _errors.Remove("GoogleMapURL");
+                _errors.Remove("Latitude");
+                _errors.Remove("Longitude");
+                _locationMessage = $"Location captured: {result.Latitude:F6}, {result.Longitude:F6}";
+                _locationSuccess = true;
+                await TriggerMapUpdate(result.Latitude, result.Longitude);
+            }
+        }
+        catch (Exception ex)
+        {
+            _locationMessage = $"Failed to get location: {ex.Message}";
+            _locationSuccess = false;
+        }
+        finally
+        {
+            _isGettingLocation = false;
+            StateHasChanged();
+        }
+    }
+    private void SyncDateBuffersFromModel()
+    {
+        string Fmt(DateTime? d) => d.HasValue && d.Value != DateTime.MinValue ? d.Value.ToString("yyyy-MM-dd") : "";
+
+        _dateOfAppointmentText = Fmt(_model.DateOfAppointment);
+        _greenstarDateOfAppointmentText = Fmt(_model.GreenstarDateOfAppointment);
+        _lastTransactionDateText = Fmt(_model.LastTransactionDate);
+        _finalApprovalDateText = Fmt(_model.FinalApprovalDate);
+        _settlementDateText = Fmt(_model.SettlementDate);
+        _tradeDepositDateText = Fmt(_model.TradeDepositDate);
+        _greenstarTradeDepositDateText = Fmt(_model.GreenstarTradeDepositDateReg);
+        _securityDepositDateText = Fmt(_model.SpicSecurityDepositDate);
+        _wholesaleLicenseExpiryDateText = Fmt(_model.WholesaleLicenseExpiryDate);
+        _retailLicenseExpiryDateText = Fmt(_model.RetailLicenseExpiryDate);
+    }
+  private void OnDateOfAppointmentChanged(ChangeEventArgs e)
+{
+    var newVal = e.Value?.ToString();
+
+    if (string.IsNullOrWhiteSpace(newVal))
+    {
+        _dateOfAppointmentText = "";
+        _model.DateOfAppointment = null;
+        return;
+    }
+
+    _dateOfAppointmentText = newVal;
+
+    if (DateTime.TryParse(newVal, out var dt))
+    {
+        _model.DateOfAppointment = dt;
+        _errors.Remove("DateOfAppointment");
+    }
+    else
+    {
+        _model.DateOfAppointment = null;
+    }
+}
+
+private void OnGreenstarDateOfAppointmentChanged(ChangeEventArgs e)
+{
+    var newVal = e.Value?.ToString();
+
+    if (string.IsNullOrWhiteSpace(newVal))
+    {
+        _greenstarDateOfAppointmentText = "";
+        _model.GreenstarDateOfAppointment = null;
+        return;
+    }
+
+    _greenstarDateOfAppointmentText = newVal;
+
+    if (DateTime.TryParse(newVal, out var dt))
+    {
+        _model.GreenstarDateOfAppointment = dt;
+        _errors.Remove("GreenstarDateOfAppointment");
+    }
+    else
+    {
+        _model.GreenstarDateOfAppointment = null;
+    }
+}
+
+    private void OnLastTransactionDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _lastTransactionDateText = "";
+            _model.LastTransactionDate = null;
+            return;
+        }
+
+        _lastTransactionDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.LastTransactionDate = dt;
+            ValidateFieldOnChange("LastTransactionDate", true);
+        }
+    }
+
+    private void OnFinalApprovalDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _finalApprovalDateText = "";
+            _model.FinalApprovalDate = null;
+            return;
+        }
+
+        _finalApprovalDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.FinalApprovalDate = dt;
+            ValidateFieldOnChange("FinalApprovalDate", true);
+        }
+    }
+
+    private void OnSettlementDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _settlementDateText = "";
+            _model.SettlementDate = null;
+            return;
+        }
+
+        _settlementDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.SettlementDate = dt;
+            ValidateFieldOnChange("SettlementDate", true);
+        }
+    }
+
+    private void OnTradeDepositDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _tradeDepositDateText = "";
+            _model.TradeDepositDate = null;
+            return;
+        }
+
+        _tradeDepositDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.TradeDepositDate = dt;
+            ValidateFieldOnChange("TradeDepositDate", true);
+        }
+    }
+    private void OnGreenstarTradeDepositDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _greenstarTradeDepositDateText = "";
+            _model.GreenstarTradeDepositDateReg = null;
+            return;
+        }
+
+        _greenstarTradeDepositDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.GreenstarTradeDepositDateReg = dt;
+            ValidateFieldOnChange("GreenstarTradeDepositDateReg", true);
+        }
+    }
+
+    private void OnSecurityDepositDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal))
+        {
+            _securityDepositDateText = "";
+            _model.SpicSecurityDepositDate = null;
+            return;
+        }
+
+        _securityDepositDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+        {
+            _model.SpicSecurityDepositDate = dt;
+            ValidateFieldOnChange("SpicSecurityDepositDate", true);
+        }
+    }
+
+    private void OnWholesaleLicenseExpiryDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _wholesaleLicenseExpiryDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+            _model.WholesaleLicenseExpiryDate = dt;
+    }
+
+    private void OnRetailLicenseExpiryDateChanged(ChangeEventArgs e)
+    {
+        var newVal = e.Value?.ToString();
+        if (string.IsNullOrEmpty(newVal)) return;
+
+        _retailLicenseExpiryDateText = newVal;
+        if (DateTime.TryParse(newVal, out var dt))
+            _model.RetailLicenseExpiryDate = dt;
+    }
+
+    public static double CalculateDistanceKm(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double R = 6371.0;
+        var dLat = (lat2 - lat1) * Math.PI / 180.0;
+        var dLng = (lng2 - lng1) * Math.PI / 180.0;
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+                + Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0)
+                * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return R * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+    }
+
+    public class GeoLocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+
+    private class CreateResponse
+    {
+        public string? Message { get; set; }
+        public DealerFormModel? Data { get; set; }
+    }
+
+    public class DealerFormModel
+    {
+        public int Id { get; set; }
+        public string? UserTableId { get; set; }
+        public bool IsDealer { get; set; } = true;
+        public bool InSpic { get; set; } = true;
+        public bool InGreenStar { get; set; } = true;
+        public string? DealerCode { get; set; }
+        public string? SPICCode { get; set; }
+       public string? GreenStarCode { get; set; }
+        public string? TnCode { get; set; }
+        public string? NCode { get; set; }
+        public int StateId { get; set; }
+        public int Region { get; set; }
+        public int HQ { get; set; }
+        public int ParentDealer { get; set; }
+        public string? FirmName { get; set; }
+        public DateTime? DateOfAppointment { get; set; }
+        public DateTime? GreenstarDateOfAppointment { get; set; }
+        public string? BusinessEntityType { get; set; }
+        public DateTime? LastTransactionDate { get; set; }
+        public bool? IsLastTransactionIsSale { get; set; }
+        public bool? IsFinalAmountSettled { get; set; }
+        public DateTime? FinalApprovalDate { get; set; }
+        public DateTime? SettlementDate { get; set; }
+        public decimal SettlementAmount { get; set; }
+        public decimal DebitorBalance { get; set; }
+        public string? GoogleMapURL { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+        public string? ShopNoORRoomNoOrBlockNo { get; set; }
+        public string? Street { get; set; }
+        public string? SubVillage { get; set; }
+        public string? Village { get; set; }
+        public string? PinCode { get; set; }
+        public string? Block { get; set; }
+        public string? Taluk { get; set; }
+        public int? DistrictId { get; set; }
+        public int? DealerStateId { get; set; }
+        public string? OfficialContactNumber { get; set; }
+        public string? WhatsAppNumber { get; set; }
+        public string? AlternativeNumber { get; set; }
+        public string? AccountHolderName { get; set; }
+        public string? AccountNumber { get; set; }
+        public int? BankId { get; set; }
+        public string? Branch { get; set; }
+        public string? IFSC { get; set; }
+        public string? GSTNumber { get; set; }
+        public string? GSTFilePath { get; set; }
+        public string? PANNumber { get; set; }
+        public string? PANFilePath { get; set; }
+        public string? AadhaarNumber { get; set; }
+        public string? AadhaarFilePath { get; set; }
+        public string? TANNumber { get; set; }
+        public string? TANFilePath { get; set; }
+        public string? ChequeFilePath { get; set; }
+        public string? WholeSaleFertilizerLicenseNumber { get; set; }
+        public DateTime? WholesaleLicenseExpiryDate { get; set; }
+        public string? WholesalemFMSCode { get; set; }
+        public string? WholesaleLicenseFilePath { get; set; }
+        public string? RetailFertilizerLicenseNumber { get; set; }
+        public DateTime? RetailLicenseExpiryDate { get; set; }
+        public string? RetailmFMSCode { get; set; }
+        public string? RetailLicenseFilePath { get; set; }
+        public bool? IsOfficeAutomation { get; set; } = true;
+        public DateTime? ExpectedOfficeAutomationDate { get; set; }
+        public bool? IsSDWA { get; set; } = true;
+        public int? EntityType { get; set; }
+        public int? DealerType { get; set; }
+        public DateTime CreditLimitExperiance { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string? UpdatedBy { get; set; }
+        public DateTime UpdatedAt { get; set; } = DateTime.Now;
+
+        public bool? RMApproved { get; set; }
+        public bool? SMApproved { get; set; }
+        public bool? AVPApproved { get; set; }
+        public int YearsofExperiance { get; set; }
+
+        public decimal CapitalInvestment { get; set; }
+        public string? CapitalInvestmentRemarks { get; set; }
+        public decimal CashCreditLimit { get; set; }
+        public string? CashCreditLimitRrmarks { get; set; }
+        public decimal AssetValue { get; set; }
+        public string? Remarks { get; set; }
+        public decimal OwnGodownCapacity { get; set; }
+        public decimal RentGodownCapacity { get; set; }
+
+        public decimal TradeDepositAmount { get; set; }
+        public string? TradeDepositReceiptNo { get; set; }
+        public DateTime? TradeDepositDate { get; set; }
+        public decimal? GreenstarTradeDepositAmountReg { get; set; }
+        public string? GreenstarTradeDepositReceiptNoReg { get; set; }
+        public DateTime? GreenstarTradeDepositDateReg { get; set; }
+        public decimal? SpicSecurityDepositAmount { get; set; }
+        public string? SpicSecurityDepositReceiptNo { get; set; }
+        public DateTime? SpicSecurityDepositDate { get; set; }
+       public string? GSTLegalName { get; set; }
+public string? GSTTradeName { get; set; }
+public string? GSTConstitutionofBusiness { get; set; }
+public DealerStatus Status { get; set; }
+public FutureBusinessProposal? InactiveProposal { get; set; }
+public bool? IsSubmittedForReview { get; set; } = false;
+public bool IsNewDealerRegistration { get; set; }
+public int? DealershipApplicationFeeBankId { get; set; }
+public string? DealershipApplicationFeeDDNumber { get; set; }
+public DateTime? DealershipApplicationFeeDDDate { get; set; }
+public decimal? DealershipApplicationFeeAmount { get; set; }
+public string? DealershipApplicationFeePayableAt { get; set; }
+public string? SpicTradeDepositDDNumber { get; set; }
+public int? SpicTradeDepositDDBankId { get; set; }
+public DateTime? SpicTradeDepositDDDate { get; set; }
+public decimal? SpicTradeDepositDDAmount { get; set; }
+public string? GflTradeDepositDDNumber { get; set; }
+public int? GflTradeDepositDDBankId { get; set; }
+public DateTime? GflTradeDepositDDDate { get; set; }
+public decimal? GflTradeDepositDDAmount { get; set; }
+public string? DealershipApplicationFeeFilePath { get; set; }
+public string? SpicTradeDepositFilePath { get; set; }
+public string? GflTradeDepositFilePath { get; set; }
+    }
+
+    
+
+    public class DealerItemDto
+    {
+        public int Id { get; set; }
+        public string DealerCode { get; set; } = "";
+        public string FirmName { get; set; } = "";
+        public int StateId { get; set; }
+    }
+
+   public class PincodeApiResponse
+    {
+        public string Status { get; set; } = "";
+        public string Message { get; set; } = "";
+        public List<PostOfficeDto>? PostOffice { get; set; }
+    }
+
+    public class PostOfficeDto
+    {
+        public string Name { get; set; } = "";
+        public string District { get; set; } = "";
+        public string State { get; set; } = "";
+        public string Block { get; set; } = "";
+        public string Division { get; set; } = "";
+        public string Region { get; set; } = "";
+        public string Country { get; set; } = "";
+        public string Pincode { get; set; } = "";
+    }
+
+    public class FileUploadResponse
+    {
+        public string FilePath { get; set; } = "";
+        public string? Aadhaar { get; set; }
+        public string? PAN { get; set; }
+        public string? GST { get; set; }
+        public string? TAN { get; set; }
+    }
+
+    public class OcrExtractResult
+    {
+        public string? Aadhaar { get; set; }
+        public string? PAN { get; set; }
+        public string? GST { get; set; }
+        public string? TAN { get; set; }
+       public string? GSTLegalName { get; set; }
+public string? GSTTradeName { get; set; }
+public string? GSTConstitutionofBusiness { get; set; }
+    }
+
+    public class ChequeOcrResult
+    {
+        public string? AccountNumber { get; set; }
+        public string? IFSC { get; set; }
+        public string? Branch { get; set; }
+        public string? AccountHolderName { get; set; }
+    }
+    private void ApplyLockedEmployeeLocation()
+    {
+        if (LoginState.IsAdmin)
+            return;
+
+        if (LoginState.StateId > 0)
+        {
+            _basicInfoStateId = LoginState.StateId;
+
+            _filteredRegions = _regionsAll
+                .Where(r => r.StateId == _basicInfoStateId)
+                .ToList();
+
+            _filteredDealers = _dealersAll
+                .Where(d => d.StateId == _basicInfoStateId)
+                .ToList();
+        }
+
+        if (LoginState.RegionId > 0)
+        {
+            _basicInfoRegionId = LoginState.RegionId;
+
+            _filteredHeadquarters = _headquartersAll
+                .Where(h => h.RegionId == _basicInfoRegionId)
+                .ToList();
+        }
+
+        if (LoginState.HQId > 0)
+        {
+            _basicInfoHqId = LoginState.HQId;
+        }
+
+        _isStateLocked = LoginState.StateId > 0;
+        _isRegionLocked = LoginState.RegionId > 0;
+        _isHqLocked = LoginState.HQId > 0;
+    }
+
+    private bool CanDelete => LoginState.Can("Register", "Delete");
+}

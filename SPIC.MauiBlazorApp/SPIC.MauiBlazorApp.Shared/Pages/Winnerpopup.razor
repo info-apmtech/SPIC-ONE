@@ -1,0 +1,359 @@
+﻿@page "/WinnerPopUp"
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', Helvetica, Arial, sans-serif;
+    background: linear-gradient(135deg, #f0f9f4 0%, #e8f5f0 100%);
+    min-height: 100vh;
+/*     display: flex; */
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+
+  /* Modal container */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 40;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-width: 408px;
+    background: linear-gradient(135deg, #f7fff6 0%, #f3fff1 100%);
+    border: 1px solid #e4ffe0;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15), 0 0 0 1px rgba(228,255,224,0.5);
+    position: relative;
+  }
+
+  .close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 32px;
+    height: 32px;
+    border: 2px solid #000;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #000;
+    transition: transform 0.2s, background 0.2s;
+    z-index: 10;
+  }
+
+  .close-btn:hover {
+    transform: scale(1.1);
+    background: rgba(0,0,0,0.05);
+  }
+
+  .close-btn::before,
+  .close-btn::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 2px;
+    background: #000;
+  }
+
+  .close-btn::before { transform: rotate(45deg); }
+  .close-btn::after { transform: rotate(-45deg); }
+
+  /* Modal content */
+  .modal-content {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0px;
+  }
+
+  /* Trophy celebration illustration */
+  .trophy-section {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+
+  .trophy-svg {
+    width: 180px;
+    height: 180px;
+  }
+
+  /* Header text */
+  .header-text {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .header-text h1 {
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 30px;
+    letter-spacing: -0.6px;
+    color: #0d701d;
+  }
+
+  .header-text p {
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 24px;
+    letter-spacing: -0.1px;
+    color: #0d701d;
+  }
+
+  /* Prize section */
+  .prize-section {
+    width: 100%;
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .prize-image-container {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 12px;
+    box-shadow: 4px 4px 12px rgba(230,230,230,0.25), -2px -2px 8px rgba(219,219,219,0.25);
+    aspect-ratio: 16/12;
+  }
+
+  .prize-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .prize-label-overlay {
+    position: absolute;
+    inset-x: 0;
+    bottom: 0;
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 8px;
+    background: rgba(237,244,238,0.2);
+    border-top: 0.5px solid #bdbdbd;
+    border-radius: 0 0 8px 8px;
+    backdrop-filter: blur(10px) brightness(100%);
+    -webkit-backdrop-filter: blur(10px) brightness(100%);
+  }
+
+  .prize-label-text {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 26px;
+    letter-spacing: 0;
+    color: #835f45;
+  }
+
+  .scheme-name {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 18px;
+    text-align: center;
+    color: #40493d;
+  }
+
+  /* CTA Button */
+  .cta-btn {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, #3371ce 0%, #2563d3 100%);
+    color: #fff;
+    font-family: 'Inter', Helvetica, Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: 0;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(51,113,206,0.3);
+  }
+
+  .cta-btn:hover {
+    background: linear-gradient(135deg, #2d5fa8 0%, #1f4ab5 100%);
+    box-shadow: 0 6px 16px rgba(51,113,206,0.4);
+    transform: translateY(-1px);
+  }
+
+  .cta-btn:active {
+    transform: translateY(0);
+  }
+
+  /* Confetti animation */
+  @@keyframes confetti-fall {
+    to { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+  }
+
+  @@keyframes confetti-spin {
+    to { transform: rotateZ(360deg); }
+  }
+
+  .confetti {
+    position: fixed;
+    pointer-events: none;
+    animation: confetti-fall 3s ease-in forwards;
+  }
+
+  /* Responsive */
+  @@media (max-width: 480px) {
+    .modal-card { max-width: 100%; }
+    .modal-content { padding: 24px; gap: 0px; }
+    .trophy-svg { width: 160px; height: 160px; }
+    .header-text h1 { font-size: 18px; line-height: 28px; }
+    .header-text p { font-size: 14px; line-height: 22px; }
+  }
+</style>
+<!-- Modal Overlay -->
+<div class="modal-overlay">
+  <div class="modal-card">
+
+    <!-- Close Button -->
+    <button class="close-btn" type="button" aria-label="Close" onclick="closeModal()"></button>
+
+    <!-- Modal Content -->
+    <div class="modal-content">
+
+      <!-- Trophy Celebration Illustration -->
+      <div class="trophy-section">
+        <svg class="trophy-svg" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- Confetti dots -->
+          <circle cx="20" cy="30" r="3" fill="#FFD700" opacity="0.9"/>
+          <circle cx="45" cy="15" r="2.5" fill="#FF6B6B" opacity="0.8"/>
+          <circle cx="75" cy="20" r="2" fill="#4ECDC4" opacity="0.9"/>
+          <circle cx="110" cy="12" r="3" fill="#FFD700" opacity="0.7"/>
+          <circle cx="140" cy="25" r="2" fill="#FF6B6B" opacity="0.8"/>
+          <circle cx="165" cy="18" r="2.5" fill="#4ECDC4" opacity="0.85"/>
+          <circle cx="185" cy="35" r="2" fill="#FFD700" opacity="0.75"/>
+          <circle cx="30" cy="50" r="2" fill="#4ECDC4" opacity="0.7"/>
+          <circle cx="175" cy="55" r="2.5" fill="#FF6B6B" opacity="0.75"/>
+
+          <!-- Trophy base -->
+          <rect x="75" y="140" width="50" height="10" rx="2" fill="#C9870A"/>
+          <rect x="65" y="152" width="70" height="8" rx="2" fill="#A0690A"/>
+
+          <!-- Trophy stem -->
+          <rect x="93" y="115" width="14" height="30" rx="2" fill="#E8A020"/>
+          <ellipse cx="100" cy="115" rx="7" ry="3" fill="#F0B929"/>
+
+          <!-- Trophy cup body -->
+          <path d="M65 50 Q60 90 100 110 Q140 90 135 50 Z" fill="#F0B929" stroke="#E8A020" stroke-width="1"/>
+
+          <!-- Trophy shine highlight -->
+          <ellipse cx="80" cy="70" rx="8" ry="15" fill="#FFF" opacity="0.4"/>
+
+          <!-- Trophy handles -->
+          <path d="M65 65 Q45 65 45 85 Q45 105 65 95" stroke="#E8A020" stroke-width="6" fill="none" stroke-linecap="round"/>
+          <path d="M135 65 Q155 65 155 85 Q155 105 135 95" stroke="#E8A020" stroke-width="6" fill="none" stroke-linecap="round"/>
+
+          <!-- Star on trophy -->
+          <text x="93" y="85" font-size="20" fill="#FFF176" opacity="0.95">★</text>
+
+          <!-- Leaf garland left -->
+          <g opacity="0.85">
+            <ellipse cx="50" cy="95" rx="8" ry="12" fill="#4CAF50" transform="rotate(-25 50 95)"/>
+            <ellipse cx="45" cy="110" rx="8" ry="12" fill="#66BB6A" transform="rotate(-10 45 110)"/>
+            <ellipse cx="48" cy="125" rx="8" ry="12" fill="#4CAF50" transform="rotate(10 48 125)"/>
+            <ellipse cx="55" cy="135" rx="8" ry="12" fill="#81C784" transform="rotate(25 55 135)"/>
+          </g>
+
+          <!-- Leaf garland right -->
+          <g opacity="0.85">
+            <ellipse cx="150" cy="95" rx="8" ry="12" fill="#4CAF50" transform="rotate(25 150 95)"/>
+            <ellipse cx="155" cy="110" rx="8" ry="12" fill="#66BB6A" transform="rotate(10 155 110)"/>
+            <ellipse cx="152" cy="125" rx="8" ry="12" fill="#4CAF50" transform="rotate(-10 152 125)"/>
+            <ellipse cx="145" cy="135" rx="8" ry="12" fill="#81C784" transform="rotate(-25 145 135)"/>
+          </g>
+
+          <!-- Floating confetti streamers -->
+          <path d="M30 45 Q35 35 40 45 Q45 55 50 45" stroke="#FFD700" stroke-width="2" fill="none" opacity="0.6" stroke-linecap="round"/>
+          <path d="M160 40 Q165 30 170 40 Q175 50 180 40" stroke="#FF6B6B" stroke-width="2" fill="none" opacity="0.6" stroke-linecap="round"/>
+          <path d="M90 25 Q95 18 100 25 Q105 32 110 25" stroke="#4ECDC4" stroke-width="2" fill="none" opacity="0.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+
+      <!-- Header -->
+      <div class="header-text">
+        <h1>Congratulations!</h1>
+        <p>You are a Lucky Draw Winner</p>
+      </div>
+
+      <!-- Prize Section -->
+      <div class="prize-section">
+        <div class="prize-image-container">
+          <img
+            class="prize-image"
+            src="https://images.pexels.com/photos/1457842/pexels-photo-1457842.jpeg?auto=compress&cs=tinysrgb&w=400&h=300&fit=crop"
+            alt="Single Door Wardrobe"
+          />
+          <div class="prize-label-overlay">
+            <p class="prize-label-text">Single Door Wardrobe</p>
+          </div>
+        </div>
+        <p class="scheme-name">Tamil New Year Special Scheme</p>
+      </div>
+
+      <!-- CTA Button -->
+      <button class="cta-btn" type="button" onclick="viewDetails()">View Details</button>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  function closeModal() {
+    const overlay = document.querySelector('.modal-overlay');
+    overlay.style.opacity = '0';
+    overlay.style.pointerEvents = 'none';
+    setTimeout(() => overlay.style.display = 'none', 300);
+  }
+
+  function viewDetails() {
+    alert('Opening prize details...');
+  }
+
+  // Optional: Create confetti effect on load
+  function createConfetti() {
+    const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#66BB6A'];
+    for (let i = 0; i < 20; i++) {
+      const confetti = document.createElement('div');
+      confetti.className = 'confetti';
+      confetti.style.left = Math.random() * 100 + '%';
+      confetti.style.top = '-10px';
+      confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+      confetti.style.width = (Math.random() * 8 + 4) + 'px';
+      confetti.style.height = (Math.random() * 8 + 4) + 'px';
+      confetti.style.borderRadius = '50%';
+      confetti.style.animationDelay = (Math.random() * 0.5) + 's';
+      confetti.style.animationDuration = (Math.random() * 1.5 + 2.5) + 's';
+      document.body.appendChild(confetti);
+    }
+  }
+
+  // Uncomment to enable confetti on page load
+  // createConfetti();
+</script>

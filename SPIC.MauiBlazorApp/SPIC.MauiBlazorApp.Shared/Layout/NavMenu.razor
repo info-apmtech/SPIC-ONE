@@ -1,115 +1,540 @@
 ﻿@inject NavigationManager NavManager
+@inject IJSRuntime JSRuntime
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
+@inject SPIC.MauiBlazorApp.Shared.Services.AppSearchState SearchState
+@using SPIC.Core.Entities
+@implements IDisposable
 
 <div class="brand">SPIC</div>
 
 <nav class="nav nav-pills flex-column nav-section">
 
-	<NavLink class="nav-link" href="/Dashboard" Match="NavLinkMatch.All">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
-		Dashboard
-	</NavLink>
+    @if (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.Dashboard))
+    {
+        <NavLink class="@NavLinkClass("Dashboard")" href="/Dashboard" Match="NavLinkMatch.All">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
+            Register
+        </NavLink>
+    }
+     @if (loginState.CanAccess(PagePermission.SubDealerList))
+    {
+        <NavLink class="@NavLinkClass("Sub Dealer Registration")" href="/SubDealerList  " Match="NavLinkMatch.All">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
+            Sub Dealer Master 
+        </NavLink>
+    }
 
-	<NavLink class="nav-link" href="/Purchases">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
-		Purchases
-	</NavLink>
+    @if (loginState.UserRole == AppRole.Admin)
+    {
+        <NavLink class="@NavLinkClass("IFMS Auto Import")" href="/IfmsAutoImport">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
+            IFMS Auto Import
+        </NavLink>
+    }
 
-	<NavLink class="nav-link" href="/Rewards">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
-		Rewards
-	</NavLink>
+    @if (loginState.UserRole == AppRole.Admin)
+    {
+        <NavLink class="@NavLinkClass("IFMS OTP Relay")" href="/IfmsRelaySetup">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
+            IFMS OTP Relay
+        </NavLink>
+    }
 
-	<NavLink class="nav-link" href="/CropAdvice">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
-		Crop Advice
-	</NavLink>
+    @if (loginState.UserRole == AppRole.Admin)
+    {
+        <NavLink class="@NavLinkClass("IFMS Logins")" href="/IfmsLogins">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
+            IFMS Logins
+        </NavLink>
+    }
 
-	<NavLink class="nav-link" href="/YieldPrediction">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
-		Yield Prediction
-	</NavLink>
+    @if (loginState.CanAccess(PagePermission.Schemes))
+    {
+        <NavLink class="@NavLinkClass("Schemes")" href="/Schemes">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            Schemes
+        </NavLink>
+    }
+    @if (AnySubsidyAccessible)
+    {
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowSubsidyExpanded ? "active" : "") @MatchClass("Subsidy Management System")"
+               @onclick="ToggleSubsidyMenu">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+                Subsidy Management System
+                <i class="bi @(ShowSubsidyExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
 
-	<NavLink class="nav-link" href="/DiseaseDetection">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
-		Disease Detection
-	</NavLink>
+            @if (ShowSubsidyExpanded)
+            {
+                <ul class="submenu-list">
+                    @if (loginState.CanAccess(PagePermission.SalesReport))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/StockReport" class="@SubmenuLinkClass("Stock Report")" Match="NavLinkMatch.All">Stock Report</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.CompanySales))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/CompanySales" class="@SubmenuLinkClass("Pending Acknowledgement")" Match="NavLinkMatch.All">Pending Acknowledgement</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.AgeingReport))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/AgeingReport" class="@SubmenuLinkClass("Ageing Report")" Match="NavLinkMatch.All">Ageing Report</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Acknowledgement))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Acknowledgement" class="@SubmenuLinkClass("Acknowledgement")" Match="NavLinkMatch.All">Acknowledgement</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.LiquidationCycle))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/LiquidationCycle" class="@SubmenuLinkClass("Liquidation Cycle")" Match="NavLinkMatch.All">Liquidation Cycle</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.TopRankingDistrict))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/TopRankingDistrict" class="@SubmenuLinkClass("Top Ranking District")" Match="NavLinkMatch.All">Top Ranking District</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.TopRankingWholesalers))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/TopRankingWholesalers" class="@SubmenuLinkClass("Top Ranking Wholesaler")" Match="NavLinkMatch.All">Top Ranking Wholesaler</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.TopRankingRetailers))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/TopRankingRetailers" class="@SubmenuLinkClass("Top Ranking Retailers")" Match="NavLinkMatch.All">Top Ranking Retailers</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.ProductWiseStockAvailability))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/ProductWiseStockAvailability" class="@SubmenuLinkClass("Productwise Stock Availability")" Match="NavLinkMatch.All">Productwise Stock Availability</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.StockDetails))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/StockDetails" class="@SubmenuLinkClass("Stock Details")" Match="NavLinkMatch.All">Stock Details</NavLink>
+                        </li>
+                    }
+                    @if (loginState.UserRole == AppRole.Admin)
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/ExcelFormatFileUpload" class="@SubmenuLinkClass("File Upload")" Match="NavLinkMatch.All">File Upload</NavLink>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+    @if (loginState.CanAccess(PagePermission.BudgetSubmissions))
+    {
+        <NavLink class="@NavLinkClass("Budget Submissions")" href="/BudgetSubmissions">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            Budget Submissions
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.CSR1Create))
+    {
+        <NavLink class="@NavLinkClass("CSR-1 Create")" href="/CREATE-CSR-1Management">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            CSR-1 Create
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.CSR1Management))
+    {
+        <NavLink class="@NavLinkClass("CSR-1 Management")" href="/CSR-1List">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            CSR-1 Management
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.WelfareSchemes))
+    {
+        <NavLink class="@NavLinkClass("Welfare Schemes")" href="/WelfareSchemes">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            Welfare Schemes
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.Purchases))
+    {
+        <NavLink class="@NavLinkClass("Purchases")" href="/Purchases">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
+            Purchases
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.Rewards))
+    {
+        <NavLink class="@NavLinkClass("Rewards")" href="/Rewards">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/RewardIcon.svg" class="SideBariconimg" />
+            Rewards
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.CropAdvice))
+    {
+        <NavLink class="@NavLinkClass("Crop Advice")" href="/CropAdvice">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/CropAdviceIcon.svg" class="SideBariconimg" />
+            Crop Advice
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.YieldPrediction))
+    {
+        <NavLink class="@NavLinkClass("Yield Prediction")" href="/YieldPrediction">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/YieldPredictionIcon.svg" class="SideBariconimg" />
+            Yield Prediction
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.DiseaseDetection))
+    {
+        <NavLink class="@NavLinkClass("Disease Detection")" href="/DiseaseDetection">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DiseaseDetectionIcon.svg" class="SideBariconimg" />
+            Disease Detection
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.Community))
+    {
+        <NavLink class="@NavLinkClass("Community")" href="/Community">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" class="SideBariconimg" />
+            Community
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.Notifications))
+    {
+        <NavLink class="@NavLinkClass("Notifications")" href="/Notifications">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
+            Notifications
+        </NavLink>
+    }
+    @if (loginState.CanAccess(PagePermission.Profile))
+    {
+        <NavLink class="@NavLinkClass("Profile")" href="/Profile">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            Profile
+        </NavLink>
+    }
 
-	<NavLink class="nav-link" href="/Community">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/Community.svg" class="SideBariconimg" />
-		Community
-	</NavLink>
+    @if (loginState.CanAccess(PagePermission.EmployeeManagement))
+    {
+        <NavLink class="@NavLinkClass("Employee")" href="/EmployeeManagement">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            Employee
+        </NavLink>
+    }
 
-	<NavLink class="nav-link" href="/Notifications">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/NotificationsIcon.svg" class="SideBariconimg" />
-		Notifications
-	</NavLink>
+    @if (loginState.CanAccess(PagePermission.dealerreviewlist))
+    {
+        <NavLink class="@NavLinkClass("Dealer Application Review")" href="/dealerreviewlist">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            Dealer Application Review
+        </NavLink>
+    }
 
-	<NavLink class="nav-link" href="/Profile">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-		Profile
-	</NavLink>
-	<NavLink class="nav-link" href="/EmployeeManagement">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
-		Employee
-	</NavLink>
+    @if (loginState.CanAccess(PagePermission.CreditLimitSales))
+    {
+        <NavLink class="@NavLinkClass("Financial Year Sales Data")" href="/CreditLimitSales">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
+            Financial year Sales Data
+        </NavLink>
+    }
 
-	@* <NavLink class="nav-link" href="/Settings">
-		<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
-		Settings
-	</NavLink> *@
+    @if (AnySettingsAccessible)
+    {
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowSettingsExpanded ? "active" : "") @MatchClass("Settings")"
+               @onclick="ToggleSettingsMenu">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
+                Settings
+                <i class="bi @(ShowSettingsExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
 
-	<div class="settings-menu-wrapper">
-		<a href="javascript:void(0);"
-			   class="nav-link mt-2 @(isSettingsOpen ? "active" : "")"
-			   @onclick="ToggleSettingsMenu">
-			<img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />@* <span class=""><i class="bi bi-gear"></i></span> *@
-			Settings
-			<i class="bi @(isSettingsOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
-		</a>
+            @if (ShowSettingsExpanded)
+            {
+                <ul class="submenu-list">
+                    @if (loginState.CanAccess(PagePermission.LocationMaster))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/LocationMaster" class="@SubmenuLinkClass("Location Master")" Match="NavLinkMatch.All">Location Master</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Agriculture))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Agriculture" class="@SubmenuLinkClass("Agriculture")" Match="NavLinkMatch.All">Agriculture & Prod...</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Logistics))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Logistics" class="@SubmenuLinkClass("Logistics Master")" Match="NavLinkMatch.All">Logistics Master</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Financial))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Financial" class="@SubmenuLinkClass("Financial Master")" Match="NavLinkMatch.All">Financial Master</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Relationship))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Relationship" class="@SubmenuLinkClass("Relationship Master")" Match="NavLinkMatch.All">Relationship Master</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.Designation))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/Designation" class="@SubmenuLinkClass("Designation")" Match="NavLinkMatch.All">Designation</NavLink>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
 
-		@if (isSettingsOpen)
-		{
-			<ul class="submenu-list">
-				<li class="submenu-item">
-					<NavLink href="/LocationMaster" class="submenu-link" Match="NavLinkMatch.All">Location Master</NavLink>
-				</li>
-				<li class="submenu-item">
-					<NavLink href="/Agriculture" class="submenu-link" Match="NavLinkMatch.All">Agriculture & Prod...</NavLink>
-				</li>
-				<li class="submenu-item">
-					<NavLink href="/Logistics" class="submenu-link" Match="NavLinkMatch.All">Logistics Master</NavLink>
-				</li>
-				<li class="submenu-item">
-					<NavLink href="/Financial" class="submenu-link" Match="NavLinkMatch.All">Financial Master</NavLink>
-				</li>
-				<li class="submenu-item">
-					<NavLink href="/Relationship" class="submenu-link" Match="NavLinkMatch.All">Relationship Master</NavLink>
-				</li>
-			</ul>
-		}
-	</div>
+    @if (AnySdwaAccessible)
+    {
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link mt-2 @(ShowSdwaExpanded ? "active" : "") @MatchClass("SDWA")"
+               @onclick="ToggleSdwaMenu">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
+                SDWA
+                <i class="bi @(ShowSdwaExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
+
+            @if (ShowSdwaExpanded)
+            {
+                <ul class="submenu-list">
+                    @if (loginState.CanAccess(PagePermission.SDWADashboard))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/SDWADashboard" class="@SubmenuLinkClass("SDWA Dashboard")" Match="NavLinkMatch.All">SDWA Dashboard</NavLink>
+                        </li>
+                    }
+                    @if (loginState.UserRole != AppRole.Dealer && (loginState.CanAccess(PagePermission.SchemeApproval) || loginState.UserRole == AppRole.Director))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/SchemeApproval" class="@SubmenuLinkClass("Scheme Approval")" Match="NavLinkMatch.All">Scheme Approval</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.SubDealerEmployeeMaster))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/SubDealerEmployeeMaster" class="@SubmenuLinkClass("Sub Dealer & Employee")" Match="NavLinkMatch.All">Sub Dealer &amp; Employee</NavLink>
+                        </li>
+                    }
+                    @if (loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/GuestHouseMaster" class="@SubmenuLinkClass("Guest House")" Match="NavLinkMatch.All">Guest House</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.FrontOffice))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/FrontOffice" class="@SubmenuLinkClass("Front Office")" Match="NavLinkMatch.All">Front Office</NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.GenerateBill))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/GenerateBill" class="@SubmenuLinkClass("Generate Bill")" Match="NavLinkMatch.All">Generate Bill</NavLink>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
 </nav>
+
+<style>
+    .nav-section::-webkit-scrollbar { width: 5px; }
+    .nav-section::-webkit-scrollbar-track { background: transparent; }
+    .nav-section::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 4px; }
+    .nav-section::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    .nav-section { scrollbar-width: thin; scrollbar-color: #c4c4c4 transparent; overflow-y: auto; }
+
+    .nav-link.search-match,
+    .submenu-link.search-match {
+        background-color: #FEF3C7 !important;
+        border-left: 3px solid #F59E0B !important;
+        color: #92400E !important;
+        font-weight: 600;
+        animation: nav-search-pulse 1.5s ease-in-out infinite;
+    }
+
+    .nav-link.search-match img,
+    .submenu-link.search-match img {
+        filter: brightness(0) saturate(100%) invert(45%) sepia(85%) saturate(800%) hue-rotate(15deg);
+    }
+
+    @@keyframes nav-search-pulse {
+        0%, 100% { background-color: #FEF3C7; }
+        50%      { background-color: #FDE68A; }
+    }
+</style>
+
 @code {
-	private bool isSettingsOpen = false;
+    private bool isSettingsOpen = false;
+    private bool isSubsidyOpen = false;
+    private bool isSdwaOpen = false;
 
-	protected override void OnInitialized()
-	{
-		isSettingsOpen = IsSettingsSectionActive();
-	}
+    protected override void OnInitialized()
+    {
+        isSettingsOpen = IsSettingsSectionActive();
+        isSubsidyOpen = IsSubsidySectionActive();
+        isSdwaOpen = IsSdwaSectionActive();
+        loginState.OnChange += HandleLoginStateChanged;
+        SearchState.OnChange += HandleSearchChanged;
+    }
 
-	private void ToggleSettingsMenu()
-	{
-		isSettingsOpen = !isSettingsOpen;
-	}
+    private void HandleLoginStateChanged() => InvokeAsync(StateHasChanged);
 
-	private bool IsSettingsSectionActive()
-	{
-		var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
+    private async void HandleSearchChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(50);
+        try { await JSRuntime.InvokeVoidAsync("navSearch.scrollToMatch"); } catch { }
+    }
 
-		return uri == "locationmaster"
-			|| uri == "agriculture"
-			|| uri == "logistics"
-			|| uri == "financial"
-			|| uri == "relationship";
-	}
+    public void Dispose()
+    {
+        loginState.OnChange -= HandleLoginStateChanged;
+        SearchState.OnChange -= HandleSearchChanged;
+    }
+
+    private string MatchClass(string label) => SearchState.Matches(label) ? "search-match" : "";
+
+    private string NavLinkClass(string label)
+    {
+        var match = MatchClass(label);
+        return string.IsNullOrEmpty(match) ? "nav-link" : $"nav-link {match}";
+    }
+
+    private string SubmenuLinkClass(string label)
+    {
+        var match = MatchClass(label);
+        return string.IsNullOrEmpty(match) ? "submenu-link" : $"submenu-link {match}";
+    }
+
+    private bool AnySettingsAccessible =>
+        loginState.CanAccess(PagePermission.LocationMaster)
+        || loginState.CanAccess(PagePermission.Agriculture)
+        || loginState.CanAccess(PagePermission.Logistics)
+        || loginState.CanAccess(PagePermission.Financial)
+        || loginState.CanAccess(PagePermission.Relationship)
+        || loginState.CanAccess(PagePermission.Designation);
+
+
+    private bool AnySettingsItemMatches =>
+        SearchState.Matches("Location Master")
+        || SearchState.Matches("Agriculture")
+        || SearchState.Matches("Logistics Master")
+        || SearchState.Matches("Financial Master")
+        || SearchState.Matches("Relationship Master")
+        || SearchState.Matches("Designation")
+        || SearchState.Matches("Settings");
+
+    private bool ShowSettingsExpanded => isSettingsOpen || AnySettingsItemMatches;
+
+    private void ToggleSettingsMenu() => isSettingsOpen = !isSettingsOpen;
+
+    private bool IsSettingsSectionActive()
+    {
+        var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
+        return uri == "locationmaster" || uri == "agriculture" || uri == "logistics" || uri == "financial" || uri == "relationship" || uri == "designation";
+    }
+
+    private bool AnySubsidyAccessible =>
+        loginState.CanAccess(PagePermission.SalesReport)
+        || loginState.CanAccess(PagePermission.CompanySales)
+        || loginState.CanAccess(PagePermission.AgeingReport)
+        || loginState.CanAccess(PagePermission.Acknowledgement)
+        || loginState.CanAccess(PagePermission.LiquidationCycle)
+        || loginState.CanAccess(PagePermission.TopRankingDistrict)
+        || loginState.CanAccess(PagePermission.TopRankingWholesalers)
+        || loginState.CanAccess(PagePermission.TopRankingRetailers)
+        || loginState.CanAccess(PagePermission.ProductWiseStockAvailability)
+        || loginState.CanAccess(PagePermission.StockDetails);
+
+    private bool AnySubsidyItemMatches =>
+        SearchState.Matches("Stock Report")
+        || SearchState.Matches("Pending Acknowledgement")
+        || SearchState.Matches("Ageing Report")
+        || SearchState.Matches("Acknowledgement")
+        || SearchState.Matches("Liquidation Cycle")
+        || SearchState.Matches("Top Ranking District")
+        || SearchState.Matches("Top Ranking Wholesaler")
+        || SearchState.Matches("Top Ranking Retailers")
+        || SearchState.Matches("Productwise Stock Availability")
+        || SearchState.Matches("Stock Details")
+        || SearchState.Matches("File Upload")
+        || SearchState.Matches("Subsidy Management System");
+
+    private bool ShowSubsidyExpanded => isSubsidyOpen || AnySubsidyItemMatches;
+
+    private void ToggleSubsidyMenu() => isSubsidyOpen = !isSubsidyOpen;
+
+    private bool IsSubsidySectionActive()
+    {
+        var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
+        return uri == "stockreport" || uri == "companysales" || uri == "ageingreport"
+            || uri == "acknowledgement" || uri == "liquidationcycle"
+            || uri == "toprankingdistrict" || uri == "toprankingwholesalers"
+            || uri == "toprankingretailers" || uri == "productwisestockavailability"
+            || uri == "stockdetails" || uri == "excelformatfileupload";
+    }
+
+    private bool AnySdwaAccessible =>
+        loginState.CanAccess(PagePermission.SDWADashboard)
+        || (loginState.UserRole != AppRole.Dealer && (loginState.CanAccess(PagePermission.SchemeApproval) || loginState.UserRole == AppRole.Director))
+        || loginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
+        || loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+        || loginState.CanAccess(PagePermission.FrontOffice)
+        || loginState.CanAccess(PagePermission.GenerateBill);
+
+    private bool AnySdwaItemMatches =>
+        SearchState.Matches("SDWA Dashboard")
+        || SearchState.Matches("Scheme Approval")
+        || SearchState.Matches("Sub Dealer & Employee")
+        || SearchState.Matches("Guest House")
+        || SearchState.Matches("Front Office")
+        || SearchState.Matches("Generate Bill")
+        || SearchState.Matches("SDWA");
+
+    private bool ShowSdwaExpanded => isSdwaOpen || AnySdwaItemMatches;
+
+    private void ToggleSdwaMenu() => isSdwaOpen = !isSdwaOpen;
+
+    private bool IsSdwaSectionActive()
+    {
+        var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
+        return uri == "sdwadashboard" || uri == "schemeapproval"
+            || uri == "subdealeremployeemaster" || uri == "guesthousemaster"
+            || uri == "frontoffice" || uri == "generatebill";
+    }
 }
+<script>
+    window.navSearch = {
+        scrollToMatch: function () {
+            var match = document.querySelector('.search-match');
+            if (match) match.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        },
+        clickMatch: function () {
+            var match = document.querySelector('.search-match');
+            if (match) match.click();
+        }
+    };
+</script>

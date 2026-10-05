@@ -1,14 +1,26 @@
 ﻿@page "/Companies"
 @using System.Net.Http.Json
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject LoginState LoginState
+
+<style>
+    .companies-view-only .logo-card,
+    .companies-view-only .selectable-card {
+        pointer-events: none;
+        cursor: default;
+    }
+</style>
 
 <div class="companies-operating-wrapper">
     <div class="container-fluid">
 
         <FormLoader />
+
+        
 
         @if (!string.IsNullOrEmpty(_message))
         {
@@ -22,7 +34,7 @@
             <h3 class="fw-bold m-0 company-title">Companies Operating In Your Place <span>(Please Mark)</span></h3>
         </div>
 
-        <div class="companies-operating-grid mb-5">
+        <div class="companies-operating-grid mb-5 @(IsViewOnly ? "companies-view-only" : "")">
 
             <div class="span-2-rows">
                 <div class="logo-card spic @(isSpic ? "active" : "")"
@@ -67,6 +79,16 @@
     [SupplyParameterFromQuery(Name = "dealerId")]
     public int? DealerId { get; set; }
 
+    [SupplyParameterFromQuery(Name = "mode")]
+    public string? Mode { get; set; }
+
+    [SupplyParameterFromQuery(Name = "flow")]
+    public string? Flow { get; set; }
+
+    private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+    private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+    private string FlowParam => IsNewDealerFlow ? "&flow=new" : "";
+
     private bool isSpic;
     private bool isGreenStar;
 
@@ -83,8 +105,9 @@
         Loading.Show();
         try
         {
-            await LoadCompetitors();
-            await LoadSavedSelections();
+            await Task.WhenAll(
+                LoadCompetitors(),
+                LoadSavedSelections());
         }
         finally
         {
@@ -109,8 +132,8 @@
         if (!DealerId.HasValue || DealerId.Value <= 0) return;
         try
         {
-            var all = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>("api/DealerCompaniesOperatingInArea/all") ?? new();
-            _savedEntries = all.Where(e => e.DealerId == DealerId.Value).ToList();
+            _savedEntries = await Http.GetFromJsonAsync<List<DealerCompaniesOperatingInArea>>(
+                $"api/DealerCompaniesOperatingInArea/byDealer/{DealerId.Value}") ?? new();
 
             var savedNames = _savedEntries
                 .Where(e => !string.IsNullOrEmpty(e.CompaniesOperating))
@@ -130,11 +153,21 @@
         }
     }
 
-    private void ToggleSpic() => isSpic = !isSpic;
-    private void ToggleGreenStar() => isGreenStar = !isGreenStar;
+    private void ToggleSpic()
+    {
+        if (IsViewOnly) return;
+        isSpic = !isSpic;
+    }
+
+    private void ToggleGreenStar()
+    {
+        if (IsViewOnly) return;
+        isGreenStar = !isGreenStar;
+    }
 
     private void ToggleCompany(string name)
     {
+        if (IsViewOnly) return;
         if (!_selectedNames.Remove(name))
             _selectedNames.Add(name);
     }
@@ -144,6 +177,13 @@
         if (!DealerId.HasValue || DealerId.Value <= 0)
         {
             ShowMessage("Dealer ID is required.", true);
+            return;
+        }
+
+        if (IsViewOnly)
+        {
+            Loading.Show();
+            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}&mode=view{FlowParam}");
             return;
         }
 
@@ -179,8 +219,11 @@
                 }
             }
 
+            var hasError = _selectedNames.Count == 0;
+            FormStepData.MarkStepError(6, hasError);
+
             Loading.Show();
-            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}");
+            Nav.NavigateTo($"/Proprietor?dealerId={DealerId}{FlowParam}");
         }
         catch (Exception ex)
         {
@@ -198,4 +241,8 @@
         _message = message;
         _isError = isError;
     }
+
+    private bool CanAdd => LoginState.Can("Companies", "Entry");
+    private bool CanEdit => LoginState.Can("Companies", "Update");
+    private bool CanDelete => LoginState.Can("Companies", "Delete");
 }

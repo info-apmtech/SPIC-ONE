@@ -4,20 +4,143 @@
 @using RelationshipEntity = SPIC.Core.Entities.Relationship
 @using DealerReg = SPIC.Core.Entities.DealerRegistration
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject LoadingService Loading
+@inject LoginState LoginState
+<style>
+	fieldset:disabled .icon-delete {
+		display: none !important;
+	}
 
+	fieldset:disabled .icon-edit {
+		display: none !important;
+	}
+	.input-with-loader {
+		position: relative;
+		flex: 1;
+	}
+	.input-with-loader .custom-input {
+		padding-right: 2.5rem;
+	}
+	.input-with-loader .field-loader-icon {
+		position: absolute;
+		right: 0.75rem;
+		top: 50%;
+		transform: translateY(calc(-50% - 2px));
+		font-size: 1rem;
+		color: #6c757d;
+		z-index: 4;
+		pointer-events: none;
+	}
+	.ocr-warning {
+		font-size: 0.75rem;
+		color: #856404;
+		background-color: #fff3cd;
+		border: 1px solid #ffc107;
+		border-radius: 4px;
+		padding: 4px 8px;
+		margin-top: 4px;
+	}
+	.welfare-note-card {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		padding: 20px 24px;
+		margin-bottom: 1.5rem;
+		background: linear-gradient(90deg, #eef9e9 0%, #f8fdf5 100%);
+		border: 2px solid #3caf4b;
+		border-radius: 18px;
+		box-shadow: 0 5px 16px rgba(44, 153, 61, 0.08);
+	}
+	.welfare-note-icon {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;
+		height: 48px;
+		flex: 0 0 48px;
+		border-radius: 13px;
+		background: #46b653;
+		color: #ffffff;
+		font-size: 1.35rem;
+	}
+	.welfare-note-title {
+		margin-bottom: 3px;
+		color: #13762c;
+		font-size: 1.05rem;
+		font-weight: 700;
+	}
+	.welfare-note-text {
+		color: #374151;
+		font-size: 0.95rem;
+		line-height: 1.5;
+	}
+	@@media (max-width: 576px) {
+		.welfare-note-card {
+			align-items: flex-start;
+			padding: 16px;
+			border-radius: 14px;
+		}
+	}
+	/* Searchable Dropdown Styles */
+	.searchable-select-input {
+		cursor: pointer;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 12px center;
+		padding-right: 32px;
+	}
+	.searchable-dropdown-container {
+		position: absolute;
+		width: 100%;
+		background: #ffffff;
+		border: 1px solid #059669;
+		border-radius: 6px;
+		max-height: 220px;
+		overflow-y: auto;
+		z-index: 1050;
+		box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+		margin-top: 4px;
+	}
+	.searchable-dropdown-item {
+		padding: 10px 14px;
+		font-size: 0.85rem;
+		color: #374151;
+		cursor: pointer;
+		border-bottom: 1px solid #F3F4F6;
+		transition: background-color 0.1s ease;
+	}
+	.searchable-dropdown-item:last-child {
+		border-bottom: none;
+	}
+	.searchable-dropdown-item:hover {
+		background-color: #DCFCE7;
+		color: #059669;
+	}
+</style>
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
+	            	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+
 	<div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
 		<h3 class="fw-bold m-0 company-title">Proprietor Details</h3>
+	</div>
+	<div class="welfare-note-card" role="note" aria-label="SDWA welfare scheme note">
+		<div class="welfare-note-icon" aria-hidden="true">
+			<i class="bi bi-info-circle-fill"></i>
+		</div>
+		<div>
+			<div class="welfare-note-title">Note</div>
+			<div class="welfare-note-text">The details will be considered for SDWA welfare scheme.</div>
+		</div>
 	</div>
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
 		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
-			@_message
+			@((MarkupString)_message)
 			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
 		</div>
 	}
@@ -61,6 +184,8 @@
 		</div>
 	</div>
 
+	
+
 	@if (_selectedEntityType != EntityType.soleProprietor || _savedPartners.Count < 1 || _isEditingPartner)
 	{
 	<div class="main-section">
@@ -84,27 +209,37 @@
                         <input type="text" class="custom-input" placeholder="Enter Father Name" @bind="_partnerForm.FatherName" />
                     </div>
                 </div>
-                <div class="row g-3 mb-3">
-                    <div class="col-md-3">
-                        <label class="custom-label">Gender</label>
-                        <select class="form-select-custom w-100" @bind="_partnerForm.Gender">
-                            @foreach (var g in Enum.GetValues<Gender>())
-                            {
-                                <option value="@g">@g</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="custom-label">Marital Status</label>
-                        <select class="form-select-custom w-100" @bind="_partnerForm.MaritalStatus">
-                            @foreach (var ms in Enum.GetValues<MaritalStatus>())
-                            {
-                                <option value="@ms">@ms</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label class="custom-label">Phone Number</label>
+				<div class="row g-3 mb-3">
+					<div class="col-md-3">
+						<label class="custom-label">Gender</label>
+						<select class="form-select-custom w-100" @bind="_partnerForm.Gender">
+							@foreach (var g in Enum.GetValues<Gender>())
+							{
+								<option value="@g">@g</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-3">
+						<label class="custom-label">Marital Status</label>
+						<select class="form-select-custom w-100" @bind="_partnerForm.MaritalStatus">
+							@foreach (var ms in Enum.GetValues<MaritalStatus>())
+							{
+								<option value="@ms">@ms</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-3">
+						<label class="custom-label">Date Of Birth</label>
+								<input type="date" class="custom-input"
+									   value="@_dobText"
+									   @onchange="OnDOBChanged" />
+							</div>
+					<div class="col-md-2">
+						<label class="custom-label">Age</label>
+						<input type="number" class="custom-input" value="@_partnerAge" readonly />
+					</div>
+					<div class="col-md-4">
+						<label class="custom-label">Phone Number</label>
                         <input type="tel"
                                inputmode="numeric"
                                pattern="[0-9]*"
@@ -115,10 +250,14 @@
                                maxlength="10"
                                oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label class="custom-label">Email</label>
                         <input type="email" class="custom-input" placeholder="email@example.com" @bind="_partnerForm.Email" />
                     </div>
+					<div class="col-md-4">
+						<label class="custom-label">Educational Qualification</label>
+						<input type="text" class="custom-input" placeholder="Enter Educational Qualification" @bind="_partnerForm.EducationalQualification" />
+					</div>
                 </div>
                 <div class="row g-3">
                     @* <div class="col-md-6">
@@ -136,40 +275,82 @@
 						<div class="col-md-6">
 							<label class="custom-label">Aadhaar Card Number</label>
 							<div class="upload-input-group">
-								<input type="text"
-									   class="custom-input"
-									   placeholder="XXXX XXXX XXXX"
-									   @bind="_partnerForm.AadhaarNumber"
-									   maxlength="12"
-									   oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+								<div class="input-with-loader">
+									<input type="text"
+										   class="custom-input"
+										   placeholder="XXXX XXXX XXXX"
+										   @bind="_partnerForm.AadhaarNumber"
+										   @bind:after="OnAadhaarNumberChanged"
+										   maxlength="12"
+										   oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
+									@if (_isExtractingAadhaar)
+									{
+										<i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+									}
+								</div>
 								<label class="btn-upload-attach mb-0">
 									<i class="bi bi-upload"></i> @(_aadhaarFile != null ? _aadhaarFile.Name : "Upload Aadhaar")
+									@if (_aadhaarFile != null)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAadhaarFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
 									<InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf" />
 								</label>
 							</div>
+							@if (!string.IsNullOrEmpty(_ocrWarningAadhaar))
+							{
+								<div class="ocr-warning">@_ocrWarningAadhaar</div>
+							}
 						</div>
 						<div class="col-md-6">
 							<label class="custom-label">PAN number</label>
 							<div class="upload-input-group">
-								<input type="text" class="custom-input" placeholder="ABCDE1234F" @bind="_partnerForm.PANNumber" />
+								<div class="input-with-loader">
+									<input type="text" class="custom-input" placeholder="ABCDE1234F" @bind="_partnerForm.PANNumber" @bind:after="OnPANNumberChanged" />
+									@if (_isExtractingPan)
+									{
+										<i class="bi bi-arrow-repeat spin field-loader-icon"></i>
+									}
+								</div>
 								<label class="btn-upload-attach mb-0">
 									<i class="bi bi-upload"></i> @(_panFile != null ? _panFile.Name : "Upload Pan PDF")
+									@if (_panFile != null)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemovePanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
 									<InputFile hidden OnChange="OnPanSelected" accept=".pdf" />
 								</label>
 							</div>
+							@if (!string.IsNullOrEmpty(_ocrWarningPan))
+							{
+								<div class="ocr-warning">@_ocrWarningPan</div>
+							}
 						</div>
 					}
                 </div>
             </div>
-            <div class="col-md-3">
-                <label class="image-upload-box mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
-                    <i class="bi bi-image"></i>
-                    <span class="btn-upload-attach">
-                        @(_imageFile != null ? _imageFile.Name : "Upload Proprietor / Managing Partner Image")
-                    </span>
-                    <InputFile hidden OnChange="OnImageSelected" accept=".jpg,.jpeg,.png,.webp" />
-                </label>
-            </div>
+					<div class="col-md-3">
+						<label class="image-upload-box mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
+							@if (!string.IsNullOrEmpty(_imagePreviewUrl))
+							{
+								<img src="@_imagePreviewUrl" alt="Proprietor preview"
+									 style="width:100%; max-height:160px; object-fit:contain; border-radius:8px;" />
+								<span class="btn-upload-attach mt-2">@(_imageFile?.Name ?? "Change Image")</span>
+							}
+							else if (!string.IsNullOrEmpty(_partnerForm.ProprietorImagePath))
+							{
+								<img src="@GetFileUrl(_partnerForm.ProprietorImagePath)" alt="Proprietor image"
+									 style="width:100%; max-height:160px; object-fit:contain; border-radius:8px;" />
+								<span class="btn-upload-attach mt-2">Change Image</span>
+							}
+							else
+							{
+								<i class="bi bi-image"></i>
+								<span class="btn-upload-attach">Upload Proprietor / Managing Partner Image</span>
+							}
+							<InputFile hidden OnChange="OnImageSelected" accept=".jpg,.jpeg,.png,.webp" />
+						</label>
+					</div>
         </div>
     </div>
 
@@ -196,22 +377,29 @@
             </div>
         </div>
         <div class="row g-3 mb-3">
-            <div class="col-md-4">
-                <label class="custom-label">Village</label>
-                <input type="text" class="custom-input" placeholder="Enter Village" @bind="_partnerForm.Village" />
-            </div>
-            <div class="col-md-4">
-                <label class="custom-label">Pin Code</label>
-                <input type="text" class="custom-input" placeholder="Enter Pin Code" @bind="_partnerForm.PinCode" @bind:after="OnPincodeChanged" maxlength="6" oninput="this.value = this.value.replace(/[^0-9]/g, '')" />
-                @if (_isPincodeLookup)
-                {
-                    <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
-                }
-                @if (!string.IsNullOrEmpty(_pincodeMessage))
-                {
-                    <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
-                }
-            </div>
+           
+           <div class="col-md-4">
+    <label class="custom-label">Pin Code</label>
+    <input type="text" class="custom-input"
+           placeholder="Enter Pin Code"
+           @bind="_partnerForm.PinCode"
+           @bind:event="oninput"
+           @bind:after="OnPincodeChanged"
+           maxlength="6"
+           inputmode="numeric" />
+    @if (_isPincodeLookup)
+    {
+        <div class="small text-muted mt-1"><i class="bi bi-arrow-repeat spin"></i> Looking up pincode...</div>
+    }
+    @if (!string.IsNullOrEmpty(_pincodeMessage))
+    {
+        <div class="small @(_pincodeSuccess ? "text-success" : "text-warning") mt-1">@_pincodeMessage</div>
+    }
+</div>
+				<div class="col-md-4">
+					<label class="custom-label">Village</label>
+					<input type="text" class="custom-input" placeholder="Enter Village" @bind="_partnerForm.Village" />
+				</div>
             <div class="col-md-4">
                 <label class="custom-label">Block</label>
                 <input type="text" class="custom-input" placeholder="Enter Block" @bind="_partnerForm.Block" />
@@ -224,23 +412,56 @@
             </div>
             <div class="col-md-4">
                 <label class="custom-label">District</label>
-                <select class="form-select-custom w-100" @bind="_partnerForm.DistrictId">
-                    <option value="0">Select District</option>
-                    @foreach (var d in _districtsAll.Where(d => d.StateId == _partnerForm.StateId))
+                <div class="position-relative">
+                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                           placeholder="-- Select District --"
+                           @bind="_districtSearchText"
+                           @bind:event="oninput"
+                           @onfocus="() => _showDistrictDropdown = true"
+                           @onblur="HideDistrictDropdown" />
+                    @if (_showDistrictDropdown)
                     {
-                        <option value="@d.Id">@d.DistrictName</option>
+                        <div class="searchable-dropdown-container">
+                            <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(0, "")'>
+                                -- Select District --
+                            </div>
+                            @foreach (var d in _districtsAll.Where(d => d.StateId == _partnerForm.StateId)
+                                .Where(d => string.IsNullOrWhiteSpace(_districtSearchText) ||
+                                    d.DistrictName.Contains(_districtSearchText, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div class="searchable-dropdown-item" @onmousedown='() => SelectDistrict(d.Id, d.DistrictName)'>
+                                    @d.DistrictName
+                                </div>
+                            }
+                        </div>
                     }
-                </select>
+                </div>
             </div>
             <div class="col-md-4">
                 <label class="custom-label">State</label>
-                <select class="form-select-custom w-100" @bind="_partnerForm.StateId">
-                    <option value="0">Select State</option>
-                    @foreach (var s in _statesAll)
+                <div class="position-relative">
+                    <input type="text" class="form-select-custom searchable-select-input w-100"
+                           placeholder="-- Select State --"
+                           @bind="_stateSearchText"
+                           @bind:event="oninput"
+                           @onfocus="() => _showStateDropdown = true"
+                           @onblur="HideStateDropdown" />
+                    @if (_showStateDropdown)
                     {
-                        <option value="@s.Id">@s.StateName</option>
+                        <div class="searchable-dropdown-container">
+                            <div class="searchable-dropdown-item" @onmousedown='() => SelectState(0, "")'>
+                                -- Select State --
+                            </div>
+                            @foreach (var state in _statesAll.Where(s => string.IsNullOrWhiteSpace(_stateSearchText) ||
+                                s.StateName.Contains(_stateSearchText, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                <div class="searchable-dropdown-item" @onmousedown='() => SelectState(state.Id, state.StateName)'>
+                                    @state.StateName
+                                </div>
+                            }
+                        </div>
                     }
-                </select>
+                </div>
             </div>
 
 		</div>
@@ -259,15 +480,17 @@
 			</div>
 			<div class="col-md-4">
 				<label class="custom-label">D.O.B</label>
-				<input type="date" class="custom-input" @bind="_familyForm.DateOfBirth" @bind:after="CalculateFamilyAge" />
-			</div>
+						<input type="date" class="custom-input"
+							   value="@_familyDobText"
+							   @onchange="OnFamilyDateOfBirthChanged" />
+					</div>
 			<div class="col-md-4">
 				<label class="custom-label">Age</label>
 				<input type="number" class="custom-input" placeholder="Age" value="@_familyForm.Age" readonly />
 			</div>
 		</div>
 		<div class="row g-3 mb-3">
-			<div class="col-md-6">
+			<div class="col-md-3">
 				<label class="custom-label">Relationship</label>
 				<select class="form-select-custom w-100" @bind="_familyForm.RelationshipId">
 					<option value="0">Select Relationship</option>
@@ -277,15 +500,32 @@
 					}
 				</select>
 			</div>
-			<div class="col-md-6">
+			<div class="col-md-3">
+				<label class="custom-label">Marital Status</label>
+				<select class="form-select-custom w-100" @bind="_familyForm.MaritalStatus">
+					<option value="">Select Marital Status</option>
+					@foreach (var ms in Enum.GetValues<MaritalStatus>())
+					{
+						<option value="@ms">@ms</option>
+					}
+				</select>
+			</div>
+			<div class="col-md-3">
 				<label class="custom-label">Occupation</label>
 				<input type="text" class="custom-input" placeholder="Enter Occupation" @bind="_familyForm.Occupation" />
 			</div>
+			<div class="col-md-3">
+				<label class="custom-label">Educational Qualification</label>
+				<input type="text" class="custom-input" placeholder="Enter Qualification" @bind="_familyForm.EducationalQualification" />
+			</div>
 		</div>
 		<div class="d-flex justify-content-end mt-2">
+			@if (CanAdd)
+			{
 			<button class="btn-blue-action-Proprietor" type="button" @onclick="AddOrUpdateFamily">
 				@(_editingFamilyIndex >= 0 ? "Update Family" : "Add Details")
 			</button>
+			}
 			@if (_editingFamilyIndex >= 0)
 			{
 				<button class="btn btn-outline-secondary ms-2 rounded-pill px-4" type="button" @onclick="CancelFamilyEdit">Cancel</button>
@@ -322,8 +562,14 @@
 									</div>
 								</div>
 								<div class="card-actions">
+									@if (CanEdit)
+									{
 									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditFamily(idx)"></i>
+									}
+									@if (CanDelete)
+									{
 									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => RemoveFamily(idx)"></i>
+									}
 								</div>
 							</div>
 							<div class="detail-grid">
@@ -342,6 +588,14 @@
 								<div class="detail-item">
 									<span class="lbl">Occupation</span>
 									<span class="val">@fm.Occupation</span>
+								</div>
+								<div class="detail-item">
+									<span class="lbl">Marital Status</span>
+									<span class="val">@(fm.MaritalStatus?.ToString() ?? "—")</span>
+								</div>
+								<div class="detail-item">
+									<span class="lbl">Educational Qualification</span>
+									<span class="val">@(string.IsNullOrWhiteSpace(fm.EducationalQualification) ? "—" : fm.EducationalQualification)</span>
 								</div>
 							</div>
 						</div>
@@ -382,7 +636,7 @@
 					</select>
 				</div>
 				<div class="col-md-3">
-					<label class="custom-label">Annual Turnover (₹)</label>
+					<label class="custom-label">Amount(₹) Lakhs</label>
 					<input type="number" class="custom-input" placeholder="Amount ₹" @bind="_occupationForm.AnnualTurnover" />
 				</div>
 			}
@@ -390,9 +644,12 @@
 		@if (_hasOtherOccupation)
 		{
 			<div class="d-flex justify-content-end mt-2">
+				@if (CanAdd)
+				{
 				<button class="btn-blue-action-Proprietor" type="button" @onclick="AddOrUpdateOccupation">
 					@(_editingOccupationIndex >= 0 ? "Update Occupation" : "Add Details")
 				</button>
+				}
 				@if (_editingOccupationIndex >= 0)
 				{
 					<button class="btn btn-outline-secondary ms-2 rounded-pill px-4" type="button" @onclick="CancelOccupationEdit">Cancel</button>
@@ -430,8 +687,14 @@
 									</div>
 								</div>
 								<div class="card-actions">
+									@if (CanEdit)
+									{
 									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditOccupation(idx)"></i>
+									}
+									@if (CanDelete)
+									{
 									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => RemoveOccupation(idx)"></i>
+									}
 								</div>
 							</div>
 							<div class="detail-grid">
@@ -453,6 +716,8 @@
 
 	<div class="main-section">
 		<div class="d-flex justify-content-end pt-2">
+			@if (CanAdd)
+			{
 			<button class="btn-blue-action-Proprietor" type="button" @onclick="SavePartnerDetails" disabled="@_isSavingPartner">
 				@if (_isSavingPartner)
 				{
@@ -464,13 +729,21 @@
 			{
 				<button class="btn btn-outline-secondary ms-2 rounded-pill px-4" type="button" @onclick="CancelPartnerEdit">Cancel</button>
 			}
+			}
 		</div>
 	</div>
 	}
 	else
 	{
 		<div class="alert alert-info" role="alert">
-			<i class="bi bi-info-circle me-2"></i>Sole Proprietor allows only 1 proprietor. You can edit or delete the existing one from the saved details below.
+			@if (_selectedEntityType == EntityType.Society)
+			{
+				<span><i class="bi bi-info-circle me-2"></i>Society requires at least 1 authorized person. You can add more, and edit or delete them from the saved details below.</span>
+			}
+			else
+			{
+				<span><i class="bi bi-info-circle me-2"></i>Sole Proprietor allows only 1 proprietor. You can edit or delete the existing one from the saved details below.</span>
+			}
 		</div>
 	}
 
@@ -505,8 +778,14 @@
 									<a href="javascript:void(0);" title="View Details" @onclick="() => OpenPopup(p.Id)">
 										<i class="bi bi-eye icon-view"></i>
 									</a>
+									@if (CanEdit)
+									{
 									<i class="bi bi-pencil-square icon-edit" style="cursor:pointer" @onclick="() => EditPartner(p)"></i>
+									}
+									@if (CanDelete)
+									{
 									<i class="bi bi-trash icon-delete" style="cursor:pointer" @onclick="() => ConfirmDeletePartner(p)"></i>
+									}
 								</div>
 							</div>
 							<div class="saved-stats">
@@ -520,6 +799,7 @@
 		</div>
 	}
 
+	</fieldset>
 	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
 
@@ -539,6 +819,8 @@
 					</p>
 					<div class="d-flex justify-content-center gap-3">
 						<button class="btn btn-outline-secondary rounded-pill px-4" @onclick="CancelDeletePartner" disabled="@_isDeleting">Cancel</button>
+						@if (CanDelete)
+						{
 						<button class="btn btn-danger rounded-pill px-4" @onclick="ExecuteDeletePartner" disabled="@_isDeleting">
 							@if (_isDeleting)
 							{
@@ -546,6 +828,7 @@
 							}
 							Delete
 						</button>
+						}
 					</div>
 				</div>
 			</div>
@@ -616,6 +899,12 @@
 								<div class="info-box">
 									<div class="info-label">Marital Status</div>
 									<div class="info-value">@_viewPartner.MaritalStatus</div>
+								</div>
+							</div>
+							<div class="col">
+								<div class="info-box">
+									<div class="info-label">Educational Qualification</div>
+									<div class="info-value">@(string.IsNullOrWhiteSpace(_viewPartner.EducationalQualification) ? "—" : _viewPartner.EducationalQualification)</div>
 								</div>
 							</div>
 						</div>
@@ -692,6 +981,8 @@
 											<div class="detail-item"><span class="lbl">Age</span><span class="val">@fm.Age</span></div>
 											<div class="detail-item"><span class="lbl">Relationship</span><span class="val">@GetRelationshipName(fm.RelationshipId)</span></div>
 											<div class="detail-item"><span class="lbl">Occupation</span><span class="val">@fm.Occupation</span></div>
+											<div class="detail-item"><span class="lbl">Marital Status</span><span class="val">@(fm.MaritalStatus?.ToString() ?? "—")</span></div>
+											<div class="detail-item"><span class="lbl">Educational Qualification</span><span class="val">@(string.IsNullOrWhiteSpace(fm.EducationalQualification) ? "—" : fm.EducationalQualification)</span></div>
 										</div>
 									</div>
 								</div>
@@ -735,11 +1026,17 @@
 		</div>
 	</div>
 }
-
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
+	private bool IsNewDealerFlow => string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase);
+
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
 	// Entity type selection
 	private EntityType? _selectedEntityType;
 	private readonly List<(EntityType Value, string Label)> _entityTypes =
@@ -757,9 +1054,13 @@
 	private List<RelationshipEntity> _relationships = new();
 	private List<State> _statesAll = new();
 	private List<District> _districtsAll = new();
+	private string _stateSearchText = "";
+	private bool _showStateDropdown;
+	private string _districtSearchText = "";
+	private bool _showDistrictDropdown;
 
 	// Partner form
-	private DealerOwnershipInfo _partnerForm = new();
+	private DealerOwnershipInfo _partnerForm = new() { DOB = DateTime.Today }; // Set DOB default to current date;
 	private bool _isEditingPartner;
 	private int _editingPartnerId;
 
@@ -767,6 +1068,14 @@
 	private IBrowserFile? _aadhaarFile;
 	private IBrowserFile? _panFile;
 	private IBrowserFile? _imageFile;
+	private string? _imagePreviewUrl;
+
+	private bool _isExtractingAadhaar;
+	private bool _isExtractingPan;
+	private string? _ocrWarningAadhaar;
+	private string? _ocrWarningPan;
+	private bool _ocrPopulatedAadhaar;
+	private bool _ocrPopulatedPan;
 
 	// Family form (in-memory per current partner)
 	private PartnerFamilyDetails _familyForm = NewFamilyForm();
@@ -801,6 +1110,9 @@
 	private bool _isPincodeLookup;
 	private string? _pincodeMessage;
 	private bool _pincodeSuccess;
+	private string _dobText = "";
+	private string _familyDobText = "";
+	private int _partnerAge;
 
 	protected override async Task OnInitializedAsync()
 	{
@@ -808,13 +1120,62 @@
 		try
 		{
 			await Task.WhenAll(LoadSectors(), LoadRelationships(), LoadDealerEntityType(), LoadSavedPartners(), LoadStates(), LoadDistricts());
+			SyncDateBuffers();
+			CalculatePartnerAge();
 		}
 		finally
 		{
 			Loading.Hide();
 		}
 	}
+	private void SyncDateBuffers()
+	{
+		string Fmt(DateTime d) => d != DateTime.MinValue ? d.ToString("yyyy-MM-dd") : "";
 
+		_dobText = Fmt(_partnerForm.DOB);
+		_familyDobText = Fmt(_familyForm.DateOfBirth);
+	}
+	private void OnDOBChanged(ChangeEventArgs e)
+	{
+		var newVal = e.Value?.ToString();
+		if (string.IsNullOrEmpty(newVal)) return; // ignore mid-typing/invalid
+
+		_dobText = newVal;
+		if (DateTime.TryParse(newVal, out var dt))
+		{
+			_partnerForm.DOB = dt;
+			CalculatePartnerAge();
+		}
+	}
+
+	private void CalculatePartnerAge()
+	{
+		var dob = _partnerForm.DOB;
+		if (dob < DateTime.Today)
+		{
+			var today = DateTime.Today;
+			int age = today.Year - dob.Year;
+			if (dob.Date > today.AddYears(-age)) age--;
+			_partnerAge = age;
+		}
+		else
+		{
+			_partnerAge = 0;
+		}
+	}
+
+	private void OnFamilyDateOfBirthChanged(ChangeEventArgs e)
+	{
+		var newVal = e.Value?.ToString();
+		if (string.IsNullOrEmpty(newVal)) return;
+
+		_familyDobText = newVal;
+		if (DateTime.TryParse(newVal, out var dt))
+		{
+			_familyForm.DateOfBirth = dt;
+			CalculateFamilyAge();
+		}
+	}
 	private async Task LoadSectors()
 	{
 		try { _sectors = await Http.GetFromJsonAsync<List<Sector>>("api/Sector/all") ?? new(); } catch { }
@@ -850,18 +1211,22 @@
 	{
 		try
 		{
-			var all = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>("api/DealerOwnershipInfo/all") ?? new();
-			_savedPartners = all.Where(p => p.DealerId == DealerId).ToList();
+			var partnersTask = Http.GetFromJsonAsync<List<DealerOwnershipInfo>>($"api/DealerOwnershipInfo/byDealer/{DealerId}");
+			var familyTask = Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails/all");
+			var occTask = Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation/all");
 
-			var allFamily = await Http.GetFromJsonAsync<List<PartnerFamilyDetails>>("api/PartnerFamilyDetails/all") ?? new();
-			var allOcc = await Http.GetFromJsonAsync<List<PartnerOccupation>>("api/PartnerOccupation/all") ?? new();
+			await Task.WhenAll(partnersTask, familyTask, occTask);
+
+			_savedPartners = partnersTask.Result ?? new();
+			var allFamily = familyTask.Result   ?? new();
+			var allOcc = occTask.Result       ?? new();
 
 			_savedFamilyMap.Clear();
 			_savedOccupationMap.Clear();
 
 			foreach (var p in _savedPartners)
 			{
-				_savedFamilyMap[p.Id] = allFamily.Where(f => f.OwnershipPartnerId == p.Id).ToList();
+				_savedFamilyMap[p.Id]     = allFamily.Where(f => f.OwnershipPartnerId == p.Id).ToList();
 				_savedOccupationMap[p.Id] = allOcc.Where(o => o.OwnershipPartnerId == p.Id).ToList();
 			}
 		}
@@ -874,13 +1239,25 @@
 	private async Task SelectEntityType(EntityType et)
 	{
 		_selectedEntityType = et;
+		if (DealerId <= 0)
+		{
+			ShowMessage("Dealer ID is missing. Please complete Step 1 first.", true);
+			return;
+		}
 		try
 		{
-			var dealer = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
-			if (dealer != null)
+			var resp = await Http.PutAsync($"api/DealerRegistration/{DealerId}/entity-type/{(int)et}", null);
+			if (!resp.IsSuccessStatusCode)
 			{
-				dealer.EntityType = et;
-				await Http.PutAsJsonAsync($"api/DealerRegistration/{DealerId}", dealer);
+				if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+				{
+					ShowMessage("Dealer registration not found. Please complete Step 1 first.", true);
+				}
+				else
+				{
+					var err = await resp.Content.ReadAsStringAsync();
+					ShowMessage($"Failed to save entity type: {err}", true);
+				}
 			}
 		}
 		catch (Exception ex)
@@ -890,26 +1267,159 @@
 	}
 
 	// File selection handlers
-	private void OnAadhaarSelected(InputFileChangeEventArgs e) => _aadhaarFile = e.File;
-	private void OnPanSelected(InputFileChangeEventArgs e) => _panFile = e.File;
-	private void OnImageSelected(InputFileChangeEventArgs e) => _imageFile = e.File;
+	private async Task OnAadhaarSelected(InputFileChangeEventArgs e)
+	{
+		var file = e.File;
+		_aadhaarFile = file;
 
+		// Clear any previously OCR-populated values before re-processing
+		if (_ocrPopulatedAadhaar)
+		{
+			_partnerForm.AadhaarNumber = null;
+			_ocrPopulatedAadhaar = false;
+		}
+		_ocrWarningAadhaar = null;
+
+		_isExtractingAadhaar = true;
+		try
+		{
+			using var content = new MultipartFormDataContent();
+			var stream = file.OpenReadStream(5 * 1024 * 1024);
+			content.Add(new StreamContent(stream), "file", file.Name);
+			var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+			if (response.IsSuccessStatusCode)
+			{
+				var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+				if (!string.IsNullOrEmpty(result?.Aadhaar))
+				{
+					_partnerForm.AadhaarNumber = result.Aadhaar;
+					_ocrPopulatedAadhaar = true;
+					_ocrWarningAadhaar = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+					OnAadhaarNumberChanged();
+				}
+				else
+				{
+					_ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+				}
+			}
+			else
+			{
+				_ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+			}
+		}
+		catch
+		{
+			_ocrWarningAadhaar = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+		}
+		finally
+		{
+			_isExtractingAadhaar = false;
+		}
+	}
+
+	private async Task OnPanSelected(InputFileChangeEventArgs e)
+	{
+		var file = e.File;
+		_panFile = file;
+
+		// Clear any previously OCR-populated values before re-processing
+		if (_ocrPopulatedPan)
+		{
+			_partnerForm.PANNumber = null;
+			_ocrPopulatedPan = false;
+		}
+		_ocrWarningPan = null;
+
+		_isExtractingPan = true;
+		try
+		{
+			using var content = new MultipartFormDataContent();
+			var stream = file.OpenReadStream(5 * 1024 * 1024);
+			content.Add(new StreamContent(stream), "file", file.Name);
+			var response = await Http.PostAsync("api/DealerFile/ocr-extract", content);
+			if (response.IsSuccessStatusCode)
+			{
+				var result = await response.Content.ReadFromJsonAsync<OcrExtractResult>();
+				if (!string.IsNullOrEmpty(result?.PAN))
+				{
+					_partnerForm.PANNumber = result.PAN;
+					_ocrPopulatedPan = true;
+					_ocrWarningPan = "\u26A0\uFE0F This value was auto-generated using OCR. Please verify and correct it manually if necessary before submitting.";
+					OnPANNumberChanged();
+				}
+				else
+				{
+					_ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+				}
+			}
+			else
+			{
+				_ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+			}
+		}
+		catch
+		{
+			_ocrWarningPan = "\u26A0\uFE0F OCR could not extract the required information from this document. Please upload a higher-quality file or verify and enter the details manually.";
+		}
+		finally
+		{
+			_isExtractingPan = false;
+		}
+	}
+
+	private async Task OnImageSelected(InputFileChangeEventArgs e)
+	{
+		_imageFile = e.File;
+
+		if (_imageFile == null)
+		{
+			_imagePreviewUrl = null;
+			return;
+		}
+
+		try
+		{
+			// Downscale for a lightweight preview; original file is still used for upload
+			var resized = await _imageFile.RequestImageFileAsync("image/png", 400, 400);
+			using var stream = resized.OpenReadStream(5 * 1024 * 1024);
+			using var ms = new MemoryStream();
+			await stream.CopyToAsync(ms);
+			_imagePreviewUrl = $"data:image/png;base64,{Convert.ToBase64String(ms.ToArray())}";
+		}
+		catch
+		{
+			_imagePreviewUrl = null;
+		}
+	}
 	// File Removal Handlers
 	private void RemoveAadhaarFile()
 	{
 		_aadhaarFile = null;
 		_partnerForm.AadhaarFilePath = null;
+		_ocrWarningAadhaar = null;
+		if (_ocrPopulatedAadhaar)
+		{
+			_partnerForm.AadhaarNumber = null;
+			_ocrPopulatedAadhaar = false;
+		}
 	}
 
 	private void RemovePanFile()
 	{
 		_panFile = null;
 		_partnerForm.PANFilePath = null;
+		_ocrWarningPan = null;
+		if (_ocrPopulatedPan)
+		{
+			_partnerForm.PANNumber = null;
+			_ocrPopulatedPan = false;
+		}
 	}
 
 	private void RemoveImageFile()
 	{
 		_imageFile = null;
+		_imagePreviewUrl = null;
 		_partnerForm.ProprietorImagePath = null;
 	}
 
@@ -948,6 +1458,7 @@
 			_currentFamilyList.Add(CloneFamily(_familyForm));
 		}
 		_familyForm = NewFamilyForm();
+		_familyDobText = _familyForm.DateOfBirth.ToString("yyyy-MM-dd");  
 		_message = null;
 	}
 
@@ -956,18 +1467,25 @@
 		_editingFamilyIndex = index;
 		var src = _currentFamilyList[index];
 		_familyForm = CloneFamily(src);
+	    _familyDobText = _familyForm.DateOfBirth.ToString("yyyy-MM-dd"); 
 	}
 
 	private void RemoveFamily(int index)
 	{
 		_currentFamilyList.RemoveAt(index);
-		if (_editingFamilyIndex == index) { _editingFamilyIndex = -1; _familyForm = NewFamilyForm(); }
+		if (_editingFamilyIndex == index)
+		{
+			_editingFamilyIndex = -1;
+			_familyForm = NewFamilyForm();
+			_familyDobText = _familyForm.DateOfBirth.ToString("yyyy-MM-dd"); 
+		}
 	}
 
 	private void CancelFamilyEdit()
 	{
 		_editingFamilyIndex = -1;
 		_familyForm = NewFamilyForm();
+		_familyDobText = _familyForm.DateOfBirth.ToString("yyyy-MM-dd");  
 	}
 
 	// --- Occupation CRUD (in-memory) ---
@@ -1014,21 +1532,45 @@
 	// --- Save Partner (with family + occupations) ---
 	private async Task SavePartnerDetails()
 	{
+		var validationErrors = new List<string>();
+
+		if (DealerId <= 0)
+			validationErrors.Add("• <b>Dealer ID</b> is missing. Please complete Step 1 first.");
+
 		if (string.IsNullOrWhiteSpace(_partnerForm.Name))
-		{
-			ShowMessage("Please enter proprietor name.", true);
-			return;
-		}
+			validationErrors.Add("• <b>Authorized Name</b> is required.");
+
 		if (string.IsNullOrWhiteSpace(_partnerForm.PhoneNumber))
+			validationErrors.Add("• <b>Phone Number</b> is required.");
+		else if (_partnerForm.PhoneNumber.Length != 10)
+			validationErrors.Add("• <b>Phone Number</b> must be exactly 10 digits.");
+
+		if (!string.IsNullOrWhiteSpace(_partnerForm.Email) &&
+			!System.Text.RegularExpressions.Regex.IsMatch(_partnerForm.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+			validationErrors.Add("• <b>Email</b> is not a valid email address.");
+
+		if (_selectedEntityType != EntityType.soleProprietor)
 		{
-			ShowMessage("Please enter phone number.", true);
-			return;
+			if (string.IsNullOrWhiteSpace(_partnerForm.AadhaarNumber))
+				validationErrors.Add("• <b>Aadhaar Number</b> is required.");
+			else if (_partnerForm.AadhaarNumber.Length != 12)
+				validationErrors.Add("• <b>Aadhaar Number</b> must be exactly 12 digits.");
+
+			if (string.IsNullOrWhiteSpace(_partnerForm.PANNumber))
+				validationErrors.Add("• <b>PAN Number</b> is required.");
+			else if (!System.Text.RegularExpressions.Regex.IsMatch(_partnerForm.PANNumber, @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
+				validationErrors.Add("• <b>PAN Number</b> must be in format ABCDE1234F (e.g. ABCDE1234F).");
 		}
 
-		// Enforce max partners for sole proprietor
+		// Enforce max partners for sole proprietor / society
 		if (_selectedEntityType == EntityType.soleProprietor && !_isEditingPartner && _savedPartners.Count >= 1)
+			validationErrors.Add("• <b>Entity Type</b>: Sole Proprietor can have only 1 partner.");
+			if (string.IsNullOrWhiteSpace(_partnerForm.ProprietorImagePath) && _imageFile == null)
+    validationErrors.Add("• <b>Proprietor / Managing Partner Image</b> is required.");
+		if (validationErrors.Count > 0)
 		{
-			ShowMessage("Sole Proprietor can have only 1 partner.", true);
+			_message = string.Join("<br/>", validationErrors);
+			_isError = true;
 			return;
 		}
 
@@ -1060,8 +1602,18 @@
 
 			if (_isEditingPartner)
 			{
-				// Update existing partner
-				await Http.PutAsJsonAsync($"api/DealerOwnershipInfo/{_editingPartnerId}", _partnerForm);
+				var updateResp = await Http.PutAsJsonAsync($"api/DealerOwnershipInfo/{_editingPartnerId}", _partnerForm);
+				if (!updateResp.IsSuccessStatusCode)
+				{
+					var err = await updateResp.Content.ReadAsStringAsync();
+
+if (err.Contains("ProprietorImagePath", StringComparison.OrdinalIgnoreCase))
+    ShowMessage("Please upload Proprietor / Managing Partner Image before updating.", true);
+else
+    ShowMessage("Unable to update partner details. Please check the entered details and try again.", true);
+
+return;
+				}
 				partnerId = _editingPartnerId;
 
 				// Delete existing family and occupations for this partner, then re-create
@@ -1078,11 +1630,25 @@
 			}
 			else
 			{
-				// Create new partner
 				var resp = await Http.PostAsJsonAsync("api/DealerOwnershipInfo", _partnerForm);
+				if (!resp.IsSuccessStatusCode)
+				{
+					var err = await resp.Content.ReadAsStringAsync();
+
+if (err.Contains("ProprietorImagePath", StringComparison.OrdinalIgnoreCase))
+    ShowMessage("Please upload Proprietor / Managing Partner Image before saving.", true);
+else
+    ShowMessage("Unable to save partner details. Please check the entered details and try again.", true);
+
+return;
+				}
 				var created = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerOwnershipInfo>>();
 				partnerId = created?.Data?.Id ?? 0;
-				if (partnerId == 0) { ShowMessage("Failed to save partner.", true); return; }
+				if (partnerId == 0)
+				{
+					ShowMessage("Failed to save partner: server did not return a valid ID. Please try again.", true);
+					return;
+				}
 			}
 
 			// Save family details
@@ -1110,7 +1676,7 @@
 		}
 		catch (Exception ex)
 		{
-			ShowMessage($"Error saving partner: {ex.Message}", true);
+			ShowMessage($"Unexpected error: {ex.Message}", true);
 		}
 		finally
 		{
@@ -1138,6 +1704,8 @@
 			ProprietorImagePath = partner.ProprietorImagePath,
 			Gender = partner.Gender,
 			MaritalStatus = partner.MaritalStatus,
+			EducationalQualification = partner.EducationalQualification,
+			DOB = partner.DOB,
 			ShopNoORRoomNoOrBlockNo = partner.ShopNoORRoomNoOrBlockNo,
 			Street = partner.Street,
 			SubVillage = partner.SubVillage,
@@ -1161,7 +1729,20 @@
 		_aadhaarFile = null;
 		_panFile = null;
 		_imageFile = null;
+		_isExtractingAadhaar = false;
+		_isExtractingPan = false;
+		_ocrWarningAadhaar = null;
+		_ocrWarningPan = null;
+		_ocrPopulatedAadhaar = false;
+		_ocrPopulatedPan = false;
 		_message = null;
+
+		SyncDateBuffers();  
+		CalculatePartnerAge();
+
+		var state = _statesAll.FirstOrDefault(s => s.Id == partner.StateId);
+		var district = _districtsAll.FirstOrDefault(d => d.Id == partner.DistrictId);
+		_districtSearchText = district?.DistrictName ?? "";
 	}
 
 	private void CancelPartnerEdit()
@@ -1170,7 +1751,21 @@
 		_editingPartnerId = 0;
 		ResetPartnerForm();
 	}
-
+	private string GetFileUrl(string? path)
+	{
+		if (string.IsNullOrEmpty(path)) return "";
+		var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+		
+		var urlPath = Uri.EscapeDataString(path).Replace("%2F", "/");
+		var token = LoginState?.Token;
+		if (!string.IsNullOrEmpty(token))
+		{
+			var rawToken = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+			return $"{baseUrl}/api/DealerFile/view/{urlPath}?access_token={rawToken}";
+		}
+		
+		return $"{baseUrl}/api/DealerFile/view/{urlPath}";
+	}
 	// --- Delete Partner ---
 	private void ConfirmDeletePartner(DealerOwnershipInfo partner)
 	{
@@ -1236,20 +1831,39 @@
 	// --- Navigate Next ---
 	private async Task HandleNext()
 	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			var isRestricted = string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase);
+			var viewNext = isRestricted ? "/Investment" : "/SalesPlaning";
+			var viewFlowParam = isRestricted ? "&flow=restricted" : (IsNewDealerFlow ? "&flow=new" : "");
+			Nav.NavigateTo($"{viewNext}?dealerId={DealerId}&mode=view{viewFlowParam}");
+			return;
+		}
 		if (_selectedEntityType == null)
 		{
+			FormStepData.MarkStepError(7, true);
 			ShowMessage("Please select a business entity type.", true);
 			return;
 		}
 
 		if (_selectedEntityType == EntityType.soleProprietor && _savedPartners.Count < 1)
 		{
+			FormStepData.MarkStepError(7, true);
 			ShowMessage("Please add at least 1 proprietor.", true);
 			return;
 		}
 
-		if (_selectedEntityType != EntityType.soleProprietor && _savedPartners.Count < 2)
+		if (_selectedEntityType == EntityType.Society && _savedPartners.Count < 1)
 		{
+			FormStepData.MarkStepError(7, true);
+			ShowMessage("Please add at least 1 authorized person for the Society.", true);
+			return;
+		}
+
+		if (_selectedEntityType != EntityType.soleProprietor && _selectedEntityType != EntityType.Society && _savedPartners.Count < 2)
+		{
+			FormStepData.MarkStepError(7, true);
 			ShowMessage("Please add at least 2 partners for the selected entity type.", true);
 			return;
 		}
@@ -1257,8 +1871,12 @@
 		_isSaving = true;
 		try
 		{
+			FormStepData.MarkStepError(7, false);
 			Loading.Show();
-			Nav.NavigateTo($"/SalesPlaning?dealerId={DealerId}");
+			var isRestricted = string.Equals(Flow, "restricted", StringComparison.OrdinalIgnoreCase);
+			var nextRoute = isRestricted ? "/Investment" : "/SalesPlaning";
+			var flowParam = isRestricted ? "&flow=restricted" : (IsNewDealerFlow ? "&flow=new" : "");
+			Nav.NavigateTo($"{nextRoute}?dealerId={DealerId}{flowParam}");
 		}
 		finally
 		{
@@ -1280,7 +1898,36 @@
 		_aadhaarFile = null;
 		_panFile = null;
 		_imageFile = null;
+		_imagePreviewUrl = null;
+		_isExtractingAadhaar = false;
+		_isExtractingPan = false;
+		_ocrWarningAadhaar = null;
+		_ocrWarningPan = null;
+		_ocrPopulatedAadhaar = false;
+		_ocrPopulatedPan = false;
+		_stateSearchText = "";
+		_districtSearchText = "";
+		SyncDateBuffers();
+		CalculatePartnerAge();
 	}
+
+	private void SelectState(int id, string displayText)
+	{
+		_stateSearchText = displayText;
+		_showStateDropdown = false;
+		_partnerForm.StateId = id;
+		_districtSearchText = "";
+	}
+
+	private void SelectDistrict(int id, string displayText)
+	{
+		_districtSearchText = displayText;
+		_showDistrictDropdown = false;
+		_partnerForm.DistrictId = id;
+	}
+
+	private async Task HideStateDropdown() { await Task.Delay(200); _showStateDropdown = false; StateHasChanged(); }
+	private async Task HideDistrictDropdown() { await Task.Delay(200); _showDistrictDropdown = false; StateHasChanged(); }
 
 	private string GetRelationshipName(int id) =>
 		_relationships.FirstOrDefault(r => r.Id == id)?.Name ?? "—";
@@ -1304,7 +1951,9 @@
 		DateOfBirth = src.DateOfBirth,
 		Age = src.Age,
 		RelationshipId = src.RelationshipId,
-		Occupation = src.Occupation
+		Occupation = src.Occupation,
+		MaritalStatus = src.MaritalStatus,
+		EducationalQualification = src.EducationalQualification
 	};
 
 	private static PartnerOccupation CloneOccupation(PartnerOccupation src) => new()
@@ -1340,67 +1989,131 @@
 		_partnerForm.PhoneNumber = new string(_partnerForm.PhoneNumber?.Where(char.IsDigit).ToArray() ?? []);
 	}
 
-	private async Task OnPincodeChanged()
+	private void OnAadhaarNumberChanged()
 	{
-		_pincodeMessage = null;
-		_pincodeSuccess = false;
-
-		if (string.IsNullOrWhiteSpace(_partnerForm.PinCode) || _partnerForm.PinCode.Length != 6 || !_partnerForm.PinCode.All(char.IsDigit))
-			return;
-
-		_isPincodeLookup = true;
-		StateHasChanged();
-
-		try
-		{
-			var results = await Http.GetFromJsonAsync<List<PincodeApiResponse>>($"https://api.postalpincode.in/pincode/{_partnerForm.PinCode}");
-			var result = results?.FirstOrDefault();
-
-			if (result?.Status == "Success" && result.PostOffice?.Count > 0)
-			{
-				var postOffice = result.PostOffice[0];
-
-				var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
-				var matchedDistrict = _districtsAll.FirstOrDefault(d =>
-					d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
-				if (matchedDistrict != null)
-					_partnerForm.DistrictId = matchedDistrict.Id;
-
-				var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
-				var matchedState = _statesAll.FirstOrDefault(s =>
-					s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
-				if (matchedState != null)
-					_partnerForm.StateId = matchedState.Id;
-
-				if (!string.IsNullOrWhiteSpace(postOffice.Block))
-					_partnerForm.Block = postOffice.Block;
-
-				if (!string.IsNullOrWhiteSpace(postOffice.Division))
-					_partnerForm.Taluk = postOffice.Division;
-
-				if (!string.IsNullOrWhiteSpace(postOffice.Name))
-					_partnerForm.Village = postOffice.Name;
-
-				if (!string.IsNullOrWhiteSpace(postOffice.Region))
-					_partnerForm.Street = postOffice.Region;
-
-				_pincodeSuccess = true;
-				_pincodeMessage = $"Auto-filled: {postOffice.District}, {postOffice.State}, {postOffice.Block}";
-			}
-			else
-			{
-				_pincodeMessage = "No data found for this pincode";
-			}
-		}
-		catch
-		{
-			_pincodeMessage = "Could not look up pincode. Please fill manually.";
-		}
-		finally
-		{
-			_isPincodeLookup = false;
-		}
+		if (_ocrPopulatedAadhaar)
+			_ocrPopulatedAadhaar = false;
+		else
+			_ocrWarningAadhaar = null;
 	}
+
+	private void OnPANNumberChanged()
+	{
+		if (_ocrPopulatedPan)
+			_ocrPopulatedPan = false;
+		else
+			_ocrWarningPan = null;
+	}
+
+	private async Task OnPincodeChanged()
+{
+    _pincodeMessage = null;
+    _pincodeSuccess = false;
+
+    // Strip non-digit characters
+    if (!string.IsNullOrEmpty(_partnerForm.PinCode))
+    {
+        var digitsOnly = new string(_partnerForm.PinCode.Where(char.IsDigit).ToArray());
+        if (digitsOnly != _partnerForm.PinCode)
+            _partnerForm.PinCode = digitsOnly;
+    }
+
+    if (string.IsNullOrWhiteSpace(_partnerForm.PinCode) || _partnerForm.PinCode.Length != 6)
+        return;
+
+    _isPincodeLookup = true;
+    StateHasChanged();
+
+    try
+    {
+        using var response = await Http.GetAsync($"api/PincodeLookup/{_partnerForm.PinCode}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            _pincodeMessage = $"Lookup failed (HTTP {(int)response.StatusCode}): {body}";
+            return;
+        }
+
+        var results = await response.Content.ReadFromJsonAsync<List<PincodeApiResponse>>();
+        var result = results?.FirstOrDefault();
+
+        if (result == null
+            || !string.Equals(result.Status, "Success", StringComparison.OrdinalIgnoreCase)
+            || result.PostOffice == null
+            || result.PostOffice.Count == 0)
+        {
+            _pincodeMessage = $"No data found for pincode {_partnerForm.PinCode}";
+            return;
+        }
+
+        var postOffice = result.PostOffice[0];
+
+        var apiDistrict = postOffice.District?.Trim().Replace(" ", "") ?? "";
+        var matchedDistrict = _districtsAll.FirstOrDefault(d =>
+            d.DistrictName.Trim().Replace(" ", "").Equals(apiDistrict, StringComparison.OrdinalIgnoreCase));
+        if (matchedDistrict != null)
+        {
+            _partnerForm.DistrictId = matchedDistrict.Id;
+            _districtSearchText = matchedDistrict.DistrictName;
+        }
+
+        var apiState = postOffice.State?.Trim().Replace(" ", "") ?? "";
+        var matchedState = _statesAll.FirstOrDefault(s =>
+            s.StateName.Trim().Replace(" ", "").Equals(apiState, StringComparison.OrdinalIgnoreCase));
+        if (matchedState != null)
+        {
+            _partnerForm.StateId = matchedState.Id;
+            _stateSearchText = matchedState.StateName;
+        }
+
+        if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+        {
+            _partnerForm.Block = postOffice.Block;
+            _partnerForm.Taluk = postOffice.Block;
+        }
+        else if (!string.IsNullOrWhiteSpace(postOffice.Division))
+        {
+            _partnerForm.Taluk = postOffice.Division;
+        }
+
+        if (!string.IsNullOrWhiteSpace(postOffice.Name))
+        {
+            _partnerForm.Village = postOffice.Name;
+        }
+
+        var details = new List<string>();
+        if (!string.IsNullOrWhiteSpace(postOffice.Name))
+            details.Add($"Village: {postOffice.Name}");
+        if (!string.IsNullOrWhiteSpace(postOffice.Block) && postOffice.Block != "NA")
+            details.Add($"Block: {postOffice.Block}");
+        if (!string.IsNullOrWhiteSpace(_partnerForm.Taluk))
+            details.Add($"Taluk: {_partnerForm.Taluk}");
+        if (matchedDistrict != null)
+            details.Add($"District: {matchedDistrict.DistrictName}");
+        if (matchedState != null)
+            details.Add($"State: {matchedState.StateName}");
+
+        _pincodeSuccess = true;
+        _pincodeMessage = "Auto-filled: " + string.Join(", ", details);
+    }
+    catch (HttpRequestException httpEx)
+    {
+        _pincodeMessage = $"Network error: {httpEx.Message}";
+    }
+    catch (TaskCanceledException)
+    {
+        _pincodeMessage = "Lookup timed out — try again.";
+    }
+    catch (Exception ex)
+    {
+        _pincodeMessage = $"{ex.GetType().Name}: {ex.Message}";
+    }
+    finally
+    {
+        _isPincodeLookup = false;
+    }
+}
 
 	private void ShowMessage(string message, bool isError)
 	{
@@ -1419,6 +2132,13 @@
 		public string? FilePath { get; set; }
 	}
 
+	private class OcrExtractResult
+	{
+		public string? Aadhaar { get; set; }
+		public string? PAN { get; set; }
+		public string? GST { get; set; }
+	}
+
 	private class PincodeApiResponse
 	{
 		public string Status { get; set; } = "";
@@ -1435,4 +2155,8 @@
 		public string Division { get; set; } = "";
 		public string Region { get; set; } = "";
 	}
+
+	private bool CanAdd => LoginState.Can("Proprietor", "Entry");
+	private bool CanEdit => LoginState.Can("Proprietor", "Update");
+	private bool CanDelete => LoginState.Can("Proprietor", "Delete");
 }

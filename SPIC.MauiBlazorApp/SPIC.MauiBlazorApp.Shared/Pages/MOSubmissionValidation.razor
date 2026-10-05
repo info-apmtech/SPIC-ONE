@@ -1,0 +1,595 @@
+﻿@page "/MOSubmissionValidation"
+
+<style>
+    :root {
+        --mo-bg-body: #f8fafc;
+        --mo-bg-card: #ffffff;
+        --mo-text-main: #1e293b;
+        --mo-text-muted: #64748b;
+        --mo-text-light: #94a3b8;
+        --mo-border-light: #e2e8f0;
+        --mo-border-focus: #cbd5e1;
+        --mo-primary-blue: #3b82f6;
+        --mo-primary-hover: #2563eb;
+        --mo-green-bg: #dcfce7;
+        --mo-green-text: #16a34a;
+    }
+
+   
+
+    .mo-container {
+        max-width: 1600px;
+        margin: 0 auto;
+    }
+
+    /* --- Page Header --- */
+    .mo-header-wrapper {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .mo-page-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--mo-text-main);
+        margin: 0 0 6px 0;
+    }
+
+    .mo-page-subtitle {
+        font-size: 0.85rem;
+        color: var(--mo-text-muted);
+        margin: 0;
+    }
+
+    /* Header Actions (Buttons) */
+    .mo-header-actions {
+        display: flex;
+        gap: 12px;
+    }
+
+    .mo-btn-outline {
+        background-color: #ffffff;
+        border: 1px solid var(--mo-border-light);
+        color: #334155;
+        font-weight: 600;
+        font-size: 0.8rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        transition: 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .mo-btn-outline:hover { background-color: #f1f5f9; }
+    .mo-btn-outline i { color: var(--mo-text-muted); }
+
+    .mo-btn-solid {
+        background-color: var(--mo-primary-blue);
+        border: 1px solid var(--mo-primary-blue);
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.8rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .mo-btn-solid:hover { background-color: var(--mo-primary-hover); }
+
+    /* --- Tabs --- */
+    .mo-tabs-container {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 1.5rem;
+        border-bottom: 1px solid var(--mo-border-light);
+        padding-bottom: 16px;
+    }
+
+    .mo-tab {
+        background-color: #ffffff;
+        border: 1px solid var(--mo-border-light);
+        color: var(--mo-text-main);
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: 0.2s;
+        min-width: 180px;
+        justify-content: center;
+    }
+
+    .mo-tab.active {
+        background-color: var(--mo-primary-blue);
+        border-color: var(--mo-primary-blue);
+        color: #ffffff;
+        box-shadow: 0 4px 6px rgba(59, 130, 246, 0.2);
+    }
+
+    .mo-badge {
+        background-color: #e0e7ff; /* Light blue */
+        color: var(--mo-primary-blue);
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 12px;
+    }
+    .mo-tab.active .mo-badge {
+        background-color: rgba(255,255,255,0.2);
+        color: #ffffff;
+    }
+
+    /* --- Filter Card --- */
+    .mo-card {
+        background: var(--mo-bg-card);
+        border: 1px solid var(--mo-border-light);
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        margin-bottom: 1.5rem;
+    }
+
+    .mo-filter-header {
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--mo-text-main);
+        border-bottom: 1px solid transparent;
+        cursor: pointer;
+    }
+    .mo-filter-header i { font-size: 1rem; color: var(--mo-text-muted); }
+    .mo-filter-header .mo-chevron { margin-left: auto; }
+
+    .mo-filter-body {
+        padding: 0 24px 24px 24px;
+    }
+
+    .mo-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    .mo-form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .mo-form-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--mo-text-main);
+    }
+    .mo-form-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--mo-border-light);
+        border-radius: 8px;
+        font-size: 0.85rem;
+        color: var(--mo-text-main);
+        background-color: #f8fafc;
+        outline: none;
+        transition: 0.2s;
+    }
+    .mo-form-input:focus {
+        border-color: var(--mo-primary-blue);
+        background-color: #ffffff;
+    }
+    .mo-form-input::placeholder { color: var(--mo-text-light); }
+
+    /* Custom Select Dropdown Styling */
+    select.mo-form-input {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 36px;
+    }
+
+    .mo-filter-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+    }
+    .mo-btn-clear {
+        background: transparent;
+        border: none;
+        color: var(--mo-text-muted);
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 8px 16px;
+        cursor: pointer;
+    }
+    .mo-btn-clear:hover { color: var(--mo-text-main); }
+
+    /* --- Table Card --- */
+    .mo-table-wrapper {
+        padding: 0;
+    }
+
+    .mo-table-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .mo-table-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--mo-text-main);
+        margin: 0;
+    }
+
+    .mo-table-tools {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+    .mo-tool-select {
+        padding: 8px 32px 8px 12px;
+        border: 1px solid var(--mo-border-light);
+        border-radius: 6px;
+        font-size: 0.8rem;
+        color: var(--mo-text-muted);
+        background-color: #f8fafc;
+        outline: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+    }
+    .mo-tool-search {
+        position: relative;
+    }
+    .mo-tool-search i {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--mo-text-light);
+        font-size: 0.85rem;
+    }
+    .mo-tool-search input {
+        padding: 8px 12px 8px 30px;
+        border: 1px solid var(--mo-border-light);
+        border-radius: 6px;
+        font-size: 0.8rem;
+        background-color: #f8fafc;
+        width: 200px;
+        outline: none;
+    }
+
+    /* Standard Table CSS */
+    .mo-data-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1000px;
+    }
+    .mo-data-table th {
+        background-color: #f8fafc;
+        color: #4b5563;
+        font-weight: 600;
+        font-size: 0.8rem;
+        padding: 14px 24px;
+        text-align: left;
+        border-bottom: 1px solid var(--mo-border-light);
+        border-top: 1px solid var(--mo-border-light);
+        white-space: nowrap;
+    }
+    .mo-data-table td {
+        padding: 16px 24px;
+        font-size: 0.85rem;
+        color: var(--mo-text-main);
+        font-weight: 500;
+        border-bottom: 1px solid var(--mo-border-light);
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    
+    /* Custom Checkbox */
+    .mo-checkbox {
+        width: 16px;
+        height: 16px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        cursor: pointer;
+        appearance: none;
+        position: relative;
+        background-color: #fff;
+    }
+    .mo-checkbox:checked {
+        background-color: var(--mo-primary-blue);
+        border-color: var(--mo-primary-blue);
+    }
+    .mo-checkbox:checked::after {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 1px;
+        width: 5px;
+        height: 10px;
+        border: solid white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
+
+    .mo-status-pill {
+        background-color: var(--mo-green-bg);
+        color: var(--mo-green-text);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    /* --- Pagination --- */
+    .mo-pagination-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 24px;
+    }
+
+    .mo-items-per-page {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.85rem;
+        color: var(--mo-text-muted);
+        font-weight: 500;
+    }
+    .mo-items-per-page select {
+        padding: 6px 30px 6px 12px;
+        border: 1px solid var(--mo-border-light);
+        border-radius: 6px;
+        background-color: #fff;
+        outline: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+    }
+
+    .mo-page-controls {
+        display: flex;
+        gap: 6px;
+    }
+    .mo-page-btn {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--mo-border-light);
+        background: #fff;
+        border-radius: 6px;
+        color: var(--mo-text-muted);
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .mo-page-btn:hover { background: #f1f5f9; }
+    .mo-page-btn.active {
+        background: #f1f5f9;
+        color: var(--mo-text-main);
+        font-weight: 700;
+        border-color: #cbd5e1;
+    }
+    .mo-page-dots {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        color: var(--mo-text-muted);
+    }
+
+    /* Responsive Grid */
+    @@media (max-width: 1024px) {
+        .mo-filter-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @@media (max-width: 600px) {
+        .mo-filter-grid { grid-template-columns: 1fr; }
+        .mo-tabs-container { flex-direction: column; }
+        .mo-table-top { flex-direction: column; align-items: flex-start; }
+    }
+</style>
+
+<div class="container-fluid py-4 px-3 px-md-4 mo-container">
+    
+    <div class="mo-header-wrapper">
+        <div>
+            <h1 class="mo-page-title">MO Submission Validation</h1>
+            <p class="mo-page-subtitle">Review and Validate CSR-1 & CSR-2 Submissions from Market Officers</p>
+        </div>
+        <div class="mo-header-actions">
+            <button class="mo-btn-outline"><i class="bi bi-arrow-clockwise"></i> Refresh Data</button>
+            <button class="mo-btn-outline"><i class="bi bi-file-earmark-excel"></i> Excel</button>
+            <button class="mo-btn-outline"><i class="bi bi-file-earmark-pdf"></i> PDF</button>
+            <button class="mo-btn-solid"><i class="bi bi-envelope"></i> Send Mail</button>
+        </div>
+    </div>
+
+    <div class="mo-tabs-container">
+        <button class="mo-tab">CSR-1 Submissions <span class="mo-badge">5</span></button>
+        <button class="mo-tab active">CSR-2 Reports <span class="mo-badge">5</span></button>
+    </div>
+
+    <div class="mo-card">
+        <div class="mo-filter-header">
+            <i class="bi bi-funnel"></i> Filters <i class="bi bi-chevron-down mo-chevron"></i>
+        </div>
+        <div class="mo-filter-body">
+            <div class="mo-filter-grid">
+                <div class="mo-form-group">
+                    <label class="mo-form-label">Date Range</label>
+                    <input type="text" class="mo-form-input" placeholder="01 Apr 2025 - 28 Apr 2025" style="background-image: url('data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'14\' height=\'14\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'%2394a3b8\'%3E%3Cpath stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z\'%3E%3C/path%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 12px center;">
+                </div>
+                <div class="mo-form-group">
+                    <label class="mo-form-label">Program Type</label>
+                    <select class="mo-form-input">
+                        <option>All Program Type</option>
+                    </select>
+                </div>
+                <div class="mo-form-group">
+                    <label class="mo-form-label">Head Quatres</label>
+                    <select class="mo-form-input">
+                        <option>All Head quatres</option>
+                    </select>
+                </div>
+                <div class="mo-form-group">
+                    <label class="mo-form-label">Status</label>
+                    <select class="mo-form-input">
+                        <option>All District</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mo-filter-actions">
+                <button class="mo-btn-clear"><i class="bi bi-x"></i> Clear All</button>
+                <button class="mo-btn-solid"><i class="bi bi-funnel"></i> Apply Filters</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mo-card mo-table-wrapper">
+        <div class="mo-table-top">
+            <h3 class="mo-table-title">CSR-2 Expense Report Validation List</h3>
+            <div class="mo-table-tools">
+                <select class="mo-tool-select"><option>Select Date</option></select>
+                <select class="mo-tool-select"><option>All Head quatres</option></select>
+                <div class="mo-tool-search">
+                    <i class="bi bi-search"></i>
+                    <input type="text" placeholder="Search zones...">
+                </div>
+            </div>
+        </div>
+
+        <div style="overflow-x: auto;">
+            <table class="mo-data-table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px; text-align: center;"><input type="checkbox" class="mo-checkbox"></th>
+                        <th>Sanction Number</th>
+                        <th>Program Type</th>
+                        <th>Program Name</th>
+                        <th>Submitted Date</th>
+                        <th>Planned Budget</th>
+                        <th>Actual Budget</th>
+                        <th>Variance</th>
+                        <th>Validation Due</th>
+                        <th>CSR - 1 Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="text-align: center;"><input type="checkbox" class="mo-checkbox"></td>
+                        <td>CSR1-2026-045</td>
+                        <td>Training</td>
+                        <td>Crop Protection Workshop</td>
+                        <td>May 1, 2026</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>May 10, 2026</td>
+                        <td><span class="mo-status-pill">Approved</span></td>
+                    </tr>
+                    <tr>
+                        <td style="text-align: center;"><input type="checkbox" class="mo-checkbox"></td>
+                        <td>CSR1-2026-045</td>
+                        <td>Training</td>
+                        <td>Crop Protection Workshop</td>
+                        <td>May 1, 2026</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>May 10, 2026</td>
+                        <td><span class="mo-status-pill">Approved</span></td>
+                    </tr>
+                    <tr>
+                        <td style="text-align: center;"><input type="checkbox" class="mo-checkbox"></td>
+                        <td>CSR1-2026-045</td>
+                        <td>Training</td>
+                        <td>Crop Protection Workshop</td>
+                        <td>May 1, 2026</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>May 10, 2026</td>
+                        <td><span class="mo-status-pill">Approved</span></td>
+                    </tr>
+                    <tr>
+                        <td style="text-align: center;"><input type="checkbox" class="mo-checkbox"></td>
+                        <td>CSR1-2026-045</td>
+                        <td>Training</td>
+                        <td>Crop Protection Workshop</td>
+                        <td>May 1, 2026</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>May 10, 2026</td>
+                        <td><span class="mo-status-pill">Approved</span></td>
+                    </tr>
+                    <tr>
+                        <td style="text-align: center;"><input type="checkbox" class="mo-checkbox"></td>
+                        <td>CSR1-2026-045</td>
+                        <td>Training</td>
+                        <td>Crop Protection Workshop</td>
+                        <td>May 1, 2026</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>₹2,50,000</td>
+                        <td>May 10, 2026</td>
+                        <td><span class="mo-status-pill">Approved</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mo-pagination-bar">
+            <div class="mo-items-per-page">
+                Items Per Page
+                <select>
+                    <option>16</option>
+                    <option>32</option>
+                    <option>50</option>
+                </select>
+            </div>
+            
+            <div class="mo-page-controls">
+                <button class="mo-page-btn"><i class="bi bi-chevron-left"></i></button>
+                <button class="mo-page-btn active">1</button>
+                <button class="mo-page-btn">2</button>
+                <button class="mo-page-btn">3</button>
+                <span class="mo-page-dots">..</span>
+                <button class="mo-page-btn">8</button>
+                <button class="mo-page-btn">9</button>
+                <button class="mo-page-btn">10</button>
+                <button class="mo-page-btn"><i class="bi bi-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@code {
+
+
+}

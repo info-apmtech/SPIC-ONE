@@ -1,0 +1,208 @@
+﻿@using SPIC.Core.DTOs
+@inject IJSRuntime JS
+
+@if (IsOpen)
+{
+    <div class="sd-overlay" @onclick="CloseDrawer">
+        <div class="sd-drawer" @onclick:stopPropagation="true">
+
+            <div class="sd-header">
+                <div class="sd-header-titles">
+                    <h2>Stock Details</h2>
+                    <div class="sd-status-badge">
+                        <div class="sd-dot"></div>
+                        @(Row?.Status ?? "—")
+                    </div>
+                </div>
+                <button class="sd-close-icon" @onclick="CloseDrawer" aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="sd-body">
+
+                <div class="sd-section">
+                    <h3>Dealer Information</h3>
+                    <div class="sd-row">
+                        <span class="sd-label">Dealer Name</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.DealerName)</span>
+                    </div>
+                    <div class="sd-row">
+                        <span class="sd-label">Dealer ID</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.DealerRegistrationId?.ToString() ?? "—")</span>
+                    </div>
+                </div>
+
+                <div class="sd-section">
+                    <h3>Contact Information</h3>
+                    @{
+                        var phones = BuildPhones();
+                    }
+                    @if (phones.Count == 0)
+                    {
+                        <div class="sd-row">
+                            <span class="sd-label">Phone</span>
+                            <span class="sd-value"><span class="sd-colon">:</span> —</span>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var ph in phones)
+                        {
+                            <div class="sd-phone-row">
+                                <div class="sd-phone-info">
+                                    <span class="sd-phone-label">@ph.Label</span>
+                                    <span class="sd-phone-number">@ph.Display</span>
+                                </div>
+                                <div class="sd-phone-actions">
+                                    <button class="sd-contact-btn sd-wa" title="WhatsApp" @onclick="() => OpenWhatsApp(ph.Digits)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                                    </button>
+                                    <button class="sd-contact-btn sd-call" title="Call" @onclick="() => Call(ph.Display)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                                    </button>
+                                    <button class="sd-contact-btn sd-sms" title="SMS" @onclick="() => SendSms(ph.Display)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="sd-section">
+                    <h3>Location Information</h3>
+                    <div class="sd-row">
+                        <span class="sd-label">State</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.StateName)</span>
+                    </div>
+                    <div class="sd-row">
+                        <span class="sd-label">Lying With</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.LyingWith)</span>
+                    </div>
+                </div>
+
+                <div class="sd-section">
+                    <h3>Product Information</h3>
+                    <div class="sd-row">
+                        <span class="sd-label">Product</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.ProductName)</span>
+                    </div>
+                    <div class="sd-row">
+                        <span class="sd-label">Quantity (MT)</span>
+                        <span class="sd-value"><span class="sd-colon">:</span> @(Row?.Quantity)</span>
+                    </div>
+                </div>
+
+                <div class="sd-section">
+                    <h3>Inventory Information</h3>
+                    <div class="sd-row">
+                        <span class="sd-label">Ageing Days</span>
+                        <span class="sd-value sd-val-flex">
+                            <span class="sd-colon">:</span> @(Row?.AgeingDays) Days
+                            <div class="sd-status-badge sd-badge-inline">
+                                <div class="sd-dot"></div> @(Row?.Status ?? "—")
+                            </div>
+                        </span>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="sd-footer">
+                <button class="sd-btn-close" @onclick="CloseDrawer">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    Close
+                </button>
+            </div>
+
+        </div>
+    </div>
+}
+
+
+@code {
+    [Parameter]
+    public bool IsOpen { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> IsOpenChanged { get; set; }
+
+    // The clicked stock row. Nullable so the drawer is safe before a row is chosen.
+    [Parameter]
+    public StockRowDto? Row { get; set; }
+
+    // A single displayable phone number and its digits-only form (for wa.me).
+    private record PhoneEntry(string Label, string Display, string Digits);
+
+    private async Task CloseDrawer()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(IsOpen);
+    }
+
+    // Builds the list of numbers to show. Registered dealers get up to three
+    // labelled numbers; if none are present (an IFMS-only dealer) we fall back
+    // to the single primary number the server put in MobileNo. Duplicate numbers
+    // (same digits) are shown only once.
+    private List<PhoneEntry> BuildPhones()
+    {
+        var list = new List<PhoneEntry>();
+        if (Row is null) return list;
+
+        void Add(string label, string? number)
+        {
+            if (string.IsNullOrWhiteSpace(number)) return;
+            var digits = new string(number.Where(char.IsDigit).ToArray());
+            if (digits.Length == 0) return;
+            if (list.Any(e => e.Digits == digits)) return; // de-dupe same number
+            list.Add(new PhoneEntry(label, number.Trim(), digits));
+        }
+
+        Add("WhatsApp", Row.WhatsAppNumber);
+        Add("Official", Row.OfficialContactNumber);
+        Add("Alternative", Row.AlternativeNumber);
+
+        // IFMS-only dealers have no registration record; show the fallback number.
+        if (list.Count == 0)
+            Add("Mobile", Row.MobileNo);
+
+        return list;
+    }
+
+    // Opens a WhatsApp chat. Indian 10-digit numbers get the 91 prefix; numbers
+    // that already include a country code are used as-is.
+    private async Task OpenWhatsApp(string digits)
+    {
+        if (string.IsNullOrEmpty(digits)) return;
+
+        var wa = digits.Length == 10 ? "91" + digits : digits;
+        var msg = Uri.EscapeDataString(
+            $"Stock Report\nDealer: {Row?.DealerName}\nState: {Row?.StateName}\n" +
+            $"Product: {Row?.ProductName}\nQuantity: {Row?.Quantity} MT\n" +
+            $"Ageing: {Row?.AgeingDays} days ({Row?.Status})");
+
+        await JS.InvokeVoidAsync("open", $"https://wa.me/{wa}?text={msg}", "_blank");
+    }
+
+    // Opens the device dialer.
+    private async Task Call(string number)
+    {
+        if (string.IsNullOrWhiteSpace(number)) return;
+        await JS.InvokeVoidAsync("open", $"tel:{number}", "_self");
+    }
+
+    // Opens the device SMS composer.
+    private async Task SendSms(string number)
+    {
+        if (string.IsNullOrWhiteSpace(number)) return;
+        await JS.InvokeVoidAsync("open", $"sms:{number}", "_self");
+    }
+}

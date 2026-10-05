@@ -29,5 +29,6 @@ namespace SPIC.Core.Interfaces
 
         // Bulk check
         Task<bool> ExistsAsync(Expression<Func<T, bool>> predicate);
+        Task<T?> UpdatePropertyAsync(int id, string propertyName, object? value);
     }
 }

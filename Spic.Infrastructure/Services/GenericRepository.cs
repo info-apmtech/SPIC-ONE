@@ -140,5 +140,20 @@ namespace Spic.Infrastructure.Services
         {
             return await _dbSet.AnyAsync(predicate);
         }
+        public async Task<T?> UpdatePropertyAsync(int id, string propertyName, object? value)
+        {
+            var existing = await _dbSet.FindAsync(id);
+            if (existing == null) return default;
+
+            var entry = _context.Entry(existing);
+            entry.Property(propertyName).CurrentValue = value;
+            entry.Property(propertyName).IsModified = true;
+
+            if (entry.Properties.Any(p => p.Metadata.Name == "UpdatedAt"))
+                entry.Property("UpdatedAt").CurrentValue = DateTime.Now;
+
+            await _context.SaveChangesAsync();
+            return existing;
+        }
     }
 }

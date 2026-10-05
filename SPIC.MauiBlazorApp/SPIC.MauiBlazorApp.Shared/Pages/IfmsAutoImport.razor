@@ -1,0 +1,427 @@
+@page "/IfmsAutoImport"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@inject HttpClient Http
+@inject IJSRuntime JS
+@implements IDisposable
+<PageTitle>IFMS Auto Import</PageTitle>
+
+<style>
+    .ia-container { font-family: 'Inter', sans-serif; }
+
+    .ia-header { display: flex; justify-content: space-between; align-items: center;
+                 flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+
+    .ia-header h1 { margin: 0; font-size: 26px; font-weight: 700; color: #1e293b; }
+    .ia-header p  { margin: 4px 0 0; font-size: 15px; color: #64748b; }
+
+    .ia-btn { border: none; border-radius: 8px; padding: 10px 18px; font-size: 14px;
+              font-weight: 600; cursor: pointer; background: #1d4ed8; color: #fff; }
+    .ia-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    .ia-btn-ghost { background: #fff; color: #1e293b; border: 1px solid #cbd5e1; }
+
+    /* The CAPTCHA prompt. Loud on purpose: it is the one thing that blocks a run. */
+    .ia-captcha { border: 2px solid #f59e0b; background: #fffbeb; border-radius: 12px;
+                  padding: 20px; margin-bottom: 24px; }
+    .ia-captcha h2 { margin: 0 0 6px; font-size: 18px; color: #92400e; }
+    .ia-captcha p  { margin: 0 0 16px; font-size: 14px; color: #b45309; }
+    .ia-captcha-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+    .ia-captcha img { border: 1px solid #d97706; border-radius: 6px; background: #fff;
+                      height: 60px; image-rendering: pixelated; }
+    .ia-captcha input { padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;
+                        font-size: 18px; letter-spacing: 3px; width: 180px; }
+    .ia-countdown { font-size: 13px; color: #b45309; font-weight: 600; }
+
+    .ia-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+                  gap: 16px; margin-bottom: 24px; }
+    .ia-stat { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; padding: 16px; }
+    .ia-stat .k { font-size: 12px; color: #64748b; text-transform: uppercase;
+                  letter-spacing: .04em; }
+    .ia-stat .v { font-size: 24px; font-weight: 700; color: #1e293b; margin-top: 4px; }
+
+    .ia-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff;
+               margin-bottom: 14px; overflow: hidden; }
+    .ia-card-head { display: flex; justify-content: space-between; align-items: center;
+                    gap: 12px; padding: 14px 18px; cursor: pointer; flex-wrap: wrap; }
+    .ia-card-head:hover { background: #f8fafc; }
+    .ia-card-title { font-weight: 600; color: #1e293b; }
+    .ia-card-sub { font-size: 13px; color: #64748b; margin-top: 2px; }
+
+    .ia-pill { padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .ia-ok      { background: #dcfce7; color: #166534; }
+    .ia-partial { background: #fef3c7; color: #92400e; }
+    .ia-fail    { background: #fee2e2; color: #991b1b; }
+    .ia-run     { background: #dbeafe; color: #1e40af; }
+
+    .ia-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .ia-table th { text-align: left; background: #f8fafc; color: #475569; font-weight: 600;
+                   padding: 10px 18px; }
+    .ia-table td { padding: 10px 18px; border-top: 1px solid #f1f5f9; color: #334155; }
+    .ia-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .ia-err { color: #991b1b; font-size: 12px; }
+
+    .ia-empty { text-align: center; padding: 48px; color: #64748b; }
+</style>
+
+<div class="ia-container">
+
+    <div class="ia-header">
+        <div>
+            <h1>IFMS Auto Import</h1>
+            <p>The nightly download from dbtfert.nic.in and its import into SPIC ONE.</p>
+        </div>
+        <div style="display:flex; gap:10px;">
+            <button class="ia-btn ia-btn-ghost" @onclick="LoadAsync" disabled="@busy">Refresh</button>
+            <button class="ia-btn" @onclick="QueueRunAsync" disabled="@(busy || queueing)">
+                @(queueing ? "Queuing…" : "Run now")
+            </button>
+        </div>
+    </div>
+
+    @if (challenge is not null)
+    {
+        <div class="ia-captcha">
+            <h2>The automation needs this CAPTCHA typed in</h2>
+            <p>
+                It could not read today's CAPTCHA on its own after five tries.
+                Type what you see and the download continues on its own.
+                @if (!string.IsNullOrWhiteSpace(challenge.FailedGuesses))
+                {
+                    <span>It read it as <strong>@challenge.FailedGuesses</strong>.</span>
+                }
+            </p>
+
+            <div class="ia-captcha-row">
+                @if (!string.IsNullOrWhiteSpace(challenge.ImageBase64))
+                {
+                    <img src="data:image/png;base64,@challenge.ImageBase64" alt="CAPTCHA" />
+                }
+
+                <input @bind="captchaAnswer"
+                       @bind:event="oninput"
+                       @onkeydown="OnCaptchaKeyDown"
+                       placeholder="captcha"
+                       autocomplete="off"
+                       maxlength="20" />
+
+                <button class="ia-btn" @onclick="SubmitCaptchaAsync"
+                        disabled="@(submitting || string.IsNullOrWhiteSpace(captchaAnswer))">
+                    @(submitting ? "Sending…" : "Send")
+                </button>
+
+                <span class="ia-countdown">
+                    @if (secondsRemaining > 0)
+                    {
+                        @($"expires in {TimeSpan.FromSeconds(secondsRemaining):hh\\:mm\\:ss}")
+                    }
+                    else
+                    {
+                        @("expired — a fresh one is on its way")
+                    }
+                </span>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(challengeMessage))
+            {
+                <p style="margin-top:12px;">@challengeMessage</p>
+            }
+        </div>
+    }
+
+    @if (runs.Count > 0)
+    {
+        var latest = runs[0];
+
+        <div class="ia-summary">
+            <div class="ia-stat">
+                <div class="k">Last run</div>
+                <div class="v">@latest.ReportDate.ToString("dd MMM")</div>
+            </div>
+            <div class="ia-stat">
+                <div class="k">Reports</div>
+                <div class="v">@latest.ReportsSucceeded / @latest.ReportsTotal</div>
+            </div>
+            <div class="ia-stat">
+                <div class="k">Rows added</div>
+                <div class="v">@latest.RowsInserted.ToString("N0")</div>
+            </div>
+            <div class="ia-stat">
+                <div class="k">Rows updated</div>
+                <div class="v">@latest.RowsUpdated.ToString("N0")</div>
+            </div>
+            <div class="ia-stat">
+                <div class="k">Login</div>
+                <div class="v" style="font-size:16px;">
+                    @(latest.LoginSucceeded ? (latest.CaptchaMethod ?? "ok") : "failed")
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (busy && runs.Count == 0)
+    {
+        <div class="ia-empty">Loading…</div>
+    }
+    else if (runs.Count == 0)
+    {
+        <div class="ia-empty">
+            No runs yet. The first one fires at 04:05, or press <strong>Run now</strong>.
+        </div>
+    }
+    else
+    {
+        @foreach (var run in runs)
+        {
+            <div class="ia-card">
+                <div class="ia-card-head" @onclick="() => Toggle(run.Id)">
+                    <div>
+                        <div class="ia-card-title">
+                            @run.ReportDate.ToString("dd MMM yyyy")
+                            <span style="color:#94a3b8; font-weight:400;">
+                                · started @run.StartedAt.ToLocalTime().ToString("dd MMM HH:mm")
+                                @if (run.Attempt > 1)
+                                {
+                                    @($" · attempt {run.Attempt}")
+                                }
+                            </span>
+                        </div>
+                        <div class="ia-card-sub">
+                            @run.ReportsSucceeded of @run.ReportsTotal imported ·
+                            @run.RowsInserted.ToString("N0") new, @run.RowsUpdated.ToString("N0") updated
+                            @if (!run.SitePortalReachable)
+                            {
+                                <span> · portal never came up</span>
+                            }
+                        </div>
+                    </div>
+                    <span class="ia-pill @PillClass(run.Status)">@run.Status</span>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(run.ErrorMessage))
+                {
+                    <div style="padding:0 18px 14px;" class="ia-err">@run.ErrorMessage</div>
+                }
+
+                @if (expanded.Contains(run.Id) && run.Reports.Count > 0)
+                {
+                    <table class="ia-table">
+                        <thead>
+                            <tr>
+                                <th>Report</th>
+                                <th>Status</th>
+                                <th style="text-align:right;">Rows</th>
+                                <th style="text-align:right;">New</th>
+                                <th style="text-align:right;">Updated</th>
+                                <th style="text-align:right;">Skipped</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var report in run.Reports)
+                            {
+                                <tr>
+                                    <td>
+                                        @report.ReportTitle
+                                        @if (!string.IsNullOrWhiteSpace(report.DownloadedFileName))
+                                        {
+                                            <div style="color:#94a3b8; font-size:12px;">
+                                                @report.DownloadedFileName
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="ia-pill @PillClass(report.Status)">@report.Status</span>
+                                    </td>
+                                    <td class="num">@report.TotalRows.ToString("N0")</td>
+                                    <td class="num">@report.RowsInserted.ToString("N0")</td>
+                                    <td class="num">@report.RowsUpdated.ToString("N0")</td>
+                                    <td class="num">@report.RowsSkipped.ToString("N0")</td>
+                                </tr>
+
+                                @if (!string.IsNullOrWhiteSpace(report.ErrorMessage))
+                                {
+                                    <tr>
+                                        <td colspan="6" class="ia-err">@report.ErrorMessage</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<IfmsRunListItemDto> runs = new();
+    private IfmsPendingChallengeDto? challenge;
+    private readonly HashSet<int> expanded = new();
+
+    private string captchaAnswer = string.Empty;
+    private string? challengeMessage;
+    private int secondsRemaining;
+
+    private bool busy;
+    private bool queueing;
+    private bool submitting;
+
+    private Timer? poller;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+
+        // A CAPTCHA prompt is time-limited, so the page has to notice one arriving
+        // without anybody pressing refresh.
+        poller = new Timer(async _ => await InvokeAsync(PollAsync), null,
+                           TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(15));
+    }
+
+    private async Task LoadAsync()
+    {
+        busy = true;
+        try
+        {
+            runs = await Http.GetFromJsonAsync<List<IfmsRunListItemDto>>(
+                "api/IfmsAutomation/runs?take=30") ?? new();
+
+            if (runs.Count > 0)
+                expanded.Add(runs[0].Id);
+
+            await RefreshChallengeAsync();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Could not load the IFMS runs. {ex.Message}");
+        }
+        finally
+        {
+            busy = false;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Cheap poll: only the challenge, plus the run list when one clears.</summary>
+    private async Task PollAsync()
+    {
+        try
+        {
+            var hadChallenge = challenge is not null;
+            await RefreshChallengeAsync();
+
+            if (hadChallenge && challenge is null)
+                runs = await Http.GetFromJsonAsync<List<IfmsRunListItemDto>>(
+                    "api/IfmsAutomation/runs?take=30") ?? runs;
+
+            StateHasChanged();
+        }
+        catch
+        {
+            // A dropped poll is not worth interrupting the user over; the next
+            // one in fifteen seconds will pick it up.
+        }
+    }
+
+    private async Task RefreshChallengeAsync()
+    {
+        challenge = await Http.GetFromJsonAsync<IfmsPendingChallengeDto?>(
+            "api/IfmsAutomation/challenge/pending");
+
+        secondsRemaining = challenge?.SecondsRemaining ?? 0;
+
+        if (challenge is null)
+        {
+            captchaAnswer = string.Empty;
+            challengeMessage = null;
+        }
+    }
+
+    private async Task OnCaptchaKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(captchaAnswer))
+            await SubmitCaptchaAsync();
+    }
+
+    private async Task SubmitCaptchaAsync()
+    {
+        if (challenge is null || string.IsNullOrWhiteSpace(captchaAnswer))
+            return;
+
+        submitting = true;
+        challengeMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                $"api/IfmsAutomation/challenge/{challenge.Id}/answer",
+                new IfmsChallengeAnswerDto { Answer = captchaAnswer.Trim() });
+
+            if (response.IsSuccessStatusCode)
+            {
+                challengeMessage = "Sent. The download is continuing.";
+                captchaAnswer = string.Empty;
+                challenge = null;
+            }
+            else
+            {
+                // The common case is answering just after it expired, which is
+                // recoverable — the automation sends a fresh image straight away.
+                challengeMessage = await response.Content.ReadAsStringAsync();
+                await RefreshChallengeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            challengeMessage = $"Could not send that: {ex.Message}";
+        }
+        finally
+        {
+            submitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task QueueRunAsync()
+    {
+        queueing = true;
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                "api/IfmsAutomation/runs/queue", new IfmsQueueRunDto());
+
+            var body = await response.Content.ReadAsStringAsync();
+
+            await JS.InvokeVoidAsync("alert", response.IsSuccessStatusCode
+                ? "Queued. The automation picks it up within about twenty seconds."
+                : $"Could not queue a run. {body}");
+
+            if (response.IsSuccessStatusCode)
+                await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Could not queue a run. {ex.Message}");
+        }
+        finally
+        {
+            queueing = false;
+            StateHasChanged();
+        }
+    }
+
+    private void Toggle(int runId)
+    {
+        if (!expanded.Remove(runId))
+            expanded.Add(runId);
+    }
+
+    private static string PillClass(string status) => status switch
+    {
+        "Succeeded" => "ia-ok",
+        "PartiallySucceeded" => "ia-partial",
+        "Running" or "Pending" => "ia-run",
+        _ => "ia-fail"
+    };
+
+    public void Dispose() => poller?.Dispose();
+}

@@ -1,0 +1,528 @@
+﻿@page "/AddScheme" 
+@inject NavigationManager Navigation
+
+    <style>
+        /* Typography & Labels */
+        h4, h5, h6 {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .form-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 0.3rem;
+        }
+
+        /* Custom Card Styling */
+        .custom-card {
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #34495e;
+            margin-bottom: 1.2rem;
+        }
+        .section-header i {
+            color: #2e7d32;
+            font-size: 1.2rem;
+        }
+
+        /* Form Inputs */
+        .form-control, .form-select {
+            background-color: #f1f3f5;
+            border: 1px solid #f1f3f5;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            padding: 0.6rem 0.75rem;
+            color: #495057;
+        }
+        .form-control:focus, .form-select:focus {
+            background-color: #fff;
+            border-color: #2e7d32;
+            box-shadow: 0 0 0 0.2rem rgba(46, 125, 50, 0.15);
+        }
+
+        /* Segmented Controls / Toggles */
+        .segmented-control {
+            display: inline-flex;
+            background-color: #f1f3f5;
+            border-radius: 8px;
+            padding: 4px;
+        }
+        .segmented-control .btn {
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            padding: 0.4rem 1.2rem;
+            color: #555;
+            transition: all 0.2s ease;
+        }
+        .segmented-control .btn.active {
+            background-color: #005f36; /* Dark Green */
+            color: #fff;
+        }
+
+        /* Status Box */
+        .status-box {
+            background-color: #e8f5e9;
+            border: 1px solid #c8e6c9;
+            border-radius: 6px;
+            padding: 0.6rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-box .form-check-input:checked {
+            background-color: #2e7d32;
+            border-color: #2e7d32;
+        }
+
+        /* Table Styling */
+        .custom-table th {
+            background-color: #f8f9fa;
+            color: #6c757d;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border-bottom: none;
+            padding: 1rem;
+            white-space: nowrap;
+        }
+        .custom-table td {
+            vertical-align: middle;
+            font-size: 0.85rem;
+            padding: 1rem;
+            border-bottom: 1px solid #f1f3f5;
+            white-space: nowrap;
+        }
+        .qty-badge {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+        .action-icons i {
+            cursor: pointer;
+            margin-right: 10px;
+            font-size: 1rem;
+        }
+        .icon-delete { color: #dc3545; }
+        .icon-edit { color: #0d6efd; }
+
+        /* Upload Box */
+        .upload-box {
+            border: 2px dashed #a5d6a7;
+            background-color: #f1f8e9;
+            border-radius: 8px;
+            text-align: center;
+            padding: 2rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .upload-box:hover {
+            background-color: #e8f5e9;
+        }
+        .upload-box i {
+            font-size: 1.5rem;
+            color: #2e7d32;
+        }
+        .upload-box p {
+            margin: 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #2e7d32;
+        }
+        .upload-box span {
+            font-size: 0.75rem;
+            color: #6c757d;
+        }
+
+        /* Frequency Buttons */
+        .freq-btn {
+            width: 100%;
+            background-color: #fff;
+            border: 1px solid #e9ecef;
+            color: #555;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.6rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        .freq-btn.active {
+            background-color: #005f36;
+            color: #fff;
+            border-color: #005f36;
+        }
+
+        .note-text {
+            font-size: 0.85rem;
+            color: #6c757d;
+        }
+        .note-text span.fw-bold {
+            color: #2e7d32;
+        }
+
+        /* Footer Action Buttons */
+        .btn-previous {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            color: #6c757d;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .btn-previous:hover {
+            background-color: #e2e6ea;
+            color: #495057;
+        }
+        
+        .btn-save-draft {
+            background-color: #fff;
+            border: 1px solid #2e7d32;
+            color: #2e7d32;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .btn-save-draft:hover {
+            background-color: #e8f5e9;
+        }
+
+        .btn-next {
+            background-color: #2e7d32;
+            border: 1px solid #2e7d32;
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.9rem;
+            padding: 0.6rem 1.5rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+        .btn-next:hover {
+            background-color: #1b5e20;
+            color: #fff;
+        }
+
+        /* --- RESPONSIVE MEDIA QUERIES --- */
+        @@media (max-width: 768px) {
+            .custom-card {
+                padding: 1rem;
+            }
+            
+            /* Make segmented controls fill the width on mobile */
+            .segmented-control {
+                width: 100%;
+                display: flex;
+            }
+            .segmented-control .btn {
+                flex: 1;
+                padding: 0.4rem 0.5rem;
+            }
+
+            /* Make search box full width */
+            .search-box-wrapper {
+                width: 100% !important;
+                margin-top: 10px;
+            }
+
+            /* Stack footer buttons */
+            .footer-actions {
+                flex-direction: column-reverse;
+                gap: 12px;
+            }
+            .footer-actions > div {
+                width: 100%;
+                flex-direction: column;
+                gap: 12px !important;
+            }
+            .footer-actions button {
+                width: 100%;
+                justify-content: center;
+            }
+
+            /* Note section spacing */
+            .note-text {
+                margin-left: 0 !important;
+                margin-top: 15px;
+            }
+        }
+    </style>
+
+
+<div class="container-fluid py-4 px-0">
+    
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <h4 class="mb-0">Create Scheme</h4>
+        <div class="segmented-control">
+            <button class="btn active">Both</button>
+            <button class="btn">Farmer</button>
+            <button class="btn">Dealer</button>
+        </div>
+    </div>
+
+    <div class="custom-card">
+        <div class="section-header">
+            <i class="bi bi-person-badge"></i> Scheme Type & Basic Info
+        </div>
+        <div class="row g-3">
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">Scheme Name</label>
+                <input type="text" class="form-control" placeholder="Enter scheme name">
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">Draw points</label>
+                <select class="form-select">
+                    <option selected>Enter the Draw Points</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">State (Multi-select)</label>
+                <select class="form-select">
+                    <option selected>Select the state</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">District (Multi-select)</label>
+                <select class="form-select">
+                    <option selected>Select the District</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">Dealer (Multi-select)</label>
+                <select class="form-select">
+                    <option selected>Select the Dealer</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">Start Date</label>
+                <input type="date" class="form-control" placeholder="Pick a date">
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">End Date</label>
+                <input type="date" class="form-control" placeholder="Pick a date">
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">&nbsp;</label>
+                <div class="status-box">
+                    <div>
+                        <div class="fw-bold text-dark" style="font-size: 0.85rem;">Scheme Status</div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Draft - Scheme is not published</div>
+                    </div>
+                    <div class="form-check form-switch m-0 p-0">
+                        <input class="form-check-input ms-0" type="checkbox" role="switch" checked style="width: 2.5em; height: 1.25em;">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h5 class="mb-3">Product Rule</h5>
+
+    <div class="custom-card">
+        <div class="section-header">
+            <i class="bi bi-file-earmark-ruled"></i> Add Product Rule
+        </div>
+        
+        <div class="row g-3 mb-3">
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">Category</label>
+                <select class="form-select">
+                    <option selected>Select the Category</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">Product</label>
+                <select class="form-select">
+                    <option selected>Select the Product</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">Dealer Quantity</label>
+                <input type="number" class="form-control" placeholder="Enter the Quantity">
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label class="form-label">Farmer Quantity</label>
+                <input type="number" class="form-control" placeholder="e.g., 10">
+            </div>
+        </div>
+        <div class="d-flex justify-content-end mb-4">
+            <button class="btn btn-primary" style="background-color: #3b82f6; border: none; font-size: 0.85rem; padding: 0.5rem 1.5rem;">
+                + Add Rule
+            </button>
+        </div>
+
+        <hr class="text-muted opacity-25">
+
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-3 mt-4 gap-2">
+            <h6 class="m-0">Product Rules List</h6>
+            <div class="input-group search-box-wrapper" style="width: 250px;">
+                <span class="input-group-text bg-light border-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" class="form-control bg-light border-0" placeholder="Search rules...">
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table custom-table">
+                <thead>
+                    <tr>
+                        <th>Sl.No</th>
+                        <th>Category</th>
+                        <th>Product</th>
+                        <th>Dealer Quantity</th>
+                        <th>Farmer Quantity</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td>Fertilizer</td>
+                        <td>DAP</td>
+                        <td><span class="qty-badge">2 Ton</span></td>
+                        <td><span class="qty-badge">25 Kg</span></td>
+                        <td class="action-icons">
+                            <i class="bi bi-trash icon-delete"></i>
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td>Fertilizer</td>
+                        <td>DAP</td>
+                        <td><span class="qty-badge">2 Ton</span></td>
+                        <td><span class="qty-badge">25 Kg</span></td>
+                        <td class="action-icons">
+                            <i class="bi bi-trash icon-delete"></i>
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td>Fertilizer</td>
+                        <td>DAP</td>
+                        <td><span class="qty-badge">2 Ton</span></td>
+                        <td><span class="qty-badge">25 Kg</span></td>
+                        <td class="action-icons">
+                            <i class="bi bi-trash icon-delete"></i>
+                            <i class="bi bi-pencil-square icon-edit"></i>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="custom-card">
+        <div class="section-header">
+            <i class="bi bi-gift"></i> Winner Prize Details
+        </div>
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-md-6">
+                <label class="form-label">Prize Name</label>
+                <input type="text" class="form-control" placeholder="Enter the Prize Name">
+            </div>
+            <div class="col-12 col-md-6">
+                <label class="form-label">Prize Description</label>
+                <input type="text" class="form-control" placeholder="Enter the Prize Description">
+            </div>
+        </div>
+        <div class="row g-3">
+            <div class="col-12 col-md-6">
+                <label class="form-label">Prize Image</label>
+                <div class="upload-box">
+                    <i class="bi bi-cloud-arrow-up mb-2 d-block"></i>
+                    <p>Click to upload image</p>
+                    <span>Supports: JPG, PNG (Max 5MB)</span>
+                </div>
+            </div>
+            <div class="col-12 col-md-6 d-flex align-items-center">
+                <div class="note-text ms-md-3">
+                    <span class="fw-bold">Note:</span> This prize will be displayed in
+                    <ul class="mt-2 mb-0 pl-3">
+                        <li>Scheme details page visible to dealers</li>
+                        <li>Winner notification message</li>
+                        <li>Draw announcement communications</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="custom-card mb-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+            <div class="section-header m-0">
+                <i class="bi bi-ticket-perforated"></i> Lucky Draw Configuration
+            </div>
+            <div class="segmented-control">
+                <button class="btn active">Automatic</button>
+                <button class="btn">Manual</button>
+            </div>
+        </div>
+
+        <label class="form-label mb-2">Frequency</label>
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+                <button class="freq-btn">Daily</button>
+            </div>
+            <div class="col-6 col-md-3">
+                <button class="freq-btn">Weekly</button>
+            </div>
+            <div class="col-6 col-md-3">
+                <button class="freq-btn active">Monthly</button>
+            </div>
+            <div class="col-6 col-md-3">
+                <button class="freq-btn">Custom</button>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-12 col-md-6">
+                <label class="form-label">Date</label>
+                <input type="date" class="form-control" placeholder="Pick a date">
+            </div>
+            <div class="col-12 col-md-6">
+                <label class="form-label">Draw Time</label>
+                <input type="time" class="form-control" placeholder="--- AM">
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex footer-actions justify-content-between align-items-center mt-2 mb-2">
+        <button class="btn btn-previous d-flex align-items-center justify-content-center">
+            <i class="bi bi-chevron-left me-2"></i> Previous Step
+        </button>
+        <div class="d-flex gap-3">
+            <button class="btn btn-save-draft d-flex align-items-center justify-content-center">
+                <i class="bi bi-save me-2"></i> Save Draft
+            </button>
+            <button class="btn btn-next d-flex align-items-center justify-content-center" @onclick="NavigateToReviewScheme">
+                Next <i class="bi bi-chevron-right ms-2"></i>
+            </button>
+        </div>
+    </div>
+
+</div>
+
+@code {
+     private void NavigateToReviewScheme()
+    {
+        Navigation.NavigateTo("ReviewScheme");
+    }
+}

@@ -1,0 +1,2869 @@
+﻿@page "/ApplyWelfareScheme"
+@inject NavigationManager NavigationManager
+@inject HttpClient Http
+@inject IJSRuntime JS
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using RelationshipEntity = SPIC.Core.Entities.Relationship
+@using OwnershipInfo = SPIC.Core.Entities.DealerOwnershipInfo
+@using FamilyDetails = SPIC.Core.Entities.PartnerFamilyDetails
+
+<div class="container-fluid py-4 px-0">
+    
+    <div class="aws-header-container">
+        <h1>@(IsResubmissionMode ? $"Correct & Resubmit {SelectedScheme} Application" : $"Apply for {SelectedScheme}")</h1>
+        <p>@(IsResubmissionMode
+            ? "Your application was returned for correction. Update the details/documents below and resubmit - no new application will be created."
+            : "Complete the form and upload required documents. Your progress is auto-saved.")</p>
+    </div>
+    @if (ResubmitId.HasValue)
+    {
+        var rejection = GetLatestRejection();
+        if (!string.IsNullOrEmpty(_resubmitError))
+        {
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 12px;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                <div><strong>@_resubmitError</strong></div>
+                <div style="margin-top: 4px;">Submission has been disabled so that a duplicate application is not created.</div>
+            </div>
+        </div>
+        }
+        else if (_resubmitDetail != null)
+        {
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 12px;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                @if (rejection != null)
+                {
+                    <div>
+                        <strong>Rejected by @StageLevelName(rejection.ApprovalLevel)@(string.IsNullOrWhiteSpace(rejection.ApprovedBy) ? "" : $" ({rejection.ApprovedBy})")</strong>
+                        @(rejection.ApprovedAt.HasValue ? $" on {rejection.ApprovedAt.Value:dd MMM yyyy}" : "")
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(rejection.Remarks))
+                    {
+                        <div style="margin-top: 4px;"><em>Reason:</em> @rejection.Remarks</div>
+                    }
+                    <div style="margin-top: 4px;">Please correct the issues below and click Resubmit. The application keeps its original ID and will restart approval from MO.</div>
+                }
+            </div>
+        </div>
+        }
+    }
+    @if (CurrentEligibilityConditions.Any())
+    {
+    <div class="aws-eligibility-box">
+        <div class="aws-eligibility-header">
+            
+            <div class="aws-eligibility-icon">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/Eligible.png" />
+            </div>
+            
+            <div class="aws-eligibility-title-group">
+                <h3 class="aws-eligibility-title">Eligibility Conditions</h3>
+                <p class="aws-eligibility-subtitle">Please ensure you meet all the following criteria for @SelectedScheme</p>
+            </div>
+        </div>
+        
+        <ul class="aws-eligibility-list">
+            @foreach (var condition in CurrentEligibilityConditions)
+            {
+                <li>@condition</li>
+            }
+        </ul>
+    </div>
+    }
+
+    <div class="di-wrapper">
+        
+        <div class="di-header">
+            <div class="di-header-left">
+                <div class="di-main-icon">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/TwoLeaf.png" alt="Dealer Icon" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline';" />
+                    <span style="font-size: 20px; display: none;">🌱</span>
+                </div>
+                <div class="di-title-group">
+                    <h2 class="di-title">@(_isLoadingDealer ? "Loading..." : _dealer.DealerName)</h2>
+                    <p class="di-subtitle">Dealer Information Overview</p>
+                </div>
+            </div>
+            <div class="di-badge">@_dealer.DealerCode</div>
+        </div>
+
+        <div class="di-cards-container">
+            
+            <div class="di-card">
+                <div class="di-card-content">
+                    <h3>Location Info</h3>
+                    
+                    <div class="di-info-row">
+                        <div class="di-info-item with-divider">
+                            <div class="di-icon-wrap">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/State.png" />
+                            </div>
+                            <div class="di-info-text">
+                                <span class="di-info-label">State:</span>
+                                <span class="di-info-value">@_dealer.State</span>
+                            </div>
+                        </div>
+                        <div class="di-info-item">
+                            <div class="di-icon-wrap">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/Region.png" />
+                            </div>
+                            <div class="di-info-text">
+                                <span class="di-info-label">Region:</span>
+                                <span class="di-info-value">@_dealer.Region</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="di-info-row">
+                        <div class="di-info-item with-divider">
+                            <div class="di-icon-wrap">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/District.png" />
+                            </div>
+                            <div class="di-info-text">
+                                <span class="di-info-label">District:</span>
+                                <span class="di-info-value">@_dealer.District</span>
+                            </div>
+                        </div>
+                        <div class="di-info-item">
+                            <div class="di-icon-wrap">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/HeadQuarters.png" />
+                            </div>
+                            <div class="di-info-text">
+                                <span class="di-info-label">Head Quarters:</span>
+                                <span class="di-info-value">@_dealer.HQ</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <svg class="di-wave-bg" viewBox="0 0 500 100" preserveAspectRatio="none">
+                    <path d="M0,70 C200,120 400,-10 500,70 L500,100 L0,100 Z" fill="#e0eee0" opacity="0.7"></path>
+                </svg>
+            </div>
+
+            <div class="di-card">
+                <div class="di-card-content">
+                    <h3>Personal Info</h3>
+                    
+                    <div class="di-info-row">
+                        <div class="di-info-item with-divider">
+                            <div class="di-icon-wrap">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/Profile.png" />
+                            </div>
+                            <div class="di-info-text">
+                                <span class="di-info-label">Full Name:</span>
+                                <span class="di-info-value">@_dealer.DealerName</span>
+                            </div>
+                        </div>
+                        <div class="di-info-item flex-1-5 with-divider">
+                            <div class="di-icon-wrap">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/Email.png" />
+                            </div>
+                            <div class="di-info-text">
+                                <span class="di-info-label">Email:</span>
+                                <span class="di-info-value" style="word-break: break-all;">@_dealer.Email</span>
+                            </div>
+                        </div>
+                        <div class="di-info-item">
+                            <div class="di-icon-wrap">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/Phone.png" />
+                            </div>
+                            <div class="di-info-text">
+                                <span class="di-info-label">Phone:</span>
+                                <span class="di-info-value">@_dealer.Phone</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="di-info-row">
+                        <div class="di-info-item">
+                            <div class="di-icon-wrap">
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/Location.png" />
+                            </div>
+                            <div class="di-info-text">
+                                <span class="di-info-label">Address:</span>
+                                <span class="di-info-value">@_dealer.Address</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <svg class="di-wave-bg" viewBox="0 0 500 100" preserveAspectRatio="none">
+                    <path d="M0,70 C200,120 400,-10 500,70 L500,100 L0,100 Z" fill="#e0eee0" opacity="0.7"></path>
+                </svg>
+            </div>
+
+        </div>
+    </div>
+    @*     <div class="aws-section-card">
+        
+        <div class="aws-section-header">
+            <span class="aws-step-number">1</span>
+            <h2>Dealer Details</h2>
+        </div>
+
+        <div class="aws-form-grid">
+            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Dealer Code</label>
+                <input type="text" class="aws-input-readonly" value="DLR-TN-04782" readonly>
+            </div>
+            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Dealer Name</label>
+                <input type="text" class="aws-input-readonly" value="Rajesh Kumar" readonly>
+            </div>
+            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Dealership Nature</label>
+                <input type="text" class="aws-input-readonly" value="Retail Fertilizer Outlet" readonly>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Mobile Number</label>
+                <input type="text" class="aws-input-readonly" value="+91 98765 43210" readonly>
+            </div>
+            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Email Address</label>
+                <input type="text" class="aws-input-readonly" value="rajesh.kumar@email.com" readonly>
+            </div>
+            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Region</label>
+                <input type="text" class="aws-input-readonly" value="Tamil Nadu - Southern" readonly>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">District</label>
+                <input type="text" class="aws-input-readonly" value="Chennai" readonly>
+            </div>
+
+        </div>
+
+    </div>
+ *@
+    <div class="aws-section-card">
+        
+        <div class="aws-section-header">
+            <span class="aws-step-number">2</span>
+            <h2>Quantity Lifted</h2>
+        </div>
+
+        <div class="aws-form-grid-2col">
+            
+     
+            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Quantity Lifted during Last Year (MT) *</label>
+                @if (_isLoadingSalesHistory)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading sales data...</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="QuantityLiftedInput" @bind:after="OnQuantityLiftedChanged">
+                        <option value="" disabled selected hidden>--Select--</option>
+                        @if (!string.IsNullOrWhiteSpace(QuantityLiftedInput) &&
+                             !QuantityOptions.Any(o => string.Equals(o.Key, QuantityLiftedInput.Trim(), StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <option value="@QuantityLiftedInput">@QuantityLiftedInput MT</option>
+                        }
+                        @foreach (var opt in QuantityOptions)
+                        {
+                            <option value="@opt.Key">@opt.Label</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">3-Year Total Quantity (MT)</label>
+                <input type="text" class="aws-input-readonly" value="@(ThreeYearTotalQuantityLifted.HasValue ? $"{ThreeYearTotalQuantityLifted.Value:N2} MT" : "-")" readonly>
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">SP Product Turnover (3 Years)</label>
+                <input type="text" class="aws-input-readonly" value="@(ThreeYearTotalSpTurnover.HasValue ? $"Rs. {ThreeYearTotalSpTurnover.Value:0.##} Lakhs" : "-")" readonly>
+            </div>
+
+        </div>
+
+        <div class="aws-alert-info">
+            <div class="aws-alert-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+            </div>
+            <div>
+                Quantity is automatically calculated from your CreditLimitSales history. Your current lifted quantity will be auto-verified on submission.
+            </div>
+        </div>
+
+    </div>
+
+    @if (ShowBeneficiaryDetails)
+    {
+    <div class="aws-section-card">
+        
+        <div class="aws-section-header">
+            <span class="aws-step-number">3</span>
+            <h2>Beneficiary Details</h2>
+        </div>
+
+        <div class="aws-form-grid">
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Select Beneficiary Group *</label>
+                <select class="aws-form-select" @bind="SelectedBeneficiaryGroup" @bind:after="OnBeneficiaryGroupChanged">
+                    <option value="" disabled selected hidden>--Select--</option>
+                    <option value="Direct Dealer">Direct Dealer</option>
+                    @if (IsSubDealerOptionVisible)
+                    {
+                        <option value="Sub Dealer">Sub Dealer</option>
+                    }
+                    @if (IsEmployeeOptionVisible)
+                    {
+                        <option value="Approved Employee">Approved Employee</option>
+                    }
+                </select>
+            </div>
+
+        </div>
+
+        @if (!string.IsNullOrEmpty(BeneficiaryGroupError))
+        {
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 16px;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                @BeneficiaryGroupError
+            </div>
+        </div>
+        }
+
+        @if (SelectedBeneficiaryGroup == "Direct Dealer")
+        {
+        <div class="aws-form-grid">
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Name *</label>
+                @if (_isLoadingOwnership)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading nominees...</option>
+                    </select>
+                }
+                else if (_ownershipPartners.Count == 0)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>No nominee information available</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="NomineeName" @bind:after="OnDirectDealerNomineeSelected">
+                        <option value="" disabled selected hidden>--Select Nominee--</option>
+                        @foreach (var p in _ownershipPartners)
+                        {
+                            <option value="@p.Name">@p.Name</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Select Beneficiary *</label>
+                @if (_isLoadingOwnership)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading family members...</option>
+                    </select>
+                }
+                else if (_dynamicFamilyMembers.Count == 0)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>No family members available</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedExistingBeneficiary" @bind:after="OnExistingBeneficiarySelected">
+                        <option value="" disabled selected hidden>--Select--</option>
+                        <option value="new">Add new beneficiary</option>
+                        @foreach (var fm in _dynamicFamilyMembers)
+                        {
+                            <option value="@fm.Id">@fm.FamilyMemberName (@GetWelfareRelationshipName(fm.RelationshipId))</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Relationship *</label>
+                <select class="aws-form-select" @bind="NomineeRelationship">
+                    <option value="" disabled selected hidden>Select relationship</option>
+                    @foreach (var rel in _welfareRelationships.Where(r => r.IsActive))
+                    {
+                        <option value="@rel.Name">@rel.Name</option>
+                    }
+                </select>
+            </div>
+            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Birth</label>
+                <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+            
+            <div class="aws-form-group">
+                <label class="aws-form-label">Age</label>
+                <input type="text" class="aws-form-control" placeholder="Age in years" @bind="BeneficiaryAge">
+            </div>
+
+        </div>
+        }
+        else if (SelectedBeneficiaryGroup == "Sub Dealer")
+        {
+        <div class="aws-form-grid">
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Sub Dealer Name *</label>
+                @if (_isLoadingSubDealers)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading sub-dealers...</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedSubDealerId" @bind:after="OnSubDealerSelected">
+                        <option value="" disabled selected hidden>--Select Sub Dealer--</option>
+                        @foreach (var sd in _subDealers)
+                        {
+                            <option value="@sd.Id">@sd.FirmName (@sd.SubDealerCode)</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Name *</label>
+                <input type="text" class="aws-form-control" placeholder="Nominee's Full Name" @bind="NomineeName">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Birth</label>
+                <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Age</label>
+                <input type="text" class="aws-form-control" placeholder="Age in years" @bind="BeneficiaryAge">
+            </div>
+
+        </div>
+        }
+        else if (SelectedBeneficiaryGroup == "Approved Employee")
+        {
+        <div class="aws-form-grid">
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Employee Name *</label>
+                @if (_isLoadingEmployees)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading employees...</option>
+                    </select>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedEmployeeId" @bind:after="OnEmployeeSelected">
+                        <option value="" disabled selected hidden>--Select Employee--</option>
+                        @foreach (var emp in _employees)
+                        {
+                            <option value="@emp.Id">@emp.EmployeeName (@emp.EmployeeCode)</option>
+                        }
+                    </select>
+                }
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Nominee Name *</label>
+                <input type="text" class="aws-form-control" placeholder="Nominee's Full Name" @bind="NomineeName">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Birth</label>
+                <input type="date" class="aws-form-control" @bind="BeneficiaryDateOfBirth" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+
+            <div class="aws-form-group">
+                <label class="aws-form-label">Age</label>
+                <input type="text" class="aws-form-control" placeholder="Age in years" @bind="BeneficiaryAge">
+            </div>
+
+        </div>
+        }
+
+    </div>
+    }
+    <div class="aws-section-card">
+        
+        <div class="aws-section-header">
+            <span class="aws-step-number">4</span>
+            <h2>@SchemeDetailsTitle</h2>
+        </div>
+
+        @if (SelectedScheme == "Wedding")
+        {
+        <div class="aws-form-grid-2col">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Wedding Date</label>
+                <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Sathabhishekam")
+        {
+        <div class="aws-form-grid-2col">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Event Date</label>
+                <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Grahapravesam")
+        {
+        <div class="aws-form-grid-2col">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Housewarming Date</label>
+                <input type="date" class="aws-form-control" @bind="EventDate" min="@DateTime.Today.AddDays(7).ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Death Relief")
+        {
+        <div class="aws-form-grid-2col">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Date of Death</label>
+                <input type="date" class="aws-form-control" @bind="DeathDateOfDeath" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind:after="OnDateChanged">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Legal Heir Relation</label>
+                <select class="aws-form-select" @bind="LegalHeirRelation">
+                    <option value="" disabled selected hidden>Select relation</option>
+                    <option value="Wife">Wife</option>
+                    <option value="Others">Others</option>
+                </select>
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Educational Assistance")
+        {
+        <div class="aws-form-grid">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Application Type</label>
+                <div style="display: flex; gap: 16px; margin-top: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="eduAppType" value="first" checked="@IsEduFirstApplication" @onchange="OnEduAppTypeChanged" />
+                        <span>First Application</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="eduAppType" value="renewal" checked="@(!IsEduFirstApplication)" @onchange="OnEduAppTypeChanged" />
+                        <span>Renewal</span>
+                    </label>
+                </div>
+            </div>
+            @if (!IsEduFirstApplication && !IsResubmissionMode)
+            {
+            <div class="aws-form-group">
+                <label class="aws-form-label">Previously Applied Educational Assistance</label>
+                @if (_isLoadingPreviousEduApps)
+                {
+                    <select class="aws-form-select" disabled>
+                        <option value="" disabled selected hidden>Loading previous applications...</option>
+                    </select>
+                }
+                else if (_previousEduApplications.Count == 0)
+                {
+                    <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 4px;">
+                        <div class="aws-alert-icon" style="color: #e74c3c;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                        </div>
+                        <div style="color: #c0392b;">
+                            @_noPreviousEduAppsMessage
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <select class="aws-form-select" @bind="SelectedPreviousEduAppId" @bind:after="OnPreviousEduAppSelected">
+                        <option value="" disabled selected hidden>Select previous application</option>
+                        @foreach (var app in _previousEduApplications)
+                        {
+                            <option value="@app.Id">@CreateEduPreviousAppLabel(app)</option>
+                        }
+                    </select>
+                }
+            </div>
+            }
+            <div class="aws-form-group">
+                <label class="aws-form-label">Total Number of Courses (Duration in Years)</label>
+                <input type="number" class="aws-form-control" placeholder="e.g. 4" @bind="EduTotalCourses" @bind:event="oninput" @bind:after="OnEduTotalCoursesChanged" min="1" max="10">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Course</label>
+                <input type="text" class="aws-form-control" placeholder="Enter course name" @bind="EduCourse">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Year</label>
+                <select class="aws-form-select" @bind="EduYear">
+                    <option value="" disabled selected hidden>Select year</option>
+                    @foreach (var eduYearOption in GetEduYearOptions())
+                    {
+                        <option value="@eduYearOption">@GetEduYearLabel(eduYearOption)</option>
+                    }
+                </select>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">College Name</label>
+                <input type="text" class="aws-form-control" placeholder="Enter college name" @bind="EduCollegeName">
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Medical Assistance")
+        {
+        <div class="aws-form-grid">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Treatment / Medical Condition <span style="color: #e74c3c;">*</span></label>
+                <input type="text" class="aws-form-control" placeholder="e.g. Surgery, Hospitalization, Cancer treatment, Kidney treatment" @bind="MedicalTreatmentType">
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Merit Award")
+        {
+        <div class="aws-form-grid">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Name of the Candidate</label>
+                <input type="text" class="aws-form-control" placeholder="Candidate's full name" @bind="MeritCandidateName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Candidate's Father Name</label>
+                <input type="text" class="aws-form-control" placeholder="Father's name" @bind="MeritFatherName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Examination Appeared (10th/12th)</label>
+                <select class="aws-form-select" @bind="MeritExamination">
+                    <option value="" disabled selected hidden>Select examination</option>
+                    <option value="10th">10th</option>
+                    <option value="12th">12th</option>
+                </select>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Name of the Board</label>
+                <input type="text" class="aws-form-control" placeholder="Enter board name" @bind="MeritBoardName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Maximum Marks</label>
+                <input type="number" class="aws-form-control" placeholder="Enter maximum marks" @bind="MeritMaximumMarks" @bind:event="oninput" @onchange="CalculatePercentage">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Marks Obtained</label>
+                <input type="number" class="aws-form-control" placeholder="Enter marks obtained" @bind="MeritMarksObtained" @bind:event="oninput" @onchange="CalculatePercentage">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Percentage</label>
+                <input type="text" class="aws-input-readonly" value="@($"{MeritPercentage:F2}%")" readonly>
+            </div>
+        </div>
+        }
+        else if (SelectedScheme == "Distinction Award")
+        {
+        <div class="aws-form-grid">
+            <div class="aws-form-group">
+                <label class="aws-form-label">Candidate Name <span style="color: #e74c3c;">*</span></label>
+                <input type="text" class="aws-form-control" placeholder="Candidate's full name" @bind="DistinctionCandidateName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Candidate's Father Name</label>
+                <input type="text" class="aws-form-control" placeholder="Father's name" @bind="DistinctionFatherName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Professional Course Name <span style="color: #e74c3c;">*</span></label>
+                <input type="text" class="aws-form-control" placeholder="e.g. B.Tech, MBBS, B.Sc Agriculture" @bind="DistinctionProfessionalCourse">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Course Completion Year</label>
+                <input type="text" class="aws-form-control" placeholder="e.g. 2025" @bind="DistinctionCourseYear">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">University / Institution Name</label>
+                <input type="text" class="aws-form-control" placeholder="Enter university or institution name" @bind="DistinctionUniversityName">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Total / Maximum Marks <span style="color: #e74c3c;">*</span></label>
+                <input type="number" class="aws-form-control" placeholder="Enter total marks" @bind="DistinctionMaximumMarks" @bind:event="oninput" @onchange="CalculateDistinctionPercentage">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Marks Obtained <span style="color: #e74c3c;">*</span></label>
+                <input type="number" class="aws-form-control" placeholder="Enter marks obtained" @bind="DistinctionMarksObtained" @bind:event="oninput" @onchange="CalculateDistinctionPercentage">
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Aggregate Percentage</label>
+                <input type="text" class="aws-input-readonly" value="@($"{DistinctionAggregatePercentage:F2}%")" readonly>
+            </div>
+            <div class="aws-form-group">
+                <label class="aws-form-label">Any Arrears / Backlogs? <span style="color: #e74c3c;">*</span></label>
+                <div style="display: flex; gap: 16px; margin-top: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="distArrears" value="no" checked="@(DistinctionHasArrears == false)" @onchange="() => DistinctionHasArrears = false" />
+                        <span>No</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="distArrears" value="yes" checked="@(DistinctionHasArrears == true)" @onchange="() => DistinctionHasArrears = true" />
+                        <span>Yes</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        @if (DistinctionAggregatePercentage > 0 && DistinctionAggregatePercentage <= 80)
+        {
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5; margin-top: 16px;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                The aggregate percentage must be more than 80% to be eligible for the Distinction Award. Your current percentage is @($"{DistinctionAggregatePercentage:F2}%").
+            </div>
+        </div>
+        }
+        }
+        else
+        {
+        <div class="aws-alert-info">
+            <div class="aws-alert-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+            </div>
+            <div>
+                Please refer to the Eligibility Conditions section above for the benefit details and required documents for @SelectedScheme.
+            </div>
+        </div>
+        }
+
+    </div>
+    <div class="aws-section-card">
+        
+        <div class="aws-section-header">
+            <span class="aws-step-number">5</span>
+            <h2>Document Upload</h2>
+        </div>
+
+        <div class="aws-alert-info" style="border-color: #e74c3c; background: #fff5f5;">
+            <div class="aws-alert-icon" style="color: #e74c3c;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+            </div>
+            <div style="color: #c0392b;">
+                <strong>Mandatory Beneficiary Document:</strong> The beneficiary must upload either a <strong>Cancelled Cheque</strong> or <strong>Bank Passbook</strong>. At least one of these two documents is required for the application to be processed.
+            </div>
+        </div>
+
+        <div class="aws-doc-upload-list">
+            @foreach (var doc in CurrentDocuments)
+            {
+                var uploadedFile = UploadedFiles.TryGetValue(doc.Name, out var f) ? f : null;
+                var existingFile = GetExistingDocument(doc.Name);
+            <div class="aws-doc-upload-item">
+                <div class="aws-doc-upload-info">
+                    <svg class="aws-doc-icon @doc.IconClass" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    <span class="aws-doc-name">@doc.Name</span>
+                    @if (SelectedScheme == "Educational Assistance" && doc.Name == "Admission Certificate (First Year only)" && !IsEduFirstApplication)
+                    {
+                        <span class="aws-doc-skip-badge">Renewal – not required</span>
+                    }
+                    @if (SelectedScheme == "Educational Assistance" && doc.Name == "Marks list of previous year / semesters duly cleared" && IsEduFirstApplication)
+                    {
+                        <span class="aws-doc-skip-badge">First year – not required</span>
+                    }
+                    @if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of 10th standard" && string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="aws-doc-skip-badge">Not required for 12th</span>
+                    }
+                    @if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of +2 examinations" && string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <span class="aws-doc-skip-badge">Not required for 10th</span>
+                    }
+                    @if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && IsDeathReliefAffidavitRequired)
+                    {
+                        <span class="aws-doc-skip-badge" style="color:#b91c1c;background:#fee2e2;border-color:#fecaca;">Required</span>
+                    }
+                    @if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && !string.IsNullOrWhiteSpace(LegalHeirRelation) && !IsDeathReliefAffidavitRequired)
+                    {
+                        <span class="aws-doc-skip-badge">Not required for @LegalHeirRelation</span>
+                    }
+                </div>
+                @if (uploadedFile != null)
+                {
+                <div class="aws-doc-upload-done">
+                    <div class="aws-doc-upload-file-info">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span class="aws-doc-upload-filename">@uploadedFile.Name</span>
+                        <span class="aws-doc-upload-size">(@FormatFileSize(uploadedFile.Size))</span>
+                        @if (existingFile != null)
+                        {
+                            <span class="aws-doc-upload-size" style="color:#B45309;">(replaces previously uploaded document)</span>
+                        }
+                    </div>
+                    <button class="aws-btn-upload-action aws-btn-upload-remove" @onclick="() => RemoveUploadedFile(doc.Name)">Remove</button>
+                </div>
+                }
+                else if (existingFile != null)
+                {
+                <div class="aws-doc-upload-done">
+                    <div class="aws-doc-upload-file-info">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                        </svg>
+                        <span class="aws-doc-upload-filename">@existingFile.FileName</span>
+                        <span class="aws-doc-upload-size">(@FormatFileSize(existingFile.FileSize ?? 0))</span>
+                        <span class="aws-doc-upload-size" style="color:#2563eb;">Previously uploaded</span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="aws-btn-upload-action aws-btn-upload-remove" style="color:#2563eb;" @onclick="() => ViewExistingDocument(existingFile)">View</button>
+                        <button class="aws-btn-upload-action aws-btn-upload-remove" @onclick="() => RemoveExistingDocument(doc.Name)">Remove</button>
+                    </div>
+                </div>
+                }
+                else if (SelectedScheme == "Educational Assistance" && doc.Name == "Admission Certificate (First Year only)" && !IsEduFirstApplication)
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required for first-year applications</span>
+                </div>
+                }
+                else if (SelectedScheme == "Educational Assistance" && doc.Name == "Marks list of previous year / semesters duly cleared" && IsEduFirstApplication)
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required for renewal applications</span>
+                </div>
+                }
+                else if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of 10th standard" && string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase))
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when 10th examination is selected</span>
+                </div>
+                }
+                else if (SelectedScheme == "Merit Award" && doc.Name == "Marks list of +2 examinations" && string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase))
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when 12th examination is selected</span>
+                </div>
+                }
+                else if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs" && !IsDeathReliefAffidavitRequired)
+                {
+                <div class="aws-doc-upload-skipped">
+                    <span>Skipped – only required when the Legal Heir Relation is Others</span>
+                </div>
+                }
+                else
+                {
+                <div class="aws-doc-upload-zone">
+                    <InputFile OnChange="e => HandleFileUpload(doc.Name, e)" accept=".pdf,.jpg,.jpeg,.png" class="aws-doc-upload-input" />
+                    <div class="aws-doc-upload-placeholder">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <span>Click to upload</span>
+                    </div>
+                </div>
+                }
+                @if (doc.Name == "Cancelled Cheque / Bank Passbook")
+                {
+                <div class="aws-doc-cheque-name">
+                    <label class="aws-form-label">Beneficiary Name *</label>
+                    <input type="text" class="aws-form-control" placeholder="Full Name" @bind="BeneficiaryName" />
+                </div>
+                <div class="aws-alert-info aws-doc-cheque-note" style="border-color: #e74c3c; background: #fff5f5;">
+                    <div class="aws-alert-icon" style="color: #e74c3c;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </div>
+                    <div style="color: #c0392b;">
+                        <strong>NOTE: @CancelledChequeBeneficiaryNameNote</strong>
+                    </div>
+                </div>
+                }
+            </div>
+            }
+        </div>
+
+        <div class="aws-alert-info" style="margin-top: 12px;">
+            <div class="aws-alert-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+            </div>
+            <div>
+                Accepted formats: PDF, JPG, PNG. Maximum 5MB per file. All documents listed above are required for your application.
+            </div>
+        </div>
+
+    </div>
+    <div class="aws-section-card">
+        
+        <div class="aws-section-header">
+            <span class="aws-step-number">6</span>
+            <h2>Declaration</h2>
+        </div>
+
+        <div class="aws-alert-warning">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span>Please read the declaration carefully before proceeding. False information may result in rejection and future disqualification.</span>
+        </div>
+
+        <div class="aws-declaration-box">
+            <input type="checkbox" class="aws-checkbox-large" id="declarationCheck" @bind="IsDeclarationConfirmed">
+            <label class="aws-declaration-text" for="declarationCheck">
+                I, @_dealer.DealerName, hereby declare that all information provided in this application is true, accurate, and complete to the best of my knowledge. I understand that any false information or suppression of facts will lead to rejection of the application and may result in appropriate action as deemed necessary by SDWA.
+            </label>
+        </div>
+
+    </div>
+
+    <div class="aws-page-actions">
+        @if (ShowValidation && ValidationErrors.Any())
+        {
+            <div style="width: 100%; margin-bottom: 12px; background: #fff5f5; border: 1px solid #e74c3c; border-radius: 8px; padding: 12px 16px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                    <strong style="color: #e74c3c;">Please fix the following errors:</strong>
+                </div>
+                <ul style="margin: 0; padding-left: 20px; color: #c0392b; font-size: 13px;">
+                    @foreach (var error in ValidationErrors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            </div>
+        }
+        @if (!string.IsNullOrEmpty(DraftMessage))
+        {
+            var bgColor = _draftSuccess ? "#f0fff4" : "#fff5f5";
+            var borderColor = _draftSuccess ? "#27ae60" : "#e74c3c";
+            var textColor = _draftSuccess ? "#1e8449" : "#c0392b";
+            <div style="width: 100%; margin-bottom: 12px; background: @bgColor; border: 1px solid @borderColor; border-radius: 8px; padding: 12px 16px; color: @textColor; font-size: 13px;">
+                @DraftMessage
+            </div>
+        }
+        @if (!IsResubmissionMode)
+        {
+            <button class="aws-btn-action aws-btn-draft" @onclick="SaveAsDraft" disabled="@(_isSavingDraft || _isSubmitting || ResubmitId.HasValue)">@( _isSavingDraft ? "Saving..." : "Save as Draft")</button>
+        }
+        <button @onclick="OpenPreviewModal" class="aws-btn-action aws-btn-primary" disabled="@(ResubmitId.HasValue && !IsResubmissionMode)">@(IsResubmissionMode ? "Resubmit Application" : "Preview Application")</button>
+    </div>
+
+</div> 
+@if (IsPreviewModalOpen)
+{
+    <div class="aws-modal-overlay" @onclick="ClosePreviewModal">
+        <div class="aws-modal" @onclick:stopPropagation="true">
+            
+            <div class="aws-modal-header">
+                <div class="aws-modal-title">
+                    <h2>@(IsResubmissionMode ? "Preview Resubmission" : "Preview Application")</h2>
+                    <p>@(IsResubmissionMode ? "Review your corrections before resubmitting the application." : "Review your details before submitting the application.")</p>
+                </div>
+                <button class="aws-modal-close" @onclick="ClosePreviewModal" aria-label="Close">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="15" y1="9" x2="9" y2="15"></line>
+                        <line x1="9" y1="9" x2="15" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="aws-modal-body">
+                
+                <div class="aws-modal-section">
+                    <h3>Scheme</h3>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Selected Scheme</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@SelectedScheme</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Event Date</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@FormatDisplayDate(EventDate)</span>
+                    </div>
+                </div>
+
+                <div class="aws-modal-section">
+                    <h3>Dealer Details</h3>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Dealer Code</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@_dealer.DealerCode</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Name</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@_dealer.DealerName</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Region</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@_dealer.State – @_dealer.Region</span>
+                    </div>
+                </div>
+
+                <div class="aws-modal-section">
+                    <h3>Beneficiary Details</h3>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Beneficiary Group</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(SelectedBeneficiaryGroup) ? "-" : SelectedBeneficiaryGroup)</span>
+                    </div>
+                    @if (SelectedBeneficiaryGroup == "Sub Dealer" && !string.IsNullOrWhiteSpace(SelectedSubDealerName))
+                    {
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Sub Dealer</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@SelectedSubDealerName</span>
+                    </div>
+                    }
+                    @if (SelectedBeneficiaryGroup == "Approved Employee" && !string.IsNullOrWhiteSpace(SelectedEmployeeName))
+                    {
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Employee</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@SelectedEmployeeName</span>
+                    </div>
+                    }
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Nominee Name</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(NomineeName) ? "-" : NomineeName)</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Nominee Relationship</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(NomineeRelationship) ? "-" : NomineeRelationship)</span>
+                    </div>
+                    @if (SelectedBeneficiaryGroup == "Direct Dealer")
+                    {
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Beneficiary Name</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(BeneficiaryName) ? "-" : BeneficiaryName)</span>
+                    </div>
+                    }
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Quantity Lifted (Last Year)</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@QuantityLiftedDisplay</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">3-Year Total Quantity</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(ThreeYearTotalQuantityLifted.HasValue ? $"{ThreeYearTotalQuantityLifted.Value:N2} MT" : "-")</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">SP Product Turnover</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(ThreeYearTotalSpTurnover.HasValue ? $"Rs. {ThreeYearTotalSpTurnover.Value:0.##} Lakhs" : "-")</span>
+                    </div>
+                </div>
+
+                @if (SelectedScheme == "Medical Assistance")
+                {
+                <div class="aws-modal-section">
+                    <h3>Medical Assistance Details</h3>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Treatment / Medical Condition</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(MedicalTreatmentType) ? "-" : MedicalTreatmentType)</span>
+                    </div>
+                </div>
+                }
+
+                @if (SelectedScheme == "Distinction Award")
+                {
+                <div class="aws-modal-section">
+                    <h3>Distinction Award Details</h3>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Candidate Name</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(DistinctionCandidateName) ? "-" : DistinctionCandidateName)</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Father Name</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(DistinctionFatherName) ? "-" : DistinctionFatherName)</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Professional Course</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(DistinctionProfessionalCourse) ? "-" : DistinctionProfessionalCourse)</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Course Completion Year</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(DistinctionCourseYear) ? "-" : DistinctionCourseYear)</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">University / Institution</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(string.IsNullOrWhiteSpace(DistinctionUniversityName) ? "-" : DistinctionUniversityName)</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Maximum Marks</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(DistinctionMaximumMarks > 0 ? DistinctionMaximumMarks.ToString() : "-")</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Marks Obtained</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(DistinctionMarksObtained > 0 ? DistinctionMarksObtained.ToString() : "-")</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Aggregate Percentage</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@($"{DistinctionAggregatePercentage:F2}%")</span>
+                    </div>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Has Arrears</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(DistinctionHasArrears == true ? "Yes" : "No")</span>
+                    </div>
+                </div>
+                }
+
+                <div class="aws-modal-section">
+                    <h3>Documents Uploaded</h3>
+                    @foreach (var doc in CurrentDocuments)
+                    {
+                        var uploaded = HasDocument(doc.Name);
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">@doc.Name</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">@(uploaded ? "Yes" : "No")</span>
+                    </div>
+                    }
+                </div>
+
+                <div class="aws-modal-section">
+                    <h3>Declaration</h3>
+                    <div class="aws-modal-row">
+                        <span class="aws-modal-label">Confirmed</span>
+                        <span class="aws-modal-colon">:</span>
+                        <span class="aws-modal-value">Yes</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="aws-modal-footer">
+                <button class="aws-btn-modal aws-btn-modal-outline" @onclick="ClosePreviewModal">Edit</button>
+                <button class="aws-btn-modal aws-btn-modal-solid" @onclick="OpenSubmitModal">@(IsResubmissionMode ? "Confirm Resubmission" : "Submit Application")</button>
+            </div>
+
+        </div>
+    </div>
+}
+@if (IsSubmitModalOpen)
+{
+    <div class="aws-submit-overlay" @onclick="CloseSubmitModal">
+        <div class="aws-submit-modal" @onclick:stopPropagation="true">
+            
+            <div class="aws-submit-icon">
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/SubmitIcon.png" alt="Medical Assistance" />
+            </div>
+
+            <h2 class="aws-submit-title">@(IsResubmissionMode ? "Confirm Resubmission" : "Submit Application")</h2>
+            <p class="aws-submit-subtitle">@(IsResubmissionMode
+                ? "Your corrected application will be sent back to the MO for review. The original Application ID is kept."
+                : "Once submitted, your application will be sent to the MO for review. This action cannot be undone.")</p>
+
+            <div class="aws-submit-info-box">
+                <div class="aws-submit-info-row">
+                    <span class="aws-submit-info-label">Scheme</span>
+                    <span class="aws-submit-info-value">@SelectedScheme</span>
+                </div>
+                <div class="aws-submit-divider"></div>
+                <div class="aws-submit-info-row">
+                    <span class="aws-submit-info-label">Dealer</span>
+                    <span class="aws-submit-info-value">@_dealer.DealerName</span>
+                </div>
+            </div>
+
+            <div class="aws-submit-actions">
+                <button class="aws-submit-btn aws-submit-btn-cancel" @onclick="CloseSubmitModal" disabled="@_isSubmitting">Cancel</button>
+                <button class="aws-submit-btn aws-submit-btn-confirm" @onclick="ConfirmSubmission" disabled="@_isSubmitting">@( _isSubmitting ? "Submitting..." : IsResubmissionMode ? "Confirm Resubmission" : "Confirm")</button>
+            </div>
+
+        </div>
+    </div>
+}
+@if (IsSuccessModalOpen)
+{
+    <div class="aws-success-overlay">
+        <div class="aws-success-modal" @onclick:stopPropagation="true">
+            
+            <div >
+                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/WelfareSchemes/GreenTick.png" alt="Submit Icon" />
+            </div>
+
+            <h2 class="aws-success-title">@(IsResubmissionMode ? "Application Resubmitted!" : "Application Submitted!")</h2>
+            <p class="aws-success-subtitle">@(IsResubmissionMode
+                ? $"Your corrected {SelectedScheme} welfare application has been resubmitted with the same Application ID and is back with the MO for approval."
+                : $"Your {SelectedScheme} welfare application has been submitted successfully. You will receive updates via SMS and email.")</p>
+
+            <div class="aws-success-id-box">
+                <span class="aws-success-id-label">Application ID</span>
+                <span class="aws-success-id-value">@(SubmittedApplicationNumber ?? "-")</span>
+            </div>
+
+            <div class="aws-success-timeline">
+                <div class="aws-success-tl-line-bg"></div>
+                <div class="aws-success-tl-line-active"></div>
+
+                <div class="aws-success-tl-item">
+                    <div class="aws-success-tl-circle aws-tl-node-submitted">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <span class="aws-success-tl-label">Submitted</span>
+                </div>
+
+                <div class="aws-success-tl-item">
+                    <div class="aws-success-tl-circle aws-tl-node-mo">MO</div>
+                    <span class="aws-success-tl-label">MO<br>Review</span>
+                </div>
+
+                <div class="aws-success-tl-item">
+                    <div class="aws-success-tl-circle aws-tl-node-rm">RM</div>
+                    <span class="aws-success-tl-label">RM<br>Review</span>
+                </div>
+
+                <div class="aws-success-tl-item">
+                    <div class="aws-success-tl-circle aws-tl-node-sm">SM</div>
+                    <span class="aws-success-tl-label">SMM Review</span>
+                </div>
+
+                <div class="aws-success-tl-item">
+                    <div class="aws-success-tl-circle aws-tl-node-approved">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                    </div>
+                    <span class="aws-success-tl-label">Approved</span>
+                </div>
+            </div>
+
+            <div class="aws-success-actions">
+                <button class="aws-success-btn aws-success-btn-back" @onclick="CloseSuccessModal">Back</button>
+                <button class="aws-success-btn aws-success-btn-track" @onclick="TrackApplication">Track Application</button>
+            </div>
+
+        </div>
+    </div>
+}
+@code {
+    [SupplyParameterFromQuery(Name = "scheme")]
+    private string? Scheme { get; set; }
+
+    // Set when the dealer opens a REJECTED application for correction/resubmission
+    // (from My Applications). The SAME application is loaded, updated and resubmitted.
+    [SupplyParameterFromQuery(Name = "resubmitId")]
+    private int? ResubmitId { get; set; }
+
+    private WelfareApplicationDetailDto? _resubmitDetail;
+    private string? _resubmitError;
+
+    // Documents already stored on the server for this application (keyed by document type)
+    private Dictionary<string, WelfareApplicationDocumentDto> ExistingDocs { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    // Document types the dealer explicitly removed (ids are sent to the server on resubmit)
+    private HashSet<string> RemovedExistingDocNames { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    private SDWADashboardDealerDto _dealer = new();
+    private bool _isLoadingDealer = true;
+
+    private string? _schemeOverride;
+    private string SelectedScheme => _schemeOverride ?? (string.IsNullOrWhiteSpace(Scheme) ? "Grahapravesam" : Uri.UnescapeDataString(Scheme));
+
+    private bool IsResubmissionMode => ResubmitId.HasValue && _resubmitDetail != null;
+
+    // Sales history
+    private DealerSalesHistoryDto? _salesHistory;
+    private bool _isLoadingSalesHistory = true;
+
+    // Same dealer sales summary source as the MO Approval detail page (SchemeApprovalBody):
+    // the "3-Year Total Quantity (MT)" figure below is rolled up from these so it always
+    // matches the ApprovalDetail page for the same dealer.
+    private List<DealerSalesYearOptionDto> _dealerAvailableYears = new();
+    private List<DealerSalesProductDto> _dealerProductSales = new();
+
+    // 3-Year Total Quantity (MT) - Urea + DAP + 20:20 + SSP over the available years,
+    // computed with the exact same data retrieval and mapping as the MO Approval detail page.
+    private decimal? ThreeYearTotalQuantityLifted =>
+        _dealerAvailableYears.Count > 0
+            ? DealerSalesCalculator.GetThreeYearTotal(_dealerProductSales, _dealerAvailableYears)
+            : _salesHistory?.AverageQuantityLifted3Years;
+
+    // 3-Year SP (speciality) product turnover, in Rs. Lakhs, computed with the exact same
+    // data and mapping as the MO Approval detail page's "SP Product Turnover".
+    private decimal? ThreeYearTotalSpTurnover =>
+        _dealerAvailableYears.Count > 0
+            ? DealerSalesCalculator.GetThreeYearTurnover(_dealerProductSales, _dealerAvailableYears)
+            : null;
+
+    // Beneficiary group
+    private string SelectedBeneficiaryGroup { get; set; } = string.Empty;
+    private string BeneficiaryGroupError { get; set; } = string.Empty;
+
+    // Sub Dealer
+    private List<SubDealerDto> _subDealers = new();
+    private bool _isLoadingSubDealers = false;
+    private string SelectedSubDealerId { get; set; } = string.Empty;
+    private string SelectedSubDealerName { get; set; } = string.Empty;
+
+    // Employee
+    private List<EmployeeDto> _employees = new();
+    private bool _isLoadingEmployees = false;
+    private string SelectedEmployeeId { get; set; } = string.Empty;
+    private string SelectedEmployeeName { get; set; } = string.Empty;
+
+    // Ownership partners & family members (for Direct Dealer nominee/beneficiary)
+    private List<OwnershipInfo> _ownershipPartners = new();
+    private List<FamilyDetails> _dynamicFamilyMembers = new();
+    private List<RelationshipEntity> _welfareRelationships = new();
+    private bool _isLoadingOwnership = false;
+
+    // Beneficiary fields (all groups)
+    private string NomineeName { get; set; } = string.Empty;
+    private string NomineeRelationship { get; set; } = string.Empty;
+    private string BeneficiaryName { get; set; } = string.Empty;
+    private string BeneficiaryRelationship { get; set; } = string.Empty;
+    private DateTime? BeneficiaryDateOfBirth { get; set; }
+    private string BeneficiaryAge { get; set; } = string.Empty;
+
+    // Scheme-specific: Wedding / Sathabhishekam / Grahapravesam
+    private DateTime? EventDate { get; set; }
+    private string EventVenue { get; set; } = string.Empty;
+    private string OwnershipType { get; set; } = string.Empty;
+
+    // Scheme-specific: Death Relief
+    private DateTime? DeathDateOfDeath { get; set; }
+    private string LegalHeirName { get; set; } = string.Empty;
+    private string LegalHeirRelation { get; set; } = string.Empty;
+    private string DeathCause { get; set; } = string.Empty;
+
+    private bool IsDeathReliefAffidavitRequired =>
+        string.Equals(LegalHeirRelation, "Others", StringComparison.OrdinalIgnoreCase);
+
+    // Declaration & submission state
+    private bool IsDeclarationConfirmed { get; set; }
+    private bool _isSubmitting = false;
+    private bool _isSavingDraft = false;
+    private bool _draftSuccess = false;
+    private string DraftMessage { get; set; } = string.Empty;
+    private string? SubmittedApplicationNumber { get; set; }
+    private int? SubmittedApplicationId { get; set; }
+
+    private void OnDateChanged()
+    {
+        if (BeneficiaryDateOfBirth.HasValue)
+        {
+            var today = DateTime.Today;
+            var age = today.Year - BeneficiaryDateOfBirth.Value.Year;
+            if (BeneficiaryDateOfBirth.Value.Date > today.AddYears(-age)) age--;
+            BeneficiaryAge = age > 0 ? age.ToString() : string.Empty;
+        }
+        else
+        {
+            BeneficiaryAge = string.Empty;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoadingDealer = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<SDWADashboardDealerDto>("api/SDWADashboard/dealer-details");
+            if (result != null)
+                _dealer = result;
+        }
+        catch (Exception)
+        {
+            _dealer = new SDWADashboardDealerDto();
+        }
+        finally
+        {
+            _isLoadingDealer = false;
+        }
+
+        // Load ownership partners and family members for Direct Dealer nominee/beneficiary
+        await LoadOwnershipAndFamilyData();
+
+        // Load sales history
+        _isLoadingSalesHistory = true;
+        try
+        {
+            var salesResult = await Http.GetFromJsonAsync<DealerSalesHistoryDto>("api/SDWADashboard/dealer-sales-history");
+            if (salesResult != null)
+            {
+                _salesHistory = salesResult;
+            }
+        }
+        catch (Exception)
+        {
+            _salesHistory = null;
+        }
+        finally
+        {
+            _isLoadingSalesHistory = false;
+        }
+
+        // Load the SAME dealer-sales summary endpoint used by the MO Approval detail page,
+        // so the "3-Year Total Quantity (MT)" field below always matches that page.
+        try
+        {
+            if (_dealer.DealerId > 0)
+            {
+                var summary = await Http.GetFromJsonAsync<DealerSalesSummaryDto>(
+                    $"api/CreditLimitSales/dealer-sales-summary/{_dealer.DealerId}");
+                if (summary != null)
+                {
+                    _dealerAvailableYears = summary.AvailableYears ?? new List<DealerSalesYearOptionDto>();
+                    _dealerProductSales = summary.ProductSales ?? new List<DealerSalesProductDto>();
+                }
+            }
+        }
+        catch (Exception)
+        {
+            _dealerAvailableYears = new List<DealerSalesYearOptionDto>();
+            _dealerProductSales = new List<DealerSalesProductDto>();
+        }
+
+        // Resubmission mode: load the SAME rejected application and pre-fill everything
+        if (ResubmitId.HasValue)
+        {
+            await LoadResubmissionAsync(ResubmitId.Value);
+        }
+    }
+
+    private async Task LoadResubmissionAsync(int applicationId)
+    {
+        _resubmitError = null;
+        try
+        {
+            var detail = await Http.GetFromJsonAsync<WelfareApplicationDetailDto>(
+                $"api/SDWAWelfareApplication/my-application/{applicationId}");
+
+            if (detail == null)
+            {
+                _resubmitError = "Application not found.";
+                return;
+            }
+
+            if (detail.Status != 9) // WelfareApplicationStatus.ReturnedToDealer
+            {
+                _resubmitError = "This application is not waiting for your resubmission. Only applications returned by MO for correction can be edited here.";
+                return;
+            }
+
+            _resubmitDetail = detail;
+            _schemeOverride = MapSchemeTypeToPageName(detail.SchemeType);
+
+            // ---- Pre-fill all previously saved details (no new application is created) ----
+            SelectedBeneficiaryGroup = detail.BeneficiaryGroup ?? string.Empty;
+            NomineeName = detail.NomineeName ?? string.Empty;
+            NomineeRelationship = detail.NomineeRelationship ?? string.Empty;
+            BeneficiaryName = detail.BeneficiaryName ?? string.Empty;
+            BeneficiaryRelationship = string.Empty;
+            BeneficiaryDateOfBirth = detail.BeneficiaryDateOfBirth;
+            OnDateChanged();
+
+            EventDate = detail.EventDate;
+            EventVenue = detail.EventVenue ?? string.Empty;
+            OwnershipType = detail.OwnershipType ?? string.Empty;
+
+            DeathDateOfDeath = detail.DateOfDeath;
+            LegalHeirName = detail.LegalHeirName ?? string.Empty;
+            DeathCause = detail.DeathCause ?? string.Empty;
+
+            EduCourse = detail.Course ?? string.Empty;
+            EduYear = detail.EduYear?.ToString() ?? string.Empty;
+            EduCollegeName = detail.CollegeName ?? string.Empty;
+            EduTotalCourses = detail.TotalNumberOfCourses;
+            IsEduFirstApplication = detail.IsFirstApplication != false;
+
+            MedicalTreatmentType = detail.MedicalTreatmentType ?? string.Empty;
+
+            MeritCandidateName = detail.MeritCandidateName ?? string.Empty;
+            MeritFatherName = detail.MeritFatherName ?? string.Empty;
+            MeritExamination = detail.ExaminationAppeared ?? string.Empty;
+            MeritBoardName = detail.BoardName ?? string.Empty;
+            MeritMaximumMarks = detail.MaximumMarks ?? 0;
+            MeritMarksObtained = detail.MarksObtained ?? 0;
+            CalculatePercentage();
+
+            DistinctionCandidateName = detail.DistinctionCandidateName ?? string.Empty;
+            DistinctionFatherName = detail.DistinctionFatherName ?? string.Empty;
+            DistinctionProfessionalCourse = detail.ProfessionalCourseName ?? string.Empty;
+            DistinctionCourseYear = detail.CourseCompletionYear ?? string.Empty;
+            DistinctionUniversityName = detail.UniversityName ?? string.Empty;
+            DistinctionMaximumMarks = detail.DistinctionMaximumMarks ?? 0;
+            DistinctionMarksObtained = detail.DistinctionMarksObtained ?? 0;
+            CalculateDistinctionPercentage();
+            DistinctionHasArrears = detail.HasArrears;
+            DistinctionIsWholesaleEmployee = detail.IsWholesaleDealerEmployee;
+
+            var qtyRangeKey = ReverseQuantityRange(detail.QuantityLifted);
+            QuantityLiftedInput = !string.IsNullOrEmpty(qtyRangeKey)
+                ? qtyRangeKey
+                : detail.QuantityLifted?.ToString("0") ?? string.Empty;
+            IsDeclarationConfirmed = detail.IsDeclarationConfirmed;
+
+            if (SelectedBeneficiaryGroup == "Direct Dealer")
+            {
+                var match = _dynamicFamilyMembers.FirstOrDefault(b =>
+                    string.Equals(b.FamilyMemberName, BeneficiaryName, StringComparison.OrdinalIgnoreCase));
+                SelectedExistingBeneficiary = match != null ? match.Id.ToString() : "new";
+            }
+            else if (SelectedBeneficiaryGroup == "Sub Dealer")
+            {
+                await LoadSubDealers();
+                SelectedSubDealerId = detail.SubDealerId?.ToString() ?? string.Empty;
+                SelectedSubDealerName = detail.SubDealerName ?? string.Empty;
+            }
+            else if (SelectedBeneficiaryGroup == "Approved Employee")
+            {
+                await LoadEmployees();
+                SelectedEmployeeId = detail.EmployeeId?.ToString() ?? string.Empty;
+                SelectedEmployeeName = detail.EmployeeName ?? string.Empty;
+            }
+
+            // ---- Pre-fill previously uploaded documents so they can be kept, replaced or removed ----
+            ExistingDocs = new Dictionary<string, WelfareApplicationDocumentDto>(StringComparer.OrdinalIgnoreCase);
+            foreach (var doc in detail.Documents.OrderByDescending(d => d.UploadedAt))
+            {
+                var key = doc.DocumentType?.Trim() ?? string.Empty;
+                if (!string.IsNullOrEmpty(key))
+                    ExistingDocs.TryAdd(key, doc);
+            }
+        }
+        catch (Exception)
+        {
+            _resubmitError = "Unable to load the application for correction. Please try again.";
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Resubmission helpers
+    // ------------------------------------------------------------------
+
+    private WelfareApprovalStepDto? GetLatestRejection() =>
+        _resubmitDetail?.Approvals
+            .Where(ap => string.Equals(ap.ApprovalStatus, "Rejected", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(ap => ap.ApprovedAt)
+            .FirstOrDefault();
+
+    private static string StageLevelName(string level) => level switch
+    {
+        "Marketing Officer (MO)" or "MO" => "MO",
+        "Regional Manager (RM)" or "RM" => "RM",
+        "Senior Manager (SM)" or "SM" => "SM",
+        "SDWA" or "AVP" => "SDWA",
+        "SDWA Admin" or "RMD" => "SDWA Admin",
+        _ => "the approval officer"
+    };
+
+    private static string MapSchemeTypeToPageName(int schemeType) => schemeType switch
+    {
+        0 => "Medical Assistance",
+        1 => "Wedding",
+        2 => "Grahapravesam",
+        3 => "Educational Assistance",
+        4 => "Sathabhishekam",
+        5 => "Death Relief",
+        6 => "Merit Award",
+        7 => "Distinction Award",
+        _ => "Grahapravesam"
+    };
+
+    private static string ReverseQuantityRange(int? quantity) => quantity switch
+    {
+        null => "",
+        <= 0 => "lt1000",
+        1001 => "gt1000",
+        >= 5001 and <= 10000 => "5001-10000",
+        >= 10001 and <= 25000 => "10001-25000",
+        >= 25001 and <= 35000 => "25001-35000",
+        >= 35001 and <= 50000 => "35001-50000",
+        >= 50001 => "gt50001",
+        _ => ""
+    };
+
+    private WelfareApplicationDocumentDto? GetExistingDocument(string docName) =>
+        IsResubmissionMode &&
+        !RemovedExistingDocNames.Contains(docName) &&
+        ExistingDocs.TryGetValue(docName, out var existing)
+            ? existing
+            : null;
+
+    /// <summary>Doc counts as present when newly uploaded OR still present from the previous submission.</summary>
+    private bool HasDocument(string docName) =>
+        UploadedFiles.ContainsKey(docName) || GetExistingDocument(docName) != null;
+
+    private void RemoveExistingDocument(string docName)
+    {
+        RemovedExistingDocNames.Add(docName);
+        StateHasChanged();
+    }
+
+    private async Task ViewExistingDocument(WelfareApplicationDocumentDto doc)
+    {
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var url = $"{baseUrl}/api/SDWAWelfareApplication/document/{doc.Id}";
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    /// <summary>
+    /// Comma-separated ids of previously stored documents to delete server-side:
+    /// explicitly removed ones plus any that are being replaced by a new upload.
+    /// </summary>
+    private string BuildRemovedDocumentIds()
+    {
+        var ids = ExistingDocs.Values
+            .Where(d =>
+                RemovedExistingDocNames.Contains(d.DocumentType ?? string.Empty) ||
+                UploadedFiles.ContainsKey(d.DocumentType ?? string.Empty))
+            .Select(d => d.Id)
+            .Distinct();
+
+        return string.Join(",", ids);
+    }
+
+    private async Task OnBeneficiaryGroupChanged()
+    {
+        BeneficiaryGroupError = string.Empty;
+        SelectedSubDealerId = string.Empty;
+        SelectedSubDealerName = string.Empty;
+        SelectedEmployeeId = string.Empty;
+        SelectedEmployeeName = string.Empty;
+        SelectedExistingBeneficiary = string.Empty;
+        NomineeName = string.Empty;
+        NomineeRelationship = string.Empty;
+        BeneficiaryName = string.Empty;
+        BeneficiaryDateOfBirth = null;
+        BeneficiaryAge = string.Empty;
+
+        if (SelectedBeneficiaryGroup == "Sub Dealer")
+        {
+            await LoadSubDealers();
+            if (_salesHistory != null && !_salesHistory.IsSubDealerEligible)
+            {
+                BeneficiaryGroupError = "You do not have sufficient sales quantity to apply for a Sub Dealer. A minimum average annual sales of 50,000 MT over the last 3 years is required.";
+            }
+        }
+        else if (SelectedBeneficiaryGroup == "Approved Employee")
+        {
+            await LoadEmployees();
+            if (_salesHistory != null && !_salesHistory.IsEmployeeEligible)
+            {
+                BeneficiaryGroupError = "You do not have sufficient sales quantity to apply for an Approved Employee. A minimum average annual sales of 5,000 MT over the last 3 years is required.";
+            }
+        }
+        else if (SelectedBeneficiaryGroup == "Direct Dealer")
+        {
+            if (_ownershipPartners.Count == 1)
+            {
+                NomineeName = _ownershipPartners[0].Name;
+                OnDirectDealerNomineeSelected();
+            }
+        }
+    }
+
+    private async Task LoadSubDealers()
+    {
+        _isLoadingSubDealers = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<SubDealerDto>>("api/SubDealerEmployee/my-sub-dealers");
+            if (result != null)
+                _subDealers = result;
+        }
+        catch (Exception)
+        {
+            _subDealers = new List<SubDealerDto>();
+        }
+        finally
+        {
+            _isLoadingSubDealers = false;
+        }
+    }
+
+    private async Task LoadEmployees()
+    {
+        _isLoadingEmployees = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<EmployeeDto>>("api/SubDealerEmployee/my-employees");
+            if (result != null)
+                _employees = result;
+        }
+        catch (Exception)
+        {
+            _employees = new List<EmployeeDto>();
+        }
+        finally
+        {
+            _isLoadingEmployees = false;
+        }
+    }
+
+    private async Task LoadOwnershipAndFamilyData()
+    {
+        if (_dealer.DealerId <= 0) return;
+        _isLoadingOwnership = true;
+        StateHasChanged();
+        try
+        {
+            var partnersTask = Http.GetFromJsonAsync<List<OwnershipInfo>>($"api/DealerOwnershipInfo/byDealer/{_dealer.DealerId}");
+            var familyTask = Http.GetFromJsonAsync<List<FamilyDetails>>("api/PartnerFamilyDetails/all");
+            var relTask = Http.GetFromJsonAsync<List<RelationshipEntity>>("api/Relationship/all");
+            await Task.WhenAll(partnersTask, familyTask, relTask);
+
+            _ownershipPartners = partnersTask.Result ?? new();
+            var allFamily = familyTask.Result ?? new();
+            _welfareRelationships = relTask.Result ?? new();
+            _dynamicFamilyMembers = allFamily.Where(f => _ownershipPartners.Any(p => p.Id == f.OwnershipPartnerId)).ToList();
+        }
+        catch (Exception)
+        {
+            _ownershipPartners = new();
+            _dynamicFamilyMembers = new();
+        }
+        finally
+        {
+            _isLoadingOwnership = false;
+        }
+    }
+
+    private void OnSubDealerSelected()
+    {
+        var selected = _subDealers.FirstOrDefault(sd => sd.Id.ToString() == SelectedSubDealerId);
+        SelectedSubDealerName = selected?.FirmName ?? string.Empty;
+
+        if (selected != null)
+        {
+            // Load nominee / beneficiary information dynamically from the Sub Dealer master
+            if (!string.IsNullOrWhiteSpace(selected.NomineeName))
+                NomineeName = selected.NomineeName;
+
+            if (!string.IsNullOrWhiteSpace(selected.BeneficiaryName))
+                BeneficiaryName = selected.BeneficiaryName;
+
+            if (!string.IsNullOrWhiteSpace(selected.Relationship))
+                NomineeRelationship = selected.Relationship;
+
+            if (selected.DOB.HasValue)
+            {
+                BeneficiaryDateOfBirth = selected.DOB.Value;
+                OnDateChanged();
+            }
+        }
+    }
+
+    private void OnDirectDealerNomineeSelected()
+    {
+        NomineeRelationship = string.Empty;
+    }
+
+    private void OnEmployeeSelected()
+    {
+        var selected = _employees.FirstOrDefault(e => e.Id.ToString() == SelectedEmployeeId);
+        SelectedEmployeeName = selected?.EmployeeName ?? string.Empty;
+
+        if (selected != null)
+        {
+            // Load nominee / beneficiary information dynamically from the Employee master
+            if (!string.IsNullOrWhiteSpace(selected.BeneficiaryName))
+                BeneficiaryName = selected.BeneficiaryName;
+
+            if (!string.IsNullOrWhiteSpace(selected.Relationship))
+                NomineeRelationship = selected.Relationship;
+
+            if (selected.DOB.HasValue)
+            {
+                BeneficiaryDateOfBirth = selected.DOB.Value;
+                OnDateChanged();
+            }
+        }
+    }
+
+    // Existing beneficiaries (loaded dynamically from dealer's family members)
+    private string SelectedExistingBeneficiary { get; set; } = string.Empty;
+
+    private string GetWelfareRelationshipName(int id) =>
+        _welfareRelationships.FirstOrDefault(r => r.Id == id)?.Name ?? string.Empty;
+
+    private void OnExistingBeneficiarySelected()
+    {
+        if (SelectedExistingBeneficiary == "new")
+        {
+            BeneficiaryName = string.Empty;
+            NomineeRelationship = string.Empty;
+            BeneficiaryDateOfBirth = null;
+            OnDateChanged();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(SelectedExistingBeneficiary) ||
+            !int.TryParse(SelectedExistingBeneficiary, out var beneficiaryId))
+            return;
+
+        var match = _dynamicFamilyMembers.FirstOrDefault(b => b.Id == beneficiaryId);
+        if (match != null)
+        {
+            BeneficiaryName = match.FamilyMemberName;
+            NomineeRelationship = GetWelfareRelationshipName(match.RelationshipId);
+            BeneficiaryDateOfBirth = match.DateOfBirth;
+            OnDateChanged();
+        }
+    }
+
+    private static readonly Dictionary<string, List<string>> EligibilityConditionsMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Wedding"] = new List<string>
+        {
+            "Direct Dealers - All States: ₹15,000",
+            "Sub Dealers / Employees - TN/PY: ₹7,500",
+            "Wholesale Dealer's Subdealer & approved employees are eligible (TN/PY only)",
+            "Invitation to be sent 7 days in advance",
+            "Required Document: Invitation"
+        },
+        ["Sathabhishekam"] = new List<string>
+        {
+            "Benefit: ₹12,000 (All States)",
+            "No specific volume lifting required",
+            "Eligible for Dealers & their parents",
+            "Invitation to be sent 7 days in advance",
+            "Required Document: Invitation"
+        },
+        ["Grahapravesam"] = new List<string>
+        {
+            "Direct Dealers - All States: ₹5,000",
+            "Invitation to be sent 7 days in advance",
+            "Required Document: Invitation"
+        },
+        ["Educational Assistance"] = new List<string>
+        {
+            "MBBS - All States: ₹20,000",
+            "MCA / MBA / BDS / BPT / B Pharm / BGL / B Sc (Agri) / B Sc (Horti) / B Sc (Nursing) - All States: ₹15,000",
+            "All Engineering Courses - All States: ₹15,000",
+            "PG Course Professional - All States: ₹15,000",
+            "PG Course Non Professional - All States: ₹10,000",
+            "Students should pass in all subjects for renewal",
+            "Proposal to be submitted within 3 months from the date of fees receipt",
+            "Hostel expenses / Caution Deposit / Others/Misc. will not be considered",
+            "Eligible: Children of dealers, partners, Wholesale Dealer's approved Employees (TN/PY only)",
+            "Employees shall be eligible for 50% of dealer member's eligibility",
+            "First Year Documents: Admission Certificate, Fees Receipt",
+            "Subsequent Years Documents: Fees Receipt, Marks list of previous year/semesters duly cleared"
+        },
+        ["Medical Assistance"] = new List<string>
+        {
+            "Expenditure below ₹1.50 Lakhs - All States: ₹30,000",
+            "Expenditure exceeding ₹1.50 Lakhs - All States: ₹50,000",
+            "50% of eligible expenditure with a cap of ₹25,000",
+            "Total reimbursement shall not exceed ₹50,000 in a period of 3 years from the first claim",
+            "Minimum expenditure for claim should be ₹20,000",
+            "Room rent & diet charges are not allowed",
+            "Doctor fees, medicines, lab expenses, surgery & hospital charges are considered",
+            "Eligible: Self, spouse and their children, Wholesale Dealer's approved Employees (TN/PY only)",
+            "Parents are NOT eligible",
+            "Required Documents: Hospital Discharge Summary, Bills issued by Hospital/Lab, Bills for purchase of medicines"
+        },
+        ["Death Relief"] = new List<string>
+        {
+            "Age < 50 AND SPIC Exp >= 10 years - All States: ₹30,000",
+            "Age < 50 AND SPIC Exp < 10 years - All States: ₹25,000",
+            "Age >= 50 AND SPIC Exp >= 10 years - All States: ₹20,000",
+            "Age >= 50 AND SPIC Exp < 10 years - All States: ₹15,000",
+            "No relief for suicide case",
+            "Spouse is natural legal heir",
+            "Wholesale Dealer's approved Employees are eligible (TN/PY only)",
+            "Employees shall be eligible for 50% of dealer member's eligibility",
+            "Required Documents: Death Certificate, Legal heir certificate (in case spouse is not alive), Affidavit from other legal heirs"
+        },
+        ["Merit Award"] = new List<string>
+        {
+            "First Rank - All States: ₹15,000",
+            "Second Rank - All States: ₹12,000",
+            "Third Rank - All States: ₹10,000",
+            "Fourth Rank - TN/PY only: ₹8,000",
+            "Fifth Rank - TN/PY only: ₹5,000",
+            "Minimum 80% marks scored only considered",
+            "No specific volume lifting required",
+            "Travel reimbursement: ₹2,500 (within state), ₹5,000 (other state)",
+            "Required Documents: Marks list of 10th standard & +2 examinations"
+        },
+        ["Distinction Award"] = new List<string>
+        {
+            "Professional Course - All States: ₹15,000",
+            "Ph.D Scholars (Dealers) - All States: ₹20,000",
+            "Ph.D Scholars (Employees) - TN/PY only: ₹10,000",
+            "Must have completed Professional Course without any arrears and scored more than 80% aggregate",
+            "Wholesale Dealer's approved Employees eligible (TN/PY only)",
+            "Employees shall be eligible for 50% of dealer member's eligibility",
+            "Required Documents: Marks list of all semesters"
+        }
+    };
+
+    private List<string> CurrentEligibilityConditions =>
+        EligibilityConditionsMap.TryGetValue(SelectedScheme, out var conditions) ? conditions : new List<string>();
+
+    private string SchemeDetailsTitle => SelectedScheme switch
+    {
+        "Wedding" => "Wedding Details",
+        "Sathabhishekam" => "Sathabhishekam Details",
+        "Grahapravesam" => "Grahapravesam Details",
+        "Educational Assistance" => "Educational Details",
+        "Medical Assistance" => "Medical Assistance Details",
+        "Death Relief" => "Death Relief Details",
+        "Merit Award" => "Merit Award Details",
+        "Distinction Award" => "Distinction Award Details",
+        _ => $"{SelectedScheme} Details"
+    };
+
+    private record DocumentInfo(string Name, string IconClass);
+
+    private static readonly Dictionary<string, List<DocumentInfo>> DocumentsMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Wedding"] = new List<DocumentInfo>
+        {
+            new("Invitation", "aws-icon-red")
+        },
+        ["Sathabhishekam"] = new List<DocumentInfo>
+        {
+            new("Invitation", "aws-icon-red")
+        },
+        ["Grahapravesam"] = new List<DocumentInfo>
+        {
+            new("Invitation / Housewarming Card Copy", "aws-icon-red"),
+            new("House Ownership Proof", "aws-icon-blue")
+        },
+        ["Educational Assistance"] = new List<DocumentInfo>
+        {
+            new("Admission Certificate (First Year only)", "aws-icon-green"),
+            new("Fees Receipt", "aws-icon-blue"),
+            new("Marks list of previous year / semesters duly cleared", "aws-icon-pink")
+        },
+        ["Medical Assistance"] = new List<DocumentInfo>
+        {
+            new("Hospital Discharge Summary", "aws-icon-red"),
+            new("Bills issued by Hospital / Lab", "aws-icon-blue"),
+            new("Bills for purchase of medicines", "aws-icon-green")
+        },
+        ["Death Relief"] = new List<DocumentInfo>
+        {
+            new("Death Certificate", "aws-icon-red"),
+            new("Legal Heir Certificate (if spouse is not alive)", "aws-icon-blue"),
+            new("Affidavit from other legal heirs", "aws-icon-pink")
+        },
+        ["Merit Award"] = new List<DocumentInfo>
+        {
+            new("Marks list of 10th standard", "aws-icon-green"),
+            new("Marks list of +2 examinations", "aws-icon-blue")
+        },
+        ["Distinction Award"] = new List<DocumentInfo>
+        {
+            new("Course Completion Certificate", "aws-icon-green"),
+            new("Marksheets / Aggregate Certificate", "aws-icon-blue")
+        }
+    };
+
+    private List<DocumentInfo> CurrentDocuments
+    {
+        get
+        {
+            var docs = DocumentsMap.TryGetValue(SelectedScheme, out var schemeDocs)
+                ? new List<DocumentInfo>(schemeDocs)
+                : new List<DocumentInfo>();
+            docs.Add(new DocumentInfo("Cancelled Cheque / Bank Passbook", "aws-icon-blue"));
+            return docs;
+        }
+    }
+
+    private string CancelledChequeBeneficiaryNameNote =>
+        string.IsNullOrWhiteSpace(BeneficiaryName)
+            ? "The Beneficiary Name must exactly match the name mentioned on the Cancelled Cheque / Bank Passbook."
+            : $"The Beneficiary Name \"{BeneficiaryName}\" must exactly match the name mentioned on the Cancelled Cheque / Bank Passbook.";
+
+    private string EduCourse { get; set; } = string.Empty;
+    private string EduYear { get; set; } = string.Empty;
+    private string EduCollegeName { get; set; } = string.Empty;
+    private int? EduTotalCourses { get; set; }
+    private bool IsEduFirstApplication { get; set; } = true;
+
+    // Year dropdown is generated from EduTotalCourses (1st Year .. Nth Year) instead of a fixed list.
+    private IEnumerable<int> GetEduYearOptions()
+    {
+        var totalCourses = EduTotalCourses.GetValueOrDefault();
+        return totalCourses > 0 ? Enumerable.Range(1, totalCourses) : Enumerable.Empty<int>();
+    }
+
+    private static string GetEduYearLabel(int year) => year switch
+    {
+        1 => "1st Year",
+        2 => "2nd Year",
+        3 => "3rd Year",
+        _ => $"{year}th Year"
+    };
+
+    private void OnEduTotalCoursesChanged()
+    {
+        var totalCourses = EduTotalCourses.GetValueOrDefault();
+        if (int.TryParse(EduYear, out var selectedYear) && (totalCourses <= 0 || selectedYear > totalCourses))
+            EduYear = string.Empty;
+    }
+
+    // Educational Assistance renewal: previously submitted applications of the logged-in user
+    private List<EducationalApplicationSummaryDto> _previousEduApplications = new();
+    private bool _isLoadingPreviousEduApps = false;
+    private string SelectedPreviousEduAppId { get; set; } = string.Empty;
+    private string _noPreviousEduAppsMessage = string.Empty;
+
+    private async Task LoadPreviousEducationalApplications()
+    {
+        _isLoadingPreviousEduApps = true;
+        _noPreviousEduAppsMessage = string.Empty;
+        _previousEduApplications = new List<EducationalApplicationSummaryDto>();
+        SelectedPreviousEduAppId = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<EducationalApplicationSummaryDto>>(
+                "api/SDWAWelfareApplication/my-educational-applications");
+            if (result != null)
+                _previousEduApplications = result;
+        }
+        catch (Exception)
+        {
+            _previousEduApplications = new List<EducationalApplicationSummaryDto>();
+        }
+        finally
+        {
+            _isLoadingPreviousEduApps = false;
+            if (_previousEduApplications.Count == 0)
+                _noPreviousEduAppsMessage = "No previous Educational Assistance application found for renewal.";
+            StateHasChanged();
+        }
+    }
+
+    private static string CreateEduPreviousAppLabel(EducationalApplicationSummaryDto app)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(app.Course))
+            parts.Add(app.Course);
+        if (app.EduYear.HasValue)
+            parts.Add($"{app.EduYear} year");
+        if (!string.IsNullOrWhiteSpace(app.CollegeName))
+            parts.Add(app.CollegeName);
+
+        var baseText = string.Join(" - ", parts);
+        return string.IsNullOrWhiteSpace(baseText)
+            ? app.ApplicationNumber ?? $"Application #{app.Id}"
+            : $"{baseText} ({app.ApplicationNumber})";
+    }
+
+    private async Task OnPreviousEduAppSelected()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedPreviousEduAppId) ||
+            !int.TryParse(SelectedPreviousEduAppId, out var appId))
+            return;
+
+        try
+        {
+            var detail = await Http.GetFromJsonAsync<WelfareApplicationDetailDto>(
+                $"api/SDWAWelfareApplication/my-application/{appId}");
+
+            if (detail != null && detail.SchemeType == (int)WelfareSchemeType.EducationalAssistance)
+            {
+                EduTotalCourses = detail.TotalNumberOfCourses;
+                EduCourse = detail.Course ?? string.Empty;
+                EduYear = detail.EduYear?.ToString() ?? string.Empty;
+                EduCollegeName = detail.CollegeName ?? string.Empty;
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        StateHasChanged();
+    }
+
+    private string MedicalTreatmentType { get; set; } = string.Empty;
+
+    private string QuantityLiftedInput { get; set; } = string.Empty;
+
+    private static readonly (string Key, string Label)[] QuantityOptions = new (string Key, string Label)[]
+    {
+        ("lt1000", "<1,000 MT"),
+        ("gt1000", ">1,000 MT"),
+        ("5001-10000", "5,001 to 10,000 MT"),
+        ("10001-25000", "10,001 to 25,000 MT"),
+        ("25001-35000", "25,001 to 35,000 MT"),
+        ("35001-50000", "35,001 to 50,000 MT"),
+        ("gt50001", ">50,001 MT")
+    };
+
+    private bool ShowBeneficiaryDetails => TryGetQuantityLifted(out _);
+
+    private bool IsSubDealerOptionVisible
+    {
+        get
+        {
+            if (!TryGetQuantityLifted(out var qty) || !qty.HasValue) return false;
+            return qty.Value >= 50000;
+        }
+    }
+
+    private bool IsEmployeeOptionVisible
+    {
+        get
+        {
+            if (!TryGetQuantityLifted(out var qty) || !qty.HasValue) return false;
+            return qty.Value >= 5000;
+        }
+    }
+
+    private void OnQuantityLiftedChanged()
+    {
+        if (SelectedBeneficiaryGroup == "Sub Dealer" && !IsSubDealerOptionVisible)
+        {
+            SelectedBeneficiaryGroup = string.Empty;
+            OnBeneficiaryGroupChanged();
+        }
+        else if (SelectedBeneficiaryGroup == "Approved Employee" && !IsEmployeeOptionVisible)
+        {
+            SelectedBeneficiaryGroup = string.Empty;
+            OnBeneficiaryGroupChanged();
+        }
+    }
+
+    private string QuantityLiftedDisplay
+    {
+        get
+        {
+            var input = QuantityLiftedInput?.Trim();
+            if (string.IsNullOrEmpty(input)) return "-";
+            var opt = QuantityOptions.FirstOrDefault(o => string.Equals(o.Key, input, StringComparison.OrdinalIgnoreCase));
+            return opt.Key != null ? opt.Label : $"{input} MT";
+        }
+    }
+
+    private bool TryGetQuantityLifted(out int? quantity)
+    {
+        quantity = null;
+        var input = QuantityLiftedInput?.Trim();
+        if (string.IsNullOrEmpty(input)) return false;
+
+        var match = QuantityOptions.FirstOrDefault(o =>
+            string.Equals(o.Key, input, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(o.Label, input, StringComparison.OrdinalIgnoreCase));
+        if (match.Key != null)
+        {
+            quantity = MapQuantityRange(match.Key);
+            return quantity.HasValue;
+        }
+
+        var cleaned = input.Replace(",", string.Empty);
+        if (decimal.TryParse(cleaned, out var parsed) && parsed > 0)
+        {
+            quantity = (int)Math.Round(parsed);
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task OnEduAppTypeChanged(ChangeEventArgs e)
+    {
+        IsEduFirstApplication = e.Value?.ToString() == "first";
+
+        if (IsEduFirstApplication)
+        {
+            SelectedPreviousEduAppId = string.Empty;
+            _noPreviousEduAppsMessage = string.Empty;
+        }
+        else
+        {
+            await LoadPreviousEducationalApplications();
+        }
+    }
+
+    private string MeritCandidateName { get; set; } = string.Empty;
+    private string MeritFatherName { get; set; } = string.Empty;
+    private string MeritExamination { get; set; } = string.Empty;
+    private string MeritBoardName { get; set; } = string.Empty;
+    private int MeritMaximumMarks { get; set; }
+    private int MeritMarksObtained { get; set; }
+    private double MeritPercentage { get; set; }
+
+    private void CalculatePercentage()
+    {
+        if (MeritMaximumMarks > 0)
+        {
+            MeritPercentage = (double)MeritMarksObtained / MeritMaximumMarks * 100;
+        }
+        else
+        {
+            MeritPercentage = 0;
+        }
+    }
+
+    private string DistinctionCandidateName { get; set; } = string.Empty;
+    private string DistinctionFatherName { get; set; } = string.Empty;
+    private string DistinctionProfessionalCourse { get; set; } = string.Empty;
+    private string DistinctionCourseYear { get; set; } = string.Empty;
+    private string DistinctionUniversityName { get; set; } = string.Empty;
+    private int DistinctionMaximumMarks { get; set; }
+    private int DistinctionMarksObtained { get; set; }
+    private double DistinctionAggregatePercentage { get; set; }
+    private bool? DistinctionHasArrears { get; set; }
+    private bool? DistinctionIsWholesaleEmployee { get; set; }
+
+    private void CalculateDistinctionPercentage()
+    {
+        if (DistinctionMaximumMarks > 0)
+        {
+            DistinctionAggregatePercentage = (double)DistinctionMarksObtained / DistinctionMaximumMarks * 100;
+        }
+        else
+        {
+            DistinctionAggregatePercentage = 0;
+        }
+    }
+
+    private record UploadedFileInfo(string Name, string ContentType, long Size, byte[] Data);
+
+    private Dictionary<string, UploadedFileInfo> UploadedFiles { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    private async Task HandleFileUpload(string docName, InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        if (file.Size > 5 * 1024 * 1024)
+        {
+            return;
+        }
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (ext is not (".pdf" or ".jpg" or ".jpeg" or ".png"))
+        {
+            return;
+        }
+
+        // Buffer the bytes now: IBrowserFile references become invalid once the
+        // InputFile element is re-rendered out of the DOM (_blazorFilesById error)
+        await using var stream = file.OpenReadStream(maxAllowedSize: 6 * 1024 * 1024);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+
+        UploadedFiles[docName] = new UploadedFileInfo(file.Name, file.ContentType, file.Size, buffer.ToArray());
+        StateHasChanged();
+    }
+
+    private void RemoveUploadedFile(string docName)
+    {
+        UploadedFiles.Remove(docName);
+        StateHasChanged();
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        return $"{bytes / (1024.0 * 1024.0):F1} MB";
+    }
+
+    private bool IsPreviewModalOpen { get; set; } = false;
+    private bool IsSubmitModalOpen { get; set; } = false;
+    private bool IsSuccessModalOpen { get; set; } = false;
+    private bool ShowValidation { get; set; } = false;
+    private List<string> ValidationErrors { get; set; } = new();
+
+    private void OpenPreviewModal()
+    {
+        // While correcting an existing application, never allow a fresh submission
+        // (a new application must NOT be created during resubmission).
+        if (ResubmitId.HasValue && !IsResubmissionMode) return;
+
+        ShowValidation = false;
+        ValidationErrors.Clear();
+        IsPreviewModalOpen = true;
+    }
+
+    private void ClosePreviewModal()
+    {
+        IsPreviewModalOpen = false;
+    }
+
+    private void OpenSubmitModal()
+    {
+        IsPreviewModalOpen = false;
+        IsSubmitModalOpen = true;
+    }
+
+    private void CloseSubmitModal()
+    {
+        IsSubmitModalOpen = false;
+    }
+
+    private async Task ConfirmSubmission()
+    {
+        if (_isSubmitting) return;
+
+        var errors = ValidateApplication();
+        if (errors.Any())
+        {
+            ValidationErrors = errors;
+            ShowValidation = true;
+            IsSubmitModalOpen = false;
+            return;
+        }
+
+        _isSubmitting = true;
+        ShowValidation = false;
+        ValidationErrors.Clear();
+        StateHasChanged();
+
+        try
+        {
+            // Resubmission updates the SAME application (same id) and restarts approval at MO;
+            // a normal submission creates a new application.
+            var url = IsResubmissionMode
+                ? $"api/WelfareApplication/resubmit/{ResubmitId.Value}"
+                : "api/WelfareApplication/submit";
+
+            var response = await PostApplicationAsync(url, IsResubmissionMode);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                SubmittedApplicationNumber = TryGetStringProperty(body, "applicationNumber");
+                SubmittedApplicationId = TryGetIntProperty(body, "applicationId");
+                IsSubmitModalOpen = false;
+                IsSuccessModalOpen = true;
+            }
+            else
+            {
+                ValidationErrors = new List<string>
+                {
+                    TryGetStringProperty(body, "message") ?? "Application submission failed. Please try again."
+                };
+                ShowValidation = true;
+                IsSubmitModalOpen = false;
+            }
+        }
+        catch (Exception)
+        {
+            ValidationErrors = new List<string> { "Could not reach the server. Please check your connection and try again." };
+            ShowValidation = true;
+            IsSubmitModalOpen = false;
+        }
+        finally
+        {
+            _isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SaveAsDraft()
+    {
+        // Drafts always create a NEW application - not allowed while correcting an existing one
+        if (_isSavingDraft || _isSubmitting || ResubmitId.HasValue) return;
+
+        _isSavingDraft = true;
+        DraftMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            var response = await PostApplicationAsync("api/WelfareApplication/draft");
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (response.IsSuccessStatusCode)
+            {
+                var reference = TryGetStringProperty(body, "applicationNumber");
+                DraftMessage = string.IsNullOrWhiteSpace(reference)
+                    ? "Draft saved successfully."
+                    : $"Draft saved successfully. Reference: {reference}";
+                _draftSuccess = true;
+            }
+            else
+            {
+                DraftMessage = TryGetStringProperty(body, "message") ?? "Could not save the draft. Please try again.";
+                _draftSuccess = false;
+            }
+        }
+        catch (Exception)
+        {
+            DraftMessage = "Could not reach the server. Please check your connection and try again.";
+            _draftSuccess = false;
+        }
+        finally
+        {
+            _isSavingDraft = false;
+            StateHasChanged();
+        }
+    }
+
+    private List<string> ValidateApplication()
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(QuantityLiftedInput))
+            errors.Add("Quantity Lifted during Last Year (MT) is required.");
+        else if (!TryGetQuantityLifted(out _))
+            errors.Add("Please enter or select a valid Quantity Lifted during Last Year (MT).");
+
+        // Beneficiary Group
+        if (string.IsNullOrWhiteSpace(SelectedBeneficiaryGroup))
+            errors.Add("Beneficiary Group is required.");
+
+        if (SelectedBeneficiaryGroup == "Sub Dealer")
+        {
+            if (string.IsNullOrWhiteSpace(SelectedSubDealerId))
+                errors.Add("Sub Dealer selection is required.");
+            else if (_salesHistory != null && !_salesHistory.IsSubDealerEligible)
+                errors.Add("You do not have sufficient sales quantity to apply for a Sub Dealer. A minimum average annual sales of 50,000 MT over the last 3 years is required.");
+        }
+
+        if (SelectedBeneficiaryGroup == "Approved Employee")
+        {
+            if (string.IsNullOrWhiteSpace(SelectedEmployeeId))
+                errors.Add("Employee selection is required.");
+            else if (_salesHistory != null && !_salesHistory.IsEmployeeEligible)
+                errors.Add("You do not have sufficient sales quantity to apply for an Approved Employee. A minimum average annual sales of 5,000 MT over the last 3 years is required.");
+        }
+
+        // Nominee
+        if (string.IsNullOrWhiteSpace(NomineeName))
+            errors.Add("Nominee Name is required.");
+
+        if (SelectedBeneficiaryGroup == "Direct Dealer" && string.IsNullOrWhiteSpace(NomineeRelationship))
+            errors.Add("Nominee Relationship is required.");
+
+        // Beneficiary
+        if (SelectedBeneficiaryGroup == "Direct Dealer" && string.IsNullOrWhiteSpace(SelectedExistingBeneficiary))
+            errors.Add("Please select a beneficiary.");
+
+        if (string.IsNullOrWhiteSpace(BeneficiaryName))
+            errors.Add("Beneficiary Name is required.");
+
+        // Scheme-specific fields
+        switch (SelectedScheme)
+        {
+            case "Wedding":
+            case "Sathabhishekam":
+            case "Grahapravesam":
+                ValidateEventDate(errors);
+                break;
+
+            case "Death Relief":
+                if (DeathDateOfDeath == null)
+                    errors.Add("Date of Death is required.");
+                else if (DeathDateOfDeath.Value.Date > DateTime.Today)
+                    errors.Add("Date of Death cannot be in the future.");
+
+                if (string.IsNullOrWhiteSpace(LegalHeirRelation))
+                    errors.Add("Please select the Legal Heir Relation.");
+                break;
+
+            case "Medical Assistance":
+                if (string.IsNullOrWhiteSpace(MedicalTreatmentType))
+                    errors.Add("Treatment / Medical Condition is required.");
+                break;
+
+            case "Educational Assistance":
+                if (!IsEduFirstApplication && !IsResubmissionMode)
+                {
+                    if (string.IsNullOrWhiteSpace(SelectedPreviousEduAppId))
+                        errors.Add("Please select a previously applied Educational Assistance application for renewal.");
+                }
+
+                if (!EduTotalCourses.HasValue || EduTotalCourses.Value <= 0)
+                    errors.Add("Total Number of Courses is required.");
+
+                if (string.IsNullOrWhiteSpace(EduCourse))
+                    errors.Add("Course is required.");
+
+                if (string.IsNullOrWhiteSpace(EduYear))
+                    errors.Add("Year is required.");
+
+                if (string.IsNullOrWhiteSpace(EduCollegeName))
+                    errors.Add("College Name is required.");
+                break;
+
+            case "Merit Award":
+                if (string.IsNullOrWhiteSpace(MeritCandidateName))
+                    errors.Add("Candidate Name is required.");
+
+                if (string.IsNullOrWhiteSpace(MeritFatherName))
+                    errors.Add("Candidate's Father Name is required.");
+
+                if (string.IsNullOrWhiteSpace(MeritExamination))
+                    errors.Add("Examination Appeared is required.");
+
+                if (string.IsNullOrWhiteSpace(MeritBoardName))
+                    errors.Add("Board Name is required.");
+
+                if (MeritMaximumMarks <= 0)
+                    errors.Add("Maximum Marks must be greater than zero.");
+
+                if (MeritMarksObtained <= 0)
+                    errors.Add("Marks Obtained must be greater than zero.");
+
+                if (MeritMaximumMarks > 0 && MeritMarksObtained > MeritMaximumMarks)
+                    errors.Add("Marks Obtained cannot exceed Maximum Marks.");
+
+                if (MeritMaximumMarks > 0 && MeritPercentage < 80)
+                    errors.Add("Minimum 80% marks is required for the Merit Award.");
+                break;
+
+            case "Distinction Award":
+                if (string.IsNullOrWhiteSpace(DistinctionCandidateName))
+                    errors.Add("Candidate Name is required.");
+
+                if (string.IsNullOrWhiteSpace(DistinctionProfessionalCourse))
+                    errors.Add("Professional Course Name is required.");
+
+                if (DistinctionMaximumMarks <= 0)
+                    errors.Add("Total / Maximum Marks must be greater than zero.");
+
+                if (DistinctionMarksObtained <= 0)
+                    errors.Add("Marks Obtained must be greater than zero.");
+
+                if (DistinctionMaximumMarks > 0 && DistinctionMarksObtained > DistinctionMaximumMarks)
+                    errors.Add("Marks Obtained cannot exceed Total / Maximum Marks.");
+
+                if (DistinctionMaximumMarks > 0 && DistinctionAggregatePercentage <= 80)
+                    errors.Add("Aggregate percentage must be more than 80% to qualify for the Distinction Award.");
+
+                if (DistinctionHasArrears == true)
+                    errors.Add("Candidates with arrears / backlogs are not eligible for the Distinction Award.");
+                break;
+        }
+
+        // Document validation based on scheme requirements (kept + newly uploaded count)
+        foreach (var doc in CurrentDocuments)
+        {
+            if (IsDocumentRequired(doc.Name) && !HasDocument(doc.Name))
+            {
+                if (SelectedScheme == "Death Relief" && doc.Name == "Affidavit from other legal heirs")
+                    errors.Add("Please upload the affidavit for Others selected.");
+                else
+                    errors.Add($"{doc.Name} is required.");
+            }
+        }
+
+        // Declaration
+        if (!IsDeclarationConfirmed)
+            errors.Add("You must confirm the declaration before submitting.");
+
+        return errors;
+    }
+
+    private void ValidateEventDate(List<string> errors)
+    {
+        if (EventDate == null)
+        {
+            errors.Add("Event date is required.");
+            return;
+        }
+
+        if (EventDate.Value.Date < DateTime.Today.AddDays(7))
+            errors.Add("Invitation must be sent at least 7 days in advance. Please choose an event date at least 7 days from today.");
+    }
+
+    private bool IsDocumentRequired(string docName)
+    {
+        if (SelectedScheme == "Educational Assistance")
+        {
+            if (docName == "Admission Certificate (First Year only)")
+                return IsEduFirstApplication;
+            if (docName == "Marks list of previous year / semesters duly cleared")
+                return !IsEduFirstApplication;
+            return true;
+        }
+
+if (SelectedScheme == "Death Relief")
+        {
+            if (docName.StartsWith("Legal Heir Certificate"))
+                return false;
+            if (docName == "Affidavit from other legal heirs")
+                return IsDeathReliefAffidavitRequired;
+            return true;
+        }
+
+        if (SelectedScheme == "Merit Award")
+        {
+            if (docName == "Marks list of 10th standard")
+                return string.Equals(MeritExamination, "10th", StringComparison.OrdinalIgnoreCase);
+            if (docName == "Marks list of +2 examinations")
+                return string.Equals(MeritExamination, "12th", StringComparison.OrdinalIgnoreCase);
+            return true;
+        }
+
+        return true;
+    }
+
+    private WelfareApplicationSubmitDto BuildSubmitDto() => new()
+    {
+        SchemeName = SelectedScheme,
+        BeneficiaryName = BeneficiaryName,
+        BeneficiaryDateOfBirth = BeneficiaryDateOfBirth,
+        NomineeName = NomineeName,
+        NomineeRelationship = NomineeRelationship,
+        QuantityLifted = TryGetQuantityLifted(out var resolvedQuantity) ? resolvedQuantity : null,
+        BeneficiaryGroup = SelectedBeneficiaryGroup,
+        SubDealerId = int.TryParse(SelectedSubDealerId, out var subDealerId) ? subDealerId : null,
+        SubDealerName = SelectedSubDealerName,
+        EmployeeId = int.TryParse(SelectedEmployeeId, out var employeeId) ? employeeId : null,
+        EmployeeName = SelectedEmployeeName,
+        // Fall back to the values stored on the application when the sales dashboard is unavailable
+        AverageQuantityLifted3Years = _salesHistory?.AverageQuantityLifted3Years
+            ?? (IsResubmissionMode ? _resubmitDetail!.AverageQuantityLifted3Years : null),
+        LastYearQuantityLifted = _salesHistory?.LastYearQuantityLifted
+            ?? (IsResubmissionMode ? _resubmitDetail!.LastYearQuantityLifted : null),
+        EventDate = EventDate,
+        EventVenue = EventVenue,
+        OwnershipType = OwnershipType,
+        DateOfDeath = DeathDateOfDeath,
+        LegalHeirName = LegalHeirName,
+        LegalHeirRelation = LegalHeirRelation,
+        DeathCause = DeathCause,
+        Course = EduCourse,
+        EduYear = int.TryParse(EduYear, out var eduYear) ? eduYear : null,
+        CollegeName = EduCollegeName,
+        TotalNumberOfCourses = EduTotalCourses,
+        IsFirstApplication = IsEduFirstApplication,
+        MedicalTreatmentType = MedicalTreatmentType,
+        MeritCandidateName = MeritCandidateName,
+        MeritFatherName = MeritFatherName,
+        ExaminationAppeared = MeritExamination,
+        BoardName = MeritBoardName,
+        MaximumMarks = MeritMaximumMarks > 0 ? MeritMaximumMarks : null,
+        MarksObtained = MeritMarksObtained > 0 ? MeritMarksObtained : null,
+        MeritPercentage = MeritPercentage > 0 ? MeritPercentage : null,
+        DistinctionCandidateName = DistinctionCandidateName,
+        DistinctionFatherName = DistinctionFatherName,
+        ProfessionalCourseName = DistinctionProfessionalCourse,
+        CourseCompletionYear = DistinctionCourseYear,
+        UniversityName = DistinctionUniversityName,
+        DistinctionMaximumMarks = DistinctionMaximumMarks > 0 ? DistinctionMaximumMarks : null,
+        DistinctionMarksObtained = DistinctionMarksObtained > 0 ? DistinctionMarksObtained : null,
+        DistinctionAggregatePercentage = DistinctionAggregatePercentage > 0 ? DistinctionAggregatePercentage : null,
+        HasArrears = DistinctionHasArrears,
+        IsWholesaleDealerEmployee = DistinctionIsWholesaleEmployee,
+        IsDeclarationConfirmed = IsDeclarationConfirmed
+    };
+
+    private async Task<HttpResponseMessage> PostApplicationAsync(string url, bool isResubmission = false)
+    {
+        var dto = BuildSubmitDto();
+
+        using var content = new MultipartFormDataContent();
+
+        void AddField(string name, string? value) =>
+            content.Add(new StringContent(value ?? string.Empty), name);
+
+        AddField("SchemeName", dto.SchemeName);
+        AddField("BeneficiaryName", dto.BeneficiaryName);
+        AddField("BeneficiaryDateOfBirth", dto.BeneficiaryDateOfBirth?.ToString("yyyy-MM-dd"));
+        AddField("NomineeName", dto.NomineeName);
+        AddField("NomineeRelationship", dto.NomineeRelationship);
+        AddField("QuantityLifted", dto.QuantityLifted?.ToString());
+        AddField("BeneficiaryGroup", dto.BeneficiaryGroup);
+        AddField("SubDealerId", dto.SubDealerId?.ToString());
+        AddField("SubDealerName", dto.SubDealerName);
+        AddField("EmployeeId", dto.EmployeeId?.ToString());
+        AddField("EmployeeName", dto.EmployeeName);
+        AddField("AverageQuantityLifted3Years", dto.AverageQuantityLifted3Years?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddField("LastYearQuantityLifted", dto.LastYearQuantityLifted?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddField("EventDate", dto.EventDate?.ToString("yyyy-MM-dd"));
+        AddField("EventVenue", dto.EventVenue);
+        AddField("OwnershipType", dto.OwnershipType);
+        AddField("DateOfDeath", dto.DateOfDeath?.ToString("yyyy-MM-dd"));
+        AddField("LegalHeirName", dto.LegalHeirName);
+        AddField("LegalHeirRelation", dto.LegalHeirRelation);
+        AddField("DeathCause", dto.DeathCause);
+        AddField("Course", dto.Course);
+        AddField("EduYear", dto.EduYear?.ToString());
+        AddField("CollegeName", dto.CollegeName);
+        AddField("TotalNumberOfCourses", dto.TotalNumberOfCourses?.ToString());
+        AddField("IsFirstApplication", dto.IsFirstApplication?.ToString());
+        AddField("MedicalTreatmentType", dto.MedicalTreatmentType);
+        AddField("MeritCandidateName", dto.MeritCandidateName);
+        AddField("MeritFatherName", dto.MeritFatherName);
+        AddField("ExaminationAppeared", dto.ExaminationAppeared);
+        AddField("BoardName", dto.BoardName);
+        AddField("MaximumMarks", dto.MaximumMarks?.ToString());
+        AddField("MarksObtained", dto.MarksObtained?.ToString());
+        AddField("MeritPercentage", dto.MeritPercentage?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddField("DistinctionCandidateName", dto.DistinctionCandidateName);
+        AddField("DistinctionFatherName", dto.DistinctionFatherName);
+        AddField("ProfessionalCourseName", dto.ProfessionalCourseName);
+        AddField("CourseCompletionYear", dto.CourseCompletionYear);
+        AddField("UniversityName", dto.UniversityName);
+        AddField("DistinctionMaximumMarks", dto.DistinctionMaximumMarks?.ToString());
+        AddField("DistinctionMarksObtained", dto.DistinctionMarksObtained?.ToString());
+        AddField("DistinctionAggregatePercentage", dto.DistinctionAggregatePercentage?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddField("HasArrears", dto.HasArrears?.ToString());
+        AddField("IsWholesaleDealerEmployee", dto.IsWholesaleDealerEmployee?.ToString());
+        AddField("IsDeclarationConfirmed", dto.IsDeclarationConfirmed.ToString());
+
+        if (isResubmission)
+        {
+            // Documents the dealer removed / replaced must be deleted from the existing application
+            AddField("removedDocumentIds", BuildRemovedDocumentIds());
+        }
+
+        foreach (var entry in UploadedFiles)
+        {
+            var file = entry.Value;
+            var fileContent = new ByteArrayContent(file.Data);
+            fileContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType ?? "application/octet-stream");
+            content.Add(fileContent, "files", file.Name);
+            content.Add(new StringContent(entry.Key), "documentTypes");
+        }
+
+        return await Http.PostAsync(url, content);
+    }
+
+    private static int? MapQuantityRange(string? range) => range switch
+    {
+        "lt1000" => 0,
+        "gt1000" => 1001,
+        "5001-10000" => 5001,
+        "10001-25000" => 10001,
+        "25001-35000" => 25001,
+        "35001-50000" => 35001,
+        "gt50001" => 50001,
+        _ => null
+    };
+
+    private static string FormatDisplayDate(DateTime? date) =>
+        date?.ToString("dd/MM/yyyy") ?? "-";
+
+    private static string? TryGetStringProperty(string json, string propertyName)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty(propertyName, out var element)
+                ? element.GetString()
+                : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int? TryGetIntProperty(string json, string propertyName)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.TryGetProperty(propertyName, out var element)
+                && element.TryGetInt32(out var value)
+                ? value
+                : (int?)null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void CloseSuccessModal()
+    {
+        IsSuccessModalOpen = false;
+    }
+
+    private void TrackApplication()
+    {
+        var url = SubmittedApplicationId.HasValue
+            ? $"/WellfareApplication?appId={SubmittedApplicationId.Value}"
+            : "/WellfareApplication";
+        NavigationManager.NavigateTo(url);
+    }
+}

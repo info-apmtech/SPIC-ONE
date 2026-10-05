@@ -1,0 +1,946 @@
+﻿@page "/PVTMaster"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Json
+@inject NavigationManager Nav
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<style>
+    .page-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 0;
+    }
+
+    .pvt-page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .pvt-back-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.45rem;
+        min-height: 38px;
+        padding: 0.625rem 1rem;
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #374151;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        line-height: 1;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+    }
+
+        .pvt-back-btn:hover {
+            border-color: #059669;
+            color: #047857;
+            background: #f0fdf4;
+        }
+
+    .main-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .btn-outline-green {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1rem;
+        border: 1px solid #059669;
+        background: transparent;
+        color: #059669;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+        .btn-outline-green:hover {
+            background-color: #f0fdf4;
+        }
+
+    .mode-switch {
+        display: inline-flex;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .mode-btn {
+        padding: 0.625rem 1.5rem;
+        border: 1px solid #d1d5db;
+        background: #ffffff;
+        color: #374151;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+        .mode-btn:hover {
+            border-color: #059669;
+            color: #047857;
+            background: #f0fdf4;
+        }
+
+        .mode-btn.active {
+            border-color: #059669;
+            background: #059669;
+            color: #ffffff;
+            box-shadow: 0 2px 6px rgba(5, 150, 105, 0.18);
+        }
+
+    .upload-area {
+        border: 2px dashed #d1d5db;
+        border-radius: 8px;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background-color: #f9fafb;
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+        .upload-area:hover {
+            border-color: #059669;
+            background-color: #f0fdf4;
+        }
+
+        .upload-area i {
+            font-size: 2.5rem;
+            color: #6b7280;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .upload-area span {
+            color: #6b7280;
+            font-weight: 500;
+            display: block;
+        }
+
+    .required-format {
+        margin-top: 0.75rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .upload-result {
+        margin-top: 1rem;
+    }
+
+    .upload-details {
+        margin-top: 1rem;
+        padding: 1rem;
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+    }
+
+        .upload-details p {
+            margin: 0.25rem 0;
+            color: #4b5563;
+        }
+
+    .error-list {
+        margin: 0.75rem 0 0 1.25rem;
+        padding: 0;
+        color: #991b1b;
+    }
+
+    .alert {
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+    }
+
+    .alert-success {
+        background-color: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #15803d;
+    }
+
+    .alert-danger {
+        background-color: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+    }
+
+    .alert-warning {
+        background-color: #fffbeb;
+        border: 1px solid #fde68a;
+        color: #92400e;
+    }
+
+    .metric-card {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 1.25rem;
+        text-align: center;
+    }
+
+    .bg-blue-light {
+        background-color: #eff6ff;
+        border-color: #bfdbfe;
+    }
+
+    .bg-mint-light {
+        background-color: #f0fdf4;
+        border-color: #bbf7d0;
+    }
+
+    .bg-orange-light {
+        background-color: #fffbeb;
+        border-color: #fde68a;
+    }
+
+    .metric-val {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .metric-title {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #6b7280;
+        margin: 0 0 0.5rem 0;
+    }
+
+    .table-responsive {
+        overflow-x: auto;
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        .table th,
+        .table td {
+            padding: 0.75rem;
+            text-align: left;
+        }
+
+        .table th {
+            font-weight: 600;
+            color: #374151;
+            background-color: #f9fafb;
+        }
+
+        .table tbody tr {
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+            .table tbody tr:hover {
+                background-color: #f9fafb;
+            }
+
+    .spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid #f3f4f6;
+        border-top: 2px solid #059669;
+        border-radius: 50%;
+        animation: pvt-spin 0.8s linear infinite;
+    }
+
+    @@keyframes pvt-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .d-flex {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .container-fluid {
+        padding: 0 1.5rem;
+    }
+
+    .search-input {
+        padding: 0.5rem 1rem;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        width: 300px;
+        outline: none;
+    }
+
+        .search-input:focus {
+            border-color: #059669;
+        }
+</style>
+
+<div class="container-fluid">
+    <div class="pvt-page-header">
+        <h2 class="page-title">PVT Master Management</h2>
+
+        <button type="button"
+                class="pvt-back-btn"
+                title="Back to Logistics"
+                @onclick="GoBackToLogistics">
+            <i class="bi bi-arrow-left"></i>
+            <span>Back</span>
+        </button>
+    </div>
+
+    <!-- Mode Toggle: switch between PVT Master and Rake Point Master upload/import. -->
+    <div class="mode-switch">
+        <button type="button" class="mode-btn @(_activeMode == "PVT" ? "active" : "")" @onclick="SelectPvtMode">
+            PVT Master
+        </button>
+        <button type="button" class="mode-btn @(_activeMode == "RakePoint" ? "active" : "")" @onclick="SelectRakePointMode">
+            Rake Point
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">
+            @_message
+        </div>
+    }
+
+    @if (_activeMode == "PVT")
+    {
+        <!-- Upload Section -->
+        <div class="main-card">
+            <div class="section-header">
+                <h3 class="section-title">Upload PVT Master Data</h3>
+                <button type="button" class="btn-outline-green" @onclick="DownloadSampleTemplate">
+                    <i class="bi bi-file-earmark-excel"></i> Sample Format
+                </button>
+            </div>
+
+            <!--
+                IMPORTANT COMPILE FIX:
+                Use Blazor InputFile instead of a raw <input type="file" @onchange=...>.
+                The label/for pair opens the file picker without JS, so no ValueTask.ContinueWith is needed.
+            -->
+            <label class="upload-area" for="fileUpload">
+                <i class="bi bi-cloud-arrow-up"></i>
+                <span>Click to upload or drag and drop</span>
+                <small style="color: #9ca3af; display: block; margin-top: 0.5rem;">Excel file (.xlsx, .xls)</small>
+            </label>
+
+            <InputFile id="fileUpload"
+                       OnChange="OnFileSelected"
+                       accept=".xlsx,.xls"
+                       style="display:none;" />
+
+            @if (_isUploading)
+            {
+                <div class="upload-result">
+                    <div class="d-flex">
+                        <span class="spinner"></span>
+                        <span style="color: #6b7280;">Uploading and processing... please wait</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (_lastUploadResult != null)
+        {
+            <div class="main-card">
+                <div class="section-header">
+                    <h3 class="section-title">Upload Result</h3>
+                </div>
+
+                <div class="row">
+                    <div class="metric-card bg-blue-light">
+                        <h4 class="metric-title">Total Records</h4>
+                        <div class="metric-val">@_lastUploadResult.TotalRows</div>
+                    </div>
+                    <div class="metric-card bg-mint-light">
+                        <h4 class="metric-title">Successfully Inserted</h4>
+                        <div class="metric-val">@_lastUploadResult.Inserted</div>
+                    </div>
+                    <div class="metric-card bg-orange-light">
+                        <h4 class="metric-title">Duplicate/Skipped</h4>
+                        <div class="metric-val">@(_lastUploadResult.Skipped)</div>
+                    </div>
+                </div>
+
+                @if (_lastUploadResult.Inserted > 0)
+                {
+                    <div class="alert alert-success">
+                        @_lastUploadResult.Inserted record(s) inserted successfully.
+                    </div>
+                }
+
+                @if (_lastUploadResult.Skipped > 0)
+                {
+                    <div class="alert alert-warning">
+                        @_lastUploadResult.Skipped record(s) were skipped due to duplicate SAP Codes.
+                    </div>
+                }
+
+                @if (_lastUploadResult.DuplicateRecords != null && _lastUploadResult.DuplicateRecords.Any())
+                {
+                    <div class="table-responsive" style="margin-top: 1rem;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Excel Row</th>
+                                    <th>SAP Code</th>
+                                    <th>Name</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var dup in _lastUploadResult.DuplicateRecords)
+                                {
+                                    <tr>
+                                        <td>@dup.RowNumber</td>
+                                        <td>@dup.SapCode</td>
+                                        <td>@dup.WarehouseName</td>
+                                        <td>@dup.Reason</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Metrics -->
+        <div class="row">
+            <div class="metric-card bg-blue-light">
+                <h4 class="metric-title">Total Records</h4>
+                <div class="metric-val">@_totalRecords</div>
+            </div>
+            <div class="metric-card bg-mint-light">
+                <h4 class="metric-title">Uploaded Today</h4>
+                <div class="metric-val">@_uploadedToday</div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <SpicDataTable Items="@_allData"
+                       IsLoading="false"
+                       Title="PVT Master List"
+                       FileName="PVT_Master_List"
+                       ExportColumns="GetPvtExportColumns()"
+                       SearchText="@_searchText">
+
+            <FilterControls>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text"
+                           placeholder="Search by code or name..."
+                           @bind="_searchText"
+                           @bind:event="oninput" />
+                </div>
+            </FilterControls>
+
+            <TableHeader>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Created At</th>
+            </TableHeader>
+
+            <TableRow Context="item">
+                <td>@item.Code</td>
+                <td>@item.Name</td>
+                <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+            </TableRow>
+        </SpicDataTable>
+    }
+    else
+    {
+        <!-- Rake Point Master Upload Section -->
+        <div class="main-card">
+            <div class="section-header">
+                <h3 class="section-title">Upload Rake Point Master Data</h3>
+                <button type="button" class="btn-outline-green" @onclick="DownloadRakePointSampleTemplate">
+                    <i class="bi bi-file-earmark-excel"></i> Sample Format
+                </button>
+            </div>
+
+            <label class="upload-area" for="rakePointFileUpload">
+                <i class="bi bi-cloud-arrow-up"></i>
+                <span>Click to upload or drag and drop</span>
+                <small style="color: #9ca3af; display: block; margin-top: 0.5rem;">Excel file (.xlsx, .xls)</small>
+            </label>
+
+            <InputFile id="rakePointFileUpload"
+                       OnChange="OnRakePointFileSelected"
+                       accept=".xlsx,.xls"
+                       style="display:none;" />
+
+            @if (_isRakePointUploading)
+            {
+                <div class="upload-result">
+                    <div class="d-flex">
+                        <span class="spinner"></span>
+                        <span style="color: #6b7280;">Uploading and processing... please wait</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (_lastRakePointUploadResult != null)
+        {
+            <div class="main-card">
+                <div class="section-header">
+                    <h3 class="section-title">Upload Result</h3>
+                </div>
+
+                <div class="row">
+                    <div class="metric-card bg-blue-light">
+                        <h4 class="metric-title">Total Records</h4>
+                        <div class="metric-val">@_lastRakePointUploadResult.TotalRecords</div>
+                    </div>
+                    <div class="metric-card bg-mint-light">
+                        <h4 class="metric-title">Successfully Inserted</h4>
+                        <div class="metric-val">@_lastRakePointUploadResult.InsertedCount</div>
+                    </div>
+                    <div class="metric-card bg-orange-light">
+                        <h4 class="metric-title">Duplicate/Skipped</h4>
+                        <div class="metric-val">@(_lastRakePointUploadResult.DuplicateRecords?.Count ?? 0)</div>
+                    </div>
+                </div>
+
+                @if (_lastRakePointUploadResult.InsertedCount > 0)
+                {
+                    <div class="alert alert-success">
+                        @_lastRakePointUploadResult.InsertedCount record(s) inserted successfully.
+                    </div>
+                }
+
+                @if (_lastRakePointUploadResult.DuplicateRecords != null && _lastRakePointUploadResult.DuplicateRecords.Any())
+                {
+                    <div class="alert alert-warning">
+                        @_lastRakePointUploadResult.DuplicateRecords.Count record(s) were skipped due to duplicate SAP Codes.
+                    </div>
+
+                    <div class="table-responsive" style="margin-top: 1rem;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Excel Row</th>
+                                    <th>SAP Code</th>
+                                    <th>Name</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var dup in _lastRakePointUploadResult.DuplicateRecords)
+                                {
+                                    <tr>
+                                        <td>@dup.RowNumber</td>
+                                        <td>@dup.SapCode</td>
+                                        <td>@dup.RakePointName</td>
+                                        <td>@dup.Reason</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Rake Point Master Metrics -->
+        <div class="row">
+            <div class="metric-card bg-blue-light">
+                <h4 class="metric-title">Total Records</h4>
+                <div class="metric-val">@_rakePointTotalRecords</div>
+            </div>
+            <div class="metric-card bg-mint-light">
+                <h4 class="metric-title">Uploaded Today</h4>
+                <div class="metric-val">@_rakePointUploadedToday</div>
+            </div>
+        </div>
+
+        <!-- Rake Point Master Data Table -->
+        <SpicDataTable Items="@_rakePointAllData"
+                       IsLoading="false"
+                       Title="Rake Point Master List"
+                       FileName="Rake_Point_Master_List"
+                       ExportColumns="GetRakePointExportColumns()"
+                       SearchText="@_rakePointSearchText">
+
+            <FilterControls>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text"
+                           placeholder="Search by code or name..."
+                           @bind="_rakePointSearchText"
+                           @bind:event="oninput" />
+                </div>
+            </FilterControls>
+
+            <TableHeader>
+                <th>Rake Point Code</th>
+                <th>Name</th>
+                <th>Created At</th>
+            </TableHeader>
+
+            <TableRow Context="item">
+                <td>@item.RakePointCode</td>
+                <td>@item.Name</td>
+                <td>@item.CreatedAt?.ToString("yyyy-MM-dd")</td>
+            </TableRow>
+        </SpicDataTable>
+    }
+</div>
+
+@code {
+    private const long MaxFileSize = 10 * 1024 * 1024;
+
+    private string _activeMode = "PVT";
+
+    private bool _isUploading = false;
+    private string _message = "";
+    private bool _isError = false;
+    private string _searchText = "";
+
+    private int _totalRecords;
+    private int _uploadedToday;
+
+    private List<PVTMasterDto> _allData = new();
+    private BulkUploadResponse? _lastUploadResult;
+
+    private bool _isRakePointUploading = false;
+    private string _rakePointSearchText = "";
+    private int _rakePointTotalRecords = 0;
+    private int _rakePointUploadedToday = 0;
+
+    private List<RakePointMasterDto> _rakePointAllData = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        await LoadRakePointData();
+    }
+
+    private void SetMode(string mode)
+    {
+        if (_activeMode == mode)
+            return;
+
+        _activeMode = mode;
+        _message = "";
+    }
+
+    private void SelectPvtMode() => SetMode("PVT");
+
+    private void SelectRakePointMode() => SetMode("RakePoint");
+
+    private void GoBackToLogistics()
+    {
+        Nav.NavigateTo("/Logistics");
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _allData = await Http.GetFromJsonAsync<List<PVTMasterDto>>("api/PVTMaster/all") ?? new();
+            _totalRecords = _allData.Count;
+            _uploadedToday = _allData.Count(x => x.CreatedAt?.Date == DateTime.Today);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load PVT Master data: {ex.Message}", true);
+        }
+    }
+
+    private async Task LoadRakePointData()
+    {
+        try
+        {
+            _rakePointAllData = await Http.GetFromJsonAsync<List<RakePointMasterDto>>("api/RakePointMaster/all") ?? new();
+            _rakePointTotalRecords = _rakePointAllData.Count;
+            _rakePointUploadedToday = _rakePointAllData.Count(x => x.CreatedAt?.Date == DateTime.Today);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load Rake Point Master data: {ex.Message}", true);
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+
+        if (file == null)
+            return;
+
+        if (!file.Name.EndsWith(".xlsx", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowMessage("Please select a valid .xlsx Excel file.", true);
+            return;
+        }
+
+        if (file.Size > MaxFileSize)
+        {
+            ShowMessage("Excel file size cannot exceed 10 MB.", true);
+            return;
+        }
+
+        _isUploading = true;
+        _message = string.Empty;
+        _lastUploadResult = null;
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+            await using var stream = file.OpenReadStream(MaxFileSize);
+            using var streamContent = new StreamContent(stream);
+
+            streamContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+            // The form field name "file" must match [FromForm] IFormFile file in the API.
+            content.Add(streamContent, "file", file.Name);
+
+            var response = await Http.PostAsync("api/PVTMaster/bulk-upload", content);
+
+            BulkUploadResponse? result = null;
+
+            try
+            {
+                result = await response.Content.ReadFromJsonAsync<BulkUploadResponse>();
+            }
+            catch
+            {
+                // If the server did not return JSON, the plain response is read below.
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorMessage = result?.Message;
+
+                ShowMessage(
+                    string.IsNullOrWhiteSpace(errorMessage)
+                        ? "PVT Master upload failed. Please check the file and try again."
+                        : errorMessage,
+                    true);
+
+                return;
+            }
+
+            _lastUploadResult = result;
+
+            if (result == null)
+            {
+                ShowMessage("PVT Master upload completed.", false);
+            }
+
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Upload failed: {ex.Message}", true);
+        }
+        finally
+        {
+            _isUploading = false;
+        }
+    }
+
+    private RakePointBulkUploadResponse? _lastRakePointUploadResult;
+
+    private async Task OnRakePointFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null)
+            return;
+
+        _isRakePointUploading = true;
+        _message = "";
+        _lastRakePointUploadResult = null;
+
+        try
+        {
+            using var content = new MultipartFormDataContent();
+
+            await using var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            using var streamContent = new StreamContent(stream);
+
+            var extension = Path.GetExtension(file.Name);
+            var contentType = string.Equals(extension, ".xls", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.ms-excel"
+                : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+            streamContent.Headers.ContentType =
+                new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+
+            content.Add(streamContent, "file", file.Name);
+
+            var response = await Http.PostAsync("api/RakePointMaster/bulk-upload", content);
+            if (!response.IsSuccessStatusCode)
+            {
+                ShowMessage("Rake Point upload failed. Please check the file and try again.", true);
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<RakePointBulkUploadResponse>();
+            _lastRakePointUploadResult = result;
+
+            if (result == null)
+            {
+                ShowMessage("Rake Point upload completed.", false);
+            }
+
+            await LoadRakePointData();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Upload failed: {ex.Message}", true);
+        }
+        finally
+        {
+            _isRakePointUploading = false;
+        }
+    }
+
+    private void DownloadSampleTemplate()
+    {
+        var baseAddress = Http.BaseAddress ?? new Uri(Nav.BaseUri);
+        var templateUrl = new Uri(baseAddress, "api/PVTMaster/template").ToString();
+        Nav.NavigateTo(templateUrl, forceLoad: true);
+    }
+
+    private async Task DownloadRakePointSampleTemplate()
+    {
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync("api/RakePointMaster/sample-template");
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFileFromBytes",
+                "RakePointMaster_Sample_Template.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                base64);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Sample template download failed: {ex.Message}", true);
+        }
+    }
+
+    private void ShowMessage(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    private List<ExportColumn<PVTMasterDto>> GetPvtExportColumns()
+    {
+        return new List<ExportColumn<PVTMasterDto>>
+        {
+            new() { Header = "Code", ValueSelector = item => item.Code ?? "" },
+            new() { Header = "Name", ValueSelector = item => item.Name ?? "" },
+            new() { Header = "Created At", ValueSelector = item => item.CreatedAt?.ToString("yyyy-MM-dd") ?? "" }
+        };
+    }
+
+    private List<ExportColumn<RakePointMasterDto>> GetRakePointExportColumns()
+    {
+        return new List<ExportColumn<RakePointMasterDto>>
+        {
+            new() { Header = "Rake Point Code", ValueSelector = item => item.RakePointCode ?? "" },
+            new() { Header = "Name", ValueSelector = item => item.Name ?? "" },
+            new() { Header = "Created At", ValueSelector = item => item.CreatedAt?.ToString("yyyy-MM-dd") ?? "" }
+        };
+    }
+
+    public class PVTMasterDto
+    {
+        public int Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+
+        public string Name { get; set; } = string.Empty;
+        public DateTime? CreatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+    }
+
+    public class RakePointMasterDto
+    {
+        public int Id { get; set; }
+        public string RakePointCode { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public DateTime? CreatedAt { get; set; }
+    }
+
+    public class BulkUploadResponse
+    {
+        public string Message { get; set; } = string.Empty;
+        public int TotalRows { get; set; }
+        public int Inserted { get; set; }
+        public int Updated { get; set; }
+        public int Skipped { get; set; }
+        public List<string> Errors { get; set; } = new();
+        public List<DuplicateRecordDto> DuplicateRecords { get; set; } = new();
+    }
+
+    public class DuplicateRecordDto
+    {
+        public int RowNumber { get; set; }
+        public string SapCode { get; set; } = string.Empty;
+        public string WarehouseName { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public class RakePointBulkUploadResponse
+    {
+        public int TotalRecords { get; set; }
+        public int InsertedCount { get; set; }
+        public int UpdatedCount { get; set; }
+        public int RejectedCount { get; set; }
+        public List<RakePointDuplicateRecordDto> DuplicateRecords { get; set; } = new();
+    }
+
+    public class RakePointDuplicateRecordDto
+    {
+        public int RowNumber { get; set; }
+        public string SapCode { get; set; } = string.Empty;
+        public string RakePointName { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+}

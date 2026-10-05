@@ -18,13 +18,15 @@ namespace Spic.Infrastructure.Services
         private readonly AppDbContext _context;
         private readonly UserManager<UserInfo> _userManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
+		private readonly RoleManager<IdentityRole> _roleManager;
 
-        public UserService(AppDbContext context, UserManager<UserInfo> userManager, IHttpContextAccessor httpContextAccessor)
+		public UserService(AppDbContext context, UserManager<UserInfo> userManager, RoleManager<IdentityRole> roleManager, IHttpContextAccessor httpContextAccessor)
         {
             _context = context;
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
-        }
+			_roleManager = roleManager;
+		}
 
         public async Task<UserInfo> CreateUserAsync(UserDto dto)
         {
@@ -52,96 +54,124 @@ namespace Spic.Infrastructure.Services
                 UpdatedBy = currentUserId
             };
 
-            var result = await _userManager.CreateAsync(user, dto.Password);
+			var result = await _userManager.CreateAsync(user, dto.Password);
 
-            if (!result.Succeeded)
-            {
-                throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
-            }
+			if (!result.Succeeded)
+			{
+				throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
+			}
 
-            return user;
-        }
+			await EnsureRoleAndAssignAsync(user, dto.Role);
 
-        public async Task<ServiceResult> SeedDefaultUserAsync(UserDto dto)
-        {
-            var exists = await _context.Users.AnyAsync(x => x.Email == dto.Email);
+			return user;
+		}
 
-            if (exists)
-            {
-                return new ServiceResult
-                {
-                    Success = false,
-                    Message = "User already exists for this site."
-                };
-            }
+		public async Task<ServiceResult> SeedDefaultUserAsync(UserDto dto)
+		{
+			var exists = await _context.Users.AnyAsync(x => x.Email == dto.Email);
 
-            var user = new UserInfo
-            {
-                Name = dto.Name,
-                Email = dto.Email,
-                UserName = dto.UserName,
-                Password = dto.Password,
-                Role = dto.Role,
-                CreatedAt = DateTime.Now,
-                CreatedBy = "Default",
-                UpdatedBy = "Default"
-            };
+			if (exists)
+			{
+				return new ServiceResult
+				{
+					Success = false,
+					Message = "User already exists for this site."
+				};
+			}
 
-            var result = await _userManager.CreateAsync(user, dto.Password);
+			var user = new UserInfo
+			{
+				Name = dto.Name,
+				Email = dto.Email,
+				UserName = dto.UserName,
+				Password = dto.Password,
+				Role = dto.Role,
+				CreatedAt = DateTime.Now,
+				CreatedBy = "Default",
+				UpdatedBy = "Default",
+				IsActive = true
+			};
 
-            if (!result.Succeeded)
-            {
-                return new ServiceResult
-                {
-                    Success = false,
-                    Message = string.Join(", ", result.Errors.Select(e => e.Description))
-                };
-            }
+			var createUserResult = await _userManager.CreateAsync(user, dto.Password);
 
-            return new ServiceResult
-            {
-                Success = true,
-                Message = "Default user created successfully."
-            };
-        }
+			if (!createUserResult.Succeeded)
+			{
+				return new ServiceResult
+				{
+					Success = false,
+					Message = string.Join(", ", createUserResult.Errors.Select(e => e.Description))
+				};
+			}
 
-        public async Task<UserInfo> UpdateUserAsync(UserDto dto)
-        {
-            var currentUserId = _httpContextAccessor.HttpContext?.User?
-                .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                ?? throw new UnauthorizedAccessException("User is not logged in.");
+			await EnsureRoleAndAssignAsync(user, dto.Role);
 
-            var user = await _userManager.FindByIdAsync(dto.Id)
-                ?? throw new Exception("User not found.");
+			return new ServiceResult
+			{
+				Success = true,
+				Message = "Default user created successfully."
+			};
+		}
 
-            // Update fields
-            user.Name = dto.Name;
-            user.UserName = dto.UserName ?? user.UserName;
-            user.Email = dto.Email ?? user.Email;
-            user.Role = dto.Role;
-            user.DesignationId = dto.DesignationId ?? user.DesignationId;
-            user.UpdatedAt = DateTime.Now;
-            user.UpdatedBy = currentUserId;
+		public async Task<UserInfo> UpdateUserAsync(UserDto dto)
+		{
+			var currentUserId = _httpContextAccessor.HttpContext?.User?
+				.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+				?? throw new UnauthorizedAccessException("User is not logged in.");
 
-            var result = await _userManager.UpdateAsync(user);
+			var user = await _userManager.FindByIdAsync(dto.Id)
+				?? throw new Exception("User not found.");
 
-            if (!result.Succeeded)
-                throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
+			// Update user fields
+			user.Name = dto.Name;
+			user.UserName = dto.UserName ?? user.UserName;
+			user.Email = dto.Email ?? user.Email;
+			user.Role = dto.Role;
+			user.DesignationId = dto.DesignationId ?? user.DesignationId;
+			user.UpdatedAt = DateTime.Now;
+			user.UpdatedBy = currentUserId;
 
-            // Change password only if provided
-            if (dto.Password != user.Password)
-            {
-                var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-                var passResult = await _userManager.ResetPasswordAsync(user, token, dto.Password);
+			var result = await _userManager.UpdateAsync(user);
 
-                if (!passResult.Succeeded)
-                    throw new Exception(string.Join(", ", passResult.Errors.Select(e => e.Description)));
-            }
+			if (!result.Succeeded)
+				throw new Exception(string.Join(", ", result.Errors.Select(e => e.Description)));
 
-            return user;
-        }
+			// Update role in AppRoles / AppUserRoles
+			var oldRoles = await _userManager.GetRolesAsync(user);
 
-        public async Task<ServiceResult> UpdateStatusAsync(string userId, bool isActive)
+			if (oldRoles.Any())
+			{
+				var removeRoleResult = await _userManager.RemoveFromRolesAsync(user, oldRoles);
+
+				if (!removeRoleResult.Succeeded)
+					throw new Exception(string.Join(", ", removeRoleResult.Errors.Select(e => e.Description)));
+			}
+
+			await EnsureRoleAndAssignAsync(user, dto.Role);
+
+			// Change password only if provided and changed
+			if (!string.IsNullOrWhiteSpace(dto.Password) && dto.Password != user.Password)
+			{
+				var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+				var passResult = await _userManager.ResetPasswordAsync(user, token, dto.Password);
+
+				if (!passResult.Succeeded)
+					throw new Exception(string.Join(", ", passResult.Errors.Select(e => e.Description)));
+
+				user.Password = dto.Password;
+				user.UpdatedAt = DateTime.Now;
+				user.UpdatedBy = currentUserId;
+
+				var passwordUpdateResult = await _userManager.UpdateAsync(user);
+
+				if (!passwordUpdateResult.Succeeded)
+					throw new Exception(string.Join(", ", passwordUpdateResult.Errors.Select(e => e.Description)));
+			}
+
+			return user;
+		}
+
+		public async Task<ServiceResult> UpdateStatusAsync(string userId, bool isActive)
         {
             var currentUserId = _httpContextAccessor.HttpContext?.User?
                 .FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
@@ -226,5 +256,25 @@ namespace Spic.Infrastructure.Services
                 Message = "User deleted permanently."
             };
         }
-    }
+		private async Task EnsureRoleAndAssignAsync(UserInfo user, AppRole role)
+		{
+			var roleName = role.ToString();
+
+			if (!await _roleManager.RoleExistsAsync(roleName))
+			{
+				var roleResult = await _roleManager.CreateAsync(new IdentityRole(roleName));
+
+				if (!roleResult.Succeeded)
+					throw new Exception(string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+			}
+
+			if (!await _userManager.IsInRoleAsync(user, roleName))
+			{
+				var addRoleResult = await _userManager.AddToRoleAsync(user, roleName);
+
+				if (!addRoleResult.Succeeded)
+					throw new Exception(string.Join(", ", addRoleResult.Errors.Select(e => e.Description)));
+			}
+		}
+	}
 }

@@ -1,0 +1,757 @@
+﻿@page "/BookingDetails"
+
+@inject HttpClient Http
+@inject LoginState LoginState
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@using System.Globalization
+
+<style>
+    :root {
+        --bg-body: #f4f6f8;
+        --bg-card: #ffffff;
+        --text-main: #1f2937;
+        --text-muted: #6b7280;
+        --border-light: #e5e7eb;
+        --primary-blue: #3b82f6;
+        
+        /* Card Theme Colors */
+        --header-bg-green: #eaf0e5; /* Soft green from design */
+        --header-text-green: #3f4e42;
+    }
+
+   
+    /* --- Page Header --- */
+    .page-header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    
+    .page-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 0.25rem;
+    }
+    
+    .page-subtitle {
+        font-size: 0.9rem;
+        color: var(--text-muted);
+        margin: 0;
+    }
+    
+    .text-blue {
+        color: #2563eb;
+        font-weight: 600;
+    }
+
+    /* --- Buttons --- */
+    .btn-outline-custom {
+        background-color: #ffffff;
+        border: 1px solid var(--border-light);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 8px 16px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .btn-outline-custom:hover { background-color: #f9fafb; color: #1f2937; }
+
+    /* --- Review Card Base --- */
+    .detail-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        height: 100%;
+        overflow: hidden; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .detail-card-header {
+        background-color: var(--header-bg-green);
+        padding: 16px 20px;
+        border-bottom: 1px solid #dce4d6;
+    }
+
+    .detail-card-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: var(--header-text-green);
+        margin: 0;
+    }
+
+    .detail-card-body {
+        padding: 20px;
+    }
+
+    /* --- Key Value Pairs --- */
+    .kv-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+    .kv-row:last-child {
+        margin-bottom: 0;
+    }
+    .kv-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        flex-shrink: 0;
+        padding-right: 16px;
+    }
+    .kv-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-main);
+        text-align: right;
+        max-width: 60%;
+        line-height: 1.4;
+        word-break: break-word;
+    }
+
+    /* --- Specific Card Layouts --- */
+    
+    /* Room Details */
+    .room-details-container {
+        display: flex;
+        gap: 20px;
+        align-items: center;
+    }
+    .room-image {
+        width: 130px;
+        height: 85px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid var(--border-light);
+        flex-shrink: 0;
+    }
+    .room-info {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    /* Check In / Out */
+    .check-box-col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .check-lbl {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-muted);
+    }
+    .check-val {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+    .check-val i {
+        color: var(--text-muted);
+        font-size: 1.1rem;
+    }
+
+    /* Booking Summary Modifiers */
+    .summary-divider {
+        height: 1px;
+        background-color: var(--border-light);
+        margin: 16px 0;
+    }
+    .total-val {
+        color: var(--primary-blue) !important;
+        font-size: 1.1rem !important;
+        font-weight: 700 !important;
+    }
+    .total-lbl {
+        font-size: 1rem !important;
+        font-weight: 700 !important;
+        color: var(--text-main);
+    }
+
+    /* --- Status --- */
+    .status-pill {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 50px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .status-pill-green { background-color: #D1FAE5; color: #059669; }
+    .status-pill-amber { background-color: #FEF3C7; color: #B45309; }
+    .status-pill-red { background-color: #FEE2E2; color: #DC2626; }
+    .status-pill-blue { background-color: #DBEAFE; color: #1D4ED8; }
+    .status-pill-gray { background-color: #E2E8F0; color: #475569; }
+
+    .field-help {
+        font-size: 0.72rem;
+        color: #9ca3af;
+        margin: 0;
+    }
+
+    /* --- Error / Loading --- */
+    .detail-error {
+        background-color: #FEF2F2;
+        border: 1px solid #FECACA;
+        color: #B91C1C;
+        border-radius: 12px;
+        padding: 20px;
+        font-weight: 500;
+        margin-bottom: 1.25rem;
+    }
+    .detail-loading {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        padding: 20px;
+        color: #6b7280;
+        margin-bottom: 1.25rem;
+    }
+</style>
+
+<div class="container-fluid py-4 px-3 px-md-4" style="max-width: 1300px; margin: auto;">
+    
+    @if (_isLoading)
+    {
+        <div class="detail-loading">Loading booking details...</div>
+    }
+    else if (_booking == null)
+    {
+        <div class="detail-error">
+            @(string.IsNullOrWhiteSpace(_loadError) ? "Booking not found." : _loadError)
+        </div>
+        <button class="btn-outline-custom" @onclick="GoBack"><i class="bi bi-arrow-left"></i> Back to My Bookings</button>
+    }
+    else
+    {
+        <div class="page-header-container">
+            <div>
+                <h1 class="page-title">Booking Details</h1>
+                <p class="page-subtitle">Booking ID: <span class="text-blue">@_booking.BookingReference</span></p>
+            </div>
+            @if (_booking.HasInvoice && string.Equals(_booking.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+            {
+                <button class="btn-outline-custom" @onclick="DownloadInvoiceAsync" disabled="@(_isDownloading)">
+                    @if (_isDownloading)
+                    {
+                        <span>Downloading...</span>
+                    }
+                    else
+                    {
+                        <text><i class="bi bi-file-earmark-arrow-down"></i> Download Invoice</text>
+                    }
+                </button>
+            }
+        </div>
+
+        <div class="row g-4">
+        
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Room Details</h3>
+                    </div>
+                    <div class="detail-card-body h-100">
+                        <div class="room-details-container">
+                            <img src="@(string.IsNullOrEmpty(_booking.RoomImagePath) ? FallbackImage : GetImageUrl(_booking.RoomImagePath))" alt="Room Image" class="room-image" onerror="this.style.backgroundColor='#e2e8f0';" />
+                            <div class="room-info">
+                                <div class="kv-row mb-0">
+                                    <span class="kv-label">Guest House</span>
+                                    <span class="kv-value">@_booking.GuestHouseName</span>
+                                </div>
+                                <div class="kv-row mb-0">
+                                    <span class="kv-label">Room Type</span>
+                                    <span class="kv-value">@_booking.RoomType</span>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(_booking.RoomNumber))
+                                {
+                                    <div class="kv-row mb-0">
+                                        <span class="kv-label">Room Number</span>
+                                        <span class="kv-value">@_booking.RoomNumber</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Check-in & Check-out</h3>
+                    </div>
+                    <div class="detail-card-body h-100">
+                        <div class="row">
+                            <div class="col-6 check-box-col">
+                                <div class="check-lbl">Check-in</div>
+                                <div class="check-val"><i class="bi bi-calendar"></i> @FormatDate(_booking.CheckInDate)</div>
+                                <div class="check-val"><i class="bi bi-clock"></i> @FormatTime(_booking.CheckInTime)</div>
+                            </div>
+                            <div class="col-6 check-box-col">
+                                <div class="check-lbl">Check-out</div>
+                                <div class="check-val"><i class="bi bi-calendar"></i> @FormatDate(_booking.CheckOutDate)</div>
+                                <div class="check-val"><i class="bi bi-clock"></i> @FormatTime(_booking.CheckOutTime)</div>
+                            </div>
+                        </div>
+                        <div class="summary-divider"></div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Nights</span>
+                            <span class="kv-value">@(_booking.NumberOfNights ?? 0)</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Rooms</span>
+                            <span class="kv-value">@(_booking.NumberOfRooms ?? 0)</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Additional Bed(s)</span>
+                            <span class="kv-value">@(_booking.ExtraBeds ?? 0)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Payment Details</h3>
+                    </div>
+                    <div class="detail-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Room Cost</span>
+                            <span class="kv-value">@_money(_booking.RoomCost)</span>
+                        </div>
+                        @if (_booking.ExtraBeds > 0)
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Additional Bed Charges</span>
+                                <span class="kv-value">@_money(_booking.ExtraBedCharges)</span>
+                            </div>
+                        }
+
+                        <div class="summary-divider"></div>
+
+                        <div class="kv-row">
+                            <span class="kv-label">Subtotal</span>
+                            <span class="kv-value">@_money(_booking.SubTotal ?? 0)</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">GST (5%)</span>
+                            <span class="kv-value">@_money(_booking.TaxAmount ?? 0)</span>
+                        </div>
+
+                        <div class="summary-divider"></div>
+
+                        <div class="kv-row mt-3">
+                            <span class="kv-label total-lbl">Total Amount</span>
+                            <span class="kv-value total-val">@_money(_booking.TotalAmount ?? 0)</span>
+                        </div>
+                        <div class="summary-divider"></div>
+                        <div class="kv-row">
+                            <span class="kv-label">Payment Method</span>
+                            <span class="kv-value">@_booking.PaymentMethod</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Payment Status</span>
+                            <span class="kv-value"><span class="status-pill @PaymentBadgeClass(_booking.PaymentStatus)">@_booking.PaymentStatus</span></span>
+                        </div>
+                        @if (_booking.PaymentDate.HasValue)
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Payment Date</span>
+                                <span class="kv-value">@FormatDateTime(_booking.PaymentDate)</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Booking Status</h3>
+                    </div>
+                    <div class="detail-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Booking Status</span>
+                            <span class="kv-value"><span class="status-pill @BookingBadgeClass(_booking.BookingStatus)">@_booking.BookingStatus</span></span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Created Date/Time</span>
+                            <span class="kv-value">@FormatDateTime(_booking.CreatedAt)</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(_booking.CancellationStatus))
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Cancellation Status</span>
+                                <span class="kv-value"><span class="status-pill status-pill-red">@_booking.CancellationStatus</span></span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="detail-card">
+                    <div class="detail-card-header">
+                        <h3 class="detail-card-title">Guest Details</h3>
+                    </div>
+                    <div class="detail-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Employee ID / Dealer Code</span>
+                            <span class="kv-value">@(_booking.EmployeeOrDealerCode ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Guest Name</span>
+                            <span class="kv-value">@(_booking.GuestName ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Company Name</span>
+                            <span class="kv-value">@(_booking.CompanyName ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Phone Number</span>
+                            <span class="kv-value">@(_booking.PhoneNumber ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Email ID</span>
+                            <span class="kv-value">@(_booking.Email ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Aadhaar / Passport Number</span>
+                            <span class="kv-value">@(_booking.AadhaarOrPassportNumber ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Nationality</span>
+                            <span class="kv-value">@(_booking.Nationality ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Persons</span>
+                            <span class="kv-value">@(_booking.NumberOfPersons?.ToString() ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Adults</span>
+                            <span class="kv-value">@(_booking.NumberOfAdults?.ToString() ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Children</span>
+                            <span class="kv-value">@(_booking.NumberOfChildren?.ToString() ?? "-")</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Address</span>
+                            <span class="kv-value text-wrap">@(_booking.Address ?? "-")</span>
+                        </div>
+                        @if (_booking.Documents.Count > 0)
+                        {
+                            var idProof = _booking.Documents[0];
+                            <div class="kv-row">
+                                <span class="kv-label">ID Proof</span>
+                                <span class="kv-value d-flex align-items-center gap-2 justify-content-end flex-wrap">
+                                    <span class="text-truncate" style="max-width:140px;" title="@idProof.FileName">@idProof.FileName</span>
+                                    <button class="btn-outline-custom" style="padding:4px 10px; font-size:0.75rem;" @onclick="() => ViewDocumentAsync(idProof.DocumentId, idProof.ContentType)" disabled="@_isDocumentBusy">
+                                        <i class="bi bi-eye"></i> View
+                                    </button>
+                                    <button class="btn-outline-custom" style="padding:4px 10px; font-size:0.75rem;" @onclick="() => DownloadDocumentAsync(idProof.DocumentId, idProof.FileName)" disabled="@_isDocumentBusy">
+                                        <i class="bi bi-download"></i> Download
+                                    </button>
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div style="margin-top: 1.5rem;">
+            <button class="btn-outline-custom" @onclick="GoBack"><i class="bi bi-arrow-left"></i> Back to My Bookings</button>
+        </div>
+    }
+
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "bookingId")]
+    public int? BookingId { get; set; }
+
+    private BookingDetailsDto? _booking;
+    private bool _isLoading = true;
+    private bool _isDownloading;
+    private bool _isDocumentBusy;
+    private string? _loadError;
+
+    private static readonly string FallbackImage =
+        "_content/SPIC.MauiBlazorApp.Shared/Images/Gallery/image20.png";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!BookingId.HasValue)
+        {
+            _loadError = "No booking selected.";
+            _isLoading = false;
+            return;
+        }
+
+        await LoadBookingAsync();
+    }
+
+    private async Task LoadBookingAsync()
+    {
+        _isLoading = true;
+        _loadError = null;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/bookings/{BookingId}");
+            if (response.IsSuccessStatusCode)
+            {
+                _booking = await response.Content.ReadFromJsonAsync<BookingDetailsDto>();
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                _loadError = "Booking not found.";
+            }
+            else
+            {
+                _loadError = "We could not load the booking details. Please try again.";
+            }
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not load the booking details. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/MyBookings");
+    }
+
+    private async Task DownloadInvoiceAsync()
+    {
+        if (!BookingId.HasValue || _isDownloading)
+            return;
+
+        _isDownloading = true;
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"api/GuestHouseBooking/bookings/{BookingId}/invoice");
+            var base64 = Convert.ToBase64String(bytes);
+            var fileName = $"{_booking?.BookingReference}.pdf";
+            await JS.InvokeVoidAsync("downloadFileFromBytes", fileName, "application/pdf", base64);
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not download the invoice. Please try again.";
+        }
+        finally
+        {
+            _isDownloading = false;
+        }
+    }
+
+    // ---------------------------- ID PROOF VIEW / DOWNLOAD ----------------------------
+    // Reuses the same authenticated-fetch + JS-interop pattern already used for Download
+    // Invoice above: the file is fetched through the authenticated HttpClient (so it works
+    // whether the document is a PDF or an image, and without needing a token in the URL),
+    // then handed to the browser via the shared JS helpers in App.razor/index.html.
+    private async Task ViewDocumentAsync(int documentId, string? contentType)
+    {
+        if (_isDocumentBusy) return;
+        _isDocumentBusy = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/documents/{documentId}/view");
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadError = "We could not open the ID proof document. Please try again.";
+                return;
+            }
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("openFileInNewWindow", base64, contentType ?? "application/octet-stream");
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not open the ID proof document. Please try again.";
+        }
+        finally
+        {
+            _isDocumentBusy = false;
+        }
+    }
+
+    private async Task DownloadDocumentAsync(int documentId, string? fileName)
+    {
+        if (_isDocumentBusy) return;
+        _isDocumentBusy = true;
+        try
+        {
+            var response = await Http.GetAsync($"api/GuestHouseBooking/documents/{documentId}/download");
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadError = "We could not download the ID proof document. Please try again.";
+                return;
+            }
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var contentType = response.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", string.IsNullOrWhiteSpace(fileName) ? "document" : fileName, contentType, base64);
+        }
+        catch (Exception)
+        {
+            _loadError = "We could not download the ID proof document. Please try again.";
+        }
+        finally
+        {
+            _isDocumentBusy = false;
+        }
+    }
+
+    private string GetImageUrl(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return FallbackImage;
+
+        if (path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("_content/", StringComparison.OrdinalIgnoreCase))
+        {
+            return path;
+        }
+
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var relative = Uri.EscapeDataString(path).Replace("%2F", "/").TrimStart('/');
+        var token = LoginState.Token;
+        if (!string.IsNullOrEmpty(token))
+        {
+            var rawToken = token.StartsWith("Bearer ") ? token["Bearer ".Length..] : token;
+            return $"{baseUrl}/api/GuestHouseBooking/image/{relative}?access_token={Uri.EscapeDataString(rawToken)}";
+        }
+
+        return $"{baseUrl}/api/GuestHouseBooking/image/{relative}";
+    }
+
+    private static string FormatDate(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string FormatTime(TimeSpan? value)
+    {
+        if (!value.HasValue) return "-";
+        return DateTime.Today.Add(value.Value).ToString("hh:mm tt", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatDateTime(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("dd MMM yyyy, hh:mm tt", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string _money(decimal value)
+    {
+        return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+
+    private static string BookingBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Confirmed" => "status-pill-green",
+            "Cancelled" => "status-pill-red",
+            "Completed" => "status-pill-green",
+            "Pending Payment" => "status-pill-amber",
+            "Draft" => "status-pill-gray",
+            _ => "status-pill-gray"
+        };
+    }
+
+    private static string PaymentBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Paid" => "status-pill-green",
+            "Pending" => "status-pill-amber",
+            "Failed" => "status-pill-red",
+            "Refunded" => "status-pill-blue",
+            "Partially Refunded" => "status-pill-blue",
+            _ => "status-pill-gray"
+        };
+    }
+
+    public class BookingDetailsDto
+    {
+        public int BookingId { get; set; }
+        public string BookingReference { get; set; } = "";
+        public string GuestHouseName { get; set; } = "";
+        public string? RoomImagePath { get; set; }
+        public string RoomType { get; set; } = "";
+        public string? RoomNumber { get; set; }
+
+        public DateTime? CheckInDate { get; set; }
+        public TimeSpan? CheckInTime { get; set; }
+        public DateTime? CheckOutDate { get; set; }
+        public TimeSpan? CheckOutTime { get; set; }
+        public int? NumberOfNights { get; set; }
+        public int? NumberOfRooms { get; set; }
+        public int? NumberOfPersons { get; set; }
+        public int? NumberOfAdults { get; set; }
+        public int? NumberOfChildren { get; set; }
+        public int? ExtraBeds { get; set; }
+
+        public decimal RoomPrice { get; set; }
+        public decimal? ExtraCotPrice { get; set; }
+        public decimal RoomCost { get; set; }
+        public decimal ExtraBedCharges { get; set; }
+        public decimal? SubTotal { get; set; }
+        public decimal? TaxAmount { get; set; }
+        public decimal? TotalAmount { get; set; }
+
+        public bool HasInvoice { get; set; }
+
+        public string BookingStatus { get; set; } = "";
+        public string PaymentStatus { get; set; } = "";
+        public string PaymentMethod { get; set; } = "";
+        public DateTime? PaymentDate { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string? CancellationStatus { get; set; }
+
+        public string? EmployeeOrDealerCode { get; set; }
+        public string? GuestName { get; set; }
+        public string? CompanyName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string? AadhaarOrPassportNumber { get; set; }
+        public string? Nationality { get; set; }
+        public string? Address { get; set; }
+
+        public List<BookingDocumentDto> Documents { get; set; } = new List<BookingDocumentDto>();
+    }
+
+    public class BookingDocumentDto
+    {
+        public int DocumentId { get; set; }
+        public string? DocumentType { get; set; }
+        public string? FileName { get; set; }
+        public string? ContentType { get; set; }
+        public long? FileSize { get; set; }
+    }
+}

@@ -3,341 +3,79 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using DealerReg = SPIC.Core.Entities.DealerRegistration
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.FormFlow
 @inject HttpClient Http
 @inject NavigationManager Nav
 @inject IJSRuntime JS
+@inject LoadingService Loading
+@inject LoginState LoginState
+<style>
+	fieldset:disabled .bi-x-circle-fill {
+		display: none !important;
+	}
+
+	fieldset:disabled .bi-arrow-repeat {
+		display: none !important;
+	}
+</style>
+
 
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
-
-	@if (!string.IsNullOrEmpty(_message))
+	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
+		@* @if (!string.IsNullOrEmpty(_message))
 	{
 		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
 			@_message
 			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
 		</div>
-	}
+	} *@
 
-	<h2 class="page-title">Enclosures</h2>
+		<h2 class="page-title">Enclosures</h2>
 
-	<div class="row g-4 mb-4">
-		<div class="col-md-6">
-			<div class="main-card mb-0 h-100">
-				<div class="progress-title-row">
-					<div class="progress-title">Document Completion Progress</div>
-					<div class="progress-percent">@_progressPercent%<small>Complete</small></div>
+		<div class="row g-4 mb-4">
+			<div class="col-md-6">
+				<div class="main-card mb-0 h-100">
+					<div class="progress-title-row">
+						<div class="progress-title">Document Completion Progress</div>
+						<div class="progress-percent">@_progressPercent%<small>Complete</small></div>
+					</div>
+					<div class="progress-text">
+						<span class="text-green">@_uploadedCount of @_totalCount</span> documents uploaded •
+						<span class="text-red">@_pendingCount mandatory documents pending</span>
+					</div>
+					<div class="progress-bar-thin">
+						<div class="progress-fill" style="width: @_progressPercent%;"></div>
+					</div>
 				</div>
-				<div class="progress-text">
-					<span class="text-green">@_uploadedCount of @_totalCount</span> documents uploaded •
-					<span class="text-red">@_pendingCount mandatory documents pending</span>
-				</div>
-				<div class="progress-bar-thin">
-					<div class="progress-fill" style="width: @_progressPercent%;"></div>
+			</div>
+			<div class="col-md-6">
+				<div class="alert-card">
+					<div class="alert-title"><i class="bi bi-exclamation-circle"></i> You still have</div>
+					<div class="alert-large-text">@_pendingCount required document(s)</div>
+					<p class="alert-desc">pending. Please complete all mandatory document uploads before proceeding to final submission.</p>
 				</div>
 			</div>
 		</div>
-		<div class="col-md-6">
-			<div class="alert-card">
-				<div class="alert-title"><i class="bi bi-exclamation-circle"></i> You still have</div>
-				<div class="alert-large-text">@_pendingCount required document(s)</div>
-				<p class="alert-desc">pending. Please complete all mandatory document uploads before proceeding to final submission.</p>
-			</div>
-		</div>
-	</div>
 
-    <!-- Specimen Signature Section -->
-    <div class="main-card">
-        <h3 class="section-title mb-3">Spic Specimen Signature</h3>
-        <div class="row g-4">
-            <div class="col-md-6">
-                <div class="dl-box">
-                    <div class="dl-icon"><i class="bi bi-download"></i></div>
-                    <div class="dl-title">Download Spic Specimen Document</div>
-                    <div class="dl-text">Download the specimen document, print it, get it signed by all required signatories.</div>
-                    <button class="btn-outline-blue" @onclick="DownloadSpecimen" disabled="@(_partners.Count == 0)">
-                        <i class="bi bi-file-earmark-arrow-down me-1"></i> Download Template
-                    </button>
-                    @if (_partners.Count == 0)
-                    {
-                        <div class="text-muted mt-2" style="font-size:0.85rem;">
-                            <i class="bi bi-info-circle"></i> No partners found. Add partners in Proprietor step first.
-                        </div>
-                    }
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="up-box">
-                    @if (!string.IsNullOrEmpty(_docs.SpecimanFilePath))
-                    {
-                        <i class="bi bi-check-circle up-icon" style="color:#059669;"></i>
-                        <div class="up-title">Specimen Uploaded</div>
-                        <div class="up-text">@GetFileName(_docs.SpecimanFilePath)</div>
-                        <label class="btn-upload-attach-Enclosure mb-0">
-                            <i class="bi bi-arrow-repeat"></i> Replace
-                            <InputFile hidden OnChange="OnSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
-                        </label>
-                    }
-                    else
-                    {
-                        <label class="up-box-label mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
-                            <i class="bi bi-upload up-icon"></i>
-                            <div class="up-title">Click or drag file to upload</div>
-                            <div class="up-text">PDF, JPG, PNG (Max 10 MB)</div>
-                            <InputFile hidden OnChange="OnSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
-                        </label>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
+	
+		<div class="main-card">
+			<h3 class="section-title">Documents already added in previous steps</h3>
+			<p class="section-subtitle">These documents were collected during earlier registration steps</p>
 
-	<div class="main-card">
-		<h3 class="section-title mb-3">Greenstar Specimen Signature</h3>
-		<div class="row g-4">
-			<div class="col-md-6">
-				<div class="dl-box">
-					<div class="dl-icon"><i class="bi bi-download"></i></div>
-					<div class="dl-title">Download Greenstar Specimen Document</div>
-					<div class="dl-text">Download the Greenstar specimen document, print it, get it signed by all required signatories.</div>
-					<button class="btn-outline-blue" @onclick="DownloadGreenstarSpecimen" disabled="@(_partners.Count == 0)">
-						<i class="bi bi-file-earmark-arrow-down me-1"></i> Download Template
-					</button>
-					@if (_partners.Count == 0)
-					{
-						<div class="text-muted mt-2" style="font-size:0.85rem;">
-							<i class="bi bi-info-circle"></i> No partners found. Add partners in Proprietor step first.
-						</div>
-					}
-				</div>
-			</div>
-			<div class="col-md-6">
-				<div class="up-box">
-					@if (!string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath))
-					{
-						<i class="bi bi-check-circle up-icon" style="color:#059669;"></i>
-						<div class="up-title">Greenstar Specimen Uploaded</div>
-						<div class="up-text">
-							@GetFileName(_docs.GreenstarSpecimanFilePath)
-							<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveGreenstarSpecimen" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
-						</div>
-						<label class="btn-upload-attach-Enclosure mb-0">
-							<i class="bi bi-arrow-repeat"></i> Replace
-							<InputFile hidden OnChange="OnGreenstarSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
-						</label>
-					}
-					else
-					{
-						<label class="up-box-label mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
-							<i class="bi bi-upload up-icon"></i>
-							<div class="up-title">Click or drag file to upload</div>
-							<div class="up-text">PDF, JPG, PNG (Max 10 MB)</div>
-							<InputFile hidden OnChange="OnGreenstarSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
-						</label>
-					}
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div class="main-card">
-		<h3 class="section-title">Documents already added in previous steps</h3>
-		<p class="section-subtitle">These documents were collected during earlier registration steps</p>
-
-		<div class="row g-3">
-			<div class="col-md-6">
-				<div class="doc-card">
-					<div class="doc-header">
-						<div class="doc-icon"><i class="bi bi-file-earmark-text"></i></div>
-						<div class="doc-title-row">
-							<div>
-								<div class="doc-title">GST Certificate</div>
-								<div class="doc-desc">GST Registration Certificate</div>
-							</div>
-							<div class="badge-group">
-								<span class="badge-req">Required</span>
-								@if (!string.IsNullOrEmpty(_dealer.GSTFilePath))
-								{
-									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-								}
-								else
-								{
-									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
-								}
-							</div>
-						</div>
-					</div>
-					@if (!string.IsNullOrEmpty(_dealer.GSTFilePath))
-					{
-						<div class="file-uploaded-box">
-							<div class="file-info">
-								<i class="bi bi-file-earmark-pdf"></i>
-								<div>
-									<div class="file-name">@GetFileName(_dealer.GSTFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveGstFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-									<div class="file-meta">GST Registration Certificate</div>
-								</div>
-							</div>
-							<div class="file-actions">
-								<a href="@GetFileUrl(_dealer.GSTFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-									<i class="bi bi-arrow-repeat"></i> Replace
-									<InputFile hidden OnChange="OnGSTSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
-							</div>
-						</div>
-					}
-					else
-					{
-						<div class="file-missing-box">
-							<div class="missing-info">
-								<i class="bi bi-upload" style="color:#059669;"></i>
-								<div>
-									<div class="missing-title" style="color:#059669;">Click to upload</div>
-									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-								</div>
-							</div>
-							<label class="btn-green-solid mb-0" style="cursor:pointer;">
-								<i class="bi bi-upload me-1"></i> Upload Document
-								<InputFile hidden OnChange="OnGSTSelected" accept=".pdf,.jpg,.jpeg,.png" />
-							</label>
-						</div>
-					}
-				</div>
-			</div>
-
-			<div class="col-md-6">
-				<div class="doc-card">
-					<div class="doc-header">
-						<div class="doc-icon"><i class="bi bi-person-vcard"></i></div>
-						<div class="doc-title-row">
-							<div>
-								<div class="doc-title">PAN Copy</div>
-								<div class="doc-desc">Permanent Account Number Card Copy</div>
-							</div>
-							<div class="badge-group">
-								<span class="badge-req">Required</span>
-								@if (!string.IsNullOrEmpty(_dealer.PANFilePath))
-								{
-									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-								}
-								else
-								{
-									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
-								}
-							</div>
-						</div>
-					</div>
-					@if (!string.IsNullOrEmpty(_dealer.PANFilePath))
-					{
-						<div class="file-uploaded-box">
-							<div class="file-info">
-								<i class="bi bi-file-earmark-pdf"></i>
-								<div>
-									<div class="file-name">@GetFileName(_dealer.PANFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemovePanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-									<div class="file-meta">Permanent Account Number Card Copy</div>
-								</div>
-							</div>
-							<div class="file-actions">
-								<a href="@GetFileUrl(_dealer.PANFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-									<i class="bi bi-arrow-repeat"></i> Replace
-									<InputFile hidden OnChange="OnPANSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
-							</div>
-						</div>
-					}
-					else
-					{
-						<div class="file-missing-box">
-							<div class="missing-info">
-								<i class="bi bi-upload" style="color:#059669;"></i>
-								<div>
-									<div class="missing-title" style="color:#059669;">Click to upload</div>
-									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-								</div>
-							</div>
-							<label class="btn-green-solid mb-0" style="cursor:pointer;">
-								<i class="bi bi-upload me-1"></i> Upload Document
-								<InputFile hidden OnChange="OnPANSelected" accept=".pdf,.jpg,.jpeg,.png" />
-							</label>
-						</div>
-					}
-				</div>
-			</div>
-
-			<div class="col-md-6">
-				<div class="doc-card">
-					<div class="doc-header">
-						<div class="doc-icon"><i class="bi bi-person-bounding-box"></i></div>
-						<div class="doc-title-row">
-							<div>
-								<div class="doc-title">Aadhaar Copy</div>
-								<div class="doc-desc">Aadhaar Card Copy of Owner</div>
-							</div>
-							<div class="badge-group">
-								<span class="badge-req">Required</span>
-								@if (!string.IsNullOrEmpty(_dealer.AadhaarFilePath))
-								{
-									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-								}
-								else
-								{
-									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
-								}
-							</div>
-						</div>
-					</div>
-					@if (!string.IsNullOrEmpty(_dealer.AadhaarFilePath))
-					{
-						<div class="file-uploaded-box">
-							<div class="file-info">
-								<i class="bi bi-file-earmark-pdf"></i>
-								<div>
-									<div class="file-name">@GetFileName(_dealer.AadhaarFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAadhaarFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-									<div class="file-meta">Aadhaar Card Copy of Owner</div>
-								</div>
-							</div>
-							<div class="file-actions">
-								<a href="@GetFileUrl(_dealer.AadhaarFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-									<i class="bi bi-arrow-repeat"></i> Replace
-									<InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
-							</div>
-						</div>
-					}
-					else
-					{
-						<div class="file-missing-box">
-							<div class="missing-info">
-								<i class="bi bi-upload" style="color:#059669;"></i>
-								<div>
-									<div class="missing-title" style="color:#059669;">Click to upload</div>
-									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-								</div>
-							</div>
-							<label class="btn-green-solid mb-0" style="cursor:pointer;">
-								<i class="bi bi-upload me-1"></i> Upload Document
-								<InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf,.jpg,.jpeg,.png" />
-							</label>
-						</div>
-					}
-				</div>
-			</div>
-
-			@if (_hasWholesaleLicense)
-			{
+			<div class="row g-3">
 				<div class="col-md-6">
 					<div class="doc-card">
 						<div class="doc-header">
-							<div class="doc-icon"><i class="bi bi-card-heading"></i></div>
+							<div class="doc-icon"><i class="bi bi-file-earmark-text"></i></div>
 							<div class="doc-title-row">
 								<div>
-									<div class="doc-title">Wholesale Fertilizers License</div>
-									<div class="doc-desc">Valid wholesale fertilizers sales license</div>
+									<div class="doc-title">GST Certificate</div>
+									<div class="doc-desc">GST Registration Certificate</div>
 								</div>
 								<div class="badge-group">
 									<span class="badge-req">Required</span>
-									@if (!string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath))
+									@if (!string.IsNullOrEmpty(_dealer.GSTFilePath))
 									{
 										<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
 									}
@@ -348,22 +86,30 @@
 								</div>
 							</div>
 						</div>
-						@if (!string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath))
+						@if (!string.IsNullOrEmpty(_dealer.GSTFilePath))
 						{
 							<div class="file-uploaded-box">
 								<div class="file-info">
 									<i class="bi bi-file-earmark-pdf"></i>
 									<div>
-										<div class="file-name">@GetFileName(_dealer.WholesaleLicenseFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveWholesaleLicenseFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-										<div class="file-meta">Wholesale fertilizers sales license</div>
+										<div class="file-name">
+											@GetFileName(_dealer.GSTFilePath) @if (CanDelete)
+											{
+												<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveGstFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+											}
+										</div>
+										<div class="file-meta">GST Registration Certificate</div>
 									</div>
 								</div>
 								<div class="file-actions">
-									<a href="@GetFileUrl(_dealer.WholesaleLicenseFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-										<i class="bi bi-arrow-repeat"></i> Replace
-										<InputFile hidden OnChange="OnWholesaleLicenseSelected" accept=".pdf,.jpg,.jpeg,.png" />
-									</label>
+									<a href="@GetFileUrl(_dealer.GSTFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+									@if (CanEdit)
+									{
+										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+											<i class="bi bi-arrow-repeat"></i> Replace
+											<InputFile hidden OnChange="OnGSTSelected" accept=".pdf,.jpg,.jpeg,.png" />
+										</label>
+									}
 								</div>
 							</div>
 						}
@@ -377,30 +123,30 @@
 										<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 									</div>
 								</div>
-								<label class="btn-green-solid mb-0" style="cursor:pointer;">
-									<i class="bi bi-upload me-1"></i> Upload Document
-									<InputFile hidden OnChange="OnWholesaleLicenseSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
+								@if (CanAdd)
+								{
+									<label class="btn-green-solid mb-0" style="cursor:pointer;">
+										<i class="bi bi-upload me-1"></i> Upload Document
+										<InputFile hidden OnChange="OnGSTSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
 							</div>
 						}
 					</div>
 				</div>
-			}
 
-			@if (_hasRetailLicense)
-			{
 				<div class="col-md-6">
 					<div class="doc-card">
 						<div class="doc-header">
-							<div class="doc-icon"><i class="bi bi-card-heading"></i></div>
+							<div class="doc-icon"><i class="bi bi-person-vcard"></i></div>
 							<div class="doc-title-row">
 								<div>
-									<div class="doc-title">Retail Fertilizers License</div>
-									<div class="doc-desc">Valid retail fertilizers sales license</div>
+									<div class="doc-title">PAN Copy</div>
+									<div class="doc-desc">Permanent Account Number Card Copy</div>
 								</div>
 								<div class="badge-group">
 									<span class="badge-req">Required</span>
-									@if (!string.IsNullOrEmpty(_dealer.RetailLicenseFilePath))
+									@if (!string.IsNullOrEmpty(_dealer.PANFilePath))
 									{
 										<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
 									}
@@ -411,22 +157,30 @@
 								</div>
 							</div>
 						</div>
-						@if (!string.IsNullOrEmpty(_dealer.RetailLicenseFilePath))
+						@if (!string.IsNullOrEmpty(_dealer.PANFilePath))
 						{
 							<div class="file-uploaded-box">
 								<div class="file-info">
 									<i class="bi bi-file-earmark-pdf"></i>
 									<div>
-										<div class="file-name">@GetFileName(_dealer.RetailLicenseFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveRetailLicenseFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-										<div class="file-meta">Retail fertilizers sales license</div>
+										<div class="file-name">
+											@GetFileName(_dealer.PANFilePath) @if (CanDelete)
+											{
+												<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemovePanFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+											}
+										</div>
+										<div class="file-meta">Permanent Account Number Card Copy</div>
 									</div>
 								</div>
 								<div class="file-actions">
-									<a href="@GetFileUrl(_dealer.RetailLicenseFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-										<i class="bi bi-arrow-repeat"></i> Replace
-										<InputFile hidden OnChange="OnRetailLicenseSelected" accept=".pdf,.jpg,.jpeg,.png" />
-									</label>
+									<a href="@GetFileUrl(_dealer.PANFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+									@if (CanEdit)
+									{
+										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+											<i class="bi bi-arrow-repeat"></i> Replace
+											<InputFile hidden OnChange="OnPANSelected" accept=".pdf,.jpg,.jpeg,.png" />
+										</label>
+									}
 								</div>
 							</div>
 						}
@@ -440,105 +194,103 @@
 										<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 									</div>
 								</div>
-								<label class="btn-green-solid mb-0" style="cursor:pointer;">
-									<i class="bi bi-upload me-1"></i> Upload Document
-									<InputFile hidden OnChange="OnRetailLicenseSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
+								@if (CanAdd)
+								{
+									<label class="btn-green-solid mb-0" style="cursor:pointer;">
+										<i class="bi bi-upload me-1"></i> Upload Document
+										<InputFile hidden OnChange="OnPANSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
 							</div>
 						}
 					</div>
 				</div>
-			}
 
-		</div>
-	</div>
-
-	@if (_partners.Count > 0)
-	{
-		<div class="main-card">
-			<h3 class="section-title">Partner / Proprietor Documents</h3>
-			<p class="section-subtitle">Documents uploaded during the Proprietor step for each partner</p>
-
-        @foreach (var partner in _partners)
-        {
-            var p = partner;
-            <h5 class="mt-3 mb-2" style="font-weight:600;color:#1F2937;">@p.Name <small class="text-muted">— @(p.Gender == Gender.Male ? "S/o" : "D/o") @p.FatherName</small></h5>
-            <div class="row g-3 mb-3">
-                <!-- Partner Photo -->
-                <div class="col-md-4">
-                    <div class="doc-card">
-                        <div class="doc-header">
-                            <div class="doc-icon"><i class="bi bi-person-circle"></i></div>
-                            <div class="doc-title-row">
-                                <div>
-                                    <div class="doc-title">Photo</div>
-                                    <div class="doc-desc">Proprietor / Partner Photo</div>
-                                </div>
-                                <div class="badge-group">
-                                    <span class="badge-req">Required</span>
-                                    @if (!string.IsNullOrEmpty(p.ProprietorImagePath))
-                                    {
-                                        <span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                        @if (!string.IsNullOrEmpty(p.ProprietorImagePath))
-                        {
-                            <div class="file-uploaded-box">
-                                <div class="file-info">
-                                    <i class="bi bi-file-earmark-image"></i>
-                                    <div>
-                                        <div class="file-name">@GetFileName(p.ProprietorImagePath)</div>
-                                        <div class="file-meta">Partner Photo</div>
-                                    </div>
-                                </div>
-                                <div class="file-actions">
-                                    <a href="@GetFileUrl(p.ProprietorImagePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-                                    <label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-                                        <i class="bi bi-arrow-repeat"></i> Replace
-                                        <InputFile hidden OnChange="(e) => OnPartnerImageSelected(p, e)" accept=".jpg,.jpeg,.png,.webp" />
-                                    </label>
-                                </div>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="file-missing-box">
-                                <div class="missing-info">
-                                    <i class="bi bi-upload" style="color:#059669;"></i>
-                                    <div>
-                                        <div class="missing-title" style="color:#059669;">Click to upload</div>
-                                        <div class="missing-meta">JPG, PNG, WEBP (Max 10 MB)</div>
-                                    </div>
-                                </div>
-                                <label class="btn-green-solid mb-0" style="cursor:pointer;">
-                                    <i class="bi bi-upload me-1"></i> Upload Photo
-                                    <InputFile hidden OnChange="(e) => OnPartnerImageSelected(p, e)" accept=".jpg,.jpeg,.png,.webp" />
-                                </label>
-                            </div>
-                        }
-                    </div>
+				<div class="col-md-6">
+					<div class="doc-card">
+						<div class="doc-header">
+							<div class="doc-icon"><i class="bi bi-person-bounding-box"></i></div>
+							<div class="doc-title-row">
+								<div>
+									<div class="doc-title">Aadhaar Copy</div>
+									<div class="doc-desc">Aadhaar Card Copy of Owner</div>
+								</div>
+								<div class="badge-group">
+									<span class="badge-req">Required</span>
+									@if (!string.IsNullOrEmpty(_dealer.AadhaarFilePath))
+									{
+										<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+									}
+									else
+									{
+										<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+									}
+								</div>
+							</div>
+						</div>
+						@if (!string.IsNullOrEmpty(_dealer.AadhaarFilePath))
+						{
+							<div class="file-uploaded-box">
+								<div class="file-info">
+									<i class="bi bi-file-earmark-pdf"></i>
+									<div>
+										<div class="file-name">
+											@GetFileName(_dealer.AadhaarFilePath) @if (CanDelete)
+											{
+												<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAadhaarFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+											}
+										</div>
+										<div class="file-meta">Aadhaar Card Copy of Owner</div>
+									</div>
+								</div>
+								<div class="file-actions">
+									<a href="@GetFileUrl(_dealer.AadhaarFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+									@if (CanEdit)
+									{
+										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+											<i class="bi bi-arrow-repeat"></i> Replace
+											<InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf,.jpg,.jpeg,.png" />
+										</label>
+									}
+								</div>
+							</div>
+						}
+						else
+						{
+							<div class="file-missing-box">
+								<div class="missing-info">
+									<i class="bi bi-upload" style="color:#059669;"></i>
+									<div>
+										<div class="missing-title" style="color:#059669;">Click to upload</div>
+										<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+									</div>
+								</div>
+								@if (CanAdd)
+								{
+									<label class="btn-green-solid mb-0" style="cursor:pointer;">
+										<i class="bi bi-upload me-1"></i> Upload Document
+										<InputFile hidden OnChange="OnAadhaarSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
+							</div>
+						}
+					</div>
 				</div>
 
-					@if (!_isSoleProprietor)
-					{
-					<div class="col-md-4">
+				@if (_hasWholesaleLicense)
+				{
+					<div class="col-md-6">
 						<div class="doc-card">
 							<div class="doc-header">
-								<div class="doc-icon"><i class="bi bi-person-bounding-box"></i></div>
+								<div class="doc-icon"><i class="bi bi-card-heading"></i></div>
 								<div class="doc-title-row">
 									<div>
-										<div class="doc-title">Aadhaar Copy</div>
-										<div class="doc-desc">Aadhaar Card of @p.Name</div>
+										<div class="doc-title">Wholesale Fertilizers License</div>
+										<div class="doc-desc">Valid wholesale fertilizers sales license</div>
 									</div>
 									<div class="badge-group">
 										<span class="badge-req">Required</span>
-										@if (!string.IsNullOrEmpty(p.AadhaarFilePath))
+										@if (!string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath))
 										{
 											<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
 										}
@@ -549,22 +301,30 @@
 									</div>
 								</div>
 							</div>
-							@if (!string.IsNullOrEmpty(p.AadhaarFilePath))
+							@if (!string.IsNullOrEmpty(_dealer.WholesaleLicenseFilePath))
 							{
 								<div class="file-uploaded-box">
 									<div class="file-info">
 										<i class="bi bi-file-earmark-pdf"></i>
 										<div>
-											<div class="file-name">@GetFileName(p.AadhaarFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemovePartnerAadhaarFile(p)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-											<div class="file-meta">Aadhaar Card Copy</div>
+											<div class="file-name">
+												@GetFileName(_dealer.WholesaleLicenseFilePath) @if (CanDelete)
+												{
+													<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveWholesaleLicenseFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+												}
+											</div>
+											<div class="file-meta">Wholesale fertilizers sales license</div>
 										</div>
 									</div>
 									<div class="file-actions">
-										<a href="@GetFileUrl(p.AadhaarFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-											<i class="bi bi-arrow-repeat"></i> Replace
-											<InputFile hidden OnChange="(e) => OnPartnerAadhaarSelected(p, e)" accept=".pdf,.jpg,.jpeg,.png" />
-										</label>
+										<a href="@GetFileUrl(_dealer.WholesaleLicenseFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+										@if (CanEdit)
+										{
+											<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+												<i class="bi bi-arrow-repeat"></i> Replace
+												<InputFile hidden OnChange="OnWholesaleLicenseSelected" accept=".pdf,.jpg,.jpeg,.png" />
+											</label>
+										}
 									</div>
 								</div>
 							}
@@ -575,30 +335,36 @@
 										<i class="bi bi-upload" style="color:#059669;"></i>
 										<div>
 											<div class="missing-title" style="color:#059669;">Click to upload</div>
-											<div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div>
+											<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 										</div>
 									</div>
-									<label class="btn-green-solid mb-0" style="cursor:pointer;">
-										<i class="bi bi-upload me-1"></i> Upload Document
-										<InputFile hidden OnChange="(e) => OnPartnerAadhaarSelected(p, e)" accept=".pdf,.jpg,.jpeg,.png" />
-									</label>
+									@if (CanAdd)
+									{
+										<label class="btn-green-solid mb-0" style="cursor:pointer;">
+											<i class="bi bi-upload me-1"></i> Upload Document
+											<InputFile hidden OnChange="OnWholesaleLicenseSelected" accept=".pdf,.jpg,.jpeg,.png" />
+										</label>
+									}
 								</div>
 							}
 						</div>
 					</div>
+				}
 
-					<div class="col-md-4">
+				@if (_hasRetailLicense)
+				{
+					<div class="col-md-6">
 						<div class="doc-card">
 							<div class="doc-header">
-								<div class="doc-icon"><i class="bi bi-person-vcard"></i></div>
+								<div class="doc-icon"><i class="bi bi-card-heading"></i></div>
 								<div class="doc-title-row">
 									<div>
-										<div class="doc-title">PAN Copy</div>
-										<div class="doc-desc">PAN Card of @p.Name</div>
+										<div class="doc-title">Retail Fertilizers License</div>
+										<div class="doc-desc">Valid retail fertilizers sales license</div>
 									</div>
 									<div class="badge-group">
 										<span class="badge-req">Required</span>
-										@if (!string.IsNullOrEmpty(p.PANFilePath))
+										@if (!string.IsNullOrEmpty(_dealer.RetailLicenseFilePath))
 										{
 											<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
 										}
@@ -609,22 +375,30 @@
 									</div>
 								</div>
 							</div>
-							@if (!string.IsNullOrEmpty(p.PANFilePath))
+							@if (!string.IsNullOrEmpty(_dealer.RetailLicenseFilePath))
 							{
 								<div class="file-uploaded-box">
 									<div class="file-info">
 										<i class="bi bi-file-earmark-pdf"></i>
 										<div>
-											<div class="file-name">@GetFileName(p.PANFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemovePartnerPanFile(p)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-											<div class="file-meta">PAN Card Copy</div>
+											<div class="file-name">
+												@GetFileName(_dealer.RetailLicenseFilePath) @if (CanDelete)
+												{
+													<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveRetailLicenseFile" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+												}
+											</div>
+											<div class="file-meta">Retail fertilizers sales license</div>
 										</div>
 									</div>
 									<div class="file-actions">
-										<a href="@GetFileUrl(p.PANFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-											<i class="bi bi-arrow-repeat"></i> Replace
-											<InputFile hidden OnChange="(e) => OnPartnerPANSelected(p, e)" accept=".pdf,.jpg,.jpeg,.png" />
-										</label>
+										<a href="@GetFileUrl(_dealer.RetailLicenseFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+										@if (CanEdit)
+										{
+											<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+												<i class="bi bi-arrow-repeat"></i> Replace
+												<InputFile hidden OnChange="OnRetailLicenseSelected" accept=".pdf,.jpg,.jpeg,.png" />
+											</label>
+										}
 									</div>
 								</div>
 							}
@@ -635,66 +409,321 @@
 										<i class="bi bi-upload" style="color:#059669;"></i>
 										<div>
 											<div class="missing-title" style="color:#059669;">Click to upload</div>
-											<div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div>
+											<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 										</div>
 									</div>
-									<label class="btn-green-solid mb-0" style="cursor:pointer;">
-										<i class="bi bi-upload me-1"></i> Upload Document
-										<InputFile hidden OnChange="(e) => OnPartnerPANSelected(p, e)" accept=".pdf,.jpg,.jpeg,.png" />
-									</label>
+									@if (CanAdd)
+									{
+										<label class="btn-green-solid mb-0" style="cursor:pointer;">
+											<i class="bi bi-upload me-1"></i> Upload Document
+											<InputFile hidden OnChange="OnRetailLicenseSelected" accept=".pdf,.jpg,.jpeg,.png" />
+										</label>
+									}
 								</div>
 							}
 						</div>
 					</div>
-					}
-				</div>
-			}
+				}
+
+			</div>
 		</div>
-	}
 
-	@if (_landAssets.Count > 0 || _buildingAssets.Count > 0)
-	{
-		<div class="main-card">
-			<h3 class="section-title">Property Documents (Land & Building)</h3>
-			<p class="section-subtitle">EC, Property Document, and Valuation Certificate for each land and building asset</p>
+		@if (_partners.Count > 0)
+		{
+			<div class="main-card">
+				<h3 class="section-title">Partner / Proprietor Documents</h3>
+				<p class="section-subtitle">Documents uploaded during the Proprietor step for each partner</p>
 
-			@foreach (var land in _landAssets)
-			{
-				var l = land;
-				<h5 class="mt-3 mb-2" style="font-weight:600;color:#1F2937;"><i class="bi bi-geo-alt text-success me-1"></i> Land: @l.LandName <small class="text-muted">— Survey No: @l.SurvayNumber</small></h5>
-				<div class="row g-3 mb-3">
-					<div class="col-md-4">
-						<div class="doc-card">
-							<div class="doc-header">
-								<div class="doc-icon"><i class="bi bi-file-earmark-check"></i></div>
-								<div class="doc-title-row">
-									<div>
-										<div class="doc-title">EC (Encumbrance Certificate)</div>
-										<div class="doc-desc">Encumbrance Certificate for @l.LandName</div>
-									</div>
-									<div class="badge-group">
-										<span class="badge-req">Required</span>
-										@if (!string.IsNullOrEmpty(l.UploadedECDocumentPath))
-										{ <span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span> }
-										else
-										{ <span class="badge-miss"><i class="bi bi-search"></i> Missing</span> }
+				@foreach (var partner in _partners)
+				{
+					var p = partner;
+					<h5 class="mt-3 mb-2" style="font-weight:600;color:#1F2937;">@p.Name <small class="text-muted">— @(p.Gender == Gender.Male ? "S/o" : "D/o") @p.FatherName</small></h5>
+					<div class="row g-3 mb-3">
+						<!-- Partner Photo -->
+						<div class="col-md-4">
+							<div class="doc-card">
+								<div class="doc-header">
+									<div class="doc-icon"><i class="bi bi-person-circle"></i></div>
+									<div class="doc-title-row">
+										<div>
+											<div class="doc-title">Photo</div>
+											<div class="doc-desc">Proprietor / Partner Photo</div>
+										</div>
+										<div class="badge-group">
+											<span class="badge-req">Required</span>
+											@if (!string.IsNullOrEmpty(p.ProprietorImagePath))
+											{
+												<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+											}
+											else
+											{
+												<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+											}
+										</div>
 									</div>
 								</div>
+								@if (!string.IsNullOrEmpty(p.ProprietorImagePath))
+								{
+									<div class="file-uploaded-box">
+										<div class="file-info">
+											<i class="bi bi-file-earmark-image"></i>
+											<div>
+												<div class="file-name">
+													@GetFileName(p.ProprietorImagePath) @if (CanDelete)
+													{
+														<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemovePartnerImageFile(p)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+													}
+												</div>
+												<div class="file-meta">Partner Photo</div>
+											</div>
+										</div>
+										<div class="file-actions">
+											<a href="@GetFileUrl(p.ProprietorImagePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+											@if (CanEdit)
+											{
+												<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+													<i class="bi bi-arrow-repeat"></i> Replace
+													<InputFile hidden OnChange="(e) => OnPartnerImageSelected(p, e)" accept=".jpg,.jpeg,.png,.webp" />
+												</label>
+											}
+										</div>
+									</div>
+								}
+								else
+								{
+									<div class="file-missing-box">
+										<div class="missing-info">
+											<i class="bi bi-upload" style="color:#059669;"></i>
+											<div>
+												<div class="missing-title" style="color:#059669;">Click to upload</div>
+												<div class="missing-meta">JPG, PNG, WEBP (Max 10 MB)</div>
+											</div>
+										</div>
+										@if (CanAdd)
+										{
+											<label class="btn-green-solid mb-0" style="cursor:pointer;">
+												<i class="bi bi-upload me-1"></i> Upload Photo
+												<InputFile hidden OnChange="(e) => OnPartnerImageSelected(p, e)" accept=".jpg,.jpeg,.png,.webp" />
+											</label>
+										}
+									</div>
+								}
 							</div>
-							@if (!string.IsNullOrEmpty(l.UploadedECDocumentPath))
-							{
-								<div class="file-uploaded-box">
-									<div class="file-info"><i class="bi bi-file-earmark-pdf"></i><div><div class="file-name">@GetFileName(l.UploadedECDocumentPath)</div><div class="file-meta">EC Document</div></div></div>
+						</div>
+
+						@if (!_isSoleProprietor)
+						{
+							<div class="col-md-4">
+								<div class="doc-card">
+									<div class="doc-header">
+										<div class="doc-icon"><i class="bi bi-person-bounding-box"></i></div>
+										<div class="doc-title-row">
+											<div>
+												<div class="doc-title">Aadhaar Copy</div>
+												<div class="doc-desc">Aadhaar Card of @p.Name</div>
+											</div>
+											<div class="badge-group">
+												<span class="badge-req">Required</span>
+												@if (!string.IsNullOrEmpty(p.AadhaarFilePath))
+												{
+													<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+												}
+												else
+												{
+													<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+												}
+											</div>
+										</div>
+									</div>
+									@if (!string.IsNullOrEmpty(p.AadhaarFilePath))
+									{
+										<div class="file-uploaded-box">
+											<div class="file-info">
+												<i class="bi bi-file-earmark-pdf"></i>
+												<div>
+													<div class="file-name">
+														@GetFileName(p.AadhaarFilePath) @if (CanDelete)
+														{
+															<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemovePartnerAadhaarFile(p)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+														}
+													</div>
+													<div class="file-meta">Aadhaar Card Copy</div>
+												</div>
+											</div>
+											<div class="file-actions">
+												<a href="@GetFileUrl(p.AadhaarFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+												@if (CanEdit)
+												{
+													<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+														<i class="bi bi-arrow-repeat"></i> Replace
+														<InputFile hidden OnChange="(e) => OnPartnerAadhaarSelected(p, e)" accept=".pdf,.jpg,.jpeg,.png" />
+													</label>
+												}
+											</div>
+										</div>
+									}
+									else
+									{
+										<div class="file-missing-box">
+											<div class="missing-info">
+												<i class="bi bi-upload" style="color:#059669;"></i>
+												<div>
+													<div class="missing-title" style="color:#059669;">Click to upload</div>
+													<div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div>
+												</div>
+											</div>
+											@if (CanAdd)
+											{
+												<label class="btn-green-solid mb-0" style="cursor:pointer;">
+													<i class="bi bi-upload me-1"></i> Upload Document
+													<InputFile hidden OnChange="(e) => OnPartnerAadhaarSelected(p, e)" accept=".pdf,.jpg,.jpeg,.png" />
+												</label>
+											}
+										</div>
+									}
+								</div>
+							</div>
+
+							<div class="col-md-4">
+								<div class="doc-card">
+									<div class="doc-header">
+										<div class="doc-icon"><i class="bi bi-person-vcard"></i></div>
+										<div class="doc-title-row">
+											<div>
+												<div class="doc-title">PAN Copy</div>
+												<div class="doc-desc">PAN Card of @p.Name</div>
+											</div>
+											<div class="badge-group">
+												<span class="badge-req">Required</span>
+												@if (!string.IsNullOrEmpty(p.PANFilePath))
+												{
+													<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+												}
+												else
+												{
+													<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+												}
+											</div>
+										</div>
+									</div>
+									@if (!string.IsNullOrEmpty(p.PANFilePath))
+									{
+										<div class="file-uploaded-box">
+											<div class="file-info">
+												<i class="bi bi-file-earmark-pdf"></i>
+												<div>
+													<div class="file-name">
+														@GetFileName(p.PANFilePath) @if (CanDelete)
+														{
+															<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemovePartnerPanFile(p)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+														}
+													</div>
+													<div class="file-meta">PAN Card Copy</div>
+												</div>
+											</div>
+											<div class="file-actions">
+												<a href="@GetFileUrl(p.PANFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+												@if (CanEdit)
+												{
+													<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+														<i class="bi bi-arrow-repeat"></i> Replace
+														<InputFile hidden OnChange="(e) => OnPartnerPANSelected(p, e)" accept=".pdf,.jpg,.jpeg,.png" />
+													</label>
+												}
+											</div>
+										</div>
+									}
+									else
+									{
+										<div class="file-missing-box">
+											<div class="missing-info">
+												<i class="bi bi-upload" style="color:#059669;"></i>
+												<div>
+													<div class="missing-title" style="color:#059669;">Click to upload</div>
+													<div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div>
+												</div>
+											</div>
+											@if (CanAdd)
+											{
+												<label class="btn-green-solid mb-0" style="cursor:pointer;">
+													<i class="bi bi-upload me-1"></i> Upload Document
+													<InputFile hidden OnChange="(e) => OnPartnerPANSelected(p, e)" accept=".pdf,.jpg,.jpeg,.png" />
+												</label>
+											}
+										</div>
+									}
+								</div>
+							</div>
+						}
+					</div>
+				}
+			</div>
+		}
+
+		@if (_landAssets.Count > 0 || _buildingAssets.Count > 0)
+		{
+			<div class="main-card">
+				<h3 class="section-title">Property Documents (Land & Building)</h3>
+				<p class="section-subtitle">EC, Property Document, and Valuation Certificate for each land and building asset</p>
+
+				@foreach (var land in _landAssets)
+				{
+					var l = land;
+					<h5 class="mt-3 mb-2" style="font-weight:600;color:#1F2937;"><i class="bi bi-geo-alt text-success me-1"></i> Land: @l.LandName <small class="text-muted">— Survey No: @l.SurvayNumber</small></h5>
+					<div class="row g-3 mb-3">
+						<div class="col-md-4">
+							<div class="doc-card">
+								<div class="doc-header">
+									<div class="doc-icon"><i class="bi bi-file-earmark-check"></i></div>
+									<div class="doc-title-row">
+										<div>
+											<div class="doc-title">EC (Encumbrance Certificate)</div>
+											<div class="doc-desc">Encumbrance Certificate for @l.LandName</div>
+										</div>
+										<div class="badge-group">
+											<span class="badge-req">Required</span>
+											@if (!string.IsNullOrEmpty(l.UploadedECDocumentPath))
+											{
+												<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+											}
+											else
+											{
+
+												<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+											}
+										</div>
+									</div>
+								</div>
+								@if (!string.IsNullOrEmpty(l.UploadedECDocumentPath))
+								{
+									<div class="file-uploaded-box">
+										<div class="file-info">
+											<i class="bi bi-file-earmark-pdf"></i><div>
+											<div class="file-name">
+												@GetFileName(l.UploadedECDocumentPath) @if (CanDelete)
+												{
+													<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemoveLandECFile(l)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+												}
+											</div>										<div class="file-meta">EC Document</div>
+										</div>
+									</div>
 									<div class="file-actions">
-										<a href="@GetFileUrl(l.UploadedECDocumentPath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncLandECSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+										<a href="@GetFileUrl(l.UploadedECDocumentPath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+										@if (CanEdit)
+										{
+											<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncLandECSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+										}
 									</div>
 								</div>
 							}
 							else
 							{
-								<div class="file-missing-box"><div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
-									<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncLandECSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+								<div class="file-missing-box">
+									<div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
+									@if (CanAdd)
+									{
+										<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncLandECSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+									}
 								</div>
 							}
 						</div>
@@ -711,336 +740,463 @@
 									<div class="badge-group">
 										<span class="badge-req">Required</span>
 										@if (!string.IsNullOrEmpty(l.UploadedLandDocumentPath))
-										{ <span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span> }
+										{
+											<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+										}
 										else
-										{ <span class="badge-miss"><i class="bi bi-search"></i> Missing</span> }
+										{
+
+											<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+										}
 									</div>
 								</div>
 							</div>
 							@if (!string.IsNullOrEmpty(l.UploadedLandDocumentPath))
 							{
 								<div class="file-uploaded-box">
-									<div class="file-info"><i class="bi bi-file-earmark-pdf"></i><div><div class="file-name">@GetFileName(l.UploadedLandDocumentPath)</div><div class="file-meta">Property Document</div></div></div>
-									<div class="file-actions">
-										<a href="@GetFileUrl(l.UploadedLandDocumentPath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+									<div class="file-info">
+										<i class="bi bi-file-earmark-pdf"></i><div>
+										<div class="file-name">
+											@GetFileName(l.UploadedLandDocumentPath) @if (CanDelete)
+											{
+												<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemoveLandPropertyDocFile(l)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+											}
+										</div>										<div class="file-meta">Property Document</div>
+									</div>
+								</div>
+								<div class="file-actions">
+									<a href="@GetFileUrl(l.UploadedLandDocumentPath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+									@if (CanEdit)
+									{
 										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncLandPropertyDocSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-									</div>
+									}
 								</div>
-							}
+							</div>
+						}
 							else
-							{
-								<div class="file-missing-box"><div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
+						{
+							<div class="file-missing-box">
+								<div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
+								@if (CanAdd)
+								{
 									<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncLandPropertyDocSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-								</div>
-							}
-						</div>
-					</div>
-					<div class="col-md-4">
-						<div class="doc-card">
-							<div class="doc-header">
-								<div class="doc-icon"><i class="bi bi-file-earmark-ruled"></i></div>
-								<div class="doc-title-row">
-									<div>
-										<div class="doc-title">Valuation Certificate</div>
-										<div class="doc-desc">Valuation certificate for @l.LandName</div>
-									</div>
-									<div class="badge-group">
-										<span class="badge-req">Required</span>
-										@if (!string.IsNullOrEmpty(l.UploadedValuationCertificatePath))
-										{ <span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span> }
-										else
-										{ <span class="badge-miss"><i class="bi bi-search"></i> Missing</span> }
-									</div>
-								</div>
+								}
 							</div>
-							@if (!string.IsNullOrEmpty(l.UploadedValuationCertificatePath))
-							{
-								<div class="file-uploaded-box">
-									<div class="file-info"><i class="bi bi-file-earmark-pdf"></i><div><div class="file-name">@GetFileName(l.UploadedValuationCertificatePath)</div><div class="file-meta">Valuation Certificate</div></div></div>
-									<div class="file-actions">
-										<a href="@GetFileUrl(l.UploadedValuationCertificatePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncLandValuationSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-									</div>
-								</div>
-							}
-							else
-							{
-								<div class="file-missing-box"><div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
-									<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncLandValuationSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-								</div>
-							}
-						</div>
+						}
 					</div>
 				</div>
-			}
+				<div class="col-md-4">
+					<div class="doc-card">
+						<div class="doc-header">
+							<div class="doc-icon"><i class="bi bi-file-earmark-ruled"></i></div>
+							<div class="doc-title-row">
+								<div>
+									<div class="doc-title">Valuation Certificate</div>
+									<div class="doc-desc">Valuation certificate for @l.LandName</div>
+								</div>
+								<div class="badge-group">
+									<span class="badge-req">Required</span>
+									@if (!string.IsNullOrEmpty(l.UploadedValuationCertificatePath))
+									{
+										<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+									}
+									else
+									{
 
-			@foreach (var bldg in _buildingAssets)
-			{
-				var b = bldg;
-				<h5 class="mt-3 mb-2" style="font-weight:600;color:#1F2937;"><i class="bi bi-building text-danger me-1"></i> Building: @b.BuildingName <small class="text-muted">— Survey No: @b.SurveyNumber</small></h5>
-				<div class="row g-3 mb-3">
-					<div class="col-md-4">
-						<div class="doc-card">
-							<div class="doc-header">
-								<div class="doc-icon"><i class="bi bi-file-earmark-check"></i></div>
-								<div class="doc-title-row">
-									<div>
-										<div class="doc-title">EC (Encumbrance Certificate)</div>
-										<div class="doc-desc">Encumbrance Certificate for @b.BuildingName</div>
-									</div>
-									<div class="badge-group">
-										<span class="badge-req">Required</span>
-										@if (!string.IsNullOrEmpty(b.UploadedECDocumentPath))
-										{ <span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span> }
-										else
-										{ <span class="badge-miss"><i class="bi bi-search"></i> Missing</span> }
-									</div>
+										<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+									}
 								</div>
 							</div>
-							@if (!string.IsNullOrEmpty(b.UploadedECDocumentPath))
-							{
-								<div class="file-uploaded-box">
-									<div class="file-info"><i class="bi bi-file-earmark-pdf"></i><div><div class="file-name">@GetFileName(b.UploadedECDocumentPath)</div><div class="file-meta">EC Document</div></div></div>
-									<div class="file-actions">
-										<a href="@GetFileUrl(b.UploadedECDocumentPath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncBuildingECSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-									</div>
-								</div>
-							}
-							else
-							{
-								<div class="file-missing-box"><div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
-									<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncBuildingECSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-								</div>
-							}
 						</div>
-					</div>
-					<div class="col-md-4">
-						<div class="doc-card">
-							<div class="doc-header">
-								<div class="doc-icon"><i class="bi bi-file-earmark-text"></i></div>
-								<div class="doc-title-row">
-									<div>
-										<div class="doc-title">Property Document</div>
-										<div class="doc-desc">Property document for @b.BuildingName</div>
-									</div>
-									<div class="badge-group">
-										<span class="badge-req">Required</span>
-										@if (!string.IsNullOrEmpty(b.UploadedBuildingDocumentPath))
-										{ <span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span> }
-										else
-										{ <span class="badge-miss"><i class="bi bi-search"></i> Missing</span> }
-									</div>
+						@if (!string.IsNullOrEmpty(l.UploadedValuationCertificatePath))
+						{
+							<div class="file-uploaded-box">
+								<div class="file-info">
+									<i class="bi bi-file-earmark-pdf"></i><div>
+									<div class="file-name">
+										@GetFileName(l.UploadedValuationCertificatePath) @if (CanDelete)
+										{
+											<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemoveLandValuationFile(l)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+										}
+									</div>										<div class="file-meta">Valuation Certificate</div>
 								</div>
 							</div>
-							@if (!string.IsNullOrEmpty(b.UploadedBuildingDocumentPath))
-							{
-								<div class="file-uploaded-box">
-									<div class="file-info"><i class="bi bi-file-earmark-pdf"></i><div><div class="file-name">@GetFileName(b.UploadedBuildingDocumentPath)</div><div class="file-meta">Property Document</div></div></div>
-									<div class="file-actions">
-										<a href="@GetFileUrl(b.UploadedBuildingDocumentPath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncBuildingPropertyDocSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-									</div>
-								</div>
-							}
-							else
-							{
-								<div class="file-missing-box"><div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
-									<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncBuildingPropertyDocSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-								</div>
-							}
-						</div>
-					</div>
-					<div class="col-md-4">
-						<div class="doc-card">
-							<div class="doc-header">
-								<div class="doc-icon"><i class="bi bi-file-earmark-ruled"></i></div>
-								<div class="doc-title-row">
-									<div>
-										<div class="doc-title">Valuation Certificate</div>
-										<div class="doc-desc">Valuation certificate for @b.BuildingName</div>
-									</div>
-									<div class="badge-group">
-										<span class="badge-req">Required</span>
-										@if (!string.IsNullOrEmpty(b.UploadedValuationCertificatePath))
-										{ <span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span> }
-										else
-										{ <span class="badge-miss"><i class="bi bi-search"></i> Missing</span> }
-									</div>
-								</div>
+							<div class="file-actions">
+								<a href="@GetFileUrl(l.UploadedValuationCertificatePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								@if (CanEdit)
+								{
+									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncLandValuationSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+								}
 							</div>
-							@if (!string.IsNullOrEmpty(b.UploadedValuationCertificatePath))
-							{
-								<div class="file-uploaded-box">
-									<div class="file-info"><i class="bi bi-file-earmark-pdf"></i><div><div class="file-name">@GetFileName(b.UploadedValuationCertificatePath)</div><div class="file-meta">Valuation Certificate</div></div></div>
-									<div class="file-actions">
-										<a href="@GetFileUrl(b.UploadedValuationCertificatePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-										<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncBuildingValuationSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-									</div>
-								</div>
-							}
+						</div>
+					}
 							else
+					{
+						<div class="file-missing-box">
+							<div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
+							@if (CanAdd)
 							{
-								<div class="file-missing-box"><div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
-									<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncBuildingValuationSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
-								</div>
+								<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncLandValuationSelected(l, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
 							}
 						</div>
-					</div>
+					}
 				</div>
-			}
+			</div>
 		</div>
 	}
 
-	<!-- Pending / Additional Documents -->
-    <div class="main-card">
-        <h3 class="section-title">Additional Documents</h3>
-        <p class="section-subtitle">Upload remaining required and additional documents</p>
-
-		<div class="row g-3">
-			<div class="col-md-6">
+	@foreach (var bldg in _buildingAssets)
+	{
+		var b = bldg;
+		<h5 class="mt-3 mb-2" style="font-weight:600;color:#1F2937;"><i class="bi bi-building text-danger me-1"></i> Building: @b.BuildingName <small class="text-muted">— Survey No: @b.SurveyNumber</small></h5>
+		<div class="row g-3 mb-3">
+			<div class="col-md-4">
 				<div class="doc-card">
 					<div class="doc-header">
-						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.FY1ITReturnFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
-							<i class="bi bi-file-earmark"></i>
-						</div>
+						<div class="doc-icon"><i class="bi bi-file-earmark-check"></i></div>
 						<div class="doc-title-row">
 							<div>
-								<div class="doc-title">IT Returns for Last Year</div>
-								<div class="doc-desc d-flex align-items-center gap-2">
-									Income Tax Returns for FY
-									<select class="form-select title-select" @bind="_docs.FY1" @bind:after="SaveDocuments">
-										<option value="0">Select FY</option>
-										@foreach (var fy in _financialYears)
-										{
-											<option value="@fy.Id">@fy.Name</option>
-										}
-									</select>
-								</div>
+								<div class="doc-title">EC (Encumbrance Certificate)</div>
+								<div class="doc-desc">Encumbrance Certificate for @b.BuildingName</div>
 							</div>
 							<div class="badge-group">
 								<span class="badge-req">Required</span>
-								@if (!string.IsNullOrEmpty(_docs.FY1ITReturnFilePath))
+								@if (!string.IsNullOrEmpty(b.UploadedECDocumentPath))
 								{
 									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
 								}
 								else
 								{
+
 									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
 								}
 							</div>
 						</div>
 					</div>
-					@if (!string.IsNullOrEmpty(_docs.FY1ITReturnFilePath))
+					@if (!string.IsNullOrEmpty(b.UploadedECDocumentPath))
 					{
 						<div class="file-uploaded-box">
 							<div class="file-info">
-								<i class="bi bi-file-earmark-pdf"></i>
-								<div>
-									<div class="file-name">@GetFileName(_docs.FY1ITReturnFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveITReturn1" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-									<div class="file-meta">IT Return Document</div>
-								</div>
+								<i class="bi bi-file-earmark-pdf"></i><div>
+								<div class="file-name">
+									@GetFileName(b.UploadedECDocumentPath) @if (CanDelete)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemoveBuildingECFile(b)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
+								</div>										<div class="file-meta">EC Document</div>
 							</div>
-							<div class="file-actions">
-								<a href="@GetFileUrl(_docs.FY1ITReturnFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(b.UploadedECDocumentPath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
+								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncBuildingECSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+							}
+						</div>
+					</div>
+				}
+							else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
+						@if (CanAdd)
+						{
+							<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncBuildingECSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+						}
+					</div>
+				}
+			</div>
+		</div>
+		<div class="col-md-4">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon"><i class="bi bi-file-earmark-text"></i></div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">Property Document</div>
+							<div class="doc-desc">Property document for @b.BuildingName</div>
+						</div>
+						<div class="badge-group">
+							<span class="badge-req">Required</span>
+							@if (!string.IsNullOrEmpty(b.UploadedBuildingDocumentPath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
+					</div>
+				</div>
+				@if (!string.IsNullOrEmpty(b.UploadedBuildingDocumentPath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i><div>
+							<div class="file-name">
+								@GetFileName(b.UploadedBuildingDocumentPath) @if (CanDelete)
+								{
+									<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemoveBuildingPropertyDocFile(b)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+								}
+							</div>										<div class="file-meta">Property Document</div>
+						</div>
+					</div>
+					<div class="file-actions">
+						<a href="@GetFileUrl(b.UploadedBuildingDocumentPath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+						@if (CanEdit)
+						{
+							<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncBuildingPropertyDocSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+						}
+					</div>
+				</div>
+			}
+							else
+			{
+				<div class="file-missing-box">
+					<div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
+					@if (CanAdd)
+					{
+						<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncBuildingPropertyDocSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+					}
+				</div>
+			}
+		</div>
+	</div>
+	<div class="col-md-4">
+		<div class="doc-card">
+			<div class="doc-header">
+				<div class="doc-icon"><i class="bi bi-file-earmark-ruled"></i></div>
+				<div class="doc-title-row">
+					<div>
+						<div class="doc-title">Valuation Certificate</div>
+						<div class="doc-desc">Valuation certificate for @b.BuildingName</div>
+					</div>
+					<div class="badge-group">
+						<span class="badge-req">Required</span>
+						@if (!string.IsNullOrEmpty(b.UploadedValuationCertificatePath))
+						{
+							<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+						}
+						else
+						{
+
+							<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+						}
+					</div>
+				</div>
+			</div>
+			@if (!string.IsNullOrEmpty(b.UploadedValuationCertificatePath))
+			{
+				<div class="file-uploaded-box">
+					<div class="file-info">
+						<i class="bi bi-file-earmark-pdf"></i><div>
+						<div class="file-name">
+							@GetFileName(b.UploadedValuationCertificatePath) @if (CanDelete)
+							{
+								<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="() => RemoveBuildingValuationFile(b)" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+							}
+						</div>										<div class="file-meta">Valuation Certificate</div>
+					</div>
+				</div>
+				<div class="file-actions">
+					<a href="@GetFileUrl(b.UploadedValuationCertificatePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+					@if (CanEdit)
+					{
+						<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;"><i class="bi bi-arrow-repeat"></i> Replace<InputFile hidden OnChange="(e) => OnEncBuildingValuationSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+					}
+				</div>
+			</div>
+		}
+							else
+		{
+			<div class="file-missing-box">
+				<div class="missing-info"><i class="bi bi-upload" style="color:#059669;"></i><div><div class="missing-title" style="color:#059669;">Click to upload</div><div class="missing-meta">PDF, JPG, PNG (Max 10 MB)</div></div></div>
+				@if (CanAdd)
+				{
+					<label class="btn-green-solid mb-0" style="cursor:pointer;"><i class="bi bi-upload me-1"></i> Upload<InputFile hidden OnChange="(e) => OnEncBuildingValuationSelected(b, e)" accept=".pdf,.jpg,.jpeg,.png" /></label>
+				}
+			</div>
+		}
+	</div>
+</div>
+</div>
+			}
+</div>
+	}
+
+<!-- Pending / Additional Documents -->
+<div class="main-card">
+	<h3 class="section-title">Additional Documents</h3>
+	<p class="section-subtitle">Upload remaining required and additional documents</p>
+
+	<div class="row g-3">
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.FY1ITReturnFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<i class="bi bi-file-earmark"></i>
+					</div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">IT Returns for Last Year</div>
+							<div class="doc-desc d-flex align-items-center flex-wrap gap-2">
+								Income Tax Returns for FY
+								<select class="form-select title-select" @bind="_docs.FY1" @bind:after="SaveDocuments">
+									<option value="0">Select FY</option>
+									@foreach (var fy in _financialYears)
+									{
+										<option value="@fy.Id">@fy.Name</option>
+									}
+								</select>
+							</div>
+						</div>
+						<div class="badge-group">
+							<span class="badge-req">Required</span>
+							@if (!string.IsNullOrEmpty(_docs.FY1ITReturnFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
+					</div>
+				</div>
+				@if (!string.IsNullOrEmpty(_docs.FY1ITReturnFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">
+									@GetFileName(_docs.FY1ITReturnFilePath) @if (CanDelete)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveITReturn1" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
+								</div>
+								<div class="file-meta">IT Return Document</div>
+							</div>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.FY1ITReturnFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
 								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
 									<i class="bi bi-arrow-repeat"></i> Replace
 									<InputFile hidden OnChange="OnITReturn1Selected" accept=".pdf,.jpg,.jpeg,.png" />
 								</label>
+							}
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 							</div>
 						</div>
-					}
-					else
-					{
-						<div class="file-missing-box">
-							<div class="missing-info">
-								<i class="bi bi-upload" style="color:#059669;"></i>
-								<div>
-									<div class="missing-title" style="color:#059669;">Click to upload</div>
-									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-								</div>
-							</div>
+						@if (CanAdd)
+						{
 							<label class="btn-green-solid mb-0" style="cursor:pointer;">
 								<i class="bi bi-upload me-1"></i> Upload Document
 								<InputFile hidden OnChange="OnITReturn1Selected" accept=".pdf,.jpg,.jpeg,.png" />
 							</label>
-						</div>
-					}
-				</div>
+						}
+					</div>
+				}
 			</div>
+		</div>
 
-			<div class="col-md-6">
-				<div class="doc-card">
-					<div class="doc-header">
-						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.FY2ITReturnFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
-							<i class="bi bi-file-earmark"></i>
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.FY2ITReturnFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<i class="bi bi-file-earmark"></i>
+					</div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">IT Returns for Last 2nd Year</div>
+							<div class="doc-desc d-flex align-items-center flex-wrap gap-2">
+								Income Tax Returns for FY
+								<select class="form-select title-select" @bind="_docs.FY2" @bind:after="SaveDocuments">
+									<option value="0">Select FY</option>
+									@foreach (var fy in _financialYears)
+									{
+										<option value="@fy.Id">@fy.Name</option>
+									}
+								</select>
+							</div>
 						</div>
-						<div class="doc-title-row">
-							<div>
-								<div class="doc-title">IT Returns for Last 2nd Year</div>
-								<div class="doc-desc d-flex align-items-center gap-2">
-									Income Tax Returns for FY
-									<select class="form-select title-select" @bind="_docs.FY2" @bind:after="SaveDocuments">
-										<option value="0">Select FY</option>
-										@foreach (var fy in _financialYears)
-										{
-											<option value="@fy.Id">@fy.Name</option>
-										}
-									</select>
-								</div>
-							</div>
-							<div class="badge-group">
-								<span class="badge-req">Required</span>
-								@if (!string.IsNullOrEmpty(_docs.FY2ITReturnFilePath))
-								{
-									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-								}
-								else
-								{
-									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
-								}
-							</div>
+						<div class="badge-group">
+							<span class="badge-req">Required</span>
+							@if (!string.IsNullOrEmpty(_docs.FY2ITReturnFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
 						</div>
 					</div>
-					@if (!string.IsNullOrEmpty(_docs.FY2ITReturnFilePath))
-					{
-						<div class="file-uploaded-box">
-							<div class="file-info">
-								<i class="bi bi-file-earmark-pdf"></i>
-								<div>
-									<div class="file-name">@GetFileName(_docs.FY2ITReturnFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveITReturn2" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-									<div class="file-meta">IT Return Document</div>
+				</div>
+				@if (!string.IsNullOrEmpty(_docs.FY2ITReturnFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">
+									@GetFileName(_docs.FY2ITReturnFilePath) @if (CanDelete)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveITReturn2" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
 								</div>
+								<div class="file-meta">IT Return Document</div>
 							</div>
-							<div class="file-actions">
-								<a href="@GetFileUrl(_docs.FY2ITReturnFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.FY2ITReturnFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
 								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
 									<i class="bi bi-arrow-repeat"></i> Replace
 									<InputFile hidden OnChange="OnITReturn2Selected" accept=".pdf,.jpg,.jpeg,.png" />
 								</label>
+							}
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 							</div>
 						</div>
-					}
-					else
-					{
-						<div class="file-missing-box">
-							<div class="missing-info">
-								<i class="bi bi-upload" style="color:#059669;"></i>
-								<div>
-									<div class="missing-title" style="color:#059669;">Click to upload</div>
-									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-								</div>
-							</div>
+						@if (CanAdd)
+						{
 							<label class="btn-green-solid mb-0" style="cursor:pointer;">
 								<i class="bi bi-upload me-1"></i> Upload Document
 								<InputFile hidden OnChange="OnITReturn2Selected" accept=".pdf,.jpg,.jpeg,.png" />
 							</label>
-						</div>
-					}
-				</div>
+						}
+					</div>
+				}
 			</div>
+		</div>
 
-			<div class="col-md-6">
+		@* <div class="col-md-6">
 				<div class="doc-card">
 					<div class="doc-header">
 						<div class="doc-icon"><i class="bi bi-file-earmark-check"></i></div>
@@ -1073,7 +1229,7 @@
 								</div>
 							</div>
 							<div class="file-actions">
-								<a href="@GetFileUrl(_docs.ValuationCertificateFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								<a href="@GetFileUrl(_docs.ValuationCertificateFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
 								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
 									<i class="bi bi-arrow-repeat"></i> Replace
 									<InputFile hidden OnChange="OnValuationCertSelected" accept=".pdf,.jpg,.jpeg,.png" />
@@ -1098,8 +1254,10 @@
 						</div>
 					}
 				</div>
-			</div>
+			</div> *@
 
+		@if (_isRetailerListRequired)
+		{
 			<div class="col-md-6">
 				<div class="doc-card">
 					<div class="doc-header">
@@ -1110,7 +1268,7 @@
 							<div>
 								<div class="doc-title">List of Retailers with Complete Details</div>
 								<div class="doc-desc">Upload Excel (.xlsx, .xls) or CSV (.csv) file</div>
-								<a href="@GetFileUrl("Downloads/Sample-DealerRegistration/List of retailers with complete details.xlsx")" target="_blank" class="btn-outline-blue mt-2" style="display:inline-flex; align-items:center; gap:4px; font-size:0.82rem; padding:4px 10px;">
+								<a href="@GetFileUrl("Downloads/Sample-DealerRegistration/List of retailers with complete details.xlsx")" class="btn-outline-blue mt-2" style="display:inline-flex; align-items:center; gap:4px; font-size:0.82rem; padding:4px 10px;">
 									<i class="bi bi-download"></i> Download Sample Template
 								</a>
 							</div>
@@ -1133,16 +1291,24 @@
 							<div class="file-info">
 								<i class="bi bi-file-earmark-spreadsheet"></i>
 								<div>
-									<div class="file-name">@GetFileName(_docs.RetailerListFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveRetailerList" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
+									<div class="file-name">
+										@GetFileName(_docs.RetailerListFilePath) @if (CanDelete)
+										{
+											<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveRetailerList" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+										}
+									</div>
 									<div class="file-meta">Retailer List</div>
 								</div>
 							</div>
 							<div class="file-actions">
-								<a href="@GetFileUrl(_docs.RetailerListFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-									<i class="bi bi-arrow-repeat"></i> Replace
-									<InputFile hidden OnChange="OnRetailerListSelected" accept=".xlsx,.xls,.csv" />
-								</label>
+								<a href="@GetFileUrl(_docs.RetailerListFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								@if (CanEdit)
+								{
+									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+										<i class="bi bi-arrow-repeat"></i> Replace
+										<InputFile hidden OnChange="OnRetailerListSelected" accept=".xlsx,.xls,.csv" />
+									</label>
+								}
 							</div>
 						</div>
 					}
@@ -1156,216 +1322,200 @@
 									<div class="missing-meta">or drag and drop Excel or CSV (Max 10 MB)</div>
 								</div>
 							</div>
-							<label class="btn-green-solid mb-0" style="cursor:pointer;">
-								<i class="bi bi-upload me-1"></i> Upload Document
-								<InputFile hidden OnChange="OnRetailerListSelected" accept=".xlsx,.xls,.csv" />
-							</label>
+							@if (CanAdd)
+							{
+								<label class="btn-green-solid mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload me-1"></i> Upload Document
+									<InputFile hidden OnChange="OnRetailerListSelected" accept=".xlsx,.xls,.csv" />
+								</label>
+							}
 						</div>
 					}
 				</div>
 			</div>
+		}
 
-			@if (_showPartnershipDeed)
-			{
-				<div class="col-md-6">
-					<div class="doc-card">
-						<div class="doc-header">
-							<div class="doc-icon"><i class="bi bi-file-earmark-check"></i></div>
-							<div class="doc-title-row">
-								<div>
-									<div class="doc-title">Partnership Deed</div>
-									<div class="doc-desc">Registered partnership deed document</div>
-								</div>
-								<div class="badge-group">
-									<span class="badge-opt">Optional</span>
-									@if (!string.IsNullOrEmpty(_docs.PartnershipDeadFilePath))
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon"><i class="bi bi-file-earmark-check"></i></div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">Partnership Deed</div>
+							<div class="doc-desc">Registered partnership deed document</div>
+						</div>
+						<div class="badge-group">
+							@if (_showPartnershipDeed)
+							{
+								<span class="badge-req">Required</span>
+							}
+							else
+							{
+								<span class="badge-opt">Optional</span>
+							}
+							@if (!string.IsNullOrEmpty(_docs.PartnershipDeadFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
+					</div>
+				</div>
+				@if (!string.IsNullOrEmpty(_docs.PartnershipDeadFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">
+									@GetFileName(_docs.PartnershipDeadFilePath) @if (CanDelete)
 									{
-										<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-									}
-									else
-									{
-										<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemovePartnershipDeed" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
 									}
 								</div>
+								<div class="file-meta">Partnership Deed</div>
 							</div>
 						</div>
-						@if (!string.IsNullOrEmpty(_docs.PartnershipDeadFilePath))
-						{
-							<div class="file-uploaded-box">
-								<div class="file-info">
-									<i class="bi bi-file-earmark-pdf"></i>
-									<div>
-										<div class="file-name">@GetFileName(_docs.PartnershipDeadFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemovePartnershipDeed" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-										<div class="file-meta">Partnership Deed</div>
-									</div>
-								</div>
-								<div class="file-actions">
-									<a href="@GetFileUrl(_docs.PartnershipDeadFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-										<i class="bi bi-arrow-repeat"></i> Replace
-										<InputFile hidden OnChange="OnPartnershipDeedSelected" accept=".pdf,.jpg,.jpeg,.png" />
-									</label>
-								</div>
-							</div>
-						}
-						else
-						{
-							<div class="file-missing-box">
-								<div class="missing-info">
-									<i class="bi bi-upload" style="color:#059669;"></i>
-									<div>
-										<div class="missing-title" style="color:#059669;">Click to upload</div>
-										<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-									</div>
-								</div>
-								<label class="btn-green-solid mb-0" style="cursor:pointer;">
-									<i class="bi bi-upload me-1"></i> Upload Document
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.PartnershipDeadFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
+								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+									<i class="bi bi-arrow-repeat"></i> Replace
 									<InputFile hidden OnChange="OnPartnershipDeedSelected" accept=".pdf,.jpg,.jpeg,.png" />
 								</label>
-							</div>
-						}
+							}
+						</div>
 					</div>
-				</div>
-			}
-
-			@if (_showBoardResolution)
-			{
-				<div class="col-md-6">
-					<div class="doc-card">
-						<div class="doc-header">
-							<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.BoardReasolutionFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
-								<i class="bi bi-file-earmark"></i>
-							</div>
-							<div class="doc-title-row">
-								<div>
-									<div class="doc-title">Board Resolution</div>
-									<div class="doc-desc">Board resolution document</div>
-								</div>
-								<div class="badge-group">
-									<span class="badge-opt">Optional</span>
-									@if (!string.IsNullOrEmpty(_docs.BoardReasolutionFilePath))
-									{
-										<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-									}
-									else
-									{
-										<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
-									}
-								</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 							</div>
 						</div>
-						@if (!string.IsNullOrEmpty(_docs.BoardReasolutionFilePath))
+						@if (CanAdd)
 						{
-							<div class="file-uploaded-box">
-								<div class="file-info">
-									<i class="bi bi-file-earmark-pdf"></i>
-									<div>
-										<div class="file-name">@GetFileName(_docs.BoardReasolutionFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveBoardResolution" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-										<div class="file-meta">Board Resolution</div>
-									</div>
-								</div>
-								<div class="file-actions">
-									<a href="@GetFileUrl(_docs.BoardReasolutionFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-										<i class="bi bi-arrow-repeat"></i> Replace
-										<InputFile hidden OnChange="OnBoardResolutionSelected" accept=".pdf,.jpg,.jpeg,.png" />
-									</label>
-								</div>
-							</div>
-						}
-						else
-						{
-							<div class="file-missing-box">
-								<div class="missing-info">
-									<i class="bi bi-upload" style="color:#059669;"></i>
-									<div>
-										<div class="missing-title" style="color:#059669;">Click to upload</div>
-										<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-									</div>
-								</div>
-								<label class="btn-green-solid mb-0" style="cursor:pointer;">
-									<i class="bi bi-upload me-1"></i> Upload Document
-									<InputFile hidden OnChange="OnBoardResolutionSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
-							</div>
+							<label class="btn-green-solid mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload me-1"></i> Upload Document
+								<InputFile hidden OnChange="OnPartnershipDeedSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
 						}
 					</div>
+				}
+			</div>
+		</div>
+
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.LlpAgreementFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<i class="bi bi-file-earmark-check"></i>
+					</div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">LLP Agreement</div>
+							<div class="doc-desc">Registered LLP agreement document</div>
+						</div>
+						<div class="badge-group">
+							@if (_isLlpAgreementRequired)
+							{
+								<span class="badge-req">Required</span>
+							}
+							else
+							{
+								<span class="badge-opt">Optional</span>
+							}
+							@if (!string.IsNullOrEmpty(_docs.LlpAgreementFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
+					</div>
 				</div>
-			}
+				@if (!string.IsNullOrEmpty(_docs.LlpAgreementFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">
+									@GetFileName(_docs.LlpAgreementFilePath) @if (CanDelete)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveLlpAgreement" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
+								</div>
+								<div class="file-meta">LLP Agreement</div>
+							</div>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.LlpAgreementFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
+								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+									<i class="bi bi-arrow-repeat"></i> Replace
+									<InputFile hidden OnChange="OnLlpAgreementSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+							</div>
+						</div>
+						@if (CanAdd)
+						{
+							<label class="btn-green-solid mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload me-1"></i> Upload Document
+								<InputFile hidden OnChange="OnLlpAgreementSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+						}
+					</div>
+				}
+			</div>
+		</div>
+
+		@if (_showBoardResolution)
+		{
 			<div class="col-md-6">
 				<div class="doc-card">
 					<div class="doc-header">
-						<div class="doc-icon"><i class="bi bi-bank"></i></div>
-						<div class="doc-title-row">
-							<div>
-								<div class="doc-title">Bank Guarantee Certificate</div>
-								<div class="doc-desc">Bank guarantee document</div>
-							</div>
-							<div class="badge-group">
-								<span class="badge-req">Required</span>
-								@if (!string.IsNullOrEmpty(_docs.BankGauranteeFilePath))
-								{
-									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-								}
-								else
-								{
-									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
-								}
-							</div>
-						</div>
-					</div>
-					@if (!string.IsNullOrEmpty(_docs.BankGauranteeFilePath))
-					{
-						<div class="file-uploaded-box">
-							<div class="file-info">
-								<i class="bi bi-file-earmark-pdf"></i>
-								<div>
-									<div class="file-name">@GetFileName(_docs.BankGauranteeFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveBankGuarantee" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-									<div class="file-meta">Bank Guarantee Document</div>
-								</div>
-							</div>
-							<div class="file-actions">
-								<a href="@GetFileUrl(_docs.BankGauranteeFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-									<i class="bi bi-arrow-repeat"></i> Replace
-									<InputFile hidden OnChange="OnBankGuaranteeSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
-							</div>
-						</div>
-					}
-					else
-					{
-						<div class="file-missing-box">
-							<div class="missing-info">
-								<i class="bi bi-upload" style="color:#059669;"></i>
-								<div>
-									<div class="missing-title" style="color:#059669;">Click to upload</div>
-									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-								</div>
-							</div>
-							<label class="btn-green-solid mb-0" style="cursor:pointer;">
-								<i class="bi bi-upload me-1"></i> Upload Document
-								<InputFile hidden OnChange="OnBankGuaranteeSelected" accept=".pdf,.jpg,.jpeg,.png" />
-							</label>
-						</div>
-					}
-				</div>
-			</div>
-
-			<div class="col-6">
-				<div class="doc-card">
-					<div class="doc-header">
-						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.AffidavitFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.BoardReasolutionFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
 							<i class="bi bi-file-earmark"></i>
 						</div>
 						<div class="doc-title-row">
 							<div>
-								<div class="doc-title">Affidavit</div>
-								<div class="doc-desc">Required when owner and signatory names differ</div>
+								<div class="doc-title">Board Resolution</div>
+								<div class="doc-desc">Board resolution document</div>
 							</div>
 							<div class="badge-group">
-								<span class="badge-opt">Optional</span>
-								@if (!string.IsNullOrEmpty(_docs.AffidavitFilePath))
+								@if (_isBoardResolutionRequired)
+								{
+									<span class="badge-req">Required</span>
+								}
+								else
+								{
+									<span class="badge-opt">Optional</span>
+								}
+								@if (!string.IsNullOrEmpty(_docs.BoardReasolutionFilePath))
 								{
 									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
 								}
@@ -1376,58 +1526,461 @@
 							</div>
 						</div>
 					</div>
-					@if (!string.IsNullOrEmpty(_docs.AffidavitFilePath))
+					@if (!string.IsNullOrEmpty(_docs.BoardReasolutionFilePath))
 					{
 						<div class="file-uploaded-box">
 							<div class="file-info">
 								<i class="bi bi-file-earmark-pdf"></i>
 								<div>
-									<div class="file-name">@GetFileName(_docs.AffidavitFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAffidavit" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-									<div class="file-meta">Affidavit Document</div>
+									<div class="file-name">
+										@GetFileName(_docs.BoardReasolutionFilePath) @if (CanDelete)
+										{
+											<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveBoardResolution" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+										}
+									</div>
+									<div class="file-meta">Board Resolution</div>
 								</div>
 							</div>
 							<div class="file-actions">
-								<a href="@GetFileUrl(_docs.AffidavitFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								<a href="@GetFileUrl(_docs.BoardReasolutionFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								@if (CanEdit)
+								{
+									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+										<i class="bi bi-arrow-repeat"></i> Replace
+										<InputFile hidden OnChange="OnBoardResolutionSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
+							</div>
+						</div>
+					}
+					else
+					{
+						<div class="file-missing-box">
+							<div class="missing-info">
+								<i class="bi bi-upload" style="color:#059669;"></i>
+								<div>
+									<div class="missing-title" style="color:#059669;">Click to upload</div>
+									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+								</div>
+							</div>
+							@if (CanAdd)
+							{
+								<label class="btn-green-solid mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload me-1"></i> Upload Document
+									<InputFile hidden OnChange="OnBoardResolutionSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					}
+				</div>
+			</div>
+		}
+		@if (_showAoaMoa)
+		{
+			<div class="col-md-6">
+				<div class="doc-card">
+					<div class="doc-header">
+						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.ArticlesOfAssociationFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+							<i class="bi bi-file-earmark"></i>
+						</div>
+						<div class="doc-title-row">
+							<div>
+								<div class="doc-title">Articles of Association (AOA)</div>
+								<div class="doc-desc">Articles of Association (AOA) document</div>
+							</div>
+							<div class="badge-group">
+								@if (_isAoaMoaRequired)
+								{
+									<span class="badge-req">Required</span>
+								}
+								else
+								{
+									<span class="badge-opt">Optional</span>
+								}
+								@if (!string.IsNullOrEmpty(_docs.ArticlesOfAssociationFilePath))
+								{
+									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+								}
+								else
+								{
+									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+								}
+							</div>
+						</div>
+					</div>
+					@if (!string.IsNullOrEmpty(_docs.ArticlesOfAssociationFilePath))
+					{
+						<div class="file-uploaded-box">
+							<div class="file-info">
+								<i class="bi bi-file-earmark-pdf"></i>
+								<div>
+									<div class="file-name">
+										@GetFileName(_docs.ArticlesOfAssociationFilePath) @if (CanDelete)
+										{
+											<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveArticlesOfAssociation" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+										}
+									</div>
+									<div class="file-meta">Articles of Association (AOA)</div>
+								</div>
+							</div>
+							<div class="file-actions">
+								<a href="@GetFileUrl(_docs.ArticlesOfAssociationFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								@if (CanEdit)
+								{
+									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+										<i class="bi bi-arrow-repeat"></i> Replace
+										<InputFile hidden OnChange="OnArticlesOfAssociationSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
+							</div>
+						</div>
+					}
+					else
+					{
+						<div class="file-missing-box">
+							<div class="missing-info">
+								<i class="bi bi-upload" style="color:#059669;"></i>
+								<div>
+									<div class="missing-title" style="color:#059669;">Click to upload</div>
+									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+								</div>
+							</div>
+							@if (CanAdd)
+							{
+								<label class="btn-green-solid mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload me-1"></i> Upload Document
+									<InputFile hidden OnChange="OnArticlesOfAssociationSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					}
+				</div>
+			</div>
+		}
+		@if (_showAoaMoa)
+		{
+			<div class="col-md-6">
+				<div class="doc-card">
+					<div class="doc-header">
+						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.MemorandumOfAssociationFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+							<i class="bi bi-file-earmark"></i>
+						</div>
+						<div class="doc-title-row">
+							<div>
+								<div class="doc-title">Memorandum of Association (MOA)</div>
+								<div class="doc-desc">Memorandum of Association (MOA) document</div>
+							</div>
+							<div class="badge-group">
+								@if (_isAoaMoaRequired)
+								{
+									<span class="badge-req">Required</span>
+								}
+								else
+								{
+									<span class="badge-opt">Optional</span>
+								}
+								@if (!string.IsNullOrEmpty(_docs.MemorandumOfAssociationFilePath))
+								{
+									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+								}
+								else
+								{
+									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+								}
+							</div>
+						</div>
+					</div>
+					@if (!string.IsNullOrEmpty(_docs.MemorandumOfAssociationFilePath))
+					{
+						<div class="file-uploaded-box">
+							<div class="file-info">
+								<i class="bi bi-file-earmark-pdf"></i>
+								<div>
+									<div class="file-name">
+										@GetFileName(_docs.MemorandumOfAssociationFilePath) @if (CanDelete)
+										{
+											<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveMemorandumOfAssociation" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+										}
+									</div>
+									<div class="file-meta">Memorandum of Association (MOA)</div>
+								</div>
+							</div>
+							<div class="file-actions">
+								<a href="@GetFileUrl(_docs.MemorandumOfAssociationFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								@if (CanEdit)
+								{
+									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+										<i class="bi bi-arrow-repeat"></i> Replace
+										<InputFile hidden OnChange="OnMemorandumOfAssociationSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
+							</div>
+						</div>
+					}
+					else
+					{
+						<div class="file-missing-box">
+							<div class="missing-info">
+								<i class="bi bi-upload" style="color:#059669;"></i>
+								<div>
+									<div class="missing-title" style="color:#059669;">Click to upload</div>
+									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+								</div>
+							</div>
+							@if (CanAdd)
+							{
+								<label class="btn-green-solid mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload me-1"></i> Upload Document
+									<InputFile hidden OnChange="OnMemorandumOfAssociationSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					}
+				</div>
+			</div>
+		}
+		@if (_showByLaw)
+		{
+			<div class="col-md-6">
+				<div class="doc-card">
+					<div class="doc-header">
+						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.ByLaw) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+							<i class="bi bi-file-earmark"></i>
+						</div>
+						<div class="doc-title-row">
+							<div>
+								<div class="doc-title">By Law</div>
+								<div class="doc-desc">Society by-law document</div>
+							</div>
+							<div class="badge-group">
+								@if (_isByLawRequired)
+								{
+									<span class="badge-req">Required</span>
+								}
+								else
+								{
+									<span class="badge-opt">Optional</span>
+								}
+								@if (!string.IsNullOrEmpty(_docs.ByLaw))
+								{
+									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+								}
+								else
+								{
+									<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+								}
+							</div>
+						</div>
+					</div>
+					@if (!string.IsNullOrEmpty(_docs.ByLaw))
+					{
+						<div class="file-uploaded-box">
+							<div class="file-info">
+								<i class="bi bi-file-earmark-pdf"></i>
+								<div>
+									<div class="file-name">
+										@GetFileName(_docs.ByLaw) @if (CanDelete)
+										{
+											<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveByLaw" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+										}
+									</div>
+									<div class="file-meta">By Law</div>
+								</div>
+							</div>
+							<div class="file-actions">
+								<a href="@GetFileUrl(_docs.ByLaw)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								@if (CanEdit)
+								{
+									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+										<i class="bi bi-arrow-repeat"></i> Replace
+										<InputFile hidden OnChange="OnByLawSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
+							</div>
+						</div>
+					}
+					else
+					{
+						<div class="file-missing-box">
+							<div class="missing-info">
+								<i class="bi bi-upload" style="color:#059669;"></i>
+								<div>
+									<div class="missing-title" style="color:#059669;">Click to upload</div>
+									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+								</div>
+							</div>
+							@if (CanAdd)
+							{
+								<label class="btn-green-solid mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload me-1"></i> Upload Document
+									<InputFile hidden OnChange="OnByLawSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					}
+				</div>
+			</div>
+		}
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon"><i class="bi bi-bank"></i></div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">Bank Guarantee Certificate</div>
+							<div class="doc-desc">Bank guarantee document</div>
+						</div>
+						<div class="badge-group">
+							<span class="badge-opt">Optional</span>
+							@if (!string.IsNullOrEmpty(_docs.BankGauranteeFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
+					</div>
+				</div>
+				@if (!string.IsNullOrEmpty(_docs.BankGauranteeFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">
+									@GetFileName(_docs.BankGauranteeFilePath) @if (CanDelete)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveBankGuarantee" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
+								</div>
+								<div class="file-meta">Bank Guarantee Document</div>
+							</div>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.BankGauranteeFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
+								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+									<i class="bi bi-arrow-repeat"></i> Replace
+									<InputFile hidden OnChange="OnBankGuaranteeSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+							</div>
+						</div>
+						@if (CanAdd)
+						{
+							<label class="btn-green-solid mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload me-1"></i> Upload Document
+								<InputFile hidden OnChange="OnBankGuaranteeSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+						}
+					</div>
+				}
+			</div>
+		</div>
+
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.AffidavitFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<i class="bi bi-file-earmark"></i>
+					</div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">Affidavit</div>
+							<div class="doc-desc">Required when owner and signatory names differ</div>
+						</div>
+						<div class="badge-group">
+							<span class="badge-opt">Optional</span>
+							@if (!string.IsNullOrEmpty(_docs.AffidavitFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
+					</div>
+				</div>
+				@if (!string.IsNullOrEmpty(_docs.AffidavitFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">
+									@GetFileName(_docs.AffidavitFilePath) @if (CanDelete)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAffidavit" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
+								</div>
+								<div class="file-meta">Affidavit Document</div>
+							</div>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.AffidavitFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
 								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
 									<i class="bi bi-arrow-repeat"></i> Replace
 									<InputFile hidden OnChange="OnAffidavitSelected" accept=".pdf,.jpg,.jpeg,.png" />
 								</label>
+							}
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 							</div>
 						</div>
-					}
-					else
-					{
-						<div class="file-missing-box">
-							<div class="missing-info">
-								<i class="bi bi-upload" style="color:#059669;"></i>
-								<div>
-									<div class="missing-title" style="color:#059669;">Click to upload</div>
-									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-								</div>
-							</div>
+						@if (CanAdd)
+						{
 							<label class="btn-green-solid mb-0" style="cursor:pointer;">
 								<i class="bi bi-upload me-1"></i> Upload Document
 								<InputFile hidden OnChange="OnAffidavitSelected" accept=".pdf,.jpg,.jpeg,.png" />
 							</label>
-						</div>
-					}
-				</div>
+						}
+					</div>
+				}
 			</div>
+		</div>
 
+		@if (IsNewDealerFlow)
+		{
 			<div class="col-md-6">
 				<div class="doc-card">
 					<div class="doc-header">
-						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
-							<i class="bi bi-file-earmark-lock"></i>
+						<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.RequestLetterFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+							<i class="bi bi-file-earmark-text"></i>
 						</div>
 						<div class="doc-title-row">
 							<div>
-								<div class="doc-title">Deed of Guarantee</div>
-								<div class="doc-desc">Deed of guarantee document</div>
+								<div class="doc-title">Request Letter for Dealership</div>
+								<div class="doc-desc">On the firm's letterhead with seal and signature</div>
 							</div>
 							<div class="badge-group">
 								<span class="badge-req">Required</span>
-								@if (!string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath))
+								@if (!string.IsNullOrEmpty(_docs.RequestLetterFilePath))
 								{
 									<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
 								}
@@ -1438,22 +1991,30 @@
 							</div>
 						</div>
 					</div>
-					@if (!string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath))
+					@if (!string.IsNullOrEmpty(_docs.RequestLetterFilePath))
 					{
 						<div class="file-uploaded-box">
 							<div class="file-info">
 								<i class="bi bi-file-earmark-pdf"></i>
 								<div>
-									<div class="file-name">@GetFileName(_docs.DeedOfGuaranteeFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveDeedOfGuarantee" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-									<div class="file-meta">Deed of Guarantee</div>
+									<div class="file-name">
+										@GetFileName(_docs.RequestLetterFilePath) @if (CanDelete)
+										{
+											<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveRequestLetter" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+										}
+									</div>
+									<div class="file-meta">Request Letter for Dealership</div>
 								</div>
 							</div>
 							<div class="file-actions">
-								<a href="@GetFileUrl(_docs.DeedOfGuaranteeFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-									<i class="bi bi-arrow-repeat"></i> Replace
-									<InputFile hidden OnChange="OnDeedOfGuaranteeSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
+								<a href="@GetFileUrl(_docs.RequestLetterFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+								@if (CanEdit)
+								{
+									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+										<i class="bi bi-arrow-repeat"></i> Replace
+										<InputFile hidden OnChange="OnRequestLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
+									</label>
+								}
 							</div>
 						</div>
 					}
@@ -1467,89 +2028,361 @@
 									<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
 								</div>
 							</div>
-							<label class="btn-green-solid mb-0" style="cursor:pointer;">
-								<i class="bi bi-upload me-1"></i> Upload Document
-								<InputFile hidden OnChange="OnDeedOfGuaranteeSelected" accept=".pdf,.jpg,.jpeg,.png" />
-							</label>
+							@if (CanAdd)
+							{
+								<label class="btn-green-solid mb-0" style="cursor:pointer;">
+									<i class="bi bi-upload me-1"></i> Upload Document
+									<InputFile hidden OnChange="OnRequestLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
 						</div>
 					}
 				</div>
 			</div>
+		}
 
-			@if (_showAuthorizationLetter)
-			{
-				<div class="col-md-6">
-					<div class="doc-card">
-						<div class="doc-header">
-							<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
-								<i class="bi bi-envelope-open"></i>
-							</div>
-							<div class="doc-title-row">
-								<div>
-									<div class="doc-title">Authorization Letter</div>
-									<div class="doc-desc">Letter of authorization from the firm</div>
-								</div>
-								<div class="badge-group">
-									<span class="badge-req">Required</span>
-									@if (!string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
-									{
-										<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
-									}
-									else
-									{
-										<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
-									}
-								</div>
-							</div>
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<i class="bi bi-file-earmark-lock"></i>
+					</div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">Deed of Guarantee</div>
+							<div class="doc-desc">Deed of guarantee document</div>
 						</div>
-						@if (!string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
-						{
-							<div class="file-uploaded-box">
-								<div class="file-info">
-									<i class="bi bi-file-earmark-pdf"></i>
-									<div>
-										<div class="file-name">@GetFileName(_docs.AuthorizationLetterFilePath) <i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAuthorizationLetter" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i></div>
-										<div class="file-meta">Authorization Letter</div>
-									</div>
-								</div>
-								<div class="file-actions">
-									<a href="@GetFileUrl(_docs.AuthorizationLetterFilePath)" target="_blank" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
-									<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
-										<i class="bi bi-arrow-repeat"></i> Replace
-										<InputFile hidden OnChange="OnAuthorizationLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
-									</label>
-								</div>
-							</div>
-						}
-						else
-						{
-							<div class="file-missing-box">
-								<div class="missing-info">
-									<i class="bi bi-upload" style="color:#059669;"></i>
-									<div>
-										<div class="missing-title" style="color:#059669;">Click to upload</div>
-										<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
-									</div>
-								</div>
-								<label class="btn-green-solid mb-0" style="cursor:pointer;">
-									<i class="bi bi-upload me-1"></i> Upload Document
-									<InputFile hidden OnChange="OnAuthorizationLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
-								</label>
-							</div>
-						}
+						<div class="badge-group">
+							@if (_isDeedOfGuaranteeRequired)
+							{
+								<span class="badge-req">Required</span>
+							}
+							else
+							{
+								<span class="badge-opt">Optional</span>
+							}
+
+							@if (!string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
 					</div>
 				</div>
-			}
+				@if (!string.IsNullOrEmpty(_docs.DeedOfGuaranteeFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">
+									@GetFileName(_docs.DeedOfGuaranteeFilePath) @if (CanDelete)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveDeedOfGuarantee" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
+								</div>
+								<div class="file-meta">Deed of Guarantee</div>
+							</div>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.DeedOfGuaranteeFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
+								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+									<i class="bi bi-arrow-repeat"></i> Replace
+									<InputFile hidden OnChange="OnDeedOfGuaranteeSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+							</div>
+						</div>
+						@if (CanAdd)
+						{
+							<label class="btn-green-solid mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload me-1"></i> Upload Document
+								<InputFile hidden OnChange="OnDeedOfGuaranteeSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+						}
+					</div>
+				}
+			</div>
+		</div>
+
+		<div class="col-md-6">
+			<div class="doc-card">
+				<div class="doc-header">
+					<div class="doc-icon" style="@(string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath) ? "background:#F3F4F6; color:#9CA3AF;" : "")">
+						<i class="bi bi-envelope-open"></i>
+					</div>
+					<div class="doc-title-row">
+						<div>
+							<div class="doc-title">Authorized person in firm letter head</div>
+							<div class="doc-desc">Letter of authorization from the firm</div>
+						</div>
+						<div class="badge-group">
+							@if (_isAuthorizationLetterRequired)
+							{
+								<span class="badge-req">Required</span>
+							}
+							else
+							{
+								<span class="badge-opt">Optional</span>
+							}
+							@if (!string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
+							{
+								<span class="badge-up"><i class="bi bi-check2"></i> Uploaded</span>
+							}
+							else
+							{
+								<span class="badge-miss"><i class="bi bi-search"></i> Missing</span>
+							}
+						</div>
+					</div>
+				</div>
+				@if (!string.IsNullOrEmpty(_docs.AuthorizationLetterFilePath))
+				{
+					<div class="file-uploaded-box">
+						<div class="file-info">
+							<i class="bi bi-file-earmark-pdf"></i>
+							<div>
+								<div class="file-name">
+									@GetFileName(_docs.AuthorizationLetterFilePath) @if (CanDelete)
+									{
+										<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveAuthorizationLetter" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+									}
+								</div>
+								<div class="file-meta">Authorized person in firm letter head</div>
+							</div>
+						</div>
+						<div class="file-actions">
+							<a href="@GetFileUrl(_docs.AuthorizationLetterFilePath)" class="btn-action-text btn-view"><i class="bi bi-eye"></i> View</a>
+							@if (CanEdit)
+							{
+								<label class="btn-action-text btn-replace mb-0" style="cursor:pointer;">
+									<i class="bi bi-arrow-repeat"></i> Replace
+									<InputFile hidden OnChange="OnAuthorizationLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
+								</label>
+							}
+						</div>
+					</div>
+				}
+				else
+				{
+					<div class="file-missing-box">
+						<div class="missing-info">
+							<i class="bi bi-upload" style="color:#059669;"></i>
+							<div>
+								<div class="missing-title" style="color:#059669;">Click to upload</div>
+								<div class="missing-meta">or drag and drop PDF, JPG, PNG (Max 10 MB)</div>
+							</div>
+						</div>
+						@if (CanAdd)
+						{
+							<label class="btn-green-solid mb-0" style="cursor:pointer;">
+								<i class="bi bi-upload me-1"></i> Upload Document
+								<InputFile hidden OnChange="OnAuthorizationLetterSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+						}
+					</div>
+				}
+			</div>
 		</div>
 	</div>
-
-	<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
 </div>
+
+
+<!-- Specimen Signature Section -->
+@if (_dealer.InSpic)
+{
+	<div class="main-card">
+		<h3 class="section-title mb-3">Spic Specimen Signature</h3>
+		<div class="row g-4">
+			<div class="col-md-6">
+				<div class="dl-box">
+					<div class="dl-icon"><i class="bi bi-download"></i></div>
+					<div class="dl-title">Download Spic Specimen Document</div>
+					<div class="dl-text">Download the specimen document, print it, get it signed by all required signatories.</div>
+					<button class="btn-outline-blue" @onclick="DownloadSpecimen" disabled="@(_partners.Count == 0)">
+						<i class="bi bi-file-earmark-arrow-down me-1"></i> Download Template
+					</button>
+					@if (_partners.Count == 0)
+					{
+						<div class="text-muted mt-2" style="font-size:0.85rem;">
+							<i class="bi bi-info-circle"></i> No partners found. Add partners in Proprietor step first.
+						</div>
+					}
+				</div>
+			</div>
+			<div class="col-md-6">
+				<div class="up-box">
+					@if (!string.IsNullOrEmpty(_docs.SpecimanFilePath))
+					{
+						<i class="bi bi-check-circle up-icon" style="color:#059669;"></i>
+						<div class="up-title">Specimen Uploaded</div>
+						<div class="up-text">
+							@GetFileName(_docs.SpecimanFilePath)
+							@if (CanDelete)
+							{
+								<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveSpecimen" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+							}
+						</div>
+						@if (CanEdit)
+						{
+							<label class="btn-upload-attach-Enclosure mb-0">
+								<i class="bi bi-arrow-repeat"></i> Replace
+								<InputFile hidden OnChange="OnSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+						}
+					}
+					else
+					{
+						@if (CanAdd)
+						{
+							<label class="up-box-label mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
+								<i class="bi bi-upload up-icon"></i>
+								<div class="up-title">Click or drag file to upload</div>
+								<div class="up-text">PDF, JPG, PNG (Max 10 MB)</div>
+								<InputFile hidden OnChange="OnSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+						}
+					}
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+@if (_dealer.InGreenStar)
+{
+	<div class="main-card">
+		<h3 class="section-title mb-3">Greenstar Specimen Signature</h3>
+		<div class="row g-4">
+			<div class="col-md-6">
+				<div class="dl-box">
+					<div class="dl-icon"><i class="bi bi-download"></i></div>
+					<div class="dl-title">Download Greenstar Specimen Document</div>
+					<div class="dl-text">Download the Greenstar specimen document, print it, get it signed by all required signatories.</div>
+					<button class="btn-outline-blue" @onclick="DownloadGreenstarSpecimen" disabled="@(_partners.Count == 0)">
+						<i class="bi bi-file-earmark-arrow-down me-1"></i> Download Template
+					</button>
+					@if (_partners.Count == 0)
+					{
+						<div class="text-muted mt-2" style="font-size:0.85rem;">
+							<i class="bi bi-info-circle"></i> No partners found. Add partners in Proprietor step first.
+						</div>
+					}
+				</div>
+			</div>
+			<div class="col-md-6">
+				<div class="up-box">
+					@if (!string.IsNullOrEmpty(_docs.GreenstarSpecimanFilePath))
+					{
+						<i class="bi bi-check-circle up-icon" style="color:#059669;"></i>
+						<div class="up-title">Greenstar Specimen Uploaded</div>
+						<div class="up-text">
+							@GetFileName(_docs.GreenstarSpecimanFilePath)
+							@if (CanDelete)
+							{
+								<i class="bi bi-x-circle-fill text-danger ms-2" style="cursor:pointer;" @onclick="RemoveGreenstarSpecimen" @onclick:preventDefault="true" @onclick:stopPropagation="true"></i>
+							}
+						</div>
+						@if (CanEdit)
+						{
+							<label class="btn-upload-attach-Enclosure mb-0">
+								<i class="bi bi-arrow-repeat"></i> Replace
+								<InputFile hidden OnChange="OnGreenstarSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+						}
+					}
+					else
+					{
+						@if (CanAdd)
+						{
+							<label class="up-box-label mb-0" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; width:100%;">
+								<i class="bi bi-upload up-icon"></i>
+								<div class="up-title">Click or drag file to upload</div>
+								<div class="up-text">PDF, JPG, PNG (Max 10 MB)</div>
+								<InputFile hidden OnChange="OnGreenstarSpecimenSelected" accept=".pdf,.jpg,.jpeg,.png" />
+							</label>
+						}
+					}
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+</fieldset>
+<CommanFooter OnNextClick="HandleNext" IsNextDisabled="@_isSaving" />
+</div>
+@if (_showDeleteModal)
+{
+	<div class="del-modal-backdrop" @onclick="CancelDelete">
+		<div class="del-modal" @onclick:stopPropagation="true">
+			<div class="del-modal-icon">
+				<i class="bi bi-exclamation-triangle-fill"></i>
+			</div>
+			<h3 class="del-modal-title">Delete @_deleteDisplayName?</h3>
+			<p class="del-modal-body">
+				You are about to delete <strong>@_deleteFileNameDisplay</strong>
+			</p>
+			<p class="del-modal-warning">This action cannot be undone.</p>
+			<div class="del-modal-actions">
+				<button type="button" class="del-btn del-btn-cancel" @onclick="CancelDelete">
+					Cancel
+				</button>
+				@if (CanDelete)
+				{
+					<button type="button" class="del-btn del-btn-delete" @onclick="ConfirmDelete">
+						<i class="bi bi-trash3-fill"></i> Delete
+					</button>
+				}
+			</div>
+		</div>
+	</div>
+}
 
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
 	public int DealerId { get; set; }
+	[SupplyParameterFromQuery(Name = "mode")]
+	public string? Mode { get; set; }
+	[SupplyParameterFromQuery(Name = "flow")]
+	public string? Flow { get; set; }
 
+	private bool IsViewOnly => string.Equals(Mode, "view", StringComparison.OrdinalIgnoreCase);
+
+	// A permanently New-Dealer record can later be maintained through the Existing
+	// Dealer flow after its first AVP approval. Do not re-enable New-Dealer-only
+	// enclosures (Request Letter) during that maintenance cycle.
+	private bool IsExistingMaintenanceFlow =>
+		string.Equals(Flow, "existing-maintenance", StringComparison.OrdinalIgnoreCase);
+
+	private bool IsNewDealerFlow =>
+		!IsExistingMaintenanceFlow &&
+		(string.Equals(Flow, "new", StringComparison.OrdinalIgnoreCase) ||
+		 (_dealer.IsNewDealerRegistration && string.IsNullOrWhiteSpace(_dealer.DealerCode)));
+
+	private string FlowParam =>
+		IsExistingMaintenanceFlow
+			? "&flow=existing-maintenance"
+			: IsNewDealerFlow
+				? "&flow=new"
+				: "";
 	private DealerReg _dealer = new();
 	private DealerRegistrationDocuments _docs = new();
 	private List<DealerOwnershipInfo> _partners = new();
@@ -1569,56 +2402,75 @@
 	private int _progressPercent;
 
 	private bool _isSoleProprietor => _dealer.EntityType == EntityType.soleProprietor;
+	// Deed of Guarantee is now optional for ALL business types
+	private bool _isDeedOfGuaranteeRequired => false;
 
 	private bool _hasWholesaleLicense => !string.IsNullOrEmpty(_dealer.WholeSaleFertilizerLicenseNumber);
 	private bool _hasRetailLicense => !string.IsNullOrEmpty(_dealer.RetailFertilizerLicenseNumber);
+	private bool _isRetailerListRequired => !_hasRetailLicense || _hasWholesaleLicense;
 
-	// Conditional document visibility based on BusinessEntityType
-	private bool _showPartnershipDeed
-	{
-		get
-		{
-			var t = _dealer.BusinessEntityType?.Trim();
-			if (string.IsNullOrEmpty(t)) return false;
-			return t.Contains("Partnership", StringComparison.OrdinalIgnoreCase) ||
-				   t.Equals("LLP", StringComparison.OrdinalIgnoreCase);
-		}
-	}
+	// ── Delete confirmation modal state ──
+	private bool _showDeleteModal = false;
+	private string _deleteDisplayName = "";
+	private string _deleteFileNameDisplay = "";
+	private string _deleteFilePathToDelete = "";
+	private Func<Task>? _deleteAction;
 
-	private bool _showAuthorizationLetter
-	{
-		get
-		{
-			var t = _dealer.BusinessEntityType?.Trim();
-			if (string.IsNullOrEmpty(t)) return false;
-			if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
-				t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
-				return false;
-			return true;
-		}
-	}
+	// Conditional document visibility based on the saved EntityType enum
+	// (set on the Proprietor step). Partnership Deed is mandatory ONLY for
+	// Partnership firms; for every other entity type it renders as Optional.
+	private bool _showPartnershipDeed =>
+		_dealer.EntityType == EntityType.Partnership;
 
-	private bool _showBoardResolution
-	{
-		get
-		{
-			var t = _dealer.BusinessEntityType?.Trim();
-			if (string.IsNullOrEmpty(t)) return false;
-			if (t.Contains("Sole", StringComparison.OrdinalIgnoreCase) ||
-				t.Contains("Proprietor", StringComparison.OrdinalIgnoreCase))
-				return false;
-			if (t.Contains("Partnership", StringComparison.OrdinalIgnoreCase))
-				return false;
-			if (t.Equals("LLP", StringComparison.OrdinalIgnoreCase))
-				return false;
-			return true;
-		}
-	}
+	private bool _isLlpAgreementRequired =>
+		_dealer.EntityType == EntityType.LLP;
+
+	// Authorization Letter: mandatory for all entity types except Sole Proprietor.
+	private bool _isAuthorizationLetterRequired =>
+		_dealer.EntityType != 0 && _dealer.EntityType != EntityType.soleProprietor;
+
+	// Board Resolution: mandatory only for Private Ltd and Public Ltd
+	private bool _isBoardResolutionRequired =>
+		_dealer.EntityType == EntityType.PvtLtd ||
+		_dealer.EntityType == EntityType.PubLtd;
+
+	// Board Resolution: shown for Private Ltd, Public Ltd, or if uploaded by any other entity type.
+	private bool _showBoardResolution =>
+		_dealer.EntityType == EntityType.PvtLtd ||
+		_dealer.EntityType == EntityType.PubLtd ||
+		!string.IsNullOrEmpty(_docs.BoardReasolutionFilePath);
+
+	// AOA + MOA: mandatory for Private Ltd and Public Ltd; shown if uploaded by any type.
+	private bool _isAoaMoaRequired =>
+		_dealer.EntityType == EntityType.PvtLtd ||
+		_dealer.EntityType == EntityType.PubLtd;
+
+	private bool _showAoaMoa =>
+		_isAoaMoaRequired ||
+		!string.IsNullOrEmpty(_docs.ArticlesOfAssociationFilePath) ||
+		!string.IsNullOrEmpty(_docs.MemorandumOfAssociationFilePath);
+
+	// By-Law: mandatory only for Society; shown if uploaded by any type.
+	// TODO: confirm the EntityType member name for Society (assumed EntityType.Society).
+	private bool _isByLawRequired =>
+		_dealer.EntityType == EntityType.Society;
+
+	private bool _showByLaw =>
+		_isByLawRequired ||
+		!string.IsNullOrEmpty(_docs.ByLaw);
 
 	protected override async Task OnInitializedAsync()
 	{
-		await Task.WhenAll(LoadDealer(), LoadPartners(), LoadFinancialYears(), LoadDocuments(), LoadLandAssets(), LoadBuildingAssets());
-		CalculateProgress();
+		Loading.Show();
+		try
+		{
+			await Task.WhenAll(LoadDealer(), LoadPartners(), LoadFinancialYears(), LoadDocuments(), LoadLandAssets(), LoadBuildingAssets());
+			CalculateProgress();
+		}
+		finally
+		{
+			Loading.Hide();
+		}
 	}
 
 	private async Task LoadDealer()
@@ -1693,19 +2545,27 @@
 			_dealer.GSTFilePath,
 			_dealer.PANFilePath,
 			_dealer.AadhaarFilePath,
-			_docs.SpecimanFilePath,
-			_docs.GreenstarSpecimanFilePath,
-			_docs.BankGauranteeFilePath,
 			_docs.FY1ITReturnFilePath,
 			_docs.FY2ITReturnFilePath,
-			_docs.ValuationCertificateFilePath,
-			_docs.RetailerListFilePath,
-				_docs.DeedOfGuaranteeFilePath,
-				_docs.AffidavitFilePath
+			// _docs.RetailerListFilePath,
+				// _docs.DeedOfGuaranteeFilePath,
 			};
 
+		if (_dealer.InSpic)
+			requiredPaths.Add(_docs.SpecimanFilePath);
+		if (_dealer.InGreenStar)
+			requiredPaths.Add(_docs.GreenstarSpecimanFilePath);
+		if (IsNewDealerFlow)
+			requiredPaths.Add(_docs.RequestLetterFilePath);
+		if (_isDeedOfGuaranteeRequired)
+			requiredPaths.Add(_docs.DeedOfGuaranteeFilePath);
 		if (_hasWholesaleLicense)
 			requiredPaths.Add(_dealer.WholesaleLicenseFilePath);
+
+		// Retailer List is mandatory when dealer has no retail license or is both retailer and wholesaler
+		if (!_hasRetailLicense || _hasWholesaleLicense)
+			requiredPaths.Add(_docs.RetailerListFilePath);
+
 
 		if (_hasRetailLicense)
 			requiredPaths.Add(_dealer.RetailLicenseFilePath);
@@ -1713,10 +2573,22 @@
 		if (_showPartnershipDeed)
 			requiredPaths.Add(_docs.PartnershipDeadFilePath);
 
-		if (_showBoardResolution)
+		if (_isLlpAgreementRequired)
+			requiredPaths.Add(_docs.LlpAgreementFilePath);
+
+		if (_isBoardResolutionRequired)
 			requiredPaths.Add(_docs.BoardReasolutionFilePath);
 
-		if (_showAuthorizationLetter)
+		if (_isAoaMoaRequired)
+		{
+			requiredPaths.Add(_docs.ArticlesOfAssociationFilePath);
+			requiredPaths.Add(_docs.MemorandumOfAssociationFilePath);
+		}
+
+		if (_isByLawRequired)
+			requiredPaths.Add(_docs.ByLaw);
+
+		if (_isAuthorizationLetterRequired)
 			requiredPaths.Add(_docs.AuthorizationLetterFilePath);
 
 		foreach (var p in _partners)
@@ -1750,17 +2622,71 @@
 	}
 
 	// --- File Upload Handlers ---
+	private void OpenDeleteModal(string displayName, string filePath, Func<Task> onConfirm)
+	{
+		if (string.IsNullOrEmpty(filePath)) return;
+		_deleteDisplayName = displayName;
+		_deleteFilePathToDelete = filePath;
+		_deleteFileNameDisplay = GetFileName(filePath);
+		_deleteAction = onConfirm;
+		_showDeleteModal = true;
+	}
+
+	private void CancelDelete()
+	{
+		_showDeleteModal = false;
+		_deleteAction = null;
+		_deleteDisplayName = "";
+		_deleteFileNameDisplay = "";
+		_deleteFilePathToDelete = "";
+	}
+
+	private async Task ConfirmDelete()
+	{
+		try
+		{
+			if (_deleteAction != null)
+				await _deleteAction.Invoke();
+			ShowMessage($"{_deleteDisplayName} deleted successfully", false);
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to delete file: {ex.Message}", true);
+		}
+		finally
+		{
+			CancelDelete();
+		}
+	}
+
+	private async Task DeleteFileFromServer(string filePath)
+	{
+		if (string.IsNullOrEmpty(filePath) || !filePath.Contains("/")) return;
+		try
+		{
+			await Http.DeleteAsync($"api/DealerFile/delete?filePath={Uri.EscapeDataString(filePath)}");
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Failed to delete file from server: {ex.Message}");
+		}
+	}
 	private async Task OnGSTSelected(InputFileChangeEventArgs e)
 	{
 		var path = await UploadFileToServer(DealerId, "GST", e.File);
 		if (path != null) { _dealer.GSTFilePath = path; await SaveDealer(); CalculateProgress(); }
 	}
 
-	private async Task RemoveGstFile()
+	private void RemoveGstFile()
 	{
-		_dealer.GSTFilePath = null;
-		await SaveDealer();
-		CalculateProgress();
+		OpenDeleteModal("GST Certificate", _dealer.GSTFilePath ?? "", async () =>
+		{
+			var path = _dealer.GSTFilePath!;
+			_dealer.GSTFilePath = null;
+			await SaveDealer();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnPANSelected(InputFileChangeEventArgs e)
@@ -1769,11 +2695,16 @@
 		if (path != null) { _dealer.PANFilePath = path; await SaveDealer(); CalculateProgress(); }
 	}
 
-	private async Task RemovePanFile()
+	private void RemovePanFile()
 	{
-		_dealer.PANFilePath = null;
-		await SaveDealer();
-		CalculateProgress();
+		OpenDeleteModal("PAN Copy", _dealer.PANFilePath ?? "", async () =>
+		{
+			var path = _dealer.PANFilePath!;
+			_dealer.PANFilePath = null;
+			await SaveDealer();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnAadhaarSelected(InputFileChangeEventArgs e)
@@ -1782,11 +2713,16 @@
 		if (path != null) { _dealer.AadhaarFilePath = path; await SaveDealer(); CalculateProgress(); }
 	}
 
-	private async Task RemoveAadhaarFile()
+	private void RemoveAadhaarFile()
 	{
-		_dealer.AadhaarFilePath = null;
-		await SaveDealer();
-		CalculateProgress();
+		OpenDeleteModal("Aadhaar Copy", _dealer.AadhaarFilePath ?? "", async () =>
+		{
+			var path = _dealer.AadhaarFilePath!;
+			_dealer.AadhaarFilePath = null;
+			await SaveDealer();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnWholesaleLicenseSelected(InputFileChangeEventArgs e)
@@ -1795,11 +2731,16 @@
 		if (path != null) { _dealer.WholesaleLicenseFilePath = path; await SaveDealer(); CalculateProgress(); }
 	}
 
-	private async Task RemoveWholesaleLicenseFile()
+	private void RemoveWholesaleLicenseFile()
 	{
-		_dealer.WholesaleLicenseFilePath = null;
-		await SaveDealer();
-		CalculateProgress();
+		OpenDeleteModal("Wholesale License", _dealer.WholesaleLicenseFilePath ?? "", async () =>
+		{
+			var path = _dealer.WholesaleLicenseFilePath!;
+			_dealer.WholesaleLicenseFilePath = null;
+			await SaveDealer();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnRetailLicenseSelected(InputFileChangeEventArgs e)
@@ -1808,11 +2749,16 @@
 		if (path != null) { _dealer.RetailLicenseFilePath = path; await SaveDealer(); CalculateProgress(); }
 	}
 
-	private async Task RemoveRetailLicenseFile()
+	private void RemoveRetailLicenseFile()
 	{
-		_dealer.RetailLicenseFilePath = null;
-		await SaveDealer();
-		CalculateProgress();
+		OpenDeleteModal("Retail License", _dealer.RetailLicenseFilePath ?? "", async () =>
+		{
+			var path = _dealer.RetailLicenseFilePath!;
+			_dealer.RetailLicenseFilePath = null;
+			await SaveDealer();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnSpecimenSelected(InputFileChangeEventArgs e)
@@ -1821,11 +2767,16 @@
 		if (path != null) { _docs.SpecimanFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveSpecimen()
+	private void RemoveSpecimen()
 	{
-		_docs.SpecimanFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Spic Specimen Signature", _docs.SpecimanFilePath ?? "", async () =>
+		{
+			var path = _docs.SpecimanFilePath!;
+			_docs.SpecimanFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnGreenstarSpecimenSelected(InputFileChangeEventArgs e)
@@ -1834,11 +2785,16 @@
 		if (path != null) { _docs.GreenstarSpecimanFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveGreenstarSpecimen()
+	private void RemoveGreenstarSpecimen()
 	{
-		_docs.GreenstarSpecimanFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Greenstar Specimen Signature", _docs.GreenstarSpecimanFilePath ?? "", async () =>
+		{
+			var path = _docs.GreenstarSpecimanFilePath!;
+			_docs.GreenstarSpecimanFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnBankGuaranteeSelected(InputFileChangeEventArgs e)
@@ -1847,11 +2803,16 @@
 		if (path != null) { _docs.BankGauranteeFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveBankGuarantee()
+	private void RemoveBankGuarantee()
 	{
-		_docs.BankGauranteeFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Bank Guarantee", _docs.BankGauranteeFilePath ?? "", async () =>
+		{
+			var path = _docs.BankGauranteeFilePath!;
+			_docs.BankGauranteeFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnITReturn1Selected(InputFileChangeEventArgs e)
@@ -1860,11 +2821,16 @@
 		if (path != null) { _docs.FY1ITReturnFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveITReturn1()
+	private void RemoveITReturn1()
 	{
-		_docs.FY1ITReturnFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("IT Returns (Last Year)", _docs.FY1ITReturnFilePath ?? "", async () =>
+		{
+			var path = _docs.FY1ITReturnFilePath!;
+			_docs.FY1ITReturnFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnITReturn2Selected(InputFileChangeEventArgs e)
@@ -1873,11 +2839,16 @@
 		if (path != null) { _docs.FY2ITReturnFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveITReturn2()
+	private void RemoveITReturn2()
 	{
-		_docs.FY2ITReturnFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("IT Returns (Last 2nd Year)", _docs.FY2ITReturnFilePath ?? "", async () =>
+		{
+			var path = _docs.FY2ITReturnFilePath!;
+			_docs.FY2ITReturnFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnValuationCertSelected(InputFileChangeEventArgs e)
@@ -1886,11 +2857,16 @@
 		if (path != null) { _docs.ValuationCertificateFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveValuationCertificate()
+	private void RemoveValuationCertificate()
 	{
-		_docs.ValuationCertificateFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Valuation Certificate", _docs.ValuationCertificateFilePath ?? "", async () =>
+		{
+			var path = _docs.ValuationCertificateFilePath!;
+			_docs.ValuationCertificateFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnRetailerListSelected(InputFileChangeEventArgs e)
@@ -1899,11 +2875,16 @@
 		if (path != null) { _docs.RetailerListFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveRetailerList()
+	private void RemoveRetailerList()
 	{
-		_docs.RetailerListFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Retailer List", _docs.RetailerListFilePath ?? "", async () =>
+		{
+			var path = _docs.RetailerListFilePath!;
+			_docs.RetailerListFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnPartnershipDeedSelected(InputFileChangeEventArgs e)
@@ -1912,11 +2893,34 @@
 		if (path != null) { _docs.PartnershipDeadFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemovePartnershipDeed()
+	private void RemovePartnershipDeed()
 	{
-		_docs.PartnershipDeadFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Partnership Deed", _docs.PartnershipDeadFilePath ?? "", async () =>
+		{
+			var path = _docs.PartnershipDeadFilePath!;
+			_docs.PartnershipDeadFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private async Task OnLlpAgreementSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId, "LlpAgreement", e.File);
+		if (path != null) { _docs.LlpAgreementFilePath = path; await SaveDocuments(); CalculateProgress(); }
+	}
+
+	private void RemoveLlpAgreement()
+	{
+		OpenDeleteModal("LLP Agreement", _docs.LlpAgreementFilePath ?? "", async () =>
+		{
+			var path = _docs.LlpAgreementFilePath!;
+			_docs.LlpAgreementFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnBoardResolutionSelected(InputFileChangeEventArgs e)
@@ -1925,11 +2929,70 @@
 		if (path != null) { _docs.BoardReasolutionFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveBoardResolution()
+	private void RemoveBoardResolution()
 	{
-		_docs.BoardReasolutionFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Board Resolution", _docs.BoardReasolutionFilePath ?? "", async () =>
+		{
+			var path = _docs.BoardReasolutionFilePath!;
+			_docs.BoardReasolutionFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private async Task OnArticlesOfAssociationSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId, "ArticlesOfAssociation", e.File);
+		if (path != null) { _docs.ArticlesOfAssociationFilePath = path; await SaveDocuments(); CalculateProgress(); }
+	}
+
+	private void RemoveArticlesOfAssociation()
+	{
+		OpenDeleteModal("Articles of Association (AOA)", _docs.ArticlesOfAssociationFilePath ?? "", async () =>
+		{
+			var path = _docs.ArticlesOfAssociationFilePath!;
+			_docs.ArticlesOfAssociationFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private async Task OnMemorandumOfAssociationSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId, "MemorandumOfAssociation", e.File);
+		if (path != null) { _docs.MemorandumOfAssociationFilePath = path; await SaveDocuments(); CalculateProgress(); }
+	}
+
+	private void RemoveMemorandumOfAssociation()
+	{
+		OpenDeleteModal("Memorandum of Association (MOA)", _docs.MemorandumOfAssociationFilePath ?? "", async () =>
+		{
+			var path = _docs.MemorandumOfAssociationFilePath!;
+			_docs.MemorandumOfAssociationFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private async Task OnByLawSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId, "ByLaw", e.File);
+		if (path != null) { _docs.ByLaw = path; await SaveDocuments(); CalculateProgress(); }
+	}
+
+	private void RemoveByLaw()
+	{
+		OpenDeleteModal("By Law", _docs.ByLaw ?? "", async () =>
+		{
+			var path = _docs.ByLaw!;
+			_docs.ByLaw = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnAffidavitSelected(InputFileChangeEventArgs e)
@@ -1938,11 +3001,34 @@
 		if (path != null) { _docs.AffidavitFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveAffidavit()
+	private void RemoveAffidavit()
 	{
-		_docs.AffidavitFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Affidavit", _docs.AffidavitFilePath ?? "", async () =>
+		{
+			var path = _docs.AffidavitFilePath!;
+			_docs.AffidavitFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private async Task OnRequestLetterSelected(InputFileChangeEventArgs e)
+	{
+		var path = await UploadFileToServer(DealerId, "RequestLetter", e.File);
+		if (path != null) { _docs.RequestLetterFilePath = path; await SaveDocuments(); CalculateProgress(); }
+	}
+
+	private void RemoveRequestLetter()
+	{
+		OpenDeleteModal("Request Letter for Dealership", _docs.RequestLetterFilePath ?? "", async () =>
+		{
+			var path = _docs.RequestLetterFilePath!;
+			_docs.RequestLetterFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnDeedOfGuaranteeSelected(InputFileChangeEventArgs e)
@@ -1951,11 +3037,16 @@
 		if (path != null) { _docs.DeedOfGuaranteeFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveDeedOfGuarantee()
+	private void RemoveDeedOfGuarantee()
 	{
-		_docs.DeedOfGuaranteeFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Deed of Guarantee", _docs.DeedOfGuaranteeFilePath ?? "", async () =>
+		{
+			var path = _docs.DeedOfGuaranteeFilePath!;
+			_docs.DeedOfGuaranteeFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnAuthorizationLetterSelected(InputFileChangeEventArgs e)
@@ -1964,11 +3055,16 @@
 		if (path != null) { _docs.AuthorizationLetterFilePath = path; await SaveDocuments(); CalculateProgress(); }
 	}
 
-	private async Task RemoveAuthorizationLetter()
+	private void RemoveAuthorizationLetter()
 	{
-		_docs.AuthorizationLetterFilePath = null;
-		await SaveDocuments();
-		CalculateProgress();
+		OpenDeleteModal("Authorization Letter", _docs.AuthorizationLetterFilePath ?? "", async () =>
+		{
+			var path = _docs.AuthorizationLetterFilePath!;
+			_docs.AuthorizationLetterFilePath = null;
+			await SaveDocuments();
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	// --- Partner Document Upload Handlers ---
@@ -1978,11 +3074,17 @@
 		if (path != null) { partner.ProprietorImagePath = path; await SavePartner(partner); CalculateProgress(); }
 	}
 
-	private async Task RemovePartnerImageFile(DealerOwnershipInfo partner)
+	private void RemovePartnerImageFile(DealerOwnershipInfo partner)
 	{
-		partner.ProprietorImagePath = null;
-		await SavePartner(partner);
-		CalculateProgress();
+		var p = partner;
+		OpenDeleteModal($"Photo ({p.Name})", p.ProprietorImagePath ?? "", async () =>
+		{
+			var path = p.ProprietorImagePath!;
+			p.ProprietorImagePath = null;
+			await SavePartner(p);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnPartnerAadhaarSelected(DealerOwnershipInfo partner, InputFileChangeEventArgs e)
@@ -1991,11 +3093,17 @@
 		if (path != null) { partner.AadhaarFilePath = path; await SavePartner(partner); CalculateProgress(); }
 	}
 
-	private async Task RemovePartnerAadhaarFile(DealerOwnershipInfo partner)
+	private void RemovePartnerAadhaarFile(DealerOwnershipInfo partner)
 	{
-		partner.AadhaarFilePath = null;
-		await SavePartner(partner);
-		CalculateProgress();
+		var p = partner;
+		OpenDeleteModal($"Aadhaar Copy ({p.Name})", p.AadhaarFilePath ?? "", async () =>
+		{
+			var path = p.AadhaarFilePath!;
+			p.AadhaarFilePath = null;
+			await SavePartner(p);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task OnPartnerPANSelected(DealerOwnershipInfo partner, InputFileChangeEventArgs e)
@@ -2004,11 +3112,17 @@
 		if (path != null) { partner.PANFilePath = path; await SavePartner(partner); CalculateProgress(); }
 	}
 
-	private async Task RemovePartnerPanFile(DealerOwnershipInfo partner)
+	private void RemovePartnerPanFile(DealerOwnershipInfo partner)
 	{
-		partner.PANFilePath = null;
-		await SavePartner(partner);
-		CalculateProgress();
+		var p = partner;
+		OpenDeleteModal($"PAN Copy ({p.Name})", p.PANFilePath ?? "", async () =>
+		{
+			var path = p.PANFilePath!;
+			p.PANFilePath = null;
+			await SavePartner(p);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	private async Task SavePartner(DealerOwnershipInfo partner)
@@ -2099,15 +3213,31 @@
 		try
 		{
 			_docs.DealerId = DealerId;
+
+			if (string.IsNullOrEmpty(_docs.SpecimanFilePath)) _docs.SpecimanFilePath = string.Empty;
+			if (string.IsNullOrEmpty(_docs.BankGauranteeFilePath)) _docs.BankGauranteeFilePath = string.Empty;
+			if (string.IsNullOrEmpty(_docs.FY1ITReturnFilePath)) _docs.FY1ITReturnFilePath = string.Empty;
+			if (string.IsNullOrEmpty(_docs.FY2ITReturnFilePath)) _docs.FY2ITReturnFilePath = string.Empty;
+
 			if (_existingDocsRecord && _docs.Id > 0)
 			{
 				var resp = await Http.PutAsJsonAsync($"api/DealerRegistrationDocuments/{_docs.Id}", _docs);
-				resp.EnsureSuccessStatusCode();
+				if (!resp.IsSuccessStatusCode)
+				{
+					var errorBody = await resp.Content.ReadAsStringAsync();
+					ShowMessage($"PUT failed ({resp.StatusCode}): {errorBody}", true);
+					return;
+				}
 			}
 			else
 			{
 				var resp = await Http.PostAsJsonAsync("api/DealerRegistrationDocuments", _docs);
-				resp.EnsureSuccessStatusCode();
+				if (!resp.IsSuccessStatusCode)
+				{
+					var errorBody = await resp.Content.ReadAsStringAsync();
+					ShowMessage($"POST failed ({resp.StatusCode}): {errorBody}", true);
+					return;
+				}
 				var created = await resp.Content.ReadFromJsonAsync<CreateResponse<DealerRegistrationDocuments>>();
 				if (created?.Data != null)
 				{
@@ -2120,6 +3250,86 @@
 		{
 			ShowMessage($"Error saving documents: {ex.Message}", true);
 		}
+	}
+
+	// ── Land asset documents ──
+	private void RemoveLandECFile(DealerAssetLand land)
+	{
+		var l = land;
+		OpenDeleteModal($"EC Document ({l.LandName})", l.UploadedECDocumentPath ?? "", async () =>
+		{
+			var path = l.UploadedECDocumentPath!;
+			l.UploadedECDocumentPath = null;
+			await SaveLandAsset(l);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private void RemoveLandPropertyDocFile(DealerAssetLand land)
+	{
+		var l = land;
+		OpenDeleteModal($"Property Document ({l.LandName})", l.UploadedLandDocumentPath ?? "", async () =>
+		{
+			var path = l.UploadedLandDocumentPath!;
+			l.UploadedLandDocumentPath = null;
+			await SaveLandAsset(l);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private void RemoveLandValuationFile(DealerAssetLand land)
+	{
+		var l = land;
+		OpenDeleteModal($"Valuation Certificate ({l.LandName})", l.UploadedValuationCertificatePath ?? "", async () =>
+		{
+			var path = l.UploadedValuationCertificatePath!;
+			l.UploadedValuationCertificatePath = null;
+			await SaveLandAsset(l);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	// ── Building asset documents ──
+	private void RemoveBuildingECFile(DealerAssetBuilding building)
+	{
+		var b = building;
+		OpenDeleteModal($"EC Document ({b.BuildingName})", b.UploadedECDocumentPath ?? "", async () =>
+		{
+			var path = b.UploadedECDocumentPath!;
+			b.UploadedECDocumentPath = null;
+			await SaveBuildingAsset(b);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private void RemoveBuildingPropertyDocFile(DealerAssetBuilding building)
+	{
+		var b = building;
+		OpenDeleteModal($"Property Document ({b.BuildingName})", b.UploadedBuildingDocumentPath ?? "", async () =>
+		{
+			var path = b.UploadedBuildingDocumentPath!;
+			b.UploadedBuildingDocumentPath = null;
+			await SaveBuildingAsset(b);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
+	}
+
+	private void RemoveBuildingValuationFile(DealerAssetBuilding building)
+	{
+		var b = building;
+		OpenDeleteModal($"Valuation Certificate ({b.BuildingName})", b.UploadedValuationCertificatePath ?? "", async () =>
+		{
+			var path = b.UploadedValuationCertificatePath!;
+			b.UploadedValuationCertificatePath = null;
+			await SaveBuildingAsset(b);
+			await DeleteFileFromServer(path);
+			CalculateProgress();
+		});
 	}
 
 	// --- Specimen Download ---
@@ -2157,15 +3367,15 @@
 		{
 			var p = _partners[i];
 			var imgHtml = !string.IsNullOrEmpty(p.ProprietorImagePath)
-				? $"<img src='{apiBase}/api/DealerFile/view/{p.ProprietorImagePath}' class='partner-photo' />"
-				: "<div class='photo-placeholder'><svg width='40' height='40' viewBox='0 0 24 24' fill='#9CA3AF'><path d='M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z'/></svg></div>";
+	? $"<img src='{GetFileUrl(p.ProprietorImagePath)}' class='partner-photo' />"
+	: "<div class='photo-placeholder'>...</div>";
 
-            var encodedName = System.Net.WebUtility.HtmlEncode(p.Name);
-            var encodedFather = System.Net.WebUtility.HtmlEncode(p.FatherName);
-            var relation = p.Gender == Gender.Male ? "S/o" : "D/o";
+			var encodedName = System.Net.WebUtility.HtmlEncode(p.Name);
+			var encodedFather = System.Net.WebUtility.HtmlEncode(p.FatherName);
+			var relation = p.Gender == Gender.Male ? "S/o" : "D/o";
 
-            // First row with rowspan=3 for S.No, Photo, Name
-            rows.Append($@"
+			// First row with rowspan=3 for S.No, Photo, Name
+			rows.Append($@"
             <tr>
                 <td rowspan='3' class='cell-center cell-sno'>{i + 1}</td>
                 <td rowspan='3' class='cell-center cell-photo'>{imgHtml}</td>
@@ -2181,12 +3391,18 @@
                 <td class='cell-center cell-signo'>3</td>
                 <td class='cell-sig'>&nbsp;</td>
             </tr>");
-        }
+		}
 
 		var firmName = System.Net.WebUtility.HtmlEncode(_dealer.FirmName ?? "—");
 		var gst = System.Net.WebUtility.HtmlEncode(_dealer.GSTNumber ?? "—");
 		var partnerNames = string.Join(", ", _partners.Select(p => System.Net.WebUtility.HtmlEncode(p.Name)));
 		var dateStr = DateTime.Now.ToString("dd-MM-yyyy");
+		// Never print the internal Dealer ID in the specimen template.
+		// Existing dealers show DealerCode; new dealers show no dealer identifier.
+		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(_dealer.DealerCode ?? "");
+		var dealerCodeInfoItem = !IsNewDealerFlow && !string.IsNullOrWhiteSpace(_dealer.DealerCode)
+			? $"<div class='info-item'><span class='label'>Dealer Code</span><span class='value'>{dealerCodeDisplay}</span></div>"
+			: "";
 
 		return $@"<!DOCTYPE html>
 <html>
@@ -2252,15 +3468,14 @@
 </head>
 <body>
 	<div class='doc-header'>
-		<img src='{blazorBase}/_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png' alt='SPIC Logo' class='doc-logo' />
-		<div class='company-name'>Southern Petrochemical Industries Corporation Limited</div>
-		<div class='doc-subtitle'>Specimen Signature Document — Dealer Registration</div>
-		<div class='doc-ref'>Ref: SPIC/DR/{DealerId}/{DateTime.Now:yyyyMMdd} &nbsp;|&nbsp; Generated on: {dateStr}</div>
-	</div>
+    <img src='{blazorBase}/_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png' alt='SPIC Logo' class='doc-logo' />
+    <div class='company-name'>Southern Petrochemical Industries Corporation Limited</div>
+    <div class='doc-subtitle'>Specimen Signature Document — Dealer Registration</div>
+</div>
 
 	<div class='info-grid'>
-		<div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{DealerId}</span></div>
-		<div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
+{dealerCodeInfoItem}
+<div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
 		<div class='info-item'><span class='label'>GST Number</span><span class='value'>{gst}</span></div>
 		<div class='info-item'><span class='label'>Date</span><span class='value'>{dateStr}</span></div>
 	</div>
@@ -2322,14 +3537,14 @@
 		{
 			var p = _partners[i];
 			var imgHtml = !string.IsNullOrEmpty(p.ProprietorImagePath)
-				? $"<img src='{apiBase}/api/DealerFile/view/{p.ProprietorImagePath}' class='partner-photo' />"
-				: "<div class='photo-placeholder'><svg width='40' height='40' viewBox='0 0 24 24' fill='#9CA3AF'><path d='M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z'/></svg></div>";
+	? $"<img src='{GetFileUrl(p.ProprietorImagePath)}' class='partner-photo' />"
+	: "...";
 
-            var encodedName = System.Net.WebUtility.HtmlEncode(p.Name);
-            var encodedFather = System.Net.WebUtility.HtmlEncode(p.FatherName);
-            var relation = p.Gender == Gender.Male ? "S/o" : "D/o";
+			var encodedName = System.Net.WebUtility.HtmlEncode(p.Name);
+			var encodedFather = System.Net.WebUtility.HtmlEncode(p.FatherName);
+			var relation = p.Gender == Gender.Male ? "S/o" : "D/o";
 
-            rows.Append($@"
+			rows.Append($@"
             <tr>
                 <td rowspan='3' class='cell-center cell-sno'>{i + 1}</td>
                 <td rowspan='3' class='cell-center cell-photo'>{imgHtml}</td>
@@ -2345,11 +3560,17 @@
                 <td class='cell-center cell-signo'>3</td>
                 <td class='cell-sig'>&nbsp;</td>
             </tr>");
-        }
+		}
 
 		var firmName = System.Net.WebUtility.HtmlEncode(_dealer.FirmName ?? "\u2014");
 		var gst = System.Net.WebUtility.HtmlEncode(_dealer.GSTNumber ?? "\u2014");
 		var dateStr = DateTime.Now.ToString("dd-MM-yyyy");
+		// Never print the internal Dealer ID in the specimen template.
+		// Existing dealers show DealerCode; new dealers show no dealer identifier.
+		var dealerCodeDisplay = System.Net.WebUtility.HtmlEncode(_dealer.DealerCode ?? "");
+		var dealerCodeInfoItem = !IsNewDealerFlow && !string.IsNullOrWhiteSpace(_dealer.DealerCode)
+			? $"<div class='info-item'><span class='label'>Dealer Code</span><span class='value'>{dealerCodeDisplay}</span></div>"
+			: "";
 
 		return $@"<!DOCTYPE html>
 <html>
@@ -2410,15 +3631,14 @@
 </head>
 <body>
 	<div class='doc-header'>
-		<img src='{blazorBase}/_content/SPIC.MauiBlazorApp.Shared/images/loginimages/GreenSratIcon.svg' alt='GFL Logo' class='doc-logo' />
-		<div class='company-name'>Greenstar Fertilizers Limited</div>
-		<div class='doc-subtitle'>Specimen Signature Document — Dealer Registration</div>
-		<div class='doc-ref'>Ref: GFL/DR/{DealerId}/{DateTime.Now:yyyyMMdd} &nbsp;|&nbsp; Generated on: {dateStr}</div>
-	</div>
+    <img src='{blazorBase}/_content/SPIC.MauiBlazorApp.Shared/images/loginimages/GreenSratIcon.svg' alt='GFL Logo' class='doc-logo' />
+    <div class='company-name'>Greenstar Fertilizers Limited</div>
+    <div class='doc-subtitle'>Specimen Signature Document — Dealer Registration</div>
+</div>
 
 	<div class='info-grid'>
-		<div class='info-item'><span class='label'>Dealer ID</span><span class='value'>{DealerId}</span></div>
-		<div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
+{dealerCodeInfoItem}
+<div class='info-item'><span class='label'>Firm Name</span><span class='value'>M/s.{firmName}</span></div>
 		<div class='info-item'><span class='label'>GST Number</span><span class='value'>{gst}</span></div>
 		<div class='info-item'><span class='label'>Date</span><span class='value'>{dateStr}</span></div>
 	</div>
@@ -2473,13 +3693,20 @@
 	// --- Save & Navigate ---
 	private async Task HandleNext()
 	{
+		if (IsViewOnly)
+		{
+			Loading.Show();
+			Nav.NavigateTo($"/FinalSubmission?dealerId={DealerId}&mode=view{FlowParam}");
+			return;
+		}
 		_isSaving = true;
 		_message = null;
 
 		try
 		{
 			await SaveDocuments();
-			Nav.NavigateTo($"/FinalSubmission?dealerId={DealerId}");
+			FormStepData.MarkStepError(12, _pendingCount > 0);
+			Nav.NavigateTo($"/FinalSubmission?dealerId={DealerId}{FlowParam}");
 		}
 		catch (Exception ex)
 		{
@@ -2526,11 +3753,21 @@
 		return idx >= 0 ? path[(idx + 1)..] : path;
 	}
 
+	// NEW: Ensure file urls are correctly formatted for downloading/viewing and handle encoding
 	private string GetFileUrl(string? path)
 	{
 		if (string.IsNullOrEmpty(path)) return "";
 		var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
-		return $"{baseUrl}/api/DealerFile/view/{path}";
+		
+		var urlPath = Uri.EscapeDataString(path).Replace("%2F", "/");
+		var token = LoginState?.Token;
+		if (!string.IsNullOrEmpty(token))
+		{
+			var rawToken = token.StartsWith("Bearer ") ? token.Substring("Bearer ".Length) : token;
+			return $"{baseUrl}/api/DealerFile/view/{urlPath}?access_token={rawToken}";
+		}
+		
+		return $"{baseUrl}/api/DealerFile/view/{urlPath}";
 	}
 
 	private void ShowMessage(string msg, bool isError)
@@ -2549,4 +3786,8 @@
 	{
 		public string? FilePath { get; set; }
 	}
+
+	private bool CanAdd => LoginState.Can("Enclosures", "Entry");
+	private bool CanEdit => LoginState.Can("Enclosures", "Update");
+	private bool CanDelete => LoginState.Can("Enclosures", "Delete");
 }

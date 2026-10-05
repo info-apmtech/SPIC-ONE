@@ -1,16 +1,19 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
+using System.Xml.Linq;
 
 namespace SPIC.Core.Entities
 {
     public class DealerRegistration
     {
         public int Id { get; set; }
-        public string UserTableId { get; set; }
+        public string? UserTableId { get; set; }
         [Display(Name = "Dealar / Department")]
         public bool IsDealer { get; set; }
+        // NEW: Keep old IsDealer for backward compatibility. Add DealerType enum to support Institution.
+        public RegistrationDealerType? DealerType { get; set; }
         public bool InSpic { get; set; }
         public bool InGreenStar { get; set; }
 
@@ -18,6 +21,7 @@ namespace SPIC.Core.Entities
         public string? SPICCode { get; set; }
         public string? GreenStarCode { get; set; }
         public string? TnCode { get; set; }
+        public string? NCode { get; set; }
 
         [Display(Name = "State")]
         public int StateId { get; set; }
@@ -28,8 +32,10 @@ namespace SPIC.Core.Entities
         public int ParentDealer { get; set; }
         [Display(Name = "Firm Name")]
         public string FirmName { get; set; }
-        [Display(Name = "Date Of Appointment")]
+        [Display(Name = "Spic Date Of Appointment")]
         public DateTime DateOfAppointment { get; set; }
+        [Display(Name = "Greenstar Date Of Appointment")]
+        public DateTime? GreenstarDateOfAppointment { get; set; }
         [Display(Name = "Business Type")]
         public string? BusinessEntityType { get; set; }
         //In Active Status
@@ -58,8 +64,8 @@ namespace SPIC.Core.Entities
         public string? Block { get; set; }
         public string? Taluk { get; set; }
         [Display(Name = "District")]
-        public int DistrictId { get; set; }
-        public int DealerStateId { get; set; }
+        public int? DistrictId { get; set; }
+        public int? DealerStateId { get; set; }
         [Display(Name = "Official Contact Number")]
         public string OfficialContactNumber { get; set; }
         [Display(Name = "WhatsApp Number")]
@@ -71,9 +77,10 @@ namespace SPIC.Core.Entities
         //Bank Details
         public string AccountHolderName { get; set; }
         public string AccountNumber { get; set; }
-        public int BankId { get; set; }
+        public int? BankId { get; set; }
         public string Branch { get; set; }
         public string IFSC { get; set; }
+        public string? ChequeFilePath { get; set; }
 
         [Display(Name = "GST Number")]
         public string? GSTNumber { get; set; }
@@ -84,11 +91,24 @@ namespace SPIC.Core.Entities
         [Display(Name = "Aadhaar Number")]
         public string? AadhaarNumber { get; set; }
         public string? AadhaarFilePath { get; set; }
+        [Display(Name = "TAN Number")]
+        public string? TANNumber { get; set; }
+        public string? TANFilePath { get; set; }
 
         //Trade Deposit Details
         public decimal TradeDepositAmount { get; set; }
         public string? TradeDepositReceiptNo { get; set; }
-        public DateTime TradeDepositDate { get; set; }
+        public DateTime? TradeDepositDate { get; set; }
+
+        //Trade Deposit Details - Greenstar
+        public decimal? GreenstarTradeDepositAmountReg { get; set; }
+        public string? GreenstarTradeDepositReceiptNoReg { get; set; }
+        public DateTime? GreenstarTradeDepositDateReg { get; set; }
+
+        //Security Deposit Details - SPIC
+        public decimal? SpicSecurityDepositAmount { get; set; }
+        public string? SpicSecurityDepositReceiptNo { get; set; }
+        public DateTime? SpicSecurityDepositDate { get; set; }
 
         //Wholesale Fertilizer
         [Display(Name = "WholeSale Fertilizer License")]
@@ -159,8 +179,49 @@ namespace SPIC.Core.Entities
         //infra
         public decimal OwnGodownCapacity { get; set; }
         public decimal RentGodownCapacity { get; set; }
+        [Display(Name = "Legal Name")]
+        public string? GSTLegalName { get; set; }
+        [Display(Name = "Trade Name")]
+        public string? GSTTradeName { get; set; }
+        [Display(Name = "Constitution of Business")]
+        public string? GSTConstitutionofBusiness { get; set; }
+        [Display(Name = "Inactive Proposal")]
+        public FutureBusinessProposal? InactiveProposal { get; set; }
+        public bool? IsSubmittedForReview { get; set; } = false;
 
-    }
+        // True when this registration was created through the "Create New Dealer" flow.
+        // New dealers have no DealerCode until the final approval generates one.
+        public bool IsNewDealerRegistration { get; set; }
+
+        // True when the dealer has consented to skip the Credit Limit pages.
+        // When true, Steps 10 and 11 (CreditLimit / CreditLimitForGreenStar) are bypassed
+        // and the dealer navigates directly from Investment (Step 9) to Enclosures (Step 12).
+        // Credit limit values for consent dealers are entered by the approver in the approval popup.
+        public bool IsCreditLimitConsentGiven { get; set; }
+
+        // Dealership Application Fee (New Dealer flow — SPIC)
+        public int? DealershipApplicationFeeBankId { get; set; }
+        public string? DealershipApplicationFeeDDNumber { get; set; }
+        public DateTime? DealershipApplicationFeeDDDate { get; set; }
+        public decimal? DealershipApplicationFeeAmount { get; set; }
+        public string? DealershipApplicationFeePayableAt { get; set; }
+
+        // Trade Deposit Details — SPIC (New Dealer flow)
+        public string? SpicTradeDepositDDNumber { get; set; }
+        public int? SpicTradeDepositDDBankId { get; set; }
+        public DateTime? SpicTradeDepositDDDate { get; set; }
+        public decimal? SpicTradeDepositDDAmount { get; set; }
+		public string? DealershipApplicationFeeFilePath { get; set; }
+		public string? SpicTradeDepositFilePath { get; set; }
+
+		// Trade Deposit Details — GFL / Greenstar (New Dealer flow)
+		public string? GflTradeDepositDDNumber { get; set; }
+        public int? GflTradeDepositDDBankId { get; set; }
+        public DateTime? GflTradeDepositDDDate { get; set; }
+        public decimal? GflTradeDepositDDAmount { get; set; }
+		public string? GflTradeDepositFilePath { get; set; }
+
+	}
     public class DealerApprovalHistory
     {
         public int Id { get; set; }
@@ -169,10 +230,17 @@ namespace SPIC.Core.Entities
         public string Role { get; set; }
         public DateTime ApprovedAt { get; set; }
         public string Remarks { get; set; }
+        public bool IsApproved { get; set; }
+        public decimal? RmCreditLimit { get; set; }
+        public decimal? RmCreditLimitGfl { get; set; }
+        public decimal? SmCreditLimit { get; set; }
+        public decimal? SmCreditLimitGfl { get; set; }
+        public decimal? AvpCreditLimit { get; set; }
+        public decimal? AvpCreditLimitGfl { get; set; }
     }
     public enum EntityType
     {
-        soleProprietor, Partnership, LLP, PvtLtd, PubLtd, Society
+        soleProprietor = 1, Partnership, LLP, PvtLtd, PubLtd, Society
     }
     public enum DealerStatus
     {
@@ -181,6 +249,17 @@ namespace SPIC.Core.Entities
     public enum IrrigationType
     {
         CANAL, TANK, WELL
+    }
+
+    public enum RegistrationDealerType
+    {
+        Dealer, Department, Institution
+    }
+    public enum FutureBusinessProposal
+    {
+        FutureBusiness = 1,
+        Terminated = 2,
+        NotTraceable = 3
     }
     public class DealerExperience
     {
@@ -256,7 +335,8 @@ namespace SPIC.Core.Entities
         public bool IsCanal { get; set; }
         public bool IsTank { get; set; }
         public bool IsWell { get; set; }
-    }
+		public bool IsRainfed { get; set; }
+	}
     public class DealerCompaniesOperatingInArea
     {
         public int Id { get; set; }
@@ -283,14 +363,19 @@ namespace SPIC.Core.Entities
         public string FatherName { get; set; }
         public Gender Gender { get; set; }
         public MaritalStatus MaritalStatus { get; set; }
+
+		[Display(Name = "Educational Qualification")]
+		public string? EducationalQualification { get; set; }   
+		[Display(Name = "Date Of Birth")]
+        public DateTime DOB { get; set; }
         public string PhoneNumber { get; set; }
         public string? Email { get; set; }
         [Display(Name = "Aadhaar Number")]
-        public string AadhaarNumber { get; set; }
-        public string AadhaarFilePath { get; set; }
+        public string? AadhaarNumber { get; set; }
+        public string? AadhaarFilePath { get; set; }
         [Display(Name = "PAN Number")]
-        public string PANNumber { get; set; }
-        public string PANFilePath { get; set; }
+        public string? PANNumber { get; set; }
+        public string? PANFilePath { get; set; }
         public string ProprietorImagePath { get; set; }
         //address details
         [Display(Name = "Shop No / Room No / Block No")]
@@ -319,8 +404,12 @@ namespace SPIC.Core.Entities
         public int Age { get; set; }
         [Display(Name = "Relationship")]
         public int RelationshipId { get; set; }
-        public string? Occupation { get; set; }
-    }
+		[Display(Name = "Marital Status")]
+		public MaritalStatus? MaritalStatus { get; set; }
+		public string? Occupation { get; set; }
+		[Display(Name = "Educational Qualification")]
+		public string? EducationalQualification { get; set; }
+	}
     public class PartnerOccupation
     {
         public int Id { get; set; }
@@ -427,10 +516,14 @@ namespace SPIC.Core.Entities
     {
         public int Id { get; set; }
         public int DealerId { get; set; }
-        //Existing Credit Limit
-        public decimal ExistingCreditLimitAmount { get; set; }
-        public DateTime ExistingCreditLimitFrom { get; set; }
-        public DateTime ExistingCreditLimitTo { get; set; }
+        //Existing Credit Limit For Spic
+        public decimal SpicExistingCreditLimitAmount { get; set; }
+        public DateTime SpicExistingCreditLimitFrom { get; set; }
+        public DateTime SpicExistingCreditLimitTo { get; set; }
+        //Existing Credit Limit For Greenstar
+        public decimal GSExistingCreditLimitAmount { get; set; }
+        public DateTime GSExistingCreditLimitFrom { get; set; }
+        public DateTime GSExistingCreditLimitTo { get; set; }
 
         public int FY1 { get; set; }
         public int FY2 { get; set; }
@@ -488,6 +581,36 @@ namespace SPIC.Core.Entities
         public string? GreenstarTradeDepositNumber { get; set; }
         public string? GreenstarTradeDepositOtherDetails { get; set; }
         public decimal GreenstarTradeDepositAmount { get; set; }
+
+        // Raw valuation values (manually entered, not calculated marks)
+        public double? SpicMonthlyAvgNetOverdues { get; set; }
+        public double? GreenstarMonthlyAvgNetOverdues { get; set; }
+    }
+    public enum CreditType
+    {
+        SPIC,
+        Greenstar
+    }
+    public class CreditLimitHistory
+    {
+        public int Id { get; set; }
+        public int DealerId { get; set; }
+        public CreditType? CreditType { get; set; }
+        [Display(Name = "Existing Credit Limit Amount (₹) In Lakhs")]
+        public decimal? ExistingCreditLimit { get; set; }
+        [Display(Name = "Existing Valid From")]
+        public DateTime ExistingValidFrom { get; set; }
+        [Display(Name = "Existing Valid To")]
+        public DateTime ExistingValidTo { get; set; }
+        [Display(Name = "Additional Credit Limit (₹) In Lakhs")]
+        public decimal? AdditionalCreditLimit { get; set; }
+        [Display(Name = "MO Recommended Credit Limit (₹) In Lakhs")]
+        public decimal? MORecommendedCreditLimit { get; set; }
+        public decimal? RMApprovedCreditLimit { get; set; }
+        public decimal? SMApprovedCreditLimit { get; set; }
+        public decimal? AVPApprovedCreditLimit { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
     }
     public class DealerCreditLimitSalesPerformance
     {
@@ -512,14 +635,56 @@ namespace SPIC.Core.Entities
         public string FY1ITReturnFilePath { get; set; }
         public int FY2 { get; set; }
         public string FY2ITReturnFilePath { get; set; }
-        public string ValuationCertificateFilePath { get; set; }
-        public string RetailerListFilePath { get; set; }
+        public string? ValuationCertificateFilePath { get; set; }
+        public string? RetailerListFilePath { get; set; }
         public string? PartnershipDeadFilePath { get; set; }
         public string? BoardReasolutionFilePath { get; set; }
         public string? AffidavitFilePath { get; set; }
         public string? GreenstarSpecimanFilePath { get; set; }
         public string? AuthorizationLetterFilePath { get; set; }
         public string? DeedOfGuaranteeFilePath { get; set; }
+        public string? LlpAgreementFilePath { get; set; }
+		public string? ArticlesOfAssociationFilePath { get; set; }   // AOA
+		public string? MemorandumOfAssociationFilePath { get; set; } // MOA
+		public string? ByLaw { get; set; }
+		public string? RequestLetterFilePath { get; set; }
 
+	}
+    public class DealerCreditLimitSales
+    {
+        public int Id { get; set; }
+        //public int DealerId { get; set; }
+        public int StateId { get; set; }
+        //Dealer Code
+        public string CustomerNumber { get; set; }
+        //Dealer Name
+        public int CustomerId { get; set; }
+        //Product
+        public int ProductId { get; set; }
+        //Categories
+        public int CategoryId { get; set; }
+        //Product Groups
+        public int ProductGroupId { get; set; }
+        //Financial year 
+        public int FinancialYearId { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal GrossAmount { get; set; }
+
+    }
+
+
+    public class SalesPerfViewRow
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+
+        public decimal? FY1Qty { get; set; }
+        public decimal? FY1Amount { get; set; }
+
+        public decimal? FY2Qty { get; set; }
+        public decimal? FY2Amount { get; set; }
+
+        public decimal? FY3Qty { get; set; }
+        public decimal? FY3Amount { get; set; }
     }
 }

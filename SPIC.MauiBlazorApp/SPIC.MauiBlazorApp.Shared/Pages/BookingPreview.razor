@@ -1,0 +1,411 @@
+@page "/BookingPreview"
+
+@inject NavigationManager Navigation
+@inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
+
+@using System.Globalization
+
+<style>
+    :root {
+        --bg-body: #f4f6f8;
+        --bg-card: #ffffff;
+        --text-main: #1f2937;
+        --text-muted: #6b7280;
+        --border-light: #e5e7eb;
+        --primary-blue: #3b82f6;
+        --header-bg-green: #eaf0e5;
+        --header-text-green: #3f4e42;
+    }
+
+    /* --- Page Header --- */
+    .page-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 0.25rem;
+    }
+
+    .page-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 1.5rem;
+    }
+
+    /* --- Review Card Base --- */
+    .review-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        margin-bottom: 1.25rem;
+        overflow: hidden;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .review-card-header {
+        background-color: var(--header-bg-green);
+        padding: 12px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #dce4d6;
+    }
+
+    .review-card-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--header-text-green);
+        margin: 0;
+    }
+
+    .review-card-body {
+        padding: 20px;
+    }
+
+    /* --- Key Value Pairs --- */
+    .kv-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+
+    .kv-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .kv-label {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--text-muted);
+        flex-shrink: 0;
+        padding-right: 16px;
+    }
+
+    .kv-value {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-main);
+        text-align: right;
+        max-width: 65%;
+        line-height: 1.4;
+        word-break: break-word;
+    }
+
+    /* --- Check-in / Check-out --- */
+    .check-box-col {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .check-lbl {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-muted);
+    }
+
+    .check-val {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+
+    .check-val i {
+        color: var(--text-muted);
+        font-size: 1rem;
+    }
+
+    /* --- Booking Summary Modifiers --- */
+    .summary-divider {
+        height: 1px;
+        background-color: var(--border-light);
+        margin: 16px 0;
+    }
+
+    .total-val {
+        color: var(--primary-blue);
+        font-size: 1.1rem;
+        font-weight: 700;
+    }
+
+    .total-lbl {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+
+    /* --- Bottom Actions --- */
+    .bottom-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 1rem;
+        padding-bottom: 2rem;
+    }
+
+    .btn-outline-back {
+        background-color: #ffffff;
+        border: 1px solid var(--border-light);
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+
+    .btn-outline-back:hover { background-color: #f9fafb; }
+
+    .btn-primary-continue {
+        background-color: var(--primary-blue);
+        border: 1px solid var(--primary-blue);
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 10px 24px;
+        border-radius: 6px;
+        transition: 0.2s;
+    }
+
+    .btn-primary-continue:hover { background-color: #2563eb; }
+</style>
+
+<div class="container-fluid py-4 px-0">
+
+    <div class="mb-4">
+        <h1 class="page-title">Review Your Booking</h1>
+        <p class="page-subtitle">Please verify all details before proceeding to payment</p>
+    </div>
+
+    @if (!BookingState.IsInitialized)
+    {
+        <div class="review-card">
+            <div class="review-card-body">
+                <p style="color: #6b7280; margin: 0;">No booking details found. Please start from the beginning.</p>
+                <div class="bottom-actions" style="margin-top: 16px;">
+                    <button class="btn-primary-continue" @onclick="GoToStart">Go to Guest House</button>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+
+            <div class="col-lg-6">
+
+                <div class="review-card">
+                    <div class="review-card-header">
+                        <h3 class="review-card-title">Booking Information</h3>
+                    </div>
+                    <div class="review-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Guest House</span>
+                            <span class="kv-value">@BookingState.GuestHouseName</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Room Type</span>
+                            <span class="kv-value">@BookingState.RoomType</span>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(BookingState.RoomNumber))
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Room Number</span>
+                                <span class="kv-value">@BookingState.RoomNumber</span>
+                            </div>
+                        }
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Rooms</span>
+                            <span class="kv-value">@BookingState.NumberOfRooms</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Nights</span>
+                            <span class="kv-value">@BookingState.NumberOfNights</span>
+                        </div>
+                        @if (BookingState.ExtraBeds > 0)
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Additional Bed(s)</span>
+                                <span class="kv-value">@BookingState.ExtraBeds</span>
+                            </div>
+                        }
+                        <div class="summary-divider"></div>
+                        <div class="row">
+                            <div class="col-6 check-box-col">
+                                <div class="check-lbl">Check-in</div>
+                                <div class="check-val"><i class="bi bi-calendar"></i> @FormatDate(BookingState.CheckInDate)</div>
+                                <div class="check-val"><i class="bi bi-clock"></i> @FormatTime(BookingState.CheckInDate)</div>
+                            </div>
+                            <div class="col-6 check-box-col">
+                                <div class="check-lbl">Check-out</div>
+                                <div class="check-val"><i class="bi bi-calendar"></i> @FormatDate(BookingState.CheckOutDate)</div>
+                                <div class="check-val"><i class="bi bi-clock"></i> @FormatTime(BookingState.CheckOutDate)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="review-card">
+                    <div class="review-card-header">
+                        <h3 class="review-card-title">Booking Summary</h3>
+                    </div>
+                    <div class="review-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Room Rate (per night)</span>
+                            <span class="kv-value">@_money(BookingState.RoomPricePerNight)</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Rooms</span>
+                            <span class="kv-value">@BookingState.NumberOfRooms</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Nights</span>
+                            <span class="kv-value">@BookingState.NumberOfNights</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Room Cost</span>
+                            <span class="kv-value">@_money(BookingState.RoomCost)</span>
+                        </div>
+                        @if (BookingState.ExtraBeds > 0)
+                        {
+                            <div class="kv-row">
+                                <span class="kv-label">Additional Bed (₹@BookingState.ExtraCotPrice.ToString("N0")/bed/night) × @BookingState.ExtraBeds</span>
+                                <span class="kv-value">@_money(BookingState.ExtraBedCost)</span>
+                            </div>
+                        }
+                        <div class="summary-divider"></div>
+                        <div class="kv-row">
+                            <span class="kv-label">Subtotal</span>
+                            <span class="kv-value">@_money(BookingState.Subtotal)</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">GST (5%)</span>
+                            <span class="kv-value">@_money(BookingState.Tax)</span>
+                        </div>
+                        <div class="summary-divider"></div>
+                        <div class="kv-row mt-3">
+                            <span class="kv-label total-lbl">Total</span>
+                            <span class="kv-value total-val">@_money(BookingState.Total)</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="col-lg-6">
+
+                <div class="review-card">
+                    <div class="review-card-header">
+                        <h3 class="review-card-title">Guest Information</h3>
+                    </div>
+                    <div class="review-card-body">
+                        <div class="kv-row">
+                            <span class="kv-label">Employee ID / Dealer Code</span>
+                            <span class="kv-value">@BookingState.EmployeeOrDealerCode</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Guest Name</span>
+                            <span class="kv-value">@BookingState.GuestName</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Company Name</span>
+                            <span class="kv-value">@BookingState.CompanyName</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Phone Number</span>
+                            <span class="kv-value">@BookingState.PhoneNumber</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Email ID</span>
+                            <span class="kv-value">@BookingState.Email</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Aadhaar / Passport Number</span>
+                            <span class="kv-value">@BookingState.AadhaarOrPassport</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Nationality</span>
+                            <span class="kv-value">@BookingState.Nationality</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Persons</span>
+                            <span class="kv-value">@BookingState.NumberOfPersons</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Adults</span>
+                            <span class="kv-value">@BookingState.NumberOfAdults</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Number of Children</span>
+                            <span class="kv-value">@BookingState.NumberOfChildren</span>
+                        </div>
+                        <div class="kv-row">
+                            <span class="kv-label">Address</span>
+                            <span class="kv-value">@BookingState.Address</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="bottom-actions">
+            <button class="btn-outline-back" @onclick="GoBack">Edit Details</button>
+            <button class="btn-primary-continue" @onclick="GoToPayment">Proceed to Payment</button>
+        </div>
+    }
+
+</div>
+
+@code {
+
+    private void GoToStart()
+    {
+        Navigation.NavigateTo("/GuestHouse");
+    }
+
+    private void GoBack()
+    {
+        if (BookingState.CheckInDate.HasValue && BookingState.CheckOutDate.HasValue)
+        {
+            var guestHouseId = BookingState.GuestHouseId;
+            var roomTypeId = BookingState.RoomTypeId;
+            var numberOfRooms = BookingState.NumberOfRooms;
+            var extraBeds = BookingState.ExtraBeds;
+            var checkIn = Uri.EscapeDataString(BookingState.CheckInDate.Value.ToString("yyyy-MM-ddTHH:mm:ss"));
+            var checkOut = Uri.EscapeDataString(BookingState.CheckOutDate.Value.ToString("yyyy-MM-ddTHH:mm:ss"));
+            Navigation.NavigateTo($"/GuestDetails?guestHouseId={guestHouseId}&roomTypeId={roomTypeId}" +
+                                  $"&numberOfRooms={numberOfRooms}&extraBeds={extraBeds}" +
+                                  $"&checkIn={checkIn}&checkOut={checkOut}");
+        }
+        else
+        {
+            Navigation.NavigateTo("/GuestHouse");
+        }
+    }
+
+    private void GoToPayment()
+    {
+        Navigation.NavigateTo("/Payment");
+    }
+
+    private static string FormatDate(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("dd MMM yyyy", CultureInfo.InvariantCulture) : "-";
+    }
+
+    private static string FormatTime(DateTime? value)
+    {
+        if (!value.HasValue) return "-";
+        return value.Value.ToString("hh:mm tt", CultureInfo.InvariantCulture);
+    }
+
+    private static string _money(decimal value)
+    {
+        return "₹" + value.ToString("N2", CultureInfo.InvariantCulture);
+    }
+}

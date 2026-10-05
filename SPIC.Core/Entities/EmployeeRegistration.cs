@@ -78,5 +78,16 @@ namespace SPIC.Core.Entities
 		public bool IsActive { get; set; } = true;
 		public string? CreatedBy { get; set; }
 		public string? UpdatedBy { get; set; }
+		// SpecialAdmin-only multi-location assignments. Ignored for other roles.
+		public List<SpecialAdminLocationItem>? SpecialAdminLocations { get; set; }
+	}
+
+	// A single State/Region/HQ assignment for a SpecialAdmin. Region/HQ are
+	// optional (0 = not narrowed); State is required.
+	public class SpecialAdminLocationItem
+	{
+		public int StateId { get; set; }
+		public int RegionId { get; set; }
+		public int HeadquarterId { get; set; }
 	}
 }

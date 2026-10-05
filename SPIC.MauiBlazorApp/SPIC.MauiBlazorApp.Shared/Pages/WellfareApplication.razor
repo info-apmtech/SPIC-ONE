@@ -1,0 +1,504 @@
+﻿@page "/WellfareApplication"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+
+
+<!-- Page heading -->
+<div class="pgttl-main">My Applications</div>
+<div class="pgttl-sub">Track and manage your submitted welfare applications.</div>
+
+@if (_loading)
+{
+    <div class="wapd-page-state">
+        <div class="wapd-spinner"></div>
+        <div>Loading your applications…</div>
+    </div>
+}
+else if (_error != null)
+{
+    <div class="wapd-page-state wapd-page-error">
+        <div>@_error</div>
+        <button class="apln-view-btn" @onclick="LoadApplications">Retry</button>
+    </div>
+}
+else
+{
+
+<!-- Status summary band -->
+<div class="summ-band">
+
+  <div class="summ-tile">
+    <div class="summ-tile-left">
+      <div class="summ-tile-caption">Total</div>
+      <div class="summ-tile-count">@_applications.Count</div>
+    </div>
+    <div class="summ-tile-emblem violet">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+    </div>
+  </div>
+
+  <div class="summ-tile" style="background-color:#FFF6EF">
+    <div class="summ-tile-left">
+      <div class="summ-tile-caption">Pending</div>
+      <div class="summ-tile-count">@CountPending()</div>
+    </div>
+    <div class="summ-tile-emblem flame">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+    </div>
+  </div>
+
+  <div class="summ-tile" style="background-color:#DCFFDF">
+    <div class="summ-tile-left">
+      <div class="summ-tile-caption">Approved</div>
+      <div class="summ-tile-count">@CountByStatus(5)</div>
+    </div>
+    <div class="summ-tile-emblem emerald">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+    </div>
+  </div>
+
+  <div class="summ-tile" style="background-color:#FFEEEE">
+    <div class="summ-tile-left">
+      <div class="summ-tile-caption">Rejected</div>
+      <div class="summ-tile-count">@CountRejected()</div>
+    </div>
+    <div class="summ-tile-emblem scarlet">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+    </div>
+  </div>
+
+  <div class="summ-tile" style="background-color:#FFFFE1">
+    <div class="summ-tile-left">
+      <div class="summ-tile-caption">Drafts</div>
+      <div class="summ-tile-count">@CountByStatus(0)</div>
+    </div>
+    <div class="summ-tile-emblem gold">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+    </div>
+  </div>
+
+  <div class="summ-tile" style="background-color:#E8E7FF">
+    <div class="summ-tile-left">
+      <div class="summ-tile-caption">Cancelled</div>
+      <div class="summ-tile-count">@CountByStatus(7)</div>
+    </div>
+    <div class="summ-tile-emblem cobalt">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>
+    </div>
+  </div>
+
+</div>
+
+<!-- Toolbar -->
+<div class="ctrl-bar">
+  <select class="ctrl-dropdown" @bind="_sort">
+    <option>Latest First</option>
+    <option>Oldest First</option>
+  </select>
+  <select class="ctrl-dropdown" style="background-color:#FFFFFF; border:0.5px solid #CECECE;" @bind="_statusFilter">
+    <option>All Statuses</option>
+    <option>Pending</option>
+    <option>Approved</option>
+    <option>Rejected</option>
+    <option>Drafts</option>
+    <option>Cancelled</option>
+  </select>
+
+  <div class="ctrl-searchbox">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_2911_12600)">
+<path d="M8.04937 16.0903C9.83699 16.0904 11.5735 15.4939 12.9838 14.3955L18.3044 19.7161C18.7019 20.1 19.3353 20.089 19.7191 19.6915C20.0936 19.3038 20.0936 18.6891 19.7191 18.3014L14.3985 12.9808C17.1242 9.47199 16.4895 4.41791 12.9807 1.69215C9.47195 -1.03361 4.41791 -0.398871 1.69215 3.10991C-1.03361 6.6187 -0.398871 11.6728 3.10991 14.3985C4.52253 15.4959 6.26059 16.0912 8.04937 16.0903ZM3.77429 3.77121C6.13538 1.41008 9.96346 1.41004 12.3246 3.77112C14.6857 6.13221 14.6858 9.96029 12.3247 12.3214C9.96359 14.6826 6.13551 14.6826 3.77438 12.3215L3.77429 12.3214C1.4132 9.97754 1.39929 6.16341 3.74317 3.80233L3.77429 3.77121Z" fill="#8E8E8E"/>
+</g>
+<defs>
+<clipPath id="clip0_2911_12600">
+<rect width="20" height="20" fill="white"/>
+</clipPath>
+</defs>
+</svg>
+
+    <input type="text" placeholder="Search by Application ID or Scheme" @bind="_search" />
+  </div>
+</div>
+
+@if (FilteredApplications().Count == 0)
+{
+    <div class="wapd-page-state">
+        <div>No applications found@(HasActiveFilters() ? " matching your filters." : ". Use Apply Welfare Scheme on the dashboard to submit your first application.")</div>
+    </div>
+}
+
+@foreach (var app in FilteredApplications())
+{
+<!-- ═══ Application Card ═══ -->
+<div class="apln-card">
+
+  <div class="apln-card-head">
+    <div class="apln-scheme-icon @GetSchemeIconClass(app.SchemeType)">
+        @((MarkupString)GetSchemeIconSvg(app.SchemeType))
+    </div>
+    <div>
+      <div class="apln-scheme-name">@app.SchemeName</div>
+      <div class="apln-scheme-ref">@(app.ApplicationNumber ?? "-")</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+        @if (app.SchemeType == 3)
+        {
+            <span class="apln-status-badge @GetApplicationTypeBadgeModifier(app.IsFirstApplication)">@(app.IsFirstApplication == false ? "Renewal" : "First Application")</span>
+        }
+        <span class="@GetCardBadgeClass(app.Status)">@app.StatusDisplay</span>
+    </div>
+  </div>
+
+  @if (app.Status == 6 || app.Status == 9)
+  {
+      <!-- Rejection details: stage, officer and reason -->
+      <div class="apln-reject-box">
+        <strong>Rejected by @(string.IsNullOrWhiteSpace(app.RejectedByLevel) ? "the approval officer" : app.RejectedByLevel)</strong>
+        @if (!string.IsNullOrWhiteSpace(app.RejectedByName))
+        {
+            <span> — @app.RejectedByName</span>
+        }
+        @if (app.RejectedAt.HasValue)
+        {
+            <span> on @FormatDate(app.RejectedAt.Value)</span>
+        }
+        @if (!string.IsNullOrWhiteSpace(app.RejectionReason))
+        {
+            <div class="apln-reject-reason"><em>Reason:</em> @app.RejectionReason</div>
+        }
+        @if (app.CanResubmit)
+        {
+            <div class="apln-reject-reason">Please review the reason above, correct the details/documents and resubmit. The application will be sent back to MO for approval.</div>
+        }
+      </div>
+  }
+
+  <div class="apln-meta-row">
+    <div class="apln-meta-box">
+      <div class="apln-meta-caption">Scheme Name</div>
+      <div class="apln-meta-value @GetSchemeValueColorClass(app.SchemeType)">@app.SchemeName</div>
+    </div>
+    <div class="apln-meta-box">
+      <div class="apln-meta-caption">Beneficiary</div>
+      <div class="apln-meta-value">@(string.IsNullOrWhiteSpace(app.BeneficiaryName) ? "-" : app.BeneficiaryName)</div>
+    </div>
+    <div class="apln-meta-box">
+      <div class="apln-meta-caption">Applied Date</div>
+      <div class="apln-meta-value">@FormatDate(app.ApplicationDate)</div>
+    </div>
+    <div class="apln-meta-box">
+      <div class="apln-meta-caption">Last Updated</div>
+      <div class="apln-meta-value">@GetRelativeTime(app.LastUpdatedAt)</div>
+    </div>
+  </div>
+
+  <div class="apln-trail-box">
+    @{ var trail = BuildTrail(app.Status); }
+    @for (var i = 0; i < trail.Count; i++)
+    {
+        var step = trail[i];
+        <div class="trail-waypoint">
+          <div class="trail-bubble @step.BubbleClass">
+            @if (step.BubbleClass.Contains("state-done"))
+            {
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            }
+            else
+            {
+                <span style="@step.BubbleFontStyle">@step.Short</span>
+            }
+          </div>
+          <div class="trail-waypoint-name @step.NameClass">@step.Name</div>
+          <div class="trail-waypoint-status @step.StatusClass">@step.Status</div>
+        </div>
+        @if (i < trail.Count - 1)
+        {
+            <div class="trail-connector @GetConnectorClass(step.BubbleClass)"></div>
+        }
+    }
+  </div>
+
+  <div class="apln-action-row">
+    <button class="apln-pdf-btn" disabled="@(_busyPdfId == app.Id)" @onclick="() => DownloadPdf(app)">
+      @(_busyPdfId == app.Id ? "Downloading…" : _pdfErrorId == app.Id ? "Failed – Tap to Retry" : "Download PDF")
+    </button>
+    <button class="apln-view-btn" @onclick="() => OpenDetails(app.Id)">View Details</button>
+    @if (app.CanResubmit)
+    {
+        <button class="apln-view-btn" style="background-color:#B91C1C; border-color:#B91C1C;" @onclick="() => OpenResubmission(app)">Correct &amp; Resubmit</button>
+    }
+  </div>
+
+</div>
+}
+
+}
+
+<WelfareApplicationDetails IsVisible="@_showDetails" ApplicationId="@_selectedId" OnClose="@((v) => _showDetails = v)" />
+
+@code {
+    private List<WelfareApplicationSummaryDto> _applications = new();
+    private bool _loading = true;
+    private string? _error;
+    private bool _showDetails = false;
+    private int _selectedId;
+
+    private string _sort = "Latest First";
+    private string _statusFilter = "All Statuses";
+    private string _search = "";
+    private int? _busyPdfId;
+    private int? _pdfErrorId;
+
+    [Inject] private HttpClient Http { get; set; } = default!;
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "appId")]
+    private int? AppId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadApplications();
+        if (AppId.HasValue && _applications.Any(a => a.Id == AppId.Value))
+        {
+            OpenDetails(AppId.Value);
+        }
+    }
+
+    private async Task LoadApplications()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _applications = await Http.GetFromJsonAsync<List<WelfareApplicationSummaryDto>>(
+                "api/SDWAWelfareApplication/my-applications") ?? new List<WelfareApplicationSummaryDto>();
+        }
+        catch
+        {
+            _error = "Unable to load your applications. Please try again.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenDetails(int id)
+    {
+        _selectedId = id;
+        _showDetails = true;
+    }
+
+    private void OpenResubmission(WelfareApplicationSummaryDto app)
+    {
+        // Opens the existing application form pre-filled with the SAME application
+        // (no new application is created on resubmission).
+        var schemeKey = GetSchemePageName(app.SchemeType);
+        NavigationManager.NavigateTo($"/ApplyWelfareScheme?scheme={Uri.EscapeDataString(schemeKey)}&resubmitId={app.Id}");
+    }
+
+    private async Task DownloadPdf(WelfareApplicationSummaryDto app)
+    {
+        _busyPdfId = app.Id;
+        _pdfErrorId = null;
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync($"api/SDWAWelfareApplication/my-application/{app.Id}/pdf");
+            var baseName = string.IsNullOrWhiteSpace(app.ApplicationNumber)
+                ? $"WelfareApplication-{app.Id}"
+                : string.Concat(app.ApplicationNumber.Split(Path.GetInvalidFileNameChars()));
+            await JS.InvokeVoidAsync("downloadFileFromBytes", $"{baseName}.pdf", "application/pdf", Convert.ToBase64String(bytes));
+        }
+        catch
+        {
+            _pdfErrorId = app.Id;
+        }
+        finally
+        {
+            _busyPdfId = null;
+        }
+    }
+
+    private int CountByStatus(int status) =>
+        _applications.Count(a => a.Status == status);
+
+    private int CountPending() =>
+        _applications.Count(a => a.Status is >= 1 and <= 4 || a.Status == 8 || a.Status == 10);
+
+    // Rejected includes applications returned to the dealer for resubmission (status 9)
+    private int CountRejected() =>
+        _applications.Count(a => a.Status == 6 || a.Status == 9);
+
+    private bool HasActiveFilters() =>
+        _statusFilter != "All Statuses" || !string.IsNullOrWhiteSpace(_search);
+
+    private List<WelfareApplicationSummaryDto> FilteredApplications()
+    {
+        IEnumerable<WelfareApplicationSummaryDto> query = _applications;
+
+        query = _statusFilter switch
+        {
+            "Pending" => query.Where(a => a.Status is >= 1 and <= 4 || a.Status == 8 || a.Status == 10),
+            "Approved" => query.Where(a => a.Status == 5),
+            "Rejected" => query.Where(a => a.Status == 6 || a.Status == 9),
+            "Drafts" => query.Where(a => a.Status == 0),
+            "Cancelled" => query.Where(a => a.Status == 7),
+            _ => query
+        };
+
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var q = _search.Trim().ToLowerInvariant();
+            query = query.Where(a =>
+                (a.ApplicationNumber ?? "").ToLowerInvariant().Contains(q) ||
+                a.SchemeName.ToLowerInvariant().Contains(q) ||
+                (a.BeneficiaryName ?? "").ToLowerInvariant().Contains(q));
+        }
+
+        return (_sort == "Oldest First"
+            ? query.OrderBy(a => a.LastUpdatedAt)
+            : query.OrderByDescending(a => a.LastUpdatedAt))
+            .ToList();
+    }
+
+    private static string GetSchemeIconClass(int schemeType) => schemeType switch
+    {
+        0 => "medical",
+        1 => "wedding",
+        2 => "grahapravesam",
+        3 => "education",
+        4 => "sathabhishekam",
+        5 => "deathrelief",
+        6 => "meritaward",
+        7 => "distinctionaward",
+        _ => "medical"
+    };
+
+    private static string GetSchemeIconSvg(int schemeType) => schemeType switch
+    {
+        // Medical Assistance – hospital cross
+        0 => "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#2563eb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='3' width='18' height='18' rx='3'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/></svg>",
+        // Wedding Gift – rings
+        1 => "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#db2777' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='9' cy='14' r='5'/><circle cx='15' cy='14' r='5'/><path d='M12 3l2 2-2 2-2-2z'/></svg>",
+        // Grahapravesam – house
+        2 => "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#d97706' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 10.5L12 3l9 7.5'/><path d='M5 9.5V21h14V9.5'/><path d='M10 21v-6h4v6'/></svg>",
+        // Educational Assistance – graduation cap
+        3 => "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#059669' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 9L12 4 2 9l10 5 10-5z'/><path d='M6 11.5V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5'/><line x1='22' y1='9' x2='22' y2='14'/></svg>",
+        // Sathabhishekam – celebration cake
+        4 => "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#7c3aed' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 21h16'/><path d='M5 21v-7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v7'/><path d='M12 12V9'/><path d='M12 9c-1.5 0-1.5-2 0-3 1.5 1 1.5 3 0 3z'/><path d='M5 16c2 1.5 4-1.5 7 0s5-1.5 7 0'/></svg>",
+        // Death Relief – heart with hands
+        5 => "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#dc2626' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 21C7 16.5 3 13.3 3 9.3 3 6.4 5.2 4.5 7.7 4.5c1.7 0 3.3.9 4.3 2.4 1-1.5 2.6-2.4 4.3-2.4 2.5 0 4.7 1.9 4.7 4.8 0 4-4 7.2-9 11.7z'/></svg>",
+        // Merit Award – medal
+        6 => "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#b45309' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='14' r='6'/><path d='M12 11.5l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L9.1 13.6l2-.3z'/><path d='M8.5 8.5L6 3h4l2 4 2-4h4l-2.5 5.5'/></svg>",
+        // Distinction Award – star
+        7 => "<svg width='26' height='26' viewBox='0 0 24 24' fill='none' stroke='#4f46e5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2'/></svg>",
+        _ => ""
+    };
+
+    private static string GetSchemeValueColorClass(int schemeType) => schemeType switch
+    {
+        0 => "clr-blue",
+        1 => "clr-purple",
+        3 => "clr-green",
+        _ => ""
+    };
+
+    private static string GetApplicationTypeBadgeModifier(bool? isFirstApplication) =>
+        isFirstApplication == false ? "renewal" : "first";
+
+    private static string GetCardBadgeClass(int status) => status switch
+    {
+        0 => "apln-status-badge draft",
+        1 or 2 or 3 or 4 or 8 or 10 => "apln-status-badge review",
+        5 => "apln-status-badge approved",
+        6 or 9 => "apln-status-badge rejected",
+        7 => "apln-status-badge cancelled",
+        _ => "apln-status-badge draft"
+    };
+
+    // Maps the scheme type to the page key used by the ApplyWelfareScheme form (for resubmission)
+    private static string GetSchemePageName(int schemeType) => schemeType switch
+    {
+        0 => "Medical Assistance",
+        1 => "Wedding",
+        2 => "Grahapravesam",
+        3 => "Educational Assistance",
+        4 => "Sathabhishekam",
+        5 => "Death Relief",
+        6 => "Merit Award",
+        7 => "Distinction Award",
+        _ => "Grahapravesam"
+    };
+
+    private sealed record TrailStep(string BubbleClass, string NameClass, string StatusClass, string Short, string Name, string Status, string BubbleFontStyle);
+
+    private static List<TrailStep> BuildTrail(int status)
+    {
+        // States: done (green), active (orange), idle (grey)
+        // Workflow: Dealer -> MO -> RM -> SM/SMM -> SDWA -> SDWA Admin -> Approved
+        var returnedToDealer = status == 9;   // Rejected by MO - back with the dealer for correction/resubmission
+        var dealerActive = returnedToDealer;
+        var dealerDone = status != 0 && !returnedToDealer;
+        var moActive = status == 1 || status == 2;
+        var moDone = status is 3 or 4 or 8 or 10 or 5;
+        var rmActive = status == 3;
+        var rmDone = status is 4 or 8 or 10 or 5;
+        var smActive = status == 4;
+        var smDone = status is 8 or 10 or 5;
+        var sdwaActive = status == 8;
+        var sdwaDone = status is 10 or 5;
+        var sdwaAdminActive = status == 10;
+        var sdwaAdminDone = status == 5;
+        var finalDone = status == 5;
+
+        string B(bool done, bool active) => done ? "state-done" : active ? "state-orange" : "state-idle";
+        string N(bool done, bool active) => done ? "done" : active ? "orange" : "idle";
+        string S(bool done, bool active, string doneText, string activeText) => done ? "done" : active ? "orange" : "idle";
+
+        return new List<TrailStep>
+        {
+            new TrailStep(
+                B(dealerDone, dealerActive),
+                N(dealerDone, dealerActive),
+                S(dealerDone, dealerActive, "done", "orange"),
+                "", "Dealer",
+                returnedToDealer ? "Revise & Resubmit" : status == 0 ? "Draft" : "Submitted", ""),
+            new TrailStep(
+                B(moDone, moActive), N(moDone, moActive), S(moDone, moActive, "Approved", "Review"),
+                "MO", "MO", moDone ? "Approved" : moActive ? "Review" : returnedToDealer ? "Rejected" : "Pending", ""),
+            new TrailStep(
+                B(rmDone, rmActive), N(rmDone, rmActive), S(rmDone, rmActive, "Approved", "Review"),
+                "RM", "RM", rmDone ? "Approved" : rmActive ? "Review" : "Pending", ""),
+            new TrailStep(
+                B(smDone, smActive), N(smDone, smActive), S(smDone, smActive, "Approved", "Review"),
+                "SM", "SM/SMM", smDone ? "Approved" : smActive ? "Review" : "Pending", "font-size:10px"),
+            new TrailStep(
+                B(sdwaDone, sdwaActive), N(sdwaDone, sdwaActive), S(sdwaDone, sdwaActive, "Approved", "Review"),
+                "SDWA", "SDWA", sdwaDone ? "Approved" : sdwaActive ? "Review" : "Pending", "font-size:10px"),
+            new TrailStep(
+                B(sdwaAdminDone, sdwaAdminActive), N(sdwaAdminDone, sdwaAdminActive), S(sdwaAdminDone, sdwaAdminActive, "Approved", "Review"),
+                "SA", "SDWA Admin", sdwaAdminDone ? "Approved" : sdwaAdminActive ? "Review" : "Pending", "font-size:10px"),
+            new TrailStep(
+                B(finalDone, false), N(finalDone, false), S(finalDone, false, "Approved", "Review"),
+                "OK", "Final", finalDone ? "Approved" : "Pending", "")
+        };
+    }
+
+    private static string GetConnectorClass(string bubbleClass) =>
+        bubbleClass.Contains("state-done") ? "done"
+        : bubbleClass.Contains("state-orange") ? "orange"
+        : "idle";
+
+    private static string FormatDate(DateTime date) => date.ToString("dd MMM yyyy");
+
+    private static string GetRelativeTime(DateTime dateTimeUtcOrLocal)
+    {
+        var span = DateTime.Now - dateTimeUtcOrLocal;
+        if (span.TotalMinutes < 1) return "Just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours} hr ago";
+        if (span.TotalDays < 30) return $"{(int)span.TotalDays} day{((int)span.TotalDays == 1 ? "" : "s")} ago";
+        return dateTimeUtcOrLocal.ToString("dd MMM yyyy");
+    }
+}
