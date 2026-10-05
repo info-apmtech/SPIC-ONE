@@ -2035,6 +2035,10 @@ namespace Spic.Infrastructure.Migrations
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
                         });
+                    // NOTE: FieldDashboard/MarkAttendance/TasksAllocation (Id 109-111) deliberately
+                    // left out of this snapshot too - see v18AddJmdoTaskAllocation's own comment.
+                    // Their reflection-computed ids collide with already-seeded Metrics/
+                    // AnnualBudgeting rows; re-add properly once that id collision is fixed.
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Bank", b =>
@@ -2190,19 +2194,20 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("ApprovedBy")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("CreatedBy")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<string>("FinancialYear")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
 
                     b.Property<decimal>("SIDAmount")
                         .HasColumnType("numeric");
@@ -2218,7 +2223,6 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("ValidateBy")
-                        .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -5716,6 +5720,137 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("IfmsProducts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AllocationDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("DapTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NpsTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OthersTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReviewRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SoilSampleTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SpcmTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SubmittedByRole")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubmittedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("UreaTarget")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationDate");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SubmittedByUserId");
+
+                    b.ToTable("JmdoTaskAllocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationDealer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DealerCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DealerName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SubDealerId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationId");
+
+                    b.ToTable("JmdoTaskAllocationDealers");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationProgram", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Budget")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("Csr1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProgramName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationId");
+
+                    b.ToTable("JmdoTaskAllocationPrograms");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
@@ -11521,6 +11656,28 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("HeadquarterBudgetSummary");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationDealer", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskAllocation", "Allocation")
+                        .WithMany("Dealers")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationProgram", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskAllocation", "Allocation")
+                        .WithMany("Programs")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.SampleBatch", "Batch")
@@ -12025,6 +12182,13 @@ namespace Spic.Infrastructure.Migrations
             modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetSummary", b =>
                 {
                     b.Navigation("HeadquarterBudgetAllocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocation", b =>
+                {
+                    b.Navigation("Dealers");
+
+                    b.Navigation("Programs");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LibraryConversation", b =>

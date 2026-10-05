@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.Entities;
 
 namespace SpicAPI.Controllers
@@ -471,17 +472,18 @@ namespace SpicAPI.Controllers
                         StringComparer.OrdinalIgnoreCase);
 
                 // Pre-load the State master so the optional "State" column can be
-                // resolved to a StateId. An unknown State name only skips that row;
-                // it never fails a valid upload.
+                // resolved to a StateId. Canonical normalization, and duplicates in the
+                // master table are tolerated rather than throwing while the map is built.
                 var stateIdByName =
                     new Dictionary<string, int>(
-                        StringComparer.OrdinalIgnoreCase);
+                        StringComparer.Ordinal);
 
                 foreach (var state in _context.States)
                 {
-                    if (!string.IsNullOrWhiteSpace(state.StateName))
+                    var stateKey = MasterNormalizer.Normalize(state.StateName);
+                    if (stateKey.Length > 0 && !stateIdByName.ContainsKey(stateKey))
                     {
-                        stateIdByName[state.StateName.Trim()] = state.Id;
+                        stateIdByName[stateKey] = state.Id;
                     }
                 }
 
@@ -495,6 +497,60 @@ namespace SpicAPI.Controllers
 
                 var now = DateTime.Now;
                 var userName = User?.Identity?.Name ?? "System";
+
+                // ----------------------------------------------------
+                // VALIDATE REFERENCED MASTERS BEFORE ANY WRITE
+                // ----------------------------------------------------
+                // The State column is optional, but when a row supplies one the State has to
+                // already exist. Previously an unknown State name only skipped that row and
+                // let the rest of the file commit, so a single typo produced a partial import.
+                // Every missing State is collected for the whole file and the upload is
+                // rejected before a single row is written.
+                //
+                // "SP" is a marker for Speciality Product, not a State Master entry, so it is
+                // never looked up and never reported as missing.
+                var missingMasters = new MissingMasterCollector();
+
+                if (stateColumn > 0)
+                {
+                    for (var validationRowNumber = headerRowNumber + 1;
+                         validationRowNumber <= lastUsedRow.RowNumber();
+                         validationRowNumber++)
+                    {
+                        var validationStateName = worksheet
+                            .Row(validationRowNumber)
+                            .Cell(stateColumn)
+                            .GetFormattedString()
+                            .Trim();
+
+                        if (MasterNormalizer.IsBlank(validationStateName) ||
+                            validationStateName.Equals("SP", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        if (!stateIdByName.ContainsKey(MasterNormalizer.Normalize(validationStateName)))
+                            missingMasters.Add("State", validationStateName, validationRowNumber);
+                    }
+                }
+
+                if (missingMasters.HasAny)
+                {
+                    var (missingMessage, missingLines) = missingMasters.Build("PVT master");
+
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = missingMessage,
+                        missingMasterLines = missingLines,
+                        missingMasters = missingMasters.Entries
+                            .Select(m => new { kind = m.Kind, value = m.Value, rowNumbers = m.RowNumbers })
+                            .ToList()
+                    });
+                }
+
+                // Every insert and update for this file commits together, so a failure part way
+                // through cannot leave a half-applied upload behind. The transaction is disposed
+                // uncommitted on any exception, which rolls it back.
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 // ----------------------------------------------------
                 // Process Excel rows
@@ -588,10 +644,12 @@ namespace SpicAPI.Controllers
 					!isSpecialState)
 				{
 					if (!stateIdByName.TryGetValue(
-						stateName,
+						MasterNormalizer.Normalize(stateName),
 						out var stateId))
 					{
-                            skippedCount++;
+                        // Unreachable: the validation pass already rejected every unknown
+                        // State before the transaction opened.
+                        skippedCount++;
                             duplicateRecords.Add(new
                             {
                                 rowNumber = rowNumber,
@@ -706,6 +764,7 @@ namespace SpicAPI.Controllers
                 // ----------------------------------------------------
 
                 await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
 
                 return Ok(new
                 {

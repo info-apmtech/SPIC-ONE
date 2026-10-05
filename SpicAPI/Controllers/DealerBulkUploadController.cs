@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.Entities;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -34,11 +35,17 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { Success = false, Message = "Only Excel files (.xlsx/.xls) are supported" });
 
             // ── State lookup ───────────────────────────────────────────
+            // GroupBy(...).First() rather than ToDictionary: two state rows whose names
+            // normalize to the same key (a stray trailing space, or a genuine duplicate)
+            // used to throw "An item with the same key has already been added" and take
+            // the whole upload down with a 500. Canonical normalization also means
+            // "  tamil nadu " and "Tamil Nadu" resolve to the same state.
             var stateNameToId = _db.States
                 .Select(s => new { s.StateName, s.Id })
                 .AsEnumerable()
-                .ToDictionary(s => s.StateName.Trim(), s => s.Id,
-                    StringComparer.OrdinalIgnoreCase);
+                .GroupBy(s => MasterNormalizer.Normalize(s.StateName))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
 
             using var stream = file.OpenReadStream();
             using var workbook = new XLWorkbook(stream);
@@ -177,8 +184,8 @@ namespace SpicAPI.Controllers
 
                         // ── Resolve state ──────────────────────────────────
                         int stateId = 0;
-                        if (!string.IsNullOrEmpty(stateName) &&
-                            !stateNameToId.TryGetValue(stateName, out stateId))
+                        if (!MasterNormalizer.IsBlank(stateName) &&
+                            !stateNameToId.TryGetValue(MasterNormalizer.Normalize(stateName), out stateId))
                         {
                             AddGrouped("State not found in database",
                                 $"Row {row.RowNumber()}: '{stateName}' (dealer: {customerName})");

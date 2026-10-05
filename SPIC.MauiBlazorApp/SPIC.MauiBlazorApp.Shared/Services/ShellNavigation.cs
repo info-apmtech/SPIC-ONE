@@ -94,7 +94,7 @@ public static class ShellNavigation
         new("DigitalLibrary", "Digital Library", "bi-collection-play", "/DigitalLibrary", "DigitalLibrary")
         {
             ShortLabel = "Library",
-            // No Rule: resolved by CanAccess("DigitalLibrary"), the same call NavMenu and PageGuard use.
+            // No Rule: resolved by CanAccess(PagePermission.DigitalLibrary), the same call NavMenu and PageGuard use.
             // Read-only content is open to every signed-in user (PageAuthorization.OpenAccessPages);
             // adding/editing content needs the DigitalLibrary page (checked in the pages). A
             // designation-driven role such as CommonRole needs the DigitalLibrary page grant.
@@ -192,7 +192,7 @@ public static class ShellNavigation
         new("Alerts", "Alerts", "bi-bell-fill", "/Alerts", "Alerts")
         {
             // Also reachable from the bell in the phone/tablet top bar.
-            // No Rule: resolved by CanAccess("Alerts"); open to every signed-in user for the
+            // No Rule: resolved by CanAccess(PagePermission.Alerts); open to every signed-in user for the
             // default employee roles (PageAuthorization.OpenAccessPages).
         },
         new("AskAI", "Ask SPIC AI", "bi-stars", "/DigitalLibrary/chat", "DigitalLibrary")
@@ -551,3 +551,4 @@ public static class ShellNavigation
     public static bool IsActive(ShellTab tab, string uri, string? baseUri = null) =>
         string.Equals(ActiveKey(uri, baseUri), tab.Key, StringComparison.OrdinalIgnoreCase);
 }
+
