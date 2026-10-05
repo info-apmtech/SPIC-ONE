@@ -111,7 +111,7 @@ namespace SPIC.Core.Entities
         // Added for menu permissions
         FieldDashboard, FieldReports, MdoDashboard, AllocationRequests, TaskMonitoring,
         PerformanceTracker, TargetAchievement, FarmerData, MdoReports, SdwaCompanyMaster,
-        GuestHouseCancellations, DemoDocumentation, SalesAudit, ExtensionRequests, AnnualBudgeting, StateBudgetManagement, MarkAttendance, TasksAllocation
+        GuestHouseCancellations, DemoDocumentation, SalesAudit, ExtensionRequests, MarkAttendance, TasksAllocation
 
     }
 }
