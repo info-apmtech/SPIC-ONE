@@ -1,0 +1,74 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@*
+    Top info cards of the review page (Dealer Name / Dealer Code / Submitted By / Status).
+    Read-only: it takes the loaded registration instance and the resolved submitter name, so it
+    re-renders only when the registration is reloaded or the name arrives, never when an
+    accordion or the approval popup on the page changes.
+*@
+
+    <!-- Top Info Cards -->
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="info-card">
+                <div>
+                    <div class="info-label">Dealer Name</div>
+                    <div class="info-value">@(Dealer?.FirmName ?? "-")</div>
+                </div>
+                <div class="info-icon purple">
+                    <i class="bi bi-person"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="info-card">
+                <div>
+                    <div class="info-label">Dealer Code</div>
+                    <div class="info-value">@(Dealer?.DealerCode ?? (Dealer?.IsNewDealerRegistration == true ? "Generated after final approval" : $"DL-{Dealer?.Id}"))</div>
+                </div>
+                <div class="info-icon orange">
+                    <i class="bi bi-upc-scan"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="info-card">
+                <div>
+                    <div class="info-label">Submitted By</div>
+                    <div class="info-value">@(SubmittedByName ?? Dealer?.UpdatedBy ?? Dealer?.CreatedBy ?? "-")</div>
+                </div>
+                <div class="info-icon cyan">
+                    <i class="bi bi-person-badge"></i>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-3">
+            <div class="info-card">
+                <div>
+                    <div class="info-label">Status</div>
+                    <span class="status-badge">@(DealerReviewFormat.GetApprovalStage(Dealer))</span>
+                </div>
+                <div class="info-icon yellow">
+                    <i class="bi bi-file-earmark-text"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+@code {
+    /// <summary>The loaded registration. Same instance across renders until it is reloaded.</summary>
+    [Parameter] public DR.DealerRegistration? Dealer { get; set; }
+
+    /// <summary>Display name resolved for the creator; null until the user list has loaded.</summary>
+    [Parameter] public string? SubmittedByName { get; set; }
+
+    /// <summary>Bumped by the page when it mutates data in place (approval sets RM/SM/AVP flags
+    /// on the existing registration object), so the cards still refresh.</summary>
+    [Parameter] public int DataVersion { get; set; }
+}

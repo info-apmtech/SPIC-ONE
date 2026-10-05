@@ -1,0 +1,117 @@
+/* =====================================================================
+   tokens.css  -  SPIC ONE shell design tokens (loaded right after app.css
+   in BOTH hosts: SPIC.MauiBlazorApp/wwwroot/index.html and
+   SPIC.MauiBlazorApp.Web/Components/App.razor).
+
+   BREAKPOINT CONTRACT (whole programme uses this; do not invent others):
+
+       phone    width <= 767.98px      @media (max-width: 767.98px)
+       tablet   768px .. 1199.98px     @media (min-width: 768px) and (max-width: 1199.98px)
+       desktop  width >= 1200px        @media (min-width: 1200px)
+
+   DESKTOP MUST STAY VISUALLY UNCHANGED: live users are on desktop web.
+   Every new behaviour switches on ONLY via max-width queries for phone /
+   tablet. CSS custom properties cannot be used inside @media, so the
+   values are repeated in the queries below; the --bp-* vars exist for
+   JS / documentation only.
+   ===================================================================== */
+:root {
+    /* ---- breakpoints (reference only, see note above) ---- */
+    --bp-phone-max: 767.98px;
+    --bp-tablet-min: 768px;
+    --bp-tablet-max: 1199.98px;
+    --bp-desktop-min: 1200px;
+
+    /* ---- spacing scale (4px base) ---- */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
+    --space-10: 40px;
+
+    /* ---- touch ---- */
+    --tap-min: 44px; /* minimum tap target (WCAG 2.5.5 / Apple HIG) */
+
+    /* ---- device safe areas (0 when the host has no notch / home bar).
+            Note: env() only reports non-zero values on iOS when the page's
+            viewport meta contains viewport-fit=cover (MAUI index.html does). ---- */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+
+    /* ---- shell geometry ---- */
+    --shell-topbar-h: 56px; /* compact phone top bar, excluding safe area */
+    --shell-tabbar-h: 60px; /* phone bottom tab bar, excluding safe area */
+    --shell-rail-w: 72px;   /* tablet navigation rail */
+
+    /* ---- z-index scale (Bootstrap 5: dropdown 1000, sticky 1020,
+            fixed 1030, offcanvas backdrop 1040, offcanvas 1045, modal 1055,
+            popover 1070, tooltip 1080, toast 1090) ---- */
+    --z-topbar: 1020;   /* sticky compact top bar */
+    --z-rail: 1025;     /* tablet rail */
+    --z-tabbar: 1030;   /* phone bottom tab bar */
+    --z-sheet: 1050;    /* full-screen "More" sheet (above offcanvas 1045) */
+    --z-toast: 1080;    /* toasts / snackbars from Feedback components */
+
+    /* ---- radii / shadows shared by shell components ---- */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-sheet: 0 -8px 32px rgba(15, 23, 42, 0.18);
+    --shadow-bar: 0 -1px 0 rgba(15, 23, 42, 0.06);
+}
+
+/* =====================================================================
+   RESPONSIVE VISIBILITY UTILITIES
+   Each class HIDES the element outside its range and otherwise leaves the
+   element's own display value alone, so they work on flex / grid / inline
+   elements alike.
+
+       .phone-only    visible  <= 767.98px
+       .tablet-only   visible  768px .. 1199.98px
+       .tablet-up     visible  >= 768px
+       .desktop-only  visible  >= 1200px
+   ===================================================================== */
+
+/* phone-only: hidden on tablet + desktop */
+@media (min-width: 768px) {
+    .phone-only {
+        display: none !important;
+    }
+}
+
+/* tablet-only: hidden on phone and on desktop */
+@media (max-width: 767.98px), (min-width: 1200px) {
+    .tablet-only {
+        display: none !important;
+    }
+}
+
+/* tablet-up: hidden on phone */
+@media (max-width: 767.98px) {
+    .tablet-up {
+        display: none !important;
+    }
+}
+
+/* desktop-only: hidden on phone + tablet */
+@media (max-width: 1199.98px) {
+    .desktop-only {
+        display: none !important;
+    }
+}
+
+/* =====================================================================
+   FOCUS RING shared by shell controls (tabs, rail items, sheet tiles).
+   Applied via the .shell-focusable class so it never touches existing
+   desktop widgets.
+   ===================================================================== */
+.shell-focusable:focus-visible {
+    outline: 2px solid var(--primary, #0b6b3a);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}

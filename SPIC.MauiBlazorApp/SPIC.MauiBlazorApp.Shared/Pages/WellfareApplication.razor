@@ -4,22 +4,21 @@
 
 
 <!-- Page heading -->
-<div class="pgttl-main">My Applications</div>
-<div class="pgttl-sub">Track and manage your submitted welfare applications.</div>
+<PageHeader Title="My Applications" Subtitle="Track and manage your submitted welfare applications." BackHref="/SDWADashboard">
+    <Actions>
+        <button class="apln-view-btn" @onclick="GoToSchemes">Apply for a scheme</button>
+    </Actions>
+</PageHeader>
 
 @if (_loading)
 {
-    <div class="wapd-page-state">
-        <div class="wapd-spinner"></div>
-        <div>Loading your applications…</div>
-    </div>
+    <Skeleton Variant="card" Rows="3" LoadingText="Loading your applications" />
 }
 else if (_error != null)
 {
-    <div class="wapd-page-state wapd-page-error">
-        <div>@_error</div>
+    <EmptyState Icon="bi-exclamation-circle" Title="Could not load applications" Message="@_error">
         <button class="apln-view-btn" @onclick="LoadApplications">Retry</button>
-    </div>
+    </EmptyState>
 }
 else
 {
@@ -122,9 +121,18 @@ else
 
 @if (FilteredApplications().Count == 0)
 {
-    <div class="wapd-page-state">
-        <div>No applications found@(HasActiveFilters() ? " matching your filters." : ". Use Apply Welfare Scheme on the dashboard to submit your first application.")</div>
-    </div>
+    @if (HasActiveFilters())
+    {
+        <EmptyState Icon="bi-search" Title="No matching applications" Message="Try a different status or search term.">
+            <button class="apln-pdf-btn" @onclick="ClearFilters">Clear filters</button>
+        </EmptyState>
+    }
+    else
+    {
+        <EmptyState Icon="bi-file-earmark-text" Title="No applications yet" Message="Apply for a welfare scheme to see its progress here.">
+            <button class="apln-view-btn" @onclick="GoToSchemes">Apply for a scheme</button>
+        </EmptyState>
+    }
 }
 
 @foreach (var app in FilteredApplications())
@@ -252,6 +260,7 @@ else
     [Inject] private HttpClient Http { get; set; } = default!;
     [Inject] private NavigationManager NavigationManager { get; set; } = default!;
     [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private ToastService Toast { get; set; } = default!;
 
     [SupplyParameterFromQuery(Name = "appId")]
     private int? AppId { get; set; }
@@ -290,6 +299,14 @@ else
         _showDetails = true;
     }
 
+    private void GoToSchemes() => NavigationManager.NavigateTo("/WelfareSchemes");
+
+    private void ClearFilters()
+    {
+        _statusFilter = "All Statuses";
+        _search = "";
+    }
+
     private void OpenResubmission(WelfareApplicationSummaryDto app)
     {
         // Opens the existing application form pre-filled with the SAME application
@@ -313,6 +330,7 @@ else
         catch
         {
             _pdfErrorId = app.Id;
+            Toast.Error("The PDF could not be downloaded. Please try again.");
         }
         finally
         {

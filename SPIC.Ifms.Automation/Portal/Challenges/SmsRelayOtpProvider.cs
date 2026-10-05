@@ -79,6 +79,8 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 				"Waiting up to {Seconds}s for the IFMS OTP to arrive from the Android relay.",
 				_options.WaitSeconds);
 
+			await LogRelayPresenceAsync(cancellationToken);
+
 			while (DateTime.UtcNow < deadline)
 			{
 				cancellationToken.ThrowIfCancellationRequested();
@@ -117,6 +119,54 @@ namespace SPIC.Ifms.Automation.Portal.Challenges
 		/// Finds the newest unconsumed message and marks it consumed in the same
 		/// save, so two overlapping runs can never grab the same code.
 		/// </summary>
+		/// <summary>
+		/// Says when the paired phone last spoke to the server. A missing OTP
+		/// has two very different causes - the phone was dead, or the SMS never
+		/// came - and without this line the morning log cannot tell them apart.
+		/// </summary>
+		private async Task LogRelayPresenceAsync(CancellationToken cancellationToken)
+		{
+			try
+			{
+				await using var scope = _scopeFactory.CreateAsyncScope();
+				var db = scope.ServiceProvider.GetRequiredService<IfmsDbContext>();
+
+				var device = await db.IfmsRelayDevices
+					.AsNoTracking()
+					.Where(d => d.IsActive && d.RevokedAt == null)
+					.OrderByDescending(d => d.LastSeenAt)
+					.Select(d => new { d.DeviceName, d.LastSeenAt })
+					.FirstOrDefaultAsync(cancellationToken);
+
+				if (device is null)
+				{
+					_logger.LogWarning("No paired relay phone is registered; the OTP can only come from the otp command.");
+					return;
+				}
+
+				var seen = device.LastSeenAt ?? DateTime.MinValue;
+				var age = DateTime.UtcNow - seen;
+
+				if (age > TimeSpan.FromMinutes(3))
+				{
+					_logger.LogWarning(
+						"The relay phone {Device} last spoke to the server {Minutes:N0} minutes ago ({Seen:HH:mm} UTC); " +
+						"it is probably not running, so the OTP is unlikely to arrive.",
+						device.DeviceName, age.TotalMinutes, seen);
+				}
+				else
+				{
+					_logger.LogInformation(
+						"The relay phone {Device} was seen {Seconds:N0} s ago; it should forward the OTP.",
+						device.DeviceName, age.TotalSeconds);
+				}
+			}
+			catch (Exception ex)
+			{
+				_logger.LogDebug("Could not read the relay phone's last-seen time: {Message}", ex.Message);
+			}
+		}
+
 		private async Task<string?> TryClaimAsync(
 			DateTime floorUtc,
 			int? runId,

@@ -1,7 +1,9 @@
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.Entities;
 
 namespace SpicAPI.Controllers
@@ -80,14 +82,163 @@ namespace SpicAPI.Controllers
                 return BadRequest($"Invalid template. Missing columns: {display}");
             }
 
-            var rows = worksheet.RowsUsed().Skip(1);
+            var rows = worksheet.RowsUsed().Skip(1).ToList();
             var now = DateTime.UtcNow;
             var rejectedRecords = new List<RejectedRecord>();
             var totalRecords = 0;
+            // This uploader no longer creates anything, so there is no insert count to
+            // report; the field stays on the response for existing callers.
             var insertedCount = 0;
             var updatedCount = 0;
 
-            var seenProductNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var t = type?.ToLowerInvariant() ?? "";
+
+            // ─────────────────────────────────────────────────────────────────────────
+            // MASTER LOOKUPS + VALIDATION PASS (read-only, before the transaction).
+            //
+            // Nothing in this uploader creates a master. Every row must already exist in
+            // master maintenance; this upload only updates the existing record. A row naming
+            // something that does not exist is reported as a missing master and the whole file
+            // is refused, so a typo can never quietly invent a new Crop, Unit or Category.
+            //
+            // Every name is compared through MasterNormalizer, and every lookup is built with
+            // GroupBy(...).First() so duplicate rows already in the master tables cannot throw.
+            // Category is scoped by its Unit, so the same category name under two units stays two
+            // different masters.
+            // ─────────────────────────────────────────────────────────────────────────
+            var unitIds = (await _db.Units.AsNoTracking().Select(u => u.Id).ToListAsync()).ToHashSet();
+
+            var cropByName = KeyByName(await _db.Crops.ToListAsync(), c => c.Name);
+            var competitorByName = KeyByName(await _db.Competitors.ToListAsync(), c => c.Name);
+            var sectorByName = KeyByName(await _db.Sectors.ToListAsync(), c => c.Name);
+            var unitByName = KeyByName(await _db.Units.ToListAsync(), c => c.Name);
+            var productGroupEntities = KeyByName(await _db.ProductGroups.ToListAsync(), c => c.Name);
+
+            // Category carries its Unit, so it is keyed by (name, unitId) rather than name alone.
+            var categoryByScopedName = (await _db.Categories.ToListAsync())
+                .GroupBy(c => MasterNormalizer.Scoped(c.Name, c.UnitId))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var productGroupByName = productGroupEntities.ToDictionary(kv => kv.Key, kv => kv.Value.Id);
+            var categoryByName = categoryByScopedName.Values
+                .GroupBy(c => MasterNormalizer.Normalize(c.Name))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            // Existing products, keyed canonically. GroupBy(...).First() keeps a pre-existing
+            // duplicate from throwing; the row loop only needs one representative per name.
+            var productEntities = (await _db.Products.ToListAsync())
+                .GroupBy(p => MasterNormalizer.Normalize(p.Name))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+            var existingProductIds = productEntities.ToDictionary(kv => kv.Key, kv => kv.Value.Id);
+
+            var missingMasters = new MissingMasterCollector();
+
+            foreach (var row in rows)
+            {
+                switch (t)
+                {
+                    case "crop":
+                        {
+                            var name = GetCellString(row, headerMap, "name");
+                            if (!MasterNormalizer.IsBlank(name) && !cropByName.ContainsKey(MasterNormalizer.Normalize(name)))
+                                missingMasters.Add("Crop", name, row.RowNumber());
+                            break;
+                        }
+                    case "competitor":
+                        {
+                            var name = GetCellString(row, headerMap, "name");
+                            if (!MasterNormalizer.IsBlank(name) && !competitorByName.ContainsKey(MasterNormalizer.Normalize(name)))
+                                missingMasters.Add("Competitor", name, row.RowNumber());
+                            break;
+                        }
+                    case "sector":
+                        {
+                            var name = GetCellString(row, headerMap, "name");
+                            if (!MasterNormalizer.IsBlank(name) && !sectorByName.ContainsKey(MasterNormalizer.Normalize(name)))
+                                missingMasters.Add("Sector", name, row.RowNumber());
+                            break;
+                        }
+                    case "unit":
+                        {
+                            var name = GetCellString(row, headerMap, "name");
+                            if (!MasterNormalizer.IsBlank(name) && !unitByName.ContainsKey(MasterNormalizer.Normalize(name)))
+                                missingMasters.Add("Unit", name, row.RowNumber());
+                            break;
+                        }
+                    case "category":
+                        {
+                            var name = GetCellString(row, headerMap, "name");
+                            if (MasterNormalizer.IsBlank(name))
+                                break;
+
+                            // Both halves of the Category's identity are reported: the category
+                            // itself and the Unit it hangs off.
+                            if (!TryParseIntFromRow(row, headerMap, "unitid", out var unitId))
+                            {
+                                missingMasters.Add("Unit", "<blank or invalid UnitId>", row.RowNumber());
+                                break;
+                            }
+
+                            if (!unitIds.Contains(unitId))
+                                missingMasters.Add("Unit", unitId.ToString(System.Globalization.CultureInfo.InvariantCulture), row.RowNumber());
+
+                            if (!categoryByScopedName.ContainsKey(MasterNormalizer.Scoped(name, unitId)))
+                                missingMasters.Add("Category", name, row.RowNumber());
+                            break;
+                        }
+                    case "productgroup":
+                        {
+                            var name = GetCellString(row, headerMap, "name");
+                            if (!MasterNormalizer.IsBlank(name) && !productGroupByName.ContainsKey(MasterNormalizer.Normalize(name)))
+                                missingMasters.Add("Product Group", name, row.RowNumber());
+                            break;
+                        }
+                    case "product":
+                        {
+                            var productName = GetCellString(row, headerMap, "productname");
+                            if (!MasterNormalizer.IsBlank(productName) && !existingProductIds.ContainsKey(MasterNormalizer.Normalize(productName)))
+                                missingMasters.Add("Product", productName, row.RowNumber());
+
+                            var catName = GetCellString(row, headerMap, "category");
+                            if (!MasterNormalizer.IsBlank(catName) &&
+                                !categoryByName.ContainsKey(MasterNormalizer.Normalize(catName)))
+                                missingMasters.Add("Category", catName, row.RowNumber());
+
+                            var pgName = GetCellString(row, headerMap, "productgroup");
+                            if (!MasterNormalizer.IsBlank(pgName) &&
+                                !productGroupByName.ContainsKey(MasterNormalizer.Normalize(pgName)))
+                                missingMasters.Add("Product Group", pgName, row.RowNumber());
+                            break;
+                        }
+                }
+            }
+
+            if (missingMasters.HasAny)
+            {
+                var (message, missingLines) = missingMasters.Build("agriculture master");
+
+                _logger.LogWarning(
+                    "Agriculture bulk upload rejected: {Count} missing master record(s): {Masters}",
+                    missingMasters.Entries.Count,
+                    string.Join(", ", missingMasters.Entries.Select(m => $"{m.Kind}='{m.Value}'")));
+
+                return BadRequest(new
+                {
+                    Success = false,
+                    Message = message,
+                    MissingMasterLines = missingLines,
+                    MissingMasters = missingMasters.Entries
+                        .Select(m => new { m.Kind, m.Value, RowNumbers = m.RowNumbers })
+                        .ToList()
+                });
+            }
+
+            // In-batch duplicate tracking, so the same row twice in one file is reported
+            // rather than applied twice.
+            var batchNames = new HashSet<string>(StringComparer.Ordinal);
 
             using var tx = await _db.Database.BeginTransactionAsync();
             try
@@ -103,36 +254,54 @@ namespace SpicAPI.Controllers
                                 {
                                     var name = GetCellString(row, headerMap, "name");
                                     if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
-                                    var ent = new Crop { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Crops.Add(ent);
-                                    insertedCount++;
+                                    var key = MasterNormalizer.Normalize(name);
+                                    if (!batchNames.Add(key)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Duplicate Crop in this file")); break; }
+                                    if (!cropByName.TryGetValue(key, out var ent)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Crop does not exist in master data")); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
+                                    updatedCount++;
                                 }
                                 break;
                             case "competitor":
                                 {
                                     var name = GetCellString(row, headerMap, "name");
                                     if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
-                                    var ent = new Competitor { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Competitors.Add(ent);
-                                    insertedCount++;
+                                    var key = MasterNormalizer.Normalize(name);
+                                    if (!batchNames.Add(key)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Duplicate Competitor in this file")); break; }
+                                    if (!competitorByName.TryGetValue(key, out var ent)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Competitor does not exist in master data")); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
+                                    updatedCount++;
                                 }
                                 break;
                             case "sector":
                                 {
                                     var name = GetCellString(row, headerMap, "name");
                                     if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
-                                    var ent = new Sector { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Sectors.Add(ent);
-                                    insertedCount++;
+                                    var key = MasterNormalizer.Normalize(name);
+                                    if (!batchNames.Add(key)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Duplicate Sector in this file")); break; }
+                                    if (!sectorByName.TryGetValue(key, out var ent)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Sector does not exist in master data")); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
+                                    updatedCount++;
                                 }
                                 break;
                             case "unit":
                                 {
                                     var name = GetCellString(row, headerMap, "name");
                                     if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
-                                    var ent = new Unit { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Units.Add(ent);
-                                    insertedCount++;
+                                    var key = MasterNormalizer.Normalize(name);
+                                    if (!batchNames.Add(key)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Duplicate Unit in this file")); break; }
+                                    if (!unitByName.TryGetValue(key, out var ent)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Unit does not exist in master data")); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    // UnitCode is accepted by the template for readability but the
+                                    // Unit entity has no such column, so there is nothing to write.
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
+                                    updatedCount++;
                                 }
                                 break;
                             case "category":
@@ -140,19 +309,29 @@ namespace SpicAPI.Controllers
                                     var name = GetCellString(row, headerMap, "name");
                                     if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
                                     if (!TryParseIntFromRow(row, headerMap, "unitid", out var unitId)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "UnitId invalid or missing")); break; }
-                                    var isSpec = ParseBoolCellByValue(GetCellString(row, headerMap, "isspecialityproduct"));
-                                    var ent = new Category { Name = name, UnitId = unitId, IsSpecialityProduct = isSpec, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.Categories.Add(ent);
-                                    insertedCount++;
+                                    // Category is scoped by its Unit: the same name under two units is
+                                    // two different masters, so the lookup key carries the unit id.
+                                    var catKey = MasterNormalizer.Scoped(name, unitId);
+                                    if (!batchNames.Add(catKey)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Duplicate Category for this Unit in this file")); break; }
+                                    if (!categoryByScopedName.TryGetValue(catKey, out var ent)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Category does not exist in master data for this Unit")); break; }
+                                    ent.IsSpecialityProduct = ParseBoolCellByValue(GetCellString(row, headerMap, "isspecialityproduct"));
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
+                                    updatedCount++;
                                 }
                                 break;
                             case "productgroup":
                                 {
                                     var name = GetCellString(row, headerMap, "name");
                                     if (string.IsNullOrEmpty(name)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Name is empty")); break; }
-                                    var ent = new ProductGroup { Name = name, IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")), CreatedAt = now, UpdatedAt = now, UpdatedBy = "bulk-upload" };
-                                    _db.ProductGroups.Add(ent);
-                                    insertedCount++;
+                                    var key = MasterNormalizer.Normalize(name);
+                                    if (!batchNames.Add(key)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Duplicate Product Group in this file")); break; }
+                                    if (!productGroupEntities.TryGetValue(key, out var ent)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), name, "Product Group does not exist in master data")); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
+                                    updatedCount++;
                                 }
                                 break;
                             case "product":
@@ -163,16 +342,15 @@ namespace SpicAPI.Controllers
                                     var catName = GetCellString(row, headerMap, "category");
                                     if (string.IsNullOrEmpty(catName)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Category is required")); break; }
 
-                                    var category = _db.Categories.FirstOrDefault(c => c.Name.ToLower() == catName.ToLower());
-                                    if (category is null) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Category not found in master data")); break; }
+                                    if (!categoryByName.TryGetValue(MasterNormalizer.Normalize(catName), out var category))
+                                    { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Category not found in master data")); break; }
                                     var catId = category.Id;
 
                                     var pgName = GetCellString(row, headerMap, "productgroup");
                                     if (string.IsNullOrEmpty(pgName)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Product Group is required")); break; }
 
-                                    var pg = _db.ProductGroups.FirstOrDefault(p => p.Name.ToLower() == pgName.ToLower());
-                                    if (pg is null) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Product Group not found in master data")); break; }
-                                    var pgId = pg.Id;
+                                    if (!productGroupByName.TryGetValue(MasterNormalizer.Normalize(pgName), out var pgId))
+                                    { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Product Group not found in master data")); break; }
 
                                     var rpuStr = GetCellString(row, headerMap, "rpu");
                                     if (string.IsNullOrEmpty(rpuStr) || !decimal.TryParse(rpuStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var rpuVal))
@@ -181,46 +359,17 @@ namespace SpicAPI.Controllers
                                         break;
                                     }
 
-                                    var existing = _db.Products.FirstOrDefault(p => p.Name.ToLower() == productName.ToLower());
-                                    if (existing != null)
-                                    {
-                                        var updated = false;
-                                        if (existing.CategoryId == null) { existing.CategoryId = catId; updated = true; }
-                                        if (existing.ProductGroupId == null) { existing.ProductGroupId = pgId; updated = true; }
-                                        if (existing.RPU == null) { existing.RPU = rpuVal; updated = true; }
+                                    var productKey = MasterNormalizer.Normalize(productName);
+                                    if (!batchNames.Add(productKey)) { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Duplicate Product in this file")); break; }
+                                    if (!productEntities.TryGetValue(productKey, out var existing))
+                                    { rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Product does not exist in master data")); break; }
 
-                                        if (updated)
-                                        {
-                                            existing.UpdatedAt = now;
-                                            existing.UpdatedBy = "bulk-upload";
-                                            updatedCount++;
-                                        }
-                                        else
-                                        {
-                                            rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Product already exists"));
-                                        }
-                                        break;
-                                    }
-
-                                    if (!seenProductNames.Add(productName))
-                                    {
-                                        rejectedRecords.Add(new RejectedRecord(row.RowNumber(), productName, "Duplicate Product"));
-                                        break;
-                                    }
-
-                                    var ent = new Product
-                                    {
-                                        Name = productName,
-                                        CategoryId = catId,
-                                        ProductGroupId = pgId,
-                                        RPU = rpuVal,
-                                        IsActive = true,
-                                        CreatedAt = now,
-                                        UpdatedAt = now,
-                                        UpdatedBy = "bulk-upload"
-                                    };
-                                    _db.Products.Add(ent);
-                                    insertedCount++;
+                                    existing.CategoryId = catId;
+                                    existing.ProductGroupId = pgId;
+                                    existing.RPU = rpuVal;
+                                    existing.UpdatedAt = now;
+                                    existing.UpdatedBy = "bulk-upload";
+                                    updatedCount++;
                                 }
                                 break;
                             default:
@@ -362,7 +511,20 @@ namespace SpicAPI.Controllers
             return s == "1" || s == "true" || s == "yes";
         }
 
-        private static string NormalizeHeader(string h) => (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
+        /// <summary>
+        /// Keys master rows by their canonical name. GroupBy(...).First() means a table that
+        /// already contains duplicate names resolves to one representative instead of throwing
+        /// from ToDictionary, which used to turn a stale duplicate into a 500 mid-upload.
+        /// </summary>
+        private static Dictionary<string, T> KeyByName<T>(IEnumerable<T> rows, Func<T, string?> name)
+        {
+            return rows
+                .GroupBy(r => MasterNormalizer.Normalize(name(r)))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+        }
+
+        private static string NormalizeHeader(string h) => MasterNormalizer.NormalizeHeader(h);
 
         private static void AddAliasEntries(Dictionary<string, int> headerMap)
         {

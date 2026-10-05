@@ -1,31 +1,24 @@
-﻿@using SPIC.Core.DTOs
+@using SPIC.Core.DTOs
 @using System.Globalization
 @inject IJSRuntime JS
 
-@if (IsOpen && Row is not null)
-{
-    <div class="add-overlay" @onclick="CloseDrawer">
-        <div class="add-drawer" @onclick:stopPropagation="true">
-
-            <!-- Drawer Header -->
-            <div class="add-header">
-                <div class="add-header-titles">
-                    <h2>Acknowledgement Details</h2>
-                    <div class="add-status-badge" style="background:@BadgeBg(); color:@BadgeFg();">
-                        <div class="add-dot" style="background:@BadgeFg();"></div>
-                        @Row.Bucket
-                    </div>
-                </div>
-                <button class="add-close-icon" @onclick="CloseDrawer" aria-label="Close">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="15" y1="9" x2="9" y2="15"></line>
-                        <line x1="9" y1="9" x2="15" y2="15"></line>
-                    </svg>
-                </button>
+@*
+    Acknowledgement row details. BottomSheet renders a bottom sheet on phones and
+    the familiar right-side drawer on tablet/desktop; the body markup is unchanged.
+*@
+<BottomSheet @bind-IsOpen="IsOpen" Title="Acknowledgement Details" CssClass="add-sheet">
+    <HeaderActions>
+        @if (Row is not null)
+        {
+            <div class="add-status-badge" style="background:@BadgeBg(); color:@BadgeFg();">
+                <div class="add-dot" style="background:@BadgeFg();"></div>
+                @Row.Bucket
             </div>
-
-            <!-- Drawer Body -->
+        }
+    </HeaderActions>
+    <ChildContent>
+        @if (Row is not null)
+        {
             <div class="add-body">
 
                 <!-- Basic Information -->
@@ -82,13 +75,13 @@
                             @if (!string.IsNullOrWhiteSpace(Row.MobileNo))
                             {
                                 <span class="add-contact-actions">
-                                    <button class="add-contact-btn add-wa" title="WhatsApp" @onclick="() => OpenWhatsApp(Row.MobileNo!)">
+                                    <button type="button" class="add-contact-btn add-wa" title="WhatsApp" aria-label="WhatsApp @Row.MobileNo" @onclick="() => OpenWhatsApp(Row.MobileNo!)">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                                     </button>
-                                    <button class="add-contact-btn add-call" title="Call" @onclick="() => Call(Row.MobileNo!)">
+                                    <button type="button" class="add-contact-btn add-call" title="Call" aria-label="Call @Row.MobileNo" @onclick="() => Call(Row.MobileNo!)">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
                                     </button>
-                                    <button class="add-contact-btn add-sms" title="SMS" @onclick="() => SendSms(Row.MobileNo!)">
+                                    <button type="button" class="add-contact-btn add-sms" title="SMS" aria-label="SMS @Row.MobileNo" @onclick="() => SendSms(Row.MobileNo!)">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
                                     </button>
                                 </span>
@@ -150,84 +143,40 @@
                 </div>
 
             </div>
-
-            <!-- Drawer Footer -->
-            <div class="add-footer">
-                <button class="add-btn-outline" @onclick="CloseDrawer">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                    Close
-                </button>
-                <button class="add-btn-outline">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                        <polyline points="17 6 23 6 23 12"></polyline>
-                    </svg>
-                    Escalate
-                </button>
-                <button class="add-btn-solid">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
-                    Send Reminder
-                </button>
-            </div>
-
-        </div>
-    </div>
-}
+        }
+    </ChildContent>
+    <Footer>
+        <button type="button" class="add-btn-outline" @onclick="CloseDrawer">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+            Close
+        </button>
+        <button type="button" class="add-btn-outline">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                <polyline points="17 6 23 6 23 12"></polyline>
+            </svg>
+            Escalate
+        </button>
+        <button type="button" class="add-btn-solid">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+            Send Reminder
+        </button>
+    </Footer>
+</BottomSheet>
 
 <style>
-    /* --- SCOPED CSS FOR ACKNOWLEDGEMENT DETAILS DRAWER --- */
+    /* --- SCOPED CSS FOR ACKNOWLEDGEMENT DETAILS DRAWER (content only; the
+       overlay / panel / header / footer chrome comes from BottomSheet) --- */
 
-    .add-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background-color: rgba(0, 0, 0, 0.4);
-        z-index: 9998;
-        display: flex;
-        justify-content: flex-end;
-    }
-
-    .add-drawer {
-        width: 440px;
-        max-width: calc(100vw - 32px);
-        height: calc(100vh - 32px);
-        margin: 16px;
-        background-color: #ffffff;
-        border-radius: 16px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-        display: flex;
-        flex-direction: column;
+    .add-sheet .fb-sheet__panel {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        animation: addSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        z-index: 9999;
-        overflow: hidden;
     }
-
-    @@keyframes addSlideIn {
-        from { transform: translateX(100%); opacity: 0; }
-        to { transform: translateX(0); opacity: 1; }
-    }
-
-    .add-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        padding: 24px 32px 16px 32px;
-        border-bottom: 1px solid #f1f5f9;
-        background-color: #ffffff;
-        z-index: 10;
-    }
-
-    .add-header-titles { display: flex; flex-direction: column; gap: 10px; }
-    .add-header-titles h2 { margin: 0; font-size: 22px; font-weight: 700; color: #334155; }
 
     .add-status-badge {
         display: inline-flex;
@@ -238,24 +187,15 @@
         padding: 4px 10px;
         border-radius: 20px;
         width: fit-content;
+        white-space: nowrap;
     }
 
     .add-dot { width: 6px; height: 6px; border-radius: 50%; }
 
-    .add-close-icon {
-        background: none; border: none; cursor: pointer; padding: 4px;
-        display: flex; align-items: center; justify-content: center; transition: opacity 0.2s;
-    }
-    .add-close-icon:hover { opacity: 0.6; }
-
-    .add-body {
-        padding: 24px 32px; overflow-y: auto; flex: 1;
+    .add-sheet .add-body {
+        padding: 4px 4px 8px;
         display: flex; flex-direction: column; gap: 20px;
     }
-    .add-body::-webkit-scrollbar { width: 6px; }
-    .add-body::-webkit-scrollbar-track { background: transparent; }
-    .add-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-    .add-body::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
     .add-section {
         display: flex; flex-direction: column; gap: 14px;
@@ -269,7 +209,7 @@
 
     .add-label { width: 200px; flex-shrink: 0; color: #64748b; font-weight: 500; }
     .add-value { flex: 1; color: #334155; font-weight: 600; display: flex; align-items: flex-start; }
-    .add-val-flex { align-items: center; }
+    .add-val-flex { align-items: center; flex-wrap: wrap; }
     .add-colon { margin-right: 12px; color: #64748b; font-weight: 500; }
 
     /* Contact (WhatsApp / Call / SMS) action buttons */
@@ -299,28 +239,25 @@
         display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px;
     }
 
-    .add-footer {
-        padding: 20px 32px; border-top: 1px solid #f1f5f9; background-color: #ffffff;
-        display: flex; justify-content: flex-end; align-items: center; gap: 12px; flex-wrap: wrap;
-    }
     .add-btn-solid {
-        display: flex; align-items: center; gap: 8px; background-color: #14532d; color: #ffffff;
+        display: flex; align-items: center; justify-content: center; gap: 8px; background-color: #14532d; color: #ffffff;
         border: none; border-radius: 6px; padding: 10px 16px; font-size: 13px; font-weight: 600;
         cursor: pointer; transition: background-color 0.2s;
     }
     .add-btn-solid:hover { background-color: #166534; }
     .add-btn-outline {
-        display: flex; align-items: center; gap: 8px; background-color: #ffffff; color: #475569;
+        display: flex; align-items: center; justify-content: center; gap: 8px; background-color: #ffffff; color: #475569;
         border: 1px solid #cbd5e1; border-radius: 6px; padding: 9px 16px; font-size: 13px;
         font-weight: 600; cursor: pointer; transition: all 0.2s;
     }
     .add-btn-outline:hover { background-color: #f8fafc; border-color: #94a3b8; color: #334155; }
 
-    @@media (max-width: 540px) {
-        .add-drawer { width: 100vw; height: 100vh; max-width: 100vw; margin: 0; border-radius: 0; }
-        .add-label { width: 140px; }
-        .add-footer { flex-direction: column; width: 100%; }
-        .add-footer button { width: 100%; justify-content: center; }
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .add-label { width: 130px; }
+        .add-contact-actions { margin-left: 0; width: 100%; padding-top: 6px; }
+        .add-contact-btn { width: var(--tap-min, 44px); height: var(--tap-min, 44px); }
+        .add-contact-btn svg { width: 20px; height: 20px; }
     }
 </style>
 

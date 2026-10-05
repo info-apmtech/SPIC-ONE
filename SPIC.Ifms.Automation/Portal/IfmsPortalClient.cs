@@ -880,6 +880,39 @@ namespace SPIC.Ifms.Automation.Portal
 			IsLoggedInAsync(cancellationToken);
 
 		/// <summary>
+		/// Whether the portal still honours this browser's session. Opens the page
+		/// behind the login (SessionProbePath) and looks for the signed-in marker
+		/// there. The page a failed job left behind is no evidence either way: a
+		/// "404 Error Found" or a no-records page carries no marker while the
+		/// session may be perfectly fine, and the reverse.
+		/// </summary>
+		public async Task<bool> ProbeSessionAsync(CancellationToken cancellationToken)
+		{
+			try
+			{
+				_activeFrame = null;
+				await Page.GotoAsync(Absolute(_options.SessionProbePath), new PageGotoOptions
+				{
+					Referer = Absolute("/mFMS/"),
+					Timeout = _options.Browser.NavigationTimeoutMs,
+					WaitUntil = WaitUntilState.DOMContentLoaded
+				});
+				await WaitForSettleAsync(cancellationToken);
+
+				if (Page.Url.Contains("login", StringComparison.OrdinalIgnoreCase))
+					return false;
+
+				return await IsLoggedInAsync(cancellationToken);
+			}
+			catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
+			{
+				_logger.LogWarning("The session probe could not load {Path}: {Message}",
+					_options.SessionProbePath, ex.Message);
+				return false;
+			}
+		}
+
+		/// <summary>
 		/// The portal answers an unknown action with its own "404 Error Found"
 		/// page. That is a wrong job URL, and must not be read as a dead session.
 		/// </summary>
@@ -1070,7 +1103,21 @@ namespace SPIC.Ifms.Automation.Portal
 				await ExecuteStepAsync(job.DownloadStep, tokens, cancellationToken);
 			}
 
-			var download = await waitForDownload;
+			var download = await WaitForDownloadOrEmptyAsync(waitForDownload, cancellationToken);
+
+			if (download is null)
+			{
+				_logger.LogInformation(
+					"The export for {JobKey} came back as a no-records page; nothing to download.", job.Key);
+				return new DownloadedReport
+				{
+					FileName = "(no records)",
+					FilePath = string.Empty,
+					Bytes = 0,
+					Extension = job.ExpectedExtension,
+					IsEmpty = true
+				};
+			}
 
 			var suggested = download.SuggestedFilename;
 			var extension = Path.GetExtension(suggested);
@@ -1113,9 +1160,43 @@ namespace SPIC.Ifms.Automation.Portal
 				var text = await Frame.Locator("body").InnerTextAsync(new LocatorInnerTextOptions { Timeout = 3_000 });
 				return _options.EmptyResultMarkers.Any(m => text.Contains(m, StringComparison.OrdinalIgnoreCase));
 			}
-			catch (TimeoutException)
+			catch (Exception ex) when (ex is PlaywrightException or TimeoutException)
 			{
+				// Playwright raises System.TimeoutException for the 3 s read on a
+				// busy page (Kerala's grid mid-render), and a PlaywrightException
+				// when the export's own navigation replaces the frame mid-read.
 				return false;
+			}
+		}
+
+		/// <summary>
+		/// An export for a combination with no rows downloads nothing: the portal
+		/// renders "No Record Found" in the page instead, and the download event
+		/// never fires. Watch for that while the download is awaited, so an empty
+		/// state costs a few seconds rather than the download timeout twice over.
+		/// Null means the page said empty.
+		/// </summary>
+		private async Task<IDownload?> WaitForDownloadOrEmptyAsync(
+			Task<IDownload> waitForDownload,
+			CancellationToken cancellationToken)
+		{
+			while (true)
+			{
+				var tick = Task.Delay(2_000, cancellationToken);
+				var first = await Task.WhenAny(waitForDownload, tick);
+
+				if (first == waitForDownload)
+					return await waitForDownload;
+
+				if (await PageSaysEmptyAsync())
+				{
+					// The abandoned wait times out on its own later; observe it so
+					// it does not surface as an unobserved task exception.
+					_ = waitForDownload.ContinueWith(
+						t => _ = t.Exception,
+						TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+					return null;
+				}
 			}
 		}
 

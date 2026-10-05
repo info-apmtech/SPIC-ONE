@@ -1,7 +1,16 @@
 ﻿@page "/WinnerDetails"    
     <style>
-        /* === CSS Variables for Theme Colors === */
-       
+        /* === CSS Variables for Theme Colors ===
+           These were referenced below but never declared anywhere, so the
+           hero tint, the summary tint and every "theme green/purple" label
+           resolved to nothing and rendered untinted / default-dark. */
+        .wd-page {
+            --theme-primary-green: #14803C;
+            --theme-light-green: #EEFAF1;
+            --theme-header-green: #E6F6EA;
+            --theme-primary-purple: #7A3BA8;
+            --theme-light-purple: #F7F0FB;
+        }
 
         /* Custom utility classes */
         .text-theme-green { color: var(--theme-primary-green); }
@@ -28,11 +37,13 @@
             width: 75px;
             height: 95px;
             object-fit: cover;
+            font-size: 32px;
         }
         .prize-img {
             width: 140px;
             height: 140px;
             object-fit: cover;
+            font-size: 52px;
         }
 
         /* List alignment */
@@ -48,9 +59,25 @@
             font-weight: 600;
         }
 
-        /* Custom Badges */
-        .badge-orange { background-color: #fff3cd; color: #d39e00; }
-        .badge-green { background-color: #d4edda; color: #1e7e34; }
+        /* Custom Badges - page-scoped names. The unprefixed .badge-green is
+           also declared globally (Schemes.css) with a bullet drawn as a
+           background-image at 10px; Bootstrap's !important .px-2 killed the
+           24px left padding that made room for it, so the bullet landed on
+           top of the first letter. */
+        .wd-badge-orange { background-color: #fff3cd; color: #d39e00; background-image: none; }
+        .wd-badge-green { background-color: #d4edda; color: #1e7e34; background-image: none; }
+
+        /* Icon placeholders standing in for artwork that is not shipped yet.
+           They previously pointed at a decorative ellipse PNG, which rendered
+           as a large empty pale-green blob. */
+        .wd-art {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #EEFAF1;
+            color: #14803C;
+            line-height: 1;
+        }
 
         /* Desktop specific tweaks */
         @@media (min-width: 992px) {
@@ -63,17 +90,19 @@
                 padding-left: 0 !important;
             }
         }
+
+        /* native: phone - 44px touch targets (mock page) */
+        @@media (max-width: 767.98px) {
+            .btn { min-height: 44px; }
+        }
     </style>
 
 
-<div class="container py-3 py-lg-5" style="max-width: 1140px;">
+<div class="container wd-page py-3 py-lg-5" style="max-width: 1140px;">
     
     <!-- Header -->
-    <header class="header-container d-flex align-items-center mb-3 mb-lg-4 px-2 bg-white sticky-top py-3">
-        <button class="btn btn-link text-dark p-0 me-3 shadow-none text-decoration-none border-0 hover-card">
-            <svg class="icon-svg" viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-        </button>
-        <h1 class="h5 mb-0 fw-bold">Winner Details</h1>
+    <header class="header-container mb-3 mb-lg-4 px-2 bg-white py-2">
+        <PageHeader Title="Winner Details" Subtitle="Your lucky draw prize and collection details" ShowBack="true" BackHref="/CelebrationWinners" />
     </header>
 
     <div class="row g-4">
@@ -91,7 +120,10 @@
                         <h2 class="fw-bolder text-theme-green mb-2 h4">You are a Winner</h2>
                         <div class="text-secondary" style="font-size: 0.75rem;">Draw ID: SPIC/KSS/2026/0420</div>
                     </div>
-                    <img src="https://images.unsplash.com/photo-1578269174936-2709b6aeb913?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80" alt="Trophy" class="rounded-circle shadow-sm position-relative" style="width: 90px; height: 90px; z-index: 2;">
+                    <span class="wd-art rounded-circle shadow-sm position-relative" role="img" aria-label="Trophy"
+                          style="width: 90px; height: 90px; font-size: 40px; z-index: 2; background-color: #FFFFFF; color: #D69E2E;">
+                        <i class="bi bi-trophy-fill" aria-hidden="true"></i>
+                    </span>
                 </div>
 
                 <!-- Draw Summary -->
@@ -154,7 +186,7 @@
                                 </div>
                                 <div class="d-flex mb-3 align-items-center">
                                     <span class="list-label">Type</span>
-                                    <span class="badge badge-orange px-2 py-1">Dealer</span>
+                                    <span class="badge wd-badge-orange px-2 py-1">Dealer</span>
                                 </div>
                                 <div class="d-flex mb-3 align-items-start">
                                     <span class="list-label">Dealer Code</span>
@@ -169,7 +201,9 @@
                                     <span class="list-value text-success fw-bold">1,250 pts</span>
                                 </div>
                             </div>
-                            <img src="https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-1.2.1&auto=format&fit=crop&w=150&q=80" alt="Profile" class="winner-img rounded-3 shadow-sm flex-shrink-0 border">
+                            <span class="wd-art winner-img rounded-3 shadow-sm flex-shrink-0 border" role="img" aria-label="Winner photo not available">
+                                <i class="bi bi-person-fill" aria-hidden="true"></i>
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -183,7 +217,9 @@
                         </div>
                         <div class="card-body p-4">
                             <div class="d-flex justify-content-center mb-4">
-                                <img src="https://images.unsplash.com/photo-1595515106969-1ce29566ff1c?ixlib=rb-1.2.1&auto=format&fit=crop&w=300&q=80" alt="Prize Item" class="prize-img rounded-3 shadow-sm border">
+                                <span class="wd-art prize-img rounded-3 shadow-sm border" role="img" aria-label="Prize photo not available">
+                                    <i class="bi bi-gift-fill" aria-hidden="true"></i>
+                                </span>
                             </div>
                             <div class="d-flex mb-3 align-items-start">
                                 <span class="list-label">Prize Name</span>
@@ -195,7 +231,7 @@
                             </div>
                             <div class="d-flex mb-3 align-items-center">
                                 <span class="list-label">Status</span>
-                                <span class="badge badge-green px-2 py-1">Prize Distributed</span>
+                                <span class="badge wd-badge-green px-2 py-1">Prize Distributed</span>
                             </div>
                             <div class="d-flex align-items-start">
                                 <span class="list-label">Distributed Date</span>
@@ -273,7 +309,10 @@
                                 </div>
                             </div>
                             <!-- Gift Illustration -->
-                            <img src="https://cdn-icons-png.flaticon.com/512/4213/4213958.png" alt="Gift" style="width: 60px; height: 60px; object-fit: contain; flex-shrink: 0;">
+                            <span class="wd-art rounded-3 flex-shrink-0" role="img" aria-label="Gift"
+                                  style="width: 60px; height: 60px; font-size: 26px;">
+                                <i class="bi bi-gift" aria-hidden="true"></i>
+                            </span>
                         </div>
                         <!-- Action Buttons -->
                         <div class="px-4 pb-4 d-flex flex-column gap-2">

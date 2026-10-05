@@ -1,12 +1,13 @@
 @page "/Relationship"
 @using System.Net.Http.Json
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
-<div class="container-fluid">
+<div class="container-fluid mf-page">
 
-	<h2 class="page-title">Relationship Master</h2>
+	<PageHeader Title="Relationship Master" />
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -16,7 +17,7 @@
 		</div>
 	}
 
-	<div class="main-card">
+	<div class="main-card mf-form-card">
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? "Edit Relationship" : "Add New Relationship")</h3>
 			<div class="d-flex gap-2">
@@ -29,7 +30,7 @@
 			</div>
 		</div>
 
-		<div class="row g-3 mb-4">
+		<div class="row g-3 mb-4 mf-form-row">
 			<div class="col-md-6 col-lg-5">
 				<label class="form-label-custom">Relationship Name</label>
 				<input type="text" class="form-control-custom w-100" placeholder="Enter Relationship Name"
@@ -37,7 +38,7 @@
 			</div>
 
 			<div class="col-md-6 col-lg-2">
-				<label class="form-label-custom d-block">&nbsp;</label>
+				<label class="form-label-custom d-block mf-align-label">&nbsp;</label>
 				<div class="status-toggle-box @(_formModel.IsActive ? "" : "status-toggle-inactive")">
 					<span>@(_formModel.IsActive ? "Active" : "Inactive")</span>
 					<label class="switch">
@@ -48,7 +49,7 @@
 			</div>
 		</div>
 
-		<div class="d-flex justify-content-end pt-2 mt-4">
+		<div class="d-flex justify-content-end pt-2 mt-4 mf-form-actions">
 			<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
 			@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Entry")) || (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Update")))
 			{
@@ -142,6 +143,17 @@
 				</td>
 			}
 		</TableRow>
+
+		<CardActions Context="item">
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Update"))
+			{
+				<button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+			}
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Relationship, "Delete"))
+			{
+				<button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+			}
+		</CardActions>
 	</SpicDataTable>
 
 </div>
@@ -149,7 +161,7 @@
 @if (_showDeleteConfirm)
 {
 	<div class="modal-backdrop fade show"></div>
-	<div class="modal fade show d-block" tabindex="-1" role="dialog">
+	<div class="modal fade show d-block wiz-modal" tabindex="-1" role="dialog">
 		<div class="modal-dialog modal-dialog-centered" role="document">
 			<div class="modal-content">
 				<div class="modal-header">
@@ -205,7 +217,7 @@
 	{
 		try
 		{
-			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			var token = await SessionStore.GetAsync(SessionKeys.Token);
 			if (!string.IsNullOrEmpty(token))
 			{
 				_currentUserId = GetUserIdFromToken(token);

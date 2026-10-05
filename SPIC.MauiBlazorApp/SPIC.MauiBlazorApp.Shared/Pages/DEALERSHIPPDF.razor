@@ -15,7 +15,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dealership Application Form - Full</title>
     
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
     <style>
                   :root {
@@ -685,6 +684,20 @@
                 margin: 0 auto 15px auto;
                 box-shadow: 0 2px 5px rgba(0,0,0,0.1);
                 border: 1px solid #d1d5db;
+            }
+
+            /* native: phone */
+            /* Print template is left as-is; on phones the fixed A4 sheet (210mm) just fits the
+               viewport and its tables scroll inside instead of widening the page. */
+            @@media (max-width: 767.98px) {
+                .document-container,
+                .dpdf-container {
+                    width: 100%;
+                    max-width: 100%;
+                    min-height: auto;
+                    overflow-x: auto;
+                    box-shadow: none;
+                }
             }
     </style>
 
@@ -3217,85 +3230,6 @@ if (string.IsNullOrEmpty(SelectedCompany) || SelectedCompany == "GreenStar")
         </div>
     }
 
-<script>
-    window.renderAllPDFs = async function() {
-        if (typeof pdfjsLib === 'undefined') return;
-        
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-        const targets = document.querySelectorAll('.pdf-render-target:not(.rendered)');
-        
-        for (let i = 0; i < targets.length; i++) {
-            const target = targets[i];
-            const url = target.getAttribute('data-pdf-url');
-            if (!url) continue;
-
-            await renderPdfWithRetry(target, url, 3);
-        }
-    };
-
-    async function renderPdfWithRetry(target, url, maxRetries) {
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                // Fetch the PDF ourselves — this avoids PDF.js internal HTTP error throws
-                const response = await fetch(url, { credentials: 'include' });
-                if (!response.ok) throw new Error('HTTP ' + response.status);
-                const contentType = response.headers.get('content-type') || '';
-                if (!contentType.includes('pdf') && !contentType.includes('octet-stream')) {
-                    throw new Error('Response is not a PDF (content-type: ' + contentType + ')');
-                }
-                const buffer = await response.arrayBuffer();
-
-                // Pass raw bytes to PDF.js — no URL loading, so no MissingPDFException
-                const loadingTask = pdfjsLib.getDocument({ data: buffer });
-                const pdf = await loadingTask.promise;
-
-                target.innerHTML = '';
-
-                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-                    const page = await pdf.getPage(pageNum);
-                    const viewport = page.getViewport({ scale: 1.5 });
-
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    canvas.height = viewport.height;
-                    canvas.width = viewport.width;
-
-                    target.appendChild(canvas);
-
-                    await page.render({
-                        canvasContext: ctx,
-                        viewport: viewport
-                    }).promise;
-                }
-
-                target.classList.add('rendered');
-                return; // success
-            } catch (err) {
-                console.error('Attempt ' + attempt + '/' + maxRetries + ' failed for PDF:', url, err);
-                if (attempt < maxRetries) {
-                    // Wait before retrying (exponential backoff: 1s, 2s)
-                    await new Promise(r => setTimeout(r, attempt * 1000));
-                } else {
-                    // All attempts exhausted — hide the container silently
-                    const container = target.closest('.document-view-container');
-                    if (container) container.style.display = 'none';
-                }
-            }
-        }
-    }
-
-    window.triggerPrint = function () {
-        try {
-            if (document.activeElement && typeof document.activeElement.blur === 'function') {
-                document.activeElement.blur();
-            }
-            window.scrollTo(0, 0);
-            setTimeout(function () { window.print(); }, 700);
-        }
-        catch (e) { /* ignore */ }
-    };
-</script>
 </body>
 
 </html>

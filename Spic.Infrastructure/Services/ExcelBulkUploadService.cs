@@ -2,6 +2,7 @@ using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
@@ -1354,354 +1355,156 @@ namespace Spic.Infrastructure.Services
 
 				var activePreparedRows = preparedMasterRows.Where(x => !x.Skip).ToList();
 
-				// States are parent masters and must be saved before Districts.
-				var newStates = activePreparedRows
-					.Where(x => !string.IsNullOrWhiteSpace(x.StateName))
-					.Where(x => !(categoryId is "Six" or "Seven") ||
-						!x.StateName.Equals("plant", StringComparison.OrdinalIgnoreCase))
-					.GroupBy(x => NormalizeKey(x.StateName), StringComparer.Ordinal)
-					.Where(x => x.Key.Length > 0 && !stateDict.ContainsKey(x.Key))
-					.Select(x => new State
-					{
-						StateName = x.First().StateName,
-						ZoneId = 1,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
+				// -----------------------------------------------------------------
+				// VALIDATE EVERY REFERENCED MASTER BEFORE ANY WRITE.
+				//
+				// This importer used to preload and batch-create every master the file
+				// happened to mention — State, District, SubDistrict, DealerType,
+				// DealershipNature, Company, Plant, Product, TxnType, Unit, Status,
+				// AckThrough, Warehouse — with State.ZoneId pinned to 1 and
+				// IfmsProduct.CategoryId pinned to 1. Importing transactions therefore
+				// grew the master tables as a side effect, and a typo in a state name
+				// silently became a brand new state that no region could ever reference.
+				//
+				// None of that happens now. Every referenced master is resolved against
+				// rows that already exist; if any is missing the entire file is rejected
+				// with every missing value and all of its row numbers, before a single
+				// row is written. District and SubDistrict are resolved parent-scoped, so
+				// a district that exists under a different state reads as missing rather
+				// than being matched to the wrong parent.
+				// -----------------------------------------------------------------
+				var missingMasters = new MissingMasterCollector();
 
-				if (newStates.Count > 0)
-				{
-					_db.States.AddRange(newStates);
-					await _db.SaveChangesAsync(cancellationToken);
-					foreach (var state in newStates)
-						stateDict[NormalizeKey(state.StateName)] = state.Id;
-					result.NewMastersCreated.States += newStates.Count;
-				}
+				// "plant" is a section label in the Six/Seven layouts, not a state name.
+				bool UsesStateName(PreparedMasterRow row) =>
+					!string.IsNullOrWhiteSpace(row.StateName) &&
+					!(categoryId is "Six" or "Seven" &&
+					  row.StateName.Equals("plant", StringComparison.OrdinalIgnoreCase));
 
 				foreach (var prepared in activePreparedRows)
 				{
-					if (!string.IsNullOrWhiteSpace(prepared.StateName) &&
-						!((categoryId is "Six" or "Seven") &&
-						  prepared.StateName.Equals("plant", StringComparison.OrdinalIgnoreCase)))
+					if (!UsesStateName(prepared))
 					{
-						stateDict.TryGetValue(NormalizeKey(prepared.StateName), out var preparedStateId);
-						prepared.StateId = preparedStateId == 0 ? null : preparedStateId;
+						prepared.StateId = null;
+						continue;
+					}
+
+					if (stateDict.TryGetValue(NormalizeKey(prepared.StateName), out var stateId))
+						prepared.StateId = stateId;
+					else
+					{
+						prepared.StateId = null;
+						missingMasters.Add("State", prepared.StateName, prepared.RowNumber);
 					}
 				}
 
-				var pendingDistricts = new Dictionary<string, (string Name, int StateId)>(StringComparer.Ordinal);
-				void CollectDistrict(string? name, int? stateId)
+				// Districts are scoped by their state. When the state itself is missing the
+				// district is left alone: reporting it would name a master that may well
+				// exist under a different state, and the state is already on the list.
+				void ResolveDistrict(string? districtName, PreparedMasterRow prepared)
 				{
-					if (string.IsNullOrWhiteSpace(name) || !stateId.HasValue)
+					if (string.IsNullOrWhiteSpace(districtName))
 						return;
 
-					var key = $"{NormalizeKey(name)}_{stateId.Value}";
-					if (!districtDict.ContainsKey(key) && !pendingDistricts.ContainsKey(key))
-						pendingDistricts[key] = (name.Trim(), stateId.Value);
+					if (prepared.StateId is not int resolvedStateId)
+						return;
+
+					if (districtDict.TryGetValue($"{NormalizeKey(districtName)}_{resolvedStateId}", out var id))
+						return;
+
+					missingMasters.Add("District", districtName, prepared.RowNumber);
 				}
 
 				foreach (var prepared in activePreparedRows)
 				{
-					CollectDistrict(prepared.DistrictName, prepared.StateId);
-					if (categoryId == "Four")
+					ResolveDistrict(prepared.DistrictName, prepared);
+
+					if (categoryId != "Four")
+						continue;
+
+					ResolveDistrict(prepared.SellerDistrictName, prepared);
+					ResolveDistrict(prepared.BuyerDistrictName, prepared);
+
+					if (prepared.StateId is not int stateId)
+						continue;
+
+					if (!string.IsNullOrWhiteSpace(prepared.DistrictName) &&
+						districtDict.TryGetValue($"{NormalizeKey(prepared.DistrictName)}_{stateId}", out var districtId))
 					{
-						CollectDistrict(prepared.SellerDistrictName, prepared.StateId);
-						CollectDistrict(prepared.BuyerDistrictName, prepared.StateId);
+						prepared.DistrictId = districtId;
+					}
+
+					if (!string.IsNullOrWhiteSpace(prepared.SellerDistrictName) &&
+						districtDict.TryGetValue($"{NormalizeKey(prepared.SellerDistrictName)}_{stateId}", out var sellerDistrictId))
+					{
+						prepared.SellerDistrictId = sellerDistrictId;
+					}
+
+					if (!string.IsNullOrWhiteSpace(prepared.BuyerDistrictName) &&
+						districtDict.TryGetValue($"{NormalizeKey(prepared.BuyerDistrictName)}_{stateId}", out var buyerDistrictId))
+					{
+						prepared.BuyerDistrictId = buyerDistrictId;
 					}
 				}
 
-				var newDistricts = pendingDistricts.Values
-					.Select(x => new District
-					{
-						DistrictName = x.Name,
-						StateId = x.StateId,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-
-				if (newDistricts.Count > 0)
-				{
-					_db.Districts.AddRange(newDistricts);
-					await _db.SaveChangesAsync(cancellationToken);
-					foreach (var district in newDistricts)
-						districtDict[$"{NormalizeKey(district.DistrictName)}_{district.StateId}"] = district.Id;
-					result.NewMastersCreated.Districts += newDistricts.Count;
-				}
-
+				// SubDistrict is scoped by its district (Retailer Sales only).
 				foreach (var prepared in activePreparedRows)
 				{
-					if (prepared.StateId.HasValue)
-					{
-						if (!string.IsNullOrWhiteSpace(prepared.DistrictName) &&
-							districtDict.TryGetValue(
-								$"{NormalizeKey(prepared.DistrictName)}_{prepared.StateId.Value}",
-								out var preparedDistrictId))
-						{
-							prepared.DistrictId = preparedDistrictId;
-						}
+					if (categoryId != "One" || string.IsNullOrWhiteSpace(prepared.SubDistrictName))
+						continue;
 
-						if (!string.IsNullOrWhiteSpace(prepared.SellerDistrictName) &&
-							districtDict.TryGetValue(
-								$"{NormalizeKey(prepared.SellerDistrictName)}_{prepared.StateId.Value}",
-								out var sellerDistrictId))
-						{
-							prepared.SellerDistrictId = sellerDistrictId;
-						}
+					if (prepared.DistrictId is not int districtId)
+						continue;
 
-						if (!string.IsNullOrWhiteSpace(prepared.BuyerDistrictName) &&
-							districtDict.TryGetValue(
-								$"{NormalizeKey(prepared.BuyerDistrictName)}_{prepared.StateId.Value}",
-								out var buyerDistrictId))
-						{
-							prepared.BuyerDistrictId = buyerDistrictId;
-						}
-					}
+					if (subDistrictDict.TryGetValue($"{NormalizeKey(prepared.SubDistrictName)}_{districtId}", out var id))
+						prepared.SubDistrictId = id;
+					else
+						missingMasters.Add("SubDistrict", prepared.SubDistrictName, prepared.RowNumber);
 				}
 
-				var pendingSubDistricts = activePreparedRows
-					.Where(x => categoryId == "One" &&
-						!string.IsNullOrWhiteSpace(x.SubDistrictName) &&
-						x.DistrictId.HasValue)
-					.GroupBy(
-						x => $"{NormalizeKey(x.SubDistrictName)}_{x.DistrictId!.Value}",
-						StringComparer.Ordinal)
-					.Where(x => !subDistrictDict.ContainsKey(x.Key))
-					.Select(x => new SubDistrict
-					{
-						SubDistrictName = x.First().SubDistrictName,
-						DistrictId = x.First().DistrictId!.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-
-				if (pendingSubDistricts.Count > 0)
-				{
-					_db.SubDistricts.AddRange(pendingSubDistricts);
-					await _db.SaveChangesAsync(cancellationToken);
-					foreach (var subDistrict in pendingSubDistricts)
-						subDistrictDict[$"{NormalizeKey(subDistrict.SubDistrictName)}_{subDistrict.DistrictId}"] = subDistrict.Id;
-					result.NewMastersCreated.SubDistricts += pendingSubDistricts.Count;
-				}
-
-				foreach (var prepared in activePreparedRows)
-				{
-					if (!string.IsNullOrWhiteSpace(prepared.SubDistrictName) && prepared.DistrictId.HasValue &&
-						subDistrictDict.TryGetValue(
-							$"{NormalizeKey(prepared.SubDistrictName)}_{prepared.DistrictId.Value}",
-							out var preparedSubDistrictId))
-					{
-						prepared.SubDistrictId = preparedSubDistrictId;
-					}
-				}
-
-				var dealerTypeNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var natureNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var companyNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var plantNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var productNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var txnTypeNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var unitNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var statusNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var ackThroughNames = new Dictionary<string, string>(StringComparer.Ordinal);
-				var warehouseNames = new Dictionary<string, string>(StringComparer.Ordinal);
-
-				static void CollectName(
-					IDictionary<string, string> destination,
-					string? value)
+				// Every remaining referenced master is a plain name → id lookup against rows that
+				// already exist. Collect the misses for the whole file before reporting, so the
+				// user gets one complete list instead of discovering them one upload at a time.
+				void RequireExisting(string kind, string? value, IReadOnlyDictionary<string, int> existing, int rowNumber)
 				{
 					if (string.IsNullOrWhiteSpace(value))
 						return;
 
-					var key = NormalizeKey(value);
-					if (key.Length > 0 && !destination.ContainsKey(key))
-						destination[key] = value.Trim();
+					if (!existing.ContainsKey(NormalizeKey(value)))
+						missingMasters.Add(kind, value, rowNumber);
 				}
 
 				foreach (var prepared in activePreparedRows)
 				{
-					CollectName(dealerTypeNames, prepared.DealerTypeName);
-					CollectName(natureNames, prepared.NatureName);
-					CollectName(natureNames, prepared.WholesalerNatureName);
-					CollectName(natureNames, prepared.DealerNatureName);
-					CollectName(companyNames, prepared.CompanyName);
-					CollectName(companyNames, prepared.MarketerName);
-					CollectName(plantNames, prepared.PlantName);
-					CollectName(productNames, prepared.ProductName);
-					CollectName(txnTypeNames, prepared.TxnTypeName);
-					CollectName(unitNames, prepared.UnitName);
-					CollectName(statusNames, prepared.StatusName);
-					CollectName(ackThroughNames, prepared.AckThroughName);
-					CollectName(warehouseNames, prepared.WarehouseName);
+					RequireExisting("Dealer Type", prepared.DealerTypeName, dealerTypeDict, prepared.RowNumber);
+					RequireExisting("Dealership Nature", prepared.NatureName, natureDict, prepared.RowNumber);
+					RequireExisting("Wholesaler Nature", prepared.WholesalerNatureName, natureDict, prepared.RowNumber);
+					RequireExisting("Dealer Nature", prepared.DealerNatureName, natureDict, prepared.RowNumber);
+					RequireExisting("Company", prepared.CompanyName, companyDict, prepared.RowNumber);
+					RequireExisting("Marketer", prepared.MarketerName, companyDict, prepared.RowNumber);
+					RequireExisting("Plant", prepared.PlantName, plantDict, prepared.RowNumber);
+					RequireExisting("Transaction Type", prepared.TxnTypeName, txnTypeDict, prepared.RowNumber);
+					RequireExisting("Unit", prepared.UnitName, unitDict, prepared.RowNumber);
+					RequireExisting("Status", prepared.StatusName, statusDict, prepared.RowNumber);
+					RequireExisting("Acknowledgement Through", prepared.AckThroughName, ackThroughDict, prepared.RowNumber);
+					RequireExisting("Warehouse", prepared.WarehouseName, warehouseDict, prepared.RowNumber);
+
+					// A product may live in either the SPIC product master or the IFMS product
+					// master; both are pre-existing records now, neither is extended by an import.
+					if (!string.IsNullOrWhiteSpace(prepared.ProductName))
+					{
+						var productKey = NormalizeKey(prepared.ProductName);
+						if (!productDict.ContainsKey(productKey) && !ifmsProductDict.ContainsKey(productKey))
+							missingMasters.Add("Product", prepared.ProductName, prepared.RowNumber);
+					}
 				}
 
-				var newDealerTypes = dealerTypeNames
-					.Where(x => !dealerTypeDict.ContainsKey(x.Key))
-					.Select(x => new DealerType
-					{
-						Name = x.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newNatures = natureNames
-					.Where(x => !natureDict.ContainsKey(x.Key))
-					.Select(x => new DealershipNature
-					{
-						Name = x.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newCompanies = companyNames
-					.Where(x => !companyDict.ContainsKey(x.Key))
-					.Select(x => new Company
-					{
-						Name = x.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newPlants = plantNames
-					.Where(x => !plantDict.ContainsKey(x.Key))
-					.Select(x => new Plant
-					{
-						Name = x.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newIfmsProducts = productNames
-					.Where(x => !productDict.ContainsKey(x.Key))
-					.Where(x => !ifmsProductDict.ContainsKey(x.Key))
-					.Select(x => new IfmsProduct
-					{
-						Name = x.Value,
-						CategoryId = 1,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newTxnTypes = txnTypeNames
-					.Where(x => !txnTypeDict.ContainsKey(x.Key))
-					.Select(x => new TxnType
-					{
-						Name = x.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newUnits = unitNames
-					.Where(x => !unitDict.ContainsKey(x.Key))
-					.Select(x => new Unit
-					{
-						Name = x.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newStatuses = statusNames
-					.Where(x => !statusDict.ContainsKey(x.Key))
-					.Select(x => new Status
-					{
-						Name = x.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newAckThroughs = ackThroughNames
-					.Where(x => !ackThroughDict.ContainsKey(x.Key))
-					.Select(x => new AckThrough
-					{
-						Name = x.Value,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-				var newWarehouses = warehouseNames
-					.Where(x => !warehouseDict.ContainsKey(x.Key))
-					.Select(x => new Warehouse
-					{
-						Name = x.Value,
-						WarehouseCode = string.Empty,
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						UpdatedBy = currentUserId
-					})
-					.ToList();
-
-				if (newDealerTypes.Count > 0) _db.DealerTypes.AddRange(newDealerTypes);
-				if (newNatures.Count > 0) _db.DealershipNatures.AddRange(newNatures);
-				if (newCompanies.Count > 0) _db.Companies.AddRange(newCompanies);
-				if (newPlants.Count > 0) _db.Plants.AddRange(newPlants);
-				if (newIfmsProducts.Count > 0) _db.Set<IfmsProduct>().AddRange(newIfmsProducts);
-				if (newTxnTypes.Count > 0) _db.TxnTypes.AddRange(newTxnTypes);
-				if (newUnits.Count > 0) _db.Units.AddRange(newUnits);
-				if (newStatuses.Count > 0) _db.Statuses.AddRange(newStatuses);
-				if (newAckThroughs.Count > 0) _db.AckThroughs.AddRange(newAckThroughs);
-				if (newWarehouses.Count > 0) _db.Warehouses.AddRange(newWarehouses);
-
-				var independentMasterCount =
-					newDealerTypes.Count + newNatures.Count + newCompanies.Count +
-					newPlants.Count + newIfmsProducts.Count + newTxnTypes.Count +
-					newUnits.Count + newStatuses.Count + newAckThroughs.Count +
-					newWarehouses.Count;
-
-				if (independentMasterCount > 0)
-				{
-					await _db.SaveChangesAsync(cancellationToken);
-					foreach (var item in newDealerTypes) dealerTypeDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newNatures) natureDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newCompanies) companyDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newPlants) plantDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newIfmsProducts) ifmsProductDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newTxnTypes) txnTypeDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newUnits) unitDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newStatuses) statusDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newAckThroughs) ackThroughDict[NormalizeKey(item.Name)] = item.Id;
-					foreach (var item in newWarehouses) warehouseDict[NormalizeKey(item.Name)] = item.Id;
-
-					result.NewMastersCreated.DealerTypes += newDealerTypes.Count;
-					result.NewMastersCreated.DealershipNatures += newNatures.Count;
-					result.NewMastersCreated.Companies += newCompanies.Count;
-					result.NewMastersCreated.Plants += newPlants.Count;
-					result.NewMastersCreated.IfmsProducts += newIfmsProducts.Count;
-					result.NewMastersCreated.TxnTypes += newTxnTypes.Count;
-					result.NewMastersCreated.Units += newUnits.Count;
-					result.NewMastersCreated.Statuses += newStatuses.Count;
-					result.NewMastersCreated.AckThroughs += newAckThroughs.Count;
-					result.NewMastersCreated.Warehouses += newWarehouses.Count;
-				}
+				if (missingMasters.HasAny)
+					throw new MissingMasterUploadException(missingMasters);
 
 				foreach (var prepared in activePreparedRows)
 				{
+
 					if (!string.IsNullOrWhiteSpace(prepared.DealerTypeName))
 						prepared.DealerTypeId = dealerTypeDict[NormalizeKey(prepared.DealerTypeName)];
 					if (!string.IsNullOrWhiteSpace(prepared.NatureName))
@@ -2550,6 +2353,10 @@ namespace Spic.Infrastructure.Services
 						"Bulk upload validation failed for category {CategoryId} file {FileName}",
 						categoryId,
 						fileName);
+
+					if (ex is MissingMasterUploadException missingMasterFailure)
+						return Failed(ex.Message, missingMasterFailure);
+
 					return Failed(ex.Message);
 				}
 
@@ -2566,12 +2373,31 @@ namespace Spic.Infrastructure.Services
 			}
 		}
 
-		private sealed class UploadValidationException : Exception
+		private class UploadValidationException : Exception
 		{
 			public UploadValidationException(string message)
 				: base(message)
 			{
 			}
+		}
+
+		/// <summary>
+		/// Raised when the file references master data that does not exist. Carries the
+		/// structured list alongside the message so the API and the UI can show every
+		/// missing value and the rows it came from, instead of only the first failure.
+		/// </summary>
+		private sealed class MissingMasterUploadException : UploadValidationException
+		{
+			public MissingMasterUploadException(MissingMasterCollector collector)
+				: base(collector.Build("IFMS").Message)
+			{
+				MissingMasters = collector.Entries;
+				MissingMasterLines = collector.Build("IFMS").Lines;
+			}
+
+			public IReadOnlyList<MissingMaster> MissingMasters { get; }
+
+			public IReadOnlyList<string> MissingMasterLines { get; }
 		}
 
 		private sealed class PreparedMasterRow
@@ -2641,11 +2467,34 @@ namespace Spic.Infrastructure.Services
 			Message = message
 		};
 
+		/// <summary>
+		/// Failure result for a file that referenced master data which does not exist.
+		/// The structured list lets the caller render one line per missing master with the
+		/// rows it affected, instead of asking the user to parse a paragraph.
+		/// </summary>
+		private static ExcelBulkUploadResult Failed(string message, MissingMasterUploadException missing) => new()
+		{
+			Success = false,
+			Message = message,
+			MissingMasterLines = missing.MissingMasterLines.ToList(),
+			MissingMasters = missing.MissingMasters
+				.Select(m => new ExcelBulkUploadMissingMaster
+				{
+					Kind = m.Kind,
+					Value = m.Value,
+					RowNumbers = m.RowNumbers.ToList()
+				})
+				.ToList()
+		};
+
 		private static string CreateErrorReference() =>
 			Guid.NewGuid().ToString("N")[..10].ToUpperInvariant();
 
 		private static string NormalizeKey(string? value) =>
-			(value ?? string.Empty).Trim().ToLowerInvariant();
+			// Canonical matching (control/zero-width removal, whitespace collapsing, edge
+			// punctuation trimming) but kept lower-case: callers below compare the result
+			// against lower-case literals such as "mt" and "metricton".
+			MasterNormalizer.Normalize(value).ToLowerInvariant();
 
 		private static string CleanDealerName(string? rawName)
 		{

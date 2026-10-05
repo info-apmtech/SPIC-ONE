@@ -1,0 +1,80 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+@implements IDisposable
+@inject NavigationManager Nav
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+@*
+    Phone-only fixed bottom tab bar (<= 767.98px, see tokens.css). Rendered on every
+    viewport but hidden by its scoped CSS above phone width so desktop stays untouched.
+    Up to four role-prioritised destinations (ShellNavigation.GetPhoneTabs) plus "More".
+*@
+<nav class="shell-tabbar" aria-label="Primary navigation">
+    @foreach (var tab in _tabs)
+    {
+        var active = IsActive(tab);
+        <a class="shell-tab shell-focusable @(active ? "active" : "")"
+           href="@tab.Href"
+           aria-label="@tab.Label"
+           aria-current="@(active ? "page" : null)"
+           title="@tab.Label">
+            <i class="bi @tab.Icon shell-tab-icon" aria-hidden="true"></i>
+            <span class="shell-tab-label">@tab.TabLabel</span>
+        </a>
+    }
+
+    <button type="button"
+            class="shell-tab shell-focusable @(_moreOpen ? "active" : "")"
+            aria-label="More pages"
+            aria-haspopup="dialog"
+            aria-expanded="@(_moreOpen ? "true" : "false")"
+            aria-controls="shellMoreSheet"
+            @onclick="OpenMore">
+        <i class="bi bi-grid-3x3-gap-fill shell-tab-icon" aria-hidden="true"></i>
+        <span class="shell-tab-label">More</span>
+    </button>
+</nav>
+
+<MoreSheet @bind-Open="_moreOpen" />
+
+@code {
+    private IReadOnlyList<SPIC.MauiBlazorApp.Shared.Services.ShellTab> _tabs = Array.Empty<SPIC.MauiBlazorApp.Shared.Services.ShellTab>();
+    private bool _moreOpen;
+    private string? _activeKey;
+
+    protected override void OnInitialized()
+    {
+        Rebuild();
+        Nav.LocationChanged += OnLocationChanged;
+        LoginState.OnChange += OnLoginStateChanged;
+    }
+
+    private void Rebuild()
+    {
+        _tabs = SPIC.MauiBlazorApp.Shared.Services.ShellNavigation.GetPhoneTabs(LoginState);
+        _activeKey = SPIC.MauiBlazorApp.Shared.Services.ShellNavigation.ActiveKey(Nav.Uri, Nav.BaseUri);
+    }
+
+    private bool IsActive(SPIC.MauiBlazorApp.Shared.Services.ShellTab tab) =>
+        string.Equals(_activeKey, tab.Key, StringComparison.OrdinalIgnoreCase);
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _activeKey = SPIC.MauiBlazorApp.Shared.Services.ShellNavigation.ActiveKey(e.Location, Nav.BaseUri);
+        _moreOpen = false;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLoginStateChanged()
+    {
+        Rebuild();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OpenMore() => _moreOpen = true;
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        LoginState.OnChange -= OnLoginStateChanged;
+    }
+}

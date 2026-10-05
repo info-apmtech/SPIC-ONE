@@ -658,18 +658,33 @@ namespace SpicAPI.Controllers
                 var oldRows = _db.DealerCreditLimitSalesData
                     .Where(x => x.FinancialYearId == financialYearId);
 
-                _db.DealerCreditLimitSalesData.RemoveRange(oldRows);
-                await _db.SaveChangesAsync();
-
-                const int batchSize = 5000;
-
-                for (int i = 0; i < salesRecords.Count; i += batchSize)
+                // The delete of the existing year and the batched inserts that replace it must be
+                // one atomic unit. Previously the delete was committed on its own and each batch
+                // committed separately, so a failure halfway through the batches left the year
+                // with its old rows already gone and only part of the new rows written.
+                await using var transaction = await _db.Database.BeginTransactionAsync();
+                try
                 {
-                    _db.DealerCreditLimitSalesData.AddRange(
-                        salesRecords.Skip(i).Take(batchSize));
-
+                    _db.DealerCreditLimitSalesData.RemoveRange(oldRows);
                     await _db.SaveChangesAsync();
-                    _db.ChangeTracker.Clear();
+
+                    const int batchSize = 5000;
+
+                    for (int i = 0; i < salesRecords.Count; i += batchSize)
+                    {
+                        _db.DealerCreditLimitSalesData.AddRange(
+                            salesRecords.Skip(i).Take(batchSize));
+
+                        await _db.SaveChangesAsync();
+                        _db.ChangeTracker.Clear();
+                    }
+
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
                 }
 
                 var summary = new StringBuilder();

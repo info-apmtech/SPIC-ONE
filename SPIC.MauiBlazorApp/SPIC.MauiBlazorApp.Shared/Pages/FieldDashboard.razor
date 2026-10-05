@@ -1,0 +1,469 @@
+@page "/FieldDashboard"
+@implements IDisposable
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject SPIC.MauiBlazorApp.Shared.Services.FieldAttendanceState AttendanceState
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="container-fluid py-4 px-0 fd-page">
+
+    <!-- Profile header -->
+    <div class="fd-profile-header">
+        <div class="fd-profile-left">
+            <div class="fd-avatar">KR</div>
+            <div class="fd-profile-info">
+                <div class="fd-name-row">
+                    <h2 class="fd-name">Karthik Raja</h2>
+                    <span class="fd-status-badge @(IsOnDuty ? "fd-status-onduty" : "fd-status-offduty")">@(IsOnDuty ? "On Duty" : "Off Duty")</span>
+                </div>
+                <p class="fd-role-line">JMDO &middot; Coimbatore Region</p>
+                <p class="fd-title-line">Field Executive</p>
+            </div>
+        </div>
+
+        <button type="button" class="fd-btn fd-btn-primary fd-mark-attendance" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
+            <i class="bi bi-geo-alt-fill"></i> Mark Attendance
+        </button>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="fd-stats-grid">
+
+        <div class="fd-stat-card fd-stat-active">
+            <div class="fd-stat-top">
+                <span class="fd-stat-label">Today's Tasks</span>
+                <span class="fd-stat-icon"><i class="bi bi-clipboard-check"></i></span>
+            </div>
+            <div class="fd-stat-number">3</div>
+            <div class="fd-stat-desc">Approved for today</div>
+        </div>
+
+        <div class="fd-stat-card fd-stat-pending">
+            <div class="fd-stat-top">
+                <span class="fd-stat-label">Yet to Start</span>
+                <span class="fd-stat-icon"><i class="bi bi-clock"></i></span>
+            </div>
+            <div class="fd-stat-number">1</div>
+            <div class="fd-stat-desc">Not started yet</div>
+        </div>
+
+        <div class="fd-stat-card fd-stat-progress">
+            <div class="fd-stat-top">
+                <span class="fd-stat-label">In Progress</span>
+                <span class="fd-stat-icon"><i class="bi bi-play-circle"></i></span>
+            </div>
+            <div class="fd-stat-number">2</div>
+            <div class="fd-stat-desc">Currently working</div>
+        </div>
+
+        <div class="fd-stat-card fd-stat-done">
+            <div class="fd-stat-top">
+                <span class="fd-stat-label">Completed</span>
+                <span class="fd-stat-icon"><i class="bi bi-check-circle"></i></span>
+            </div>
+            <div class="fd-stat-number">0</div>
+            <div class="fd-stat-desc">Closed today</div>
+        </div>
+
+    </div>
+
+    <!-- Tracking -->
+    @if (!IsOnDuty)
+    {
+        <div class="fd-tracking-banner">
+            <div class="fd-tracking-left">
+                <span class="fd-tracking-icon"><i class="bi bi-geo-alt-fill"></i></span>
+                <div class="fd-tracking-text">
+                    <div class="fd-tracking-title">Tracking In-active <span class="fd-tracking-dot"></span></div>
+                    <div class="fd-tracking-sub">Update Attendance to Start Tracking</div>
+                </div>
+            </div>
+
+            <button type="button" class="fd-btn fd-btn-outline fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
+                <i class="bi bi-upload"></i> UPDATE
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="fd-tracking-card">
+            <div class="fd-tracking-header-row">
+                <div class="fd-tracking-left">
+                    <span class="fd-tracking-icon fd-tracking-icon-active"><i class="bi bi-geo-alt-fill"></i></span>
+                    <div class="fd-tracking-text">
+                        <div class="fd-tracking-title">Tracking Active <span class="fd-tracking-dot fd-tracking-dot-active"></span></div>
+                        <div class="fd-tracking-sub">Your location being tracked in real-time</div>
+                    </div>
+                </div>
+
+                <div class="fd-tracking-actions">
+                    <button type="button" class="fd-btn fd-btn-stop" @onclick="RequestStopTracking">
+                        <i class="bi bi-stop-circle-fill"></i> Stop Tracking
+                    </button>
+                    <span class="fd-timer-badge"><i class="bi bi-stopwatch"></i> @TrackingDuration</span>
+                </div>
+            </div>
+
+            <div class="fd-tracking-body">
+                <div class="fd-map-placeholder" role="img" aria-label="Map showing today's tracked route">
+                    <svg class="fd-map-route-svg" viewBox="0 0 400 220" preserveAspectRatio="none">
+                        <path d="M70,175 C150,160 170,70 320,45" />
+                    </svg>
+                    <span class="fd-map-pin fd-map-pin-end"><i class="bi bi-geo-alt-fill"></i></span>
+                    <span class="fd-map-pin fd-map-pin-current"><i class="bi bi-person-fill"></i></span>
+                </div>
+
+                <div class="fd-tracking-details">
+                    <div class="fd-detail-row">
+                        <span class="fd-detail-key"><i class="bi bi-calendar3"></i> This week</span>
+                        <span class="fd-detail-val">16 Sep 2026 - 22 Sep 2026</span>
+                    </div>
+                    <div class="fd-detail-row">
+                        <span class="fd-detail-key"><i class="bi bi-person-check"></i> Current Status</span>
+                        <span class="fd-detail-val fd-detail-val-inline"><span class="fd-tracking-dot fd-tracking-dot-active"></span> On Duty</span>
+                    </div>
+                    <div class="fd-detail-row">
+                        <span class="fd-detail-key"><i class="bi bi-person"></i> Current Location</span>
+                        <span class="fd-detail-val fd-detail-val-stack">
+                            <span class="fd-detail-val-main">Near Coimbatore, Tamil Nadu</span>
+                            <span class="fd-detail-val-sub">(22 Sep 2026, 10:42 AM)</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="fd-attendance-section">
+                <h4 class="fd-attendance-title">Attendance</h4>
+                <div class="fd-attendance-box">
+                    <div class="fd-attendance-status">
+                        <i class="bi bi-check-circle-fill"></i> Marked present today at 9:14 AM &middot; Anaimalai
+                    </div>
+                    <button type="button" class="fd-btn fd-btn-primary fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
+                        <i class="bi bi-upload"></i> UPDATE
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Continue where you left off -->
+    <div class="fd-tasks-card">
+        <div class="fd-tasks-header">
+            <div>
+                <h3 class="fd-tasks-title">Continue where you left off</h3>
+                <p class="fd-tasks-subtitle">Your in-progress tasks for today</p>
+            </div>
+            <button type="button" class="fd-view-all" @onclick='() => Navigation.NavigateTo("/TasksAllocation")'><i class="bi bi-arrow-right"></i> View All</button>
+        </div>
+
+        <div class="fd-task-list">
+            @foreach (var task in Tasks)
+            {
+                <div class="fd-task-row">
+                    <div class="fd-task-main">
+                        <span class="fd-cat @task.CategoryClass">@task.Category</span>
+                        <div class="fd-task-title">@task.Title</div>
+                        @if (!string.IsNullOrEmpty(task.SubtitleLine1))
+                        {
+                            <div class="fd-task-sub fd-task-sub-muted">@task.SubtitleLine1</div>
+                        }
+                        @if (!string.IsNullOrEmpty(task.SubtitleLine2))
+                        {
+                            <div class="fd-task-sub">@task.SubtitleLine2</div>
+                        }
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(task.Badge) || !string.IsNullOrEmpty(task.InfoLine1) || !string.IsNullOrEmpty(task.InfoLine2))
+                    {
+                        <div class="fd-task-info">
+                            @if (!string.IsNullOrEmpty(task.Badge))
+                            {
+                                <span class="fd-task-badge">@task.Badge</span>
+                            }
+                            @if (!string.IsNullOrEmpty(task.InfoLine1))
+                            {
+                                <div class="fd-task-info-line">@task.InfoLine1</div>
+                            }
+                            @if (!string.IsNullOrEmpty(task.InfoLine2))
+                            {
+                                <div class="fd-task-info-line">@task.InfoLine2</div>
+                            }
+                        </div>
+                    }
+
+                    <button type="button" class="fd-btn fd-btn-view"><i class="bi bi-arrow-right"></i> view</button>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Stop-tracking confirmation -->
+    @if (ShowStopConfirm)
+    {
+        <div class="fd-modal-backdrop" @onclick="CancelStopTracking">
+            <div class="fd-modal" role="dialog" aria-modal="true" aria-labelledby="fd-stop-confirm-title" @onclick:stopPropagation="true">
+                <div class="fd-modal-header">
+                    <div class="fd-modal-header-left">
+                        <span class="fd-modal-icon"><i class="bi bi-shield-exclamation"></i></span>
+                        <div>
+                            <h4 class="fd-modal-title" id="fd-stop-confirm-title">Stop location tracking?</h4>
+                            <p class="fd-modal-subtitle">Confirmation required</p>
+                        </div>
+                    </div>
+                    <span class="fd-modal-warning-badge">warning</span>
+                </div>
+
+                <p class="fd-modal-body-text">
+                    Your location is currently being tracked in real time.
+                    If you stop tracking, live location updates will end.
+                </p>
+
+                <div class="fd-modal-duration-row">
+                    <span class="fd-modal-duration-label"><i class="bi bi-clock"></i> Current tracking duration</span>
+                    <span class="fd-modal-duration-val">@TrackingDuration</span>
+                </div>
+
+                <div class="fd-modal-footer">
+                    <button type="button" class="fd-btn fd-btn-keep" @onclick="CancelStopTracking" disabled="@_stopping">Keep Tracking</button>
+                    <button type="button" class="fd-btn fd-btn-stop" @onclick="ConfirmStopTracking" disabled="@_stopping">
+                        <i class="bi bi-stop-circle-fill"></i> @(_stopping ? "Stopping..." : "Stop Tracking")
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
+
+@code {
+    // Static placeholder state: no Attendance/Tracking API exists yet (see
+    // FieldDashboard's original implementation notes), so this just flips
+    // the page between the two Figma states instead of calling a backend.
+    // Lives in the shared AttendanceState service (not a local field) so it
+    // survives the round trip to MarkAttendance and back - each navigation
+    // creates a fresh FieldDashboard instance, which would otherwise reset
+    // IsOnDuty to false every time.
+    private bool IsOnDuty => AttendanceState.IsOnDuty;
+    private bool ShowStopConfirm { get; set; }
+    private const string TrackingDuration = "00:12:34";
+
+    // ---------------------------------------------------------------------------------------
+    // Start Tracking: fires once, automatically, the first time this dashboard renders while
+    // the JMDO is On Duty (there is no separate "Start Tracking" button - marking attendance is
+    // what starts tracking, per the existing "Update Attendance to Start Tracking" copy above).
+    // The server call is idempotent (JMDOTrackingController.Start returns the caller's existing
+    // Active session instead of creating a second one), so reloading this page, or a fresh
+    // component instance after navigating back from MarkAttendance, safely resumes the same
+    // session rather than duplicating it.
+    //
+    // Stop Tracking, duration and View Tracking Details are a later step - this only creates the
+    // session and begins periodic point capture while it stays Active.
+    // ---------------------------------------------------------------------------------------
+    private const int TrackingPointIntervalSeconds = 60;
+
+    private JMDOTrackingSessionDto? _session;
+    private CancellationTokenSource? _trackingCts;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await StartTrackingIfNeededAsync();
+    }
+
+    private async Task StartTrackingIfNeededAsync()
+    {
+        if (!IsOnDuty || _session is not null) return;
+
+        GeoResult? position;
+        try
+        {
+            position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+        }
+        catch (Exception)
+        {
+            position = null;
+        }
+
+        if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+        {
+            Toast.Error(string.IsNullOrWhiteSpace(position?.Error)
+                ? "Could not get your current location. Tracking was not started."
+                : position!.Error!);
+            return;
+        }
+
+        _session = await TrackingApi.StartAsync(position.Latitude, position.Longitude);
+        if (_session is null) return; // TrackingApi already raised an error toast
+
+        if (_session.Status == JMDOTrackingSessionStatus.Active)
+        {
+            _trackingCts = new CancellationTokenSource();
+            _ = RunPointLoopAsync(_session.Id, _trackingCts.Token);
+        }
+    }
+
+    // Periodic GPS capture: reuses the same single-shot window.getCurrentPosition bridge (no new
+    // location mechanism) on a timer instead of a continuous "watch" API, which is enough to
+    // produce a point trail for the map (Stop Tracking / duration / the map itself come later).
+    private async Task RunPointLoopAsync(int sessionId, CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(TrackingPointIntervalSeconds));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (_session is null || _session.Status != JMDOTrackingSessionStatus.Active) break;
+
+                GeoResult? position;
+                try
+                {
+                    position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+                }
+                catch (Exception)
+                {
+                    continue; // a transient failure just skips this interval's point
+                }
+
+                if (position is null || !string.IsNullOrWhiteSpace(position.Error)) continue;
+
+                await TrackingApi.AddPointAsync(sessionId, position.Latitude, position.Longitude, null, ct);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected when the component is disposed (navigated away)
+        }
+    }
+
+    private sealed class GeoResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _trackingCts?.Cancel();
+        _trackingCts?.Dispose();
+    }
+
+    private bool _stopping;
+
+    private void RequestStopTracking() => ShowStopConfirm = true;
+
+    private void CancelStopTracking()
+    {
+        if (!_stopping) ShowStopConfirm = false;
+    }
+
+    private async Task ConfirmStopTracking()
+    {
+        if (_stopping) return;
+        _stopping = true;
+
+        try
+        {
+            // A fresh fix at the moment tracking is stopped - the same bridge the periodic loop
+            // and Start Tracking use, not a new location mechanism.
+            GeoResult? position;
+            try
+            {
+                position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+            }
+            catch (Exception)
+            {
+                position = null;
+            }
+
+            if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+            {
+                Toast.Error(string.IsNullOrWhiteSpace(position?.Error)
+                    ? "Could not get your current location. Tracking is still active - please try again."
+                    : position!.Error!);
+                return; // session stays Active; the confirm modal stays open so the JMDO can retry
+            }
+
+            var stopped = await TrackingApi.StopAsync(position.Latitude, position.Longitude);
+            if (stopped is null) return; // TrackingApi already raised an error toast; session stays Active
+
+            _session = stopped;
+
+            // Only now is the periodic loop cancelled - no point is sent after Status=Completed.
+            _trackingCts?.Cancel();
+            _trackingCts?.Dispose();
+            _trackingCts = null;
+
+            ShowStopConfirm = false;
+            AttendanceState.IsOnDuty = false;
+            Toast.Success("Location tracking stopped successfully.");
+            Navigation.NavigateTo("/MarkAttendance?view=stopped");
+        }
+        finally
+        {
+            _stopping = false;
+        }
+    }
+
+    private sealed class FdTask
+    {
+        public string Category { get; init; } = "";
+        public string CategoryClass { get; init; } = "";
+        public string Title { get; init; } = "";
+        public string? SubtitleLine1 { get; init; }
+        public string? SubtitleLine2 { get; init; }
+        public string? Badge { get; init; }
+        public string? InfoLine1 { get; init; }
+        public string? InfoLine2 { get; init; }
+    }
+
+    private static readonly List<FdTask> Tasks = new()
+    {
+        new FdTask
+        {
+            Category = "DEALER",
+            CategoryClass = "fd-cat-dealer",
+            Title = "Hanumesh Trading CO",
+            SubtitleLine1 = "Dues 99 Lakhs",
+            SubtitleLine2 = "Pending Ack. 10 mT",
+            Badge = "Dealer Code : 41051099",
+            InfoLine1 = "IFMS ID : 215361",
+            InfoLine2 = "Pos Liquidation : 12.5 mT - 160 days"
+        },
+        new FdTask
+        {
+            Category = "MD Program",
+            CategoryClass = "fd-cat-mdprogram",
+            Title = "Crop Protection Workshop",
+            SubtitleLine1 = "Training",
+            SubtitleLine2 = "1 Program",
+            Badge = "Sanction No : CSR!-2026-045",
+            InfoLine1 = "Total Budget : 50,000",
+            InfoLine2 = "Sanction Date : 01 May 2026"
+        },
+        new FdTask
+        {
+            Category = "SPCM",
+            CategoryClass = "fd-cat-spcm fd-cat-pill",
+            Title = "Today's Target : 100"
+        },
+        new FdTask
+        {
+            Category = "Soil Sample",
+            CategoryClass = "fd-cat-soil-orange fd-cat-pill",
+            Title = "Today's Target : 100"
+        },
+        new FdTask
+        {
+            Category = "Soil Sample",
+            CategoryClass = "fd-cat-soil-grey fd-cat-pill",
+            Title = "Urea : 100",
+            InfoLine1 = "NSP : 1000",
+            InfoLine2 = "DAP : 200"
+        }
+    };
+}

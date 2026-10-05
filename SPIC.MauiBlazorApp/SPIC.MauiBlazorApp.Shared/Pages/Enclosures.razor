@@ -9,6 +9,7 @@
 @inject IJSRuntime JS
 @inject LoadingService Loading
 @inject LoginState LoginState
+@inject ToastService Toast
 <style>
 	fieldset:disabled .bi-x-circle-fill {
 		display: none !important;
@@ -20,8 +21,9 @@
 </style>
 
 
-<div class="container-fluid py-4 px-0">
+<div class="container-fluid py-4 px-0 enc-page">
 	<FormLoader />
+	<PageHeader Title="Enclosures" />
 	<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 		@* @if (!string.IsNullOrEmpty(_message))
 	{
@@ -30,8 +32,6 @@
 			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
 		</div>
 	} *@
-
-		<h2 class="page-title">Enclosures</h2>
 
 		<div class="row g-4 mb-4">
 			<div class="col-md-6">
@@ -2331,7 +2331,7 @@
 </div>
 @if (_showDeleteModal)
 {
-	<div class="del-modal-backdrop" @onclick="CancelDelete">
+	<div class="del-modal-backdrop reg-del-modal" @onclick="CancelDelete">
 		<div class="del-modal" @onclick:stopPropagation="true">
 			<div class="del-modal-icon">
 				<i class="bi bi-exclamation-triangle-fill"></i>
@@ -2358,7 +2358,10 @@
 
 @code {
 	[SupplyParameterFromQuery(Name = "dealerId")]
-	public int DealerId { get; set; }
+	public int? DealerIdQuery { get; set; }
+	// A missing or empty ?dealerId= used to throw inside the router (cannot parse '' as int),
+	// which blanks the whole app in the MAUI host. Nullable binding + a default keeps it safe.
+	private int DealerId => DealerIdQuery ?? 0;
 	[SupplyParameterFromQuery(Name = "mode")]
 	public string? Mode { get; set; }
 	[SupplyParameterFromQuery(Name = "flow")]
@@ -2480,7 +2483,7 @@
 			var dealer = await Http.GetFromJsonAsync<DealerReg>($"api/DealerRegistration/{DealerId}");
 			if (dealer != null) _dealer = dealer;
 		}
-		catch { }
+		catch { Toast.Error("Could not load dealer details."); }
 	}
 
 	private async Task LoadPartners()
@@ -2489,7 +2492,7 @@
 		{
 			_partners = await Http.GetFromJsonAsync<List<DealerOwnershipInfo>>($"api/DealerOwnershipInfo/byDealer/{DealerId}") ?? new();
 		}
-		catch { }
+		catch { Toast.Error("Could not load partner details."); }
 	}
 
 	private async Task LoadFinancialYears()
@@ -2498,7 +2501,7 @@
 		{
 			_financialYears = await Http.GetFromJsonAsync<List<FinancialYear>>("api/FinancialYear/all") ?? new();
 		}
-		catch { }
+		catch { Toast.Error("Could not load financial years."); }
 	}
 
 	private async Task LoadDocuments()
@@ -2517,7 +2520,7 @@
 				_docs = new DealerRegistrationDocuments { DealerId = DealerId };
 			}
 		}
-		catch { }
+		catch { Toast.Error("Could not load the uploaded documents."); }
 	}
 
 	private async Task LoadLandAssets()
@@ -2526,7 +2529,7 @@
 		{
 			_landAssets = await Http.GetFromJsonAsync<List<DealerAssetLand>>($"api/DealerAssetLand/byDealer/{DealerId}") ?? new();
 		}
-		catch { }
+		catch { Toast.Error("Could not load land assets."); }
 	}
 
 	private async Task LoadBuildingAssets()
@@ -2535,7 +2538,7 @@
 		{
 			_buildingAssets = await Http.GetFromJsonAsync<List<DealerAssetBuilding>>($"api/DealerAssetBuilding/byDealer/{DealerId}") ?? new();
 		}
-		catch { }
+		catch { Toast.Error("Could not load building assets."); }
 	}
 
 	private void CalculateProgress()
@@ -3468,7 +3471,7 @@
 </head>
 <body>
 	<div class='doc-header'>
-    <img src='{blazorBase}/_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png' alt='SPIC Logo' class='doc-logo' />
+    <img src='{blazorBase}/_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/logo.png' alt='SPIC Logo' class='doc-logo' />
     <div class='company-name'>Southern Petrochemical Industries Corporation Limited</div>
     <div class='doc-subtitle'>Specimen Signature Document — Dealer Registration</div>
 </div>
@@ -3631,7 +3634,7 @@
 </head>
 <body>
 	<div class='doc-header'>
-    <img src='{blazorBase}/_content/SPIC.MauiBlazorApp.Shared/images/loginimages/GreenSratIcon.svg' alt='GFL Logo' class='doc-logo' />
+    <img src='{blazorBase}/_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/GreenSratIcon.svg' alt='GFL Logo' class='doc-logo' />
     <div class='company-name'>Greenstar Fertilizers Limited</div>
     <div class='doc-subtitle'>Specimen Signature Document — Dealer Registration</div>
 </div>

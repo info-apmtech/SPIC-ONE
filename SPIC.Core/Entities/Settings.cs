@@ -472,10 +472,15 @@ namespace SPIC.Core.Entities
 		[Required]
 		public string Name { get; set; }
 
+		// Optional State mapping used to filter SAP Codes in the Logistics page.
+		public int? StateId { get; set; }
+
 		[Required]
 		public bool IsActive { get; set; } = true;
 
-		[Required]
+        public bool? IsSpecialityProduct { get; set; }
+
+        [Required]
 		public DateTime CreatedAt { get; set; }
 
 		[Required]
@@ -502,6 +507,9 @@ namespace SPIC.Core.Entities
 
 		[Required]
 		public string Name { get; set; }
+
+		// Optional State mapping used to filter SAP Codes in the Logistics page.
+		public int? StateId { get; set; }
 
 		[Required]
 		public bool IsActive { get; set; } = true;

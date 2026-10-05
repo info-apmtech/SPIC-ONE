@@ -1,0 +1,43 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
+
+@*
+    Screen 17, "Submitted Successfully": green tick, the same four rows, Cancel / Preview Report.
+    The page decides where Preview Report goes (the batch report once the batch is Completed,
+    otherwise the locked values on the entry page).
+*@
+<LabModal IsOpen="IsOpen" Title="Submitted Successfully" Icon="bi-check-lg" Tone="green" OnClose="OnCancel"
+          Message="Values are locked and ready for report preview.">
+    <ChildContent>
+        <dl class="lm-rows">
+            <div class="lm-row"><dt>Sample No.</dt><dd>@SampleNo</dd></div>
+            <div class="lm-row"><dt>Farmer Name</dt><dd>@FarmerName</dd></div>
+            <div class="lm-row"><dt>Sample Type</dt><dd>@SampleType</dd></div>
+            <div class="lm-row"><dt>@OverallLabel</dt><dd><LabPill Text="@OverallText" Tone="@OverallTone" /></dd></div>
+        </dl>
+        @if (!string.IsNullOrWhiteSpace(NextNote))
+        {
+            <p class="sd-next">@NextNote</p>
+        }
+    </ChildContent>
+    <Actions>
+        <button type="button" class="la-btn la-btn-outline" @onclick="OnCancel">Cancel</button>
+        <button type="button" class="la-btn la-btn-primary" @onclick="OnPreviewReport">
+            <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+            <span>Preview Report</span>
+        </button>
+    </Actions>
+</LabModal>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public string SampleNo { get; set; } = "";
+    [Parameter] public string FarmerName { get; set; } = "";
+    [Parameter] public string SampleType { get; set; } = "";
+    [Parameter] public string OverallLabel { get; set; } = "Overall Soil Status";
+    [Parameter] public string OverallText { get; set; } = "";
+    [Parameter] public string OverallTone { get; set; } = "grey";
+    /// <summary>Optional line under the rows ("2 samples still pending in this batch").</summary>
+    [Parameter] public string? NextNote { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public EventCallback OnPreviewReport { get; set; }
+}

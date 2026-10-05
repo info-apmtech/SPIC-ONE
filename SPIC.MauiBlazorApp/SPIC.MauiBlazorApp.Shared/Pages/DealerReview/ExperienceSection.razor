@@ -1,0 +1,52 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@* "Experience In Fertilizer Trade" accordion. Read-only apart from the header toggle and the pencil. *@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="OnToggle">
+            Experience In Fertilizer Trade
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="detail-card">
+                        <div class="detail-card-header">
+                            <h4 class="detail-card-title"><i class="bi bi-person-workspace"></i> Experience</h4>
+                            <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                        </div>
+                        <div class="detail-card-body">
+                            @if (Experiences != null && Experiences.Any())
+                            {
+                                foreach (var exp in Experiences)
+                                {
+                                    <div class="data-row"><div class="data-label">Company Name:</div><div class="data-value">@(CompetitorNames.TryGetValue(exp.CompanyId ?? "", out var cn) ? cn : (exp.CompanyId ?? "-"))</div></div>
+                                    <div class="data-row"><div class="data-label">Number of years:</div><div class="data-value">@exp.NoOfYears @("Years")</div></div>
+                                    <div class="data-row"><div class="data-label">Quantity (MT):</div><div class="data-value">@exp.Quantity</div></div>
+                                    <div class="data-row"><div class="data-label">Turnover (Lakhs):</div><div class="data-value">@exp.TurnOver</div></div>
+                                    <div class="data-row"><div class="data-label">Still Active:</div><div class="data-value">@(exp.IsActive ? "Yes" : "No")</div></div>
+                                    <div class="mb-2"></div>
+                                }
+                            }
+                            else
+                            {
+                                <div class="data-row"><div class="data-label">Experience</div><div class="data-value">No experience data</div></div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    [Parameter] public List<DR.DealerExperience> Experiences { get; set; } = new();
+    [Parameter] public Dictionary<string, string> CompetitorNames { get; set; } = new();
+    [Parameter] public int DataVersion { get; set; }
+}

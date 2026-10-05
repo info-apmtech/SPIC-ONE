@@ -1,0 +1,260 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Feedback
+@implements IDisposable
+@inject LoginState LoginState
+@inject NavigationManager Navigation
+@inject ISessionStore SessionStore
+@inject HttpClient Http
+
+@*
+    SessionExpiryDialog: watches LoginState.Expiration with ONE timer.
+    - WarnBefore (default 2 min) before expiry: shows a countdown with "Continue" and "Sign out now".
+    - "Continue" only dismisses for the current expiry (there is no refresh-token endpoint yet;
+      wire OnContinue to a refresh call once the API team adds one).
+    - "Sign out now": LoginState.Logout(), clears the stored session, navigates to LoginPath.
+    - On expiry: navigates to LoginPath (MainLayout's own expiry check does the storage cleanup).
+    Place ONE per layout.
+*@
+
+@if (_visible)
+{
+    <div class="fb-session" role="presentation">
+        <div class="fb-session__backdrop"></div>
+
+        <div class="fb-session__dialog"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="fb-session-title"
+             aria-describedby="fb-session-message"
+             tabindex="-1">
+
+            <div class="fb-session__icon" aria-hidden="true">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+
+            <h2 id="fb-session-title" class="fb-session__title">@Title</h2>
+
+            <p id="fb-session-message" class="fb-session__message">
+                @Message
+            </p>
+
+            <div class="fb-session__countdown" aria-live="polite" aria-atomic="true">
+                <span class="fb-session__time">@FormatRemaining(_remaining)</span>
+                <span class="fb-session__unit">remaining</span>
+            </div>
+
+            <div class="fb-session__bar" aria-hidden="true">
+                <div class="fb-session__bar-fill" style="width:@(ProgressPercent.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+            </div>
+
+            <div class="fb-session__actions">
+                <button type="button" class="fb-session__btn fb-session__btn--secondary" @onclick="SignOutNowAsync">
+                    <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                    Sign out now
+                </button>
+                <button type="button" class="fb-session__btn fb-session__btn--primary" @onclick="ContinueAsync">
+                    Continue
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>How long before expiry the warning appears.</summary>
+    [Parameter] public TimeSpan WarnBefore { get; set; } = TimeSpan.FromMinutes(2);
+    [Parameter] public string LoginPath { get; set; } = "/login";
+    [Parameter] public string Title { get; set; } = "Your session is about to expire";
+    [Parameter] public string Message { get; set; } = "For your security you will be signed out automatically. Continue to keep working, or sign out now.";
+
+    /// <summary>Hook for the future refresh-token call. Runs when "Continue" is pressed.</summary>
+    [Parameter] public EventCallback OnContinue { get; set; }
+    /// <summary>Runs once when the token expires, before navigating to LoginPath.</summary>
+    [Parameter] public EventCallback OnExpired { get; set; }
+
+    private static readonly TimeSpan MaxPoll = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan MinDue = TimeSpan.FromMilliseconds(250);
+
+    private System.Threading.Timer? _timer;
+    private bool _visible;
+    private TimeSpan _remaining;
+    private DateTime _dismissedForExpiry;   // "Continue" hides the dialog for this expiry only
+    private bool _expiredHandled;
+    private bool _disposed;
+
+    private double ProgressPercent
+    {
+        get
+        {
+            if (WarnBefore <= TimeSpan.Zero) return 0;
+            var pct = _remaining.TotalMilliseconds / WarnBefore.TotalMilliseconds * 100.0;
+            return Math.Clamp(pct, 0, 100);
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        LoginState.OnChange += HandleLoginChanged;
+        _timer = new System.Threading.Timer(OnTimer, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        Evaluate();
+    }
+
+    /// <summary>Re-read LoginState.Expiration now (call after changing it without raising OnChange).</summary>
+    public void Reschedule()
+    {
+        if (_disposed) return;
+        Evaluate();
+        StateHasChanged();
+    }
+
+    private void HandleLoginChanged()
+    {
+        if (_disposed) return;
+        _ = SafeInvokeAsync(() =>
+        {
+            Evaluate();
+            StateHasChanged();
+        });
+    }
+
+    private void OnTimer(object? _)
+    {
+        if (_disposed) return;
+        _ = SafeInvokeAsync(() =>
+        {
+            Evaluate();
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>Marshals onto the renderer and swallows the exceptions a disposed circuit throws.</summary>
+    private async Task SafeInvokeAsync(Action action)
+    {
+        try
+        {
+            await InvokeAsync(() =>
+            {
+                if (!_disposed) action();
+            });
+        }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { }
+        catch (TaskCanceledException) { }
+    }
+
+    /// <summary>Single decision point: derives the visible state from LoginState and arms the next tick.</summary>
+    private void Evaluate()
+    {
+        if (_disposed) return;
+
+        var expiration = LoginState.Expiration;
+        if (expiration == default)
+        {
+            _visible = false;
+            _expiredHandled = false;
+            _dismissedForExpiry = default;
+            Schedule(MaxPoll);
+            return;
+        }
+
+        var expUtc = expiration.Kind == DateTimeKind.Utc ? expiration : expiration.ToUniversalTime();
+        var remaining = expUtc - DateTime.UtcNow;
+
+        if (remaining <= TimeSpan.Zero)
+        {
+            _visible = false;
+            _remaining = TimeSpan.Zero;
+            if (!_expiredHandled)
+            {
+                _expiredHandled = true;
+                _ = HandleExpiredAsync();
+            }
+            Schedule(MaxPoll);
+            return;
+        }
+
+        _expiredHandled = false;
+
+        if (remaining <= WarnBefore)
+        {
+            _remaining = remaining;
+            _visible = _dismissedForExpiry != expUtc;
+            Schedule(TimeSpan.FromSeconds(1));
+        }
+        else
+        {
+            // Outside the warning window. A new expiry means a new token: forget any dismissal.
+            _visible = false;
+            _dismissedForExpiry = default;
+            var untilWarn = remaining - WarnBefore;
+            Schedule(untilWarn < MaxPoll ? untilWarn : MaxPoll);
+        }
+    }
+
+    private void Schedule(TimeSpan due)
+    {
+        if (_disposed) return;
+        if (due < MinDue) due = MinDue;
+        try { _timer?.Change(due, Timeout.InfiniteTimeSpan); }
+        catch (ObjectDisposedException) { }
+    }
+
+    private async Task HandleExpiredAsync()
+    {
+        try
+        {
+            await OnExpired.InvokeAsync();
+        }
+        catch (Exception) { /* never block the redirect */ }
+
+        if (_disposed) return;
+        Navigation.NavigateTo(LoginPath);
+    }
+
+    private async Task ContinueAsync()
+    {
+        var expiration = LoginState.Expiration;
+        _dismissedForExpiry = expiration.Kind == DateTimeKind.Utc ? expiration : expiration.ToUniversalTime();
+        _visible = false;
+
+        await OnContinue.InvokeAsync();
+        Evaluate();
+    }
+
+    private async Task SignOutNowAsync()
+    {
+        _visible = false;
+
+        LoginState.Logout();
+        LoginState.Expiration = default;
+        Http.DefaultRequestHeaders.Authorization = null;
+
+        try
+        {
+            await SessionStore.RemoveAsync(SessionKeys.Token);
+            await SessionStore.RemoveAsync(SessionKeys.Expiration);
+            await SessionStore.RemoveAsync(SessionKeys.RoleAccess);
+            await SessionStore.RemoveAsync(SessionKeys.DesignationName);
+        }
+        catch (Exception) { /* storage cleanup is best effort */ }
+
+        Navigation.NavigateTo(LoginPath);
+    }
+
+    private static string FormatRemaining(TimeSpan t)
+    {
+        if (t < TimeSpan.Zero) t = TimeSpan.Zero;
+        return t.TotalHours >= 1
+            ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
+            : $"{t.Minutes}:{t.Seconds:00}";
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        LoginState.OnChange -= HandleLoginChanged;
+        _timer?.Dispose();
+        _timer = null;
+    }
+}

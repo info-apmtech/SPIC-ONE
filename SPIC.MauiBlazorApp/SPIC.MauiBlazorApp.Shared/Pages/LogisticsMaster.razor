@@ -7,6 +7,7 @@
 @using Microsoft.AspNetCore.Components
 @using SPIC.Core.Entities
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
@@ -145,10 +146,53 @@
             grid-template-columns: 1fr;
         }
     }
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .lgm-page .tab-item { padding: 10px 16px; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; }
+        .lgm-page .form-control-custom,
+        .lgm-page .form-select-custom { min-height: var(--tap-min, 44px); font-size: 16px; }
+        /* Active / Inactive is the only control for that field – full 44px target. */
+        .lgm-page .status-btn-group .btn { min-height: var(--tap-min, 44px); }
+        /* map: 60vh so the pin can be placed with a thumb; 44px location buttons */
+        .lgm-page .map-box-wrap,
+        .lgm-page .leaflet-map-el { height: 60vh; min-height: 60vh; }
+        .lgm-page .map-loc-btn { font-size: 0.8rem; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; gap: 6px; }
+        .lgm-page .use-current-loc-btn { min-height: var(--tap-min, 44px); width: 100%; justify-content: center; }
+        .lgm-page .primary-location-header { flex-direction: column; align-items: stretch; }
+        /* uploads: one full-width zone per document */
+        .lgm-page .lm-doc-grid { grid-template-columns: 1fr; gap: 10px; }
+        .lgm-page .lm-doc-card { min-height: 0; }
+        .lgm-page .lm-upload-btn { width: 100%; min-height: var(--tap-min, 44px); }
+        /* three compact metric tiles */
+        .lgm-page .row.g-3.mb-4 > .col-md-4 { flex: 0 0 33.333%; max-width: 33.333%; }
+        .lgm-page .metric-card { padding: 12px 8px; }
+        .lgm-page .metric-title { font-size: 0.72rem; }
+        .lgm-page .metric-val { font-size: 1.25rem; }
+        .lgm-page .lm-save-row { margin: 0; }
+    }
+    @@media (min-width: 768px) and (max-width: 1199.98px) {
+        .lgm-page .map-box-wrap,
+        .lgm-page .leaflet-map-el { height: 420px; min-height: 420px; }
+        .lgm-page .map-loc-btn { font-size: 0.75rem; min-height: var(--tap-min, 44px); display: inline-flex; align-items: center; gap: 6px; }
+        .lgm-page .use-current-loc-btn { min-height: var(--tap-min, 44px); }
+        .lgm-page .lm-upload-btn { min-height: var(--tap-min, 44px); }
+    }
+
+    /* native: keep the pre-existing desktop/tablet spacing of the inline ActionBar */
+    @@media (min-width: 768px) {
+        .lgm-page .lm-save-row.fb-actionbar { padding-top: 0; padding-bottom: 0; }
+    }
+
+    /* native: phone - lift the sticky ActionBar above the shell's bottom tab bar */
+    @@media (max-width: 767.98px) {
+        .lgm-page { --shell-bottom-offset: calc(var(--shell-tabbar-h, 60px) + var(--safe-bottom, 0px)); }
+        .lgm-page .fb-actionbar--sticky { padding-bottom: 10px; } /* tab bar already covers the home-indicator area */
+    }
 </style>
 
-<div class="container-fluid py-4 px-0">
-    <h5 class="fw-bold mb-4 reg-page-heading">Logistics Master</h5>
+<div class="container-fluid py-4 px-0 lgm-page">
+    <PageHeader Title="Logistics Master" Subtitle="PVT warehouses, C&amp;F warehouses and rake points" CssClass="reg-page-heading" />
 
     @if (!string.IsNullOrWhiteSpace(_message))
     {
@@ -183,7 +227,7 @@
         <div class="basic-info-card">
             <div class="basic-info-header">
                 <h3 class="basic-info-title">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/BasicInfoIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/BasicInfoIcon.svg"
                          class="formicon"
                          alt="icon" /> Basic Information
                 </h3>
@@ -198,7 +242,7 @@
                                 <div class="card-checkbox">
                                     <i class="bi bi-check-lg"></i>
                                 </div>
-                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/logo.png" />
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/logo.png" />
                                 <span>SPIC</span>
                             </div>
                         </div>
@@ -209,7 +253,7 @@
                                 <div class="card-checkbox">
                                     <i class="bi bi-check-lg"></i>
                                 </div>
-                                <img src="_content/SPIC.MauiBlazorApp.Shared/images/loginimages/greensraticon.svg" />
+                                <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LoginImages/GreenSratIcon.svg" />
                                 <span>GREEN STAR</span>
                             </div>
                         </div>
@@ -423,7 +467,7 @@
         <div class="form-card">
             <div class="primary-location-header">
                 <div class="card-header-title mb-0">
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/LocationIcon.svg"
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/LocationIcon.svg"
                          alt="Location"
                          class="formicon" />Primary Location
                 </div>
@@ -439,7 +483,7 @@
                     }
                     else
                     {
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/CurrentLocation.svg"
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/CurrentLocation.svg"
                              alt="Current Location"
                              class="verifyicon" />
                         <span>Use Current Location</span>
@@ -759,10 +803,13 @@
             }
         </div>
 
-        <div class="lm-save-row">
-            <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
-                <i class="bi bi-x"></i> Cancel
-            </button>
+        <ActionBar CssClass="lm-save-row" AriaLabel="Save logistics master">
+            <Secondary>
+                <button type="button" class="btn-cancel" @onclick="() => ResetForm()">
+                    <i class="bi bi-x"></i> Cancel
+                </button>
+            </Secondary>
+            <ChildContent>
 
             @if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Entry")) ||
                              (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update")))
@@ -775,7 +822,8 @@
                     @(_isUploadingDocuments ? "Uploading Documents..." : (_isSaving ? "Saving..." : (_isEditing ? "Update" : "Save")))
                 </button>
             }
-        </div>
+            </ChildContent>
+        </ActionBar>
     </div>
 
     <!-- Preserve old CRUD/list functionality under the new Register-style form. -->
@@ -811,7 +859,9 @@
                    Title="@($"Existing {ActiveTabDisplayName}")"
                    FileName="@CurrentFileName"
                    ExportColumns="GetExportColumns()"
-                   SearchText="@_searchText">
+                   SearchText="@_searchText"
+                   EmptyTitle="@($"No {ActiveTabDisplayName.ToLowerInvariant()} yet")"
+                   EmptyMessage="Use the form above to add the first record.">
 
         <FilterControls>
             <div class="search-box">
@@ -886,6 +936,19 @@
                 </td>
             }
         </TableRow>
+        <CardActions Context="item">
+            <button type="button" class="btn btn-sm @(item.IsActive ? "btn-outline-success" : "btn-outline-secondary")" @onclick="() => ToggleStatus(item)">
+                <i class="bi @(item.IsActive ? "bi-toggle-on" : "bi-toggle-off")"></i> @(item.IsActive ? "Active" : "Inactive")
+            </button>
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Update"))
+            {
+                <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+            }
+            @if (LoginState.Can(SPIC.Core.Entities.PagePermission.Logistics, "Delete"))
+            {
+                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+            }
+        </CardActions>
     </SpicDataTable>
 </div>
 
@@ -954,6 +1017,11 @@
     private List<HeadquarterDto> _filteredHeadquarters = new();
     private List<DistrictDto> _filteredDistricts = new();
 
+    // Name indexes for the table rows: the district master is several hundred rows, so a
+    // FirstOrDefault per rendered row scanned it on every re-render.
+    private Dictionary<int, string> _stateNameById = new();
+    private Dictionary<int, string> _districtNameById = new();
+
     private List<LogisticsItemDto> _pvtWarehouseAll = new();
     private List<LogisticsItemDto> _candFWarehouseAll = new();
     private List<LogisticsItemDto> _rakePointAll = new();
@@ -1007,7 +1075,7 @@
 
         try
         {
-            var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+            var token = await SessionStore.GetAsync(SessionKeys.Token);
             if (!string.IsNullOrWhiteSpace(token))
                 _currentUserId = GetUserIdFromToken(token);
         }
@@ -1058,6 +1126,11 @@
             _districts = districtsTask.Result ?? new();
             _regions = regionsTask.Result ?? new();
             _headquarters = hqTask.Result ?? new();
+
+            _stateNameById = _states.GroupBy(x => x.Id)
+                .ToDictionary(g => g.Key, g => g.First().StateName ?? "");
+            _districtNameById = _districts.GroupBy(x => x.Id)
+                .ToDictionary(g => g.Key, g => g.First().DistrictName ?? "");
         }
         catch (Exception ex)
         {
@@ -1745,8 +1818,8 @@
     private static int? ToNullableId(int value) => value > 0 ? value : null;
     private static string? NullIfWhiteSpace(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private string GetStateName(int id) => _states.FirstOrDefault(x => x.Id == id)?.StateName ?? "";
-    private string GetDistrictName(int id) => _districts.FirstOrDefault(x => x.Id == id)?.DistrictName ?? "";
+    private string GetStateName(int id) => _stateNameById.TryGetValue(id, out var name) ? name : "";
+    private string GetDistrictName(int id) => _districtNameById.TryGetValue(id, out var name) ? name : "";
 
     private void ShowMessage(string message, bool isError)
     {

@@ -1,9 +1,11 @@
 @implements IDisposable
 @inject NavigationManager Nav
+@inject ISessionStore SessionStore
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
 @using System.Linq
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
 
 @code {
     private static readonly HashSet<string> _alwaysOpen = new(StringComparer.OrdinalIgnoreCase)
@@ -14,7 +16,28 @@
         "error",
         "notfound",
         "forbidden",
-        "Welcome"
+        "Welcome",
+        // Default landing pages (LoginState). Each is the destination of LandingPage for the role it
+        // belongs to, so both must be open to every signed-in user; otherwise the redirect at the
+        // bottom of Check() sends the user back to LandingPage - the very route - and loops. These
+        // are common landing screens, NOT designation permissions: they are not PagePermission
+        // members and appear in no RoleAccess. Listed without the leading slash, matching above.
+        LoginState.DefaultLandingPath.TrimStart('/'),
+        LoginState.AdminLandingPath.TrimStart('/')
+    };
+
+    // Shell hub pages (phone tab bar / top bar destinations). Each hub only LINKS to pages the
+    // user can already open (every link is filtered by LoginState.CanAccess), so they are open to
+    // every signed-in user who has a designation.
+    // Product decision 2026-09-20: the Knowledge Community is usable by everyone, and Digital
+    // Library CONTENT is viewable by everyone; only adding/editing content (/DigitalLibrary/add/...)
+    // needs the DigitalLibrary page in the user's designation (the API enforces the same rule).
+    private static readonly HashSet<string> _shellHubs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Activities",
+        "Farmers",
+        "Alerts",
+        "Community"
     };
 
     private bool _restored;
@@ -24,11 +47,11 @@
         Nav.LocationChanged += OnLocationChanged;
         LoginState.OnChange += OnLoginStateChanged;
 
-        // Restore role access from sessionStorage BEFORE the first check,
+        // Restore role access from the session store BEFORE the first check,
         // so a hard navigation (URL typed into address bar) doesn't slip through.
         try
         {
-            var roleAccess = await JS.InvokeAsync<string?>("sessionStorage.getItem", "spic_role_access");
+            var roleAccess = await SessionStore.GetAsync(SessionKeys.RoleAccess);
             if (roleAccess != null)
             {
                 LoginState.SetAllowedPages(roleAccess);
@@ -46,16 +69,13 @@
     private void OnLoginStateChanged()
     {
         // Re-check the current URL whenever LoginState changes (e.g. after login,
-        // or after MainLayout restores AllowedPages from sessionStorage).
+        // or after MainLayout restores AllowedPages from the session store).
         if (_restored) Check(Nav.Uri);
     }
 
     private void Check(string url)
     {
         if (!LoginState.IsLoggedIn) return;
-
-        // Admin and CorporateAdmin bypass everything
-        if (LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin) return;
 
         var path = (new Uri(url, UriKind.RelativeOrAbsolute).IsAbsoluteUri
                 ? new Uri(url).AbsolutePath
@@ -65,9 +85,30 @@
             .TrimEnd('/');
 
         // Match on the FIRST path segment only, so routes WITH parameters
-        var firstSegment = path
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault() ?? "";
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var firstSegment = segments.FirstOrDefault() ?? "";
+        var secondSegment = segments.Skip(1).FirstOrDefault() ?? "";
+
+        // Data Explorer is SuperAdmin only. Admin is explicitly
+        // excluded here, even though Admin otherwise bypasses every other page
+        // check below - this must run BEFORE the general Admin bypass.
+        if (firstSegment.Equals("DataExplorer", StringComparison.OrdinalIgnoreCase)
+            && LoginState.UserRole == AppRole.Admin)
+        {
+            Nav.NavigateTo("/Dashboard", replace: true);
+            return;
+        }
+
+        // SuperAdmin bypasses everything else.
+        if (LoginState.UserRole == AppRole.SuperAdmin) return;
+
+        // Admin and CorporateAdmin bypass everything EXCEPT the SAS Lab (/Lab/...) and payment
+        // (/Sas/Payments...) routes: those are reached through the designation only (product
+        // decision 2026-09-27), so admins go through the strict checks below like everyone else.
+        bool designationOnlyRoute = firstSegment.Equals("Lab", StringComparison.OrdinalIgnoreCase)
+            || (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase)
+                && secondSegment.Equals("Payments", StringComparison.OrdinalIgnoreCase));
+        if ((LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin) && !designationOnlyRoute) return;
 
         // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
         // but must NEVER reach the SchemeApproval page.
@@ -110,8 +151,19 @@
                                     || firstSegment.Equals("WelfareSchemes", StringComparison.OrdinalIgnoreCase)
                                     || firstSegment.Equals("ApplyWelfareScheme", StringComparison.OrdinalIgnoreCase)
                                     || firstSegment.Equals("WellfareApplication", StringComparison.OrdinalIgnoreCase));
+            // The default landing routes are in _alwaysOpen so users WITH a designation (and Admin,
+            // who bypasses this branch entirely) can reach them, so they are excluded here to keep
+            // this branch's existing behaviour: a user with no designation still lands on /Welcome,
+            // the screen telling them to contact an administrator. /Welcome is allowed, so this
+            // cannot loop. Listed as data so a new landing route is covered by adding one entry.
+            bool isDefaultLanding = firstSegment.Equals(
+                                        LoginState.DefaultLandingPath.TrimStart('/'), StringComparison.OrdinalIgnoreCase)
+                                    || firstSegment.Equals(
+                                        LoginState.AdminLandingPath.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
+
             bool isInfra = _alwaysOpen.Contains(firstSegment)
-                           && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase);
+                           && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase)
+                           && !isDefaultLanding;
 
             if (!isWelcome && !isDealerDash && !isInfra && !isDirectorSchemeApproval)
             {
@@ -121,28 +173,102 @@
         }
 
         if (_alwaysOpen.Contains(firstSegment)) return;
+        // Shell hubs and the read-only Digital Library are open to every signed-in user for the
+        // default employee roles. That grant now lives in PageAuthorization.OpenAccessPages
+        // instead of in these two short-circuits, so a designation-driven role is NOT let through
+        // here and falls through to the shared CanAccess check below - its hubs, like every other
+        // page, come from its designation. No per-page or per-designation conditional: the model
+        // is what PageGuard asks about.
+        if (_shellHubs.Contains(firstSegment) && !LoginState.IsDesignationDrivenRole) return;
+        // /DigitalLibrary/add/... (content wizard) and /DigitalLibrary/categories (category master)
+        // are admin pages: they fall through to the generic DigitalLibrary page check below.
+        if (firstSegment.Equals("DigitalLibrary", StringComparison.OrdinalIgnoreCase)
+            && !LoginState.IsDesignationDrivenRole
+            && !secondSegment.Equals("add", StringComparison.OrdinalIgnoreCase)
+            && !secondSegment.Equals("categories", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
 
         // ApprovalDetail (and its legacy MOApproval alias) is a dedicated
         // full-page route for approval details shared by all roles;
         // it uses the same SchemeApproval permission.
+        // SAS Lab portal and Payment Approval (2026-09-27): routes live under one prefix and map
+        // to a page key by their second segment. Farmer pages under /Sas use the v1 keys.
+        // The lab / payment keys are DESIGNATION only (HasPageStrict): the Admin / CorporateAdmin
+        // roles do not bypass them (product decision 2026-09-27).
+        if (firstSegment.Equals("Lab", StringComparison.OrdinalIgnoreCase))
+        {
+            firstSegment = secondSegment.ToLowerInvariant() switch
+            {
+                "" => "LabDashboard",
+                "consignments" => "LabConsignments",
+                "analysis" => "LabAnalysis",
+                "reports" => "LabReports",
+                "testentry" => "LabTestEntry",
+                "tracking" => "LabTracking",
+                _ => "LabDashboard"
+            };
+            // Coordinators (LabAnalysis) may open a sample's entry page read-only from Batch Details.
+            if (firstSegment == "LabTestEntry" && LoginState.HasPageStrict("LabAnalysis")) return;
+            // The lab dashboard opens to anyone holding any lab page (it picks the variant).
+            if (firstSegment == "LabDashboard"
+                && (LoginState.HasPageStrict("LabTestEntry") || LoginState.HasPageStrict("LabConsignments")
+                    || LoginState.HasPageStrict("LabAnalysis") || LoginState.HasPageStrict("LabReports")))
+            {
+                return;
+            }
+        }
+        else if (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase))
+        {
+            if (secondSegment.Equals("Payments", StringComparison.OrdinalIgnoreCase))
+            {
+                // Admin and Finance modes by their keys (designation only); farmers and the v1 write
+                // roles open the same page read-only through the SampleCollection key (the API decides
+                // the mode). Admin / CorporateAdmin never take the SampleCollection path: their
+                // payment access comes from the designation only.
+                if (LoginState.HasPageStrict("SasPaymentApproval") || LoginState.HasPageStrict("SasPaymentVerification")) return;
+                if (LoginState.UserRole is not (AppRole.Admin or AppRole.CorporateAdmin)
+                    && LoginState.CanAccess(PagePermission.SampleCollection)) return;
+                firstSegment = "SasPaymentApproval";
+            }
+            else
+            {
+                firstSegment = "SampleCollection";   // /Sas/MySamples, /Sas/MyReports, /Sas/MyPayments (farmer)
+            }
+        }
+
         if (firstSegment.Equals("MOApproval", StringComparison.OrdinalIgnoreCase)
             || firstSegment.Equals("ApprovalDetail", StringComparison.OrdinalIgnoreCase))
         {
             firstSegment = "SchemeApproval";
-        }
+        }      
 
         // CanAccess understands "Page.Action" tokens (page reachable if any action
-        // is granted) as well as legacy bare page tokens.
-        if (!LoginState.CanAccess(firstSegment) && !isDirectorSchemeApproval)
+        // is granted) as well as legacy bare page tokens. Dynamically registered
+        // pages use the same generic check: Key == URL first segment.
+        // The designation-only lab / payment keys are checked without the admin bypass.
+        // Resolve the permission identity the SAME way the menus do: ShellNavigation maps
+        // each route first segment to its PagePermission key (e.g. /CREATE-CSR-1Management
+        // -> CSR1Create, /StockReport -> SalesReport, /qr-scanner -> QRScanner). Fall back
+        // to the segment, which is the convention new pages follow (route prefix == enum
+        // member name), so a new page / menu / enum member needs no wiring here.
+        var permissionKey = ShellNavigation.Find(firstSegment)?.PermissionKey ?? firstSegment;
+        bool allowed = SPIC.MauiBlazorApp.Shared.Services.LoginState.DesignationOnlyPages.Contains(permissionKey)
+            ? LoginState.HasPageStrict(permissionKey)
+            : LoginState.CanAccess(permissionKey);
+        if (!allowed && !isDirectorSchemeApproval)
         {
-            string fallback;
-            if (LoginState.UserRole == AppRole.Dealer)
-                fallback = "/SDWADashboard";
-            else if (LoginState.UserRole == AppRole.SpecialAdmin)
-                fallback = LoginState.CanAccess("Logistics") ? "/Logistics" : "/Welcome";
-            else
-                fallback = "/Dashboard";
-            Nav.NavigateTo(fallback, replace: true);
+            // Redirect to the SAME landing page the login flow uses. That keeps the existing
+            // per-role destinations exactly as they were (Dealer -> /SDWADashboard, SpecialAdmin ->
+            // /Logistics or /Welcome, everyone else -> /Dashboard) and, because LandingPage is the
+            // one place that knows which pages a role actually has, it also gives a
+            // designation-driven role such as CommonRole a destination it is allowed to open. The
+            // previous hardcoded "/Dashboard" fallback would have bounced a CommonRole user whose
+            // designation does not grant Dashboard back to /Dashboard forever, because /Dashboard
+            // is denied by the very check above. Keyed off the authorization model, so any future
+            // designation-driven role inherits it without a change here.
+            Nav.NavigateTo(LoginState.LandingPage, replace: true);
         }
     }
     public void Dispose()

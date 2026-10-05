@@ -20,6 +20,75 @@ window.getCurrentPosition = function () {
     });
 };
 
+window.showRouteOnMap = function (elementId, originLat, originLng, destLat, destLng) {
+    var map = window.mapInstances ? window.mapInstances[elementId] : null;
+    if (!map) return { distanceKm: 0, durationMin: 0, error: "Map is not ready." };
+
+    if (map.marker) {
+        map.marker.remove();
+        map.marker = null;
+    }
+
+    if (map.routeLayer) {
+        map.removeLayer(map.routeLayer);
+        map.routeLayer = null;
+    }
+
+    var originIcon = L.divIcon({
+        className: 'cu-map-pin-icon cu-map-pin-origin',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: '<i class="bi bi-person-fill"></i>'
+    });
+    var destIcon = L.divIcon({
+        className: 'cu-map-pin-icon cu-map-pin-dest',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        html: '<i class="bi bi-geo-alt-fill"></i>'
+    });
+
+    map.marker = L.layerGroup([
+        L.marker([originLat, originLng], { icon: originIcon })
+            .bindPopup('<b>Your Location</b>'),
+        L.marker([destLat, destLng], { icon: destIcon })
+            .bindPopup('<b>SPIC Office</b><br/>SPIC House, 88 Anna Salai<br/>Little Mount, Guindy, Chennai – 600032')
+    ]).addTo(map);
+
+    var url = 'https://router.project-osrm.org/route/v1/driving/' +
+        originLng + ',' + originLat + ';' + destLng + ',' + destLat +
+        '?overview=full&geometries=geojson';
+
+    return fetch(url)
+        .then(function (response) {
+            if (!response.ok) throw new Error('Route service returned ' + response.status);
+            return response.json();
+        })
+        .then(function (data) {
+            if (!data.routes || data.routes.length === 0) throw new Error('No route found.');
+            var route = data.routes[0];
+            map.routeLayer = L.polyline(
+                route.geometry.coordinates.map(function (p) { return [p[1], p[0]]; }),
+                {
+                    color: '#2D72D9',
+                    weight: 4,
+                    opacity: 0.8
+                }).addTo(map);
+            map.fitBounds([[originLat, originLng], [destLat, destLng]], { padding: [40, 40] });
+            return {
+                distanceKm: route.distance / 1000,
+                durationMin: route.duration / 60,
+                error: null
+            };
+        })
+        .catch(function (err) {
+            return {
+                distanceKm: 0,
+                durationMin: 0,
+                error: err && err.message ? err.message : 'Unable to calculate road route right now.'
+            };
+        });
+};
+
 window.openPrintableHtml = function (htmlContent) {
     var w = window.open('', '_blank');
     if (w) {

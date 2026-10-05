@@ -1,0 +1,296 @@
+@page "/TaskDetail"
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<div class="container-fluid py-4 px-0 td-page">
+
+    <button type="button" class="td-back-link" @onclick='() => Navigation.NavigateTo("/TasksAllocation?tab=today")'>
+        <i class="bi bi-arrow-left"></i> Back to Tasks
+    </button>
+
+    <span class="td-category-badge">@CategoryLabel</span>
+    @if (kind == TaskKind.Dealer)
+    {
+        <h2 class="td-title">Hanumesh Trading Co</h2>
+        <p class="td-subtitle">Pending Ack. 10 mT &middot; Dues 99 Lakhs &middot; Coimbatore</p>
+    }
+
+    <div class="td-timeline-card">
+        <h3 class="td-timeline-title">Task Timeline</h3>
+        <div class="td-timeline">
+            @for (var i = 0; i < TimelineSteps.Count; i++)
+            {
+                var step = TimelineSteps[i];
+                var index = i;
+                <div class="td-timeline-step">
+                    <div class="td-timeline-node @(step.Done ? "done" : "pending")">
+                        <i class="bi @(step.Done ? "bi-check-lg" : "bi-clock")"></i>
+                    </div>
+                    <div class="td-timeline-label">@step.Label</div>
+                    <div class="td-timeline-sub">@step.SubLabel</div>
+                </div>
+
+                @if (index < TimelineSteps.Count - 1)
+                {
+                    <div class="td-timeline-connector @(step.Done && TimelineSteps[index + 1].Done ? "done" : "")"></div>
+                }
+            }
+        </div>
+    </div>
+
+    <div class="td-main-grid">
+            @if (kind == TaskKind.Dealer)
+            {
+                <div class="td-card td-col-left">
+                    <h3 class="td-card-title">Task Details</h3>
+                    <div class="td-details-grid">
+                        <div class="td-detail">
+                            <span class="td-detail-label">Dealer / Farmer</span>
+                            <span class="td-detail-val">HANUMESH TRADING CO</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Task Type</span>
+                            <span class="td-detail-val">dealer</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Location</span>
+                            <span class="td-detail-val">Coimbatore</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Due Date</span>
+                            <span class="td-detail-val">23 Sep 2026</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Priority</span>
+                            <span class="td-detail-val">High</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Assigned To</span>
+                            <span class="td-detail-val">Karthik Raja</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @if (kind == TaskKind.MdProgram)
+            {
+                <div class="td-card td-col-left">
+                    <h3 class="td-card-title">Program Details</h3>
+                    <div class="td-details-grid">
+                        <div class="td-detail">
+                            <span class="td-detail-label">Program</span>
+                            <span class="td-detail-val">Crop Protection Workshop</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Task Type</span>
+                            <span class="td-detail-val">MD Program</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Sanction Date</span>
+                            <span class="td-detail-val">01 May 2026</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Sanction No</span>
+                            <span class="td-detail-val">CSR1-2026-045</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Program Type</span>
+                            <span class="td-detail-val">Training</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Total Budget</span>
+                            <span class="td-detail-val">&#8377;50,000</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <div class="td-card td-col-right">
+                <h3 class="td-card-title">Quick actions</h3>
+                <p class="td-card-subtitle">Open these if this visit needs them</p>
+
+                <button type="button" class="td-quick-action" @onclick="OpenSoilSampleCollection">
+                    <i class="bi bi-eyedropper"></i> Soil Sample Collection
+                </button>
+                <button type="button" class="td-quick-action" @onclick="OpenAddFarmerData">
+                    <i class="bi bi-leaf"></i> Add Farmer Data
+                </button>
+            </div>
+
+            <div class="td-time-bar td-col-left">
+                <div class="td-time-left">
+                    <span class="td-time-label">Time on task</span>
+                    <span class="td-time-val">@ElapsedDisplay</span>
+                </div>
+                <div class="td-time-location"><i class="bi bi-geo-alt-fill"></i> Location captured (&plusmn;20m)</div>
+
+                @if (!isStarted)
+                {
+                    <button type="button" class="td-btn td-btn-primary" @onclick="StartTask">
+                        <i class="bi bi-check-circle"></i> Start Task
+                    </button>
+                }
+                else
+                {
+                    <!-- Sole close action: the close-out form below (Outcome/Remarks/
+                         Photo Proof) has no submit button of its own - this is it. -->
+                    <button type="button" class="td-btn td-btn-danger" disabled="@isClosed" @onclick="CloseTask">
+                        <i class="bi @(isClosed ? "bi-check-circle" : "bi-x-circle")"></i> @(isClosed ? "Task Closed" : "Close Task")
+                    </button>
+                }
+            </div>
+
+            <div class="td-card td-col-left">
+                <h3 class="td-card-title">Close-out form</h3>
+                <p class="td-card-subtitle">Fill this once work is done, then close the task.</p>
+
+                <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
+                <input id="td-outcome" type="text" class="td-input" @bind="outcome" @bind:event="oninput" disabled="@isClosed" />
+
+                @if (kind == TaskKind.Spcm)
+                {
+                    <label class="td-field-label" for="td-achieved">Achieved Target</label>
+                    <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@isClosed" />
+                }
+
+                @if (kind == TaskKind.PosLiquidation)
+                {
+                    <div class="td-pos-grid">
+                        <div>
+                            <label class="td-field-label" for="td-pos-urea">Urea</label>
+                            <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@isClosed" />
+                        </div>
+                        <div>
+                            <label class="td-field-label" for="td-pos-nps">NPS</label>
+                            <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@isClosed" />
+                        </div>
+                        <div>
+                            <label class="td-field-label" for="td-pos-dap">DAP</label>
+                            <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@isClosed" />
+                        </div>
+                        <div>
+                            <label class="td-field-label" for="td-pos-other">Other</label>
+                            <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@isClosed" />
+                        </div>
+                    </div>
+                }
+
+                <label class="td-field-label" for="td-remarks">Remarks</label>
+                <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" disabled="@isClosed"></textarea>
+
+                <label class="td-field-label">@FileFieldLabel</label>
+                <input type="file" class="td-file-input" disabled="@isClosed" />
+            </div>
+    </div>
+
+</div>
+
+@code {
+    // Which task type opened this page - drives the parts that differ
+    // between the Dealer/SPCM/MD Program/PoS Liquidation Figma frames
+    // (title/subtitle, category badge text, the details card, the
+    // close-out form's extra fields). Soil Sample has no Figma frame yet,
+    // so it still just cycles status in place on TasksAllocation.
+    private enum TaskKind { Dealer, Spcm, MdProgram, PosLiquidation }
+
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? TypeQuery { get; set; }
+
+    private TaskKind kind;
+
+    protected override void OnInitialized()
+    {
+        kind = TypeQuery?.ToLowerInvariant() switch
+        {
+            "spcm" => TaskKind.Spcm,
+            "mdprogram" => TaskKind.MdProgram,
+            "posliquidation" => TaskKind.PosLiquidation,
+            _ => TaskKind.Dealer
+        };
+    }
+
+    // Each Figma frame used its own casing for this badge (DEALER, SPCM,
+    // "MD Program", "Pos liquidation") rather than one shared rule.
+    private string CategoryLabel => kind switch
+    {
+        TaskKind.Dealer => "DEALER",
+        TaskKind.Spcm => "SPCM",
+        TaskKind.MdProgram => "MD Program",
+        TaskKind.PosLiquidation => "Pos liquidation",
+        _ => kind.ToString().ToUpperInvariant()
+    };
+
+    private string FileFieldLabel => kind == TaskKind.Dealer ? "Photo Proof" : "Supporting Document";
+
+    private string achievedTarget = "";
+    private string posUrea = "";
+    private string posNps = "";
+    private string posDap = "";
+    private string posOther = "";
+
+    private sealed record TimelineStep(string Label, string SubLabel, bool Done);
+
+    // Static placeholder: mirrors the Hanumesh Trading Co dealer task from
+    // Today's Allocation. The Figma frame's own title said "Malar
+    // Fertilizers" while its Task Details panel said "Hanumesh Trading Co" -
+    // an internal inconsistency in the mockup - so this uses the name that's
+    // consistent with the rest of the app's example data instead.
+    private List<TimelineStep> TimelineSteps = new()
+    {
+        new("Assigned", "Karthik Raja", true),
+        new("Requested", "By JMDO", true),
+        new("Approved", "By RM", true),
+        new("Started", "Time & GPS logged", true),
+        new("Closed", "Pending", false)
+    };
+
+    private bool isStarted;
+    private bool isClosed;
+    private int elapsedSeconds;
+    private System.Timers.Timer? timer;
+
+    private string ElapsedDisplay => TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss");
+
+    private string outcome = "Fully Completed";
+    private string remarks = "";
+
+    private void StartTask()
+    {
+        if (isStarted) return;
+        isStarted = true;
+
+        timer = new System.Timers.Timer(1000) { AutoReset = true };
+        timer.Elapsed += (_, _) =>
+        {
+            elapsedSeconds++;
+            InvokeAsync(StateHasChanged);
+        };
+        timer.Start();
+
+        Toast.Success("Task started - time and location are now being logged.");
+    }
+
+    private void CloseTask()
+    {
+        if (string.IsNullOrWhiteSpace(outcome) || isClosed) return;
+
+        isClosed = true;
+        timer?.Stop();
+
+        var idx = TimelineSteps.FindIndex(s => s.Label == "Closed");
+        if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Just now", Done = true };
+
+        Toast.Success("Task closed.");
+    }
+
+    private void OpenSoilSampleCollection() => Toast.Info("Soil Sample Collection form is not built yet.");
+
+    private void OpenAddFarmerData() => Toast.Info("Add Farmer Data form is not built yet.");
+
+    public void Dispose()
+    {
+        timer?.Stop();
+        timer?.Dispose();
+    }
+}

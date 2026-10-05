@@ -6,14 +6,13 @@
 @inject NavigationManager NavManager
 @inject LoginState LoginState
 
-<main class="drl-wrapper d-flex flex-column gap-3">
+<main class="container-fluid py-4 px-0">
 
     <!-- ── Header Section ── -->
     <section class="drl-header">
         <div class="drl-header-row">
             <div style="flex:1; min-width:0;">
-                <h1 class="drl-header-title">Dealer Applications Review</h1>
-                <p class="drl-header-desc">Review and approve dealer registration</p>
+                <PageHeader Title="Dealer Applications Review" Subtitle="Review and approve dealer registration" CssClass="mb-0" />
             </div>
             <span class="drl-badge-role">@(LoginState?.UserRole.ToString() ?? "User")</span>
         </div>
@@ -93,17 +92,13 @@
             <div class="drl-table-container">
                 @if (_isLoading)
                 {
-                    <div class="text-center py-5">
-                        <div class="spinner-border text-primary" role="status"></div>
-                        <p class="text-muted mt-2">Loading applications...</p>
+                    <div class="p-3">
+                        <Skeleton Variant="table" Rows="6" LoadingText="Loading applications..." />
                     </div>
                 }
                 else if (!PagedItems.Any())
                 {
-                    <div class="text-center py-5">
-                        <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
-                        <p class="text-muted mt-2">No applications found.</p>
-                    </div>
+                    <EmptyState Icon="bi-inbox" Title="No applications found." Message="Try a different search or status filter." />
                 }
                 else
                 {
@@ -125,19 +120,19 @@
                                 @foreach (var item in PagedItems.Select((d, i) => new { Dealer = d, Index = (_currentPage - 1) * _pageSize + i + 1 }))
                                 {
                                     <tr>
-                                        <td><span style="font-weight:500;">@item.Index</span></td>
-                                        <td>@(item.Dealer.DealerCode ?? $"APP-{DateTime.Now.Year}-{item.Dealer.Id:D3}")</td>
-                                        <td>
+                                        <td class="drl-cell-no" data-label="S.No"><span style="font-weight:500;">@item.Index</span></td>
+                                        <td data-label="Application ID">@(item.Dealer.DealerCode ?? $"APP-{DateTime.Now.Year}-{item.Dealer.Id:D3}")</td>
+                                        <td class="drl-cell-dealer" data-label="Dealer Name">
                                             <div class="drl-dealer-cell">
                                                 <div class="drl-dealer-avatar">@GetInitials(item.Dealer.FirmName)</div>
                                                 <span>@(item.Dealer.FirmName ?? "Unnamed Firm")</span>
                                             </div>
                                         </td>
-                                        <td><span class="@GetBadgeStageClass(item.Dealer)">@GetBadgeStageText(item.Dealer)</span></td>
-                                        <td><span class="@GetBadgeStatusClass(item.Dealer)">@GetBadgeStatusText(item.Dealer)</span></td>
-                                        <td>@(item.Dealer.CashCreditLimit > 0 ? $"&#8377;{item.Dealer.CashCreditLimit.ToString("N2")}" : "-")</td>
-                                        <td>@item.Dealer.UpdatedAt.ToString("dd MMM yyyy")</td>
-                                        <td>
+                                        <td data-label="Current Stage"><span class="@GetBadgeStageClass(item.Dealer)">@GetBadgeStageText(item.Dealer)</span></td>
+                                        <td data-label="Status"><span class="@GetBadgeStatusClass(item.Dealer)">@GetBadgeStatusText(item.Dealer)</span></td>
+                                        <td data-label="Credit Limit">@(item.Dealer.CashCreditLimit > 0 ? $"&#8377;{item.Dealer.CashCreditLimit.ToString("N2")}" : "-")</td>
+                                        <td data-label="Last Updated">@item.Dealer.UpdatedAt.ToString("dd MMM yyyy")</td>
+                                        <td data-label="Action">
                                             <button class="drl-btn-action" aria-label="View application @(item.Dealer.DealerCode ?? item.Dealer.Id.ToString())" @onclick="() => ReviewDealer(item.Dealer.Id)">
                                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                     <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>
@@ -939,4 +934,112 @@
     }
 
     .drl-page-number-btn:hover:not(.drl-active) { background: #f9f9f9; }
+
+    /* Phone: one row, "Items Per Page" left and the pager right. Only prev / current /
+       next are shown so the row always fits the phone width. */
+    @@media (max-width: 767.98px) {
+        .drl-table-footer {
+            flex-direction: row;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .drl-items-per-page { gap: 6px; }
+        .drl-items-per-page-label { font-size: 12px; }
+
+        .drl-items-per-page select {
+            width: 58px;
+            height: 30px;
+            font-size: 12px;
+        }
+
+        .drl-pagination-wrapper {
+            flex-wrap: nowrap;
+            gap: 4px;
+        }
+
+        .drl-page-nav-btn,
+        .drl-page-number-btn {
+            min-width: 28px;
+            height: 28px;
+            padding: 0 6px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .drl-page-number-btn:not(.drl-active) { display: none; }
+
+        /* Each application row becomes a card; cells show their column label on the left. */
+        .drl-table-container {
+            overflow-x: hidden;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+        }
+
+        .drl-app-table {
+            display: block;
+            min-width: 0;
+        }
+
+        .drl-app-table thead { display: none; }
+
+        .drl-app-table tbody,
+        .drl-app-table tbody tr,
+        .drl-app-table tbody tr td {
+            display: block;
+            width: 100%;
+        }
+
+        .drl-app-table tbody tr {
+            padding: 6px 14px;
+            margin-bottom: 12px;
+            border: 1px solid #d8ebe1;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+        }
+
+        .drl-app-table tbody tr:last-child { margin-bottom: 0; }
+
+        .drl-app-table tbody tr td {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f5f3;
+            text-align: right;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        .drl-app-table tbody tr td::before {
+            content: attr(data-label);
+            flex: 0 0 40%;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: .02em;
+        }
+
+        .drl-app-table tbody tr td:last-child { border-bottom: 0; }
+
+        .drl-app-table tbody tr td.drl-cell-no { display: none; }
+
+        .drl-cell-dealer .drl-dealer-cell {
+            min-width: 0;
+            font-weight: 600;
+        }
+
+        .drl-btn-action {
+            width: 32px;
+            height: 32px;
+            border: 1px solid #d8ebe1;
+            border-radius: 7px;
+        }
+    }
 </style>

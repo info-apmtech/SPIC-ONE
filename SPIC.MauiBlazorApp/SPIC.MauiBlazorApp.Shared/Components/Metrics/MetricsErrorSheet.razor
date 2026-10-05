@@ -1,0 +1,177 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Metrics
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@implements IDisposable
+@inject MetricsApi Metrics
+
+@*
+    One error group in detail (api/Metrics/errors/{lastId}): message, where and who, counts,
+    stack trace, the latest occurrences, and Resolve / Reopen (api/Metrics/errors/{fp}/resolve).
+    Bottom sheet on phones, side drawer from 768 px.
+*@
+<BottomSheet IsOpen="IsOpen" IsOpenChanged="OnOpenChanged" Size="BottomSheet.SheetSize.Full"
+             Title="@MetricsText.ShortType(Group?.ExceptionType)"
+             Subtitle="@(Group is null ? null : $"{MetricsText.SourceName(Group.Source)} · {MetricsText.AppName(Group.App)}")"
+             CssClass="mx-sheet">
+    <ChildContent>
+        @if (_loading && _detail is null)
+        {
+            <div class="mx-loading"><span class="spinner-border text-success" role="status"><span class="visually-hidden">Loading</span></span></div>
+        }
+        else if (_detail is null)
+        {
+            <EmptyState Icon="bi-cloud-slash" Title="The details could not be loaded" Compact="true">
+                <button type="button" class="mx-btn mx-btn-outline" @onclick="LoadAsync">Try again</button>
+            </EmptyState>
+        }
+        else
+        {
+            var d = _detail;
+            <div class="mx-detail">
+                <p class="mx-detail-msg">@d.Message</p>
+                <p class="mx-detail-type">@d.ExceptionType</p>
+
+                <dl class="mx-detail-counts">
+                    <div><dt>Occurrences</dt><dd>@MetricsText.Num(d.Occurrences)</dd></div>
+                    <div><dt>Affected users</dt><dd>@MetricsText.Num(d.AffectedUsers)</dd></div>
+                    <div><dt>First seen</dt><dd>@MetricsText.Stamp(d.FirstSeen)</dd></div>
+                    <div><dt>Last seen</dt><dd>@MetricsText.Stamp(d.LastSeen)</dd></div>
+                </dl>
+
+                <h3 class="mx-detail-title">Latest occurrence</h3>
+                <dl class="mx-detail-grid">
+                    <div><dt>When</dt><dd>@MetricsText.Stamp(d.At)</dd></div>
+                    <div><dt>Page / route</dt><dd class="mx-route">@MetricsText.Dash(d.Route)</dd></div>
+                    <div><dt>Method / status</dt><dd>@MetricsText.Dash(d.Method) @(d.StatusCode is { } sc ? $"· {sc}" : "")</dd></div>
+                    <div><dt>User</dt><dd>@MetricsText.Dash(d.UserName)@(string.IsNullOrWhiteSpace(d.Role) ? "" : $" ({d.Role})")</dd></div>
+                    <div><dt>App</dt><dd>@MetricsText.AppName(d.App)@(string.IsNullOrWhiteSpace(d.AppVersion) ? "" : $" v{d.AppVersion}")</dd></div>
+                    <div><dt>Trace id</dt><dd class="mx-mono">@MetricsText.Dash(d.TraceId)</dd></div>
+                    @if (!string.IsNullOrWhiteSpace(d.Category))
+                    {
+                        <div class="mx-detail-wide"><dt>Logged by</dt><dd class="mx-mono">@d.Category</dd></div>
+                    }
+                    @if (d.IsResolved)
+                    {
+                        <div class="mx-detail-wide"><dt>Resolved</dt><dd>@MetricsText.Dash(d.ResolvedBy) · @MetricsText.Stamp(d.ResolvedAt)</dd></div>
+                    }
+                </dl>
+
+                <h3 class="mx-detail-title">Stack trace</h3>
+                @if (string.IsNullOrWhiteSpace(d.StackTrace))
+                {
+                    <p class="mx-muted">No stack trace was captured.</p>
+                }
+                else
+                {
+                    <pre class="mx-stack" tabindex="0">@d.StackTrace</pre>
+                }
+
+                @if (d.Recent.Count > 0)
+                {
+                    <h3 class="mx-detail-title">Latest occurrences</h3>
+                    <ul class="mx-occ">
+                        @foreach (var o in d.Recent)
+                        {
+                            <li class="mx-occ-row">
+                                <span class="mx-occ-when">@MetricsText.Stamp(o.At)</span>
+                                <span class="mx-occ-who">@MetricsText.Dash(o.UserName)@(string.IsNullOrWhiteSpace(o.Role) ? "" : $" ({o.Role})")</span>
+                                <span class="mx-occ-where">
+                                    @MetricsText.AppName(o.App)@(string.IsNullOrWhiteSpace(o.AppVersion) ? "" : $" v{o.AppVersion}")
+                                    @if (o.StatusCode is { } s)
+                                    {
+                                        <span> · @s</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(o.Route))
+                                    {
+                                        <span class="mx-route"> · @o.Route</span>
+                                    }
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+    </ChildContent>
+    <Footer>
+        <button type="button" class="mx-btn mx-btn-outline" @onclick="CloseAsync">Close</button>
+        @if (_detail is not null)
+        {
+            <button type="button" class="mx-btn @(_detail.IsResolved ? "mx-btn-outline" : "mx-btn-primary")"
+                    disabled="@_saving" @onclick="ToggleResolvedAsync">
+                @if (_saving)
+                {
+                    <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+                }
+                else
+                {
+                    <i class="bi @(_detail.IsResolved ? "bi-arrow-counterclockwise" : "bi-check2-circle")" aria-hidden="true"></i>
+                }
+                @(_detail.IsResolved ? "Reopen" : "Mark resolved")
+            </button>
+        }
+    </Footer>
+</BottomSheet>
+
+@code {
+    [Parameter] public MetricsErrorGroupDto? Group { get; set; }
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+    /// <summary>Raised with the updated group after Resolve / Reopen.</summary>
+    [Parameter] public EventCallback<MetricsErrorGroupDto> GroupChanged { get; set; }
+
+    private MetricsErrorDetailDto? _detail;
+    private long? _loadedId;
+    private bool _loading;
+    private bool _saving;
+    private int _version;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!IsOpen || Group is null || _loadedId == Group.LastId) return;
+        _loadedId = Group.LastId;
+        _detail = null;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Group is null) return;
+        var version = ++_version;
+        _loading = true;
+        StateHasChanged();
+
+        var detail = await Metrics.GetErrorAsync(Group.LastId, _cts.Token);
+        if (version != _version) return;
+        _detail = detail;
+        _loading = false;
+        StateHasChanged();
+    }
+
+    private async Task ToggleResolvedAsync()
+    {
+        if (_detail is null || _saving) return;
+        _saving = true;
+
+        var updated = await Metrics.ResolveAsync(_detail.Fingerprint, !_detail.IsResolved, _cts.Token);
+        _saving = false;
+        if (updated is null) return;
+
+        _detail.IsResolved = updated.IsResolved;
+        _detail.ResolvedBy = updated.ResolvedBy;
+        _detail.ResolvedAt = updated.ResolvedAt;
+        await GroupChanged.InvokeAsync(updated);
+    }
+
+    private async Task OnOpenChanged(bool open)
+    {
+        IsOpen = open;
+        if (!open) _loadedId = null;
+        await IsOpenChanged.InvokeAsync(open);
+    }
+
+    private Task CloseAsync() => OnOpenChanged(false);
+
+    public void Dispose() => _cts.Cancel();
+}

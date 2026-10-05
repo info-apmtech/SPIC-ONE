@@ -1,0 +1,76 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Feedback
+@implements IDisposable
+@inject IServiceProvider Services
+
+@*
+    OfflineBanner: slim fixed banner at the top while navigator.onLine is false, plus a
+    "Back online" toast when the connection returns. Place ONE per layout.
+    Needs ConnectivityState + ToastService registered (scoped) and feedback-interop.js loaded.
+*@
+
+@if (!Connectivity.IsOnline)
+{
+    <div class="fb-offline @CssClass" role="status" aria-live="polite">
+        <i class="bi bi-wifi-off" aria-hidden="true"></i>
+        <span class="fb-offline__text">@Message</span>
+    </div>
+}
+
+@code {
+    [Parameter] public string Message { get; set; } = "You are offline. Showing the last loaded data.";
+    [Parameter] public string BackOnlineMessage { get; set; } = "Back online";
+    [Parameter] public bool ShowBackOnlineToast { get; set; } = true;
+    [Parameter] public string? CssClass { get; set; }
+
+    [CascadingParameter] public ConnectivityState? CascadedConnectivity { get; set; }
+    [CascadingParameter] public ToastService? CascadedToasts { get; set; }
+
+    private ConnectivityState? _connectivity;
+    private ToastService? _toasts;
+    private bool _disposed;
+
+    private ConnectivityState Connectivity =>
+        _connectivity ??= FeedbackServiceResolver.Resolve(CascadedConnectivity, Services);
+
+    private ToastService Toasts =>
+        _toasts ??= FeedbackServiceResolver.Resolve(CascadedToasts, Services);
+
+    protected override void OnInitialized()
+    {
+        Connectivity.OnChange += HandleChange;
+        Connectivity.OnBackOnline += HandleBackOnline;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _disposed) return;
+
+        // JS interop is only available after the first render.
+        await Connectivity.InitializeAsync();
+        if (!Connectivity.IsOnline) StateHasChanged();
+    }
+
+    private void HandleChange()
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleBackOnline()
+    {
+        if (_disposed || !ShowBackOnlineToast) return;
+        _ = InvokeAsync(() => Toasts.Success(BackOnlineMessage, durationMs: 2500));
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        if (_connectivity is not null)
+        {
+            _connectivity.OnChange -= HandleChange;
+            _connectivity.OnBackOnline -= HandleBackOnline;
+        }
+    }
+}

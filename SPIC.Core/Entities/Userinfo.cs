@@ -34,7 +34,7 @@ namespace SPIC.Core.Entities
     }
     public enum AppRole
     {
-        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin
+        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin, SuperAdmin, CommonRole
     }
     public enum PagePermission
     {
@@ -59,8 +59,59 @@ namespace SPIC.Core.Entities
         [PageModule("Employee Management")] EmployeeRegistration, 
         dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, SDWADashboard, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
-        Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration, SubDealerList , SchemeApproval,
-        SubDealerEmployeeMaster,SDWA,SDWAAdmin,GuestHouse,GuestHouseBooking,Rooms,RoomDetails,GuestDetails,Payment, MyBookings,BookingPreview,BookingDetails,FrontOffice,GenerateBill,BillList
+        [OpenToAll] Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration, SubDealerList , SchemeApproval,
+        SubDealerEmployeeMaster,SDWA,SDWAAdmin,GuestHouse,GuestHouseBooking,Rooms,RoomDetails,GuestDetails,Payment, MyBookings,BookingPreview,BookingDetails,FrontOffice,GenerateBill,BillList,LogisticsReport, DealerStateSummary,
+        // Appended at the END on purpose: ApplicationPage seed ids are enum-index based (see AppDbContext).
+        // OpenToAll: the product opens the read-only Digital Library to every signed-in user.
+        // Adding/editing CONTENT still needs the DigitalLibrary page permission (checked inside
+        // the pages), which is why it is still configurable on a designation. Flagged rather than
+        // special-cased so PageAuthorization can treat it as data - see OpenToAllAttribute.
+        [PageModule("Digital Library")] [OpenToAll] DigitalLibrary,
+        [PageModule("SAS")] SampleCollection,
+        [PageModule("SAS")] ConsignmentHistory,
+        IfmsRelaySetup,
+        SchemeOverview,
+        AddScheme,
+        WinnerPopUp,
+        WinnerDetails,
+        Luckydraw,
+        LuckyDrawList,
+        SelectPurchasedProducts,
+        Scanproduct,
+        QRScanner,
+        BudgetOverview,
+        BudgetingManagements,
+        CSR2,
+        FinalReportCSRView,
+        RMDValidationQueue,
+        MOSubmissionValidation,
+        RMApprovalStatus,
+        SMMApprovals,
+        AVPApprovals,
+        ReportDashboard,
+        ReportsCenter,
+        ContactUs,
+        LogisticsMaster,
+        UserProfile,
+        // Lab portal (version 2, 2026-09-27): coordinator pages, then the analyst page.
+        [PageModule("SAS Lab")] LabDashboard,
+        [PageModule("SAS Lab")] LabConsignments,
+        [PageModule("SAS Lab")] LabAnalysis,
+        [PageModule("SAS Lab")] LabReports,
+        [PageModule("SAS Lab")] LabTestEntry,
+        [PageModule("SAS Lab")] LabTracking,
+        [PageModule("SAS")] SasPaymentApproval,
+        [PageModule("SAS")] SasPaymentVerification,
+        // Usage / error metrics page (2026-09-28, docs/metrics-telemetry-plan.md). Normal CanAccess rule.
+        [PageModule("Administration")] Metrics,
+        // MD Portal - Annual Budgeting master. Appended at the END on purpose.
+        // MD Portal - Annual Budgeting master. Appended at the END on purpose.
+        AnnualBudgeting, StateBudgetManagement,
+        
+        // Added for menu permissions
+        FieldDashboard, FieldReports, MdoDashboard, AllocationRequests, TaskMonitoring,
+        PerformanceTracker, TargetAchievement, FarmerData, MdoReports, SdwaCompanyMaster,
+        GuestHouseCancellations, DemoDocumentation, SalesAudit, ExtensionRequests, MarkAttendance, TasksAllocation
 
     }
 }

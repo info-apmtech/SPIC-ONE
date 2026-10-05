@@ -1,0 +1,1130 @@
+@page "/TasksAllocation"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.LookupCacheService LookupCache
+
+<div class="container-fluid py-4 px-0 ta-page">
+
+    <!-- Header card -->
+    <div class="ta-header-card">
+        <h2 class="ta-title">Tasks Allocation</h2>
+        <p class="ta-subtitle">@HeaderSubtitle</p>
+    </div>
+
+    <!-- Tabs + content card -->
+    <div class="ta-content-card">
+        <div class="ta-tabs" role="tablist">
+            <button type="button"
+                    class="ta-tab @(currentTab == TaTab.All ? "active" : "")"
+                    role="tab"
+                    aria-selected="@(currentTab == TaTab.All ? "true" : "false")"
+                    @onclick="() => currentTab = TaTab.All">
+                All Allocations
+            </button>
+            <button type="button"
+                    class="ta-tab @(currentTab == TaTab.Today ? "active" : "")"
+                    role="tab"
+                    aria-selected="@(currentTab == TaTab.Today ? "true" : "false")"
+                    @onclick="() => currentTab = TaTab.Today">
+                Today's Allocation
+            </button>
+            <button type="button"
+                    class="ta-tab @(currentTab == TaTab.Completed ? "active" : "")"
+                    role="tab"
+                    aria-selected="@(currentTab == TaTab.Completed ? "true" : "false")"
+                    @onclick="() => currentTab = TaTab.Completed">
+                Completed Allocations
+            </button>
+        </div>
+
+        @if (currentTab == TaTab.All)
+        {
+            @if (isAllocationSubmitted)
+            {
+                <div class="ta-status-card ta-status-pending">
+                    <div class="ta-status-icon"><i class="bi bi-clock-history"></i></div>
+                    <div class="ta-status-title">Allocation submitted &mdash; awaiting MDO approval</div>
+                    <div class="ta-status-summary">@submittedSummary</div>
+                </div>
+            }
+            else
+            {
+                <div class="ta-wizard">
+                    <!-- Step sidebar -->
+                    <div class="ta-stepper @(stepperCollapsed ? "ta-stepper-collapsed" : "")">
+                        @foreach (var step in Steps)
+                        {
+                            <button type="button"
+                                    class="ta-step-item @(currentStep == step.Number ? "active" : "")"
+                                    @onclick="() => GoToStep(step.Number)">
+                                <span class="ta-step-num">@step.Number</span>
+                                <span class="ta-step-label">@step.Label</span>
+                            </button>
+                        }
+                    </div>
+
+                    <button type="button" class="ta-stepper-toggle" title="@(stepperCollapsed ? "Expand steps" : "Collapse steps")" @onclick="ToggleStepper">
+                        <i class="bi @(stepperCollapsed ? "bi-chevron-right" : "bi-chevron-left")"></i>
+                    </button>
+
+                    <!-- Step content -->
+                    <div class="ta-wizard-content">
+                        @if (currentStep == 1)
+                        {
+                            <div class="ta-step-panel">
+                                <p class="ta-step-instruction">Step 1 of 5 &mdash; select the dealer tasks you plan to work on today.</p>
+
+                                <div class="ta-step-toolbar">
+                                    <div class="ta-search-box">
+                                        <i class="bi bi-search"></i>
+                                        <input type="text" placeholder="Search dealer name or code..." @bind="dealerSearch" @bind:event="oninput" />
+                                    </div>
+                                    <button type="button" class="ta-filter-btn"><i class="bi bi-sliders"></i> Filter</button>
+                                </div>
+
+                                <div class="ta-dealer-grid">
+                                    @if (isLoadingDealers)
+                                    {
+                                        <EmptyState Icon="bi-hourglass-split" Title="Loading dealers..." Compact="true" />
+                                    }
+                                    else if (dealersLoadFailed)
+                                    {
+                                        <EmptyState Icon="bi-exclamation-triangle" Title="Couldn't load dealers" Message="Please try again in a moment." Compact="true" />
+                                    }
+                                    else
+                                    {
+                                        @foreach (var dealer in FilteredDealers)
+                                        {
+                                            <div class="ta-dealer-card @(dealer.IsSelected ? "selected" : "")" @onclick="() => ToggleDealer(dealer)">
+                                                <div class="ta-dealer-top">
+                                                    <span class="ta-checkbox @(dealer.IsSelected ? "checked" : "")">
+                                                        @if (dealer.IsSelected)
+                                                        {
+                                                            <i class="bi bi-check-lg"></i>
+                                                        }
+                                                    </span>
+                                                    <span class="ta-type-pill"><i class="bi bi-shop"></i> @dealer.TypeLabel</span>
+                                                </div>
+
+                                                <h4 class="ta-dealer-name">@dealer.Name</h4>
+
+                                                <div class="ta-dealer-code-row">
+                                                    <i class="bi bi-person"></i> Dealer Code <strong>@dealer.DealerCode</strong>
+                                                    <button type="button" class="ta-copy-btn" title="Copy dealer code" @onclick="() => CopyCode(dealer.DealerCode)" @onclick:stopPropagation="true">
+                                                        <i class="bi bi-copy"></i>
+                                                    </button>
+                                                </div>
+
+                                                <div class="ta-dealer-info-row">
+                                                    <span>iFMS ID</span>
+                                                    <strong>@(dealer.IfmsId ?? "—")</strong>
+                                                </div>
+                                                <div class="ta-dealer-info-row">
+                                                    <span>PoS Liquidation</span>
+                                                    <strong>@(dealer.PosLiquidation ?? "—")</strong>
+                                                </div>
+
+                                                <div class="ta-dealer-stats-row">
+                                                    <div class="ta-mini-stat ta-mini-stat-dues">
+                                                        <div class="ta-mini-stat-label"><i class="bi bi-clock"></i> Dues</div>
+                                                        <div class="ta-mini-stat-val">
+                                                            @if (dealer.DuesLakhs is int dues)
+                                                            {
+                                                                @dues <span>Lakhs</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                @:—
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    <div class="ta-mini-stat ta-mini-stat-pending">
+                                                        <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
+                                                        <div class="ta-mini-stat-val">
+                                                            @if (dealer.PendingAckMt is int ack)
+                                                            {
+                                                                @ack <span>mT</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                @:—
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+
+                                        @if (!FilteredDealers.Any())
+                                        {
+                                            <EmptyState Icon="bi-search" Title="No dealers match your search" Compact="true" />
+                                        }
+                                    }
+                                </div>
+
+                                <div class="ta-step-footer">
+                                    <div class="ta-selected-summary">
+                                        @if (SelectedDealers.Any())
+                                        {
+                                            @string.Join("  ·  ", SelectedDealers.Select(d => $"{d.Name} - dealer Code : {d.DealerCode}"))
+                                        }
+                                        else
+                                        {
+                                            <span>Select at least one dealer to continue.</span>
+                                        }
+                                    </div>
+                                    <button type="button" class="ta-btn ta-btn-next" disabled="@(!SelectedDealers.Any())" @onclick="() => GoToStep(2)">
+                                        Next: SPCM Target <i class="bi bi-arrow-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        else if (currentStep == 2)
+                        {
+                            <div class="ta-step-panel">
+                                <p class="ta-step-instruction">Step 2 of 5 &mdash; how much are you targeting to achieve today?</p>
+
+                                <div class="ta-target-card">
+                                    <div class="ta-target-header">
+                                        <i class="bi bi-bullseye"></i>
+                                        <h4>Today's SPCM Target</h4>
+                                    </div>
+                                    <p class="ta-target-meta">Region: @FieldExecRegion &middot; MO H.Q: @FieldExecMoHq &middot; JMDO H.Q: @FieldExecJmdoHq</p>
+
+                                    <label class="ta-target-label" for="ta-spcm-target">Today's Target</label>
+                                    <input id="ta-spcm-target" type="number" min="0" class="ta-target-input" placeholder="e.g. 100" @bind="spcmTarget" @bind:event="oninput" />
+                                </div>
+
+                                <div class="ta-step-footer ta-step-footer-simple">
+                                    <button type="button" class="ta-btn ta-btn-prev" @onclick="() => GoToStep(1)">
+                                        <i class="bi bi-arrow-left"></i> Back
+                                    </button>
+                                    <button type="button" class="ta-btn ta-btn-next" disabled="@string.IsNullOrWhiteSpace(spcmTarget)" @onclick="() => GoToStep(3)">
+                                        Next: Soil Sample <i class="bi bi-arrow-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        else if (currentStep == 3)
+                        {
+                            <div class="ta-step-panel">
+                                <p class="ta-step-instruction">Step 3 of 5 &mdash; how many soil samples are you targeting today?</p>
+
+                                <div class="ta-target-card">
+                                    <div class="ta-target-header">
+                                        <i class="bi bi-moisture"></i>
+                                        <h4>Soil Sample Collection</h4>
+                                    </div>
+                                    <p class="ta-target-meta">Region: @FieldExecRegion &middot; MO H.Q: @FieldExecMoHq &middot; JMDO H.Q: @FieldExecJmdoHq</p>
+
+                                    <label class="ta-target-label" for="ta-soil-target">Today's Target</label>
+                                    <input id="ta-soil-target" type="number" min="0" class="ta-target-input" placeholder="e.g. 100" @bind="soilTarget" @bind:event="oninput" />
+                                </div>
+
+                                <div class="ta-step-footer ta-step-footer-simple">
+                                    <button type="button" class="ta-btn ta-btn-prev" @onclick="() => GoToStep(2)">
+                                        <i class="bi bi-arrow-left"></i> Back
+                                    </button>
+                                    <button type="button" class="ta-btn ta-btn-next" disabled="@string.IsNullOrWhiteSpace(soilTarget)" @onclick="() => GoToStep(4)">
+                                        Next: MD Program <i class="bi bi-arrow-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        else if (currentStep == 4)
+                        {
+                            <div class="ta-step-panel">
+                                <p class="ta-step-instruction">Step 4 of 5 &mdash; select the MD programs you'll cover today, then submit for MDO approval.</p>
+
+                                <div class="ta-dealer-grid">
+                                    @if (isLoadingPrograms)
+                                    {
+                                        <EmptyState Icon="bi-hourglass-split" Title="Loading MD programs..." Compact="true" />
+                                    }
+                                    else if (programsLoadFailed)
+                                    {
+                                        <EmptyState Icon="bi-exclamation-triangle" Title="Couldn't load MD programs" Message="Please try again in a moment." Compact="true" />
+                                    }
+                                    else if (!Programs.Any())
+                                    {
+                                        <EmptyState Icon="bi-easel" Title="No MD programs found for your HQ" Compact="true" />
+                                    }
+                                    else
+                                    {
+                                        @foreach (var program in Programs)
+                                        {
+                                            <div class="ta-dealer-card @(program.IsSelected ? "selected" : "")" @onclick="() => ToggleProgram(program)">
+                                                <div class="ta-dealer-top">
+                                                    <span class="ta-checkbox @(program.IsSelected ? "checked" : "")">
+                                                        @if (program.IsSelected)
+                                                        {
+                                                            <i class="bi bi-check-lg"></i>
+                                                        }
+                                                    </span>
+                                                    <span class="ta-type-pill ta-type-pill-purple"><i class="bi bi-people"></i> @program.TypeLabel</span>
+                                                </div>
+
+                                                <h4 class="ta-dealer-name ta-program-name">@program.Title</h4>
+
+                                                <div class="ta-dealer-code-row">
+                                                    <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>@(program.SanctionNo ?? "—")</strong>
+                                                    @if (program.SanctionNo is not null)
+                                                    {
+                                                        <button type="button" class="ta-copy-btn" title="Copy sanction number" @onclick="() => CopyCode(program.SanctionNo)" @onclick:stopPropagation="true">
+                                                            <i class="bi bi-copy"></i>
+                                                        </button>
+                                                    }
+                                                </div>
+
+                                                <div class="ta-dealer-info-row ta-program-date-row">
+                                                    <span>Sanction Date</span>
+                                                    <strong>@(program.SanctionDate ?? "—")</strong>
+                                                </div>
+
+                                                <div class="ta-dealer-stats-row">
+                                                    <div class="ta-mini-stat ta-mini-stat-programs">
+                                                        <div class="ta-mini-stat-label"><i class="bi bi-file-earmark-text"></i> Programs</div>
+                                                        <div class="ta-mini-stat-val">@program.ProgramCount <span>Program</span></div>
+                                                    </div>
+                                                    <div class="ta-mini-stat ta-mini-stat-budget">
+                                                        <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
+                                                        <div class="ta-mini-stat-val">@program.TotalBudget</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    }
+                                </div>
+
+                                <div class="ta-step-footer">
+                                    <div class="ta-selected-summary">
+                                        @if (SelectedPrograms.Any())
+                                        {
+                                            @string.Join("  ·  ", SelectedPrograms.Select(p => $"{p.ProgramCount} Program - {p.Title}"))
+                                        }
+                                        else
+                                        {
+                                            <span>Select at least one MD program to continue.</span>
+                                        }
+                                    </div>
+                                    <div class="ta-step-footer-actions">
+                                        <button type="button" class="ta-btn ta-btn-prev" @onclick="() => GoToStep(3)">
+                                            <i class="bi bi-arrow-left"></i> Back
+                                        </button>
+                                        <button type="button" class="ta-btn ta-btn-next" disabled="@(!SelectedPrograms.Any())" @onclick="() => GoToStep(5)">
+                                            Next: PoS liquidation <i class="bi bi-arrow-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="ta-step-panel">
+                                <p class="ta-step-instruction">Step 5 of 5 &mdash; how much are you targeting to achieve today?</p>
+
+                                <div class="ta-target-card ta-target-card-wide">
+                                    <div class="ta-target-header">
+                                        <i class="bi bi-bullseye"></i>
+                                        <h4>Today's PoS liquidation</h4>
+                                    </div>
+                                    <p class="ta-target-meta">Region: @FieldExecRegion &middot; MO H.Q: @FieldExecMoHq &middot; JMDO H.Q: @FieldExecJmdoHq</p>
+
+                                    <div class="ta-target-input-grid">
+                                        <div class="ta-target-field">
+                                            <label class="ta-target-label" for="ta-urea-target">Urea</label>
+                                            <input id="ta-urea-target" type="number" min="0" class="ta-target-input" placeholder="e.g. 100" @bind="ureaTarget" @bind:event="oninput" />
+                                        </div>
+                                        <div class="ta-target-field">
+                                            <label class="ta-target-label" for="ta-dap-target">DAP</label>
+                                            <input id="ta-dap-target" type="number" min="0" class="ta-target-input" placeholder="e.g. 100" @bind="dapTarget" @bind:event="oninput" />
+                                        </div>
+                                        <div class="ta-target-field">
+                                            <label class="ta-target-label" for="ta-nps-target">NPS</label>
+                                            <input id="ta-nps-target" type="number" min="0" class="ta-target-input" placeholder="e.g. 100" @bind="npsTarget" @bind:event="oninput" />
+                                        </div>
+                                        <div class="ta-target-field">
+                                            <label class="ta-target-label" for="ta-others-target">Others</label>
+                                            <input id="ta-others-target" type="number" min="0" class="ta-target-input" @bind="othersTarget" @bind:event="oninput" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="ta-step-footer ta-step-footer-simple">
+                                    <button type="button" class="ta-btn ta-btn-prev" @onclick="() => GoToStep(4)">
+                                        <i class="bi bi-arrow-left"></i> Back
+                                    </button>
+                                    <button type="button" class="ta-btn ta-btn-submit" disabled="@isSubmittingAllocation" @onclick="SubmitAllocationAsync">
+                                        @(isSubmittingAllocation ? "Submitting..." : "Request")
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+        else if (currentTab == TaTab.Today)
+        {
+            <div class="ta-wizard">
+                <!-- Status filter sidebar -->
+                <div class="ta-stepper @(todayStepperCollapsed ? "ta-stepper-collapsed" : "")">
+                    @foreach (var filter in TodayFilters)
+                    {
+                        var count = BadgeCount(filter.Status);
+                        <button type="button"
+                                class="ta-step-item @(todayFilter == filter.Status ? "active" : "")"
+                                @onclick="() => todayFilter = filter.Status">
+                            <span class="ta-step-num">@filter.Number</span>
+                            <span class="ta-step-label">@filter.Label</span>
+                            <span class="ta-today-bell">
+                                <i class="bi bi-bell"></i>
+                                @if (count > 0)
+                                {
+                                    <span class="ta-today-badge">@count</span>
+                                }
+                            </span>
+                        </button>
+                    }
+                </div>
+
+                <button type="button" class="ta-stepper-toggle" title="@(todayStepperCollapsed ? "Expand" : "Collapse")" @onclick="() => todayStepperCollapsed = !todayStepperCollapsed">
+                    <i class="bi @(todayStepperCollapsed ? "bi-chevron-right" : "bi-chevron-left")"></i>
+                </button>
+
+                <!-- Task cards -->
+                <div class="ta-wizard-content">
+                    <div class="ta-today-grid">
+                        @if (dealerTaskStatus == todayFilter)
+                        {
+                            <div class="ta-today-card @StatusCardClass(dealerTaskStatus)">
+                                <div class="ta-dealer-top">
+                                    <span class="ta-type-pill ta-type-pill-blue"><i class="bi bi-person"></i> Dealer</span>
+                                    <span class="ta-type-pill ta-type-pill-today"><i class="bi bi-shop"></i> Retailer</span>
+                                </div>
+
+                                <h4 class="ta-dealer-name">HANUMESH TRADING CO</h4>
+
+                                <div class="ta-dealer-code-row">
+                                    <i class="bi bi-person"></i> Dealer Code <strong>41051099</strong>
+                                    <button type="button" class="ta-copy-btn" title="Copy dealer code" @onclick='() => CopyCode("41051099")' @onclick:stopPropagation="true">
+                                        <i class="bi bi-copy"></i>
+                                    </button>
+                                </div>
+
+                                <div class="ta-dealer-info-row">
+                                    <span>iFMS ID</span>
+                                    <strong>215361</strong>
+                                </div>
+                                <div class="ta-dealer-info-row">
+                                    <span>PoS Liquidation</span>
+                                    <strong>12.5 mT &middot; 160 days</strong>
+                                </div>
+
+                                <div class="ta-dealer-stats-row">
+                                    <div class="ta-mini-stat ta-mini-stat-dues">
+                                        <div class="ta-mini-stat-label"><i class="bi bi-clock"></i> Dues</div>
+                                        <div class="ta-mini-stat-val">99 <span>Lakhs</span></div>
+                                    </div>
+                                    <div class="ta-mini-stat ta-mini-stat-pending">
+                                        <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
+                                        <div class="ta-mini-stat-val">10 <span>mT</span></div>
+                                    </div>
+                                </div>
+
+                                <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/TaskDetail?type=dealer")'>
+                                    @ActionLabel(dealerTaskStatus) <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                        }
+
+                        @if (programTaskStatus == todayFilter)
+                        {
+                            <div class="ta-today-card @StatusCardClass(programTaskStatus)">
+                                <div class="ta-dealer-top">
+                                    <span class="ta-type-pill ta-type-pill-purple"><i class="bi bi-easel"></i> MD Program</span>
+                                    <span class="ta-type-pill ta-type-pill-outline"><i class="bi bi-people"></i> Training</span>
+                                </div>
+
+                                <h4 class="ta-dealer-name ta-program-name">Crop Protection Workshop</h4>
+
+                                <div class="ta-dealer-code-row">
+                                    <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>CSR1-2026-045</strong>
+                                    <button type="button" class="ta-copy-btn" title="Copy sanction number" @onclick='() => CopyCode("CSR1-2026-045")' @onclick:stopPropagation="true">
+                                        <i class="bi bi-copy"></i>
+                                    </button>
+                                </div>
+
+                                <div class="ta-dealer-info-row">
+                                    <span><i class="bi bi-calendar3"></i> Sanction Date</span>
+                                    <strong>01 May 2026</strong>
+                                </div>
+
+                                <div class="ta-dealer-stats-row">
+                                    <div class="ta-mini-stat ta-mini-stat-programs">
+                                        <div class="ta-mini-stat-label"><i class="bi bi-file-earmark-text"></i> Programs</div>
+                                        <div class="ta-mini-stat-val">1 <span>Program</span></div>
+                                    </div>
+                                    <div class="ta-mini-stat ta-mini-stat-budget">
+                                        <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
+                                        <div class="ta-mini-stat-val">₹50,000</div>
+                                    </div>
+                                </div>
+
+                                <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/TaskDetail?type=mdprogram")'>
+                                    @ActionLabel(programTaskStatus) <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                        }
+
+                        @if (spcmTaskStatus == todayFilter)
+                        {
+                            <div class="ta-today-card ta-today-card-narrow @StatusCardClass(spcmTaskStatus)">
+                                <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
+
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-bullseye"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Today's Target</div>
+                                        <div class="ta-today-target-val">@(string.IsNullOrWhiteSpace(spcmTarget) ? "100" : spcmTarget)</div>
+                                    </div>
+                                </div>
+
+                                <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/TaskDetail?type=spcm")'>
+                                    @ActionLabel(spcmTaskStatus) <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                        }
+
+                        @if (soilTaskStatus == todayFilter)
+                        {
+                            <div class="ta-today-card ta-today-card-narrow @StatusCardClass(soilTaskStatus)">
+                                <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
+
+                                <div class="ta-today-target-box">
+                                    <span class="ta-today-target-icon"><i class="bi bi-eyedropper"></i></span>
+                                    <div>
+                                        <div class="ta-target-label">Today's Target</div>
+                                        <div class="ta-today-target-val">@(string.IsNullOrWhiteSpace(soilTarget) ? "100" : soilTarget)</div>
+                                    </div>
+                                </div>
+
+                                <button type="button" class="ta-start-btn" @onclick="() => AdvanceTask(soilTaskStatus, s => soilTaskStatus = s)">
+                                    @ActionLabel(soilTaskStatus) <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                        }
+
+                        @if (posTaskStatus == todayFilter)
+                        {
+                            <div class="ta-today-card ta-today-card-wide @StatusCardClass(posTaskStatus)">
+                                <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
+
+                                <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate</div>
+                                <div class="ta-today-products-row">
+                                    <div class="ta-today-product-tile">
+                                        <div class="ta-today-product-name">UREA</div>
+                                        <div class="ta-today-product-val">@(string.IsNullOrWhiteSpace(ureaTarget) ? "100" : ureaTarget)</div>
+                                    </div>
+                                    <div class="ta-today-product-tile">
+                                        <div class="ta-today-product-name">NSP</div>
+                                        <div class="ta-today-product-val">@(string.IsNullOrWhiteSpace(npsTarget) ? "1000" : npsTarget)</div>
+                                    </div>
+                                    <div class="ta-today-product-tile">
+                                        <div class="ta-today-product-name">DAP</div>
+                                        <div class="ta-today-product-val">@(string.IsNullOrWhiteSpace(dapTarget) ? "200" : dapTarget)</div>
+                                    </div>
+                                </div>
+
+                                <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/TaskDetail?type=posliquidation")'>
+                                    @ActionLabel(posTaskStatus) <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </div>
+                        }
+
+                        @if (CountByStatus(todayFilter) == 0)
+                        {
+                            <EmptyState Icon="bi-inbox" Title="@EmptyTodayTitle" Compact="true" />
+                        }
+                    </div>
+
+                    @if (NextStatus is { } nextStatus && BadgeCount(nextStatus) > 0)
+                    {
+                        <button type="button" class="ta-today-jump-btn" @onclick="() => todayFilter = nextStatus">
+                            @TodayFilters.First(f => f.Status == nextStatus).Label <i class="bi bi-arrow-right"></i>
+                        </button>
+                    }
+                    else if (todayFilter == AllocTaskStatus.Completed)
+                    {
+                        <button type="button" class="ta-today-back-btn" @onclick="() => todayFilter = AllocTaskStatus.YetToStart">
+                            <i class="bi bi-arrow-left"></i> Back
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- Static reference list of every finished task (no filter sidebar
+                 here, unlike Today's Allocation - this tab is just a flat
+                 record of what's done), always in the purple "completed" theme. -->
+            <div class="ta-today-grid">
+                <div class="ta-today-card ta-status-completed">
+                    <div class="ta-dealer-top">
+                        <span class="ta-type-pill ta-type-pill-blue"><i class="bi bi-person"></i> Dealer</span>
+                        <span class="ta-type-pill ta-type-pill-today"><i class="bi bi-shop"></i> Retailer</span>
+                    </div>
+
+                    <h4 class="ta-dealer-name">HANUMESH TRADING CO</h4>
+
+                    <div class="ta-dealer-code-row">
+                        <i class="bi bi-person"></i> Dealer Code <strong>41051099</strong>
+                        <button type="button" class="ta-copy-btn" title="Copy dealer code" @onclick='() => CopyCode("41051099")' @onclick:stopPropagation="true">
+                            <i class="bi bi-copy"></i>
+                        </button>
+                    </div>
+
+                    <div class="ta-dealer-info-row">
+                        <span>iFMS ID</span>
+                        <strong>215361</strong>
+                    </div>
+                    <div class="ta-dealer-info-row">
+                        <span>PoS Liquidation</span>
+                        <strong>12.5 mT &middot; 160 days</strong>
+                    </div>
+
+                    <div class="ta-dealer-stats-row">
+                        <div class="ta-mini-stat ta-mini-stat-dues">
+                            <div class="ta-mini-stat-label"><i class="bi bi-clock"></i> Dues</div>
+                            <div class="ta-mini-stat-val">99 <span>Lakhs</span></div>
+                        </div>
+                        <div class="ta-mini-stat ta-mini-stat-pending">
+                            <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
+                            <div class="ta-mini-stat-val">10 <span>mT</span></div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/TaskDetail?type=dealer")'>
+                        @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+
+                <div class="ta-today-card ta-status-completed">
+                    <div class="ta-dealer-top">
+                        <span class="ta-type-pill ta-type-pill-purple"><i class="bi bi-easel"></i> MD Program</span>
+                        <span class="ta-type-pill ta-type-pill-outline"><i class="bi bi-people"></i> Training</span>
+                    </div>
+
+                    <h4 class="ta-dealer-name ta-program-name">Crop Protection Workshop</h4>
+
+                    <div class="ta-dealer-code-row">
+                        <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>CSR1-2026-045</strong>
+                        <button type="button" class="ta-copy-btn" title="Copy sanction number" @onclick='() => CopyCode("CSR1-2026-045")' @onclick:stopPropagation="true">
+                            <i class="bi bi-copy"></i>
+                        </button>
+                    </div>
+
+                    <div class="ta-dealer-info-row">
+                        <span><i class="bi bi-calendar3"></i> Sanction Date</span>
+                        <strong>01 May 2026</strong>
+                    </div>
+
+                    <div class="ta-dealer-stats-row">
+                        <div class="ta-mini-stat ta-mini-stat-programs">
+                            <div class="ta-mini-stat-label"><i class="bi bi-file-earmark-text"></i> Programs</div>
+                            <div class="ta-mini-stat-val">1 <span>Program</span></div>
+                        </div>
+                        <div class="ta-mini-stat ta-mini-stat-budget">
+                            <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
+                            <div class="ta-mini-stat-val">₹50,000</div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="ta-start-btn" @onclick="ViewDetailsNotAvailable">
+                        @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+
+                <div class="ta-today-card ta-today-card-narrow ta-status-completed">
+                    <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
+
+                    <div class="ta-today-target-box">
+                        <span class="ta-today-target-icon"><i class="bi bi-bullseye"></i></span>
+                        <div>
+                            <div class="ta-target-label">Today's Target</div>
+                            <div class="ta-today-target-val">@(string.IsNullOrWhiteSpace(spcmTarget) ? "100" : spcmTarget)</div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/TaskDetail?type=spcm")'>
+                        @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+
+                <div class="ta-today-card ta-today-card-narrow ta-status-completed">
+                    <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
+
+                    <div class="ta-today-target-box">
+                        <span class="ta-today-target-icon"><i class="bi bi-eyedropper"></i></span>
+                        <div>
+                            <div class="ta-target-label">Today's Target</div>
+                            <div class="ta-today-target-val">@(string.IsNullOrWhiteSpace(soilTarget) ? "100" : soilTarget)</div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="ta-start-btn" @onclick="ViewDetailsNotAvailable">
+                        @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+
+                <div class="ta-today-card ta-today-card-wide ta-status-completed">
+                    <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
+
+                    <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate</div>
+                    <div class="ta-today-products-row">
+                        <div class="ta-today-product-tile">
+                            <div class="ta-today-product-name">UREA</div>
+                            <div class="ta-today-product-val">@(string.IsNullOrWhiteSpace(ureaTarget) ? "100" : ureaTarget)</div>
+                        </div>
+                        <div class="ta-today-product-tile">
+                            <div class="ta-today-product-name">NSP</div>
+                            <div class="ta-today-product-val">@(string.IsNullOrWhiteSpace(npsTarget) ? "1000" : npsTarget)</div>
+                        </div>
+                        <div class="ta-today-product-tile">
+                            <div class="ta-today-product-name">DAP</div>
+                            <div class="ta-today-product-val">@(string.IsNullOrWhiteSpace(dapTarget) ? "200" : dapTarget)</div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="ta-start-btn" @onclick="ViewDetailsNotAvailable">
+                        @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+
+</div>
+
+@code {
+    private enum TaTab { All, Today, Completed }
+
+    // Lets links like /TasksAllocation?tab=today (used by TaskDetail's
+    // "Back to Tasks") land on the right tab instead of always resetting to
+    // "All Allocations" - navigating here creates a fresh component
+    // instance, so currentTab's default wouldn't otherwise remember it.
+    [SupplyParameterFromQuery(Name = "tab")]
+    public string? TabQuery { get; set; }
+
+    private TaTab currentTab = TaTab.All;
+
+    protected override void OnInitialized()
+    {
+        currentTab = TabQuery?.ToLowerInvariant() switch
+        {
+            "today" => TaTab.Today,
+            "completed" => TaTab.Completed,
+            _ => TaTab.All
+        };
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(
+            LoadDealersAsync(),
+            LoadProgramsAsync(),
+            LookupCache.EnsureLoadedAsync(),
+            CheckExistingAllocationAsync());
+    }
+
+    private string HeaderSubtitle => currentTab switch
+    {
+        TaTab.Today => "Pick your dealer tasks and set today's targets, then track them through to completion.",
+        _ => "Everything assigned to you, what's approved for today, and what you've finished."
+    };
+
+    // Static placeholder flow: no Allocation API exists yet, so submitting
+    // just flips the "All Allocations" tab from the wizard to the
+    // awaiting-approval card (see TasksAllocation's original notes on the
+    // pending-approval design for why that card has no live data either).
+    private bool isAllocationSubmitted;
+
+    // ---------- Today's Allocation tab ----------
+    // The 5 tasks shown here are the ones picked/targeted in the wizard
+    // above (Hanumesh Trading Co, Crop Protection Workshop, SPCM/Soil
+    // targets, PoS liquidation products) - static placeholder mirroring
+    // that example data, since there's no Allocation API yet to actually
+    // link "submitted" to "today's tasks".
+    private enum AllocTaskStatus { YetToStart, InProgress, Completed }
+
+    private AllocTaskStatus todayFilter = AllocTaskStatus.YetToStart;
+    private bool todayStepperCollapsed;
+
+    private sealed record TodayFilter(int Number, string Label, AllocTaskStatus Status);
+
+    private static readonly List<TodayFilter> TodayFilters = new()
+    {
+        new(1, "Yet to Start", AllocTaskStatus.YetToStart),
+        new(2, "In Progress", AllocTaskStatus.InProgress),
+        new(3, "Completed", AllocTaskStatus.Completed)
+    };
+
+    // Spread across all three statuses (rather than all defaulting to Yet to
+    // Start) so every filter tab has a real card to show out of the box -
+    // otherwise "In Progress"/"Completed" always rendered the empty state
+    // until a user manually clicked Start/Continue on something first, which
+    // hid the green/purple themes entirely on a fresh page load.
+    private AllocTaskStatus dealerTaskStatus = AllocTaskStatus.Completed;
+    private AllocTaskStatus programTaskStatus = AllocTaskStatus.InProgress;
+    private AllocTaskStatus spcmTaskStatus = AllocTaskStatus.YetToStart;
+    private AllocTaskStatus soilTaskStatus = AllocTaskStatus.InProgress;
+    private AllocTaskStatus posTaskStatus = AllocTaskStatus.YetToStart;
+
+    private int CountByStatus(AllocTaskStatus status) =>
+        new[] { dealerTaskStatus, programTaskStatus, spcmTaskStatus, soilTaskStatus, posTaskStatus }
+            .Count(s => s == status);
+
+    // The sidebar notification badges are the static 1 / 2 / 1 from the
+    // Figma design, not a live count of the 5 example cards above (those
+    // numbers don't correspond to this placeholder set - they represent
+    // other tasks not shown here). CountByStatus stays live since it drives
+    // which cards are actually visible under each filter.
+    private static int BadgeCount(AllocTaskStatus status) => status switch
+    {
+        AllocTaskStatus.YetToStart => 1,
+        AllocTaskStatus.InProgress => 2,
+        AllocTaskStatus.Completed => 1,
+        _ => 0
+    };
+
+    private string EmptyTodayTitle => todayFilter switch
+    {
+        AllocTaskStatus.YetToStart => "Nothing left to start",
+        AllocTaskStatus.InProgress => "Nothing in progress right now",
+        _ => "Nothing completed yet"
+    };
+
+    // Card theme + button label follow the task's own status, not just
+    // whichever filter is currently selected (though in practice a card
+    // only renders while its status matches the active filter anyway).
+    private static string StatusCardClass(AllocTaskStatus status) => status switch
+    {
+        AllocTaskStatus.InProgress => "ta-status-inprogress",
+        AllocTaskStatus.Completed => "ta-status-completed",
+        _ => ""
+    };
+
+    private static string ActionLabel(AllocTaskStatus status) => status switch
+    {
+        AllocTaskStatus.InProgress => "Continue",
+        AllocTaskStatus.Completed => "View Details",
+        _ => "Start"
+    };
+
+    // The floating shortcut button jumps to whichever status comes after the
+    // one currently being viewed (Yet to Start -> In Progress -> Completed),
+    // and only shows if that status actually has something in it.
+    private AllocTaskStatus? NextStatus => todayFilter switch
+    {
+        AllocTaskStatus.YetToStart => AllocTaskStatus.InProgress,
+        AllocTaskStatus.InProgress => AllocTaskStatus.Completed,
+        _ => null
+    };
+
+    // MD Program / Soil Sample / PoS Liquidation don't have a dedicated detail
+    // page yet (only Dealer and SPCM do, via TaskDetail) - same placeholder
+    // pattern as TaskDetail's own "not built yet" quick actions.
+    private void ViewDetailsNotAvailable() => Toast.Info("Detailed view for this task type isn't built yet.");
+
+    private void AdvanceTask(AllocTaskStatus current, Action<AllocTaskStatus> setStatus)
+    {
+        var next = current switch
+        {
+            AllocTaskStatus.YetToStart => AllocTaskStatus.InProgress,
+            AllocTaskStatus.InProgress => AllocTaskStatus.Completed,
+            _ => current // "View" on an already-completed task: nothing to advance
+        };
+        if (next == current) return;
+
+        setStatus(next);
+        Toast.Success(next == AllocTaskStatus.InProgress ? "Task moved to In Progress." : "Task marked as Completed.");
+    }
+
+    private int currentStep = 1;
+    private bool stepperCollapsed;
+
+    // Resolved from the signed-in user's own HQ via the same Headquarters
+    // lookup-by-id (LocationItemDto carries both the HQ and its Region name
+    // on one row) already used elsewhere in the app - falls back to the old
+    // placeholder strings if the HQ isn't found yet (still loading, or the
+    // user has no HQ claim), so the UI never goes blank.
+    private string FieldExecRegion =>
+        LookupCache.Headquarters.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionName is { Length: > 0 } region
+            ? region.ToUpperInvariant()
+            : "COIMBATORE";
+
+    private const string FieldExecMoHq = "-";
+
+    private string FieldExecJmdoHq =>
+        LookupCache.Headquarters.FirstOrDefault(h => h.Id == LoginState.HQId)?.HeadquarterName is { Length: > 0 } hq
+            ? hq.ToUpperInvariant()
+            : "COIMBATORE";
+
+    private string spcmTarget = "";
+    private string soilTarget = "";
+    private string ureaTarget = "";
+    private string dapTarget = "";
+    private string npsTarget = "";
+    private string othersTarget = "";
+
+    private sealed record WizardStep(int Number, string Label);
+
+    private static readonly List<WizardStep> Steps = new()
+    {
+        new(1, "Dealer"),
+        new(2, "SPCM"),
+        new(3, "Soil Sample"),
+        new(4, "MD Program"),
+        new(5, "PoS liquidation")
+    };
+
+    private void GoToStep(int step)
+    {
+        if (step < 1 || step > Steps.Count) return;
+        currentStep = step;
+    }
+
+    private void ToggleStepper() => stepperCollapsed = !stepperCollapsed;
+
+    private string submittedSummary = "";
+    private bool isSubmittingAllocation;
+
+    private static int? ParseTargetOrNull(string value) => int.TryParse(value, out var n) ? n : null;
+
+    private async Task SubmitAllocationAsync()
+    {
+        if (isSubmittingAllocation) return;
+        isSubmittingAllocation = true;
+
+        try
+        {
+            var dto = new JmdoTaskAllocationCreateDto
+            {
+                DealerIds = SelectedDealers.Select(d => d.Id).ToList(),
+                SpcmTarget = ParseTargetOrNull(spcmTarget),
+                SoilSampleTarget = ParseTargetOrNull(soilTarget),
+                ProgramIds = SelectedPrograms.Select(p => p.Id).ToList(),
+                UreaTarget = ParseTargetOrNull(ureaTarget),
+                DapTarget = ParseTargetOrNull(dapTarget),
+                NpsTarget = ParseTargetOrNull(npsTarget),
+                OthersTarget = ParseTargetOrNull(othersTarget)
+            };
+
+            var response = await Http.PostAsJsonAsync("api/JmdoTaskAllocation", dto);
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Could not submit the allocation. Please try again.");
+                return;
+            }
+
+            var saved = await response.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
+            submittedSummary = BuildSubmittedSummary(saved);
+
+            isAllocationSubmitted = true;
+            currentStep = 1;
+            Toast.Success("Allocation submitted for MDO approval.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Allocation submit failed: {ex.Message}");
+            Toast.Error("Could not submit the allocation. Please try again.");
+        }
+        finally
+        {
+            isSubmittingAllocation = false;
+        }
+    }
+
+    private static string BuildSubmittedSummary(JmdoTaskAllocationResponseDto? saved) =>
+        saved is null
+            ? "Allocation submitted."
+            : $"{saved.DealerCount} dealer task(s) · SPCM target {saved.SpcmTarget ?? 0} · Soil target {saved.SoilSampleTarget ?? 0} · {saved.ProgramCount} program(s)";
+
+    // Rehydrates "already submitted today" across a page refresh, since the
+    // wizard's submitted state would otherwise reset to step 1 every reload.
+    private async Task CheckExistingAllocationAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync("api/JmdoTaskAllocation/mine/today");
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+                return;
+
+            var existing = await response.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
+            if (existing is null) return;
+
+            submittedSummary = BuildSubmittedSummary(existing);
+            isAllocationSubmitted = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Checking today's allocation failed: {ex.Message}");
+        }
+    }
+
+    private async Task CopyCode(string code)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", code);
+            Toast.Success($"{code} copied.");
+        }
+        catch
+        {
+            // Clipboard API unavailable (e.g. no secure context): nothing to copy to.
+        }
+    }
+
+    private sealed class DealerOption
+    {
+        public int Id { get; init; }
+        public string Name { get; init; } = "";
+        public string DealerCode { get; init; } = "";
+        // No backend source yet for these four (confirmed via a repo-wide
+        // search - "Dues" doesn't exist anywhere server-side, and iFMS
+        // ID/PoS Liquidation/Pending Ack. live on other, unrelated APIs that
+        // aren't joined to the dealer list). Null renders as "—" below
+        // instead of a fabricated number.
+        public string? IfmsId { get; init; }
+        public string? PosLiquidation { get; init; }
+        public int? DuesLakhs { get; init; }
+        public int? PendingAckMt { get; init; }
+        public string TypeLabel { get; init; } = "Dealer";
+        public bool IsSelected { get; set; }
+    }
+
+    private string dealerSearch = "";
+    private bool isLoadingDealers = true;
+    private bool dealersLoadFailed;
+
+    private readonly List<DealerOption> Dealers = new();
+
+    // Real dealer list, scoped to the signed-in JMDO/MDO/MO's HQ (falling
+    // back to region/state) - same endpoint and scope-derivation pattern as
+    // SubDealerList.razor's ApplyLoggedInRoleScope/LoadListAsync.
+    private async Task LoadDealersAsync()
+    {
+        isLoadingDealers = true;
+        dealersLoadFailed = false;
+
+        try
+        {
+            // GetList's `status` query param binds to SubDealerRegistrationController's own
+            // int? SubDealerStatus, not the string "Active" - see SubDealerRegistrationController.cs.
+            var query = new List<string> { "page=1", "pageSize=100", $"status={(int)SubDealerStatus.Active}" };
+
+            if (LoginState.HQId > 0) query.Add($"hqId={LoginState.HQId}");
+            else if (LoginState.RegionId > 0) query.Add($"regionId={LoginState.RegionId}");
+            else if (LoginState.StateId > 0) query.Add($"stateId={LoginState.StateId}");
+
+            var url = "api/SubDealerRegistration/list?" + string.Join("&", query);
+            var result = await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
+
+            Dealers.Clear();
+            Dealers.AddRange((result?.Items ?? new()).Select(item => new DealerOption
+            {
+                Id = item.Id,
+                Name = item.FirmName,
+                DealerCode = item.SubDealerCode
+            }));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Dealer list load failed: {ex.Message}");
+            Toast.Error("Could not load the dealer list. Please try again.");
+            dealersLoadFailed = true;
+        }
+        finally
+        {
+            isLoadingDealers = false;
+        }
+    }
+
+    private IEnumerable<DealerOption> FilteredDealers =>
+        string.IsNullOrWhiteSpace(dealerSearch)
+            ? Dealers
+            : Dealers.Where(d =>
+                d.Name.Contains(dealerSearch, StringComparison.OrdinalIgnoreCase) ||
+                d.DealerCode.Contains(dealerSearch, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<DealerOption> SelectedDealers => Dealers.Where(d => d.IsSelected);
+
+    private void ToggleDealer(DealerOption dealer) => dealer.IsSelected = !dealer.IsSelected;
+
+    private sealed class ProgramOption
+    {
+        public int Id { get; init; }
+        public string Title { get; init; } = "";
+        // CSR1 (the real backend entity) has no Sanction No/Date columns at
+        // all yet - confirmed via CSR-1Management.razor itself already
+        // rendering "--" for Sanction Number against this same API. Null
+        // here renders as "—" in the card, same as the dealer grid's fallbacks.
+        public string? SanctionNo { get; init; }
+        public string? SanctionDate { get; init; }
+        public int ProgramCount { get; init; }
+        public string TotalBudget { get; init; } = "";
+        public string TypeLabel { get; init; } = "";
+        public bool IsSelected { get; set; }
+    }
+
+    private bool isLoadingPrograms = true;
+    private bool programsLoadFailed;
+
+    private readonly List<ProgramOption> Programs = new();
+
+    // Real MD program list from CSR1 (api/CSR1/list has no query params or
+    // server-side scoping at all - unlike SubDealerRegistration - so the
+    // HQ filter happens client-side here).
+    private async Task LoadProgramsAsync()
+    {
+        isLoadingPrograms = true;
+        programsLoadFailed = false;
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list");
+
+            Programs.Clear();
+            Programs.AddRange((result ?? new())
+                .Where(p => p.IsActive && (LoginState.HQId <= 0 || p.HeadquarterId == LoginState.HQId))
+                .Select(p => new ProgramOption
+                {
+                    Id = p.Id,
+                    Title = p.ProgramName,
+                    ProgramCount = p.NumberOfPrograms,
+                    TotalBudget = $"₹{p.Budget:N0}",
+                    TypeLabel = string.IsNullOrWhiteSpace(p.ProgramType) ? "Training" : p.ProgramType
+                }));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"MD program list load failed: {ex.Message}");
+            Toast.Error("Could not load the MD program list. Please try again.");
+            programsLoadFailed = true;
+        }
+        finally
+        {
+            isLoadingPrograms = false;
+        }
+    }
+
+    private IEnumerable<ProgramOption> SelectedPrograms => Programs.Where(p => p.IsSelected);
+
+    private void ToggleProgram(ProgramOption program) => program.IsSelected = !program.IsSelected;
+}

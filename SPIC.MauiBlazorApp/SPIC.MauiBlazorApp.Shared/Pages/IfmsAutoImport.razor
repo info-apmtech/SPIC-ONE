@@ -3,17 +3,20 @@
 @using SPIC.Core.DTOs
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject ToastService Toast
 @implements IDisposable
-<PageTitle>IFMS Auto Import</PageTitle>
 
 <style>
     .ia-container { font-family: 'Inter', sans-serif; }
 
-    .ia-header { display: flex; justify-content: space-between; align-items: center;
-                 flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
-
-    .ia-header h1 { margin: 0; font-size: 26px; font-weight: 700; color: #1e293b; }
-    .ia-header p  { margin: 4px 0 0; font-size: 15px; color: #64748b; }
+    /* PageHeader adoption: keep the desktop title row as the old .ia-header looked */
+    .ia-container .shell-page-header.ia-header { align-items: center; flex-wrap: wrap;
+                 gap: 16px; margin: 0 0 24px; }
+    .ia-container .shell-page-header.ia-header .shell-page-title { margin: 0; font-size: 26px;
+                 font-weight: 700; line-height: 1.2; color: #1e293b; }
+    .ia-container .shell-page-header.ia-header .shell-page-subtitle { margin: 4px 0 0;
+                 font-size: 15px; color: #64748b; }
+    .ia-container .shell-page-header.ia-header .shell-page-actions { gap: 10px; }
 
     .ia-btn { border: none; border-radius: 8px; padding: 10px 18px; font-size: 14px;
               font-weight: 600; cursor: pointer; background: #1d4ed8; color: #fff; }
@@ -61,22 +64,57 @@
     .ia-err { color: #991b1b; font-size: 12px; }
 
     .ia-empty { text-align: center; padding: 48px; color: #64748b; }
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .ia-container { padding-bottom: var(--safe-bottom, 0px); }
+
+        .ia-container .shell-page-header.ia-header { gap: 8px; margin-bottom: 16px; }
+        .ia-container .shell-page-header.ia-header .shell-page-title { font-size: 1.15rem; }
+        .ia-container .shell-page-header.ia-header .shell-page-subtitle { font-size: 0.8rem; }
+        .ia-container .shell-page-header.ia-header .shell-page-actions {
+            flex-basis: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+        .ia-btn { min-height: var(--tap-min, 44px); width: 100%; }
+
+        .ia-captcha { padding: 16px; }
+        .ia-captcha-row { flex-direction: column; align-items: stretch; }
+        .ia-captcha img { align-self: flex-start; }
+        .ia-captcha input { width: 100%; min-height: var(--tap-min, 44px); box-sizing: border-box; }
+
+        .ia-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+        .ia-stat { padding: 12px; }
+        .ia-stat .v { font-size: 20px; }
+
+        .ia-card-head { min-height: var(--tap-min, 44px); padding: 12px 16px; }
+
+        /* Report rows become labelled cards */
+        .ia-table thead { display: none; }
+        .ia-table, .ia-table tbody, .ia-table tr, .ia-table td { display: block; width: 100%; }
+        .ia-table tr { padding: 6px 16px; border-top: 1px solid #f1f5f9; }
+        .ia-table td { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+                       padding: 6px 0; border-top: 0; border-bottom: 1px solid #f8fafc;
+                       box-sizing: border-box; text-align: right; }
+        .ia-table td::before { content: attr(data-label); flex: 0 0 42%; color: #64748b;
+                               font-weight: 500; text-align: left; }
+        .ia-table td:last-child { border-bottom: 0; }
+        .ia-table td.num { text-align: right; }
+        .ia-table td.ia-err::before { content: none; }
+        .ia-table td[data-label="Report"] { flex-direction: column; align-items: flex-end; text-align: right; }
+        .ia-table td[data-label="Report"]::before { align-self: flex-start; }
+    }
 </style>
 
 <div class="ia-container">
 
-    <div class="ia-header">
-        <div>
-            <h1>IFMS Auto Import</h1>
-            <p>The nightly download from dbtfert.nic.in and its import into SPIC ONE.</p>
-        </div>
-        <div style="display:flex; gap:10px;">
+    <PageHeader Title="IFMS Auto Import" Subtitle="The nightly download from dbtfert.nic.in and its import into SPIC ONE." CssClass="ia-header">
+        <Actions>
             <button class="ia-btn ia-btn-ghost" @onclick="LoadAsync" disabled="@busy">Refresh</button>
             <button class="ia-btn" @onclick="QueueRunAsync" disabled="@(busy || queueing)">
                 @(queueing ? "Queuing…" : "Run now")
             </button>
-        </div>
-    </div>
+        </Actions>
+    </PageHeader>
 
     @if (challenge is not null)
     {
@@ -160,12 +198,16 @@
 
     @if (busy && runs.Count == 0)
     {
-        <div class="ia-empty">Loading…</div>
+        <div class="ia-card" style="padding:16px 18px;">
+            <Skeleton Variant="card" Rows="3" LoadingText="Loading the IFMS runs..." />
+        </div>
     }
     else if (runs.Count == 0)
     {
-        <div class="ia-empty">
-            No runs yet. The first one fires at 04:05, or press <strong>Run now</strong>.
+        <div class="ia-card">
+            <EmptyState Icon="bi-cloud-download" Title="No runs yet" Message="The first one fires at 04:05, or press Run now.">
+                <button type="button" class="ia-btn" @onclick="QueueRunAsync" disabled="@(busy || queueing)">Run now</button>
+            </EmptyState>
         </div>
     }
     else
@@ -219,7 +261,7 @@
                             @foreach (var report in run.Reports)
                             {
                                 <tr>
-                                    <td>
+                                    <td data-label="Report">
                                         @report.ReportTitle
                                         @if (!string.IsNullOrWhiteSpace(report.DownloadedFileName))
                                         {
@@ -228,13 +270,13 @@
                                             </div>
                                         }
                                     </td>
-                                    <td>
+                                    <td data-label="Status">
                                         <span class="ia-pill @PillClass(report.Status)">@report.Status</span>
                                     </td>
-                                    <td class="num">@report.TotalRows.ToString("N0")</td>
-                                    <td class="num">@report.RowsInserted.ToString("N0")</td>
-                                    <td class="num">@report.RowsUpdated.ToString("N0")</td>
-                                    <td class="num">@report.RowsSkipped.ToString("N0")</td>
+                                    <td data-label="Rows" class="num">@report.TotalRows.ToString("N0")</td>
+                                    <td data-label="New" class="num">@report.RowsInserted.ToString("N0")</td>
+                                    <td data-label="Updated" class="num">@report.RowsUpdated.ToString("N0")</td>
+                                    <td data-label="Skipped" class="num">@report.RowsSkipped.ToString("N0")</td>
                                 </tr>
 
                                 @if (!string.IsNullOrWhiteSpace(report.ErrorMessage))
@@ -292,7 +334,7 @@
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", $"Could not load the IFMS runs. {ex.Message}");
+            Toast.Error($"Could not load the IFMS runs. {ex.Message}");
         }
         finally
         {
@@ -391,16 +433,17 @@
 
             var body = await response.Content.ReadAsStringAsync();
 
-            await JS.InvokeVoidAsync("alert", response.IsSuccessStatusCode
-                ? "Queued. The automation picks it up within about twenty seconds."
-                : $"Could not queue a run. {body}");
+            if (response.IsSuccessStatusCode)
+                Toast.Success("Queued. The automation picks it up within about twenty seconds.");
+            else
+                Toast.Error($"Could not queue a run. {body}");
 
             if (response.IsSuccessStatusCode)
                 await LoadAsync();
         }
         catch (Exception ex)
         {
-            await JS.InvokeVoidAsync("alert", $"Could not queue a run. {ex.Message}");
+            Toast.Error($"Could not queue a run. {ex.Message}");
         }
         finally
         {

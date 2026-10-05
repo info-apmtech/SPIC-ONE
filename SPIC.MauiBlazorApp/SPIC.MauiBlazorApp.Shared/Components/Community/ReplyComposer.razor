@@ -1,0 +1,362 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Community
+@using Microsoft.AspNetCore.Components.Forms
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject ToastService Toast
+@inject CommunityApi Api
+
+@*
+    The reply composer, in the two shapes the Discussion Details page needs:
+
+        Bar     the pill at the bottom of the replies card (avatar + one-line box + icons)
+        Inline  the box that opens under a reply (avatar + textarea + Cancel / Reply)
+
+    Both carry the same extras: up to three images (InputFile, image/*, 5 MB each) shown as
+    thumbnail chips before sending, and a "Paste a link" input that appends the URL to the text
+    (ReplyItem renders it as a real link). Images are uploaded after the reply exists, so a
+    failed upload never costs the reply itself.
+
+    Clicking your own avatar raises OnAvatarClick; the page owns the "Profile photo" sheet.
+*@
+
+<div class="rc @(Inline ? "rc--inline" : "rc--bar")">
+
+    <button type="button" class="rc-me" title="Change your profile photo" aria-label="Change your profile photo"
+            @onclick="AvatarClickedAsync">
+        <MemberAvatar Member="Me ?? Api.ComposerIdentity" Size="@(Inline ? 32 : 40)" />
+    </button>
+
+    <div class="rc-main">
+
+        <div class="rc-box">
+            <textarea class="rc-input"
+                      rows="@(Inline ? 2 : 1)"
+                      placeholder="@Placeholder"
+                      aria-label="@Placeholder"
+                      value="@_draft"
+                      @oninput="OnInput"
+                      @onkeydown="OnKeyDownAsync"></textarea>
+
+            @if (!Inline)
+            {
+                <div class="rc-icons">
+                    <label class="rc-icon" title="Add images" aria-label="Add images">
+                        <InputFile OnChange="OnFilesChosenAsync" multiple accept="image/jpeg,image/png,image/webp" />
+                        <i class="bi bi-image" aria-hidden="true"></i>
+                    </label>
+                    <button type="button" class="rc-icon @(_linkOpen ? "is-on" : "")" title="Add a link"
+                            aria-label="Add a link" aria-expanded="@(_linkOpen ? "true" : "false")"
+                            @onclick="ToggleLink">
+                        <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="rc-icon rc-send" title="Send reply" aria-label="Send reply"
+                            disabled="@_busy" @onclick="SendAsync">
+                        <i class="bi bi-send-fill" aria-hidden="true"></i>
+                    </button>
+                </div>
+            }
+        </div>
+
+        @if (_linkOpen)
+        {
+            <div class="rc-link">
+                <input class="rc-link-input"
+                       type="url"
+                       inputmode="url"
+                       placeholder="Paste a link"
+                       aria-label="Paste a link"
+                       value="@_link"
+                       @oninput="e => _link = e.Value?.ToString() ?? string.Empty"
+                       @onkeydown="OnLinkKeyDown" />
+                <button type="button" class="rc-link-add" disabled="@(string.IsNullOrWhiteSpace(_link))" @onclick="AddLink">Add</button>
+                <button type="button" class="rc-link-cancel" @onclick="CloseLink">Cancel</button>
+            </div>
+        }
+
+        @if (_files.Count > 0)
+        {
+            <ul class="rc-chips">
+                @for (var i = 0; i < _files.Count; i++)
+                {
+                    var index = i;
+                    var chip = _files[index];
+                    <li class="rc-chip" @key="chip.Key">
+                        @if (chip.Preview is not null)
+                        {
+                            <img class="rc-chip-img" src="@chip.Preview" alt="" />
+                        }
+                        else
+                        {
+                            <span class="rc-chip-img rc-chip-img--none"><i class="bi bi-image" aria-hidden="true"></i></span>
+                        }
+                        <span class="rc-chip-name" title="@chip.File.Name">@chip.File.Name</span>
+                        <button type="button" class="rc-chip-x" aria-label="@($"Remove {chip.File.Name}")"
+                                @onclick="() => RemoveFile(index)">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (Inline)
+        {
+            <div class="rc-actions">
+                <label class="rc-icon" title="Add images" aria-label="Add images">
+                    <InputFile OnChange="OnFilesChosenAsync" multiple accept="image/jpeg,image/png,image/webp" />
+                    <i class="bi bi-image" aria-hidden="true"></i>
+                </label>
+                <button type="button" class="rc-icon @(_linkOpen ? "is-on" : "")" title="Add a link"
+                        aria-label="Add a link" aria-expanded="@(_linkOpen ? "true" : "false")"
+                        @onclick="ToggleLink">
+                    <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                </button>
+
+                <span class="rc-actions-gap"></span>
+
+                <button type="button" class="rc-cancel" @onclick="CancelAsync">Cancel</button>
+                <button type="button" class="rc-post"
+                        disabled="@(_busy || string.IsNullOrWhiteSpace(_draft))"
+                        @onclick="SendAsync">
+                    @(_busy ? "Posting…" : "Reply")
+                </button>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int DiscussionId { get; set; }
+
+    /// <summary>Reply the new reply is nested under; null posts at the top level.</summary>
+    [Parameter] public int? ParentReplyId { get; set; }
+
+    /// <summary>Name pre-filled as "@Name " and sent as the mention (inline boxes).</summary>
+    [Parameter] public string? MentionName { get; set; }
+
+    /// <summary>Inline = the box under a reply (Cancel / Reply); otherwise the sticky bar.</summary>
+    [Parameter] public bool Inline { get; set; }
+
+    /// <summary>The signed-in user, for the avatar. Null falls back to the JWT name.</summary>
+    [Parameter] public CommunityMember? Me { get; set; }
+
+    /// <summary>On a phone Enter inserts a newline; the send button posts.</summary>
+    [Parameter] public bool IsPhone { get; set; }
+
+    [Parameter] public string Placeholder { get; set; } = "Write a reply...";
+
+    /// <summary>The reply the server created, with its images already uploaded.</summary>
+    [Parameter] public EventCallback<CommunityReply> OnPosted { get; set; }
+
+    /// <summary>Inline only: the Cancel button.</summary>
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    /// <summary>The user tapped their own avatar (the page opens the Profile photo sheet).</summary>
+    [Parameter] public EventCallback OnAvatarClick { get; set; }
+
+    private sealed class PendingImage
+    {
+        public IBrowserFile File { get; init; } = default!;
+        public string? Preview { get; set; }
+        public string Key { get; } = Guid.NewGuid().ToString("N");
+    }
+
+    private readonly List<PendingImage> _files = new();
+
+    private string _draft = "";
+    private string _link = "";
+    private bool _linkOpen;
+    private bool _busy;
+    private bool _ignoreNextInput;
+    private bool _primed;
+
+    protected override void OnParametersSet()
+    {
+        // The inline box opens with "@Name " already typed, exactly as the Figma frame shows.
+        if (_primed) return;
+        _primed = true;
+
+        if (Inline && !string.IsNullOrWhiteSpace(MentionName)) _draft = $"@{MentionName} ";
+    }
+
+    // ---------------------------------------------------------------- text
+    private void OnInput(ChangeEventArgs e)
+    {
+        // The newline the browser inserts for the "Enter posts" shortcut arrives after the key
+        // handler already cleared the box, so it is dropped here.
+        if (_ignoreNextInput)
+        {
+            _ignoreNextInput = false;
+            return;
+        }
+        _draft = e.Value?.ToString() ?? "";
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (Inline || e.Key != "Enter" || e.ShiftKey || IsPhone) return;
+        _ignoreNextInput = true;
+        await SendAsync();
+    }
+
+    // ---------------------------------------------------------------- link
+    private void ToggleLink()
+    {
+        _linkOpen = !_linkOpen;
+        if (!_linkOpen) _link = "";
+    }
+
+    private void CloseLink()
+    {
+        _linkOpen = false;
+        _link = "";
+    }
+
+    private void OnLinkKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") AddLink();
+        else if (e.Key == "Escape") CloseLink();
+    }
+
+    private void AddLink()
+    {
+        var url = (_link ?? "").Trim();
+        if (url.Length == 0) return;
+
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            url = "https://" + url;
+        }
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out _))
+        {
+            Toast.Error("That does not look like a link.");
+            return;
+        }
+
+        _draft = _draft.Length == 0 || _draft.EndsWith(' ') || _draft.EndsWith('\n')
+            ? _draft + url
+            : _draft + " " + url;
+
+        CloseLink();
+    }
+
+    // ---------------------------------------------------------------- images
+    private async Task OnFilesChosenAsync(InputFileChangeEventArgs e)
+    {
+        var rejected = 0;
+        var full = false;
+
+        foreach (var file in e.GetMultipleFiles(CommunityApi.MaxReplyImages * 2))
+        {
+            if (_files.Count >= CommunityApi.MaxReplyImages) { full = true; break; }
+
+            if (file.Size > CommunityApi.MaxReplyImageBytes ||
+                !(file.ContentType ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                rejected++;
+                continue;
+            }
+
+            var pending = new PendingImage { File = file };
+            _files.Add(pending);
+            pending.Preview = await ThumbnailAsync(file);
+        }
+
+        if (rejected > 0)
+        {
+            Toast.Error(rejected == 1
+                ? "That file is not an image under 5 MB."
+                : $"{rejected} files were skipped: images up to 5 MB only.");
+        }
+        else if (full)
+        {
+            Toast.Info("A reply can carry up to 3 images.");
+        }
+
+        StateHasChanged();
+    }
+
+    /// <summary>A data URL the browser resized to 200px, so the preview never ships 5 MB.</summary>
+    private static async Task<string?> ThumbnailAsync(IBrowserFile file)
+    {
+        try
+        {
+            var resized = await file.RequestImageFileAsync("image/jpeg", 200, 200);
+            using var stream = resized.OpenReadStream(1024L * 1024);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            return $"data:image/jpeg;base64,{Convert.ToBase64String(buffer.ToArray())}";
+        }
+        catch (Exception)
+        {
+            // No JS image resizing (prerender / odd format): the chip shows an icon instead.
+            return null;
+        }
+    }
+
+    private void RemoveFile(int index)
+    {
+        if (index >= 0 && index < _files.Count) _files.RemoveAt(index);
+    }
+
+    // ---------------------------------------------------------------- send
+    private async Task SendAsync()
+    {
+        if (_busy) return;
+
+        var text = (_draft ?? "").Trim();
+        var mention = Inline ? MentionName : null;
+
+        // "@Name " typed by the reply button travels as the mention, not as body text.
+        if (!string.IsNullOrEmpty(mention) &&
+            text.StartsWith("@" + mention, StringComparison.OrdinalIgnoreCase))
+        {
+            text = text[(mention!.Length + 1)..].TrimStart();
+        }
+        else
+        {
+            mention = null;
+        }
+
+        if (text.Length == 0)
+        {
+            if (_files.Count > 0) Toast.Info("Please write a few words with your images.");
+            return;
+        }
+
+        _busy = true;
+        var posted = await Api.AddReplyAsync(DiscussionId, text, ParentReplyId, mention);
+
+        if (posted is null)
+        {
+            _busy = false;                        // CommunityApi already explained why
+            return;
+        }
+
+        if (_files.Count > 0)
+        {
+            var images = await Api.UploadReplyImagesAsync(posted.Id, _files.Select(f => f.File).ToList());
+            if (images is not null) posted.Attachments = images;
+            // a null result already raised its own toast; the reply itself stands
+        }
+
+        _busy = false;
+        _draft = "";
+        _files.Clear();
+        CloseLink();
+
+        Toast.Success("Reply posted.");
+        if (OnPosted.HasDelegate) await OnPosted.InvokeAsync(posted);
+    }
+
+    private async Task CancelAsync()
+    {
+        _draft = "";
+        _files.Clear();
+        CloseLink();
+        if (OnCancel.HasDelegate) await OnCancel.InvokeAsync();
+    }
+
+    private Task AvatarClickedAsync() => OnAvatarClick.HasDelegate ? OnAvatarClick.InvokeAsync() : Task.CompletedTask;
+}

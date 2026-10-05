@@ -1,0 +1,152 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Feedback
+@implements IDisposable
+@inject IServiceProvider Services
+
+@*
+    ToastHost: renders ToastService's toasts. Place ONE per layout.
+    Desktop/tablet: stacked top-right. Phone: bottom-centre, above the ActionBar
+    (--fb-actionbar-height, set by feedback-interop.js) and the shell tab bar
+    (--shell-bottom-offset).
+*@
+
+<div class="fb-toasts @CssClass" role="region" aria-label="Notifications" aria-live="polite" aria-atomic="false">
+    @foreach (var t in Toasts.Toasts)
+    {
+        <div @key="t.Id"
+             class="fb-toast fb-toast--@(t.Level.ToString().ToLowerInvariant()) @(_paused.Contains(t.Id) ? "fb-toast--paused" : "")"
+             role="@(t.Level is ToastLevel.Error or ToastLevel.Warning ? "alert" : "status")"
+             @onmouseenter="() => Pause(t.Id)"
+             @onmouseleave="() => Resume(t)">
+
+            <i class="fb-toast__icon bi @IconFor(t.Level)" aria-hidden="true"></i>
+
+            <div class="fb-toast__content">
+                @if (!string.IsNullOrWhiteSpace(t.Title))
+                {
+                    <div class="fb-toast__title">@t.Title</div>
+                }
+                <div class="fb-toast__message">@t.Message</div>
+            </div>
+
+            <button type="button" class="fb-toast__close" aria-label="Dismiss" @onclick="() => Toasts.Dismiss(t.Id)">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? CssClass { get; set; }
+
+    /// <summary>Optional override (dev demo/tests). Normally the service comes from DI.</summary>
+    [CascadingParameter] public ToastService? CascadedService { get; set; }
+
+    private ToastService? _toasts;
+    private ToastService Toasts => _toasts ??= FeedbackServiceResolver.Resolve(CascadedService, Services);
+
+    private readonly Dictionary<Guid, CancellationTokenSource> _timers = new();
+    private readonly HashSet<Guid> _paused = new();
+    private bool _disposed;
+
+    private const int ResumeDelayMs = 1500;
+
+    protected override void OnInitialized()
+    {
+        Toasts.OnChange += HandleChange;
+        SyncTimers();
+    }
+
+    private void HandleChange()
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            SyncTimers();
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>Start an auto-dismiss timer for every new visible toast; drop timers of removed ones.</summary>
+    private void SyncTimers()
+    {
+        var visible = Toasts.Toasts;
+        var visibleIds = new HashSet<Guid>(visible.Select(t => t.Id));
+
+        foreach (var id in _timers.Keys.Where(id => !visibleIds.Contains(id)).ToList())
+        {
+            _timers[id].Cancel();
+            _timers[id].Dispose();
+            _timers.Remove(id);
+            _paused.Remove(id);
+        }
+
+        foreach (var t in visible)
+        {
+            if (t.DurationMs <= 0 || _timers.ContainsKey(t.Id) || _paused.Contains(t.Id)) continue;
+            StartTimer(t.Id, t.DurationMs);
+        }
+    }
+
+    private void StartTimer(Guid id, int delayMs)
+    {
+        var cts = new CancellationTokenSource();
+        _timers[id] = cts;
+        _ = DismissAfterAsync(id, delayMs, cts.Token);
+    }
+
+    private async Task DismissAfterAsync(Guid id, int delayMs, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(delayMs, token);
+            if (_disposed || token.IsCancellationRequested) return;
+            await InvokeAsync(() => Toasts.Dismiss(id));
+        }
+        catch (TaskCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (InvalidOperationException) { /* renderer gone */ }
+    }
+
+    private void Pause(Guid id)
+    {
+        if (_timers.Remove(id, out var cts))
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+        _paused.Add(id);
+    }
+
+    private void Resume(ToastMessage t)
+    {
+        _paused.Remove(t.Id);
+        if (t.DurationMs > 0 && !_timers.ContainsKey(t.Id))
+        {
+            StartTimer(t.Id, Math.Min(ResumeDelayMs, t.DurationMs));
+        }
+    }
+
+    private static string IconFor(ToastLevel level) => level switch
+    {
+        ToastLevel.Success => "bi-check-circle-fill",
+        ToastLevel.Error => "bi-x-circle-fill",
+        ToastLevel.Warning => "bi-exclamation-triangle-fill",
+        _ => "bi-info-circle-fill"
+    };
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+
+        if (_toasts is not null) _toasts.OnChange -= HandleChange;
+
+        foreach (var cts in _timers.Values)
+        {
+            cts.Cancel();
+            cts.Dispose();
+        }
+        _timers.Clear();
+    }
+}

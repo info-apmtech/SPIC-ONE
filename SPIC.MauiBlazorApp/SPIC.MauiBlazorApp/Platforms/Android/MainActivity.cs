@@ -1,28 +1,44 @@
-using Android.App;
+﻿using Android.App;
 using Android.Content.PM;
 using Android.OS;
-using SPIC.MauiBlazorApp.Platforms.Android;
+using Microsoft.AspNetCore.Components.WebView.Maui;
 
 namespace SPIC.MauiBlazorApp
 {
     [Activity(Theme = "@style/Maui.SplashTheme", MainLauncher = true, ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
     public class MainActivity : MauiAppCompatActivity
     {
-        protected override void OnCreate(Bundle? savedInstanceState)
+        /// <summary>
+        /// WebView inspection is off in Release. Launching from adb with
+        /// <c>am start ... --ez webdebug true</c> turns it on for that run only, so a store
+        /// build can be profiled with Chrome DevTools without shipping a debuggable app.
+        /// </summary>
+        protected override void OnResume()
         {
-            base.OnCreate(savedInstanceState);
+            base.OnResume();
+            // After OnCreate: the BlazorWebView handler resets the flag while creating the view.
+            if (Intent?.GetBooleanExtra("webdebug", false) == true)
+            {
+                Android.Webkit.WebView.SetWebContentsDebuggingEnabled(true);
+            }
+        }
 
-            // Bring the IFMS CAPTCHA watcher back up whenever the app is opened.
-            // Cheap when it is already running, and it covers the case where
-            // Android stopped the service while the phone was idle.
-            try
+        /// <summary>
+        /// Hardware / gesture back: step back through the Blazor page history (which also
+        /// closes an open BottomSheet or More sheet, since they push a history entry) and
+        /// only leave the app when there is nothing left to go back to. Without this the
+        /// Android back button closed the whole app from any page.
+        /// </summary>
+        public override void OnBackPressed()
+        {
+            var page = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault()?.Page as MainPage;
+            if (page?.WebView?.Handler?.PlatformView is Android.Webkit.WebView webView && webView.CanGoBack())
             {
-                IfmsWatchService.EnsureRunning(this);
+                webView.GoBack();
+                return;
             }
-            catch
-            {
-                // The app must still start even if the watcher cannot.
-            }
+
+            base.OnBackPressed();
         }
     }
 }

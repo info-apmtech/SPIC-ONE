@@ -1,0 +1,74 @@
+@page "/AllocationRequests"
+@inject NavigationManager Navigation
+
+<div class="container-fluid py-4 px-0 alreq-page">
+
+    <h2 class="alreq-title">Allocation Requests</h2>
+    <p class="alreq-subtitle">Review and approve each JMDO's daily allocation &mdash; dealer tasks, SPCM &amp; soil sample targets, and MD programs.</p>
+
+    <div class="alreq-notice-banner">
+        <i class="bi bi-info-circle-fill"></i>
+        <span>@Rows.Count JMDO(s) have submitted today's allocation for your approval. Review and approve them one by one.</span>
+    </div>
+
+    <div class="alreq-card alreq-list-card">
+        <div class="alreq-table-scroll">
+            <table class="alreq-table alreq-list-table">
+                <thead>
+                    <tr>
+                        <th>JMDO</th>
+                        <th>Submitted</th>
+                        <th>Dealer Tasks</th>
+                        <th>SPCM Target</th>
+                        <th>Soil Target</th>
+                        <th>MD Programs</th>
+                        <th>Pos Liquidation</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Rows)
+                    {
+                        <tr>
+                            <td class="alreq-cell-header">
+                                <div class="alreq-jmdo-cell">
+                                    <span class="alreq-avatar">@row.Initials</span>
+                                    <div>
+                                        <div class="alreq-jmdo-name">@row.Name</div>
+                                        <div class="alreq-jmdo-sub">@row.Code &middot; @row.Location</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td data-label="Submitted">@row.Submitted</td>
+                            <td data-label="Dealer Tasks">@row.DealerTasks</td>
+                            <td data-label="SPCM Target">@row.SpcmTarget</td>
+                            <td data-label="Soil Target">@row.SoilTarget</td>
+                            <td data-label="MD Programs">@row.MdPrograms</td>
+                            <td data-label="Pos Liquidation">@row.PosLiquidation</td>
+                            <td class="alreq-cell-actions">
+                                <button type="button" class="alreq-btn-review" @onclick='() => Navigation.NavigateTo($"/AllocationRequestReview?jmdo={Uri.EscapeDataString(row.Name)}")'>
+                                    Review <i class="bi bi-arrow-right"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    private sealed record RequestRow(string Initials, string Name, string Code, string Location, string Submitted, int DealerTasks, int SpcmTarget, int SoilTarget, int MdPrograms, int PosLiquidation);
+
+    // Static placeholder: no Allocation-approval API exists yet. Matches the
+    // per-JMDO seed data in AllocationRequestReview.razor (the "Review"
+    // destination) row for row.
+    private static readonly List<RequestRow> Rows = new()
+    {
+        new("KR", "Karthik Raja", "JMDO-104", "Coimbatore", "24 Sep 2026", 1, 12, 6, 2, 2),
+        new("SM", "Selvam M", "JMDO-108", "Pollachi", "24 Sep 2026", 1, 10, 5, 1, 1),
+        new("PD", "Priya Dharshini", "JMDO-112", "Udumalpet", "24 Sep 2026", 1, 8, 4, 2, 2)
+    };
+}

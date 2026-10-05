@@ -1,0 +1,90 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Feedback
+@implements IDisposable
+@inject IServiceProvider Services
+
+@*
+    ConfirmDialog: renders ToastService.ConfirmAsync(...) requests. Place ONE per layout.
+    Replaces browser confirm(): await Toasts.ConfirmAsync("Delete?", "This cannot be undone.", "Delete", danger: true)
+    Desktop/tablet: centred card. Phone: card anchored to the bottom (thumb reach).
+    Cancel = button, backdrop, Escape. Focus lands on Cancel so a stray Enter never confirms.
+*@
+
+@if (Toasts.PendingConfirm is { } c)
+{
+    <div class="fb-confirm" role="presentation">
+        <div class="fb-confirm__backdrop" @onclick="() => Resolve(false)"></div>
+
+        <div class="fb-confirm__dialog @(c.Danger ? "fb-confirm--danger" : "")"
+             role="alertdialog"
+             aria-modal="true"
+             aria-labelledby="fb-confirm-title"
+             aria-describedby="fb-confirm-message"
+             tabindex="-1"
+             @onkeydown="OnKeyDown">
+
+            <div class="fb-confirm__icon" aria-hidden="true">
+                <i class="bi @(c.Danger ? "bi-exclamation-triangle-fill" : "bi-question-circle-fill")"></i>
+            </div>
+
+            <h2 id="fb-confirm-title" class="fb-confirm__title">@c.Title</h2>
+            <p id="fb-confirm-message" class="fb-confirm__message">@c.Message</p>
+
+            <div class="fb-confirm__actions">
+                <button type="button" class="fb-confirm__btn fb-confirm__btn--cancel" @onclick="() => Resolve(false)" @ref="_cancelButton">
+                    @c.CancelText
+                </button>
+                <button type="button" class="fb-confirm__btn @(c.Danger ? "fb-confirm__btn--danger" : "fb-confirm__btn--primary")" @onclick="() => Resolve(true)">
+                    @c.ConfirmText
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] public ToastService? CascadedService { get; set; }
+
+    private ToastService? _toasts;
+    private ToastService Toasts => _toasts ??= FeedbackServiceResolver.Resolve(CascadedService, Services);
+
+    private ElementReference _cancelButton;
+    private ConfirmRequest? _focusedFor;
+    private bool _disposed;
+
+    protected override void OnInitialized()
+    {
+        Toasts.OnChange += HandleChange;
+    }
+
+    private void HandleChange()
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var current = Toasts.PendingConfirm;
+        if (current is null || ReferenceEquals(current, _focusedFor)) return;
+
+        _focusedFor = current;
+        try { await _cancelButton.FocusAsync(); }
+        catch (JSException) { }
+        catch (JSDisconnectedException) { }
+        catch (InvalidOperationException) { }
+    }
+
+    private void Resolve(bool result) => Toasts.ResolveConfirm(result);
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape") Resolve(false);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_toasts is not null) _toasts.OnChange -= HandleChange;
+    }
+}

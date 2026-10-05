@@ -1,0 +1,79 @@
+namespace SPIC.Core.DTOs
+{
+    // StateBudgetDto (one state's row in the State Budget Management table) already
+    // exists in StateBudgetDto.cs - reused as-is, not redefined here.
+
+    /// <summary>One state's allocation as submitted from the State Budget Management save action.</summary>
+    public class StateBudgetAllocationRequest
+    {
+        public int StateId { get; set; }
+        public decimal Amount { get; set; }
+    }
+
+    /// <summary>
+    /// Full replace of every state's allocation for one FY. The client always sends every
+    /// state's current amount (not just the changed row), so the sum submitted here IS the
+    /// new total allocated for the FY - there is no partial/incremental save to reconcile.
+    /// </summary>
+    public class SaveStateBudgetRequest
+    {
+        public string FY { get; set; } = string.Empty;
+        public List<StateBudgetAllocationRequest> Allocations { get; set; } = new();
+    }
+
+    /// <summary>Submit For Validation request: marks every saved allocation for one FY as Submitted.</summary>
+    public class SubmitStateBudgetRequest
+    {
+        public string FY { get; set; } = string.Empty;
+    }
+
+    /// <summary>Validate request: marks every "Submitted" allocation for one FY as Validated.</summary>
+    public class ValidateStateBudgetRequest
+    {
+        public string FY { get; set; } = string.Empty;
+    }
+
+    /// <summary>Approve request: marks every "Validated" allocation for one FY as Approved.</summary>
+    public class ApproveStateBudgetRequest
+    {
+        public string FY { get; set; } = string.Empty;
+    }
+
+    /// <summary>Current submission status for one FY's state allocations ("Draft" if none saved yet).</summary>
+    public class StateBudgetStatusDto
+    {
+        public string Status { get; set; } = "Draft";
+    }
+
+    /// <summary>
+    /// Level 1 (Admin) summary for one FY: the Total Budget / Allocated to State / Remaining
+    /// Amount triple from StateBudgetSummary. All three are plain persisted values - never
+    /// recomputed from each other - returned as 0/"Draft" when nothing has been saved yet.
+    /// </summary>
+    public class StateBudgetSummaryDto
+    {
+        public string FY { get; set; } = string.Empty;
+        public decimal TotalBudget { get; set; }
+        public decimal AllocatedAmount { get; set; }
+        public decimal RemainingAmount { get; set; }
+        public string Status { get; set; } = "Draft";
+    }
+
+    /// <summary>
+    /// Save (Draft) request for the Level 1 summary. All three values are whatever the Admin
+    /// typed - no server-side recomputation of RemainingAmount from TotalBudget - AllocatedAmount.
+    /// </summary>
+    public class SaveStateBudgetSummaryRequest
+    {
+        public string FY { get; set; } = string.Empty;
+        public decimal TotalBudget { get; set; }
+        public decimal AllocatedAmount { get; set; }
+        public decimal RemainingAmount { get; set; }
+    }
+
+    /// <summary>Submit request for the Level 1 summary: re-validates TotalBudget = AllocatedAmount + RemainingAmount.</summary>
+    public class SubmitStateBudgetSummaryRequest
+    {
+        public string FY { get; set; } = string.Empty;
+    }
+}

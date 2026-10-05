@@ -182,4 +182,60 @@ namespace SPIC.Core.DTOs
 		public bool NeedsAttention { get; set; }
 		public string Headline { get; set; } = string.Empty;
 	}
+
+	/// <summary>
+	/// The alert email settings as the phone sees them. The password is never
+	/// returned; <see cref="HasPassword"/> is all a client gets to know.
+	/// </summary>
+	public sealed class IfmsAlertSettingsDto
+	{
+		public int Id { get; set; }
+
+		public bool EmailEnabled { get; set; }
+		public string SmtpHost { get; set; } = string.Empty;
+		public int SmtpPort { get; set; } = 587;
+		public bool UseStartTls { get; set; } = true;
+		public string UserName { get; set; } = string.Empty;
+		public bool HasPassword { get; set; }
+
+		public string FromAddress { get; set; } = string.Empty;
+		public string FromName { get; set; } = "SPIC IFMS Automation";
+
+		/// <summary>Separated by ; or , or newline.</summary>
+		public string ToAddresses { get; set; } = string.Empty;
+		public string CcAddresses { get; set; } = string.Empty;
+
+		public bool FailuresOnly { get; set; }
+		public bool AttachReports { get; set; }
+
+		public DateTime? TestRequestedAt { get; set; }
+		public string? TestRequestedBy { get; set; }
+		public DateTime? LastTestAt { get; set; }
+		public string? LastTestResult { get; set; }
+
+		public DateTime? LastSentAt { get; set; }
+		public string? LastSendResult { get; set; }
+
+		public DateTime UpdatedAt { get; set; }
+		public string UpdatedBy { get; set; } = string.Empty;
+	}
+
+	public sealed class IfmsSetAlertSettingsDto
+	{
+		public bool EmailEnabled { get; set; }
+		public string SmtpHost { get; set; } = string.Empty;
+		public int SmtpPort { get; set; } = 587;
+		public bool UseStartTls { get; set; } = true;
+		public string UserName { get; set; } = string.Empty;
+
+		/// <summary>Null or empty keeps the stored password; a value replaces it.</summary>
+		public string? Password { get; set; }
+
+		public string FromAddress { get; set; } = string.Empty;
+		public string FromName { get; set; } = "SPIC IFMS Automation";
+		public string ToAddresses { get; set; } = string.Empty;
+		public string CcAddresses { get; set; } = string.Empty;
+		public bool FailuresOnly { get; set; }
+		public bool AttachReports { get; set; }
+	}
 }

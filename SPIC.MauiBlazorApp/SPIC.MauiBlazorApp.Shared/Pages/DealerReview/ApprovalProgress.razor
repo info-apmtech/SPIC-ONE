@@ -1,0 +1,90 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@*
+    The MO → RM → SM → AVP progress rail. Read-only; it reads the three approval flags from
+    the registration instance the page passes in.
+*@
+
+    <!-- Approval Progress -->
+    <div class="approval-card mb-3">
+        <div class="approval-steps-wrapper">
+        <div class="approval-step completed">
+            <div class="step-circle">
+                <i class="bi bi-check-lg"></i>
+            </div>
+            <div>
+                <div class="step-title">MO</div>
+                <div class="step-status">Submitted</div>
+            </div>
+        </div>
+
+        <div class="step-line @DealerReviewFormat.GetLineClass(Dealer?.RMApproved)"></div>
+
+        <div class="approval-step @DealerReviewFormat.GetStepClass(Dealer?.RMApproved)">
+            <div class="step-circle">
+                @if (Dealer?.RMApproved == true)
+                {
+                    <i class="bi bi-check-lg"></i>
+                }
+                else
+                {
+                    <text>RM</text>
+                }
+            </div>
+            <div>
+                <div class="step-title">RM</div>
+                <div class="step-status">@( Dealer?.RMApproved == null ? "Under Review" : (Dealer.RMApproved == true ? "Approved" : "Rejected") )</div>
+            </div>
+        </div>
+
+        <div class="step-line @DealerReviewFormat.GetLineClass(Dealer?.SMApproved)"></div>
+
+        <div class="approval-step @DealerReviewFormat.GetStepClass(Dealer?.SMApproved)">
+            <div class="step-circle">
+                @if (Dealer?.SMApproved == true)
+                {
+                    <i class="bi bi-check-lg"></i>
+                }
+                else
+                {
+                    <text>SM</text>
+                }
+            </div>
+            <div>
+                <div class="step-title">SM</div>
+                <div class="step-status">@(Dealer?.SMApproved == null ? "Pending" : (Dealer.SMApproved == true ? "Approved" : "Rejected"))</div>
+            </div>
+        </div>
+
+        <div class="step-line @DealerReviewFormat.GetLineClass(Dealer?.AVPApproved)"></div>
+
+        <div class="approval-step @DealerReviewFormat.GetStepClass(Dealer?.AVPApproved)">
+            <div class="step-circle">
+                @if (Dealer?.AVPApproved == true)
+                {
+                    <i class="bi bi-check-lg"></i>
+                }
+                else
+                {
+                    <text>AVP</text>
+                }
+            </div>
+            <div>
+                <div class="step-title">AVP</div>
+                <div class="step-status">@(Dealer?.AVPApproved == null ? "Pending" : (Dealer.AVPApproved == true ? "Approved" : "Rejected"))</div>
+            </div>
+        </div>
+
+        <div class="step-line @DealerReviewFormat.GetLineClass(Dealer?.AVPApproved)"></div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public DR.DealerRegistration? Dealer { get; set; }
+
+    /// <summary>Approval mutates the flags on the existing registration instance, so the page
+    /// bumps this to tell the rail to re-render.</summary>
+    [Parameter] public int DataVersion { get; set; }
+}

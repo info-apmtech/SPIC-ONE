@@ -1,0 +1,644 @@
+@page "/ConsignmentHistory/view/{Id:int}"
+@using System.IO
+@using ClosedXML.Excel
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Components.Sas
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject SasApi Api
+@inject ToastService Toast
+@inject FileDownloadService Downloads
+@implements IDisposable
+
+@*
+    Consignment Details (Figma frame 15, supplied 2026-09-21): the summary strip, the seven-step
+    timeline, collection information, the sample summary and sample list, the consignment card
+    with the photos modal, and the amount box.
+
+    Courier charges and GST are not part of the data model, so the Amount Details card shows the
+    sample charge and the total only (the Figma rows for the other two are deliberately absent).
+
+    Review roles (Admin / CorporateAdmin, from CanReview on the DTO) also get the status control
+    that moves the consignment to In Transit / Delivered / Completed.
+
+    Phone (<= 767.98px): the strip becomes a two-column grid, every table becomes cards and the
+    timeline runs vertically.
+*@
+
+<div class="cd-page">
+    <PageHeader Title="Consignment Details" BackHref="/ConsignmentHistory">
+        <Actions>
+            @if (_c is not null)
+            {
+                <div class="cd-tools">
+                    <button type="button" class="cd-tool" @onclick="ExportExcelAsync">
+                        <i class="bi bi-file-earmark-excel" aria-hidden="true"></i> <span>Excel</span>
+                    </button>
+                    <button type="button" class="cd-tool" @onclick="ExportPdfAsync">
+                        <i class="bi bi-download" aria-hidden="true"></i> <span>PDF</span>
+                    </button>
+                </div>
+            }
+        </Actions>
+    </PageHeader>
+
+    @if (_loading)
+    {
+        <section class="cd-card"><Skeleton Rows="3" Height="18px" /></section>
+        <section class="cd-card"><Skeleton Variant="card" Rows="2" /></section>
+    }
+    else if (_c is null)
+    {
+        <EmptyState Icon="bi-truck"
+                    Title="@(_notFound ? "Consignment not found" : "The consignment could not be loaded")"
+                    Message="@(_notFound ? "This consignment is no longer available, or the link is out of date." : "Please check your connection and try again.")">
+            <a class="cd-btn cd-btn-outline" href="/ConsignmentHistory">Back to Consignment History</a>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="cd-chips">
+            <span class="cd-chip">@_c.Code</span>
+            <span class="cd-chip-text">Consignment dispatched on @SasLabels.DateTimeText(_c.DispatchedAt)</span>
+        </div>
+
+        <!-- ---------------------------------------------------------- summary strip -->
+        <section class="cd-card cd-strip" aria-label="Consignment summary">
+            <div class="cd-strip-item">
+                <span class="cd-key">Consignment ID</span>
+                <span class="cd-val cd-val--strong">@_c.Code</span>
+            </div>
+            <div class="cd-strip-item">
+                <span class="@StatusPillClass(_c.Status)">@SasLabels.ConsignmentStatusName(_c.Status)</span>
+                @if (_c.DeliveredAt is { } delivered)
+                {
+                    <span class="cd-key">Delivered on</span>
+                    <span class="cd-val">@SasLabels.DateTimeText(delivered)</span>
+                }
+                else
+                {
+                    <span class="cd-key">Current status</span>
+                }
+            </div>
+            <div class="cd-strip-item">
+                <span class="cd-key">Transaction ID</span>
+                <span class="cd-val cd-val--strong">@Dash(_c.TransactionIds)</span>
+            </div>
+            <div class="cd-strip-item">
+                <span class="cd-key">Courier Partner</span>
+                <span class="cd-val cd-val--strong">@Dash(_c.CourierService)</span>
+            </div>
+            <div class="cd-strip-item">
+                <span class="cd-key">Samples</span>
+                <span class="cd-val cd-val--strong">@_c.SampleCount</span>
+                <span class="cd-sub">(@TotalTests Tests)</span>
+            </div>
+            <div class="cd-strip-item">
+                <span class="cd-key">Date &amp; Time</span>
+                <span class="cd-val cd-val--strong">@SasLabels.LongDate(_c.DispatchedAt)</span>
+                <span class="cd-sub">@SasLabels.TimeOnly(_c.DispatchedAt)</span>
+            </div>
+            <div class="cd-strip-item">
+                <span class="cd-key">Payment Status</span>
+                @if (_c.PaymentStatus is { } ps)
+                {
+                    <span class="@SasLabels.PaymentStatusPillClass(ps)">@SasLabels.PaymentStatusName(ps)</span>
+                }
+                else
+                {
+                    <span class="sas-pill sas-pill--grey">Free Sample</span>
+                }
+                <span class="cd-sub">@SasLabels.ConsignmentStatusName(_c.Status)</span>
+            </div>
+        </section>
+
+        @if (_c.CanReview && NextStatuses.Length > 0)
+        {
+            <section class="cd-card cd-review" aria-label="Move this consignment on">
+                <div>
+                    <h2 class="cd-card-title">Update status</h2>
+                    <p class="cd-card-sub">Moving the consignment on also moves every sample inside it.</p>
+                </div>
+                <div class="cd-review-actions">
+                    @foreach (var next in NextStatuses)
+                    {
+                        var target = next;
+                        <button type="button" class="cd-btn cd-btn-outline" disabled="@_saving"
+                                @onclick="() => SetStatusAsync(target)">
+                            @SasLabels.ConsignmentStatusName(target)
+                        </button>
+                    }
+                </div>
+            </section>
+        }
+
+        <!-- ---------------------------------------------------------- timeline -->
+        <section class="cd-card" aria-labelledby="cd-timeline">
+            <h2 id="cd-timeline" class="cd-card-title">History / Timeline</h2>
+            <div class="cd-timeline">
+                <StatusTimeline Events="_c.Timeline" Current="_c.Status" AriaLabel="Consignment progress" />
+            </div>
+        </section>
+
+        <div class="cd-two">
+            <!-- ------------------------------------------------------ collection information -->
+            <section class="cd-card" aria-labelledby="cd-collection">
+                <h2 id="cd-collection" class="cd-card-title">Collection Information</h2>
+                <dl class="cd-facts">
+                    <dt>Packaging Type</dt><dd>@Dash(_c.PackagingType)</dd>
+                    <dt>Contact Person</dt><dd>@Dash(_c.ContactPerson)</dd>
+
+                    <dt>Courier Partner</dt><dd>@Dash(_c.CourierService)</dd>
+                    <dt>Mobile</dt><dd>@Dash(_c.ContactMobile)</dd>
+
+                    <dt>AWB / Tracking No</dt><dd class="cd-green">@Dash(_c.TrackingNumber)</dd>
+                    <dt>Email</dt><dd class="cd-green">@Dash(_c.ContactEmail)</dd>
+
+                    <dt>Collection Type</dt><dd>@CollectionTypeText</dd>
+                    <dt>Dispatched By</dt><dd>@Dash(_c.DispatchedByName)</dd>
+
+                    <dt>Collected By</dt><dd>@Dash(CollectedByText)</dd>
+                    <dt>Expected Delivery Date</dt>
+                    <dd>@(_c.ExpectedDeliveryDate is { } eta ? SasLabels.LongDate(eta) : "-")</dd>
+
+                    <dt>Collection Notes</dt><dd>@Dash(_c.Notes)</dd>
+                    <dt>No. of Collections</dt><dd>@_c.CollectionCount</dd>
+                </dl>
+            </section>
+
+            <!-- ------------------------------------------------------ sample summary -->
+            <section class="cd-card" aria-labelledby="cd-summary">
+                <h2 id="cd-summary" class="cd-card-title">Sample Summary</h2>
+
+                @if (SummaryRows.Count == 0)
+                {
+                    <EmptyState Icon="bi-eyedropper" Title="No samples" Compact="true"
+                                Message="This consignment carries no sample lines yet." />
+                }
+                else
+                {
+                    <div class="cd-table-wrap">
+                        <table class="cd-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">S:NO</th>
+                                    <th scope="col">Sample type</th>
+                                    <th scope="col">No. of Samples</th>
+                                    <th scope="col">No. of Tests</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @{ var sn = 0; }
+                                @foreach (var line in SummaryRows)
+                                {
+                                    sn++;
+                                    <tr>
+                                        <td>@sn</td>
+                                        <td>@SasLabels.SampleTypeName(line.Type)</td>
+                                        <td>@line.Samples</td>
+                                        <td>@line.Tests</td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="2">Total</td>
+                                    <td>@SummaryRows.Sum(r => r.Samples)</td>
+                                    <td>@SummaryRows.Sum(r => r.Tests)</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+            </section>
+        </div>
+
+        <!-- ---------------------------------------------------------- sample list -->
+        <section class="cd-card" aria-labelledby="cd-samples">
+            <h2 id="cd-samples" class="cd-card-title">Sample in this collection</h2>
+
+            @if (_c.Samples.Count == 0)
+            {
+                <EmptyState Icon="bi-eyedropper" Title="No samples" Compact="true"
+                            Message="The sample list is not available for this consignment." />
+            }
+            else
+            {
+                <div class="cd-table-wrap tablet-up">
+                    <table class="cd-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">S:NO</th>
+                                <th scope="col">Collection ID</th>
+                                <th scope="col">Sample Type</th>
+                                <th scope="col">Sample Description</th>
+                                <th scope="col">No. of Tests</th>
+                                <th scope="col">Category Type</th>
+                                <th scope="col">Payment Type</th>
+                                <th scope="col">Amount (&#8377;)</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @{ var i = 0; }
+                            @foreach (var sample in ShownSamples)
+                            {
+                                i++;
+                                var owner = OwnerOf(sample);
+                                <tr @key="sample.Id">
+                                    <td>@i</td>
+                                    <td>
+                                        @if (owner is not null)
+                                        {
+                                            <a class="cd-link" href="@($"/SampleCollection/view/{owner.Id}")">@sample.Code</a>
+                                        }
+                                        else
+                                        {
+                                            <span>@sample.Code</span>
+                                        }
+                                    </td>
+                                    <td>@SasLabels.SampleTypeName(sample.SampleType)</td>
+                                    <td>@Dash(DescriptionOf(sample))</td>
+                                    <td>@sample.NoOfTests</td>
+                                    <td>
+                                        @if (owner?.PaidCategory is { } category)
+                                        {
+                                            <span class="@CategoryPillClass(category)">@SasLabels.PaidCategoryName(category)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="cd-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (owner is not null)
+                                        {
+                                            <span class="sas-pill sas-pill--blue">@SasLabels.PaymentTypeName(owner.PaymentType)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="cd-muted">-</span>
+                                        }
+                                    </td>
+                                    <td>@sample.Amount.ToString("N2")</td>
+                                    <td>
+                                        @if (owner is not null)
+                                        {
+                                            <span class="@SasLabels.StatusPillClass(owner.Status)">@SasLabels.Status(owner.Status)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="cd-muted">-</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="cd-cards phone-only">
+                    @{ var j = 0; }
+                    @foreach (var sample in ShownSamples)
+                    {
+                        j++;
+                        var owner = OwnerOf(sample);
+                        <article class="cd-samplecard" @key="@($"s{sample.Id}")">
+                            <div class="cd-samplecard-top">
+                                @if (owner is not null)
+                                {
+                                    <a class="cd-link" href="@($"/SampleCollection/view/{owner.Id}")">@sample.Code</a>
+                                }
+                                else
+                                {
+                                    <span class="cd-link">@sample.Code</span>
+                                }
+                                @if (owner is not null)
+                                {
+                                    <span class="@SasLabels.StatusPillClass(owner.Status)">@SasLabels.Status(owner.Status)</span>
+                                }
+                            </div>
+                            <dl class="cd-facts cd-facts--card">
+                                <dt>Sample Type</dt><dd>@SasLabels.SampleTypeName(sample.SampleType)</dd>
+                                <dt>Description</dt><dd>@Dash(DescriptionOf(sample))</dd>
+                                <dt>No. of Tests</dt><dd>@sample.NoOfTests</dd>
+                                <dt>Category</dt>
+                                <dd>@(owner?.PaidCategory is { } cat ? SasLabels.PaidCategoryName(cat) : "-")</dd>
+                                <dt>Payment</dt>
+                                <dd>@(owner is not null ? SasLabels.PaymentTypeName(owner.PaymentType) : "-")</dd>
+                                <dt>Amount</dt><dd>@sample.Amount.ToString("N2")</dd>
+                            </dl>
+                        </article>
+                    }
+                </div>
+
+                @if (_c.Samples.Count > ShowLimit)
+                {
+                    <div class="cd-viewall-row">
+                        <button type="button" class="cd-viewall" @onclick="() => _showAll = !_showAll">
+                            @(_showAll ? "Show fewer samples" : $"View All Sample ({_c.Samples.Count})")
+                            <i class="bi @(_showAll ? "bi-chevron-up" : "bi-chevron-right")" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                }
+            }
+        </section>
+
+        <div class="cd-two">
+            <!-- ------------------------------------------------------ consignment card -->
+            <section class="cd-card" aria-labelledby="cd-consign">
+                <h2 id="cd-consign" class="cd-card-title">Consignments Details</h2>
+                <dl class="cd-facts">
+                    <dt>Consignment ID</dt><dd class="cd-green">@_c.Code</dd>
+                    <dt>No. of Package</dt><dd>@_c.PackageCount</dd>
+
+                    <dt>Dispatched Date</dt><dd>@SasLabels.DateTimeText(_c.DispatchedAt)</dd>
+                    <dt>Package Weight</dt>
+                    <dd>@(_c.PackageWeightKg is { } kg ? $"{kg:0.##} Kg" : "-")</dd>
+
+                    <dt>Dispatched Through</dt><dd>@Dash(_c.CourierService)</dd>
+                    <dt>AWB / Tracking No.</dt><dd class="cd-green">@Dash(_c.TrackingNumber)</dd>
+                </dl>
+
+                <div class="cd-photos">
+                    <span class="cd-key">Consignment Photos</span>
+                    <button type="button" class="cd-photos-btn" @onclick="() => _photosOpen = true">
+                        <i class="bi bi-images" aria-hidden="true"></i>
+                        Click and View Photos and Files
+                        <span class="cd-photos-count">@_c.Photos.Count</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- ------------------------------------------------------ amount card -->
+            <section class="cd-card" aria-labelledby="cd-amount">
+                <h2 id="cd-amount" class="cd-card-title">Amount Details</h2>
+
+                <dl class="cd-amount">
+                    <dt>Sample Charge (@TotalTests Test@(TotalTests == 1 ? "" : "s"))</dt>
+                    <dd>@SasLabels.Money(_c.TotalAmount)</dd>
+                    <dt class="cd-amount-total">Total Amount</dt>
+                    <dd class="cd-amount-total">@SasLabels.Money(_c.TotalAmount)</dd>
+                </dl>
+
+                <div class="cd-paybox">
+                    <dl class="cd-facts cd-facts--card">
+                        <dt>Payment Mode</dt>
+                        <dd>@(_c.PaymentStatus is null ? "Free sample" : "Online")</dd>
+                        <dt>Payment Date</dt>
+                        <dd>@(_c.PaymentReviewedAt is { } paid ? SasLabels.DateTimeText(paid) : "-")</dd>
+                        <dt>Transaction ID</dt>
+                        <dd>@Dash(_c.TransactionIds)</dd>
+                    </dl>
+                </div>
+            </section>
+        </div>
+
+        <ConsignmentPhotosDialog @bind-IsOpen="_photosOpen"
+                                 Code="@_c.Code"
+                                 DispatchedAt="_c.DispatchedAt"
+                                 CourierService="@_c.CourierService"
+                                 Photos="_c.Photos"
+                                 FileUrl="Api.FileUrl" />
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ConsignmentDetailDto? _c;
+    private bool _loading = true;
+    private bool _notFound;
+    private bool _saving;
+    private bool _photosOpen;
+    private bool _showAll;
+    private int _loadedId = -1;
+    private CancellationTokenSource? _cts;
+
+    private const int ShowLimit = 10;
+
+    private static string Dash(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value!;
+
+    private static string StatusPillClass(ConsignmentStatus status) => "sas-pill " + status switch
+    {
+        ConsignmentStatus.PendingPickup => "sas-pill--amber",
+        ConsignmentStatus.Dispatched => "sas-pill--blue",
+        ConsignmentStatus.InTransit => "sas-pill--blue",
+        ConsignmentStatus.Delivered => "sas-pill--green",
+        ConsignmentStatus.Completed => "sas-pill--green",
+        _ => "sas-pill--grey"
+    };
+
+    private static string CategoryPillClass(SamplePaidCategory category) =>
+        "sas-pill " + (category == SamplePaidCategory.Ngo ? "sas-pill--violet" : "sas-pill--green");
+
+    private int TotalTests => _c?.Samples.Sum(s => s.NoOfTests) ?? 0;
+
+    private IEnumerable<SampleItemDto> ShownSamples =>
+        _showAll ? _c!.Samples : _c!.Samples.Take(ShowLimit);
+
+    /// <summary>Which statuses this consignment may still be moved to (review roles only).</summary>
+    private ConsignmentStatus[] NextStatuses => _c?.Status switch
+    {
+        ConsignmentStatus.PendingPickup => new[] { ConsignmentStatus.InTransit, ConsignmentStatus.Delivered },
+        ConsignmentStatus.Dispatched => new[] { ConsignmentStatus.InTransit, ConsignmentStatus.Delivered },
+        ConsignmentStatus.InTransit => new[] { ConsignmentStatus.Delivered },
+        ConsignmentStatus.Delivered => new[] { ConsignmentStatus.Completed },
+        _ => Array.Empty<ConsignmentStatus>()
+    };
+
+    private string CollectionTypeText
+    {
+        get
+        {
+            if (_c is null || _c.Collections.Count == 0) return "-";
+            var free = _c.Collections.Any(c => c.PaymentType == SamplePaymentType.Free);
+            var paid = _c.Collections.Any(c => c.PaymentType == SamplePaymentType.Paid);
+            return free && paid ? "Free + Paid Sample" : paid ? "Paid Sample" : "Free Sample";
+        }
+    }
+
+    private string? CollectedByText
+    {
+        get
+        {
+            var names = _c?.Collections
+                .Select(c => c.CollectedByName)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct()
+                .ToList();
+
+            return names is { Count: > 0 } ? string.Join(", ", names) : null;
+        }
+    }
+
+    private sealed record SummaryRow(SampleType Type, int Samples, int Tests);
+
+    private List<SummaryRow> SummaryRows =>
+        _c is null
+            ? new List<SummaryRow>()
+            : _c.Samples
+                .GroupBy(s => s.SampleType)
+                .OrderBy(g => g.Key)
+                .Select(g => new SummaryRow(g.Key, g.Count(), g.Sum(s => s.NoOfTests)))
+                .ToList();
+
+    /// <summary>
+    /// The collection a sample belongs to. Sample codes are "{collectionCode}-{n}" (see the DTO
+    /// header), so the prefix identifies the owner; a single-collection consignment needs no
+    /// matching at all.
+    /// </summary>
+    private SampleCollectionSummaryDto? OwnerOf(SampleItemDto sample)
+    {
+        if (_c is null || _c.Collections.Count == 0) return null;
+        if (_c.Collections.Count == 1) return _c.Collections[0];
+
+        return _c.Collections.FirstOrDefault(c =>
+            !string.IsNullOrWhiteSpace(c.Code) &&
+            sample.Code.StartsWith(c.Code + "-", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string DescriptionOf(SampleItemDto sample)
+    {
+        var crops = string.Join(" + ", new[] { sample.Crop1, sample.Crop2 }
+            .Where(c => !string.IsNullOrWhiteSpace(c)));
+
+        if (!string.IsNullOrWhiteSpace(sample.Remarks))
+        {
+            return string.IsNullOrWhiteSpace(crops) ? sample.Remarks! : $"{crops} - {sample.Remarks}";
+        }
+
+        return crops;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == Id) return;
+        _loadedId = Id;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        _showAll = false;
+
+        var (item, notFound) = await Api.GetConsignmentAsync(Id, ct);
+        if (ct.IsCancellationRequested) return;
+
+        _c = item;
+        _notFound = notFound;
+        _loading = false;
+    }
+
+    private async Task SetStatusAsync(ConsignmentStatus status)
+    {
+        if (_c is null || _saving) return;
+
+        var label = SasLabels.ConsignmentStatusName(status);
+        if (!await Toast.ConfirmAsync("Update consignment",
+                $"Mark {_c.Code} as \"{label}\"? Every sample inside it moves with the consignment.",
+                label)) return;
+
+        _saving = true;
+        var updated = await Api.SetConsignmentStatusAsync(Id, status, _cts?.Token ?? CancellationToken.None);
+        _saving = false;
+
+        if (updated is null) return;            // the API already raised the toast
+
+        _c = updated;
+        Toast.Success($"Consignment marked as {label}.");
+    }
+
+    // ---------------- exports
+
+    private static readonly string[] Headers =
+    {
+        "S:NO", "Collection ID", "Sample Type", "Sample Description", "No. of Tests",
+        "Category Type", "Payment Type", "Amount", "Status"
+    };
+
+    private List<List<string>> ExportRows()
+    {
+        if (_c is null) return new List<List<string>>();
+
+        var rows = new List<List<string>>();
+        var n = 0;
+
+        foreach (var sample in _c.Samples)
+        {
+            n++;
+            var owner = OwnerOf(sample);
+            rows.Add(new List<string>
+            {
+                n.ToString(),
+                sample.Code,
+                SasLabels.SampleTypeName(sample.SampleType),
+                DescriptionOf(sample),
+                sample.NoOfTests.ToString(),
+                owner?.PaidCategory is { } c ? SasLabels.PaidCategoryName(c) : "",
+                owner is not null ? SasLabels.PaymentTypeName(owner.PaymentType) : "",
+                sample.Amount.ToString("N2"),
+                owner is not null ? SasLabels.Status(owner.Status) : ""
+            });
+        }
+
+        return rows;
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        if (_c is null) return;
+
+        try
+        {
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Samples");
+
+            for (var c = 0; c < Headers.Length; c++) sheet.Cell(1, c + 1).Value = Headers[c];
+
+            var rows = ExportRows();
+            for (var r = 0; r < rows.Count; r++)
+            {
+                for (var c = 0; c < rows[r].Count; c++) sheet.Cell(r + 2, c + 1).Value = rows[r][c];
+            }
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            await Downloads.SaveAsync($"{_c.Code}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", stream.ToArray());
+        }
+        catch (Exception)
+        {
+            Toast.Error("The Excel file could not be created. Please try again.");
+        }
+    }
+
+    private async Task ExportPdfAsync()
+    {
+        if (_c is null) return;
+
+        var request = new
+        {
+            Title = $"Consignment {_c.Code}",
+            Headers = Headers.ToList(),
+            Rows = ExportRows()
+        };
+
+        try
+        {
+            await Downloads.PostAsync("api/Export/table-pdf", request, $"{_c.Code}.pdf");
+        }
+        catch (Exception)
+        {
+            Toast.Error("The PDF could not be created. Please try again.");
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

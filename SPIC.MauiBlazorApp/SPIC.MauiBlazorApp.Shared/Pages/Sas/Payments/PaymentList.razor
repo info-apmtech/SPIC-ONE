@@ -1,0 +1,826 @@
+﻿@page "/Sas/Payments"
+@page "/Sas/Payments/History"
+@namespace SPIC.MauiBlazorApp.Shared.Pages.Sas.Payments
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@inject SasPaymentApi Api
+@inject SasApi Sas
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+@*
+    One list page, four views (mode from api/Sas/payments/me):
+      Admin    - Payment Approval (screen 23)
+      Finance  - Payment Verification (screen 27); /Sas/Payments/History = Payment History (screen 30)
+      Farmer   - Payments (screen 34); "view" opens the details as a right-side drawer (screen 35),
+                 full-screen on phones
+      ReadOnly - the MO's own submissions with the admin columns, no actions
+    Filters, tab and page live in the URL (replace: true), like Consignment History.
+    Phone (<= 767.98px): KPI cards two per row, tabs scroll inside their strip, rows become cards.
+*@
+
+<div class="spl-page">
+    <PageHeader Title="@Title" Subtitle="@Subtitle">
+        <Actions>
+            <button type="button" class="spl-tool" @onclick="RefreshAsync" disabled="@_loading">
+                <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> <span>Refresh</span>
+            </button>
+        </Actions>
+    </PageHeader>
+
+    @if (_me is null && !_meLoading)
+    {
+        <EmptyState Icon="bi-shield-lock" Title="Payments are not available"
+                    Message="Your account does not have access to SAS payments, or the page could not load.">
+            <button type="button" class="spl-btn spl-btn--outline" @onclick="ReloadAllAsync">Try again</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="spl-kpis">
+            @foreach (var k in Kpis)
+            {
+                <LabKpiCard Label="@k.Label" Value="@k.Value.ToString()" Icon="@k.Icon" Tone="@k.Tone" Caption="@k.Caption" />
+            }
+        </div>
+
+        @if (Tabs.Count > 0)
+        {
+            <div class="spl-tabs" role="tablist" aria-label="Payment status">
+                @foreach (var t in Tabs)
+                {
+                    var key = t.Key;
+                    <button type="button" role="tab" class="spl-tab @(key == ActiveTab ? "is-on" : "")"
+                            aria-selected="@(key == ActiveTab ? "true" : "false")" @onclick="() => SetTab(key)">
+                        @t.Label <span class="spl-tab-count">@t.Count</span>
+                    </button>
+                }
+            </div>
+        }
+
+        @if (View != PayView.Farmer)
+        {
+            <section class="spl-card">
+                <button type="button" class="spl-filters-head" aria-expanded="@(_filtersOpen ? "true" : "false")"
+                        @onclick="() => _filtersOpen = !_filtersOpen">
+                    <span><i class="bi bi-funnel" aria-hidden="true"></i> Filters</span>
+                    <i class="bi @(_filtersOpen ? "bi-chevron-up" : "bi-chevron-down")" aria-hidden="true"></i>
+                </button>
+
+                @if (_filtersOpen)
+                {
+                    <div class="spl-filters">
+                        <div class="spl-field">
+                            <label for="spl-from">From Date</label>
+                            <div class="spl-datefield @(string.IsNullOrWhiteSpace(_from) ? "is-empty" : null)">
+                                <input id="spl-from" class="spl-input" type="date" value="@_from"
+                                       @onchange="e => _from = e.Value?.ToString() ?? string.Empty" />
+                                <span class="spl-datefield-ph" aria-hidden="true">From date</span>
+                            </div>
+                        </div>
+                        <div class="spl-field">
+                            <label for="spl-to">To Date</label>
+                            <div class="spl-datefield @(string.IsNullOrWhiteSpace(_to) ? "is-empty" : null)">
+                                <input id="spl-to" class="spl-input" type="date" value="@_to"
+                                       @onchange="e => _to = e.Value?.ToString() ?? string.Empty" />
+                                <span class="spl-datefield-ph" aria-hidden="true">To date</span>
+                            </div>
+                        </div>
+                        @if (View != PayView.History)
+                        {
+                            <div class="spl-field">
+                                <label for="spl-state">State</label>
+                                <select id="spl-state" class="spl-input" value="@_stateId" @onchange="OnStateChangedAsync">
+                                    <option value="">All States</option>
+                                    @foreach (var st in _states)
+                                    {
+                                        <option value="@st.Id">@st.Name</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="spl-field">
+                                <label for="spl-region">Region</label>
+                                <select id="spl-region" class="spl-input" value="@_regionId" disabled="@(_regions.Count == 0)"
+                                        @onchange="e => _regionId = e.Value?.ToString() ?? string.Empty">
+                                    <option value="">All Regions</option>
+                                    @foreach (var r in _regions)
+                                    {
+                                        <option value="@r.Id">@r.RegionName</option>
+                                    }
+                                </select>
+                            </div>
+                        }
+                        <div class="spl-field">
+                            <label for="spl-mode">Payment Mode</label>
+                            <select id="spl-mode" class="spl-input" value="@_payMode" @onchange="e => _payMode = e.Value?.ToString() ?? string.Empty">
+                                <option value="">All Modes</option>
+                                @foreach (var m in PaymentLabels.Modes)
+                                {
+                                    <option value="@((int)m)">@PaymentLabels.ModeName(m)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="spl-field">
+                            <label for="spl-status">Status</label>
+                            <select id="spl-status" class="spl-input" value="@_status" @onchange="e => _status = e.Value?.ToString() ?? string.Empty">
+                                <option value="">All Statuses</option>
+                                @if (UsesAdminStatusFilter)
+                                {
+                                    <option value="0">Pending Review</option>
+                                    <option value="1">Admin Approved</option>
+                                    <option value="2">Returned to MO</option>
+                                }
+                                else
+                                {
+                                    @if (View != PayView.History)
+                                    {
+                                        <option value="1">Pending</option>
+                                    }
+                                    <option value="2">Verified</option>
+                                    <option value="3">Mismatch / Failed</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="spl-filter-actions">
+                            <button type="button" class="spl-btn spl-btn--outline" @onclick="ClearFilters">
+                                <i class="bi bi-x-lg" aria-hidden="true"></i> Clear All
+                            </button>
+                            <button type="button" class="spl-btn spl-btn--primary" @onclick="() => Apply(1)">
+                                <i class="bi bi-funnel" aria-hidden="true"></i> Apply Filters
+                            </button>
+                        </div>
+                    </div>
+                }
+            </section>
+        }
+
+        <section class="spl-card">
+            <div class="spl-list-head">
+                <h2 class="spl-list-title">@ListTitle</h2>
+                <div class="spl-search">
+                    <i class="bi bi-search" aria-hidden="true"></i>
+                    <input type="search" placeholder="@SearchPlaceholder" aria-label="Search payments"
+                           value="@_search" @oninput="e => SetSearch(e.Value?.ToString())" />
+                </div>
+            </div>
+
+            @if (View == PayView.Farmer)
+            {
+                <div class="spl-toolbar">
+                    <div class="spl-datefield @(string.IsNullOrWhiteSpace(_from) ? "is-empty" : null)">
+                        <input class="spl-input" type="date" aria-label="From date" value="@_from"
+                               @onchange="e => { _from = e.Value?.ToString() ?? string.Empty; Apply(1); }" />
+                        <span class="spl-datefield-ph" aria-hidden="true">From date</span>
+                    </div>
+                    <div class="spl-datefield @(string.IsNullOrWhiteSpace(_to) ? "is-empty" : null)">
+                        <input class="spl-input" type="date" aria-label="To date" value="@_to"
+                               @onchange="e => { _to = e.Value?.ToString() ?? string.Empty; Apply(1); }" />
+                        <span class="spl-datefield-ph" aria-hidden="true">To date</span>
+                    </div>
+                    <select class="spl-input" aria-label="Status" value="@_tab" @onchange="e => SetTab(e.Value?.ToString() ?? string.Empty)">
+                        <option value="">All Statuses</option>
+                        <option value="verified">Finance Verified</option>
+                        <option value="approvalPending">Approval Pending</option>
+                        <option value="issues">Payment Issues</option>
+                    </select>
+                    <select class="spl-input" aria-label="Crop" value="@_crop" @onchange="e => { _crop = e.Value?.ToString() ?? string.Empty; Apply(1); }">
+                        <option value="">All Crops</option>
+                        @foreach (var c in _crops)
+                        {
+                            <option value="@c">@c</option>
+                        }
+                    </select>
+                </div>
+            }
+
+            @if (_loading)
+            {
+                <Skeleton Variant="table" Rows="6" />
+            }
+            else if (_rows.Count == 0)
+            {
+                <EmptyState Icon="bi-wallet2" Title="No payments found"
+                            Message="@(View == PayView.Farmer ? "Payments for your paid soil samples will appear here." : "Try another tab, date range, status or search term.")">
+                    @if (HasFilters)
+                    {
+                        <button type="button" class="spl-btn spl-btn--outline" @onclick="ClearFilters">Clear filters</button>
+                    }
+                </EmptyState>
+            }
+            else
+            {
+                <!-- tablet / desktop table -->
+                <div class="spl-table-wrap tablet-up">
+                    <table class="spl-table">
+                        <thead>
+                            <tr>
+                                @foreach (var h in Headers)
+                                {
+                                    <th scope="col">@h</th>
+                                }
+                                <th scope="col" class="spl-th-action"><span class="visually-hidden">View</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _rows)
+                            {
+                                var r = row;
+                                <tr @key="r.Id">
+                                    @RowCells(r)
+                                    <td class="spl-td-action">
+                                        <button type="button" class="spl-icon-btn" aria-label="@($"View {RowTitle(r)}")" title="View" @onclick="() => OpenAsync(r)">
+                                            <i class="bi bi-eye" aria-hidden="true"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- phone cards -->
+                <div class="spl-cards phone-only">
+                    @foreach (var row in _rows)
+                    {
+                        var r = row;
+                        <article class="spl-rowcard" @key="@($"c{r.Id}")">
+                            <div class="spl-rowcard-top">
+                                <button type="button" class="spl-link spl-rowcard-code" @onclick="() => OpenAsync(r)">@RowTitle(r)</button>
+                                @RowStatusPill(r)
+                            </div>
+                            <dl class="spl-rowcard-facts">
+                                @RowFacts(r)
+                            </dl>
+                            <button type="button" class="spl-btn spl-btn--outline spl-rowcard-view" @onclick="() => OpenAsync(r)">
+                                <i class="bi bi-eye" aria-hidden="true"></i> View Details
+                            </button>
+                        </article>
+                    }
+                </div>
+
+                <LabPager Page="_page" PageSize="_size" Total="_total"
+                          PageChanged="p => Apply(p)" PageSizeChanged="SetSize" />
+            }
+        </section>
+    }
+</div>
+
+@if (View == PayView.Farmer)
+{
+    <BottomSheet @bind-IsOpen="_drawerOpen" Size="BottomSheet.SheetSize.Full" Title="Payment Details"
+                 Subtitle="@(_drawerDetail is { } dd ? $"Sample No. {dd.Summary.CollectionCode}" : null)">
+        <HeaderActions>
+            @if (_drawerDetail is { } dh)
+            {
+                <LabPill Text="@PaymentLabels.FarmerStatusName(dh.Summary.AdminStatus, dh.Summary.FinanceStatus)"
+                         Tone="@PaymentLabels.FarmerStatusTone(dh.Summary.AdminStatus, dh.Summary.FinanceStatus)" />
+            }
+        </HeaderActions>
+        <ChildContent>
+            @if (_drawerDetail is null)
+            {
+                <Skeleton Variant="card" Rows="2" />
+            }
+            else
+            {
+                <PaymentFarmerView Detail="_drawerDetail" ShowHead="false" />
+            }
+        </ChildContent>
+    </BottomSheet>
+}
+
+@code {
+    private enum PayView { Admin, Finance, History, Farmer, ReadOnly }
+
+    private sealed record Kpi(string Label, int Value, string Icon, string Tone, string? Caption = null);
+    private sealed record Tab(string Key, string Label, int Count);
+
+    // ---------------- URL state
+    [SupplyParameterFromQuery(Name = "tab")] public string? TabQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "q")] public string? SearchQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "from")] public string? FromQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "to")] public string? ToQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "state")] public string? StateQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "region")] public string? RegionQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "pmode")] public string? ModeQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "crop")] public string? CropQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "page")] public int? PageQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "size")] public int? SizeQuery { get; set; }
+
+    private string _tab = "";
+    private string _search = "";
+    private string _from = "";
+    private string _to = "";
+    private string _stateId = "";
+    private string _regionId = "";
+    private string _payMode = "";
+    private string _status = "";
+    private string _crop = "";
+    private int _page = 1;
+    private int _size = 16;
+
+    private SasPaymentModeDto? _me;
+    private bool _meLoading = true;
+    private SasPaymentStatsDto? _stats;
+    private List<SasPaymentRowDto> _rows = new();
+    private int _total;
+    private bool _loading = true;
+    private bool _filtersOpen = true;
+    private string _appliedKey = "?";
+    private bool _isHistory;
+
+    private List<SasStateDto> _states = new();
+    private List<SasPaymentRegionOption> _regions = new();
+    private List<string> _crops = new();
+
+    private bool _drawerOpen;
+    private SasPaymentDetailDto? _drawerDetail;
+
+    private CancellationTokenSource? _cts;
+    private CancellationTokenSource? _searchDebounce;
+
+    // ---------------- view
+
+    private PayView View => _me?.Mode switch
+    {
+        SasPaymentPageMode.Farmer => PayView.Farmer,
+        _ when _isHistory => PayView.History,
+        SasPaymentPageMode.Admin => PayView.Admin,
+        SasPaymentPageMode.Finance => PayView.Finance,
+        _ => PayView.ReadOnly
+    };
+
+    private string BasePath => _isHistory ? "/Sas/Payments/History" : "/Sas/Payments";
+
+    private string Title => View switch
+    {
+        PayView.Admin => "Payment Approval",
+        PayView.Finance => "Payment Verification",
+        PayView.History => "Payment History",
+        PayView.Farmer => "Payments",
+        _ => "My Payments"
+    };
+
+    private string Subtitle => View switch
+    {
+        PayView.Admin => "Admin reviews payment proofs for paid samples and forwards approved payments to Finance.",
+        PayView.Finance => "Admin-approved paid sample payments awaiting Finance verification.",
+        PayView.History => "Full record of all Finance-processed payments.",
+        PayView.Farmer => "Track payment status for all your paid soil samples.",
+        _ => "Payments you recorded for paid samples and where they are in approval."
+    };
+
+    private string ListTitle => View switch
+    {
+        PayView.Admin => "Payment Approval List",
+        PayView.Finance => "Payment Verification List",
+        PayView.History => "Payment History List",
+        _ => "Payment List"
+    };
+
+    private string SearchPlaceholder => View == PayView.Farmer
+        ? "Search sample no., transaction ID..."
+        : "Search payment ref, collection, farmer, MO...";
+
+    private bool UsesAdminStatusFilter => View is PayView.Admin or PayView.ReadOnly;
+
+    private string DefaultTab => View switch
+    {
+        PayView.History => "history",
+        PayView.Farmer => "",
+        _ => "all"
+    };
+
+    private string ActiveTab => string.IsNullOrWhiteSpace(_tab) ? DefaultTab : _tab;
+
+    private bool HasFilters =>
+        !string.IsNullOrWhiteSpace(_search) || !string.IsNullOrWhiteSpace(_from) || !string.IsNullOrWhiteSpace(_to) ||
+        !string.IsNullOrWhiteSpace(_stateId) || !string.IsNullOrWhiteSpace(_regionId) ||
+        !string.IsNullOrWhiteSpace(_payMode) || !string.IsNullOrWhiteSpace(_status) || !string.IsNullOrWhiteSpace(_crop) ||
+        (View == PayView.Farmer && !string.IsNullOrWhiteSpace(_tab));
+
+    private List<Kpi> Kpis
+    {
+        get
+        {
+            var s = _stats ?? new SasPaymentStatsDto();
+            return View switch
+            {
+                PayView.Finance or PayView.History => new()
+                {
+                    new("All Payments", s.AllPayments, "bi-wallet2", "violet"),
+                    new("Pending Verification", s.PendingVerification, "bi-hourglass-split", "orange"),
+                    new("Verified Payments", s.VerifiedPayments, "bi-patch-check", "green"),
+                    new("Failed/\u200BMismatch Payments", s.FailedOrMismatch, "bi-exclamation-octagon", "red")
+                },
+                PayView.Farmer => new()
+                {
+                    new("Total Paid Samples", s.TotalPaidSamples, "bi-wallet2", "violet"),
+                    new("Finance Verified", s.FinanceVerified, "bi-patch-check", "green"),
+                    new("Approval Pending", s.ApprovalPending, "bi-hourglass-split", "orange"),
+                    new("Payment Issues", s.PaymentIssues, "bi-exclamation-octagon", "red")
+                },
+                _ => new()
+                {
+                    new("Pending Admin Approval", s.PendingAdminApproval, "bi-hourglass-split", "orange"),
+                    new("Forward to Finance", s.ForwardedToFinance, "bi-send-check", "blue"),
+                    new("Returned / Rejected", s.ReturnedOrRejected, "bi-arrow-return-left", "red"),
+                    new("Finance Verified", s.FinanceVerified, "bi-patch-check", "green")
+                }
+            };
+        }
+    }
+
+    private List<Tab> Tabs
+    {
+        get
+        {
+            var s = _stats ?? new SasPaymentStatsDto();
+            return View switch
+            {
+                PayView.Finance => new()
+                {
+                    new("all", "All Payments", s.AllPayments),
+                    new("pendingVerification", "Pending Verification", s.PendingVerification),
+                    new("verified", "Verified Payments", s.VerifiedPayments),
+                    new("failed", "Failed Payments", s.FailedOrMismatch)
+                },
+                PayView.History => new()
+                {
+                    new("history", "All", s.VerifiedPayments + s.FailedOrMismatch),
+                    new("verified", "Verified", s.VerifiedPayments),
+                    new("failedOnly", "Failed", s.Failed),
+                    new("mismatch", "Mismatch", s.Mismatch)
+                },
+                PayView.Farmer => new(),
+                _ => new()
+                {
+                    new("all", "All Payments", s.AllPayments),
+                    new("pendingAdmin", "Pending Admin Approval", s.PendingAdminApproval),
+                    new("forwarded", "Forwarded to Finance", s.ForwardedToFinance),
+                    new("returned", "Returned / Rejected", s.ReturnedOrRejected),
+                    new("financeStatus", "Finance Status", s.FinanceVerified + s.FailedOrMismatch)
+                }
+            };
+        }
+    }
+
+    // ---------------- columns
+
+    private string[] Headers => View switch
+    {
+        PayView.Finance => new[] { "Payment Ref No.", "Consignment No.", "Farmer Name", "Mode", "Amount", "Admin Status", "Finance Status", "Submitted" },
+        PayView.History => new[] { "Payment Ref No.", "Consignment No.", "Farmer Name", "Mode", "Amount", "Finance Status", "Verified By", "Verified Date", "Remarks" },
+        PayView.Farmer => new[] { "Sample No.", "Crop", "Amount", "Mode", "Transaction ID", "Submitted Date", "Status" },
+        _ => new[] { "Payment Ref No.", "Collection No.", "Consignment No.", "MO Name", "Farmer Name", "Mode", "Expected Amount", "Paid Amount", "Difference", "Admin Status", "Finance Status", "Submitted" }
+    };
+
+    private string RowTitle(SasPaymentRowDto r) => View == PayView.Farmer ? r.CollectionCode : r.Code;
+
+    private string HistoryName(SasPaymentRowDto r) => ActiveTab switch
+    {
+        "mismatch" when r.FinanceStatus == SampleFinanceStatus.Mismatch => "Amount Mismatch",
+        "failedOnly" when r.FinanceStatus == SampleFinanceStatus.Mismatch => "Failed",
+        _ => PaymentLabels.HistoryStatusName(r)
+    };
+
+    private string HistoryTone(SasPaymentRowDto r) => ActiveTab switch
+    {
+        "mismatch" when r.FinanceStatus == SampleFinanceStatus.Mismatch => "orange",
+        "failedOnly" when r.FinanceStatus == SampleFinanceStatus.Mismatch => "red",
+        _ => PaymentLabels.HistoryStatusTone(r)
+    };
+
+    private RenderFragment Person(string? name) => @<span class="spl-person">
+        <span class="spl-avatar spl-avatar--@PaymentLabels.AvatarTone(name)" aria-hidden="true">@PaymentLabels.Initials(name)</span>
+        <span class="spl-person-name">@PaymentLabels.Dash(name)</span>
+    </span>;
+
+    private RenderFragment DateCell(DateTime? at) => @<text>@PaymentLabels.Date(at)<span class="spl-sub">@PaymentLabels.Time(at)</span></text>;
+
+    private RenderFragment AdminPill(SasPaymentRowDto r) =>
+        @<LabPill Text="@PaymentLabels.AdminStatusName(r.AdminStatus)" Tone="@PaymentLabels.AdminStatusTone(r.AdminStatus)" />;
+
+    private RenderFragment FinancePill(SasPaymentRowDto r) =>
+        @<LabPill Text="@PaymentLabels.FinanceStatusName(r.FinanceStatus)" Tone="@PaymentLabels.FinanceStatusTone(r.FinanceStatus)" />;
+
+    private RenderFragment RowStatusPill(SasPaymentRowDto r) => View switch
+    {
+        PayView.Farmer => @<LabPill Text="@PaymentLabels.FarmerStatusName(r.AdminStatus, r.FinanceStatus)" Tone="@PaymentLabels.FarmerStatusTone(r.AdminStatus, r.FinanceStatus)" />,
+        PayView.History => @<LabPill Text="@HistoryName(r)" Tone="@HistoryTone(r)" />,
+        PayView.Finance => FinancePill(r),
+        _ => AdminPill(r)
+    };
+
+    private RenderFragment RowCells(SasPaymentRowDto r) => View switch
+    {
+        PayView.Finance => @<text>
+            <td><button type="button" class="spl-link" @onclick="() => OpenAsync(r)">@r.Code</button></td>
+            <td>@PaymentLabels.Dash(r.ConsignmentCode)</td>
+            <td>@Person(r.FarmerName)</td>
+            <td>@PaymentLabels.ModeName(r.PaymentMode)</td>
+            <td>@PaymentLabels.Money(r.PaidAmount)</td>
+            <td>@AdminPill(r)</td>
+            <td>@FinancePill(r)</td>
+            <td>@DateCell(r.SubmittedAt)</td>
+        </text>,
+        PayView.History => @<text>
+            <td><button type="button" class="spl-link" @onclick="() => OpenAsync(r)">@r.Code</button></td>
+            <td>@PaymentLabels.Dash(r.ConsignmentCode)</td>
+            <td>@Person(r.FarmerName)</td>
+            <td>@PaymentLabels.ModeName(r.PaymentMode)</td>
+            <td>@PaymentLabels.Money(r.PaidAmount)</td>
+            <td><LabPill Text="@HistoryName(r)" Tone="@HistoryTone(r)" /></td>
+            <td>@Person(r.FinanceVerifiedByName)</td>
+            <td>@DateCell(r.FinanceVerifiedAt)</td>
+            <td class="spl-remarks">@PaymentLabels.Dash(r.FinanceRemarks)</td>
+        </text>,
+        PayView.Farmer => @<text>
+            <td><button type="button" class="spl-link" @onclick="() => OpenAsync(r)">@r.CollectionCode</button></td>
+            <td>@PaymentLabels.Dash(r.Crop)</td>
+            <td>@PaymentLabels.Money(r.PaidAmount)</td>
+            <td>@PaymentLabels.ModeName(r.PaymentMode)</td>
+            <td>@PaymentLabels.Dash(r.TransactionId)</td>
+            <td>@DateCell(r.SubmittedAt)</td>
+            <td><LabPill Text="@PaymentLabels.FarmerStatusName(r.AdminStatus, r.FinanceStatus)" Tone="@PaymentLabels.FarmerStatusTone(r.AdminStatus, r.FinanceStatus)" /></td>
+        </text>,
+        _ => @<text>
+            <td><button type="button" class="spl-link" @onclick="() => OpenAsync(r)">@r.Code</button></td>
+            <td>@r.CollectionCode</td>
+            <td>@PaymentLabels.Dash(r.ConsignmentCode)</td>
+            <td>@Person(r.SubmittedByName)</td>
+            <td>@Person(r.FarmerName)</td>
+            <td>@PaymentLabels.ModeName(r.PaymentMode)</td>
+            <td>@PaymentLabels.Money(r.ExpectedAmount)</td>
+            <td>@PaymentLabels.Money(r.PaidAmount)</td>
+            <td class="@(r.Difference == 0 ? "spl-diff-ok" : "spl-diff-bad")">@PaymentLabels.Difference(r.Difference)</td>
+            <td>@AdminPill(r)</td>
+            <td>@FinancePill(r)</td>
+            <td>@DateCell(r.SubmittedAt)</td>
+        </text>
+    };
+
+    private RenderFragment RowFacts(SasPaymentRowDto r) => View switch
+    {
+        PayView.Farmer => @<text>
+            <dt>Crop</dt><dd>@PaymentLabels.Dash(r.Crop)</dd>
+            <dt>Amount</dt><dd>@PaymentLabels.Money(r.PaidAmount)</dd>
+            <dt>Mode</dt><dd>@PaymentLabels.ModeName(r.PaymentMode)</dd>
+            <dt>Transaction</dt><dd>@PaymentLabels.Dash(r.TransactionId)</dd>
+            <dt>Submitted</dt><dd>@PaymentLabels.DateTime(r.SubmittedAt)</dd>
+        </text>,
+        PayView.History => @<text>
+            <dt>Farmer</dt><dd>@PaymentLabels.Dash(r.FarmerName)</dd>
+            <dt>Consignment</dt><dd>@PaymentLabels.Dash(r.ConsignmentCode)</dd>
+            <dt>Amount</dt><dd>@PaymentLabels.Money(r.PaidAmount) · @PaymentLabels.ModeName(r.PaymentMode)</dd>
+            <dt>Verified By</dt><dd>@PaymentLabels.Dash(r.FinanceVerifiedByName)</dd>
+            <dt>Verified</dt><dd>@PaymentLabels.DateTime(r.FinanceVerifiedAt)</dd>
+            <dt>Remarks</dt><dd>@PaymentLabels.Dash(r.FinanceRemarks)</dd>
+        </text>,
+        PayView.Finance => @<text>
+            <dt>Farmer</dt><dd>@PaymentLabels.Dash(r.FarmerName)</dd>
+            <dt>Consignment</dt><dd>@PaymentLabels.Dash(r.ConsignmentCode)</dd>
+            <dt>Amount</dt><dd>@PaymentLabels.Money(r.PaidAmount) · @PaymentLabels.ModeName(r.PaymentMode)</dd>
+            <dt>Admin</dt><dd>@AdminPill(r)</dd>
+            <dt>Submitted</dt><dd>@PaymentLabels.DateTime(r.SubmittedAt)</dd>
+        </text>,
+        _ => @<text>
+            <dt>Collection</dt><dd>@r.CollectionCode</dd>
+            <dt>MO</dt><dd>@PaymentLabels.Dash(r.SubmittedByName)</dd>
+            <dt>Farmer</dt><dd>@PaymentLabels.Dash(r.FarmerName)</dd>
+            <dt>Paid</dt><dd>@PaymentLabels.Money(r.PaidAmount) · @PaymentLabels.ModeName(r.PaymentMode)</dd>
+            <dt>Difference</dt><dd class="@(r.Difference == 0 ? "spl-diff-ok" : "spl-diff-bad")">@PaymentLabels.Difference(r.Difference)</dd>
+            <dt>Finance</dt><dd>@FinancePill(r)</dd>
+            <dt>Submitted</dt><dd>@PaymentLabels.DateTime(r.SubmittedAt)</dd>
+        </text>
+    };
+
+    // ---------------- load
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isHistory = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/')
+            .EndsWith("Payments/History", StringComparison.OrdinalIgnoreCase);
+
+        _tab = TabQuery ?? "";
+        _search = SearchQuery ?? "";
+        _from = FromQuery ?? "";
+        _to = ToQuery ?? "";
+        _stateId = StateQuery ?? "";
+        _regionId = RegionQuery ?? "";
+        _payMode = ModeQuery ?? "";
+        _status = StatusQuery ?? "";
+        _crop = CropQuery ?? "";
+        _page = Math.Max(1, PageQuery ?? 1);
+        _size = SizeQuery is > 0 ? SizeQuery!.Value : 16;
+
+        var key = $"{_isHistory}|{_tab}|{_search}|{_from}|{_to}|{_stateId}|{_regionId}|{_payMode}|{_status}|{_crop}|{_page}|{_size}";
+        if (key == _appliedKey) return;
+        _appliedKey = key;
+
+        if (_me is null)
+        {
+            _meLoading = true;
+            _me = await Api.GetMeAsync();
+            _meLoading = false;
+            if (_me is null)
+            {
+                _loading = false;
+                return;
+            }
+
+            _ = LoadLookupsAsync();
+        }
+
+        await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Phones start with the filter panel folded so the list is on the first screen.
+        if (!firstRender) return;
+        try
+        {
+            if (await JS.InvokeAsync<bool>("eval", "window.matchMedia('(max-width: 767.98px)').matches"))
+            {
+                _filtersOpen = false;
+                StateHasChanged();
+            }
+        }
+        catch (Exception)
+        {
+            // prerender / no JS: keep the panel open
+        }
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        var lookups = await Sas.GetLookupsAsync();
+        _states = lookups?.States ?? new();
+        _crops = lookups?.Crops ?? new();
+
+        if (int.TryParse(_stateId, out var sid))
+            _regions = await Api.GetRegionsAsync(sid);
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadAsync()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        StateHasChanged();
+
+        var query = new SasPaymentQuery
+        {
+            Tab = View == PayView.Farmer && string.IsNullOrWhiteSpace(_tab) ? "all" : ActiveTab,
+            StateId = int.TryParse(_stateId, out var sid) ? sid : null,
+            RegionId = int.TryParse(_regionId, out var rid) ? rid : null,
+            PaymentMode = int.TryParse(_payMode, out var pm) ? (SamplePaymentMode)pm : null,
+            Crop = string.IsNullOrWhiteSpace(_crop) ? null : _crop,
+            Search = string.IsNullOrWhiteSpace(_search) ? null : _search,
+            From = string.IsNullOrWhiteSpace(_from) ? null : _from,
+            To = string.IsNullOrWhiteSpace(_to) ? null : _to,
+            Page = _page,
+            PageSize = _size
+        };
+
+        if (int.TryParse(_status, out var st))
+        {
+            if (UsesAdminStatusFilter) query.AdminStatus = (SamplePaymentStatus)st;
+            else query.FinanceStatus = (SampleFinanceStatus)st;
+        }
+
+        var statsTask = Api.GetStatsAsync(ct);
+        var page = await Api.GetPaymentsAsync(query, ct);
+        if (ct.IsCancellationRequested) return;
+
+        _rows = page?.Items ?? new List<SasPaymentRowDto>();
+        _total = page?.Total ?? 0;
+        _stats = await statsTask ?? _stats;
+        _loading = false;
+    }
+
+    private async Task RefreshAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task ReloadAllAsync()
+    {
+        _appliedKey = "?";
+        _me = null;
+        await OnParametersSetAsync();
+    }
+
+    // ---------------- filters in the URL
+
+    private async Task OnStateChangedAsync(ChangeEventArgs e)
+    {
+        _stateId = e.Value?.ToString() ?? "";
+        _regionId = "";
+        _regions = int.TryParse(_stateId, out var sid) ? await Api.GetRegionsAsync(sid) : new();
+    }
+
+    private void SetTab(string tab)
+    {
+        _tab = tab == DefaultTab ? "" : tab;
+        Apply(1);
+    }
+
+    private void ClearFilters()
+    {
+        _search = _from = _to = _stateId = _regionId = _payMode = _status = _crop = "";
+        if (View == PayView.Farmer) _tab = "";
+        _regions = new();
+        Apply(1);
+    }
+
+    private void SetSize(int size)
+    {
+        _size = size > 0 ? size : 16;
+        Apply(1);
+    }
+
+    private void SetSearch(string? text)
+    {
+        _search = text ?? "";
+        _searchDebounce?.Cancel();
+        _searchDebounce = new CancellationTokenSource();
+        var token = _searchDebounce.Token;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(400, token);
+                await InvokeAsync(() => Apply(1));
+            }
+            catch (TaskCanceledException) { }
+        });
+    }
+
+    private void Apply(int page)
+    {
+        _page = Math.Max(1, page);
+
+        var parts = new List<string>();
+        void Add(string key, string? value)
+        {
+            if (!string.IsNullOrWhiteSpace(value)) parts.Add($"{key}={Uri.EscapeDataString(value)}");
+        }
+
+        Add("tab", _tab);
+        Add("q", _search);
+        Add("from", _from);
+        Add("to", _to);
+        Add("state", _stateId);
+        Add("region", _regionId);
+        Add("pmode", _payMode);
+        Add("status", _status);
+        Add("crop", _crop);
+        if (_page > 1) parts.Add($"page={_page}");
+        if (_size != 16) parts.Add($"size={_size}");
+
+        Nav.NavigateTo(BasePath + (parts.Count > 0 ? "?" + string.Join("&", parts) : ""), replace: true);
+    }
+
+    // ---------------- open
+
+    private async Task OpenAsync(SasPaymentRowDto row)
+    {
+        if (View != PayView.Farmer)
+        {
+            Nav.NavigateTo($"/Sas/Payments/{row.Id}");
+            return;
+        }
+
+        _drawerDetail = null;
+        _drawerOpen = true;
+        StateHasChanged();
+
+        var (item, _) = await Api.GetPaymentAsync(row.Id);
+        if (item is null)
+        {
+            _drawerOpen = false;
+            return;
+        }
+
+        _drawerDetail = item;
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _searchDebounce?.Cancel();
+        _searchDebounce?.Dispose();
+    }
+}

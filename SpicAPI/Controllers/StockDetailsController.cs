@@ -1,4 +1,5 @@
 ﻿using System;
+using Microsoft.AspNetCore.Authorization;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -11,6 +12,7 @@ using SpicAPI.Services;
 
 namespace SpicAPI.Controllers
 {
+	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class StockDetailsController : ControllerBase

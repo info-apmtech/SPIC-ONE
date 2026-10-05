@@ -1,0 +1,111 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Metrics
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@implements IDisposable
+@inject MetricsApi Metrics
+
+@* Pages tab: the 20 most viewed app routes (api/Metrics/pages). *@
+<section class="mx-card" aria-labelledby="mx-pages-title">
+    <div class="mx-card-head">
+        <h2 class="mx-card-title" id="mx-pages-title">Top pages</h2>
+        <span class="mx-muted">Last @Days days</span>
+    </div>
+
+    @if (_loading && _rows is null)
+    {
+        <Skeleton Variant="table" Rows="6" />
+    }
+    else if (_rows is null)
+    {
+        <EmptyState Icon="bi-cloud-slash" Title="The pages could not be loaded" Message="Check the connection and try again." Compact="true">
+            <button type="button" class="mx-btn mx-btn-outline" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else if (_rows.Count == 0)
+    {
+        <EmptyState Icon="bi-window-stack" Title="No page views in this period" Message="Page views are recorded while people are signed in." Compact="true" />
+    }
+    else
+    {
+        var max = Math.Max(1, _rows.Max(r => r.Hits));
+        <div class="mx-table-wrap tablet-up @(_loading ? "is-busy" : "")">
+            <table class="mx-table">
+                <thead>
+                    <tr>
+                        <th scope="col" class="rank">#</th>
+                        <th scope="col">Page</th>
+                        <th scope="col" class="num">Views</th>
+                        <th scope="col" class="num">Users</th>
+                        <th scope="col" class="num">Errors</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @for (var i = 0; i < _rows.Count; i++)
+                    {
+                        var r = _rows[i];
+                        <tr>
+                            <td class="rank">@(i + 1)</td>
+                            <td class="wrap">
+                                <span class="mx-route mx-strong">@r.Route</span>
+                                <span class="mx-meter" aria-hidden="true"><span style="width:@(Math.Max(2, r.Hits * 100 / max))%"></span></span>
+                            </td>
+                            <td class="num">@MetricsText.Num(r.Hits)</td>
+                            <td class="num">@MetricsText.Num(r.Users)</td>
+                            <td class="num @(r.Errors > 0 ? "mx-bad" : "")">@MetricsText.Num(r.Errors)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mx-mcards phone-only">
+            @for (var i = 0; i < _rows.Count; i++)
+            {
+                var r = _rows[i];
+                <article class="mx-mcard">
+                    <header class="mx-mcard-head">
+                        <span class="mx-route mx-strong">@(i + 1). @r.Route</span>
+                    </header>
+                    <dl class="mx-mcard-nums mx-mcard-nums--3">
+                        <div><dt>Views</dt><dd>@MetricsText.Num(r.Hits)</dd></div>
+                        <div><dt>Users</dt><dd>@MetricsText.Num(r.Users)</dd></div>
+                        <div><dt>Errors</dt><dd class="@(r.Errors > 0 ? "mx-bad" : "")">@MetricsText.Num(r.Errors)</dd></div>
+                    </dl>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public int Days { get; set; } = 7;
+    [Parameter] public TelemetryApp? App { get; set; }
+
+    private List<MetricsRouteRowDto>? _rows;
+    private bool _loading = true;
+    private int _version;
+    private (int, TelemetryApp?)? _loadedFor;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == (Days, App)) return;
+        _loadedFor = (Days, App);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        _loading = true;
+        StateHasChanged();
+
+        var rows = await Metrics.GetPagesAsync(Days, App, 20, _cts.Token);
+        if (version != _version) return;
+        _rows = rows?.OrderByDescending(r => r.Hits).ToList();
+        _loading = false;
+        StateHasChanged();
+    }
+
+    public void Dispose() => _cts.Cancel();
+}

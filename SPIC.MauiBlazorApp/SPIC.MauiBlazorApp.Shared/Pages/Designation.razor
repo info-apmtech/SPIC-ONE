@@ -1,8 +1,7 @@
-﻿@page "/Designation"
-@rendermode InteractiveServer
+@page "/Designation"
 @using System.Net.Http.Json
-@using Microsoft.AspNetCore.Components
 @using System.Reflection
+@using Microsoft.AspNetCore.Components
 @using DR = SPIC.Core.Entities
 @inject HttpClient Http
 @inject LoadingService Loading
@@ -17,9 +16,24 @@
     // Selected permission tokens in "Page.Action" form, e.g. "Register.View"
     private HashSet<string> _selectedTokens = new(StringComparer.OrdinalIgnoreCase);
 
+    private sealed record PageCatalogItem(string Key, string DisplayName, string? Module, int SortOrder);
+
+    private List<PageCatalogItem> _catalogPages = new();
+
+    // Page order for stable RoleAccess serialization = catalog SortOrder.
+    private List<string> _allCatalogKeys = new();
+
+    // Module grouping built from PageModuleAttribute (first page per module
+    // renders as the parent row, exactly like the old enum module grouping).
+    private HashSet<string> _parentPages = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string[]> _childMap = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _childSet = new(StringComparer.OrdinalIgnoreCase);
+
     private bool _isEditMode;
     private bool _isSaving;
+    private bool _isLoading = true;
     private string _searchText = "";
+    private string _pageSearchText = "";
     private string _statusFilter = "All";
     private string? _message;
     private bool _isError;
@@ -31,54 +45,32 @@
 
     private ElementReference _firstInputRef;
 
-    private static readonly string[] _allPages = Enum.GetNames(typeof(DR.PagePermission));
     private static readonly string[] _actions = { "View", "Entry", "Update", "Delete" };
 
-    private static bool IsParent(string page) => _parentPages.Contains(page);
-    private static bool IsChild(string page) => _childSet.Contains(page);
-    private static string[] GetChildren(string page) => _childMap.TryGetValue(page, out var c) ? c : Array.Empty<string>();
+    private bool IsParent(string page) => _parentPages.Contains(page);
+    private bool IsChild(string page) => _childSet.Contains(page);
+    private string[] GetChildren(string page) => _childMap.TryGetValue(page, out var c) ? c : Array.Empty<string>();
 
-    private static readonly HashSet<string> _parentPages;
-    private static readonly Dictionary<string, string[]> _childMap = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly HashSet<string> _childSet = new(StringComparer.OrdinalIgnoreCase);
-
-    static Designation()
+    private IEnumerable<(string Page, string DisplayName, bool IsParent, int Indent)> GetDisplayPages()
     {
-        var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in _allPages)
+        foreach (var page in _catalogPages)
         {
-            var field = typeof(DR.PagePermission).GetField(name);
-            var attr = field?.GetCustomAttribute<DR.PageModuleAttribute>();
-            if (attr != null)
-            {
-                if (!groups.ContainsKey(attr.Module))
-                    groups[attr.Module] = new List<string>();
-                groups[attr.Module].Add(name);
-            }
-        }
-        _parentPages = new(groups.Select(g => g.Value[0]), StringComparer.OrdinalIgnoreCase);
-        foreach (var kv in groups)
-        {
-            var children = kv.Value.Skip(1).ToArray();
-            _childMap[kv.Value[0]] = children;
-            foreach (var c in children) _childSet.Add(c);
+            if (!string.IsNullOrWhiteSpace(_pageSearchText) &&
+                !page.DisplayName.Contains(_pageSearchText, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (IsParent(page.Key))
+                yield return (page.Key, page.DisplayName, true, 0);
+            else if (!IsChild(page.Key))
+                yield return (page.Key, page.DisplayName, false, 0);
         }
     }
 
-    private IEnumerable<(string Page, bool IsParent, int Indent)> GetDisplayPages()
+    private static string DisplayFor(DR.PagePermission page)
     {
-        foreach (var page in _allPages)
-        {
-            if (IsParent(page))
-                yield return (page, true, 0);
-            else if (!IsChild(page))
-                yield return (page, false, 0);
-        }
-    }
+        if (page == DR.PagePermission.QRScanner) return "QR Scanner";
 
-    // Prettifies "AnnualSales" -> "Annual Sales" for display only.
-    private static string DisplayFor(string key)
-    {
+        var key = page.ToString();
         var sb = new System.Text.StringBuilder();
         for (int i = 0; i < key.Length; i++)
         {
@@ -94,20 +86,20 @@
         if (IsParent(page))
         {
             var children = GetChildren(page);
-            return children.Length > 0 && children.All(c => _selectedTokens.Contains($"{c}.{action}"));
+            return _selectedTokens.Contains($"{page}.{action}")
+                && children.All(c => _selectedTokens.Contains($"{c}.{action}"));
         }
         return _selectedTokens.Contains($"{page}.{action}");
     }
 
     private void ToggleAction(string page, string action)
     {
-        var token = $"{page}.{action}";
-        var isAdding = !_selectedTokens.Contains(token);
+        var isAdding = !HasAction(page, action);
 
         if (isAdding)
-            _selectedTokens.Add(token);
+            _selectedTokens.Add($"{page}.{action}");
         else
-            _selectedTokens.Remove(token);
+            _selectedTokens.Remove($"{page}.{action}");
 
         if (IsParent(page))
         {
@@ -127,7 +119,8 @@
         if (IsParent(page))
         {
             var children = GetChildren(page);
-            return children.Length > 0 && children.All(c => _actions.All(a => _selectedTokens.Contains($"{c}.{a}")));
+            return _actions.All(a => _selectedTokens.Contains($"{page}.{a}"))
+                && children.All(c => _actions.All(a => _selectedTokens.Contains($"{c}.{a}")));
         }
         return _actions.All(a => _selectedTokens.Contains($"{page}.{a}"));
     }
@@ -160,18 +153,28 @@
         }
     }
 
-    private bool IsAllSelected => _allPages.All(IsRowAll);
+    private bool IsAllSelected => _allCatalogKeys.Count > 0 && _allCatalogKeys.All(IsRowAll);
 
-    private void ToggleAllRoles()
+    private void ToggleAllRoles(ChangeEventArgs? e = null)
     {
-        if (IsAllSelected)
+        bool shouldSelect;
+        if (e?.Value is bool isChecked)
+        {
+            shouldSelect = isChecked;
+        }
+        else
+        {
+            shouldSelect = !IsAllSelected;
+        }
+
+        if (!shouldSelect)
         {
             _selectedTokens.Clear();
         }
         else
         {
             _selectedTokens.Clear();
-            foreach (var p in _allPages)
+            foreach (var p in _allCatalogKeys)
                 foreach (var a in _actions)
                     _selectedTokens.Add($"{p}.{a}");
         }
@@ -186,6 +189,7 @@
         Loading.Show();
         try
         {
+            LoadCatalog();
             await LoadDesignations();
         }
         finally
@@ -194,10 +198,53 @@
         }
     }
 
+    private void LoadCatalog()
+    {
+        _catalogPages = Enum.GetValues<DR.PagePermission>()
+            .Select((page, index) => new PageCatalogItem(
+                DR.RoleAccessPermissions.KeyFor(page),
+                DisplayFor(page),
+                typeof(DR.PagePermission).GetField(page.ToString())?.GetCustomAttribute<DR.PageModuleAttribute>()?.Module,
+                index))
+            .ToList();
+        _allCatalogKeys = _catalogPages.Select(p => p.Key).ToList();
+        RebuildModuleGroups();
+    }
+
+    private void RebuildModuleGroups()
+    {
+        _parentPages.Clear();
+        _childMap.Clear();
+        _childSet.Clear();
+
+        var groups = new Dictionary<string, List<PageCatalogItem>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var page in _catalogPages)
+        {
+            if (string.IsNullOrWhiteSpace(page.Module))
+                continue;
+            if (!groups.TryGetValue(page.Module!, out var list))
+                groups[page.Module!] = list = new List<PageCatalogItem>();
+            list.Add(page);
+        }
+
+        foreach (var kv in groups)
+        {
+            if (kv.Value.Count <= 1)
+                continue;
+
+            var first = kv.Value[0];
+            _parentPages.Add(first.Key);
+            var children = kv.Value.Skip(1).Select(p => p.Key).ToArray();
+            _childMap[first.Key] = children;
+            foreach (var c in children) _childSet.Add(c);
+        }
+    }
+
     private async Task LoadDesignations()
     {
         try
         {
+            _isLoading = true;
             _designations = await Http.GetFromJsonAsync<List<DR.Designation>>("api/Designation/all") ?? new();
             ApplyFilter();
         }
@@ -205,14 +252,27 @@
         {
             ShowMessage($"Failed to load designations: {ex.Message}", true);
         }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private List<ExportColumn<DR.Designation>> GetExportColumns()
+    {
+        return new List<ExportColumn<DR.Designation>>
+        {
+            new ExportColumn<DR.Designation> { Header = "S:No", ValueSelector = item => (_filtered.IndexOf(item) >= 0 ? (_filtered.IndexOf(item) + 1).ToString() : "") },
+            new ExportColumn<DR.Designation> { Header = "Designation Name", ValueSelector = item => item.Name },
+            new ExportColumn<DR.Designation> { Header = "Roles Permission", ValueSelector = item => CompressRoleAccessForDisplay(item.RoleAccess) },
+            new ExportColumn<DR.Designation> { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" },
+            new ExportColumn<DR.Designation> { Header = "Created At", ValueSelector = item => item.CreatedAt.ToString("yyyy-MM-dd") }
+        };
     }
 
     private void ApplyFilter()
     {
         IEnumerable<DR.Designation> query = _designations;
-
-        if (!string.IsNullOrWhiteSpace(_searchText))
-            query = query.Where(d => d.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
 
         if (_statusFilter == "Active") query = query.Where(d => d.IsActive);
         else if (_statusFilter == "Inactive") query = query.Where(d => !d.IsActive);
@@ -239,14 +299,16 @@
         {
             foreach (var raw in d.RoleAccess.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                if (raw.Contains('.'))
+                var dot = raw.IndexOf('.');
+                var page = DR.RoleAccessPermissions.NormalizePageKey(dot < 0 ? raw : raw.Substring(0, dot));
+                if (dot >= 0)
                 {
-                    _selectedTokens.Add(raw);
+                    _selectedTokens.Add($"{page}.{raw.Substring(dot + 1)}");
                 }
                 else
                 {
                     // legacy bare page name => grant all actions (re-saves as dotted)
-                    foreach (var a in _actions) _selectedTokens.Add($"{raw}.{a}");
+                    foreach (var a in _actions) _selectedTokens.Add($"{page}.{a}");
                 }
             }
         }
@@ -263,6 +325,7 @@
     {
         _model = new DR.Designation { Name = "", IsActive = true };
         _selectedTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _pageSearchText = "";
         _isEditMode = false;
         _message = null;
     }
@@ -295,11 +358,25 @@
         {
             _model.Name = _model.Name.Trim();
 
-            // Build RoleAccess in a stable order: page order, then action order.
-            _model.RoleAccess = string.Join(",",
-                _allPages.SelectMany(p => _actions
-                    .Where(a => _selectedTokens.Contains($"{p}.{a}"))
-                    .Select(a => $"{p}.{a}")));
+            // Build RoleAccess in a stable order: page order (SortOrder), then action order.
+            var selectedTokens = _allCatalogKeys.SelectMany(p => _actions
+                .Where(a => _selectedTokens.Contains($"{p}.{a}"))
+                .Select(a => $"{p}.{a}"));
+
+            // Preserve tokens for pages NOT in the current catalog (deactivated or
+            // removed) so existing permissions are never dropped on edit-save.
+            var catalogKeys = new HashSet<string>(
+                _allCatalogKeys.Select(DR.RoleAccessPermissions.NormalizePageKey),
+                StringComparer.OrdinalIgnoreCase);
+            var preservedTokens = Enumerable.Empty<string>();
+            if (!string.IsNullOrWhiteSpace(_model.RoleAccess))
+            {
+                preservedTokens = DR.RoleAccessPermissions.ParseTokens(_model.RoleAccess)
+                    .Where(t => !catalogKeys.Contains(
+                        DR.RoleAccessPermissions.NormalizePageKey(DR.RoleAccessPermissions.PagePart(t))));
+            }
+
+            _model.RoleAccess = string.Join(",", selectedTokens.Concat(preservedTokens).Distinct(StringComparer.OrdinalIgnoreCase));
 
             _model.UpdatedBy = LoginState.UserId ?? "System";
             _model.UpdatedAt = DateTime.Now;
@@ -467,7 +544,7 @@
 
         // Pass 1: collapse a module to its parent row when every child holds the
         // same actions (mirrors the single parent row shown in the grid).
-        foreach (var page in _allPages)
+        foreach (var page in _allCatalogKeys)
         {
             if (displayed.Contains(page) || !map.ContainsKey(page)) continue;
 
@@ -495,7 +572,7 @@
         }
 
         // Pass 2: any child pages left over (non-uniform module) listed individually.
-        foreach (var page in _allPages)
+        foreach (var page in _allCatalogKeys)
         {
             if (displayed.Contains(page) || !map.ContainsKey(page)) continue;
             var self = Format(page, map[page]);
@@ -567,30 +644,10 @@
     .desig-stat-label { font-size: 0.82rem; color: #6B7280; font-weight: 600; margin-bottom: 8px; }
     .desig-stat-value { font-size: 1.5rem; font-weight: 700; color: #1F2937; }
 
-    /* --- List Card --- */
-    .desig-list-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.04); margin-bottom: 40px; }
-    .desig-list-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-    .desig-list-title { font-size: 1.05rem; font-weight: 700; color: #1F2937; margin: 0; }
-    .desig-list-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .desig-search { padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 8px; background: #F9FAFB; font-size: 0.8rem; outline: none; min-width: 200px; }
-    .desig-search:focus { border-color: #059669; background: #fff; }
-    .desig-status-select { padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 8px; background: #fff; font-size: 0.8rem; outline: none; cursor: pointer; }
-
-    .desig-table { width: 100%; border-collapse: collapse; text-align: center; }
-    .desig-table th { background: #F8FAFC; color: #374151; font-weight: 600; font-size: 0.78rem; padding: 12px 14px; border-bottom: 1px solid #E5E7EB; }
-    .desig-table td { padding: 13px 14px; font-size: 0.8rem; color: #4B5563; border-bottom: 1px solid #F3F4F6; }
-    .desig-table tr:last-child td { border-bottom: none; }
-    .desig-table .desig-roles-cell { max-width: 420px; text-align: left; word-break: break-word; }
-
-    .desig-badge { display: inline-block; padding: 4px 14px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; }
-    .desig-badge-active { background: #059669; color: #fff; }
-    .desig-badge-inactive { background: #E5E7EB; color: #6B7280; }
-
-    .desig-action-icons { display: flex; gap: 14px; justify-content: center; }
-    .desig-action-icons i { font-size: 1rem; cursor: pointer; }
-    .desig-icon-edit { color: #2563EB; }
-    .desig-icon-delete { color: #DC2626; }
-    .desig-icon-restore { color: #059669; }
+    /* --- Table Styles --- */
+    .desig-roles-cell { max-width: 420px; text-align: left; word-break: break-word; white-space: normal; }
+    .icon-restore { color: #059669; cursor: pointer; }
+    .desig-page .spic-dt { margin-bottom: 40px; }
 
     /* --- Deactivate Modal --- */
     .desig-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1055; padding: 1rem; }
@@ -602,11 +659,65 @@
     .desig-modal-actions { display: flex; gap: 12px; justify-content: center; }
     .desig-btn-delete { background: #DC2626; color: #fff; }
     .desig-btn-delete:hover { background: #B91C1C; }
+
+    /* native: phone */
+    .desig-perm-cards { display: none; }
+    @@media (max-width: 767.98px) {
+        .desig-page .desig-form-card { padding: 16px; border-radius: 12px; }
+        .desig-page .desig-field { width: 100%; }
+        .desig-page .desig-field input[type="text"] { width: 100%; min-height: var(--tap-min, 44px); font-size: 16px; }
+        .desig-page .desig-toggle-pill { min-height: var(--tap-min, 44px); width: 100%; justify-content: space-between; }
+        .desig-page .desig-roles-box { padding: 12px; }
+        .desig-page .desig-role-all { min-height: var(--tap-min, 44px); }
+        .desig-page .desig-role-all input { width: 20px; height: 20px; }
+
+        /* permission matrix -> one accordion per page group with toggle switches */
+        .desig-page .desig-perm-scroll { display: none; }
+        .desig-page .desig-perm-cards { display: flex; flex-direction: column; gap: 8px; }
+        .desig-perm-acc { border: 1px solid #E5E7EB; border-radius: 10px; background: #fff; overflow: hidden; }
+        .desig-perm-acc-head { display: flex; align-items: center; gap: 10px; min-height: var(--tap-min, 44px); padding: 10px 12px; cursor: pointer; list-style: none; font-weight: 600; font-size: 0.9rem; color: #1F2937; -webkit-tap-highlight-color: transparent; }
+        .desig-perm-acc-head::-webkit-details-marker { display: none; }
+        .desig-perm-acc-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+        .desig-perm-acc-count { font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #FEF3C7; color: #92400E; }
+        .desig-perm-acc-count.all { background: #D1FAE5; color: #065F46; }
+        .desig-perm-acc-count.none { background: #F3F4F6; color: #6B7280; }
+        .desig-perm-acc-chev { transition: transform .2s; color: #6B7280; }
+        .desig-perm-acc[open] .desig-perm-acc-chev { transform: rotate(180deg); }
+        .desig-perm-acc-body { border-top: 1px solid #F3F4F6; padding: 4px 12px 8px; }
+        .desig-perm-switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--tap-min, 44px); font-size: 0.88rem; color: #374151; cursor: pointer; position: relative; margin: 0; }
+        .desig-perm-switch-all { font-weight: 700; color: #065F46; border-bottom: 1px solid #F3F4F6; }
+        .desig-perm-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+        .desig-perm-slider { position: relative; flex-shrink: 0; width: 44px; height: 24px; border-radius: 24px; background: #D1D5DB; transition: background .2s; }
+        .desig-perm-slider::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: left .2s; }
+        .desig-perm-switch input:checked + .desig-perm-slider { background: #22C55E; }
+        .desig-perm-switch input:checked + .desig-perm-slider::after { left: 22px; }
+        .desig-perm-switch input:focus-visible + .desig-perm-slider { outline: 2px solid #059669; outline-offset: 2px; }
+
+        /* form buttons stretch */
+        .desig-page .desig-form-actions { flex-wrap: nowrap; gap: 10px; padding: 8px 0 0; }
+        .desig-page .desig-form-actions .fb-actionbar__secondary,
+        .desig-page .desig-form-actions .fb-actionbar__primary { flex: 1 1 0; min-width: 0; }
+        .desig-page .desig-form-actions .desig-btn { width: 100%; min-height: var(--tap-min, 44px); justify-content: center; }
+
+        /* stats: three compact tiles */
+        .desig-page .desig-stats-row { gap: 8px; flex-wrap: nowrap; margin-bottom: 16px; }
+        .desig-page .desig-stat-card { min-width: 0; padding: 12px 10px; }
+        .desig-page .desig-stat-label { font-size: 0.72rem; margin-bottom: 4px; }
+        .desig-page .desig-stat-value { font-size: 1.25rem; }
+
+        .desig-modal { padding: 20px; }
+        .desig-modal-actions .desig-btn { flex: 1 1 0; min-height: var(--tap-min, 44px); justify-content: center; }
+    }
+
+    /* native: keep the pre-existing desktop/tablet spacing of the inline ActionBar */
+    @@media (min-width: 768px) {
+        .desig-page .desig-form-actions.fb-actionbar { padding-top: 0; padding-bottom: 0; }
+    }
 </style>
 
-<div class="container-fluid py-2 px-0">
+<div class="container-fluid py-2 px-0 desig-page">
 
-    <h1 class="desig-page-title">Designation Master</h1>
+    <PageHeader Title="Designation Master" Subtitle="Roles and page permissions" CssClass="desig-page-title" />
 
     @if (!string.IsNullOrEmpty(_message))
     {
@@ -638,12 +749,47 @@
 
         <!-- Role Access grid -->
         <div class="desig-roles-box">
+               
             <div class="desig-roles-head">
                 <div class="desig-roles-title">Role Access</div>
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search PageName..."
+                               @bind="_pageSearchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+                    </div>
                 <label class="desig-role-all">
                     <input type="checkbox" checked="@IsAllSelected" @onchange="ToggleAllRoles" />
                     Select All
                 </label>
+            </div>
+
+            <div class="desig-perm-cards phone-only">
+                @foreach (var (page, displayName, _, _) in GetDisplayPages())
+                {
+                    var granted = _actions.Count(a => HasAction(page, a));
+                    <details class="desig-perm-acc">
+                        <summary class="desig-perm-acc-head">
+                            <span class="desig-perm-acc-name">@displayName</span>
+                            <span class="desig-perm-acc-count @(granted == _actions.Length ? "all" : granted == 0 ? "none" : "")">@granted/@_actions.Length</span>
+                            <i class="bi bi-chevron-down desig-perm-acc-chev" aria-hidden="true"></i>
+                        </summary>
+                        <div class="desig-perm-acc-body">
+                            <label class="desig-perm-switch desig-perm-switch-all">
+                                <span>All permissions</span>
+                                <input type="checkbox" role="switch" checked="@IsRowAll(page)" @onchange="() => ToggleRowAll(page)" />
+                                <span class="desig-perm-slider" aria-hidden="true"></span>
+                            </label>
+                            @foreach (var action in _actions)
+                            {
+                                <label class="desig-perm-switch">
+                                    <span>@action</span>
+                                    <input type="checkbox" role="switch" checked="@HasAction(page, action)" @onchange="() => ToggleAction(page, action)" />
+                                    <span class="desig-perm-slider" aria-hidden="true"></span>
+                                </label>
+                            }
+                        </div>
+                    </details>
+                }
             </div>
 
             <div class="desig-perm-scroll">
@@ -661,12 +807,12 @@
                     </thead>
                     <tbody>
                         @{ var pno = 1; }
-                        @foreach (var (page, _, _) in GetDisplayPages())
+                        @foreach (var (page, displayName, _, _) in GetDisplayPages())
                         {
                             <tr>
                                 <td>@pno</td>
                                 <td class="desig-perm-page">
-                                    @DisplayFor(page)
+                                    @displayName
                                 </td>
                                 <td>
                                     <input type="checkbox" checked="@IsRowAll(page)"
@@ -687,14 +833,18 @@
             </div>
         </div>
 
-        <div class="desig-form-actions">
-            <button type="button" class="desig-btn desig-btn-cancel" @onclick="ResetForm">
-                <i class="bi bi-x-lg"></i> Cancel
-            </button>
-            <button type="button" class="desig-btn desig-btn-save" @onclick="SaveDesignation" disabled="@_isSaving">
-                <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
-            </button>
-        </div>
+        <ActionBar Sticky="false" CssClass="desig-form-actions">
+            <Secondary>
+                <button type="button" class="desig-btn desig-btn-cancel" @onclick="ResetForm">
+                    <i class="bi bi-x-lg"></i> Cancel
+                </button>
+            </Secondary>
+            <ChildContent>
+                <button type="button" class="desig-btn desig-btn-save" @onclick="SaveDesignation" disabled="@_isSaving">
+                    <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
+                </button>
+            </ChildContent>
+        </ActionBar>
         </div>
     }
 
@@ -715,82 +865,88 @@
     </div>
 
     <!-- ============ Designation List ============ -->
-    <div class="desig-list-card">
-        <div class="desig-list-header">
-            <h3 class="desig-list-title">Existing Designations</h3>
-            <div class="desig-list-tools">
-                <input type="text" class="desig-search" placeholder="Search designations..."
-                       @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter" />
-                <select class="desig-status-select" @bind="_statusFilter" @bind:after="ApplyFilter">
-                    <option value="All">All Status</option>
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                </select>
-            </div>
-        </div>
+    <SpicDataTable Items="_filtered"
+                   IsLoading="_isLoading"
+                   Title="Existing Designations"
+                   FileName="Designations"
+                   ExportColumns="GetExportColumns()"
+                   SearchText="@_searchText">
 
-        <div class="table-responsive">
-            <table class="desig-table">
-                <thead>
-                    <tr>
-                        <th>S:No</th>
-                        <th>Designation Name</th>
-                        <th style="text-align:left;">Roles Permission</th>
-                        <th>Status</th>
-                        <th>Created At</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @if (_filtered.Any())
-                    {
-                        var sno = 1;
-                        foreach (var d in _filtered)
+        <FilterControls>
+            <div class="search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" placeholder="Search designations..."
+                       @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+            </div>
+            <select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+                <option value="All">All Status</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+            </select>
+        </FilterControls>
+
+        <TableHeader>
+            <th>Designation Name</th>
+            <th style="text-align:left;">Roles Permission</th>
+            <th>Status</th>
+            <th>Created At</th>
+            @if (CanEditDesignation || CanDeleteDesignation)
+            {
+                <th>Action</th>
+            }
+        </TableHeader>
+
+        <TableRow Context="d">
+            <td>@d.Name</td>
+            <td class="desig-roles-cell">@CompressRoleAccessForDisplay(d.RoleAccess)</td>
+            <td>
+                <span class="status-pill @(d.IsActive ? "status-active" : "status-inactive")">
+                    @(d.IsActive ? "Active" : "Inactive")
+                </span>
+            </td>
+            <td>@d.CreatedAt.ToString("yyyy-MM-dd")</td>
+            @if (CanEditDesignation || CanDeleteDesignation)
+            {
+                <td>
+                    <div class="action-icons">
+                        @if (d.IsActive)
                         {
-                            <tr>
-                                <td>@sno</td>
-                                <td>@d.Name</td>
-                                <td class="desig-roles-cell">@CompressRoleAccessForDisplay(d.RoleAccess)</td>
-                                <td>
-                                    <span class="desig-badge @(d.IsActive ? "desig-badge-active" : "desig-badge-inactive")">
-                                        @(d.IsActive ? "Active" : "Inactive")
-                                    </span>
-                                </td>
-                                <td>@d.CreatedAt.ToString("yyyy-MM-dd")</td>
-                                <td>
-                                    <div class="desig-action-icons">
-                                        @if (d.IsActive)
-                                        {
-                                            @if (CanDeleteDesignation)
-                                            {
-                                                <i class="bi bi-slash-circle desig-icon-delete" title="Deactivate" @onclick="() => OpenDeleteModal(d)"></i>
-                                            }
-                                        }
-                                        else
-                                        {
-                                            @if (CanEditDesignation)
-                                            {
-                                                <i class="bi bi-arrow-counterclockwise desig-icon-restore" title="Activate" @onclick="() => ReactivateDesignation(d)"></i>
-                                            }
-                                        }
-                                        @if (CanEditDesignation)
-                                        {
-                                            <i class="bi bi-pencil-square desig-icon-edit" title="Edit" @onclick="() => EditDesignation(d)"></i>
-                                        }
-                                    </div>
-                                </td>
-                            </tr>
-                            sno++;
+                            @if (CanDeleteDesignation)
+                            {
+                                <i class="bi bi-slash-circle icon-del" title="Deactivate" @onclick="() => OpenDeleteModal(d)"></i>
+                            }
                         }
-                    }
-                    else
-                    {
-                        <tr><td colspan="6" class="text-muted">No designations found</td></tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
+                        else
+                        {
+                            @if (CanEditDesignation)
+                            {
+                                <i class="bi bi-arrow-counterclockwise icon-restore" title="Activate" @onclick="() => ReactivateDesignation(d)"></i>
+                            }
+                        }
+                        @if (CanEditDesignation)
+                        {
+                            <i class="bi bi-pencil-square icon-edit" title="Edit" @onclick="() => EditDesignation(d)"></i>
+                        }
+                    </div>
+                </td>
+            }
+        </TableRow>
+
+        <CardActions Context="d">
+            @if (CanEditDesignation)
+            {
+                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => EditDesignation(d)"><i class="bi bi-pencil-square"></i> Edit</button>
+            }
+            @if (d.IsActive && CanDeleteDesignation)
+            {
+                <button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => OpenDeleteModal(d)"><i class="bi bi-slash-circle"></i> Deactivate</button>
+            }
+            else if (!d.IsActive && CanEditDesignation)
+            {
+                <button type="button" class="btn btn-outline-success btn-sm" @onclick="() => ReactivateDesignation(d)"><i class="bi bi-arrow-counterclockwise"></i> Activate</button>
+            }
+        </CardActions>
+    </SpicDataTable>
 </div>
 
 <!-- ============ Deactivate Confirmation Modal ============ -->

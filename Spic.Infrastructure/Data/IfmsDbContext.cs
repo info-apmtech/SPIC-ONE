@@ -13,8 +13,9 @@ namespace Spic.Infrastructure.Data
 	/// it has no reason to know about dealers, welfare schemes or identity, and no
 	/// reason to be able to reach them.
 	///
-	/// Nine tables: what ran, what it downloaded, which logins it uses, which
-	/// phones may relay an OTP, and the keys that encrypt the passwords.
+	/// Ten tables: what ran, what it downloaded, which logins it uses, which
+	/// phones may relay an OTP, where the alert email goes, and the keys that
+	/// encrypt the passwords.
 	/// </summary>
 	public class IfmsDbContext : DbContext, IDataProtectionKeyContext
 	{
@@ -30,6 +31,7 @@ namespace Spic.Infrastructure.Data
 		public DbSet<IfmsPortalAccount> IfmsPortalAccounts { get; set; }
 		public DbSet<IfmsPasswordChange> IfmsPasswordChanges { get; set; }
 		public DbSet<IfmsRelayDevice> IfmsRelayDevices { get; set; }
+		public DbSet<IfmsAlertSettings> IfmsAlertSettings { get; set; }
 
 		/// <summary>
 		/// The Data Protection keys that encrypt the portal passwords.
@@ -80,6 +82,12 @@ namespace Spic.Infrastructure.Data
 			// The SMS relay looks a device up by its token on every call.
 			builder.Entity<IfmsRelayDevice>()
 				.HasIndex(d => new { d.TokenHash, d.IsActive });
+
+			// A single settings row with a fixed key, so there is no identity
+			// column to argue with when the store upserts Id = 1.
+			builder.Entity<IfmsAlertSettings>()
+				.Property(s => s.Id)
+				.ValueGeneratedNever();
 		}
 	}
 }

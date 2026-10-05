@@ -442,6 +442,65 @@
     gap: 16px;
 }
 
+/* Shown for the first render only, until the page knows phone vs desktop. */
+.cs-filter-placeholder {
+    height: 50px;
+    margin-bottom: 24px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f4f6f8;
+}
+
+@media (max-width: 767.98px) {
+    .cs-filter-placeholder {
+        height: var(--tap-min, 44px);
+        margin-bottom: 16px;
+        border-radius: 12px;
+        background: #ffffff;
+    }
+}
+
+/* Collapsible filter card (desktop / tablet): the header toggles the body. */
+.cs-filter-chevron {
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.cs-filter-card--collapsed .cs-filter-chevron {
+    transform: rotate(-90deg);
+}
+
+.cs-filter-card--collapsed .cs-filter-header {
+    border-bottom: 0;
+}
+
+.cs-filter-card--collapsed .cs-filter-body {
+    display: none;
+}
+
+/* Active-filter count shown next to "Filters" while the card is collapsed. */
+.cs-filter-card .cs-filter-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    margin-left: 6px;
+    border-radius: 999px;
+    background: #3b82f6;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+/* Date range: the two inputs share the cell and never overflow it. */
+.cs-date-range .cs-form-input {
+    flex: 1 1 0;
+    min-width: 0;
+    width: 100%;
+}
+
 .cs-filter-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -1085,16 +1144,6 @@
             justify-content: center;
         }
 
-    .cs-pagination {
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .cs-page-controls {
-        flex-wrap: wrap;
-        justify-content: center;
-    }
-
     .cs-status-grid {
         grid-template-columns: 1fr;
     }
@@ -1123,12 +1172,12 @@
     }
 
 /* Hide the browser's expanded native multiple-select while Select2 attaches. */
-.cs-page-container .cs-form-group {
+.cs-form-group {
     position: relative;
     min-width: 0;
 }
 
-.cs-page-container select.cs-form-select[multiple]:not(.select2-hidden-accessible) {
+select.cs-form-select[multiple]:not(.select2-hidden-accessible) {
     display: block !important;
     width: 100% !important;
     height: 38px !important;
@@ -1144,7 +1193,7 @@
 }
 
 /* Temporary closed-field visual. It disappears as soon as Select2 adds its class. */
-.cs-page-container .cs-form-group:has(> select.cs-form-select[multiple]:not(.select2-hidden-accessible))::after {
+.cs-form-group:has(> select.cs-form-select[multiple]:not(.select2-hidden-accessible))::after {
     content: "Select an option";
     position: absolute;
     left: 0;
@@ -1166,7 +1215,7 @@
     pointer-events: none;
 }
 
-.cs-page-container .cs-form-group:has(> select.cs-form-select[multiple]:not(.select2-hidden-accessible))::before {
+.cs-form-group:has(> select.cs-form-select[multiple]:not(.select2-hidden-accessible))::before {
     content: "";
     position: absolute;
     right: 16px;
@@ -1181,7 +1230,7 @@
 }
 
 /* Select2 sizing and appearance, scoped to this page. */
-.cs-page-container .select2-container {
+.cs-filter-body .select2-container {
     width: 100% !important;
     min-width: 0 !important;
 }
@@ -1685,4 +1734,422 @@
     .cs-stat-card > div[style*="grid-template-columns:repeat(5"] {
         grid-template-columns: 1fr !important;
     }
+}
+
+/* ========================================================
+   PageHeader adoption: keep the desktop title row exactly as
+   the old .cs-header-container looked (24px title, 14px subtitle).
+   ======================================================== */
+.cs-page-container .shell-page-header.cs-header-container {
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 0 0 24px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+    .cs-page-container .shell-page-header.cs-header-container .shell-page-title {
+        margin: 0;
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.2;
+        color: #334155;
+    }
+
+    .cs-page-container .shell-page-header.cs-header-container .shell-page-subtitle {
+        margin: 4px 0 0;
+        font-size: 14px;
+        color: #475569;
+    }
+
+    .cs-page-container .shell-page-header.cs-header-container .shell-page-actions {
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+/* "View" label next to the row action icon: phone only */
+.cs-action-text {
+    display: none;
+}
+
+.cs-empty-state .spic-empty {
+    width: 100%;
+}
+
+/* native: phone */
+@media (max-width: 767.98px) {
+    .cs-page-container {
+        padding-top: 12px !important;
+        padding-bottom: calc(16px + var(--safe-bottom, 0px)) !important;
+    }
+
+    /* Header: title row, then the four actions as a 2 x 2 grid */
+    /* Back arrow + title on one row (the old 768px rule stacked this header in a column,
+       which put the arrow alone on top); actions drop to their own row. */
+    .cs-page-container .shell-page-header.cs-header-container {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+        .cs-page-container .shell-page-header.cs-header-container .shell-page-title {
+            font-size: 1.15rem;
+        }
+
+        .cs-page-container .shell-page-header.cs-header-container .shell-page-subtitle {
+            font-size: 0.8rem;
+            margin-top: 2px;
+        }
+
+        .cs-page-container .shell-page-header.cs-header-container .shell-page-actions {
+            flex-basis: 100%;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+    /* Header actions: same compact 2 x 2 buttons as RMD Validation Queue. */
+    .cs-page-container .cs-btn {
+        min-height: 36px;
+        width: 100%;
+        justify-content: center;
+        gap: 6px;
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+
+        .cs-page-container .shell-page-actions > .cs-btn {
+            min-height: 36px;
+        }
+
+        .cs-page-container .cs-btn svg,
+        .cs-page-container .cs-btn i {
+            width: 14px;
+            height: 14px;
+            font-size: 14px;
+        }
+
+    /* Filters trigger (opens the BottomSheet) */
+    .cs-filter-trigger {
+        width: 100%;
+        min-height: var(--tap-min, 44px);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        margin-bottom: 16px;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        color: #1e293b;
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        text-align: left;
+    }
+
+        .cs-filter-trigger:disabled {
+            opacity: 0.6;
+        }
+
+    .cs-filter-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 22px;
+        height: 22px;
+        padding: 0 7px;
+        margin-left: 6px;
+        border-radius: 999px;
+        background: #3b82f6;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    /* Filter fields inside the sheet: one column, native multi-selects visible */
+    .cs-page-container .cs-filter-sheet .cs-filter-body {
+        padding: 0;
+        gap: 0;
+    }
+
+    .cs-page-container .cs-filter-sheet .cs-filter-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    /* Date range: From / To stacked full width so neither input overflows the sheet.
+       Not scoped to .cs-page-container in case the BottomSheet renders outside it. */
+    .cs-filter-sheet .cs-date-range {
+        flex-direction: column;
+        width: 100%;
+        min-width: 0;
+    }
+
+        .cs-filter-sheet .cs-date-range .cs-form-input {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+
+    /* Select2 runs inside the sheet; each dropdown is attached to its field's form
+       group (dropdownParent), which is its positioning context. The open field is
+       lifted above the fields that follow so the list is not painted under them. */
+    .cs-filter-sheet .cs-form-group {
+        position: relative;
+    }
+
+    .cs-filter-sheet .cs-form-group:has(.select2-container--open) {
+        z-index: 5;
+    }
+
+    .cs-filter-sheet .select2-container {
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+
+    .cs-filter-sheet .select2-dropdown {
+        font-size: 14px;
+    }
+
+    .cs-filter-sheet .select2-results__options {
+        max-height: 220px;
+    }
+
+    /* Fallback only: a native multi-select that Select2 has not (yet) taken over. */
+    .cs-page-container .cs-filter-sheet select.cs-form-select[multiple]:not(.select2-hidden-accessible) {
+        display: block !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: var(--tap-min, 44px) !important;
+        max-height: 168px;
+        margin: 0 !important;
+        padding: 6px 8px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        overflow: auto !important;
+        pointer-events: auto !important;
+        appearance: auto !important;
+        -webkit-appearance: auto !important;
+        background-image: none;
+        color: #334155;
+        font-size: 16px; /* prevents iOS zoom on focus */
+    }
+
+        .cs-page-container .cs-filter-sheet select.cs-form-select[multiple] option {
+            padding: 8px 6px;
+        }
+
+    .cs-page-container .cs-filter-sheet .cs-form-group::after,
+    .cs-page-container .cs-filter-sheet .cs-form-group::before {
+        content: none !important;
+    }
+
+    .cs-page-container .cs-filter-sheet .cs-form-input {
+        min-height: var(--tap-min, 44px);
+        color: #334155;
+        font-size: 16px;
+    }
+
+    .cs-page-container .cs-filter-sheet .cs-btn {
+        width: auto;
+    }
+
+    /* KPI cards: one per row (each already holds a 5-column breakdown) */
+    .cs-stats-grid {
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .cs-stat-card {
+        padding: 14px 16px;
+    }
+
+    .cs-stat-value {
+        font-size: 20px;
+    }
+
+    /* Chart: contained sideways scroll; hover tooltips hidden on touch */
+    .cs-status-section {
+        padding: 16px !important;
+    }
+
+    .cs-chart-inner-area {
+        min-width: 640px;
+        height: 260px;
+    }
+
+    .cs-chart-tooltip {
+        display: none;
+    }
+
+    /* Table: tabs scroll sideways, one card per row, labels from data-label */
+    .cs-table-card {
+        padding: 16px;
+        gap: 14px;
+    }
+
+    .cs-table-header {
+        padding: 0;
+        border-bottom: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .cs-tabs-wrapper {
+        flex-wrap: nowrap;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 4px;
+    }
+
+    .cs-tab {
+        min-height: 40px;
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    .cs-search-input {
+        width: 100%;
+        min-height: var(--tap-min, 44px);
+        font-size: 16px;
+    }
+
+    .cs-table-wrapper {
+        overflow-x: hidden;
+        border: 0;
+    }
+
+    .cs-table {
+        min-width: 0;
+    }
+
+        .cs-table thead {
+            display: none;
+        }
+
+        .cs-table tbody,
+        .cs-table tr,
+        .cs-table td {
+            display: block;
+            width: 100%;
+        }
+
+        .cs-table tr {
+            padding: 6px 12px;
+            margin-bottom: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+        }
+
+        .cs-table td {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 13px;
+            text-align: right !important;
+        }
+
+            .cs-table td::before {
+                content: attr(data-label);
+                flex: 0 0 42%;
+                color: #64748b;
+                font-weight: 500;
+                text-align: left;
+            }
+
+            .cs-table td:last-child {
+                border-bottom: 0;
+            }
+
+            .cs-table td[data-label="S.No"] {
+                display: none;
+            }
+
+            .cs-table td[data-label="Agency Name"] {
+                font-weight: 600;
+                color: #0f172a;
+            }
+
+        .cs-table tr.cs-empty-row td {
+            display: block;
+            text-align: center !important;
+        }
+
+            .cs-table tr.cs-empty-row td::before {
+                content: none;
+            }
+
+    .cs-stacked-text {
+        align-items: flex-end;
+    }
+
+    .cs-action-group {
+        justify-content: flex-end;
+    }
+
+    .cs-action-btn-blue {
+        min-height: var(--tap-min, 44px);
+        min-width: var(--tap-min, 44px);
+        gap: 6px;
+        padding: 0 8px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .cs-action-text {
+        display: inline;
+    }
+
+    /* Pagination: one row, "Items Per Page" left and the pager right. Only prev /
+       current / next are shown so the row always fits the phone width. */
+    .cs-pagination {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .cs-page-size {
+        gap: 6px;
+        font-size: 12px;
+        white-space: nowrap;
+    }
+
+        .cs-page-size select.cs-form-select {
+            width: auto !important;          /* inline style sets 65px */
+            height: 30px;
+            min-height: 30px;
+            padding: 0 24px 0 8px !important;
+            font-size: 12px;
+        }
+
+    .cs-page-controls {
+        flex-wrap: nowrap;
+        gap: 4px;
+    }
+
+    .cs-page-btn {
+        min-width: 28px;
+        height: 28px;
+        padding: 0 6px;
+        font-size: 12px;
+    }
+
+        .cs-page-btn:not(.active):not(:first-child):not(:last-child) {
+            display: none;
+        }
 }

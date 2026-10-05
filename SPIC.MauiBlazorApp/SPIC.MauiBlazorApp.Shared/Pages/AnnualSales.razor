@@ -7,6 +7,7 @@
 @inject NavigationManager Nav
 @inject LoadingService Loading
 @inject LoginState LoginState
+@inject ToastService Toast
 <style>
 	/* Replace your annual-table-responsive and annual-spic-table styles with these */
 
@@ -71,6 +72,7 @@
 </style>
 <div class="container-fluid py-4 px-0">
 	<FormLoader />
+	<PageHeader Title="Annual Sales Data For All Companies" />
 		<fieldset disabled="@IsViewOnly" style="border:0;padding:0;margin:0;">
 
 	@if (!string.IsNullOrEmpty(_message))
@@ -81,16 +83,12 @@
 		</div>
 	}
 
-	<div class="company-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-		<h3 class="fw-bold m-0 company-title">Annual Sales Data For All Companies</h3>
-	</div>
-
 	<div class="form-card">
 
 		<!-- Header -->
 		<div class="annual-card-header d-flex justify-content-between align-items-center py-3 flex-wrap gap-2">
 			<div class="card-header-title mb-0">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/AddUserIcon.svg"
+				<img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/AddUserIcon.svg"
 					 class="formicon" />
 				Last Financial Year
 			</div>
@@ -103,24 +101,30 @@
 				</button>
 			}
 				<button class="btn-verified">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/Verifiedicon.svg"
+					<img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/Verifiedicon.svg"
 						 class="verifyicon" />
 					Verified Units
 				</button>
 			</div>
 		</div>
 
-		<!-- Dynamic Category Tabs -->
-		<div class="custom-tabs mb-3 annual-custom-tabs">
-			@foreach (var cat in _categories)
-			{
-				var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
-				<div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
-					 @onclick="() => SelectCategory(cat.Id)">
-					@cat.Name (@unitName/Value)
-				</div>
-			}
-		</div>
+		<!-- Dynamic Category Tabs.
+		     Rendered only when there is at least one category: .custom-tabs draws a
+		     filled pill background, so an empty list used to show as a blank grey bar
+		     above the table on both phone and desktop. -->
+		@if (_categories.Count > 0)
+		{
+			<div class="custom-tabs mb-3 annual-custom-tabs">
+				@foreach (var cat in _categories)
+				{
+					var unitName = _units.FirstOrDefault(u => u.Id == cat.UnitId)?.Name ?? "";
+					<div class="tab-btn @(cat.Id == _selectedCategoryId ? "active" : "")"
+						 @onclick="() => SelectCategory(cat.Id)">
+						@cat.Name (@unitName/Value)
+					</div>
+				}
+			</div>
+		}
 
 		<!-- Table with X and Y Scroll -->
 		<div class="table-wrapper annual-table-wrapper">
@@ -281,7 +285,7 @@
 
 			<div class="col-12 col-sm-6 col-md-4">
 				<div class="total-value-card total-value-card-bgimg category-summary-card">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+					<img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/GrowthForecast.svg"
 						 class="total-card-bg"
 						 alt="GrowthForecast" />
 					<div class="total-value-title category-summary-title">@cat.Name</div>
@@ -300,7 +304,7 @@
 		<!-- Card 1: Urea Product - By Category -->
 		<div class="col-12 col-md-3">
 			<div class="total-value-card total-value-card-bgimg">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+				<img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
 					 alt="Urea" />
 
@@ -332,7 +336,7 @@
 		<!-- Card 2: All Other Products Total -->
 		<div class="col-12 col-md-3">
 			<div class="total-value-card total-value-card-bgimg">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+				<img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
 					 alt="Other Products" />
 
@@ -351,7 +355,7 @@
 			<!-- Card: Combined Total of Specialty Products (Amount only) -->
 			<div class="col-12 col-md-3">
 				<div class="total-value-card total-value-card-bgimg">
-					<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+					<img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/GrowthForecast.svg"
 						 class="total-card-bg"
 						 alt="Specialty Products Total" />
 					<div class="total-value-title">Specialty Products Total</div>
@@ -369,7 +373,7 @@
 		<!-- Card 3: Grand Total -->
 		<div class="col-12 col-md-3">
 			<div class="total-value-card total-value-card-bgimg">
-				<img src="_content/SPIC.MauiBlazorApp.Shared/images/FormIcons/GrowthForecast.svg"
+				<img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/GrowthForecast.svg"
 					 class="total-card-bg"
 					 alt="GrowthForecast" />
 
@@ -412,7 +416,7 @@
 	@if (_showProductPopup)
 	{
 		<div class="modal-backdrop fade show"></div>
-		<div class="modal fade show d-block" tabindex="-1" role="dialog">
+		<div class="modal fade show d-block wiz-modal" tabindex="-1" role="dialog">
 			<div class="modal-dialog modal-dialog-centered" role="document">
 				<div class="modal-content">
 					<div class="modal-header">
@@ -587,7 +591,7 @@
 			if (dealer != null)
 				_hasWholesaleLicense = !string.IsNullOrWhiteSpace(dealer.WholeSaleFertilizerLicenseNumber);
 		}
-		catch { }
+		catch { Toast.Error("Could not load dealer details."); }
 	}
 
 	private async Task LoadSalesData()

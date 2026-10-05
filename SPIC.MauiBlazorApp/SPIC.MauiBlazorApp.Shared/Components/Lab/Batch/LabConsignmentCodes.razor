@@ -1,0 +1,38 @@
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Lab.Batch
+
+@*
+    First consignment code and a "+n" button; the button (and the hover tooltip) lists every code
+    of the batch. A single code renders as plain text.
+*@
+@if (Codes.Count == 0)
+{
+    <span class="lcc-none">-</span>
+}
+else
+{
+    <span class="lcc @CssClass" title="@string.Join(", ", Codes)">
+        <span class="lcc-first">@Codes[0]</span>
+        @if (Codes.Count > 1)
+        {
+            <button type="button" class="lcc-more" aria-expanded="@(_open ? "true" : "false")"
+                    aria-label="@($"Show all {Codes.Count} consignments")" @onclick="() => _open = !_open"
+                    @onclick:stopPropagation="true">+@(Codes.Count - 1)</button>
+            @if (_open)
+            {
+                <span class="lcc-list" role="list">
+                    @foreach (var cc in Codes)
+                    {
+                        <span role="listitem">@cc</span>
+                    }
+                </span>
+            }
+        }
+    </span>
+}
+
+@code {
+    [Parameter] public List<string> Codes { get; set; } = new();
+    [Parameter] public string? CssClass { get; set; }
+
+    private bool _open;
+}

@@ -1,0 +1,147 @@
+@page "/SampleCollection/submitted/{ConsignmentId:int}"
+@using SPIC.Core.DTOs
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject SasApi Api
+@inject NavigationManager Nav
+@inject ToastService Toast
+@inject IJSRuntime JS
+@inject LoginState LoginState
+@implements IDisposable
+
+@*
+    "Consignment Submitted Successfully" (Figma frame 11, supplied 2026-09-21). Reached from
+    Upload Consignment once POST api/Sas/consignments returned, and read back with
+    GET api/Sas/consignments/{id} so the AWB, the date and the package count come from the
+    server rather than from the form.
+*@
+
+<PageTitle>Consignment submitted &middot; SPIC ONE</PageTitle>
+
+<div class="cs-page">
+    @if (_loading)
+    {
+        <div class="cs-hero"><Skeleton Rows="2" Height="18px" /></div>
+        <section class="cs-card"><Skeleton Rows="3" /></section>
+    }
+    else if (_c is null)
+    {
+        <EmptyState Icon="bi-truck"
+                    Title="@(_notFound ? "Consignment not found" : "The consignment could not be loaded")"
+                    Message="@(_notFound ? "This consignment is no longer available, or the link is out of date." : "Please check your connection and try again.")">
+            <a class="cs-btn cs-btn-primary" href="/ConsignmentHistory">Go to Consignment History</a>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="cs-hero">
+            <span class="cs-tick" aria-hidden="true"><i class="bi bi-patch-check"></i></span>
+            <h1 class="cs-title">Consignment Submitted Successfully!</h1>
+            <p class="cs-sub">
+                Your consignment details have been submitted.<br />
+                You can now track the consignment using the tracking number
+            </p>
+        </div>
+
+        <section class="cs-card" aria-label="Consignment summary">
+            <div class="cs-awb-label">Tracking Number (AWB)</div>
+            <div class="cs-awb-row">
+                <span class="cs-awb">@_c.TrackingNumber</span>
+                <button type="button" class="cs-copy" aria-label="Copy the tracking number"
+                        title="Copy the tracking number" @onclick="CopyAsync">
+                    <i class="bi bi-copy" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <hr class="cs-rule" />
+
+            <div class="cs-facts">
+                <div class="cs-fact">
+                    <span class="cs-fact-icon" aria-hidden="true"><i class="bi bi-patch-check"></i></span>
+                    <span class="cs-fact-main">
+                        <span class="cs-fact-key">Submitted</span>
+                        <span class="cs-fact-val">@_c.DispatchedAt.ToString("dd MMM yyyy, hh:mm tt")</span>
+                    </span>
+                </div>
+                <div class="cs-fact">
+                    <span class="cs-fact-icon" aria-hidden="true"><i class="bi bi-patch-check"></i></span>
+                    <span class="cs-fact-main">
+                        <span class="cs-fact-key">Courier Service</span>
+                        <span class="cs-fact-val">@(string.IsNullOrWhiteSpace(_c.CourierService) ? "-" : _c.CourierService)</span>
+                    </span>
+                </div>
+                <div class="cs-fact">
+                    <span class="cs-fact-icon" aria-hidden="true"><i class="bi bi-patch-check"></i></span>
+                    <span class="cs-fact-main">
+                        <span class="cs-fact-key">No. of Packages</span>
+                        <span class="cs-fact-val">@_c.PackageCount</span>
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <div class="cs-info" role="note">
+            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+            <span>You will receive updates on your consignment status via email and in your dashboard.</span>
+        </div>
+
+        <div class="cs-actions">
+            <a class="cs-btn cs-btn-outline" href="@($"/ConsignmentHistory/view/{ConsignmentId}")">
+                <i class="bi bi-eye" aria-hidden="true"></i> View Consignment
+            </a>
+            <a class="cs-btn cs-btn-primary" href="@LoginState.LandingPage">
+                Go to Dashboard <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int ConsignmentId { get; set; }
+
+    private ConsignmentDetailDto? _c;
+    private bool _loading = true;
+    private bool _notFound;
+    private int _loadedId = -1;
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedId == ConsignmentId) return;
+        _loadedId = ConsignmentId;
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        _loading = true;
+        var (item, notFound) = await Api.GetConsignmentAsync(ConsignmentId, ct);
+        if (ct.IsCancellationRequested) return;
+
+        _c = item;
+        _notFound = notFound;
+        _loading = false;
+    }
+
+    private async Task CopyAsync()
+    {
+        if (_c is null || string.IsNullOrWhiteSpace(_c.TrackingNumber)) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _c.TrackingNumber);
+            Toast.Success("Tracking number copied.");
+        }
+        catch (Exception)
+        {
+            // No clipboard permission, or no JS at all: the toast still tells the user what to do.
+            Toast.Info($"Tracking number: {_c.TrackingNumber}");
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+}

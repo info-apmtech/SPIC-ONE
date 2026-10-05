@@ -3,12 +3,16 @@
 @using SPIC.Core.DTOs
 @inject HttpClient Http
 @inject IJSRuntime JS
-<PageTitle>IFMS Logins</PageTitle>
+@inject ToastService Toast
 
 <style>
     .il-container { font-family: 'Inter', sans-serif; max-width: 900px; }
-    .il-container h1 { margin: 0 0 6px; font-size: 26px; font-weight: 700; color: #1e293b; }
     .il-lede { margin: 0 0 26px; font-size: 15px; color: #64748b; max-width: 70ch; }
+
+    /* PageHeader adoption: keep the desktop title as the old h1 looked (26px, 700) */
+    .il-container .shell-page-header.il-header { margin: 0 0 6px; }
+    .il-container .shell-page-header.il-header .shell-page-title { margin: 0; font-size: 26px;
+                 font-weight: 700; line-height: 1.2; color: #1e293b; }
 
     .il-card { border: 1px solid #e2e8f0; border-radius: 10px; background: #fff;
                padding: 20px; margin-bottom: 16px; }
@@ -49,10 +53,22 @@
     .il-msg-ok  { color: #166534; font-size: 14px; margin-top: 12px; }
     .il-msg-bad { color: #991b1b; font-size: 14px; margin-top: 12px; }
     .il-empty { text-align: center; padding: 40px; color: #64748b; }
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .il-container { padding-bottom: var(--safe-bottom, 0px); }
+        .il-container .shell-page-header.il-header .shell-page-title { font-size: 1.15rem; }
+        .il-lede { font-size: 0.85rem; margin-bottom: 16px; }
+        .il-card { padding: 16px; }
+        .il-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .il-form { grid-template-columns: 1fr; }
+        .il-field input { min-height: var(--tap-min, 44px); font-size: 16px; }
+        .il-btn { min-height: var(--tap-min, 44px); width: 100%; }
+    }
 </style>
 
 <div class="il-container">
-    <h1>IFMS Logins</h1>
+    <PageHeader Title="IFMS Logins" CssClass="il-header" />
     <p class="il-lede">
         The automation signs in as each company in turn and pulls that company's
         reports. Passwords are encrypted before they are stored and are never shown
@@ -71,10 +87,19 @@
 
     @if (loading)
     {
-        <div class="il-empty">Loading…</div>
+        <div class="il-card">
+            <Skeleton Variant="card" Rows="2" LoadingText="Loading the IFMS logins..." />
+        </div>
     }
     else
     {
+        @if (accounts.Count == 0)
+        {
+            <div class="il-card">
+                <EmptyState Icon="bi-person-lock" Title="No logins yet" Message="Add the first IFMS portal login below." />
+            </div>
+        }
+
         @foreach (var account in accounts)
         {
             <div class="il-card">
@@ -126,14 +151,15 @@
 
                 <div class="il-form">
                     <div class="il-field">
-                        <label>New password</label>
-                        <input type="password"
+                        <label for="il-pw-@account.AccountKey">New password</label>
+                        <input id="il-pw-@account.AccountKey" type="password"
                                placeholder="paste the new password"
+                               autocomplete="new-password"
                                @bind="passwords[account.AccountKey]" />
                     </div>
                     <div class="il-field">
-                        <label>OTP goes to</label>
-                        <input placeholder="mobile number"
+                        <label for="il-otp-@account.AccountKey">OTP goes to</label>
+                        <input id="il-otp-@account.AccountKey" placeholder="mobile number" inputmode="tel"
                                @bind="mobiles[account.AccountKey]" />
                     </div>
                     <div>
@@ -285,12 +311,20 @@
                 : await response.Content.ReadAsStringAsync();
 
             if (succeeded)
+            {
+                Toast.Success(message);
                 await LoadAsync();
+            }
+            else
+            {
+                Toast.Error(string.IsNullOrWhiteSpace(message) ? "Could not save that." : message);
+            }
         }
         catch (Exception ex)
         {
             succeeded = false;
             message = $"Could not save that. {ex.Message}";
+            Toast.Error(message);
         }
         finally
         {
@@ -309,12 +343,22 @@
                 null);
 
             if (response.IsSuccessStatusCode)
+            {
+                Toast.Success(account.IsActive ? $"{account.CompanyName} login disabled." : $"{account.CompanyName} login enabled.");
                 await LoadAsync();
+            }
+            else
+            {
+                succeeded = false;
+                message = $"Could not change that. {await response.Content.ReadAsStringAsync()}";
+                Toast.Error(message);
+            }
         }
         catch (Exception ex)
         {
             succeeded = false;
             message = $"Could not change that. {ex.Message}";
+            Toast.Error(message);
         }
         finally
         {

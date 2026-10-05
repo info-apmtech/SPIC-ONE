@@ -1,0 +1,28 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Community
+@using SPIC.MauiBlazorApp.Shared.Services
+
+@*
+    Round avatar for a community member: photo when Member.Avatar is set, otherwise the
+    initial on a green tint. Size in CSS px (default 40).
+*@
+<span class="cm-avatar @CssClass" style="--cm-avatar-size:@(Size)px" title="@Member?.Name"
+      data-initial="@(Member?.Initial ?? "?")" aria-hidden="@(string.IsNullOrEmpty(Alt) ? "true" : null)">
+    @if (!string.IsNullOrEmpty(Member?.Avatar))
+    {
+        @* a photo that cannot be loaded falls back to the initial, not the broken-image glyph *@
+        <img src="@Member.Avatar" alt="@Alt" loading="lazy"
+             onerror="this.onerror=null;this.parentElement.classList.add('is-broken')" />
+    }
+    else
+    {
+        <span class="cm-avatar-initial">@(Member?.Initial ?? "?")</span>
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public CommunityMember? Member { get; set; }
+    [Parameter] public int Size { get; set; } = 40;
+    [Parameter] public string? CssClass { get; set; }
+    /// <summary>Alt text; empty = decorative (name is usually printed next to the avatar).</summary>
+    [Parameter] public string Alt { get; set; } = "";
+}

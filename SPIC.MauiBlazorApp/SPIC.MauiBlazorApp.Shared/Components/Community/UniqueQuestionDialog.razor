@@ -1,0 +1,101 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Community
+
+@*
+    "Your question looks unique!" - shown after the author presses Post Discussion when
+    the similar check (POST api/Community/discussions/similar) finds nothing. Centred modal on tablet/desktop,
+    bottom sheet on phones (same CSS pattern as DigitalLibraryUnpublishDialog).
+
+        <UniqueQuestionDialog @bind-IsOpen="_open" OnPost="PostAsync" OnBackToEdit="BackToEditAsync" />
+
+    The close button, the backdrop and Escape all mean "Back to edit".
+*@
+
+@if (IsOpen)
+{
+    <div class="uqd-backdrop" @onclick="BackToEditAsync"></div>
+
+    <div class="uqd"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="uqd-title"
+         aria-describedby="uqd-desc"
+         tabindex="-1"
+         @ref="_dialog"
+         @onkeydown="OnKeyDown">
+
+        <div class="uqd-handle" aria-hidden="true"></div>
+
+        <button type="button" class="uqd-close" aria-label="Back to edit" @onclick="BackToEditAsync">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
+
+        <div class="uqd-head">
+            <span class="uqd-icon" aria-hidden="true"><i class="bi bi-patch-check"></i></span>
+            <h2 id="uqd-title" class="uqd-title">Your question looks unique!</h2>
+            <p id="uqd-desc" class="uqd-desc">
+                We couldn't find any similar discussions. Your question is ready to post
+            </p>
+        </div>
+
+        <div class="uqd-info">
+            This will help other farmers in the community and our experts will get back to you soon
+        </div>
+
+        <div class="uqd-foot">
+            <button type="button" class="uqd-btn uqd-btn-outline" @onclick="BackToEditAsync">Back to edit</button>
+            <button type="button" class="uqd-btn uqd-btn-primary" @onclick="PostAsync">
+                <i class="bi bi-send" aria-hidden="true"></i> Post Discussion
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>Two-way bindable: <c>&lt;UniqueQuestionDialog @bind-IsOpen="_open" /&gt;</c>.</summary>
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    /// <summary>The author confirmed the post.</summary>
+    [Parameter] public EventCallback OnPost { get; set; }
+
+    /// <summary>Close button, backdrop, Escape or "Back to edit".</summary>
+    [Parameter] public EventCallback OnBackToEdit { get; set; }
+
+    private ElementReference _dialog;
+    private bool _focused;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (IsOpen && !_focused)
+        {
+            _focused = true;
+            try { await _dialog.FocusAsync(); } catch { /* not rendered yet */ }
+        }
+        else if (!IsOpen && _focused)
+        {
+            _focused = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (!IsOpen) return;
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private async Task BackToEditAsync()
+    {
+        await CloseAsync();
+        await OnBackToEdit.InvokeAsync();
+    }
+
+    private async Task PostAsync()
+    {
+        await CloseAsync();
+        await OnPost.InvokeAsync();
+    }
+
+    private Task OnKeyDown(KeyboardEventArgs e) =>
+        e.Key == "Escape" ? BackToEditAsync() : Task.CompletedTask;
+}

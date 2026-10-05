@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 using static SPIC.Core.Entities.EmployeeRegistration;
 
 namespace SpicAPI.Controllers
@@ -210,6 +211,7 @@ namespace SpicAPI.Controllers
 
             var login = await _employeeLoginRepo
                 .GetWhere(x => x.EmployeeInformationID == employeeId)
+                .InCurrentRowOrder()
                 .FirstOrDefaultAsync();
 
             if (login == null)
@@ -254,6 +256,7 @@ namespace SpicAPI.Controllers
 
             var login = await _employeeLoginRepo
                 .GetWhere(x => x.EmployeeInformationID == employeeId)
+                .InCurrentRowOrder()
                 .FirstOrDefaultAsync();
 
             if (login == null)
@@ -335,6 +338,7 @@ namespace SpicAPI.Controllers
 
             var login = await _employeeLoginRepo
                 .GetWhere(x => x.EmployeeInformationID == employeeId)
+                .InCurrentRowOrder()
                 .FirstOrDefaultAsync();
 
             if (login != null)

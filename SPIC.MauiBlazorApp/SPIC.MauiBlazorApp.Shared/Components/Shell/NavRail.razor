@@ -1,0 +1,80 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+@implements IDisposable
+@inject NavigationManager Nav
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+@*
+    Tablet-only (768px .. 1199.98px) left navigation rail: 72px wide, icons + short labels,
+    built from the same ShellNavigation list as the phone tab bar. Hidden by its scoped CSS
+    on phone and desktop so the desktop sidebar is untouched. The menu button at the bottom
+    opens the existing full menu (#mobileSidebar offcanvas in MainLayout) via Bootstrap's
+    data-api, exactly like the old mobile hamburger did.
+*@
+<aside class="shell-rail" aria-label="Primary navigation">
+    <a class="shell-rail-brand brand" href="@LoginState.LandingPage" aria-label="SPIC home">SPIC</a>
+
+    <nav class="shell-rail-nav">
+        @foreach (var item in _items)
+        {
+            var active = IsActive(item);
+            <a class="shell-rail-item shell-focusable @(active ? "active" : "")"
+               href="@item.Href"
+               title="@item.Label"
+               aria-label="@item.Label"
+               aria-current="@(active ? "page" : null)">
+                <i class="bi @item.Icon shell-rail-icon" aria-hidden="true"></i>
+                <span class="shell-rail-label">@item.TabLabel</span>
+            </a>
+        }
+    </nav>
+
+    <button type="button"
+            class="shell-rail-item shell-rail-menu shell-focusable"
+            data-bs-toggle="offcanvas"
+            data-bs-target="#mobileSidebar"
+            aria-controls="mobileSidebar"
+            aria-label="Open full menu"
+            title="Full menu">
+        <i class="bi bi-list shell-rail-icon" aria-hidden="true"></i>
+        <span class="shell-rail-label">Menu</span>
+    </button>
+</aside>
+
+@code {
+    private IReadOnlyList<SPIC.MauiBlazorApp.Shared.Services.ShellTab> _items = Array.Empty<SPIC.MauiBlazorApp.Shared.Services.ShellTab>();
+    private string? _activeKey;
+
+    protected override void OnInitialized()
+    {
+        Rebuild();
+        Nav.LocationChanged += OnLocationChanged;
+        LoginState.OnChange += OnLoginStateChanged;
+    }
+
+    private void Rebuild()
+    {
+        _items = SPIC.MauiBlazorApp.Shared.Services.ShellNavigation.GetRailItems(LoginState);
+        _activeKey = SPIC.MauiBlazorApp.Shared.Services.ShellNavigation.ActiveKey(Nav.Uri, Nav.BaseUri);
+    }
+
+    private bool IsActive(SPIC.MauiBlazorApp.Shared.Services.ShellTab tab) =>
+        string.Equals(_activeKey, tab.Key, StringComparison.OrdinalIgnoreCase);
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        _activeKey = SPIC.MauiBlazorApp.Shared.Services.ShellNavigation.ActiveKey(e.Location, Nav.BaseUri);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLoginStateChanged()
+    {
+        Rebuild();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        LoginState.OnChange -= OnLoginStateChanged;
+    }
+}

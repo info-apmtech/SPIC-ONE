@@ -1,0 +1,129 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@*
+    "Enclosures" accordion: one link per uploaded document. The list and the markup string are
+    built here exactly as the page built them, including the data-enhance-nav="false" that stops
+    Blazor from intercepting the file links.
+*@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="OnToggle">
+            Enclosures
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+<h4 class="detail-card-title"><i class="bi bi-folder-check"></i> Submitted Documents</h4>
+                                    <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                </div>
+                <div class="enclosure-grid">
+                    @if (Documents != null)
+                    {
+                        @((MarkupString)GetEnclosureHtml())
+                    }
+                    else
+                    {
+                        <div class="enclosure-btn">No documents submitted</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    [Parameter] public DR.DealerRegistration? Dealer { get; set; }
+    [Parameter] public DR.DealerOwnershipInfo? Ownership { get; set; }
+    [Parameter] public DR.DealerRegistrationDocuments? Documents { get; set; }
+    [Parameter] public bool ShowNewDealerSavedDetails { get; set; }
+    [Parameter] public bool ShowProprietorAndInvestment { get; set; }
+    [Parameter] public bool ShowBusinessInfo { get; set; }
+
+    [Parameter] public string? ApiBaseUrl { get; set; }
+    [Parameter] public string? AuthToken { get; set; }
+    [Parameter] public int DataVersion { get; set; }
+
+    private IEnumerable<(string title, string? path)> GetEnclosureItems()
+    {
+        var list = new List<(string, string?)>();
+        list.Add(("GST Certificate", Dealer?.GSTFilePath));
+        list.Add(("PAN Copy", Dealer?.PANFilePath));
+        list.Add(("Aadhaar Copy", Dealer?.AadhaarFilePath));
+        list.Add(("Wholesale License", Dealer?.WholesaleLicenseFilePath));
+        list.Add(("Retail License", Dealer?.RetailLicenseFilePath));
+
+        if (ShowNewDealerSavedDetails)
+        {
+            list.Add(("New Dealer - Dealership Application Fee", Dealer?.DealershipApplicationFeeFilePath));
+            list.Add(("New Dealer - SPIC Trade Deposit", Dealer?.SpicTradeDepositFilePath));
+            list.Add(("New Dealer - GFL Trade Deposit", Dealer?.GflTradeDepositFilePath));
+        }
+
+        if (ShowProprietorAndInvestment)
+        {
+            list.Add(("Proprietor Photograph", Ownership?.ProprietorImagePath));
+            list.Add(("Proprietor Aadhaar", Ownership?.AadhaarFilePath));
+            list.Add(("Proprietor PAN", Ownership?.PANFilePath));
+        }
+
+        if (Documents != null && ShowBusinessInfo)
+        {
+            list.Add(("Specimen Signature", Documents.SpecimanFilePath));
+            list.Add(("Greenstar Specimen", Documents.GreenstarSpecimanFilePath));
+            list.Add(("Bank Guarantee Certificate", Documents.BankGauranteeFilePath));
+            list.Add(("IT Returns FY1", Documents.FY1ITReturnFilePath));
+            list.Add(("IT Returns FY2", Documents.FY2ITReturnFilePath));
+            list.Add(("Valuation Certificate", Documents.ValuationCertificateFilePath));
+            list.Add(("Retailer List", Documents.RetailerListFilePath));
+            list.Add(("Partnership Deed", Documents.PartnershipDeadFilePath));
+            list.Add(("LLP Agreement", Documents.LlpAgreementFilePath));
+            list.Add(("Board Resolution", Documents.BoardReasolutionFilePath));
+            if (Dealer?.EntityType == DR.EntityType.PvtLtd || Dealer?.EntityType == DR.EntityType.PubLtd)
+            {
+                list.Add(("Articles of Association (AOA)", Documents.ArticlesOfAssociationFilePath));
+                list.Add(("Memorandum of Association (MOA)", Documents.MemorandumOfAssociationFilePath));
+            }
+            if (Dealer?.EntityType == DR.EntityType.Society)
+                list.Add(("By Law", Documents.ByLaw));
+            list.Add(("Affidavit", Documents.AffidavitFilePath));
+            list.Add(("Authorization Letter", Documents.AuthorizationLetterFilePath));
+            list.Add(("Deed of Guarantee", Documents.DeedOfGuaranteeFilePath));
+
+            // New Dealer documents remain visible after first AVP approval and during
+            // Existing Dealer maintenance/re-approval. This is display-only and does not alter
+            // the approval-flow meaning of IsNewDealer.
+            if (ShowNewDealerSavedDetails)
+                list.Add(("Request Letter for Dealership", Documents.RequestLetterFilePath));
+        }
+        return list;
+    }
+
+    private string GetEnclosureHtml()
+    {
+        var sb = new System.Text.StringBuilder();
+
+        // Only render documents that were actually uploaded (non-empty path)
+        var uploaded = GetEnclosureItems()
+            .Where(item => !string.IsNullOrWhiteSpace(item.path))
+            .ToList();
+
+        if (!uploaded.Any())
+        {
+            return "<div class=\"enclosure-btn\">No documents submitted</div>";
+        }
+
+        foreach (var item in uploaded)
+        {
+            // data-enhance-nav="false" is required to stop Blazor from intercepting the link
+            sb.Append($"<a class=\"enclosure-btn\" href=\"{DealerReviewFormat.GetFileUrl(ApiBaseUrl, AuthToken, item.path)}\" data-enhance-nav=\"false\">{System.Net.WebUtility.HtmlEncode(item.title)}</a>");
+        }
+
+        return sb.ToString();
+    }
+}

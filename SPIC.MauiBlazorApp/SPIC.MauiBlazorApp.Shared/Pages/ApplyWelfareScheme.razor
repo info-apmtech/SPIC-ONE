@@ -11,10 +11,11 @@
 <div class="container-fluid py-4 px-0">
     
     <div class="aws-header-container">
-        <h1>@(IsResubmissionMode ? $"Correct & Resubmit {SelectedScheme} Application" : $"Apply for {SelectedScheme}")</h1>
-        <p>@(IsResubmissionMode
-            ? "Your application was returned for correction. Update the details/documents below and resubmit - no new application will be created."
-            : "Complete the form and upload required documents. Your progress is auto-saved.")</p>
+        <PageHeader Title="@(IsResubmissionMode ? $"Correct & Resubmit {SelectedScheme} Application" : $"Apply for {SelectedScheme}")"
+                    Subtitle="@(IsResubmissionMode
+                        ? "Your application was returned for correction. Update the details/documents below and resubmit - no new application will be created."
+                        : "Complete the form and upload required documents. Your progress is auto-saved.")"
+                    BackHref="@(IsResubmissionMode ? "/WellfareApplication" : "/WelfareSchemes")" />
     </div>
     @if (ResubmitId.HasValue)
     {
@@ -1012,11 +1013,17 @@
                 @DraftMessage
             </div>
         }
-        @if (!IsResubmissionMode)
-        {
-            <button class="aws-btn-action aws-btn-draft" @onclick="SaveAsDraft" disabled="@(_isSavingDraft || _isSubmitting || ResubmitId.HasValue)">@( _isSavingDraft ? "Saving..." : "Save as Draft")</button>
-        }
-        <button @onclick="OpenPreviewModal" class="aws-btn-action aws-btn-primary" disabled="@(ResubmitId.HasValue && !IsResubmissionMode)">@(IsResubmissionMode ? "Resubmit Application" : "Preview Application")</button>
+        <ActionBar CssClass="aws-actionbar" AriaLabel="Application actions">
+            <Secondary>
+                @if (!IsResubmissionMode)
+                {
+                    <button class="aws-btn-action aws-btn-draft" @onclick="SaveAsDraft" disabled="@(_isSavingDraft || _isSubmitting || ResubmitId.HasValue)">@( _isSavingDraft ? "Saving..." : "Save as Draft")</button>
+                }
+            </Secondary>
+            <ChildContent>
+                <button @onclick="OpenPreviewModal" class="aws-btn-action aws-btn-primary" disabled="@(ResubmitId.HasValue && !IsResubmissionMode)">@(IsResubmissionMode ? "Resubmit Application" : "Preview Application")</button>
+            </ChildContent>
+        </ActionBar>
     </div>
 
 </div> 

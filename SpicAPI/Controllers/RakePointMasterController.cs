@@ -1,6 +1,9 @@
+using Microsoft.AspNetCore.Authorization;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.Entities;
 
 namespace SpicAPI.Controllers
@@ -11,6 +14,7 @@ namespace SpicAPI.Controllers
 	/// AgricultureBulkUploadController. The RakePointMasters table is created
 	/// manually, so no EF migration is involved.
 	/// </summary>
+	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class RakePointMasterController : ControllerBase
@@ -29,16 +33,17 @@ namespace SpicAPI.Controllers
 		[HttpGet("all")]
 		public IActionResult GetAll()
 		{
-			var records = _context.RakePointMasters
-				.Where(x => x.IsActive)
-				.Select(x => new
-				{
-					x.Id,
-					x.RakePointCode,
-					x.Name
-				})
-				.OrderBy(x => x.Name)
-				.ToList();
+var records = _context.RakePointMasters
+			.Where(x => x.IsActive)
+			.Select(x => new
+			{
+				x.Id,
+				x.RakePointCode,
+				x.Name,
+				x.StateId
+			})
+			.OrderBy(x => x.Name)
+			.ToList();
 
 			return Ok(records);
 		}
@@ -59,7 +64,8 @@ namespace SpicAPI.Controllers
 				{
 					x.Id,
 					x.RakePointCode,
-					x.Name
+					x.Name,
+					x.StateId
 				})
 				.OrderBy(x => x.Name)
 				.Take(20)
@@ -105,8 +111,53 @@ namespace SpicAPI.Controllers
 			}
 		}
 
+		// POST /api/RakePointMaster/map-state
+		// Only the State mapping is editable. The SAP Code is never changed.
+		[HttpPost("map-state")]
+		public async Task<IActionResult> MapState([FromBody] RakePointMapStateDto dto)
+		{
+			if (dto == null || dto.Id <= 0)
+				return BadRequest(new { message = "Invalid request" });
+
+			try
+			{
+				var record = await _context.RakePointMasters
+					.FirstOrDefaultAsync(x => x.Id == dto.Id && x.IsActive);
+
+				if (record == null)
+					return NotFound(new { message = "SAP Code record not found." });
+
+				if (dto.StateId.HasValue &&
+					dto.StateId.Value > 0 &&
+					!(await _context.States.AnyAsync(s => s.Id == dto.StateId.Value)))
+					return BadRequest(new { message = "Selected State does not exist." });
+
+				var now = DateTime.Now;
+				var userName = User?.Identity?.Name ?? "System";
+
+				record.StateId = dto.StateId.HasValue && dto.StateId.Value > 0
+					? dto.StateId.Value
+					: (int?)null;
+				record.UpdatedAt = now;
+				record.UpdatedBy = userName;
+
+				await _context.SaveChangesAsync();
+
+				return Ok(new
+				{
+					message = "State mapping saved successfully.",
+					id = record.Id,
+					stateId = record.StateId
+				});
+			}
+			catch (Exception ex)
+			{
+				return StatusCode(500, new { message = $"Save failed: {ex.Message}" });
+			}
+		}
+
 		// POST /api/RakePointMaster/bulk-upload
-		// Excel template columns: "Rakepoint Code" and "Name".
+		// Excel template columns: "Rakepoint Code", "Name" and an optional "State".
 		[HttpPost("bulk-upload")]
 		public async Task<IActionResult> BulkUpload(IFormFile file)
 		{
@@ -119,47 +170,164 @@ namespace SpicAPI.Controllers
 
 			using var stream = file.OpenReadStream();
 			using var workbook = new XLWorkbook(stream);
-			var worksheet = workbook.Worksheets.First();
-
-			var headerRow = worksheet.Row(1);
-			var lastHeaderCell = headerRow.LastCellUsed()?.Address.ColumnNumber ?? 0;
-			if (lastHeaderCell == 0)
-				return BadRequest(new { message = "Empty worksheet or missing header row" });
-
+			// Do not assume the first worksheet: the active table may live in another
+			// sheet (e.g. a leading "Instructions"/"Read Me" tab). Skip worksheets
+			// without any used row and pick the first one (in tab order) whose header
+			// row is recognized. Header titles are matched after normalization
+			// (lowercase; trim + strip ALL whitespace, underscores and hyphens), so
+			// "Rake Point Code", "Rake_Point_Code", "Rake-Point-Code" and
+			// "Rakepoint Code" all map to "rakepointcode".
+			IXLWorksheet? worksheet = null;
 			var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-			for (int c = 1; c <= lastHeaderCell; c++)
+			var headerRowNumber = 0;
+			var sheetDebug = new List<object>();
+
+			foreach (var ws in workbook.Worksheets)
 			{
-				var n = NormalizeHeader(headerRow.Cell(c).GetString());
-				if (!string.IsNullOrEmpty(n) && !headerMap.ContainsKey(n))
-					headerMap[n] = c;
+				var lastRow = ws.LastRowUsed();
+				if (lastRow == null)
+				{
+					sheetDebug.Add(new { name = ws.Name, rows = new List<object>() });
+					continue;
+				}
+
+				var scanLimit = Math.Min(lastRow.RowNumber(), 10);
+				var rowsDebug = new List<object>();
+				var candidates = new List<Dictionary<string, int>>();
+
+				for (int r = 1; r <= scanLimit; r++)
+				{
+					var row = ws.Row(r);
+					var lastCell = row.LastCellUsed()?.Address.ColumnNumber ?? 0;
+					var values = new List<string>();
+					var candidate = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+					for (int c = 1; c <= lastCell; c++)
+					{
+						var raw = row.Cell(c).GetString();
+						values.Add(raw);
+
+						var n = NormalizeHeader(raw);
+						if (!string.IsNullOrEmpty(n) && !candidate.ContainsKey(n))
+							candidate[n] = c;
+					}
+
+					AddAliasEntries(candidate);
+					candidates.Add(candidate);
+
+					rowsDebug.Add(new
+					{
+						row = r,
+						values,
+						normalized = candidate.Select(kvp => $"{kvp.Key}=C{kvp.Value}").ToList()
+					});
+				}
+
+				for (int r = 0; r < candidates.Count && worksheet == null; r++)
+				{
+					if (candidates[r].ContainsKey("rakepointcode") && candidates[r].ContainsKey("name"))
+					{
+						headerMap = candidates[r];
+						headerRowNumber = r + 1;
+						worksheet = ws;
+					}
+				}
+
+				sheetDebug.Add(new { name = ws.Name, rows = rowsDebug });
+
+				if (worksheet != null)
+					break;
 			}
 
-			AddAliasEntries(headerMap);
+			if (worksheet == null)
+			{
+				return BadRequest(new
+				{
+					message = "Empty worksheet or missing header row",
+					debug = new
+					{
+						sheets = sheetDebug,
+						note = "A header row containing both 'rakepointcode' and 'name' was not found in the first 10 rows of any worksheet."
+					}
+				});
+			}
 
-			var expected = new[] { "rakepointcode", "name" };
-			var missing = expected.Where(h => !headerMap.ContainsKey(h)).ToList();
-			if (missing.Any())
-				return BadRequest(new { message = $"Invalid template. Missing columns: {string.Join(", ", missing)}" });
-
-			var dataRows = worksheet.RowsUsed().Skip(1).ToList();
+			var dataRows = worksheet.RowsUsed().Where(row => row.RowNumber() > headerRowNumber).ToList();
 			var now = DateTime.Now;
 			var insertedCount = 0;
+			var updatedCount = 0;
 			var totalRows = 0;
 			var rejectedRecords = new List<RejectedRecord>();
 			var duplicateRecords = new List<object>();
 			var uploadedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 			// Pre-load existing rows keyed by code to detect database duplicates.
-			var existingByCode = new Dictionary<string, RakePointMaster>(StringComparer.OrdinalIgnoreCase);
+			// Canonical normalization: a code with stray whitespace or inconsistent casing is
+			// the same code, and pre-existing duplicates must not throw when building the map.
+			var existingByCode = new Dictionary<string, RakePointMaster>(StringComparer.Ordinal);
 			foreach (var existing in _context.RakePointMasters)
-				existingByCode[existing.RakePointCode.Trim()] = existing;
+			{
+				var existingKey = MasterNormalizer.Normalize(existing.RakePointCode);
+				if (existingKey.Length > 0 && !existingByCode.ContainsKey(existingKey))
+					existingByCode[existingKey] = existing;
+			}
 
+			// Pre-load the State master to resolve the optional "State" column.
+			var stateIdByName = new Dictionary<string, int>(StringComparer.Ordinal);
+			foreach (var state in _context.States)
+			{
+				var stateKey = MasterNormalizer.Normalize(state.StateName);
+				if (stateKey.Length > 0 && !stateIdByName.ContainsKey(stateKey))
+					stateIdByName[stateKey] = state.Id;
+			}
+
+			// -----------------------------------------------------------------
+			// VALIDATE REFERENCED MASTERS BEFORE ANY WRITE.
+			//
+			// The State column is optional, but when a row does supply one the State has
+			// to already exist. Previously an unknown State name only skipped that one
+			// row and let the rest of the file commit, so a typo produced a partial
+			// import. Every missing State is now collected for the whole file and the
+			// upload is rejected before anything is written.
+			// -----------------------------------------------------------------
+			var missingMasters = new MissingMasterCollector();
+			foreach (var row in dataRows)
+			{
+				var stateName = GetCellString(row, headerMap, "state");
+				if (MasterNormalizer.IsBlank(stateName))
+					continue;
+
+				if (!stateIdByName.ContainsKey(MasterNormalizer.Normalize(stateName)))
+					missingMasters.Add("State", stateName, row.RowNumber());
+			}
+
+			if (missingMasters.HasAny)
+			{
+				var (missingMessage, missingLines) = missingMasters.Build("RakePoint master");
+
+				return BadRequest(new
+				{
+					success = false,
+					message = missingMessage,
+					missingMasterLines = missingLines,
+					missingMasters = missingMasters.Entries
+						.Select(m => new { kind = m.Kind, value = m.Value, rowNumbers = m.RowNumbers })
+						.ToList()
+				});
+			}
+
+			// Every insert and update for this file commits together, so a failure part way
+			// through cannot leave a half-applied upload behind. The transaction is disposed
+			// uncommitted on any exception, which rolls it back.
+			await using var transaction = await _context.Database.BeginTransactionAsync();
 			try
 			{
 				foreach (var row in dataRows)
 				{
 					var code = GetCellString(row, headerMap, "rakepointcode");
 					var name = GetCellString(row, headerMap, "name");
+					// Optional State column (blank when the workbook has no State header).
+					var stateName = GetCellString(row, headerMap, "state");
 
 					if (string.IsNullOrWhiteSpace(code))
 					{
@@ -175,7 +343,7 @@ namespace SpicAPI.Controllers
 
 					totalRows++;
 
-					var key = code.Trim();
+					var key = MasterNormalizer.Normalize(code);
 
 					// Duplicate SAP Code within the same uploaded Excel file
 					if (!uploadedCodes.Add(key))
@@ -190,35 +358,69 @@ namespace SpicAPI.Controllers
 						continue;
 					}
 
-					// SAP Code already exists in database — skip instead of updating
-					if (existingByCode.ContainsKey(key))
+					// Resolve the optional State column. Empty State -> StateId is left
+					// unchanged (or null for inserts). Unknown State name -> skip only
+					// this row and report the missing State.
+					int? resolvedStateId = null;
+
+					if (!string.IsNullOrWhiteSpace(stateName))
 					{
+					if (!stateIdByName.TryGetValue(
+						MasterNormalizer.Normalize(stateName),
+						out var stateId))
+					{
+						// Unreachable: the validation pass already rejected every unknown
+						// State before the transaction opened.
 						duplicateRecords.Add(new
 						{
 							rowNumber = row.RowNumber(),
 							sapCode = key,
 							rakePointName = name.Trim(),
-							reason = "SAP Code already exists in database"
+							reason = $"Invalid State: '{stateName}' not found in State Master"
 						});
 						continue;
 					}
 
-					var ent = new RakePointMaster
+						resolvedStateId = stateId;
+					}
+
+					// Existing RakePoint Code -> update StateId only. The existing
+					// Code and Name are never changed.
+					if (existingByCode.TryGetValue(
+						key,
+						out var existingRecord))
 					{
-						RakePointCode = key,
-						Name = name.Trim(),
-						IsActive = true,
-						CreatedAt = now,
-						UpdatedAt = now,
-						CreatedBy = "bulk-upload",
-						UpdatedBy = "bulk-upload"
-					};
+						if (resolvedStateId.HasValue &&
+							existingRecord.StateId != resolvedStateId.Value)
+						{
+							existingRecord.StateId = resolvedStateId.Value;
+							existingRecord.UpdatedAt = now;
+							existingRecord.UpdatedBy = "bulk-upload";
+						}
+
+						updatedCount++;
+					}
+					else
+					{
+						var ent = new RakePointMaster
+						{
+							RakePointCode = key,
+							Name = name.Trim(),
+							StateId = resolvedStateId,
+							IsActive = true,
+							CreatedAt = now,
+							UpdatedAt = now,
+							CreatedBy = "bulk-upload",
+							UpdatedBy = "bulk-upload"
+						};
 					_context.RakePointMasters.Add(ent);
 					existingByCode[key] = ent;
 					insertedCount++;
 				}
+				}
 
 				await _context.SaveChangesAsync();
+				await transaction.CommitAsync();
 			}
 			catch (Exception ex)
 			{
@@ -229,6 +431,7 @@ namespace SpicAPI.Controllers
 			{
 				TotalRecords = totalRows,
 				InsertedCount = insertedCount,
+				UpdatedCount = updatedCount,
 				RejectedCount = rejectedRecords.Count,
 				RejectedRecords = rejectedRecords,
 				DuplicateRecords = duplicateRecords
@@ -244,7 +447,8 @@ namespace SpicAPI.Controllers
 			(string Header, string Sample)[] columns = new[]
 			{
 				("Rakepoint Code", "PABS"),
-				("Name", "Abohar Rkpt")
+				("Name", "Abohar Rkpt"),
+				("State", "Punjab")
 			};
 
 			using var wb = new XLWorkbook();
@@ -281,7 +485,11 @@ namespace SpicAPI.Controllers
 		}
 
 		private static string NormalizeHeader(string h) =>
-			(h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
+			string.IsNullOrWhiteSpace(h) ? string.Empty : new string(h
+				.Trim()
+				.Where(ch => !char.IsWhiteSpace(ch) && ch != '_' && ch != '-')
+				.Select(char.ToLowerInvariant)
+				.ToArray());
 
 		private static void AddAliasEntries(Dictionary<string, int> headerMap)
 		{
@@ -304,5 +512,11 @@ namespace SpicAPI.Controllers
 	{
 		public string RakePointCode { get; set; } = string.Empty;
 		public string Name { get; set; } = string.Empty;
+	}
+
+	public class RakePointMapStateDto
+	{
+		public int Id { get; set; }
+		public int? StateId { get; set; }
 	}
 }

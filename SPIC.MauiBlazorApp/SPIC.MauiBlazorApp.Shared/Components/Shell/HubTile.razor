@@ -1,0 +1,54 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+
+@*
+    HubTile - one destination on a hub page: tinted icon, label, one-line hint,
+    optional count badge and a chevron.
+
+        <HubTile Icon="bi-clipboard-check" Label="Scheme Approval"
+                 Hint="Approve or return dealer scheme requests" Href="/SchemeApproval" />
+
+    Phone: a full-width row (>= 56px tall, the whole row is the tap target).
+    Tablet / desktop: the same content laid out as a card inside the HubSection grid.
+    Badge is left unset today; it exists so pending counts can be added later.
+    Hub pages must only render tiles the signed-in user is allowed to open.
+*@
+
+<a class="hub-tile shell-focusable @CssClass" href="@Href">
+    <span class="hub-tile-icon" aria-hidden="true">
+        <i class="bi @Icon"></i>
+    </span>
+
+    <span class="hub-tile-text">
+        <span class="hub-tile-label">@Label</span>
+        @if (!string.IsNullOrWhiteSpace(Hint))
+        {
+            <span class="hub-tile-hint">@Hint</span>
+        }
+    </span>
+
+    @if (!string.IsNullOrWhiteSpace(Badge))
+    {
+        <span class="hub-tile-badge">@Badge</span>
+    }
+
+    <i class="bi bi-chevron-right hub-tile-chevron" aria-hidden="true"></i>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    /// <summary>Destination route, e.g. "/SchemeApproval".</summary>
+    [Parameter, EditorRequired] public string Href { get; set; } = string.Empty;
+
+    /// <summary>One short line under the label.</summary>
+    [Parameter] public string? Hint { get; set; }
+
+    /// <summary>bootstrap-icons class, e.g. "bi-clipboard-check".</summary>
+    [Parameter] public string Icon { get; set; } = "bi-app-indicator";
+
+    /// <summary>Optional count / status pill (e.g. "3"). Hidden when empty.</summary>
+    [Parameter] public string? Badge { get; set; }
+
+    /// <summary>Extra CSS classes for the tile.</summary>
+    [Parameter] public string? CssClass { get; set; }
+}

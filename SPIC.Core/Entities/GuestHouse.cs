@@ -49,6 +49,19 @@ public enum GuestHouseRefundStatus
 }
 
 /// <summary>
+/// Admin decision status for a dealer's cancellation request. Kept separate from
+/// GuestHouseRefundStatus because "Rejected" (admin declined the request, no refund
+/// was ever due) is a materially different situation from "Failed" (admin approved,
+/// but the Razorpay refund attempt itself failed) - the two must never be conflated.
+/// </summary>
+public enum GuestHouseCancellationApprovalStatus
+{
+	PendingApproval = 0,  // Dealer requested cancellation; awaiting Admin decision
+	Approved = 1,          // Admin approved the cancellation (refund may still be processing/failed)
+	Rejected = 2           // Admin rejected the cancellation; booking remains active
+}
+
+/// <summary>
 /// Master record of a guest house (e.g. T-Nagar Guest House, Tirupathi Guest House).
 /// Guest house names are data, not hard-coded.
 /// </summary>
@@ -265,6 +278,11 @@ public class GuestHouseBookingGuest
 	public int? NumberOfChildren { get; set; }                           // Number of children (below 12 years)
 	public string? Address { get; set; }                                 // Guest address
 
+	// Company Master (optional — populated from SDWA Company Details Master)
+	public int? SdwaCompanyId { get; set; }                              // FK to the selected company master
+	public SdwaCompany? SdwaCompany { get; set; }                       // Navigation to the selected company
+	public string? GstinNumber { get; set; }                             // GSTIN snapshot from selected company
+
 	// Audit
 	public DateTime CreatedAt { get; set; } = DateTime.Now;              // When the guest record was created
 	public DateTime UpdatedAt { get; set; } = DateTime.Now;              // When the guest record was last updated
@@ -356,6 +374,13 @@ public class GuestHouseBookingCancellation
 	public GuestHouseRefundStatus RefundStatus { get; set; } = GuestHouseRefundStatus.Pending; // Refund stage
 	public DateTime? EstimatedRefundDate { get; set; }                   // Expected refund date shown to the user
 	public string? Remarks { get; set; }                                 // Additional remarks
+
+	// Admin approval workflow (see GuestHouseCancellationApprovalStatus for why this is
+	// separate from RefundStatus).
+	public GuestHouseCancellationApprovalStatus ApprovalStatus { get; set; } = GuestHouseCancellationApprovalStatus.PendingApproval;
+	public string? AdminDecisionBy { get; set; }                         // Admin/CorporateAdmin user who approved or rejected the request
+	public DateTime? AdminDecisionAt { get; set; }                       // When the approval/rejection decision was made
+	public string? RejectionReason { get; set; }                        // Reason recorded when Admin rejects the request
 }
 
 /// <summary>
@@ -399,6 +424,8 @@ public class GuestHouseBill
 	// Booking / guest snapshot (for a stable printable invoice)
 	public string? BookingReference { get; set; }                        // Booking reference snapshot
 	public string? GuestName { get; set; }                               // Guest name snapshot
+	public string? CompanyName { get; set; }                             // Company name snapshot (from SDWA Company Details Master)
+	public string? GstinNumber { get; set; }                             // GSTIN snapshot (from SDWA Company Details Master)
 	public string? Address { get; set; }                                 // Guest address snapshot
 	public string? Email { get; set; }                                   // Guest email snapshot
 	public string? PhoneNumber { get; set; }                             // Guest phone snapshot

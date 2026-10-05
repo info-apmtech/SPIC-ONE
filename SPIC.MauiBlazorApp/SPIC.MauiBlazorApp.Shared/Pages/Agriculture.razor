@@ -1,12 +1,175 @@
 @page "/Agriculture"
 @using System.Net.Http.Json
 @inject HttpClient Http
+@inject ISessionStore SessionStore
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
-<div class="container-fluid">
+<style>
+	/* =====================================================================
+	   PHONE (max-width 767.98px) - see css/tokens.css breakpoint contract.
+	   Scoped to .agri-master-page so the shared .tabs-* / .section-header
+	   rules in css/LocationSaveList.css (used by several other pages) are
+	   untouched. Desktop / tablet are unchanged.
 
-	<h2 class="page-title">Agriculture & Product Master</h2>
+	   Problem fixed: .tabs-container is `width: fit-content` with no wrap,
+	   so at 392px the seven tabs ran off the screen - Units, Categories,
+	   Product Groups and Products were unreachable and the row was cut at
+	   the viewport edge. Make the strip a real horizontal scroller with
+	   compact, 44px-high tabs that snap.
+	   ===================================================================== */
+	@@media (max-width: 767.98px) {
+		.agri-master-page .tabs-wrapper {
+			padding: 8px;
+		}
+
+		.agri-master-page .tabs-container {
+			width: auto;
+			max-width: 100%;
+			flex-wrap: nowrap;
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+			scroll-snap-type: x proximity;
+			scrollbar-width: none;
+			gap: 4px;
+		}
+
+			.agri-master-page .tabs-container::-webkit-scrollbar {
+				display: none;
+			}
+
+		.agri-master-page .tab-item {
+			flex: 0 0 auto;
+			white-space: nowrap;
+			padding: 0 16px;
+			min-height: var(--tap-min, 44px);
+			display: inline-flex;
+			align-items: center;
+			scroll-snap-align: start;
+		}
+
+		/* Title and the Sample Format / Bulk Upload buttons stack; keep the
+		   gap tight so the card does not open with a band of dead space. */
+		.agri-master-page .section-header {
+			gap: 12px;
+			margin-bottom: 16px;
+		}
+
+			.agri-master-page .section-header > .d-flex {
+				flex-wrap: wrap;
+			}
+
+		.agri-master-page .agri-form-card {
+			padding: 16px;
+		}
+
+			.agri-master-page .agri-form-card .section-header {
+				gap: 10px;
+			}
+
+		/* The blank label only lines the toggle up with the inputs beside it on
+		   desktop; stacked on a phone it is just an empty line. */
+		.agri-master-page .agri-align-label {
+			display: none !important;
+		}
+
+		.agri-master-page .agri-form-row {
+			--bs-gutter-y: 12px;
+		}
+
+		/* List cards: compact Edit / Delete, centred under the card rows. */
+		.agri-master-page .spic-dt .spic-card-actions {
+			justify-content: center;
+		}
+
+			.agri-master-page .spic-dt .spic-card-actions .btn {
+				min-height: 32px;
+				min-width: 88px;
+				padding: 4px 12px;
+				font-size: 12px;
+				border-radius: 6px;
+			}
+
+				.agri-master-page .spic-dt .spic-card-actions .btn i {
+					font-size: 12px;
+				}
+
+		/* Pagination: one row, "Items Per Page" left and the pager right, only
+		   prev / current / next - same as the other lists. */
+		.agri-master-page .spic-dt .pagination-container {
+			flex-direction: row;
+			flex-wrap: nowrap;
+			justify-content: space-between;
+			align-items: center;
+			gap: 8px;
+		}
+
+		.agri-master-page .spic-dt .items-per-page {
+			gap: 6px;
+			font-size: 12px;
+			white-space: nowrap;
+		}
+
+			.agri-master-page .spic-dt .items-per-page select {
+				width: 58px;
+				height: 30px;
+				min-height: 30px;
+				padding: 0 6px;
+				font-size: 12px;
+			}
+
+		.agri-master-page .spic-dt .spic-page-status {
+			display: none;
+		}
+
+		.agri-master-page .spic-dt .pagination-controls {
+			flex-wrap: nowrap;
+			gap: 4px;
+		}
+
+		.agri-master-page .spic-dt .page-btn {
+			width: 28px;
+			height: 28px;
+			font-size: 12px;
+			border-radius: 6px;
+		}
+
+			.agri-master-page .spic-dt .page-btn.spic-pg-near:not(.active) {
+				display: none;
+			}
+	}
+
+	/* Add / Edit form, all sizes: the field row (mb-4), the action row (pt-2 mt-4)
+	   and the buttons (mt-3) stacked ~70px of dead space between the last field
+	   and Cancel / Save. Keep one 20px gap instead. */
+	.agri-master-page .agri-form-card .section-header {
+		margin-bottom: 16px;
+		padding-bottom: 0; /* Investment.css adds 12px to every .section-header */
+	}
+
+		.agri-master-page .agri-form-card .section-title {
+			margin: 0;
+		}
+
+	.agri-master-page .agri-form-row {
+		margin-bottom: 0 !important;
+	}
+
+	.agri-master-page .agri-form-actions {
+		gap: 10px;
+		margin-top: 20px !important;
+		padding-top: 0 !important;
+	}
+
+		.agri-master-page .agri-form-actions .btn-cancel,
+		.agri-master-page .agri-form-actions .btn-save {
+			margin: 0 !important;
+		}
+</style>
+
+<div class="container-fluid agri-master-page">
+
+	<PageHeader Title="Agriculture & Product Master" />
 
 	@if (!string.IsNullOrEmpty(_message))
 	{
@@ -27,7 +190,7 @@
 		</div>
 	</div>
 
-	<div class="main-card">
+	<div class="main-card agri-form-card">
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {GetSingularName(ActiveTab)}" : $"Add New {GetSingularName(ActiveTab)}")</h3>
 			<div class="d-flex gap-2">
@@ -43,7 +206,7 @@
 			</div>
 		</div>
 
-		<div class="row g-3 mb-4">
+		<div class="row g-3 mb-4 agri-form-row">
 			@if (ActiveTab == "Categories")
 			{
 				<div class="col-md-4">
@@ -62,7 +225,7 @@
 					</select>
 				</div>
 				<div class="col-md-6 col-lg-3">
-					<label class="form-label-custom d-block">&nbsp;</label>
+					<label class="form-label-custom d-block agri-align-label">&nbsp;</label>
 					<div class="status-toggle-box @(_categoryForm.IsSpecialityProduct ? "" : "status-toggle-inactive")">
 						<span>@(_categoryForm.IsSpecialityProduct ? "Speciality" : "Regular")</span>
 						<label class="switch">
@@ -115,7 +278,7 @@
 				}
 
 				<div class="col-md-6 col-lg-2">
-					<label class="form-label-custom d-block">&nbsp;</label>
+					<label class="form-label-custom d-block agri-align-label">&nbsp;</label>
 					<div class="status-toggle-box @(CurrentFormIsActive ? "" : "status-toggle-inactive")">
 						<span>@(CurrentFormIsActive ? "Active" : "Inactive")</span>
 						<label class="switch">
@@ -137,11 +300,11 @@
 							</div>
 						</div>
 
-						<div class="d-flex justify-content-end pt-2 mt-4">
+						<div class="d-flex justify-content-end pt-2 mt-4 agri-form-actions">
 							@if (_showUploadModal)
 							{
 								<div class="modal-backdrop fade show"></div>
-								<div class="modal fade show d-block" tabindex="-1" role="dialog">
+								<div class="modal fade show d-block wiz-modal" tabindex="-1" role="dialog">
 									<div class="modal-dialog modal-dialog-centered" role="document">
 										<div class="modal-content">
 											<div class="modal-header">
@@ -334,6 +497,17 @@
 										</td>
 									}
 							</TableRow>
+
+							<CardActions Context="item">
+								@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Agriculture, "Update"))
+								{
+									<button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+								}
+								@if (LoginState.Can(SPIC.Core.Entities.PagePermission.Agriculture, "Delete"))
+								{
+									<button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+								}
+							</CardActions>
 						</SpicDataTable>
 
 					</div>
@@ -341,7 +515,7 @@
 					@if (_showDeleteConfirm)
 					{
 						<div class="modal-backdrop fade show"></div>
-						<div class="modal fade show d-block" tabindex="-1" role="dialog">
+						<div class="modal fade show d-block wiz-modal" tabindex="-1" role="dialog">
 							<div class="modal-dialog modal-dialog-centered" role="document">
 								<div class="modal-content">
 									<div class="modal-header">
@@ -418,6 +592,22 @@
 	// Lookup data
 	private List<AgriItemDto> _unitsAll = new();
 
+	// Name indexes for the table rows: a row must not scan a whole master list
+	// (see Dashboard.razor - every re-render diffs every rendered row).
+	private Dictionary<int, string> _unitNameById = new();
+	private Dictionary<int, string> _categoryNameById = new();
+	private Dictionary<int, string> _productGroupNameById = new();
+
+	private static Dictionary<int, string> NameIndex(List<AgriItemDto> items) =>
+		items.GroupBy(i => i.Id).ToDictionary(g => g.Key, g => g.First().Name ?? "");
+
+	private void BuildNameIndexes()
+	{
+		_unitNameById = NameIndex(_unitsAll);
+		_categoryNameById = NameIndex(_categoriesAll);
+		_productGroupNameById = NameIndex(_productGroupsAll);
+	}
+
 	private List<AgriItemDto> CurrentAllItems => ActiveTab switch
 	{
 		"Crops" => _cropsAll,
@@ -472,7 +662,7 @@
 	{
 		try
 		{
-			var token = await JS.InvokeAsync<string>("sessionStorage.getItem", "jwt_token");
+			var token = await SessionStore.GetAsync(SessionKeys.Token);
 			if (!string.IsNullOrEmpty(token))
 			{
 				_currentUserId = GetUserIdFromToken(token);
@@ -497,6 +687,7 @@
 			_categoriesAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Category/all") ?? new();
 			_productGroupsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/ProductGroup/all") ?? new();
 			_productsAll = await Http.GetFromJsonAsync<List<AgriItemDto>>("api/Product/all") ?? new();
+			BuildNameIndexes();
 		}
 		catch (Exception ex)
 		{
@@ -522,6 +713,7 @@
 				case "Products": _productsAll = items; break;
 			}
 
+			BuildNameIndexes();
 			ApplyFilter();
 		}
 		catch (Exception ex)
@@ -846,13 +1038,13 @@
 	}
 
 	private string GetUnitName(int unitId) =>
-		_unitsAll.FirstOrDefault(u => u.Id == unitId)?.Name ?? "";
+		_unitNameById.TryGetValue(unitId, out var name) ? name : "";
 
 	private string GetCategoryName(int categoryId) =>
-		_categoriesAll.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "";
+		_categoryNameById.TryGetValue(categoryId, out var name) ? name : "";
 
 	private string GetProductGroupName(int? productGroupId) =>
-		productGroupId.HasValue ? _productGroupsAll.FirstOrDefault(pg => pg.Id == productGroupId.Value)?.Name ?? "" : "";
+		productGroupId.HasValue && _productGroupNameById.TryGetValue(productGroupId.Value, out var name) ? name : "";
 
 	private string GetSingularName(string pluralName) => pluralName switch
 	{

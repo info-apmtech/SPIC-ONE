@@ -436,4 +436,84 @@ namespace SPIC.Core.Entities
 		[MaxLength(120)]
 		public string? Platform { get; set; }
 	}
+
+	/// <summary>
+	/// Where the nightly alert email goes and how it is sent. Exactly one row,
+	/// Id = 1, edited from the relay phone through SpicAPI.
+	///
+	/// Moved out of appsettings.json for the same reason the portal passwords
+	/// were: an SMTP password rotates, a recipient list changes, and neither
+	/// should need a redeploy of the automation host. When this row is absent
+	/// or switched off the automation still honours Alerts:Email from
+	/// configuration, so an empty table changes nothing.
+	/// </summary>
+	public class IfmsAlertSettings
+	{
+		[Key]
+		public int Id { get; set; }
+
+		public bool EmailEnabled { get; set; }
+
+		[MaxLength(200)]
+		public string SmtpHost { get; set; } = string.Empty;
+
+		public int SmtpPort { get; set; } = 587;
+
+		public bool UseStartTls { get; set; } = true;
+
+		[MaxLength(200)]
+		public string UserName { get; set; } = string.Empty;
+
+		/// <summary>
+		/// SMTP password encrypted with the isolated IFMS Data Protection key
+		/// ring, exactly like <see cref="IfmsPortalAccount.ProtectedPassword"/>.
+		/// Never returned to a client in any form.
+		/// </summary>
+		public string? ProtectedPassword { get; set; }
+
+		[MaxLength(200)]
+		public string FromAddress { get; set; } = string.Empty;
+
+		[MaxLength(120)]
+		public string FromName { get; set; } = "SPIC IFMS Automation";
+
+		/// <summary>Separated by ; or , or newline — whichever the phone's keyboard made easiest.</summary>
+		[MaxLength(2000)]
+		public string ToAddresses { get; set; } = string.Empty;
+
+		[MaxLength(2000)]
+		public string CcAddresses { get; set; } = string.Empty;
+
+		/// <summary>Only mail failures, never the daily all-clear.</summary>
+		public bool FailuresOnly { get; set; }
+
+		public bool AttachReports { get; set; }
+
+		/// <summary>
+		/// Set by the API when somebody presses "send test email"; the automation
+		/// polls for it, sends, and clears it. A queued flag rather than a direct
+		/// call because the API host has no SMTP access and the automation does.
+		/// </summary>
+		public DateTime? TestRequestedAt { get; set; }
+
+		[MaxLength(120)]
+		public string? TestRequestedBy { get; set; }
+
+		public DateTime? LastTestAt { get; set; }
+
+		/// <summary>"Sent to a@b, c@d" or the SMTP error text, so the phone can show either.</summary>
+		[MaxLength(1000)]
+		public string? LastTestResult { get; set; }
+
+		/// <summary>The last real alert, as opposed to a test.</summary>
+		public DateTime? LastSentAt { get; set; }
+
+		[MaxLength(1000)]
+		public string? LastSendResult { get; set; }
+
+		public DateTime UpdatedAt { get; set; }
+
+		[MaxLength(120)]
+		public string UpdatedBy { get; set; } = "System";
+	}
 }

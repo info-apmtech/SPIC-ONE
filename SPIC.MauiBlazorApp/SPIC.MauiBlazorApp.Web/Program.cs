@@ -1,4 +1,8 @@
-﻿using SPIC.MauiBlazorApp.Shared.Services;
+﻿using System.Reflection;
+using Microsoft.AspNetCore.Components.Server.Circuits;
+using SPIC.Core.Entities;
+using SPIC.MauiBlazorApp.Shared.Services;
+using SPIC.MauiBlazorApp.Shared.Services.Telemetry;
 using SPIC.MauiBlazorApp.Web.Components;
 using SPIC.MauiBlazorApp.Web.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -23,7 +27,14 @@ builder.Services.AddHealthChecks();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents()
+    .AddInteractiveServerComponents(options =>
+    {
+        // A user whose connection drops (mobile network, laptop sleep) keeps the page and
+        // the half-filled form on the server for 30 minutes; the browser retries for as long
+        // (see Blazor.start in App.razor). Default was 3 minutes / 100 circuits.
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
+        options.DisconnectedCircuitMaxRetained = 500;
+    })
     .AddHubOptions(options =>
     {
         options.MaximumReceiveMessageSize = 100 * 1024 * 1024; // 100 MB
@@ -38,12 +49,46 @@ builder.Services.AddRazorComponents()
 
 // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
 builder.Services.AddSingleton<IFormFactor, FormFactor>();
-builder.Services.AddSingleton<IIfmsRelayHost, SPIC.MauiBlazorApp.Web.Services.IfmsRelayHost>();
+builder.Services.AddScoped<ISessionStore, BrowserSessionStore>();
+builder.Services.AddScoped<FileDownloadService>();
+builder.Services.AddScoped<ToastService>();
+builder.Services.AddScoped<ConnectivityState>();
 builder.Services.AddScoped<LoginState>();
+builder.Services.AddScoped<FieldAttendanceState>();
+// Shell state shared by MainLayout and the parameterless Components/Shell components.
+builder.Services.AddScoped<ShellSession>();
 builder.Services.AddScoped<LoadingService>();
 builder.Services.AddScoped<AppSearchState>();
 builder.Services.AddScoped<LookupCacheService>();
 builder.Services.AddScoped<GuestHouseBookingState>();
+builder.Services.AddScoped<DigitalLibraryApi>();
+builder.Services.AddScoped<CommunityApi>();
+builder.Services.AddScoped<SasApi>();
+builder.Services.AddScoped<SasPaymentApi>();
+builder.Services.AddScoped<LabApi>();
+builder.Services.AddScoped<MetricsApi>();
+builder.Services.AddScoped<JMDOAttendanceApi>();
+builder.Services.AddScoped<JMDOTrackingApi>();
+
+// Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on every API
+// call, page views and client errors per circuit, and anything this host logs at Error or above.
+const string DefaultApiBaseUrl = "https://spicapi.apmiot.com/";
+builder.Services.AddSingleton(new ClientInfo(TelemetryApp.Web,
+    typeof(SPIC.MauiBlazorApp.Shared._Imports).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion));
+builder.Services.AddSingleton<TelemetryCircuitRegistry>();
+builder.Services.AddScoped<ClientTelemetry>();
+builder.Services.AddScoped<CircuitHandler, TelemetryCircuitHandler>();
+builder.Logging.Services.AddSingleton<ILoggerProvider>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    return new TelemetryLoggerProvider(
+        sp.GetRequiredService<ClientInfo>(),
+        sp.GetRequiredService<TelemetryCircuitRegistry>(),
+        config["ApiBaseUrl"] ?? DefaultApiBaseUrl,
+        TelemetrySource.WebHost,
+        config["Telemetry:IngestKey"]);
+});
 
 // ADD THIS
 builder.Services.AddSingleton(new PlatformService
@@ -56,7 +101,7 @@ builder.Services.AddScoped(sp =>
     var handler = sp.GetRequiredService<AuthHttpMessageHandler>();
     handler.InnerHandler = new HttpClientHandler();
     var config = sp.GetRequiredService<IConfiguration>();
-    var baseUrl = config["ApiBaseUrl"] ?? "https://spicapi.apmiot.com/";
+    var baseUrl = config["ApiBaseUrl"] ?? DefaultApiBaseUrl;
     //var baseUrl = config["ApiBaseUrl"] ?? "https://previewspicapi.apmiot.com/";
     // var baseUrl = config["ApiBaseUrl"] ?? "https://localhost:7032/";
     return new HttpClient(handler)

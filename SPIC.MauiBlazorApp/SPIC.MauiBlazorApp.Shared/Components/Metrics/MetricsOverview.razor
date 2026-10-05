@@ -1,0 +1,195 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Metrics
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+@implements IDisposable
+@inject MetricsApi Metrics
+
+@*
+    Overview tab: KPIs (summary, loaded by the page), the daily series as two line charts (active
+    users + errors on one scale, page views on its own: never two y-axes on one chart), an
+    optional table view of the same points, and the By app / By role tiles.
+*@
+<MetricsKpis Summary="Summary" Days="Days" />
+
+<section class="mx-card" aria-labelledby="mx-trend-title">
+    <div class="mx-card-head">
+        <h2 class="mx-card-title" id="mx-trend-title">Daily trend</h2>
+        @if (_series is { Points.Count: > 0 })
+        {
+            <button type="button" class="mx-btn mx-btn-outline mx-btn-sm" aria-pressed="@(_showTable ? "true" : "false")"
+                    @onclick="() => _showTable = !_showTable">
+                <i class="bi @(_showTable ? "bi-graph-up" : "bi-table")" aria-hidden="true"></i>
+                @(_showTable ? "Chart view" : "Table view")
+            </button>
+        }
+    </div>
+
+    @if (_loading && _series is null)
+    {
+        <div class="mx-loading"><span class="spinner-border text-success" role="status"><span class="visually-hidden">Loading</span></span></div>
+    }
+    else if (_series is null)
+    {
+        <EmptyState Icon="bi-cloud-slash" Title="The daily numbers could not be loaded" Message="Check the connection and try again." Compact="true">
+            <button type="button" class="mx-btn mx-btn-outline" @onclick="LoadAsync">Try again</button>
+        </EmptyState>
+    }
+    else if (_series.Points.Count == 0)
+    {
+        <EmptyState Icon="bi-graph-up" Title="No activity in this period" Message="Numbers appear here as soon as people use the apps." Compact="true" />
+    }
+    else if (_showTable)
+    {
+        <div class="mx-table-wrap">
+            <table class="mx-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Day</th>
+                        <th scope="col" class="num">Active users</th>
+                        <th scope="col" class="num">Page views</th>
+                        <th scope="col" class="num">Requests</th>
+                        <th scope="col" class="num">Errors</th>
+                        <th scope="col" class="num">P95</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in _series.Points)
+                    {
+                        <tr>
+                            <td>@MetricsText.Day(p.Day)</td>
+                            <td class="num">@MetricsText.Num(p.ActiveUsers)</td>
+                            <td class="num">@MetricsText.Num(p.PageViews)</td>
+                            <td class="num">@MetricsText.Num(p.Requests)</td>
+                            <td class="num">@MetricsText.Num(p.Errors)</td>
+                            <td class="num">@MetricsText.Ms(p.P95DurationMs)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="mx-charts">
+            <div class="mx-chart-cell">
+                <h3 class="mx-chart-title">Active users and errors</h3>
+                <MetricsChart Labels="_labels" Datasets="_usersErrors" AriaLabel="Daily active users and errors" />
+            </div>
+            <div class="mx-chart-cell">
+                <h3 class="mx-chart-title">Page views</h3>
+                <MetricsChart Labels="_labels" Datasets="_views" AriaLabel="Daily page views" />
+            </div>
+        </div>
+    }
+</section>
+
+<div class="mx-slices">
+    <section class="mx-card" aria-labelledby="mx-byapp-title">
+        <h2 class="mx-card-title mx-card-title--pad" id="mx-byapp-title">By app</h2>
+        @if (Summary is null)
+        {
+            <p class="mx-muted">–</p>
+        }
+        else if (Summary.ByApp.Count == 0)
+        {
+            <EmptyState Icon="bi-phone" Title="No app activity yet" Compact="true" />
+        }
+        else
+        {
+            <div class="mx-tiles">
+                @foreach (var a in Summary.ByApp.OrderByDescending(a => a.ActiveUsers))
+                {
+                    <div class="mx-tile">
+                        <span class="mx-tile-icon mx-tone-@MetricsText.AppTone(a.App)" aria-hidden="true"><i class="bi @MetricsText.AppIcon(a.App)"></i></span>
+                        <div class="mx-tile-text">
+                            <span class="mx-tile-name">@MetricsText.AppName(a.App)</span>
+                            <span class="mx-tile-value">@MetricsText.Num(a.ActiveUsers) <small>@(a.ActiveUsers == 1 ? "user" : "users")</small></span>
+                            <span class="mx-tile-sub">@MetricsText.Num(a.PageViews) views · @MetricsText.Num(a.Requests) requests · @MetricsText.Num(a.Errors) errors</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="mx-card" aria-labelledby="mx-byrole-title">
+        <h2 class="mx-card-title mx-card-title--pad" id="mx-byrole-title">By role</h2>
+        @if (Summary is null)
+        {
+            <p class="mx-muted">–</p>
+        }
+        else if (Summary.ByRole.Count == 0)
+        {
+            <EmptyState Icon="bi-person-badge" Title="No signed-in activity yet" Compact="true" />
+        }
+        else
+        {
+            var max = Math.Max(1, Summary.ByRole.Max(r => r.ActiveUsers));
+            <ul class="mx-roles">
+                @foreach (var r in Summary.ByRole.OrderByDescending(r => r.ActiveUsers))
+                {
+                    <li class="mx-role">
+                        <span class="mx-role-name">@MetricsText.Dash(r.Role)</span>
+                        <span class="mx-role-bar" aria-hidden="true"><span style="width:@(Math.Max(4, r.ActiveUsers * 100 / max))%"></span></span>
+                        <span class="mx-role-num">@MetricsText.Num(r.ActiveUsers) <small>@(r.ActiveUsers == 1 ? "user" : "users")</small></span>
+                        <span class="mx-role-sub">@MetricsText.Num(r.PageViews) views</span>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>
+
+@code {
+    // Categorical slots 1-3 of the reference palette: one colour per measure, on every chart.
+    private const string UsersColor = "#2a78d6";
+    private const string ErrorsColor = "#eb6834";
+    private const string ViewsColor = "#1baf7a";
+
+    [Parameter] public MetricsSummaryDto? Summary { get; set; }
+    [Parameter] public int Days { get; set; } = 7;
+    [Parameter] public TelemetryApp? App { get; set; }
+
+    private MetricsSeriesDto? _series;
+    private string[] _labels = Array.Empty<string>();
+    private IReadOnlyList<MetricsChart.Series> _usersErrors = Array.Empty<MetricsChart.Series>();
+    private IReadOnlyList<MetricsChart.Series> _views = Array.Empty<MetricsChart.Series>();
+    private bool _loading = true;
+    private bool _showTable;
+    private (int, TelemetryApp?)? _loadedFor;
+    private int _version;
+    private readonly CancellationTokenSource _cts = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedFor == (Days, App)) return;
+        _loadedFor = (Days, App);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var version = ++_version;
+        _loading = true;
+
+        var series = await Metrics.GetSeriesAsync(Days, App, _cts.Token);
+        if (version != _version) return;
+
+        _series = series;
+        _loading = false;
+        if (series is not null)
+        {
+            var points = series.Points.OrderBy(p => p.Day).ToList();
+            series.Points = points;
+            _labels = points.Select(p => MetricsText.Day(p.Day)).ToArray();
+            _usersErrors = new[]
+            {
+                new MetricsChart.Series("Active users", points.Select(p => p.ActiveUsers).ToArray(), UsersColor),
+                new MetricsChart.Series("Errors", points.Select(p => p.Errors).ToArray(), ErrorsColor)
+            };
+            _views = new[] { new MetricsChart.Series("Page views", points.Select(p => p.PageViews).ToArray(), ViewsColor) };
+        }
+    }
+
+    public void Dispose() => _cts.Cancel();
+}

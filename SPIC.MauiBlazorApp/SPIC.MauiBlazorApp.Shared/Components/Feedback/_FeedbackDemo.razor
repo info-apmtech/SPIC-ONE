@@ -1,0 +1,322 @@
+@page "/dev/feedback"
+@layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
+@namespace SPIC.MauiBlazorApp.Shared.Components.Feedback
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject LoginState LoginState
+
+@*
+    DEV ONLY: exercises every Components/Feedback component without login.
+    - Loads feedback-interop.js itself (production host pages include it globally).
+    - Creates its own ToastService / ConnectivityState and cascades them, so it works even
+      before Program.cs / MauiProgram.cs register the services.
+*@
+
+<PageTitle>Feedback components demo</PageTitle>
+
+<div class="demo" style="@(_fakeTabBar ? "--shell-bottom-offset: 56px" : "")">
+
+    @if (_scriptReady)
+    {
+        <CascadingValue Value="_toasts" IsFixed="true">
+        <CascadingValue Value="_connectivity" IsFixed="true">
+
+            <ToastHost />
+            <ConfirmDialog />
+            <OfflineBanner />
+            <SessionExpiryDialog @ref="_sessionDialog" WarnBefore="TimeSpan.FromMinutes(2)" LoginPath="/dev/feedback" />
+
+            <header class="demo__header">
+                <h1>Feedback &amp; form-chrome components</h1>
+                <p class="demo__lead">
+                    Resize the window: <strong>&le; 767px</strong> phone, <strong>768-1199px</strong> tablet,
+                    <strong>&ge; 1200px</strong> desktop. Interop script: <code>@(_scriptVersion ?? "not loaded")</code>.
+                </p>
+            </header>
+
+            @* ---------------------------------------------------------------- Toasts *@
+            <section class="demo__card">
+                <h2>ToastService + ToastHost</h2>
+                <p>Top-right stack on desktop/tablet; bottom-centre above the action bar on phone. Hover pauses auto-dismiss.</p>
+                <div class="demo__row">
+                    <button class="btn btn-success" @onclick="@(() => _toasts.Success("Dealer application saved.", "Saved"))">Success</button>
+                    <button class="btn btn-danger" @onclick="@(() => _toasts.Error("The server rejected the request (HTTP 500).", "Save failed"))">Error</button>
+                    <button class="btn btn-primary" @onclick="@(() => _toasts.Info("3 new acknowledgements are pending."))">Info</button>
+                    <button class="btn btn-warning" @onclick="@(() => _toasts.Warning("Credit limit is 92% utilised.", "Heads up"))">Warning</button>
+                    <button class="btn btn-outline-secondary" @onclick="@(() => _toasts.Show(ToastLevel.Info, "This one stays until dismissed.", "Sticky", durationMs: 0))">Sticky</button>
+                    <button class="btn btn-outline-secondary" @onclick="Burst">Burst 8 (queue)</button>
+                    <button class="btn btn-outline-dark" @onclick="@(() => _toasts.Clear())">Clear</button>
+                </div>
+                <p class="demo__hint">Visible: @_toasts.Toasts.Count &middot; Queued: @_toasts.QueuedCount (max visible @_toasts.MaxVisible)</p>
+            </section>
+
+            @* ---------------------------------------------------------------- Confirm *@
+            <section class="demo__card">
+                <h2>ConfirmDialog (replaces confirm())</h2>
+                <div class="demo__row">
+                    <button class="btn btn-outline-danger" @onclick="ConfirmDelete">Delete record...</button>
+                    <button class="btn btn-outline-primary" @onclick="ConfirmPlain">Submit for approval...</button>
+                    <button class="btn btn-outline-secondary" @onclick="ConfirmTwice">Two in a row (queued)</button>
+                </div>
+                <p class="demo__hint">Last answer: <strong>@(_lastConfirm?.ToString() ?? "-")</strong></p>
+            </section>
+
+            @* ---------------------------------------------------------------- BottomSheet *@
+            <section class="demo__card">
+                <h2>BottomSheet / drawer</h2>
+                <p>Phone: slides up, drag handle, swipe down, back button and Escape close it. Tablet/desktop: 420px right drawer.</p>
+                <div class="demo__row demo__row--wrap">
+                    <label class="demo__field">
+                        Size
+                        <select class="form-select form-select-sm" @bind="_sheetSize">
+                            <option value="@BottomSheet.SheetSize.Auto">Auto</option>
+                            <option value="@BottomSheet.SheetSize.Half">Half</option>
+                            <option value="@BottomSheet.SheetSize.Full">Full</option>
+                        </select>
+                    </label>
+                    <label class="demo__check">
+                        <input type="checkbox" class="form-check-input" @bind="_closeOnBackdrop" /> Close on backdrop
+                    </label>
+                    <button class="btn btn-success" @onclick="() => _sheetOpen = true">Open sheet</button>
+                </div>
+                <p class="demo__hint">Open: @_sheetOpen &middot; Last close reason: @(_lastCloseReason?.ToString() ?? "-")</p>
+            </section>
+
+            @* ---------------------------------------------------------------- Offline *@
+            <section class="demo__card">
+                <h2>OfflineBanner + ConnectivityState</h2>
+                <p>
+                    Status: <span class="demo__pill @(_connectivity.IsOnline ? "demo__pill--ok" : "demo__pill--bad")">@(_connectivity.IsOnline ? "online" : "offline")</span>
+                    &middot; listening: @_connectivity.IsListening
+                </p>
+                <p class="demo__hint">Toggle "Offline" in DevTools &rarr; Network (or airplane mode on a device). A banner appears at the top; a "Back online" toast follows when restored.</p>
+            </section>
+
+            @* ---------------------------------------------------------------- Session *@
+            <section class="demo__card">
+                <h2>SessionExpiryDialog</h2>
+                <p>Warns 2 minutes before <code>LoginState.Expiration</code>. On this page the expiry redirect targets <code>/dev/feedback</code> itself.</p>
+                <div class="demo__row">
+                    <button class="btn btn-outline-primary" @onclick="() => SetExpiry(TimeSpan.FromMinutes(2) + TimeSpan.FromSeconds(10))">Dialog in 10 s (expiry 2:10)</button>
+                    <button class="btn btn-outline-primary" @onclick="() => SetExpiry(TimeSpan.FromSeconds(20))">Expire in 20 s</button>
+                    <button class="btn btn-outline-secondary" @onclick="() => SetExpiry(null)">Reset</button>
+                </div>
+                <p class="demo__hint">Expiration: @(LoginState.Expiration == default ? "-" : LoginState.Expiration.ToUniversalTime().ToString("HH:mm:ss 'UTC'"))</p>
+            </section>
+
+            @* ---------------------------------------------------------------- ActionBar *@
+            <section class="demo__card">
+                <h2>ActionBar</h2>
+                <p>Below is a long fake form. On phone the bar is fixed to the bottom and a spacer keeps the last field reachable.</p>
+                <label class="demo__check">
+                    <input type="checkbox" class="form-check-input" @bind="_fakeTabBar" /> Simulate a 56px shell tab bar (<code>--shell-bottom-offset</code>)
+                </label>
+
+                <div class="demo__form">
+                    @for (var i = 1; i <= 12; i++)
+                    {
+                        var n = i;
+                        <label class="demo__field demo__field--full">
+                            Field @n
+                            <input class="form-control" placeholder="Value @n" />
+                        </label>
+                    }
+                </div>
+
+                <ActionBar>
+                    <Secondary>
+                        <button class="btn btn-outline-secondary" @onclick="@(() => _toasts.Info("Cancelled"))">Cancel</button>
+                    </Secondary>
+                    <ChildContent>
+                        <button class="btn btn-outline-success" @onclick="@(() => _toasts.Info("Draft saved"))">Save draft</button>
+                        <button class="btn btn-success" @onclick="SubmitWithConfirm">Submit</button>
+                    </ChildContent>
+                </ActionBar>
+            </section>
+
+            @if (_fakeTabBar)
+            {
+                <nav class="demo__fake-tabbar" aria-hidden="true">
+                    <span><i class="bi bi-house"></i>Home</span>
+                    <span><i class="bi bi-list-check"></i>Tasks</span>
+                    <span><i class="bi bi-person"></i>Me</span>
+                </nav>
+            }
+
+            <BottomSheet @bind-IsOpen="_sheetOpen"
+                         Title="Dealer details"
+                         Subtitle="Same markup renders as a sheet on phone and a drawer on desktop."
+                         Size="_sheetSize"
+                         CloseOnBackdrop="_closeOnBackdrop"
+                         OnClosed="r => _lastCloseReason = r">
+                <ChildContent>
+                    <div class="demo__form">
+                        <label class="demo__field demo__field--full">
+                            Firm name
+                            <input class="form-control" value="Green Valley Agro" />
+                        </label>
+                        <label class="demo__field demo__field--full">
+                            Dealer code
+                            <input class="form-control" value="DL-1042" />
+                        </label>
+                        <label class="demo__field demo__field--full">
+                            Notes
+                            <textarea class="form-control" rows="4" placeholder="Scrollable body: add more text to test overflow"></textarea>
+                        </label>
+                        @for (var i = 1; i <= 8; i++)
+                        {
+                            var n = i;
+                            <label class="demo__field demo__field--full">
+                                Extra field @n
+                                <input class="form-control" placeholder="Filler to force scrolling" />
+                            </label>
+                        }
+                    </div>
+                </ChildContent>
+                <Footer>
+                    <button class="btn btn-outline-secondary" @onclick="() => _sheetOpen = false">Cancel</button>
+                    <button class="btn btn-success" @onclick="SaveFromSheet">Save</button>
+                </Footer>
+            </BottomSheet>
+
+        </CascadingValue>
+        </CascadingValue>
+    }
+    else
+    {
+        <div class="demo__loading">
+            @if (_scriptFailed)
+            {
+                <p class="text-danger">feedback-interop.js could not be loaded from <code>_content/SPIC.MauiBlazorApp.Shared/js/feedback-interop.js</code>.</p>
+            }
+            else
+            {
+                <p>Loading interop script...</p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private const string ScriptPath = "_content/SPIC.MauiBlazorApp.Shared/js/feedback-interop.js";
+
+    private readonly ToastService _toasts = new();
+    private ConnectivityState _connectivity = default!;
+    private SessionExpiryDialog? _sessionDialog;
+
+    private bool _scriptReady;
+    private bool _scriptFailed;
+    private string? _scriptVersion;
+
+    private bool _sheetOpen;
+    private BottomSheet.SheetSize _sheetSize = BottomSheet.SheetSize.Auto;
+    private bool _closeOnBackdrop = true;
+    private BottomSheet.CloseReason? _lastCloseReason;
+
+    private bool? _lastConfirm;
+    private bool _fakeTabBar;
+
+    protected override void OnInitialized()
+    {
+        _connectivity = new ConnectivityState(JS);
+        _toasts.OnChange += HandleToastsChanged;
+        _connectivity.OnChange += HandleToastsChanged;
+    }
+
+    private void HandleToastsChanged() => _ = InvokeAsync(StateHasChanged);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        // Blazor never executes <script> tags in component markup, so inject it here.
+        // Production host pages (Web App.razor / MAUI index.html) include the script tag instead.
+        var loader = $$"""
+            new Promise(function (resolve) {
+                if (window.spicFeedback && window.spicFeedback.version) { resolve(window.spicFeedback.version); return; }
+                var s = document.createElement('script');
+                s.src = '{{ScriptPath}}';
+                s.onload = function () { resolve(window.spicFeedback ? window.spicFeedback.version : null); };
+                s.onerror = function () { resolve(null); };
+                document.body.appendChild(s);
+            })
+            """;
+
+        try
+        {
+            _scriptVersion = await JS.InvokeAsync<string?>("eval", loader);
+        }
+        catch (JSException)
+        {
+            _scriptVersion = null;
+        }
+
+        _scriptFailed = _scriptVersion is null;
+        _scriptReady = !_scriptFailed;
+        StateHasChanged();
+    }
+
+    private void Burst()
+    {
+        for (var i = 1; i <= 8; i++)
+        {
+            var level = (ToastLevel)(i % 4);
+            _toasts.Show(level, $"Queued toast {i} of 8", durationMs: 2500);
+        }
+    }
+
+    private async Task ConfirmDelete()
+    {
+        _lastConfirm = await _toasts.ConfirmAsync(
+            "Delete this record?",
+            "The dealer application and its enclosures will be removed. This cannot be undone.",
+            "Delete",
+            danger: true);
+
+        if (_lastConfirm == true) _toasts.Success("Record deleted.");
+    }
+
+    private async Task ConfirmPlain()
+    {
+        _lastConfirm = await _toasts.ConfirmAsync(
+            "Submit for approval?",
+            "You will not be able to edit the application while it is under review.",
+            "Submit");
+
+        if (_lastConfirm == true) _toasts.Success("Submitted for approval.");
+    }
+
+    private async Task ConfirmTwice()
+    {
+        var first = _toasts.ConfirmAsync("First question", "Answer this one first.", "OK");
+        var second = _toasts.ConfirmAsync("Second question", "Shown after the first is answered.", "OK");
+        var results = await Task.WhenAll(first, second);
+        _lastConfirm = results[1];
+        _toasts.Info($"Answers: {results[0]}, {results[1]}");
+    }
+
+    private async Task SubmitWithConfirm()
+    {
+        if (await _toasts.ConfirmAsync("Submit the form?", "Please make sure every field is correct.", "Submit"))
+            _toasts.Success("Form submitted.", "Done");
+    }
+
+    private void SaveFromSheet()
+    {
+        _sheetOpen = false;
+        _toasts.Success("Dealer details saved.");
+    }
+
+    private void SetExpiry(TimeSpan? fromNow)
+    {
+        LoginState.Expiration = fromNow is null ? default : DateTime.UtcNow.Add(fromNow.Value);
+        _sessionDialog?.Reschedule();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _toasts.OnChange -= HandleToastsChanged;
+        _connectivity.OnChange -= HandleToastsChanged;
+        await _connectivity.DisposeAsync();
+    }
+}

@@ -1,0 +1,88 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@* "Annual Sales Data" accordion: the last financial year table with its grand total row. *@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="OnToggle">
+            Annual Sales Data
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+            <div class="detail-card">
+                <div class="detail-card-header">
+                                    <h4 class="detail-card-title"><i class="bi bi-file-earmark-spreadsheet"></i> Last Financial Year</h4>
+                                    <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                </div>
+                <div class="table-responsive">
+                    <table class="sales-table">
+                        <thead>
+                            <tr>
+                                <th>S:No</th>
+                                <th>Product</th>
+                                <th>Group</th>
+                                <th>Category</th>
+                                <th>Own Retail Qty (MT)</th>
+                                <th>Own Retail Amount (₹)</th>
+                                <th>Sales to Dealers Qty (MT)</th>
+                                <th>Sales to Dealers Amount (₹)</th>
+                                <th>Total Qty (MT)</th>
+                                <th>Total Amount (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (AnnualSales != null && AnnualSales.Any())
+                            {
+                                var idx = 1;
+                                foreach (var a in AnnualSales)
+                                {
+                                    var product = Products.FirstOrDefault(p => p.Id == a.ProductId);
+                                    var category = Categories.FirstOrDefault(c => c.Id == a.CategoryId);
+                                    var group = ProductGroups.FirstOrDefault(g => g.Id == product?.ProductGroupId);
+                                    <tr>
+                                        <td>@idx</td>
+                                        <td>@(product?.Name ?? a.ProductId.ToString())</td>
+                                        <td>@(group?.Name ?? "-")</td>
+                                        <td>@(category?.Name ?? a.CategoryId.ToString())</td>
+                                        <td>@DealerReviewFormat.NumOrDash(a.OwnRetailsSaleQty)</td>
+                                        <td>@DealerReviewFormat.NumOrDash(a.OwnRetailsSaleAmount)</td>
+                                        <td>@DealerReviewFormat.NumOrDash(a.SaleToDealerQty)</td>
+                                        <td>@DealerReviewFormat.NumOrDash(a.SaleToDealerAmount)</td>
+                                        <td>@DealerReviewFormat.NumOrDash(a.OwnRetailsSaleQty + a.SaleToDealerQty)</td>
+                                        <td>@DealerReviewFormat.NumOrDash(a.OwnRetailsSaleAmount + a.SaleToDealerAmount)</td>
+                                    </tr>
+                                    idx++;
+                                }
+                                <tr class="grand-total-row">
+                                    <td colspan="4" style="text-align: right; padding-right: 40px;">GRAND TOTAL</td>
+                                    <td>@DealerReviewFormat.NumOrDash(AnnualSales.Sum(x => x.OwnRetailsSaleQty))</td>
+                                    <td>@DealerReviewFormat.NumOrDash(AnnualSales.Sum(x => x.OwnRetailsSaleAmount))</td>
+                                    <td>@DealerReviewFormat.NumOrDash(AnnualSales.Sum(x => x.SaleToDealerQty))</td>
+                                    <td>@DealerReviewFormat.NumOrDash(AnnualSales.Sum(x => x.SaleToDealerAmount))</td>
+                                    <td>@DealerReviewFormat.NumOrDash(AnnualSales.Sum(x => x.OwnRetailsSaleQty + x.SaleToDealerQty))</td>
+                                    <td>@DealerReviewFormat.NumOrDash(AnnualSales.Sum(x => x.OwnRetailsSaleAmount + x.SaleToDealerAmount))</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                <tr><td colspan="10">No annual sales data</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    [Parameter] public List<DR.AnnualSaleDataLastFYofDealerRegistration> AnnualSales { get; set; } = new();
+    [Parameter] public List<DR.Product> Products { get; set; } = new();
+    [Parameter] public List<DR.Category> Categories { get; set; } = new();
+    [Parameter] public List<DR.ProductGroup> ProductGroups { get; set; } = new();
+    [Parameter] public int DataVersion { get; set; }
+}

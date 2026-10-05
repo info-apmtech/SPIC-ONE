@@ -184,6 +184,41 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("AckThroughs");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.AnnualBudgeting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AnnualBudgetings");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.AnnualSaleDataLastFYofDealerRegistration", b =>
                 {
                     b.Property<int>("Id")
@@ -216,6 +251,1794 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("AnnualSaleDataLastFY");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.AppErrorLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("App")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ExceptionType")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("IsResolved")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Method")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Route")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SessionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StackTrace")
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)");
+
+                    b.Property<int?>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At");
+
+                    b.HasIndex("TraceId");
+
+                    b.HasIndex("Fingerprint", "At");
+
+                    b.ToTable("AppErrorLogs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.AppPageView", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("App")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Route")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("SessionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At");
+
+                    b.HasIndex("UserId", "At");
+
+                    b.ToTable("AppPageViews");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.AppRequestLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("App")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Ip")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TraceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("UserName")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At");
+
+                    b.HasIndex("UserId", "At");
+
+                    b.ToTable("AppRequestLogs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.AppRouteDaily", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("App")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AvgDurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Day")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Errors")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Hits")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("P95DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Route")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<int>("Users")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Day", "App", "Kind", "Route")
+                        .IsUnique();
+
+                    b.ToTable("AppRouteDaily");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.AppUsageDaily", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ActiveUsers")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("App")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AvgDurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ComputedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("Day")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Errors")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("P95DurationMs")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PageViews")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Requests")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Day", "App", "Role")
+                        .IsUnique();
+
+                    b.ToTable("AppUsageDaily");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ApplicationPage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("HasActions")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Module")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("Pages");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Dashboard",
+                            Module = "DealerRegistration",
+                            Name = "Dashboard",
+                            SortOrder = 0,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Register",
+                            Module = "DealerRegistration",
+                            Name = "Register",
+                            SortOrder = 1,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Experience",
+                            Module = "DealerRegistration",
+                            Name = "Experience",
+                            SortOrder = 2,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AnnualSales",
+                            Module = "DealerRegistration",
+                            Name = "Annual Sales",
+                            SortOrder = 3,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Warehouse",
+                            Module = "DealerRegistration",
+                            Name = "Warehouse",
+                            SortOrder = 4,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "MarketDetails",
+                            Module = "DealerRegistration",
+                            Name = "Market Details",
+                            SortOrder = 5,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 7,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Companies",
+                            Module = "DealerRegistration",
+                            Name = "Companies",
+                            SortOrder = 6,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 8,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Proprietor",
+                            Module = "DealerRegistration",
+                            Name = "Proprietor",
+                            SortOrder = 7,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SalesPlaning",
+                            Module = "DealerRegistration",
+                            Name = "Sales Planing",
+                            SortOrder = 8,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Investment",
+                            Module = "DealerRegistration",
+                            Name = "Investment",
+                            SortOrder = 9,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 11,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CreditLimit",
+                            Module = "DealerRegistration",
+                            Name = "Credit Limit",
+                            SortOrder = 10,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 12,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CreditLimitForGreenStar",
+                            Module = "DealerRegistration",
+                            Name = "Credit Limit For Green Star",
+                            SortOrder = 11,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 13,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Enclosures",
+                            Module = "DealerRegistration",
+                            Name = "Enclosures",
+                            SortOrder = 12,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 14,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FinalSubmission",
+                            Module = "DealerRegistration",
+                            Name = "Final Submission",
+                            SortOrder = 13,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 15,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DealershipPDF",
+                            Module = "DealerRegistration",
+                            Name = "Dealership PDF",
+                            SortOrder = 14,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 16,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SavedDealerReview",
+                            Module = "DealerRegistration",
+                            Name = "Saved Dealer Review",
+                            SortOrder = 15,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 17,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Designation",
+                            Name = "Designation",
+                            SortOrder = 16,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 18,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "EmployeeManagement",
+                            Module = "Employee Management",
+                            Name = "Employee Management",
+                            SortOrder = 17,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 19,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "EmployeeRegistration",
+                            Module = "Employee Management",
+                            Name = "Employee Registration",
+                            SortOrder = 18,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 20,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "dealerreviewlist",
+                            Name = "dealerreviewlist",
+                            SortOrder = 19,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 21,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CreditLimitSales",
+                            Name = "Credit Limit Sales",
+                            SortOrder = 20,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 22,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LocationMaster",
+                            Name = "Location Master",
+                            SortOrder = 21,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 23,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Agriculture",
+                            Name = "Agriculture",
+                            SortOrder = 22,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 24,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Logistics",
+                            Name = "Logistics",
+                            SortOrder = 23,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 25,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Financial",
+                            Name = "Financial",
+                            SortOrder = 24,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 26,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Relationship",
+                            Name = "Relationship",
+                            SortOrder = 25,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 27,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Schemes",
+                            Name = "Schemes",
+                            SortOrder = 26,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 28,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CompanySales",
+                            Name = "Company Sales",
+                            SortOrder = 27,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 29,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SalesReport",
+                            Name = "Sales Report",
+                            SortOrder = 28,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 30,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AgeingReport",
+                            Name = "Ageing Report",
+                            SortOrder = 29,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 31,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Acknowledgement",
+                            Name = "Acknowledgement",
+                            SortOrder = 30,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 32,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LiquidationCycle",
+                            Name = "Liquidation Cycle",
+                            SortOrder = 31,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 33,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BudgetSubmissions",
+                            Name = "Budget Submissions",
+                            SortOrder = 32,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 34,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "WelfareSchemes",
+                            Name = "Welfare Schemes",
+                            SortOrder = 33,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 35,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SDWADashboard",
+                            Name = "SDWADashboard",
+                            SortOrder = 34,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 36,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Purchases",
+                            Name = "Purchases",
+                            SortOrder = 35,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 37,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Rewards",
+                            Name = "Rewards",
+                            SortOrder = 36,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 38,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CropAdvice",
+                            Name = "Crop Advice",
+                            SortOrder = 37,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 39,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "YieldPrediction",
+                            Name = "Yield Prediction",
+                            SortOrder = 38,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 40,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DiseaseDetection",
+                            Name = "Disease Detection",
+                            SortOrder = 39,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 41,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Community",
+                            Name = "Community",
+                            SortOrder = 40,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 42,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Notifications",
+                            Name = "Notifications",
+                            SortOrder = 41,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 43,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Profile",
+                            Name = "Profile",
+                            SortOrder = 42,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 44,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CSR1Create",
+                            Name = "CSR1 Create",
+                            SortOrder = 43,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 45,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CSR1Management",
+                            Name = "CSR1 Management",
+                            SortOrder = 44,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 46,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "TopRankingDistrict",
+                            Name = "Top Ranking District",
+                            SortOrder = 45,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 47,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "TopRankingRetailers",
+                            Name = "Top Ranking Retailers",
+                            SortOrder = 46,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 48,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "TopRankingWholesalers",
+                            Name = "Top Ranking Wholesalers",
+                            SortOrder = 47,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 49,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ProductWiseStockAvailability",
+                            Name = "Product Wise Stock Availability",
+                            SortOrder = 48,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 50,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "StockDetails",
+                            Name = "Stock Details",
+                            SortOrder = 49,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 51,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SubDealerRegistration",
+                            Name = "Sub Dealer Registration",
+                            SortOrder = 50,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 52,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SubDealerList",
+                            Name = "Sub Dealer List",
+                            SortOrder = 51,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 53,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SchemeApproval",
+                            Name = "Scheme Approval",
+                            SortOrder = 52,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 54,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SubDealerEmployeeMaster",
+                            Name = "Sub Dealer Employee Master",
+                            SortOrder = 53,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 55,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SDWA",
+                            Name = "SDWA",
+                            SortOrder = 54,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 56,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SDWAAdmin",
+                            Name = "SDWAAdmin",
+                            SortOrder = 55,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 57,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GuestHouse",
+                            Name = "Guest House",
+                            SortOrder = 56,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 58,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GuestHouseBooking",
+                            Name = "Guest House Booking",
+                            SortOrder = 57,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 59,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Rooms",
+                            Name = "Rooms",
+                            SortOrder = 58,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 60,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "RoomDetails",
+                            Name = "Room Details",
+                            SortOrder = 59,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 61,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GuestDetails",
+                            Name = "Guest Details",
+                            SortOrder = 60,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 62,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Payment",
+                            Name = "Payment",
+                            SortOrder = 61,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 63,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "MyBookings",
+                            Name = "My Bookings",
+                            SortOrder = 62,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 64,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BookingPreview",
+                            Name = "Booking Preview",
+                            SortOrder = 63,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 65,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BookingDetails",
+                            Name = "Booking Details",
+                            SortOrder = 64,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 66,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FrontOffice",
+                            Name = "Front Office",
+                            SortOrder = 65,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 67,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GenerateBill",
+                            Name = "Generate Bill",
+                            SortOrder = 66,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 68,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BillList",
+                            Name = "Bill List",
+                            SortOrder = 67,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 69,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LogisticsReport",
+                            Name = "Logistics Report",
+                            SortOrder = 68,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 70,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DealerStateSummary",
+                            Name = "Dealer State Summary",
+                            SortOrder = 69,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 71,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DigitalLibrary",
+                            Module = "Digital Library",
+                            Name = "Digital Library",
+                            SortOrder = 70,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 72,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SampleCollection",
+                            Module = "SAS",
+                            Name = "Sample Collection",
+                            SortOrder = 71,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 73,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ConsignmentHistory",
+                            Module = "SAS",
+                            Name = "Consignment History",
+                            SortOrder = 72,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 74,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "IfmsRelaySetup",
+                            Name = "Ifms Relay Setup",
+                            SortOrder = 73,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 75,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SchemeOverview",
+                            Name = "Scheme Overview",
+                            SortOrder = 74,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 76,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AddScheme",
+                            Name = "Add Scheme",
+                            SortOrder = 75,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 77,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "WinnerPopUp",
+                            Name = "Winner Pop Up",
+                            SortOrder = 76,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 78,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "WinnerDetails",
+                            Name = "Winner Details",
+                            SortOrder = 77,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 79,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Luckydraw",
+                            Name = "Luckydraw",
+                            SortOrder = 78,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 80,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LuckyDrawList",
+                            Name = "Lucky Draw List",
+                            SortOrder = 79,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 81,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SelectPurchasedProducts",
+                            Name = "Select Purchased Products",
+                            SortOrder = 80,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 82,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Scanproduct",
+                            Name = "Scanproduct",
+                            SortOrder = 81,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 83,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "qr-scanner",
+                            Name = "QR Scanner",
+                            SortOrder = 82,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 84,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BudgetOverview",
+                            Name = "Budget Overview",
+                            SortOrder = 83,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 85,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BudgetingManagements",
+                            Name = "Budgeting Managements",
+                            SortOrder = 84,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 86,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CSR2",
+                            Name = "CSR2",
+                            SortOrder = 85,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 87,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FinalReportCSRView",
+                            Name = "Final Report CSRView",
+                            SortOrder = 86,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 88,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "RMDValidationQueue",
+                            Name = "RMDValidation Queue",
+                            SortOrder = 87,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 89,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "MOSubmissionValidation",
+                            Name = "MOSubmission Validation",
+                            SortOrder = 88,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 90,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "RMApprovalStatus",
+                            Name = "RMApproval Status",
+                            SortOrder = 89,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 91,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SMMApprovals",
+                            Name = "SMMApprovals",
+                            SortOrder = 90,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 92,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AVPApprovals",
+                            Name = "AVPApprovals",
+                            SortOrder = 91,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 93,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ReportDashboard",
+                            Name = "Report Dashboard",
+                            SortOrder = 92,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 94,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ReportsCenter",
+                            Name = "Reports Center",
+                            SortOrder = 93,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 95,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ContactUs",
+                            Name = "Contact Us",
+                            SortOrder = 94,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 96,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LogisticsMaster",
+                            Name = "Logistics Master",
+                            SortOrder = 95,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 97,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "UserProfile",
+                            Name = "User Profile",
+                            SortOrder = 96,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 98,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabDashboard",
+                            Module = "SAS Lab",
+                            Name = "Lab Dashboard",
+                            SortOrder = 97,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 99,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabConsignments",
+                            Module = "SAS Lab",
+                            Name = "Lab Consignments",
+                            SortOrder = 98,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 100,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabAnalysis",
+                            Module = "SAS Lab",
+                            Name = "Lab Analysis",
+                            SortOrder = 99,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 101,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabReports",
+                            Module = "SAS Lab",
+                            Name = "Lab Reports",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 102,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabTestEntry",
+                            Module = "SAS Lab",
+                            Name = "Lab Test Entry",
+                            SortOrder = 101,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 103,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabTracking",
+                            Module = "SAS Lab",
+                            Name = "Lab Tracking",
+                            SortOrder = 102,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 104,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SasPaymentApproval",
+                            Module = "SAS",
+                            Name = "Sas Payment Approval",
+                            SortOrder = 103,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 105,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SasPaymentVerification",
+                            Module = "SAS",
+                            Name = "Sas Payment Verification",
+                            SortOrder = 104,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 106,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Metrics",
+                            Module = "Administration",
+                            Name = "Metrics",
+                            SortOrder = 105,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 107,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AnnualBudgeting",
+                            Name = "Annual Budgeting",
+                            SortOrder = 106,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 108,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "StateBudgetManagement",
+                            Name = "State Budget Management",
+                            SortOrder = 107,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        });
+                    // NOTE: FieldDashboard/MarkAttendance/TasksAllocation (Id 109-111) deliberately
+                    // left out of this snapshot too - see v18AddJmdoTaskAllocation's own comment.
+                    // Their reflection-computed ids collide with already-seeded Metrics/
+                    // AnnualBudgeting rows; re-add properly once that id collision is fixed.
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Bank", b =>
@@ -255,6 +2078,323 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("Banks");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgram", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("April")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("AprilCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("August")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("AugustCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("BudgetProgramMainId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("December")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("DecemberCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("February")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("FebruaryCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("January")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("JanuaryCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("July")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("JulyCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("June")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("JuneCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("March")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("MarchCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("May")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("MayCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("November")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("NovemberCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("October")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("OctoberCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("ProgramId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("September")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("SeptemberCount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BudgetProgramMainId");
+
+                    b.HasIndex("ProgramId");
+
+                    b.ToTable("BudgetPrograms");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgramMains", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("ApprovedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FinancialYear")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("SIDAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidateAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ValidateBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BudgetProgramMains");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR1", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Budget")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Compliments")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Inputs")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("JeepRunningExpenses")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("LocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NumberOfPrograms")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Others")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Photography")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("PrintingAndStationery")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("ProgramId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProgramTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PublicityMaterial")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Refreshments")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ResponsiblePersonId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ServiceChargesLCA")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("StageArrangements")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal>("TransportRent")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CSR1");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR1Products1", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CropId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CSR1Products1");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR1Products2", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CropId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CSR1Products2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR1Products3", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CropId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CSR1Products3");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -291,6 +2431,244 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("UnitId");
 
                     b.ToTable("Categories");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CommunityPost", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AuthorLocation")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthorName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthorRole")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthorUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Category")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Crop")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LastActivityAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("LikeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Product")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ReplyCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Tags")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Views")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorUserId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("LastActivityAt");
+
+                    b.HasIndex("Product");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("CommunityPosts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CommunityPostAttachment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PostId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ReplyId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoredPath")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PostId");
+
+                    b.HasIndex("ReplyId");
+
+                    b.ToTable("CommunityPostAttachments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CommunityPostReply", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AuthorLocation")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthorName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthorRole")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthorUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("LikeCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("MentionName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ParentReplyId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PostId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentReplyId");
+
+                    b.HasIndex("PostId", "CreatedAt");
+
+                    b.ToTable("CommunityPostReplies");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CommunityProductMember", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ProductName")
+                        .IsUnique();
+
+                    b.ToTable("CommunityProductMembers");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CommunityReaction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TargetType", "TargetId", "Kind");
+
+                    b.HasIndex("UserId", "TargetType", "TargetId", "Kind")
+                        .IsUnique();
+
+                    b.ToTable("CommunityReactions");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Company", b =>
@@ -351,6 +2729,51 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Competitors");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ConsignmentPhoto", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConsignmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoredPath")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UploadedByName")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConsignmentId");
+
+                    b.ToTable("ConsignmentPhotos");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CreditLimitHistory", b =>
@@ -1731,6 +4154,33 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("Designations");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.DesignationPermission", b =>
+                {
+                    b.Property<int>("DesignationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PageId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Delete")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Entry")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("Update")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("View")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("DesignationId", "PageId");
+
+                    b.HasIndex("PageId");
+
+                    b.ToTable("DesignationPermissions");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
                 {
                     b.Property<int>("Id")
@@ -2113,6 +4563,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime?>("CheckOutAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("CompanyName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -2127,6 +4580,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int?>("ExtraBeds")
                         .HasColumnType("integer");
+
+                    b.Property<string>("GstinNumber")
+                        .HasColumnType("text");
 
                     b.Property<int>("GuestHouseBookingId")
                         .HasColumnType("integer");
@@ -2343,6 +4799,15 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("AdminDecisionAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("AdminDecisionBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ApprovalStatus")
+                        .HasColumnType("integer");
+
                     b.Property<decimal?>("CancellationCharge")
                         .HasColumnType("numeric");
 
@@ -2372,6 +4837,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int>("RefundStatus")
                         .HasColumnType("integer");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text");
 
                     b.Property<string>("Remarks")
                         .HasColumnType("text");
@@ -2455,6 +4923,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("EmployeeOrDealerCode")
                         .HasColumnType("text");
 
+                    b.Property<string>("GstinNumber")
+                        .HasColumnType("text");
+
                     b.Property<int>("GuestHouseBookingId")
                         .HasColumnType("integer");
 
@@ -2476,12 +4947,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("text");
 
+                    b.Property<int?>("SdwaCompanyId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
                     b.HasKey("Id");
 
                     b.HasIndex("GuestHouseBookingId");
+
+                    b.HasIndex("SdwaCompanyId");
 
                     b.ToTable("GuestHouseBookingGuests");
                 });
@@ -2920,6 +5396,261 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("Headquarters");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("HeadquarterBudgetSummaryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HeadquarterBudgetSummaryId");
+
+                    b.HasIndex("RegionId");
+
+                    b.HasIndex("HeadquarterId", "FY")
+                        .IsUnique();
+
+                    b.ToTable("HeadquarterBudgetAllocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetAllocationHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ActionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("HeadquarterBudgetAllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HeadquarterBudgetAllocationId");
+
+                    b.HasIndex("HeadquarterId", "FY");
+
+                    b.ToTable("HeadquarterBudgetAllocationHistories");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetSummary", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RemainingAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RegionId", "FY")
+                        .IsUnique();
+
+                    b.ToTable("HeadquarterBudgetSummaries");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetSummaryHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ActionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("HeadquarterBudgetSummaryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RemainingAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HeadquarterBudgetSummaryId");
+
+                    b.HasIndex("RegionId", "FY");
+
+                    b.ToTable("HeadquarterBudgetSummaryHistories");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.IfmsDealer", b =>
                 {
                     b.Property<int>("Id")
@@ -2989,6 +5720,1691 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("IfmsProducts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("AllocationDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("DapTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("NpsTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OthersTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReviewRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SoilSampleTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("SpcmTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SubmittedByRole")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SubmittedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("UreaTarget")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationDate");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("SubmittedByUserId");
+
+                    b.ToTable("JmdoTaskAllocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationDealer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DealerCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DealerName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SubDealerId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationId");
+
+                    b.ToTable("JmdoTaskAllocationDealers");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationProgram", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("Budget")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("Csr1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProgramName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationId");
+
+                    b.ToTable("JmdoTaskAllocationPrograms");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("BatchId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ByName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ByRole")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind");
+
+                    b.HasIndex("BatchId", "At");
+
+                    b.ToTable("LabActivities");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabCropRecommendation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Crop")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DayNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("KgPerAcre")
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("Nutrient")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Product")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Stage")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Crop", "Stage", "SortOrder");
+
+                    b.ToTable("LabCropRecommendations");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 300m,
+                            Nutrient = "Organic",
+                            Product = "SPIC Jyoti",
+                            SortOrder = 1,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 200m,
+                            Nutrient = "Gypsum",
+                            Product = "SPIC Gypsum",
+                            SortOrder = 2,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 100m,
+                            Nutrient = "Organic",
+                            Product = "SPIC Sangamam",
+                            SortOrder = 3,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "N,P",
+                            Product = "SPIC DAP",
+                            SortOrder = 4,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "N",
+                            Product = "SPIC Urea",
+                            SortOrder = 5,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "K",
+                            Product = "Potash",
+                            SortOrder = 6,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 12m,
+                            Nutrient = "Zn",
+                            Product = "SPIC Zinc Sulphate",
+                            SortOrder = 7,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "Fe",
+                            Product = "Ferrous Sulphate",
+                            SortOrder = 8,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "Mn",
+                            Product = "Manganese Sulphate",
+                            SortOrder = 9,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Crop = "Banana",
+                            IsActive = true,
+                            KgPerAcre = 5m,
+                            Nutrient = "Cu",
+                            Product = "Copper Sulphate",
+                            SortOrder = 10,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Crop = "Banana",
+                            DayNumber = 90,
+                            IsActive = true,
+                            KgPerAcre = 82.5m,
+                            Nutrient = "N,P",
+                            Product = "SPIC DAP",
+                            SortOrder = 1,
+                            Stage = 1
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Crop = "Banana",
+                            DayNumber = 90,
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "N",
+                            Product = "SPIC Urea",
+                            SortOrder = 2,
+                            Stage = 1
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Crop = "Banana",
+                            DayNumber = 90,
+                            IsActive = true,
+                            KgPerAcre = 150m,
+                            Nutrient = "K",
+                            Product = "Potash",
+                            SortOrder = 3,
+                            Stage = 1
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Crop = "Banana",
+                            DayNumber = 150,
+                            IsActive = true,
+                            KgPerAcre = 125m,
+                            Nutrient = "N",
+                            Product = "SPIC Urea",
+                            SortOrder = 1,
+                            Stage = 2
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Crop = "Banana",
+                            DayNumber = 150,
+                            IsActive = true,
+                            KgPerAcre = 112.5m,
+                            Nutrient = "K",
+                            Product = "Potash",
+                            SortOrder = 2,
+                            Stage = 2
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Crop = "Banana",
+                            DayNumber = 210,
+                            IsActive = true,
+                            KgPerAcre = 125m,
+                            Nutrient = "N",
+                            Product = "SPIC Urea",
+                            SortOrder = 1,
+                            Stage = 3
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Crop = "Banana",
+                            DayNumber = 210,
+                            IsActive = true,
+                            KgPerAcre = 112.5m,
+                            Nutrient = "K",
+                            Product = "Potash",
+                            SortOrder = 2,
+                            Stage = 3
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 300m,
+                            Nutrient = "Organic",
+                            Product = "SPIC Jyoti",
+                            SortOrder = 1,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 19,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 200m,
+                            Nutrient = "Gypsum",
+                            Product = "SPIC Gypsum",
+                            SortOrder = 2,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 100m,
+                            Nutrient = "Organic",
+                            Product = "SPIC Sangamam",
+                            SortOrder = 3,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "N,P",
+                            Product = "SPIC DAP",
+                            SortOrder = 4,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "N",
+                            Product = "SPIC Urea",
+                            SortOrder = 5,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "K",
+                            Product = "Potash",
+                            SortOrder = 6,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 24,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 12m,
+                            Nutrient = "Zn",
+                            Product = "SPIC Zinc Sulphate",
+                            SortOrder = 7,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 25,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "Fe",
+                            Product = "Ferrous Sulphate",
+                            SortOrder = 8,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 26,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "Mn",
+                            Product = "Manganese Sulphate",
+                            SortOrder = 9,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 27,
+                            Crop = "General",
+                            IsActive = true,
+                            KgPerAcre = 5m,
+                            Nutrient = "Cu",
+                            Product = "Copper Sulphate",
+                            SortOrder = 10,
+                            Stage = 0
+                        },
+                        new
+                        {
+                            Id = 28,
+                            Crop = "General",
+                            DayNumber = 90,
+                            IsActive = true,
+                            KgPerAcre = 82.5m,
+                            Nutrient = "N,P",
+                            Product = "SPIC DAP",
+                            SortOrder = 1,
+                            Stage = 1
+                        },
+                        new
+                        {
+                            Id = 29,
+                            Crop = "General",
+                            DayNumber = 90,
+                            IsActive = true,
+                            KgPerAcre = 0m,
+                            Nutrient = "N",
+                            Product = "SPIC Urea",
+                            SortOrder = 2,
+                            Stage = 1
+                        },
+                        new
+                        {
+                            Id = 30,
+                            Crop = "General",
+                            DayNumber = 90,
+                            IsActive = true,
+                            KgPerAcre = 150m,
+                            Nutrient = "K",
+                            Product = "Potash",
+                            SortOrder = 3,
+                            Stage = 1
+                        },
+                        new
+                        {
+                            Id = 31,
+                            Crop = "General",
+                            DayNumber = 150,
+                            IsActive = true,
+                            KgPerAcre = 125m,
+                            Nutrient = "N",
+                            Product = "SPIC Urea",
+                            SortOrder = 1,
+                            Stage = 2
+                        },
+                        new
+                        {
+                            Id = 32,
+                            Crop = "General",
+                            DayNumber = 150,
+                            IsActive = true,
+                            KgPerAcre = 112.5m,
+                            Nutrient = "K",
+                            Product = "Potash",
+                            SortOrder = 2,
+                            Stage = 2
+                        },
+                        new
+                        {
+                            Id = 33,
+                            Crop = "General",
+                            DayNumber = 210,
+                            IsActive = true,
+                            KgPerAcre = 125m,
+                            Nutrient = "N",
+                            Product = "SPIC Urea",
+                            SortOrder = 1,
+                            Stage = 3
+                        },
+                        new
+                        {
+                            Id = 34,
+                            Crop = "General",
+                            DayNumber = 210,
+                            IsActive = true,
+                            KgPerAcre = 112.5m,
+                            Nutrient = "K",
+                            Product = "Potash",
+                            SortOrder = 2,
+                            Stage = 3
+                        });
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabDocument", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BatchId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StoredPath")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UploadedByName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UploadedByUserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("Kind");
+
+                    b.ToTable("LabDocuments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabParameter", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AppliesTo")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("DerivedFactor")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("DerivedFromCode")
+                        .HasColumnType("text");
+
+                    b.Property<string>("HighHint")
+                        .HasColumnType("text");
+
+                    b.Property<string>("HighLabel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LowHint")
+                        .HasColumnType("text");
+
+                    b.Property<string>("LowLabel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("ModerateFrom")
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("NormalHint")
+                        .HasColumnType("text");
+
+                    b.Property<string>("NormalLabel")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("NormalRange")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Options")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("RangeMax")
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<decimal?>("RangeMin")
+                        .HasColumnType("numeric(12,4)");
+
+                    b.Property<string>("RecommendationGroup")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReportingLimit")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .HasColumnType("text");
+
+                    b.Property<int>("ValueType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("AppliesTo", "SortOrder");
+
+                    b.ToTable("LabParameters");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            AppliesTo = 0,
+                            Code = "S-PH",
+                            HighHint = "Apply gypsum to reduce alkalinity",
+                            HighLabel = "Alkaline",
+                            IsActive = true,
+                            LowHint = "Apply lime to correct soil acidity",
+                            LowLabel = "Acidic",
+                            Name = "pH",
+                            NormalHint = "Suitable for crop growth",
+                            NormalLabel = "Neutral",
+                            NormalRange = "6.5 - 7.5",
+                            RangeMax = 7.5m,
+                            RangeMin = 6.5m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 1,
+                            Unit = "-",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 2,
+                            AppliesTo = 0,
+                            Code = "S-EC",
+                            HighHint = "Improve drainage and leach salts",
+                            HighLabel = "Saline",
+                            IsActive = true,
+                            LowHint = "No salinity issue",
+                            LowLabel = "Safe",
+                            Name = "EC",
+                            NormalHint = "No salinity issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 1.0",
+                            RangeMax = 1.0m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.01",
+                            SortOrder = 2,
+                            Unit = "dS/m",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 3,
+                            AppliesTo = 0,
+                            Code = "S-OC",
+                            HighHint = "Organic matter is high; no addition needed",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Add organic manure / compost",
+                            LowLabel = "Low",
+                            Name = "Organic Carbon",
+                            NormalHint = "Maintain organic matter",
+                            NormalLabel = "Medium",
+                            NormalRange = "0.5 - 0.75",
+                            RangeMax = 0.75m,
+                            RangeMin = 0.5m,
+                            RecommendationGroup = "Organic",
+                            ReportingLimit = "0.01",
+                            SortOrder = 3,
+                            Unit = "%",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 4,
+                            AppliesTo = 0,
+                            Code = "S-N",
+                            HighHint = "Reduce nitrogen-based fertilizer",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply nitrogen fertilizer",
+                            LowLabel = "Low",
+                            Name = "Nitrogen",
+                            NormalHint = "Maintain standard nitrogen dosage",
+                            NormalLabel = "Medium",
+                            NormalRange = "280 - 560",
+                            RangeMax = 560m,
+                            RangeMin = 280m,
+                            RecommendationGroup = "Fertilizer",
+                            ReportingLimit = "1",
+                            SortOrder = 4,
+                            Unit = "kg/ha",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 5,
+                            AppliesTo = 0,
+                            Code = "S-P",
+                            HighHint = "Reduce phosphorus-based fertilizer",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply phosphorus fertilizer",
+                            LowLabel = "Low",
+                            Name = "Phosphorus",
+                            NormalHint = "Maintain standard phosphorus dosage",
+                            NormalLabel = "Medium",
+                            NormalRange = "22 - 56",
+                            RangeMax = 56m,
+                            RangeMin = 22m,
+                            RecommendationGroup = "Fertilizer",
+                            ReportingLimit = "1",
+                            SortOrder = 5,
+                            Unit = "kg/ha",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 6,
+                            AppliesTo = 0,
+                            Code = "S-K",
+                            HighHint = "Reduce potassium-based fertilizer",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply potassium fertilizer",
+                            LowLabel = "Low",
+                            Name = "Potassium",
+                            NormalHint = "Maintain standard potassium dosage",
+                            NormalLabel = "Medium",
+                            NormalRange = "110 - 280",
+                            RangeMax = 280m,
+                            RangeMin = 110m,
+                            RecommendationGroup = "Fertilizer",
+                            ReportingLimit = "1",
+                            SortOrder = 6,
+                            Unit = "kg/ha",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 7,
+                            AppliesTo = 0,
+                            Code = "S-ZN",
+                            HighHint = "Avoid further zinc application",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply zinc micronutrient",
+                            LowLabel = "Low",
+                            Name = "Zinc",
+                            NormalHint = "Zinc is adequate",
+                            NormalLabel = "Medium",
+                            NormalRange = "0.6 - 1.2",
+                            RangeMax = 1.2m,
+                            RangeMin = 0.6m,
+                            RecommendationGroup = "Micronutrient",
+                            ReportingLimit = "0.1",
+                            SortOrder = 7,
+                            Unit = "ppm",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 8,
+                            AppliesTo = 0,
+                            Code = "S-FE",
+                            HighHint = "Avoid further iron application",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply iron micronutrient (ferrous sulphate)",
+                            LowLabel = "Low",
+                            Name = "Iron",
+                            NormalHint = "Iron is adequate",
+                            NormalLabel = "Medium",
+                            NormalRange = "4.5 - 9.0",
+                            RangeMax = 9.0m,
+                            RangeMin = 4.5m,
+                            RecommendationGroup = "Micronutrient",
+                            ReportingLimit = "0.1",
+                            SortOrder = 8,
+                            Unit = "ppm",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 9,
+                            AppliesTo = 0,
+                            Code = "S-MN",
+                            HighHint = "Avoid further manganese application",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply manganese micronutrient",
+                            LowLabel = "Low",
+                            Name = "Manganese",
+                            NormalHint = "Manganese is adequate",
+                            NormalLabel = "Medium",
+                            NormalRange = "2.0 - 4.0",
+                            RangeMax = 4.0m,
+                            RangeMin = 2.0m,
+                            RecommendationGroup = "Micronutrient",
+                            ReportingLimit = "0.1",
+                            SortOrder = 9,
+                            Unit = "ppm",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 10,
+                            AppliesTo = 0,
+                            Code = "S-CU",
+                            HighHint = "Avoid further copper application",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply copper micronutrient",
+                            LowLabel = "Low",
+                            Name = "Copper",
+                            NormalHint = "Copper is adequate",
+                            NormalLabel = "Medium",
+                            NormalRange = "0.2 - 0.5",
+                            RangeMax = 0.5m,
+                            RangeMin = 0.2m,
+                            RecommendationGroup = "Micronutrient",
+                            ReportingLimit = "0.01",
+                            SortOrder = 10,
+                            Unit = "ppm",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 11,
+                            AppliesTo = 0,
+                            Code = "S-B",
+                            HighHint = "Avoid further boron application",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply borax",
+                            LowLabel = "Low",
+                            Name = "Boron",
+                            NormalHint = "Boron is adequate",
+                            NormalLabel = "Medium",
+                            NormalRange = "0.5 - 1.0",
+                            RangeMax = 1.0m,
+                            RangeMin = 0.5m,
+                            RecommendationGroup = "Micronutrient",
+                            ReportingLimit = "0.01",
+                            SortOrder = 11,
+                            Unit = "ppm",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 12,
+                            AppliesTo = 0,
+                            Code = "S-S",
+                            HighHint = "Avoid further sulphur application",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Apply sulphur (gypsum)",
+                            LowLabel = "Low",
+                            Name = "Sulphur",
+                            NormalHint = "Sulphur is adequate",
+                            NormalLabel = "Medium",
+                            NormalRange = "10 - 20",
+                            RangeMax = 20m,
+                            RangeMin = 10m,
+                            RecommendationGroup = "Fertilizer",
+                            ReportingLimit = "0.1",
+                            SortOrder = 12,
+                            Unit = "ppm",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 13,
+                            AppliesTo = 1,
+                            Code = "W-PH",
+                            HighHint = "Water is alkaline; treat before use",
+                            HighLabel = "Alkaline",
+                            IsActive = true,
+                            LowHint = "Water is acidic; neutralise before use",
+                            LowLabel = "Acidic",
+                            Name = "pH",
+                            NormalHint = "Suitable for irrigation",
+                            NormalLabel = "Neutral",
+                            NormalRange = "6.5 - 8.5",
+                            RangeMax = 8.5m,
+                            RangeMin = 6.5m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 1,
+                            Unit = "-",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 14,
+                            AppliesTo = 1,
+                            Code = "W-EC",
+                            HighHint = "Saline water; blend with fresh water",
+                            HighLabel = "Saline",
+                            IsActive = true,
+                            LowHint = "No salinity issue",
+                            LowLabel = "Safe",
+                            Name = "EC",
+                            NormalHint = "No salinity issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 0.75",
+                            RangeMax = 0.75m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.01",
+                            SortOrder = 2,
+                            Unit = "dS/m",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 15,
+                            AppliesTo = 1,
+                            Code = "W-TDS",
+                            HighHint = "High dissolved solids; use with caution",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No issue",
+                            LowLabel = "Safe",
+                            Name = "Total Dissolved Solids",
+                            NormalHint = "No issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 500",
+                            RangeMax = 500m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "1",
+                            SortOrder = 3,
+                            Unit = "mg/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 16,
+                            AppliesTo = 1,
+                            Code = "W-CL",
+                            HighHint = "Chloride is high; avoid on sensitive crops",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No issue",
+                            LowLabel = "Safe",
+                            Name = "Chloride",
+                            NormalHint = "No issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 4",
+                            RangeMax = 4m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 4,
+                            Unit = "meq/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 17,
+                            AppliesTo = 1,
+                            Code = "W-SO4",
+                            HighHint = "Sulphate is high",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No issue",
+                            LowLabel = "Safe",
+                            Name = "Sulphate",
+                            NormalHint = "No issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 4",
+                            RangeMax = 4m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 5,
+                            Unit = "meq/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 18,
+                            AppliesTo = 1,
+                            Code = "W-CO3",
+                            HighHint = "Carbonate is high; apply gypsum",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No issue",
+                            LowLabel = "Safe",
+                            Name = "Carbonate",
+                            NormalHint = "No issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 0.5",
+                            RangeMax = 0.5m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.01",
+                            SortOrder = 6,
+                            Unit = "meq/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 19,
+                            AppliesTo = 1,
+                            Code = "W-HCO3",
+                            HighHint = "Bicarbonate is high; apply gypsum",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No issue",
+                            LowLabel = "Safe",
+                            Name = "Bicarbonate",
+                            NormalHint = "No issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 2.5",
+                            RangeMax = 2.5m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 7,
+                            Unit = "meq/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 20,
+                            AppliesTo = 1,
+                            Code = "W-NA",
+                            HighHint = "Sodium is high; risk of sodicity",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No issue",
+                            LowLabel = "Safe",
+                            Name = "Sodium",
+                            NormalHint = "No issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 3",
+                            RangeMax = 3m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 8,
+                            Unit = "meq/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 21,
+                            AppliesTo = 1,
+                            Code = "W-CA",
+                            HighHint = "Calcium is high",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Calcium is low",
+                            LowLabel = "Low",
+                            Name = "Calcium",
+                            NormalHint = "Calcium is adequate",
+                            NormalLabel = "Medium",
+                            NormalRange = "1 - 5",
+                            RangeMax = 5m,
+                            RangeMin = 1m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 9,
+                            Unit = "meq/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 22,
+                            AppliesTo = 1,
+                            Code = "W-MG",
+                            HighHint = "Magnesium is high",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Magnesium is low",
+                            LowLabel = "Low",
+                            Name = "Magnesium",
+                            NormalHint = "Magnesium is adequate",
+                            NormalLabel = "Medium",
+                            NormalRange = "0.5 - 3",
+                            RangeMax = 3m,
+                            RangeMin = 0.5m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 10,
+                            Unit = "meq/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 23,
+                            AppliesTo = 1,
+                            Code = "W-SAR",
+                            HighHint = "Sodicity hazard; apply gypsum",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No sodicity hazard",
+                            LowLabel = "Safe",
+                            Name = "Sodium Adsorption Ratio",
+                            NormalHint = "No sodicity hazard",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 10",
+                            RangeMax = 10m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 11,
+                            Unit = "-",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 24,
+                            AppliesTo = 1,
+                            Code = "W-RSC",
+                            HighHint = "Unsuitable without gypsum treatment",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Safe for irrigation",
+                            LowLabel = "Safe",
+                            Name = "Residual Sodium Carbonate",
+                            NormalHint = "Safe for irrigation",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 1.25",
+                            RangeMax = 1.25m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.01",
+                            SortOrder = 12,
+                            Unit = "meq/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 25,
+                            AppliesTo = 1,
+                            Code = "W-NO3",
+                            HighHint = "Nitrate is high",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No issue",
+                            LowLabel = "Safe",
+                            Name = "Nitrate",
+                            NormalHint = "No issue",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 10",
+                            RangeMax = 10m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "0.1",
+                            SortOrder = 13,
+                            Unit = "mg/L",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 26,
+                            AppliesTo = 1,
+                            Code = "W-MB",
+                            HighHint = "Microbial contamination; disinfect before use",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "No contamination",
+                            LowLabel = "Safe",
+                            Name = "Total Coliforms",
+                            NormalHint = "No contamination",
+                            NormalLabel = "Safe",
+                            NormalRange = "0 - 1",
+                            RangeMax = 1m,
+                            RangeMin = 0m,
+                            RecommendationGroup = "General",
+                            ReportingLimit = "1",
+                            SortOrder = 14,
+                            Unit = "CFU/100mL",
+                            ValueType = 0
+                        },
+                        new
+                        {
+                            Id = 27,
+                            AppliesTo = 0,
+                            Code = "S-TEX",
+                            HighLabel = "-",
+                            IsActive = true,
+                            LowLabel = "-",
+                            Name = "Texture",
+                            NormalLabel = "-",
+                            Options = "Sandy|Loamy Sand|Sandy Loam|Loam|Silt Loam|Clay Loam|Sandy Clay|Silty Clay|Clay|Sandy Clay Silt",
+                            RecommendationGroup = "General",
+                            SortOrder = 0,
+                            ValueType = 1
+                        },
+                        new
+                        {
+                            Id = 28,
+                            AppliesTo = 0,
+                            Code = "S-OM",
+                            DerivedFactor = 1.724m,
+                            DerivedFromCode = "S-OC",
+                            HighHint = "Organic matter is high; no addition needed",
+                            HighLabel = "High",
+                            IsActive = true,
+                            LowHint = "Add organic manure / compost",
+                            LowLabel = "Low",
+                            Name = "Organic Matter",
+                            NormalHint = "Maintain organic matter",
+                            NormalLabel = "Moderate",
+                            NormalRange = "0.87 - 1.29",
+                            RangeMax = 1.29m,
+                            RangeMin = 0.87m,
+                            RecommendationGroup = "Organic",
+                            ReportingLimit = "0.01",
+                            SortOrder = 3,
+                            Unit = "%",
+                            ValueType = 0
+                        });
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BatchId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("DownloadCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FinancialYearStart")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("GeneratedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("GeneratedByName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LastDownloadedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("PrintedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("SampleItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SampleType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("FinancialYearStart");
+
+                    b.HasIndex("GeneratedAt");
+
+                    b.HasIndex("SampleItemId", "SampleType")
+                        .IsUnique();
+
+                    b.ToTable("LabReports");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabTranslation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Lang")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key", "Lang")
+                        .IsUnique();
+
+                    b.ToTable("LabTranslations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LibraryCategory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("NormalizedName")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasComputedColumnSql("lower(\"Name\")", true);
+
+                    b.Property<int?>("ParentCategoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentCategoryId");
+
+                    b.HasIndex("Kind", "NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("LibraryCategories");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LibraryContent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdditionalSectionsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthorName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AuthorUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Category")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CoverImagePath")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DocumentName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DocumentPath")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("DocumentSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("DurationSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Features")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Format")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Keywords")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LayoutJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Overview")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("RelatedBrochuresJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RelatedVideosJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ShortDescription")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SubCategory")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Tags")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Usage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VideoFilePath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VideoUrl")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Views")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Visibility")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PublishedAt");
+
+                    b.HasIndex("Kind", "Status");
+
+                    b.ToTable("LibraryContents");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LibraryConversation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "UpdatedAt");
+
+                    b.ToTable("LibraryConversations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LibraryMessage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("ConversationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Provider")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourcesJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConversationId");
+
+                    b.ToTable("LibraryMessages");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LogisticsApprovalHistory", b =>
@@ -3119,9 +7535,15 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool?>("IsSpecialityProduct")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -3346,6 +7768,164 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("ProductGroups");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramHQBudget", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BudgetAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("HQId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HeadquartersId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProgramRegionBudgetId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HeadquartersId");
+
+                    b.HasIndex("ProgramRegionBudgetId");
+
+                    b.ToTable("ProgramHQBudgets");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramMaster", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsMO")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsRMDO")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsSMDO")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("ProgramTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProgramTypeId");
+
+                    b.ToTable("ProgramMasters");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramRegionBudget", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BudgetAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("ProgramStateBudgetId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProgramStateBudgetId");
+
+                    b.HasIndex("RegionId");
+
+                    b.ToTable("ProgramRegionBudgets");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramStateBudget", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("BudgetAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("ProgramId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProgramId");
+
+                    b.HasIndex("StateId");
+
+                    b.ToTable("ProgramStateBudgets");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsChangeAmount")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ProgramTypes");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
                 {
                     b.Property<int>("Id")
@@ -3509,6 +8089,9 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -3555,6 +8138,261 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("StateId");
 
                     b.ToTable("Regions");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionBudgetSummaryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RegionBudgetSummaryId");
+
+                    b.HasIndex("StateId");
+
+                    b.HasIndex("RegionId", "FY")
+                        .IsUnique();
+
+                    b.ToTable("RegionBudgetAllocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetAllocationHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ActionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RegionBudgetAllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RegionBudgetAllocationId");
+
+                    b.HasIndex("RegionId", "FY");
+
+                    b.ToTable("RegionBudgetAllocationHistories");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetSummary", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("RemainingAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StateId", "FY")
+                        .IsUnique();
+
+                    b.ToTable("RegionBudgetSummaries");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetSummaryHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ActionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RegionBudgetSummaryId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("RemainingAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RegionBudgetSummaryId");
+
+                    b.HasIndex("StateId", "FY");
+
+                    b.ToTable("RegionBudgetSummaryHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Relationship", b =>
@@ -4056,6 +8894,832 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("SalesWholesalers");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.SampleBatch", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AnalysisCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("AnalysisStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("AssignedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("AssignedByName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AssignedToName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AssignedToUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("BatchDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedByName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FinalRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ReportCode")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReportGeneratedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("SampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("TakenForAnalysisAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedToUserId");
+
+                    b.HasIndex("BatchDate");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("ReportCode")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("SampleBatches");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleCollection", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CollectedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("CollectedByRole")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CollectedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CollectionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("ConsignmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LocationName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("PaidCategory")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PaymentType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("TotalAmount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CollectedByUserId");
+
+                    b.HasIndex("CollectionDate");
+
+                    b.HasIndex("ConsignmentId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("SampleCollections");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleConsignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("BatchId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactEmail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactMobile")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ContactPerson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CourierService")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("DispatchedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("DispatchedByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("DispatchedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ExpectedDeliveryDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text");
+
+                    b.Property<int>("PackageCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("PackageWeightKg")
+                        .HasColumnType("numeric(8,2)");
+
+                    b.Property<string>("PackagingType")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TrackingLink")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TrackingNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BatchId");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("DispatchedAt");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("SampleConsignments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime?>("AnalysisCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("AnalysisStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("AnalysisStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CollectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Crop1")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Crop2")
+                        .HasColumnType("text");
+
+                    b.Property<int>("FarmerId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("NoOfTests")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SampleType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AnalysisStatus");
+
+                    b.HasIndex("CollectionId");
+
+                    b.HasIndex("FarmerId");
+
+                    b.ToTable("SampleItems");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleLabResult", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("EnteredAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("EnteredByName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EnteredValue")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Hint")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("LabParameterId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NormalRange")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Parameter")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResultLabel")
+                        .HasColumnType("text");
+
+                    b.Property<int>("SampleItemId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Unit")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LabParameterId");
+
+                    b.HasIndex("SampleItemId");
+
+                    b.ToTable("SampleLabResults");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SamplePayment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AdminRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("BankGateway")
+                        .HasColumnType("text");
+
+                    b.Property<string>("BankName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Code")
+                        .HasColumnType("text");
+
+                    b.Property<int>("CollectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContactNumber")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("FinanceReceivedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FinanceRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<int>("FinanceStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("FinanceVerifiedAmount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<DateTime?>("FinanceVerifiedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("FinanceVerifiedByName")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ForwardedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ForwardedToName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("MoRemarks")
+                        .HasColumnType("text");
+
+                    b.Property<string>("PaidByName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("PaymentMode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProofPath")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RejectReason")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ReviewedByName")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("TransactionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TransactionId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UtrNumber")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("VerifiedAmount")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("CollectionId");
+
+                    b.HasIndex("FinanceStatus");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("SamplePayments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SasCourier", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TrackingUrlTemplate")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SasCouriers");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            IsActive = true,
+                            Name = "Professional Courier",
+                            TrackingUrlTemplate = "https://www.tpcindia.com/Tracking2014.aspx?id={0}"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            IsActive = true,
+                            Name = "Blue Dart Express",
+                            TrackingUrlTemplate = "https://www.bluedart.com/tracking?awb={0}"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            IsActive = true,
+                            Name = "DTDC",
+                            TrackingUrlTemplate = "https://www.dtdc.in/tracking.asp?awb={0}"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            IsActive = true,
+                            Name = "India Post",
+                            TrackingUrlTemplate = "https://www.indiapost.gov.in/_layouts/15/DOP.Portal.Tracking/TrackConsignment.aspx"
+                        });
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SasFarmer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address1")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Address2")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DistrictId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DistrictName")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Mobile")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PinCode")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StateName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SurveyNumber")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Taluk")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Village")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Mobile");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("SasFarmers");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SasSampleCharge", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AmountPerSample")
+                        .HasColumnType("numeric(12,2)");
+
+                    b.Property<int>("Category")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("NoOfTests")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SampleType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SampleType", "Category")
+                        .IsUnique();
+
+                    b.ToTable("SasSampleCharges");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            AmountPerSample = 100m,
+                            Category = 0,
+                            IsActive = true,
+                            NoOfTests = 1,
+                            SampleType = 0
+                        },
+                        new
+                        {
+                            Id = 2,
+                            AmountPerSample = 100m,
+                            Category = 0,
+                            IsActive = true,
+                            NoOfTests = 1,
+                            SampleType = 1
+                        },
+                        new
+                        {
+                            Id = 3,
+                            AmountPerSample = 150m,
+                            Category = 0,
+                            IsActive = true,
+                            NoOfTests = 2,
+                            SampleType = 2
+                        },
+                        new
+                        {
+                            Id = 4,
+                            AmountPerSample = 150m,
+                            Category = 1,
+                            IsActive = true,
+                            NoOfTests = 1,
+                            SampleType = 0
+                        },
+                        new
+                        {
+                            Id = 5,
+                            AmountPerSample = 150m,
+                            Category = 1,
+                            IsActive = true,
+                            NoOfTests = 1,
+                            SampleType = 1
+                        },
+                        new
+                        {
+                            Id = 6,
+                            AmountPerSample = 200m,
+                            Category = 1,
+                            IsActive = true,
+                            NoOfTests = 2,
+                            SampleType = 2
+                        });
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SasStatusEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ByName")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("CollectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ConsignmentId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CollectionId");
+
+                    b.HasIndex("ConsignmentId");
+
+                    b.ToTable("SasStatusEvents");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SdwaCompany", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CompanyName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GSTIN")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ShortCode")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SdwaCompanies");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SdwaCompanyGuestHouse", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("GuestHouseId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SdwaCompanyId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuestHouseId");
+
+                    b.HasIndex("SdwaCompanyId");
+
+                    b.ToTable("SdwaCompanyGuestHouses");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Sector", b =>
                 {
                     b.Property<int>("Id")
@@ -4156,6 +9820,247 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("ZoneId");
 
                     b.ToTable("States");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetAllocation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("StateBudgetSummaryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StateBudgetSummaryId");
+
+                    b.HasIndex("StateId", "FY")
+                        .IsUnique();
+
+                    b.ToTable("StateBudgetAllocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetAllocationHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ActionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("StateBudgetAllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StateBudgetAllocationId");
+
+                    b.HasIndex("StateId", "FY");
+
+                    b.ToTable("StateBudgetAllocationHistories");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetSummary", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("RemainingAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Draft");
+
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FY")
+                        .IsUnique();
+
+                    b.ToTable("StateBudgetSummaries");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetSummaryHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("ActionDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("AllocatedAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ApprovedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FY")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("RemainingAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("StateBudgetSummaryId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("TotalBudget")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("ValidatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidatedDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FY");
+
+                    b.HasIndex("StateBudgetSummaryId");
+
+                    b.ToTable("StateBudgetSummaryHistories");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.StateGlobalStockReconciliation", b =>
@@ -5387,6 +11292,25 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgram", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.BudgetProgramMains", "BudgetProgramMain")
+                        .WithMany("Programs")
+                        .HasForeignKey("BudgetProgramMainId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.ProgramMaster", "Program")
+                        .WithMany()
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BudgetProgramMain");
+
+                    b.Navigation("Program");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.Unit", "Unit")
@@ -5396,6 +11320,58 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Unit");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CommunityPostAttachment", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CommunityPost", "Post")
+                        .WithMany("Attachments")
+                        .HasForeignKey("PostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Post");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CommunityPostReply", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CommunityPost", "Post")
+                        .WithMany("Replies")
+                        .HasForeignKey("PostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Post");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ConsignmentPhoto", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleConsignment", "Consignment")
+                        .WithMany("Photos")
+                        .HasForeignKey("ConsignmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Consignment");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.DesignationPermission", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.Designation", "Designation")
+                        .WithMany()
+                        .HasForeignKey("DesignationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.ApplicationPage", "Page")
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Designation");
+
+                    b.Navigation("Page");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
@@ -5480,7 +11456,13 @@ namespace Spic.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("SPIC.Core.Entities.SdwaCompany", "SdwaCompany")
+                        .WithMany()
+                        .HasForeignKey("SdwaCompanyId");
+
                     b.Navigation("GuestHouseBooking");
+
+                    b.Navigation("SdwaCompany");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouseBookingPayment", b =>
@@ -5615,6 +11597,149 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Region");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetAllocation", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.HeadquarterBudgetSummary", "HeadquarterBudgetSummary")
+                        .WithMany("HeadquarterBudgetAllocations")
+                        .HasForeignKey("HeadquarterBudgetSummaryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SPIC.Core.Entities.Headquarter", "Headquarter")
+                        .WithMany()
+                        .HasForeignKey("HeadquarterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.Region", "Region")
+                        .WithMany()
+                        .HasForeignKey("RegionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Headquarter");
+
+                    b.Navigation("HeadquarterBudgetSummary");
+
+                    b.Navigation("Region");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetAllocationHistory", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.HeadquarterBudgetAllocation", "HeadquarterBudgetAllocation")
+                        .WithMany()
+                        .HasForeignKey("HeadquarterBudgetAllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("HeadquarterBudgetAllocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetSummary", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.Region", "Region")
+                        .WithMany()
+                        .HasForeignKey("RegionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Region");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetSummaryHistory", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.HeadquarterBudgetSummary", "HeadquarterBudgetSummary")
+                        .WithMany()
+                        .HasForeignKey("HeadquarterBudgetSummaryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("HeadquarterBudgetSummary");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationDealer", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskAllocation", "Allocation")
+                        .WithMany("Dealers")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocationProgram", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskAllocation", "Allocation")
+                        .WithMany("Programs")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleBatch", "Batch")
+                        .WithMany("Activities")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabDocument", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleBatch", "Batch")
+                        .WithMany("Documents")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LabReport", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleBatch", "Batch")
+                        .WithMany("Reports")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.SampleItem", "SampleItem")
+                        .WithMany()
+                        .HasForeignKey("SampleItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Batch");
+
+                    b.Navigation("SampleItem");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LibraryCategory", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.LibraryCategory", "ParentCategory")
+                        .WithMany()
+                        .HasForeignKey("ParentCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ParentCategory");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LibraryMessage", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.LibraryConversation", "Conversation")
+                        .WithMany("Messages")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Conversation");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Port", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.District", "District")
@@ -5651,6 +11776,72 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("ProductGroup");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramHQBudget", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.Headquarter", "Headquarters")
+                        .WithMany()
+                        .HasForeignKey("HeadquartersId");
+
+                    b.HasOne("SPIC.Core.Entities.ProgramRegionBudget", "ProgramRegionBudget")
+                        .WithMany("Headquarters")
+                        .HasForeignKey("ProgramRegionBudgetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Headquarters");
+
+                    b.Navigation("ProgramRegionBudget");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramMaster", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.ProgramType", "ProgramType")
+                        .WithMany("Programs")
+                        .HasForeignKey("ProgramTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProgramType");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramRegionBudget", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.ProgramStateBudget", "ProgramStateBudget")
+                        .WithMany("Regions")
+                        .HasForeignKey("ProgramStateBudgetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.Region", "Region")
+                        .WithMany()
+                        .HasForeignKey("RegionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProgramStateBudget");
+
+                    b.Navigation("Region");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramStateBudget", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.ProgramMaster", "Program")
+                        .WithMany("StateBudgets")
+                        .HasForeignKey("ProgramId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.State", "State")
+                        .WithMany()
+                        .HasForeignKey("StateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Program");
+
+                    b.Navigation("State");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.District", "District")
@@ -5677,6 +11868,145 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("State");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetAllocation", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.RegionBudgetSummary", "RegionBudgetSummary")
+                        .WithMany("RegionBudgetAllocations")
+                        .HasForeignKey("RegionBudgetSummaryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SPIC.Core.Entities.Region", "Region")
+                        .WithMany()
+                        .HasForeignKey("RegionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.State", "State")
+                        .WithMany()
+                        .HasForeignKey("StateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Region");
+
+                    b.Navigation("RegionBudgetSummary");
+
+                    b.Navigation("State");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetAllocationHistory", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.RegionBudgetAllocation", "RegionBudgetAllocation")
+                        .WithMany()
+                        .HasForeignKey("RegionBudgetAllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RegionBudgetAllocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetSummary", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.State", "State")
+                        .WithMany()
+                        .HasForeignKey("StateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("State");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetSummaryHistory", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.RegionBudgetSummary", "RegionBudgetSummary")
+                        .WithMany()
+                        .HasForeignKey("RegionBudgetSummaryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("RegionBudgetSummary");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleCollection", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleConsignment", "Consignment")
+                        .WithMany("Collections")
+                        .HasForeignKey("ConsignmentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Consignment");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleConsignment", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleBatch", "Batch")
+                        .WithMany("Consignments")
+                        .HasForeignKey("BatchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Batch");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleItem", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleCollection", "Collection")
+                        .WithMany("Items")
+                        .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.SasFarmer", "Farmer")
+                        .WithMany()
+                        .HasForeignKey("FarmerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Collection");
+
+                    b.Navigation("Farmer");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleLabResult", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleItem", "SampleItem")
+                        .WithMany("Results")
+                        .HasForeignKey("SampleItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SampleItem");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SamplePayment", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.SampleCollection", "Collection")
+                        .WithMany("Payments")
+                        .HasForeignKey("CollectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Collection");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SdwaCompanyGuestHouse", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.GuestHouse", "GuestHouse")
+                        .WithMany()
+                        .HasForeignKey("GuestHouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.SdwaCompany", "SdwaCompany")
+                        .WithMany("CompanyGuestHouses")
+                        .HasForeignKey("SdwaCompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuestHouse");
+
+                    b.Navigation("SdwaCompany");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.State", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.Zone", "Zone")
@@ -5686,6 +12016,46 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Zone");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetAllocation", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.StateBudgetSummary", "StateBudgetSummary")
+                        .WithMany("StateBudgetAllocations")
+                        .HasForeignKey("StateBudgetSummaryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SPIC.Core.Entities.State", "State")
+                        .WithMany()
+                        .HasForeignKey("StateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("State");
+
+                    b.Navigation("StateBudgetSummary");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetAllocationHistory", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.StateBudgetAllocation", "StateBudgetAllocation")
+                        .WithMany()
+                        .HasForeignKey("StateBudgetAllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StateBudgetAllocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetSummaryHistory", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.StateBudgetSummary", "StateBudgetSummary")
+                        .WithMany()
+                        .HasForeignKey("StateBudgetSummaryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StateBudgetSummary");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SubDistrict", b =>
@@ -5753,6 +12123,18 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("WelfareApplication");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.BudgetProgramMains", b =>
+                {
+                    b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CommunityPost", b =>
+                {
+                    b.Navigation("Attachments");
+
+                    b.Navigation("Replies");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouse", b =>
                 {
                     b.Navigation("Bookings");
@@ -5795,6 +12177,88 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Bookings");
 
                     b.Navigation("Images");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetSummary", b =>
+                {
+                    b.Navigation("HeadquarterBudgetAllocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocation", b =>
+                {
+                    b.Navigation("Dealers");
+
+                    b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.LibraryConversation", b =>
+                {
+                    b.Navigation("Messages");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramMaster", b =>
+                {
+                    b.Navigation("StateBudgets");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramRegionBudget", b =>
+                {
+                    b.Navigation("Headquarters");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramStateBudget", b =>
+                {
+                    b.Navigation("Regions");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.ProgramType", b =>
+                {
+                    b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RegionBudgetSummary", b =>
+                {
+                    b.Navigation("RegionBudgetAllocations");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleBatch", b =>
+                {
+                    b.Navigation("Activities");
+
+                    b.Navigation("Consignments");
+
+                    b.Navigation("Documents");
+
+                    b.Navigation("Reports");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleCollection", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Payments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleConsignment", b =>
+                {
+                    b.Navigation("Collections");
+
+                    b.Navigation("Photos");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SampleItem", b =>
+                {
+                    b.Navigation("Results");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SdwaCompany", b =>
+                {
+                    b.Navigation("CompanyGuestHouses");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.StateBudgetSummary", b =>
+                {
+                    b.Navigation("StateBudgetAllocations");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.WelfareApplication", b =>

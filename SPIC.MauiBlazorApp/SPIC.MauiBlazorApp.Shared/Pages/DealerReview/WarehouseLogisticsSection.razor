@@ -1,0 +1,96 @@
+@namespace SPIC.MauiBlazorApp.Shared.Pages.DealerReview
+@using DR = SPIC.Core.Entities
+@inherits DealerReviewSectionBase
+
+@* "Warehouse & Logistics" accordion: warehouse/depot, rail and port facility cards. *@
+
+    <div class="custom-accordion @(IsOpen ? "active" : "")">
+        <div class="accordion-header" @onclick="OnToggle">
+            Warehouse & Logistics
+            <i class="bi bi-chevron-down"></i>
+        </div>
+        <div class="accordion-body">
+                <div class="row g-4">
+                @if ((Warehouses != null && Warehouses.Any()) || (Rails != null && Rails.Any()) || (Ports != null && Ports.Any()))
+                {
+                    @if (Warehouses != null && Warehouses.Any())
+                    {
+                        foreach (var w in Warehouses)
+                        {
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-card-header">
+                                        <h4 class="detail-card-title"><i class="bi bi-building"></i> Warehouse / Depot</h4>
+                                        <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                                    </div>
+                                    <div class="detail-card-body">
+                                        <div class="data-row"><div class="data-label">Warehouse Name:</div><div class="data-value">@(WarehouseNames.TryGetValue(w.WarehouseId.ToString(), out var wn) ? wn : w.WarehouseId.ToString())</div></div>
+                                        <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@w.Distance</div></div>
+                                        <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@w.Freight</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+
+                    @if (Rails != null && Rails.Any())
+                    {
+                        foreach (var r in Rails)
+                        {
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-card-header">
+                                        <h4 class="detail-card-title"><i class="bi bi-train-front"></i> Rail Facilities</h4>
+                                        <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                                    </div>
+                                    <div class="detail-card-body">
+                                        <div class="data-row"><div class="data-label">Rail Facility Name:</div><div class="data-value">@(RailFacilitiesNames.TryGetValue(r.RailFacilitiesId.ToString(), out var rn) ? rn : r.RailFacilitiesId.ToString())</div></div>
+                                        <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@r.Distance</div></div>
+                                        <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@r.Freight</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+
+                    @if (Ports != null && Ports.Any())
+                    {
+                        foreach (var p in Ports)
+                        {
+                            <div class="col-md-6">
+                                <div class="detail-card">
+                                    <div class="detail-card-header">
+                                        <h4 class="detail-card-title"><i class="bi bi-water"></i> Port Facilities</h4>
+                                        <i class="bi bi-pencil-square edit-icon" @onclick="OnEdit" role="button" title="Edit"></i>
+                                    </div>
+                                    <div class="detail-card-body">
+                                        <div class="data-row"><div class="data-label">Port Name:</div><div class="data-value">@(PortNames.TryGetValue(p.PortId.ToString(), out var rn) ? rn : p.PortId.ToString())</div></div>
+                                        <div class="data-row"><div class="data-label">Distance (KM):</div><div class="data-value">@p.Distance</div></div>
+                                        <div class="data-row"><div class="data-label">Freight (₹):</div><div class="data-value">@p.Freight</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+                else
+                {
+                    <div class="col-12"><div class="text-muted">No warehouse/logistics data</div></div>
+                }
+            </div>
+        </div>
+    </div>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback OnToggle { get; set; }
+    [Parameter] public EventCallback OnEdit { get; set; }
+
+    [Parameter] public List<DR.DealerWarehouseFacilities> Warehouses { get; set; } = new();
+    [Parameter] public List<DR.DealerRailFacilities> Rails { get; set; } = new();
+    [Parameter] public List<DR.DealerPortFacilities> Ports { get; set; } = new();
+    [Parameter] public Dictionary<string, string> WarehouseNames { get; set; } = new();
+    [Parameter] public Dictionary<string, string> RailFacilitiesNames { get; set; } = new();
+    [Parameter] public Dictionary<string, string> PortNames { get; set; } = new();
+    [Parameter] public int DataVersion { get; set; }
+}

@@ -38,8 +38,8 @@ namespace SpicAPI.Services
                 BookingId = bill.GuestHouseBookingId,
                 BillDate = bill.BillDate,
                 GuestName = bill.GuestName,
-                CompanyName = companyName,
-                GstNumber = gstNumber,
+                CompanyName = string.IsNullOrWhiteSpace(companyName) ? bill.CompanyName : companyName,
+                GstNumber = string.IsNullOrWhiteSpace(gstNumber) ? bill.GstinNumber : gstNumber,
                 Address = bill.Address,
                 Email = bill.Email,
                 PhoneNumber = bill.PhoneNumber,
@@ -82,8 +82,13 @@ namespace SpicAPI.Services
             if (guest == null)
                 return (null, null);
 
-            string? gstNumber = null;
-            if (!string.IsNullOrWhiteSpace(guest.EmployeeOrDealerCode))
+            // The guest's Company Name is captured on the booking's guest record. The GST No
+            // now comes from the SDWA Company master (persisted on the guest at booking time);
+            // for legacy bookings that predate the Company Details master we keep the previous
+            // behaviour of resolving the GST live from the Dealer master via the Employee/Dealer
+            // Code used for the stay.
+            string? gstNumber = guest.GstinNumber;
+            if (string.IsNullOrWhiteSpace(gstNumber) && !string.IsNullOrWhiteSpace(guest.EmployeeOrDealerCode))
             {
                 gstNumber = await db.DealerRegistrations
                     .AsNoTracking()

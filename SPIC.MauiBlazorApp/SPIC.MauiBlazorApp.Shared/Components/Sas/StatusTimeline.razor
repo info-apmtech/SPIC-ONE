@@ -1,0 +1,163 @@
+@namespace SPIC.MauiBlazorApp.Shared.Components.Sas
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
+
+@*
+    The seven-step SAS progress rail shared by the Sample Collection details page and the
+    Consignment details page (Figma "History / Timeline").
+
+        <StatusTimeline Events="@detail.Timeline" Current="@detail.Status" />
+        <StatusTimeline Events="@c.Timeline" Current="@c.Status.ToString()" />
+
+    Steps: Sample Collected, Ready for Consignment, Dispatched, In Transit, Delivered to Lab,
+    Test In Progress, Completed. A step is "done" when the timeline carries an event whose
+    Status maps to it (the date and the person are then printed under the label), and the step
+    that matches Current is highlighted as the one the sample is sitting on.
+
+    Current accepts the enum (SampleCollectionStatus / ConsignmentStatus) or its name as a string.
+    Steps overrides the seven defaults when a caller needs its own rail.
+
+    Horizontal on tablet and desktop, vertical on phone (<= 767.98px).
+*@
+
+<ol class="sas-tl @CssClass" aria-label="@AriaLabel">
+    @{
+        var steps = EffectiveSteps;
+        var currentIndex = CurrentIndex;
+    }
+    @for (var i = 0; i < steps.Length; i++)
+    {
+        var step = steps[i];
+        var done = i <= currentIndex;
+        var current = i == currentIndex;
+        var ev = done ? EventFor(step) : null;
+
+        <li class="sas-tl__step @(done ? "is-done" : "") @(current ? "is-current" : "")">
+            <div class="sas-tl__rail" aria-hidden="true">
+                <span class="sas-tl__line sas-tl__line--before @(i > 0 && i - 1 <= currentIndex ? "is-done" : "")"></span>
+                <span class="sas-tl__dot"><i class="bi @step.Icon"></i></span>
+                <span class="sas-tl__line sas-tl__line--after @(i < currentIndex ? "is-done" : "")"></span>
+            </div>
+
+            <div class="sas-tl__body">
+                <span class="sas-tl__label">@step.Label</span>
+                @if (ev is not null)
+                {
+                    <span class="sas-tl__when">@ev.At.ToString("dd MMM yyyy hh:mm tt")</span>
+                    @if (!string.IsNullOrWhiteSpace(ev.ByName))
+                    {
+                        <span class="sas-tl__by">by @ev.ByName</span>
+                    }
+                }
+                else if (current)
+                {
+                    <span class="sas-tl__when">In progress</span>
+                }
+            </div>
+        </li>
+    }
+</ol>
+
+@code {
+    /// <summary>One step of the rail; <see cref="Keys"/> are the SasStatusEvent status names it covers.</summary>
+    public sealed record Step(string Label, string Icon, string[] Keys);
+
+    /// <summary>Status events from the API (collection or consignment timeline). May be empty.</summary>
+    [Parameter] public List<SasStatusEventDto> Events { get; set; } = new();
+
+    /// <summary>Current status: the enum value (SampleCollectionStatus / ConsignmentStatus) or its name.</summary>
+    [Parameter] public object? Current { get; set; }
+
+    /// <summary>Overrides the seven default steps.</summary>
+    [Parameter] public Step[]? Steps { get; set; }
+
+    [Parameter] public string? CssClass { get; set; }
+
+    [Parameter] public string AriaLabel { get; set; } = "Progress";
+
+    // Keys hold every enum name that lands on this step: collection statuses first, then the
+    // consignment status that means the same thing (Delivered == DeliveredToLab).
+    public static readonly Step[] DefaultSteps =
+    {
+        new("Sample Collected",      "bi-eyedropper",       new[] { "Collected", "Submitted", "PendingPayment", "PendingApproval" }),
+        new("Ready for Consignment", "bi-box-seam",         new[] { "ReadyForConsignment", "PendingPickup" }),
+        new("Dispatched",            "bi-truck",            new[] { "Dispatched" }),
+        new("In Transit",            "bi-signpost-split",   new[] { "InTransit" }),
+        new("Delivered to Lab",      "bi-buildings",        new[] { "DeliveredToLab", "Delivered" }),
+        new("Test In Progress",      "bi-clipboard-pulse",  new[] { "TestInProgress" }),
+        new("Completed",             "bi-patch-check",      new[] { "Completed" })
+    };
+
+    private Step[] EffectiveSteps => Steps is { Length: > 0 } ? Steps : DefaultSteps;
+
+    private string? CurrentName => Current switch
+    {
+        null => null,
+        string s => s,
+        Enum e => e.ToString(),
+        var other => other.ToString()
+    };
+
+    /// <summary>Index of the step the item is on; -1 for a draft or an unknown status.</summary>
+    private int CurrentIndex
+    {
+        get
+        {
+            var name = CurrentName;
+
+            // A draft has not reached "Sample Collected" yet.
+            if (string.Equals(name, nameof(SampleCollectionStatus.Draft), StringComparison.OrdinalIgnoreCase))
+                return -1;
+
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                var found = IndexOf(name!);
+                if (found >= 0) return found;
+            }
+
+            return FurthestEventIndex;
+        }
+    }
+
+    private int FurthestEventIndex
+    {
+        get
+        {
+            var best = -1;
+            foreach (var e in Events)
+            {
+                var i = IndexOf(e.Status);
+                if (i > best) best = i;
+            }
+            return best;
+        }
+    }
+
+    private int IndexOf(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return -1;
+        var steps = EffectiveSteps;
+        for (var i = 0; i < steps.Length; i++)
+        {
+            foreach (var key in steps[i].Keys)
+            {
+                if (string.Equals(key, status, StringComparison.OrdinalIgnoreCase)) return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>The event that stamped this step: the first of its keys that has one, earliest first.</summary>
+    private SasStatusEventDto? EventFor(Step step)
+    {
+        foreach (var key in step.Keys)
+        {
+            var match = Events
+                .Where(e => string.Equals(e.Status, key, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(e => e.At)
+                .FirstOrDefault();
+            if (match is not null) return match;
+        }
+        return null;
+    }
+}

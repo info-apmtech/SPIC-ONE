@@ -1,0 +1,72 @@
+@*
+    "Unpublish this content?" confirmation (Figma frame supplied 2026-09-20). Centred modal on
+    tablet/desktop, bottom sheet on phones. Nothing changes until the user presses Unpublish.
+*@
+
+@if (Item is not null)
+{
+    <div class="dlud-backdrop" @onclick="Cancel"></div>
+    <div class="dlud" role="alertdialog" aria-modal="true" aria-labelledby="dlud-title" aria-describedby="dlud-desc" @onkeydown="OnKeyDown" tabindex="-1" @ref="_dialog">
+        <div class="dlud-handle" aria-hidden="true"></div>
+        <button type="button" class="dlud-close" aria-label="Close" @onclick="Cancel"><i class="bi bi-x-circle"></i></button>
+
+        <span class="dlud-icon" aria-hidden="true"><i class="bi bi-exclamation-triangle-fill"></i></span>
+
+        <h2 id="dlud-title" class="dlud-title">Unpublish this content?</h2>
+        <p id="dlud-desc" class="dlud-desc">
+            This item will no longer be visible in the Digital Library. It will be moved to Drafts and can be republished at any time.
+        </p>
+
+        <div class="dlud-item">
+            <div class="dlud-item-title">@Item.Title</div>
+            <div class="dlud-item-note">Will be moved to Drafts</div>
+        </div>
+
+        <div class="dlud-foot">
+            <button type="button" class="dlud-cancel" @onclick="Cancel" disabled="@_busy"><i class="bi bi-x-lg"></i> Cancel</button>
+            <button type="button" class="dlud-confirm" @onclick="Confirm" disabled="@_busy">
+                @if (_busy)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                }
+                Unpublish
+            </button>
+        </div>
+    </div>
+}
+
+@code {
+    /// <summary>The item being unpublished; null hides the dialog.</summary>
+    [Parameter] public DigitalLibraryItem? Item { get; set; }
+    [Parameter] public EventCallback<DigitalLibraryItem> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private ElementReference _dialog;
+    private bool _busy;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Item is not null && !_busy)
+        {
+            try { await _dialog.FocusAsync(); } catch { /* not rendered yet */ }
+        }
+    }
+
+    private async Task Confirm()
+    {
+        if (Item is null || _busy) return;
+        _busy = true;
+        try
+        {
+            await OnConfirm.InvokeAsync(Item);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task Cancel() => _busy ? Task.CompletedTask : OnCancel.InvokeAsync();
+
+    private Task OnKeyDown(KeyboardEventArgs e) => e.Key == "Escape" ? Cancel() : Task.CompletedTask;
+}
