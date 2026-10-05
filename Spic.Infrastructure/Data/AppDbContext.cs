@@ -205,6 +205,37 @@ namespace Spic.Infrastructure.Data
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // JMDO Attendance and Tracking: one attendance row per (UserId, Date); a session is a
+        // continuous GPS tracking window within a day's attendance; a point is one GPS fix
+        // within a session. Tracking sessions/points are not written yet (next step), but the
+        // relationships are configured now so the model is complete.
+        builder.Entity<JMDOAttendance>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.UserId, x.Date }).IsUnique();
+            entity.HasMany(x => x.TrackingSessions)
+                .WithOne(s => s.Attendance)
+                .HasForeignKey(s => s.AttendanceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<JMDOTrackingSession>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.AttendanceId);
+            entity.HasIndex(x => x.UserId);
+            entity.HasMany(x => x.Points)
+                .WithOne(p => p.TrackingSession)
+                .HasForeignKey(p => p.TrackingSessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<JMDOTrackingPoint>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TrackingSessionId);
+        });
+
         builder.Entity<SampleItem>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -817,6 +848,11 @@ namespace Spic.Infrastructure.Data
 		public DbSet<LibraryConversation> LibraryConversations { get; set; }
 		public DbSet<LibraryMessage> LibraryMessages { get; set; }
 		public DbSet<LibraryCategory> LibraryCategories { get; set; }
+
+		//// JMDO Attendance and Tracking
+		public DbSet<JMDOAttendance> JMDOAttendances { get; set; }
+		public DbSet<JMDOTrackingSession> JMDOTrackingSessions { get; set; }
+		public DbSet<JMDOTrackingPoint> JMDOTrackingPoints { get; set; }
 
 		//// SAS: sample collection
 		public DbSet<SasFarmer> SasFarmers { get; set; }

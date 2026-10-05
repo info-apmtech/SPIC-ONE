@@ -67,6 +67,8 @@ builder.Services.AddScoped<SasApi>();
 builder.Services.AddScoped<SasPaymentApi>();
 builder.Services.AddScoped<LabApi>();
 builder.Services.AddScoped<MetricsApi>();
+builder.Services.AddScoped<JMDOAttendanceApi>();
+builder.Services.AddScoped<JMDOTrackingApi>();
 
 // Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on every API
 // call, page views and client errors per circuit, and anything this host logs at Error or above.

@@ -1,7 +1,12 @@
 @page "/MarkAttendance"
+@using SPIC.Core.Entities
+@using SPIC.Core.DTOs
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.FieldAttendanceState AttendanceState
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi Api
+@inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 ma-page">
 
@@ -107,12 +112,12 @@
                     </select>
 
                     <div class="ma-location-row">
-                        <i class="bi bi-check-circle-fill"></i> Location captured (&plusmn;400m) &middot;
+                        <i class="bi bi-check-circle-fill"></i> @LocationStatusText &middot;
                         <button type="button" class="ma-link-btn" @onclick="ViewOnMap">view on map</button>
                     </div>
 
-                    <button type="button" class="ma-btn-submit" disabled="@string.IsNullOrWhiteSpace(visitArea)" @onclick="UpdateAttendance">
-                        Update Attendance
+                    <button type="button" class="ma-btn-submit" disabled="@(_saving || string.IsNullOrWhiteSpace(visitArea))" @onclick="UpdateAttendance">
+                        @(_saving ? "Updating..." : "Update Attendance")
                     </button>
                 }
             </div>
@@ -130,13 +135,16 @@
                     </div>
                     <div class="ma-info-row">
                         <span class="ma-info-key"><i class="bi bi-person-check"></i> Current Status</span>
-                        <span class="ma-info-val"><span class="@(showStoppedState ? "ma-dot ma-dot-off" : "ma-dot")"></span>@(showStoppedState ? "Off Duty" : "On Duty")</span>
+                        <span class="ma-info-val"><span class="@(AttendanceState.IsOnDuty ? "ma-dot" : "ma-dot ma-dot-off")"></span>@(AttendanceState.IsOnDuty ? "On Duty" : "Off Duty")</span>
                     </div>
                     <div class="ma-info-row">
                         <span class="ma-info-key"><i class="bi bi-person"></i> Current Location</span>
                         <span class="ma-info-val ma-info-val-stack">
-                            <span>Near Coimbatore, Tamil Nadu</span>
-                            <span class="ma-info-sub">(22 Sep 2026, 10:42 AM)</span>
+                            <span>@LocationStatusText</span>
+                            @if (_locatedAt is not null)
+                            {
+                                <span class="ma-info-sub">(@_locatedAt.Value.ToString("dd MMM yyyy, hh:mm tt"))</span>
+                            }
                         </span>
                     </div>
                 </div>
@@ -195,9 +203,104 @@
 
     private bool isLate = true;
 
-    private DateTime visitDate = new(2026, 9, 22);
-    private string visitArea = "Anaimalai";
+    private DateTime visitDate = DateTime.Today;
+    private string visitArea = "";
     private string attendanceStatus = "Present";
+    private bool _saving;
+
+    // Current-location capture: reuses the same window.getCurrentPosition bridge as
+    // Sas/NewFarmerDialog.razor (js/location.js on the Web; MAUI bridges the same name to the
+    // native locator). Display-only here - JMDOAttendance has no lat/lng fields; GPS points are
+    // persisted by the tracking session work, done separately.
+    private bool _locating;
+    private double? _latitude;
+    private double? _longitude;
+    private DateTime? _locatedAt;
+    private string? _locationError;
+
+    private string LocationStatusText =>
+        _locating ? "Capturing location..."
+        : _latitude is null ? (_locationError ?? "Location unavailable")
+        : $"Location captured ({_latitude.Value.ToString("0.####")}, {_longitude!.Value.ToString("0.####")})";
+
+    private sealed class GeoResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Pre-fills the form from the caller's own attendance row for today, if one already
+        // exists - the server upserts by (UserId, Date), so this just lets the JMDO see and
+        // amend what they already submitted instead of blindly overwriting it.
+        var today = await Api.GetTodayAsync();
+        if (today is not null)
+        {
+            visitDate = today.Date;
+            visitArea = today.VisitArea;
+            attendanceStatus = StatusToLabel(today.AttendanceStatus);
+            AttendanceState.IsOnDuty = today.DutyStatus == JMDODutyStatus.OnDuty;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await CaptureLocationAsync();
+    }
+
+    private async Task CaptureLocationAsync()
+    {
+        _locating = true;
+        StateHasChanged();
+
+        try
+        {
+            var position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+
+            if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+            {
+                _latitude = null;
+                _longitude = null;
+                _locationError = string.IsNullOrWhiteSpace(position?.Error)
+                    ? "Location unavailable"
+                    : position!.Error;
+            }
+            else
+            {
+                _latitude = position.Latitude;
+                _longitude = position.Longitude;
+                _locatedAt = DateTime.Now;
+                _locationError = null;
+            }
+        }
+        catch (Exception)
+        {
+            _latitude = null;
+            _locationError = "Location is not available on this device.";
+        }
+        finally
+        {
+            _locating = false;
+            StateHasChanged();
+        }
+    }
+
+    private static JMDOAttendanceStatus ParseStatus(string label) => label switch
+    {
+        "Half Day" => JMDOAttendanceStatus.HalfDay,
+        "On Leave" => JMDOAttendanceStatus.OnLeave,
+        _ => JMDOAttendanceStatus.Present
+    };
+
+    private static string StatusToLabel(JMDOAttendanceStatus status) => status switch
+    {
+        JMDOAttendanceStatus.HalfDay => "Half Day",
+        JMDOAttendanceStatus.OnLeave => "On Leave",
+        _ => "Present"
+    };
 
     private sealed record WeeklyDay(string Label, string Hours, int Locations, string Km);
 
@@ -223,12 +326,48 @@
         Navigation.NavigateTo("/MarkAttendance?view=stopped");
     }
 
-    private void UpdateAttendance()
+    private async Task UpdateAttendance()
     {
-        if (string.IsNullOrWhiteSpace(visitArea)) return;
+        if (!LoginState.IsLoggedIn)
+        {
+            Toast.Error("Please sign in again to mark attendance.");
+            return;
+        }
+        if (visitDate == default)
+        {
+            Toast.Warning("Date is required.");
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(visitArea))
+        {
+            Toast.Warning("Visit Area / Place is required.");
+            return;
+        }
 
-        AttendanceState.IsOnDuty = true;
-        Toast.Success("Attendance updated.");
-        Navigation.NavigateTo("/FieldDashboard");
+        _saving = true;
+        try
+        {
+            // A fresh fix at the moment attendance is marked, not the one captured on page load -
+            // the coordinates must represent "now", not whenever the page happened to render.
+            await CaptureLocationAsync();
+
+            if (_latitude is null || _longitude is null)
+            {
+                Toast.Error(_locationError ?? "Could not get your current location. Please try again.");
+                return;
+            }
+
+            var saved = await Api.UpdateAttendanceAsync(
+                visitDate, visitArea.Trim(), ParseStatus(attendanceStatus), _latitude.Value, _longitude.Value);
+            if (saved is null) return; // Api already raised an error toast
+
+            AttendanceState.IsOnDuty = saved.DutyStatus == JMDODutyStatus.OnDuty;
+            Toast.Success("Attendance updated.");
+            Navigation.NavigateTo("/FieldDashboard");
+        }
+        finally
+        {
+            _saving = false;
+        }
     }
 }
