@@ -20,9 +20,10 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public string LandingPage => UserRole switch
         {
             // Admin bypasses page permissions entirely (PageAuthorization.RoleModels), so it needs no
-            // designation and lands on its own default screen. Listed first so the no-designation arm
-            // below can never claim it: Admin has full access with an empty RoleAccess.
-            AppRole.Admin => AdminLandingPath,
+            // designation. Lands on the same plain welcome screen as every other designation-driven
+            // role - listed first so the no-designation arm below can never claim it: Admin has full
+            // access with an empty RoleAccess.
+            AppRole.Admin => DefaultLandingPath,
             AppRole.Dealer => "/SDWADashboard",
             AppRole.SpecialAdmin => CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome",
             // No designation assigned at all => /Welcome, the existing screen that tells the user to
@@ -39,10 +40,6 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         // "Welcome to SPIC ONE" screen with no dashboard content. Shared with PageGuard's always-open
         // set so the route and the route that is permitted cannot drift apart.
         public const string DefaultLandingPath = "/DefaultWelcome";
-
-        // Default landing page for AppRole.Admin. Admin bypasses page permissions, so it never
-        // depends on a designation.
-        public const string AdminLandingPath = "/DefaultAdmin";
 
         public event Action? OnChange;
 
