@@ -1,0 +1,127 @@
+@page "/TargetAchievement"
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<div class="container-fluid py-4 px-0 tga-page">
+
+    <h2 class="tga-title">Yearly Target Allocation</h2>
+    <p class="tga-subtitle">Set the yearly SPCM and Soil Sample collection target for each JMDO.</p>
+
+    <div class="tga-card tga-form-card">
+        <h3 class="tga-card-title">Allocate target to a JMDO</h3>
+        <p class="tga-card-subtitle">Choose a JMDO, then set their target for the year.</p>
+
+        <label class="tga-field-label" for="tga-jmdo">JMDO<span class="tga-required">*</span></label>
+        <select id="tga-jmdo" class="tga-select" @bind="selectedJmdo" @bind:after="LoadSelectedJmdoTargets">
+            @foreach (var row in Targets)
+            {
+                <option value="@row.Name">@row.Name &mdash; @row.Location</option>
+            }
+        </select>
+
+        <div class="tga-target-row">
+            <div class="tga-target-field">
+                <label class="tga-field-label" for="tga-spcm">SPCM Target (yearly)<span class="tga-required">*</span></label>
+                <input id="tga-spcm" type="number" min="0" class="tga-input" placeholder="e.g. 420" @bind="spcmTarget" @bind:event="oninput" />
+            </div>
+            <div class="tga-target-field">
+                <label class="tga-field-label" for="tga-soil">Soil Sample Target (yearly)<span class="tga-required">*</span></label>
+                <input id="tga-soil" type="number" min="0" class="tga-input" placeholder="e.g. 180" @bind="soilTarget" @bind:event="oninput" />
+            </div>
+        </div>
+
+        <button type="button" class="tga-btn-save" disabled="@(string.IsNullOrWhiteSpace(spcmTarget) || string.IsNullOrWhiteSpace(soilTarget))" @onclick="SaveTargetAllocation">
+            <i class="bi bi-check-lg"></i> Save Target Allocation
+        </button>
+    </div>
+
+    <div class="tga-card">
+        <h3 class="tga-card-title">Current yearly targets</h3>
+        <p class="tga-card-subtitle">Across all JMDOs in your region.</p>
+
+        <div class="tga-table-scroll">
+            <table class="tga-table">
+                <thead>
+                    <tr>
+                        <th>JMDO</th>
+                        <th>SPCM Target</th>
+                        <th>Soil Sample Target</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in Targets)
+                    {
+                        <tr>
+                            <td class="tga-cell-header">
+                                <div class="tga-jmdo-name">@row.Name</div>
+                                <div class="tga-jmdo-sub">@row.Code &middot; @row.Location</div>
+                            </td>
+                            <td data-label="SPCM Target">@row.SpcmTarget</td>
+                            <td data-label="Soil Sample Target">@row.SoilTarget</td>
+                            <td class="tga-cell-actions">
+                                <button type="button" class="tga-icon-btn" title="Edit target" @onclick="() => EditTarget(row)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+@code {
+    // Static placeholder: no Target/Achievement API exists yet. Reuses the
+    // same 5 JMDOs/codes/locations from MdoDashboard's JMDO-wise summary
+    // table.
+    private sealed class JmdoTarget
+    {
+        public string Name { get; init; } = "";
+        public string Code { get; init; } = "";
+        public string Location { get; init; } = "";
+        public int SpcmTarget { get; set; }
+        public int SoilTarget { get; set; }
+    }
+
+    private readonly List<JmdoTarget> Targets = new()
+    {
+        new() { Name = "Karthik Raja", Code = "JMDO-104", Location = "Coimbatore", SpcmTarget = 420, SoilTarget = 180 },
+        new() { Name = "Selvam M", Code = "JMDO-108", Location = "Pollachi", SpcmTarget = 360, SoilTarget = 150 },
+        new() { Name = "Priya Dharshini", Code = "JMDO-112", Location = "Udumalpet", SpcmTarget = 300, SoilTarget = 140 },
+        new() { Name = "Ganesh Kumar", Code = "JMDO-119", Location = "Mettupalayam", SpcmTarget = 280, SoilTarget = 120 },
+        new() { Name = "Lakshmi Narayanan", Code = "JMDO-121", Location = "Annur", SpcmTarget = 250, SoilTarget = 110 }
+    };
+
+    private string selectedJmdo = "Karthik Raja";
+    private string spcmTarget = "420";
+    private string soilTarget = "180";
+
+    private void LoadSelectedJmdoTargets()
+    {
+        var row = Targets.FirstOrDefault(t => t.Name == selectedJmdo);
+        if (row is null) return;
+
+        spcmTarget = row.SpcmTarget.ToString();
+        soilTarget = row.SoilTarget.ToString();
+    }
+
+    private void EditTarget(JmdoTarget row)
+    {
+        selectedJmdo = row.Name;
+        spcmTarget = row.SpcmTarget.ToString();
+        soilTarget = row.SoilTarget.ToString();
+    }
+
+    private void SaveTargetAllocation()
+    {
+        var row = Targets.FirstOrDefault(t => t.Name == selectedJmdo);
+        if (row is null) return;
+        if (!int.TryParse(spcmTarget, out var spcm) || !int.TryParse(soilTarget, out var soil)) return;
+
+        row.SpcmTarget = spcm;
+        row.SoilTarget = soil;
+        Toast.Success($"{row.Name}'s yearly target saved.");
+    }
+}

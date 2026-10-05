@@ -520,6 +520,13 @@ namespace Spic.Infrastructure.Data
             // A DB-level default so adding this column never fails against rows
             // already saved via Save Draft before Submit For Validation existed.
             entity.Property(x => x.Status).HasDefaultValue("Draft");
+            // Summary-to-Detail relationship key (replaces FY-only matching) - nullable
+            // since pre-existing rows are backfilled, not recreated; see v16AddBudgetSummaryIdForeignKey.
+            entity.HasIndex(x => x.StateBudgetSummaryId);
+            entity.HasOne(x => x.StateBudgetSummary)
+                .WithMany(s => s.StateBudgetAllocations)
+                .HasForeignKey(x => x.StateBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // MD Portal - Region-wise share of a StateBudgetAllocation. RegionId alone
@@ -536,6 +543,13 @@ namespace Spic.Infrastructure.Data
                 .HasForeignKey(x => x.RegionId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Status).HasDefaultValue("Draft");
+            // Summary-to-Detail relationship key (replaces FY-only matching) - nullable
+            // since pre-existing rows are backfilled, not recreated; see v16AddBudgetSummaryIdForeignKey.
+            entity.HasIndex(x => x.RegionBudgetSummaryId);
+            entity.HasOne(x => x.RegionBudgetSummary)
+                .WithMany(s => s.RegionBudgetAllocations)
+                .HasForeignKey(x => x.RegionBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // MD Portal - Headquarters-wise share of a RegionBudgetAllocation. HeadquarterId
@@ -553,6 +567,13 @@ namespace Spic.Infrastructure.Data
                 .HasForeignKey(x => x.HeadquarterId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Status).HasDefaultValue("Draft");
+            // Summary-to-Detail relationship key (replaces FY-only matching) - nullable
+            // since pre-existing rows are backfilled, not recreated; see v16AddBudgetSummaryIdForeignKey.
+            entity.HasIndex(x => x.HeadquarterBudgetSummaryId);
+            entity.HasOne(x => x.HeadquarterBudgetSummary)
+                .WithMany(s => s.HeadquarterBudgetAllocations)
+                .HasForeignKey(x => x.HeadquarterBudgetSummaryId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // MD Portal - approval/history audit trail for the three allocation levels above.

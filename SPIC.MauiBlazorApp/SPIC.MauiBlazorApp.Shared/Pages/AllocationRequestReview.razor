@@ -1,0 +1,313 @@
+@page "/AllocationRequestReview"
+@inject NavigationManager Navigation
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+
+<div class="container-fluid py-4 px-0 alreq-page">
+
+    <button type="button" class="alreq-back-link" @onclick='() => Navigation.NavigateTo("/AllocationRequests")'>
+        <i class="bi bi-arrow-left"></i> Back to all requests (@TotalPending)
+    </button>
+
+    <h2 class="alreq-title">@JmdoName's Allocation</h2>
+    <p class="alreq-subtitle">Review and approve this JMDO's daily allocation &mdash; dealer tasks, SPCM &amp; soil sample targets, and MD programs.</p>
+
+    <div class="alreq-notice-banner">
+        <i class="bi bi-info-circle-fill"></i>
+        <span>@JmdoName submitted today's allocation (@SubmittedDate) for your approval. You can add or remove dealer tasks, re-assign them, add/remove MD programs, or adjust targets before approving. @(TotalPending - 1) more JMDO(s) still waiting on your review.</span>
+    </div>
+
+    <div class="alreq-card">
+        <h3 class="alreq-card-title">Dealer Tasks</h3>
+
+        <div class="alreq-table-scroll">
+            <table class="alreq-table">
+                <thead>
+                    <tr>
+                        <th>Task</th>
+                        <th>Type</th>
+                        <th>Party</th>
+                        <th>Location</th>
+                        <th>Assign To</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var task in DealerTasks)
+                    {
+                        <tr>
+                            <td class="alreq-cell-header">
+                                <div class="alreq-task-code">@task.Code</div>
+                                <div class="alreq-task-sub">@task.SubLabel</div>
+                            </td>
+                            <td data-label="Type"><span class="alreq-type-pill">Dealer</span></td>
+                            <td data-label="Party">@task.Party</td>
+                            <td data-label="Location">@task.Location</td>
+                            <td data-label="Assign To">
+                                <select class="alreq-select alreq-assign-select" @bind="task.AssignTo">
+                                    @foreach (var jmdo in JmdoNames)
+                                    {
+                                        <option value="@jmdo">@jmdo</option>
+                                    }
+                                </select>
+                            </td>
+                            <td class="alreq-cell-actions">
+                                <button type="button" class="alreq-icon-btn-danger" title="Remove task" @onclick="() => RemoveDealerTask(task)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <label class="alreq-add-label">Add a dealer task</label>
+        <select class="alreq-select" @bind="selectedTaskToAdd" @bind:after="AddDealerTask">
+            <option value="">&mdash; Select to add &mdash;</option>
+            @foreach (var option in AvailableDealerTasks)
+            {
+                <option value="@option.Code">@option.Code &mdash; @option.Party &mdash; @option.SubLabel</option>
+            }
+        </select>
+    </div>
+
+    <div class="alreq-two-col">
+        <div class="alreq-card">
+            <h3 class="alreq-card-title">Today's Targets</h3>
+            <div class="alreq-target-grid">
+                <div class="alreq-target-field">
+                    <label class="alreq-field-label" for="alreq-spcm">SPCM Target</label>
+                    <input id="alreq-spcm" type="number" min="0" class="alreq-input" @bind="spcmTarget" @bind:event="oninput" />
+                </div>
+                <div class="alreq-target-field">
+                    <label class="alreq-field-label" for="alreq-soil">Soil Sample Target</label>
+                    <input id="alreq-soil" type="number" min="0" class="alreq-input" @bind="soilTarget" @bind:event="oninput" />
+                </div>
+                <div class="alreq-target-field">
+                    <label class="alreq-field-label" for="alreq-urea">Urea</label>
+                    <input id="alreq-urea" type="number" min="0" class="alreq-input" @bind="ureaTarget" @bind:event="oninput" />
+                </div>
+                <div class="alreq-target-field">
+                    <label class="alreq-field-label" for="alreq-dap">DAP</label>
+                    <input id="alreq-dap" type="number" min="0" class="alreq-input" @bind="dapTarget" @bind:event="oninput" />
+                </div>
+                <div class="alreq-target-field">
+                    <label class="alreq-field-label" for="alreq-nps">NPS</label>
+                    <input id="alreq-nps" type="number" min="0" class="alreq-input" @bind="npsTarget" @bind:event="oninput" />
+                </div>
+                <div class="alreq-target-field">
+                    <label class="alreq-field-label" for="alreq-other">Other</label>
+                    <input id="alreq-other" type="number" min="0" class="alreq-input" @bind="otherTarget" @bind:event="oninput" />
+                </div>
+            </div>
+        </div>
+
+        <div class="alreq-card">
+            <h3 class="alreq-card-title">MD Programs</h3>
+
+            <div class="alreq-chip-list">
+                @foreach (var program in SelectedPrograms)
+                {
+                    <span class="alreq-chip">
+                        <span class="alreq-chip-dot"></span>@program
+                        <button type="button" class="alreq-chip-remove" title="Remove program" @onclick="() => RemoveProgram(program)">&times;</button>
+                    </span>
+                }
+                @if (!SelectedPrograms.Any())
+                {
+                    <span class="alreq-chip-empty">No programs added.</span>
+                }
+            </div>
+
+            <label class="alreq-add-label">Add a program</label>
+            <select class="alreq-select" @bind="selectedProgramToAdd" @bind:after="AddProgram">
+                <option value="">&mdash; Select to add &mdash;</option>
+                @foreach (var option in AvailablePrograms.Where(p => !SelectedPrograms.Contains(p)))
+                {
+                    <option value="@option">@option</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    <div class="alreq-summary-bar">
+        <div class="alreq-summary-text">
+            @DealerTasks.Count dealer task(s) &middot; SPCM target @Fallback(spcmTarget) &middot; Soil sample target @Fallback(soilTarget) &middot; @SelectedPrograms.Count program(s) &middot; @Fallback(ureaTarget)-Urea &middot; @Fallback(dapTarget)-DAP &middot; @Fallback(npsTarget)-NPS &middot; @Fallback(otherTarget)-Other
+        </div>
+        <button type="button" class="alreq-btn-approve" @onclick="ApproveAllocation">
+            <i class="bi bi-check-lg"></i> Approve Allocation
+        </button>
+    </div>
+
+</div>
+
+@code {
+    // Static placeholder: no Allocation-approval API exists yet. Which JMDO's
+    // request this shows is picked via ?jmdo=, set by AllocationRequests'
+    // (the list page) "Review" buttons - each of the 3 JMDOs listed there
+    // has its own seed data below, matching that list's own dealer-task/
+    // SPCM/soil/program counts per row.
+    [SupplyParameterFromQuery(Name = "jmdo")]
+    public string? JmdoQuery { get; set; }
+
+    private string JmdoName = "";
+    private string SubmittedDate = "";
+    private const int TotalPending = 3;
+
+    private static readonly string[] JmdoNames =
+    {
+        "Karthik Raja", "Selvam M", "Priya Dharshini", "Ganesh Kumar", "Lakshmi Narayanan"
+    };
+
+    private sealed class DealerTaskRow
+    {
+        public string Code { get; init; } = "";
+        public string SubLabel { get; init; } = "";
+        public string Party { get; init; } = "";
+        public string Location { get; init; } = "";
+        public string AssignTo { get; set; } = "";
+    }
+
+    private sealed class ReviewSeed
+    {
+        public string SubmittedDate { get; init; } = "";
+        public List<DealerTaskRow> DealerTasks { get; init; } = new();
+        public string SpcmTarget { get; init; } = "";
+        public string SoilTarget { get; init; } = "";
+        public string UreaTarget { get; init; } = "";
+        public string DapTarget { get; init; } = "";
+        public string NpsTarget { get; init; } = "";
+        public string OtherTarget { get; init; } = "";
+        public List<string> SelectedPrograms { get; init; } = new();
+    }
+
+    // Karthik Raja's dealer task reuses Hanumesh Trading Co (dealer code
+    // 41051099, Coimbatore) - the same example task used for him on
+    // FieldDashboard/TasksAllocation/TaskDetail elsewhere in this app.
+    private static readonly Dictionary<string, ReviewSeed> Seeds = new()
+    {
+        ["Karthik Raja"] = new ReviewSeed
+        {
+            SubmittedDate = "24 Sep 2026",
+            DealerTasks = new() { new() { Code = "TSK-3101", SubLabel = "Pending Ack. 10 mT", Party = "Hanumesh Trading Co", Location = "Coimbatore", AssignTo = "Karthik Raja" } },
+            SpcmTarget = "12",
+            SoilTarget = "6",
+            UreaTarget = "120",
+            DapTarget = "90",
+            NpsTarget = "110",
+            OtherTarget = "100",
+            SelectedPrograms = new() { "Crop Protection Workshop — NPK Plus", "Farmer Field Demo — Urea Gold" }
+        },
+        ["Selvam M"] = new ReviewSeed
+        {
+            SubmittedDate = "24 Sep 2026",
+            DealerTasks = new() { new() { Code = "TSK-3104", SubLabel = "Q3 outstanding dues", Party = "Sri Balaji Fertilizers", Location = "Annur", AssignTo = "Selvam M" } },
+            SpcmTarget = "10",
+            SoilTarget = "5",
+            UreaTarget = "100",
+            DapTarget = "100",
+            NpsTarget = "100",
+            OtherTarget = "120",
+            SelectedPrograms = new() { "Farmer Field Demo — Urea Gold" }
+        },
+        ["Priya Dharshini"] = new ReviewSeed
+        {
+            SubmittedDate = "24 Sep 2026",
+            DealerTasks = new() { new() { Code = "TSK-3109", SubLabel = "Dues 110 Lakhs", Party = "Kumar Company", Location = "Udumalpet", AssignTo = "Priya Dharshini" } },
+            SpcmTarget = "8",
+            SoilTarget = "4",
+            UreaTarget = "80",
+            DapTarget = "70",
+            NpsTarget = "90",
+            OtherTarget = "60",
+            SelectedPrograms = new() { "Soil Health Card — DAP Combo", "Crop Protection Workshop — NPK Plus" }
+        }
+    };
+
+    private List<DealerTaskRow> DealerTasks = new();
+
+    // Instance-level (not static): this list is mutated by Add/Remove below,
+    // and a static collection would leak one user's edits into every other
+    // signed-in user's session on a Blazor Server app.
+    private List<DealerTaskRow> AvailableDealerTasks = new();
+
+    private string spcmTarget = "";
+    private string soilTarget = "";
+    private string ureaTarget = "";
+    private string dapTarget = "";
+    private string npsTarget = "";
+    private string otherTarget = "";
+
+    private List<string> SelectedPrograms = new();
+
+    protected override void OnParametersSet()
+    {
+        JmdoName = Seeds.ContainsKey(JmdoQuery ?? "") ? JmdoQuery! : "Selvam M";
+        var seed = Seeds[JmdoName];
+
+        SubmittedDate = seed.SubmittedDate;
+        DealerTasks = seed.DealerTasks.Select(t => new DealerTaskRow { Code = t.Code, SubLabel = t.SubLabel, Party = t.Party, Location = t.Location, AssignTo = t.AssignTo }).ToList();
+        AvailableDealerTasks = AllDealerTaskOptions.Where(o => DealerTasks.All(t => t.Code != o.Code)).Select(o => new DealerTaskRow { Code = o.Code, SubLabel = o.SubLabel, Party = o.Party, Location = o.Location }).ToList();
+        spcmTarget = seed.SpcmTarget;
+        soilTarget = seed.SoilTarget;
+        ureaTarget = seed.UreaTarget;
+        dapTarget = seed.DapTarget;
+        npsTarget = seed.NpsTarget;
+        otherTarget = seed.OtherTarget;
+        SelectedPrograms = new List<string>(seed.SelectedPrograms);
+    }
+
+    // Reuses the same example dealers as TasksAllocation's Step 1, for
+    // consistency with the rest of the app's placeholder data.
+    private static readonly List<DealerTaskRow> AllDealerTaskOptions = new()
+    {
+        new() { Code = "TSK-3105", SubLabel = "Pending Ack. 10 mT", Party = "Hanumesh Trading Co", Location = "Coimbatore" },
+        new() { Code = "TSK-3106", SubLabel = "Dues 110 Lakhs", Party = "Kumar Company", Location = "Coimbatore" },
+        new() { Code = "TSK-3107", SubLabel = "Dues 99 Lakhs", Party = "Abdul Rasheed M-Terminated", Location = "Coimbatore" }
+    };
+
+    private string selectedTaskToAdd = "";
+
+    private void AddDealerTask()
+    {
+        var option = AvailableDealerTasks.FirstOrDefault(t => t.Code == selectedTaskToAdd);
+        if (option is null) return;
+
+        DealerTasks.Add(new DealerTaskRow { Code = option.Code, SubLabel = option.SubLabel, Party = option.Party, Location = option.Location, AssignTo = JmdoName });
+        AvailableDealerTasks.Remove(option);
+        selectedTaskToAdd = "";
+    }
+
+    private void RemoveDealerTask(DealerTaskRow task)
+    {
+        DealerTasks.Remove(task);
+        AvailableDealerTasks.Add(task);
+    }
+
+    private static string Fallback(string value) => string.IsNullOrWhiteSpace(value) ? "0" : value;
+
+    private static readonly List<string> AvailablePrograms = new()
+    {
+        "Farmer Field Demo — Urea Gold",
+        "Soil Health Card — DAP Combo",
+        "Crop Protection Workshop — NPK Plus"
+    };
+
+    private string selectedProgramToAdd = "";
+
+    private void AddProgram()
+    {
+        if (string.IsNullOrEmpty(selectedProgramToAdd)) return;
+
+        SelectedPrograms.Add(selectedProgramToAdd);
+        selectedProgramToAdd = "";
+    }
+
+    private void RemoveProgram(string program) => SelectedPrograms.Remove(program);
+
+    private void ApproveAllocation()
+    {
+        Toast.Success($"{JmdoName}'s allocation approved.");
+        Navigation.NavigateTo("/AllocationRequests");
+    }
+}
