@@ -9,7 +9,7 @@
         <i class="bi bi-arrow-left"></i> Back to Tasks
     </button>
 
-    <span class="td-category-badge">@kind.ToString().ToUpperInvariant()</span>
+    <span class="td-category-badge">@CategoryLabel</span>
     @if (kind == TaskKind.Dealer)
     {
         <h2 class="td-title">Hanumesh Trading Co</h2>
@@ -73,6 +73,39 @@
                 </div>
             }
 
+            @if (kind == TaskKind.MdProgram)
+            {
+                <div class="td-card td-col-left">
+                    <h3 class="td-card-title">Program Details</h3>
+                    <div class="td-details-grid">
+                        <div class="td-detail">
+                            <span class="td-detail-label">Program</span>
+                            <span class="td-detail-val">Crop Protection Workshop</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Task Type</span>
+                            <span class="td-detail-val">MD Program</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Sanction Date</span>
+                            <span class="td-detail-val">01 May 2026</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Sanction No</span>
+                            <span class="td-detail-val">CSR1-2026-045</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Program Type</span>
+                            <span class="td-detail-val">Training</span>
+                        </div>
+                        <div class="td-detail">
+                            <span class="td-detail-label">Total Budget</span>
+                            <span class="td-detail-val">&#8377;50,000</span>
+                        </div>
+                    </div>
+                </div>
+            }
+
             <div class="td-card td-col-right">
                 <h3 class="td-card-title">Quick actions</h3>
                 <p class="td-card-subtitle">Open these if this visit needs them</p>
@@ -121,6 +154,28 @@
                     <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@isClosed" />
                 }
 
+                @if (kind == TaskKind.PosLiquidation)
+                {
+                    <div class="td-pos-grid">
+                        <div>
+                            <label class="td-field-label" for="td-pos-urea">Urea</label>
+                            <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@isClosed" />
+                        </div>
+                        <div>
+                            <label class="td-field-label" for="td-pos-nps">NPS</label>
+                            <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@isClosed" />
+                        </div>
+                        <div>
+                            <label class="td-field-label" for="td-pos-dap">DAP</label>
+                            <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@isClosed" />
+                        </div>
+                        <div>
+                            <label class="td-field-label" for="td-pos-other">Other</label>
+                            <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@isClosed" />
+                        </div>
+                    </div>
+                }
+
                 <label class="td-field-label" for="td-remarks">Remarks</label>
                 <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" disabled="@isClosed"></textarea>
 
@@ -133,10 +188,11 @@
 
 @code {
     // Which task type opened this page - drives the parts that differ
-    // between e.g. the Dealer and SPCM Figma frames (title/subtitle, the
-    // Task Details card, the close-out form's extra fields). Only these two
-    // exist so far; extend the switch below as more task types get designs.
-    private enum TaskKind { Dealer, Spcm }
+    // between the Dealer/SPCM/MD Program/PoS Liquidation Figma frames
+    // (title/subtitle, category badge text, the details card, the
+    // close-out form's extra fields). Soil Sample has no Figma frame yet,
+    // so it still just cycles status in place on TasksAllocation.
+    private enum TaskKind { Dealer, Spcm, MdProgram, PosLiquidation }
 
     [SupplyParameterFromQuery(Name = "type")]
     public string? TypeQuery { get; set; }
@@ -148,13 +204,30 @@
         kind = TypeQuery?.ToLowerInvariant() switch
         {
             "spcm" => TaskKind.Spcm,
+            "mdprogram" => TaskKind.MdProgram,
+            "posliquidation" => TaskKind.PosLiquidation,
             _ => TaskKind.Dealer
         };
     }
 
-    private string FileFieldLabel => kind == TaskKind.Spcm ? "Supporting Document" : "Photo Proof";
+    // Each Figma frame used its own casing for this badge (DEALER, SPCM,
+    // "MD Program", "Pos liquidation") rather than one shared rule.
+    private string CategoryLabel => kind switch
+    {
+        TaskKind.Dealer => "DEALER",
+        TaskKind.Spcm => "SPCM",
+        TaskKind.MdProgram => "MD Program",
+        TaskKind.PosLiquidation => "Pos liquidation",
+        _ => kind.ToString().ToUpperInvariant()
+    };
+
+    private string FileFieldLabel => kind == TaskKind.Dealer ? "Photo Proof" : "Supporting Document";
 
     private string achievedTarget = "";
+    private string posUrea = "";
+    private string posNps = "";
+    private string posDap = "";
+    private string posOther = "";
 
     private sealed record TimelineStep(string Label, string SubLabel, bool Done);
 

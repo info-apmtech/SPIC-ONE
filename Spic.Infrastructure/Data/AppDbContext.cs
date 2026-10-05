@@ -114,8 +114,19 @@ namespace Spic.Infrastructure.Data
         // PageModuleAttribute metadata, preserving every exact existing key and
         // the existing display/grouping behavior. Future enum changes surface
         // as model diffs in later EF migrations.
+        //
+        // FieldDashboard/MarkAttendance/TasksAllocation are filtered out of this
+        // seed for now: their position-based ids (computed from each entry's
+        // index in the enum) collide with already-applied rows for Metrics/
+        // AnnualBudgeting in the real database, for reasons that predate this
+        // change and need their own fix. Nothing reads these three via
+        // PagePermission today (their pages are gated by LoginState.UserRole
+        // instead), so excluding them from the seed has no effect on anything
+        // working right now. Remove this filter once the id collision is sorted.
+        var unseededPages = new[] { PagePermission.FieldDashboard, PagePermission.MarkAttendance, PagePermission.TasksAllocation };
             builder.Entity<ApplicationPage>().HasData(
                 Enum.GetValues<PagePermission>()
+                    .Where(page => !unseededPages.Contains(page))
                     .Select((page, index) => new ApplicationPage
                     {
                         Id = index + 1,
@@ -203,6 +214,28 @@ namespace Spic.Infrastructure.Data
                 .WithOne(p => p.Collection)
                 .HasForeignKey(p => p.CollectionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ---------------------------------------------------------- JMDO task allocation
+        builder.Entity<JmdoTaskAllocation>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.SubmittedByUserId);
+            entity.HasIndex(x => x.AllocationDate);
+            entity.HasIndex(x => x.Status);
+            entity.HasMany(x => x.Dealers)
+                .WithOne(d => d.Allocation)
+                .HasForeignKey(d => d.AllocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Programs)
+                .WithOne(p => p.Allocation)
+                .HasForeignKey(p => p.AllocationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<JmdoTaskAllocationProgram>(entity =>
+        {
+            entity.Property(x => x.Budget).HasColumnType("numeric(12,2)");
         });
 
         builder.Entity<SampleItem>(entity =>
@@ -836,6 +869,11 @@ namespace Spic.Infrastructure.Data
 		public DbSet<LabCropRecommendation> LabCropRecommendations { get; set; }
 		public DbSet<LabTranslation> LabTranslations { get; set; }
 		public DbSet<SasCourier> SasCouriers { get; set; }
+
+		//// JMDO Task Allocation
+		public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }
+		public DbSet<JmdoTaskAllocationDealer> JmdoTaskAllocationDealers { get; set; }
+		public DbSet<JmdoTaskAllocationProgram> JmdoTaskAllocationPrograms { get; set; }
 
 		//// Knowledge Community
 		public DbSet<CommunityPost> CommunityPosts { get; set; }
