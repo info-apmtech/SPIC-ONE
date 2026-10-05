@@ -1,7 +1,13 @@
 @page "/FieldDashboard"
+@implements IDisposable
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.FieldAttendanceState AttendanceState
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 fd-page">
 
@@ -222,9 +228,9 @@
                 </div>
 
                 <div class="fd-modal-footer">
-                    <button type="button" class="fd-btn fd-btn-keep" @onclick="CancelStopTracking">Keep Tracking</button>
-                    <button type="button" class="fd-btn fd-btn-stop" @onclick="ConfirmStopTracking">
-                        <i class="bi bi-stop-circle-fill"></i> Stop Tracking
+                    <button type="button" class="fd-btn fd-btn-keep" @onclick="CancelStopTracking" disabled="@_stopping">Keep Tracking</button>
+                    <button type="button" class="fd-btn fd-btn-stop" @onclick="ConfirmStopTracking" disabled="@_stopping">
+                        <i class="bi bi-stop-circle-fill"></i> @(_stopping ? "Stopping..." : "Stop Tracking")
                     </button>
                 </div>
             </div>
@@ -245,15 +251,162 @@
     private bool ShowStopConfirm { get; set; }
     private const string TrackingDuration = "00:12:34";
 
+    // ---------------------------------------------------------------------------------------
+    // Start Tracking: fires once, automatically, the first time this dashboard renders while
+    // the JMDO is On Duty (there is no separate "Start Tracking" button - marking attendance is
+    // what starts tracking, per the existing "Update Attendance to Start Tracking" copy above).
+    // The server call is idempotent (JMDOTrackingController.Start returns the caller's existing
+    // Active session instead of creating a second one), so reloading this page, or a fresh
+    // component instance after navigating back from MarkAttendance, safely resumes the same
+    // session rather than duplicating it.
+    //
+    // Stop Tracking, duration and View Tracking Details are a later step - this only creates the
+    // session and begins periodic point capture while it stays Active.
+    // ---------------------------------------------------------------------------------------
+    private const int TrackingPointIntervalSeconds = 60;
+
+    private JMDOTrackingSessionDto? _session;
+    private CancellationTokenSource? _trackingCts;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await StartTrackingIfNeededAsync();
+    }
+
+    private async Task StartTrackingIfNeededAsync()
+    {
+        if (!IsOnDuty || _session is not null) return;
+
+        GeoResult? position;
+        try
+        {
+            position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+        }
+        catch (Exception)
+        {
+            position = null;
+        }
+
+        if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+        {
+            Toast.Error(string.IsNullOrWhiteSpace(position?.Error)
+                ? "Could not get your current location. Tracking was not started."
+                : position!.Error!);
+            return;
+        }
+
+        _session = await TrackingApi.StartAsync(position.Latitude, position.Longitude);
+        if (_session is null) return; // TrackingApi already raised an error toast
+
+        if (_session.Status == JMDOTrackingSessionStatus.Active)
+        {
+            _trackingCts = new CancellationTokenSource();
+            _ = RunPointLoopAsync(_session.Id, _trackingCts.Token);
+        }
+    }
+
+    // Periodic GPS capture: reuses the same single-shot window.getCurrentPosition bridge (no new
+    // location mechanism) on a timer instead of a continuous "watch" API, which is enough to
+    // produce a point trail for the map (Stop Tracking / duration / the map itself come later).
+    private async Task RunPointLoopAsync(int sessionId, CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(TrackingPointIntervalSeconds));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                if (_session is null || _session.Status != JMDOTrackingSessionStatus.Active) break;
+
+                GeoResult? position;
+                try
+                {
+                    position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+                }
+                catch (Exception)
+                {
+                    continue; // a transient failure just skips this interval's point
+                }
+
+                if (position is null || !string.IsNullOrWhiteSpace(position.Error)) continue;
+
+                await TrackingApi.AddPointAsync(sessionId, position.Latitude, position.Longitude, null, ct);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // expected when the component is disposed (navigated away)
+        }
+    }
+
+    private sealed class GeoResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string? Error { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _trackingCts?.Cancel();
+        _trackingCts?.Dispose();
+    }
+
+    private bool _stopping;
+
     private void RequestStopTracking() => ShowStopConfirm = true;
 
-    private void CancelStopTracking() => ShowStopConfirm = false;
-
-    private void ConfirmStopTracking()
+    private void CancelStopTracking()
     {
-        ShowStopConfirm = false;
-        AttendanceState.IsOnDuty = false;
-        Navigation.NavigateTo("/MarkAttendance?view=stopped");
+        if (!_stopping) ShowStopConfirm = false;
+    }
+
+    private async Task ConfirmStopTracking()
+    {
+        if (_stopping) return;
+        _stopping = true;
+
+        try
+        {
+            // A fresh fix at the moment tracking is stopped - the same bridge the periodic loop
+            // and Start Tracking use, not a new location mechanism.
+            GeoResult? position;
+            try
+            {
+                position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+            }
+            catch (Exception)
+            {
+                position = null;
+            }
+
+            if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+            {
+                Toast.Error(string.IsNullOrWhiteSpace(position?.Error)
+                    ? "Could not get your current location. Tracking is still active - please try again."
+                    : position!.Error!);
+                return; // session stays Active; the confirm modal stays open so the JMDO can retry
+            }
+
+            var stopped = await TrackingApi.StopAsync(position.Latitude, position.Longitude);
+            if (stopped is null) return; // TrackingApi already raised an error toast; session stays Active
+
+            _session = stopped;
+
+            // Only now is the periodic loop cancelled - no point is sent after Status=Completed.
+            _trackingCts?.Cancel();
+            _trackingCts?.Dispose();
+            _trackingCts = null;
+
+            ShowStopConfirm = false;
+            AttendanceState.IsOnDuty = false;
+            Toast.Success("Location tracking stopped successfully.");
+            Navigation.NavigateTo("/MarkAttendance?view=stopped");
+        }
+        finally
+        {
+            _stopping = false;
+        }
     }
 
     private sealed class FdTask
