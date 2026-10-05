@@ -105,7 +105,13 @@ namespace SPIC.Core.Entities
         // Usage / error metrics page (2026-09-28, docs/metrics-telemetry-plan.md). Normal CanAccess rule.
         [PageModule("Administration")] Metrics,
         // MD Portal - Annual Budgeting master. Appended at the END on purpose.
-        AnnualBudgeting, StateBudgetManagement
+        // MD Portal - Annual Budgeting master. Appended at the END on purpose.
+        AnnualBudgeting, StateBudgetManagement,
+        
+        // Added for menu permissions
+        FieldDashboard, FieldReports, MdoDashboard, AllocationRequests, TaskMonitoring,
+        PerformanceTracker, TargetAchievement, FarmerData, MdoReports, SdwaCompanyMaster,
+        GuestHouseCancellations, DemoDocumentation, SalesAudit, ExtensionRequests
 
     }
 }

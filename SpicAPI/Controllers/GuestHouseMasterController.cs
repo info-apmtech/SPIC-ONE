@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.Entities;
 using System.Globalization;
 using System.IO;
@@ -518,7 +519,14 @@ namespace SpicAPI.Controllers
 			var houses = await _db.GuestHouses
 				.AsNoTracking()
 				.ToListAsync();
-			var existingHouses = houses.ToDictionary(h => h.Name.Trim().ToUpperInvariant(), h => h);
+			// GroupBy(...).First() rather than ToDictionary: two guest houses whose names
+			// normalize to the same key used to throw "An item with the same key has already
+			// been added" and fail the whole upload. Canonical normalization also makes
+			// "  north  lodge " and "North Lodge" the same guest house.
+			var existingHouses = houses
+				.GroupBy(h => MasterNormalizer.Normalize(h.Name))
+				.Where(g => g.Key.Length > 0)
+				.ToDictionary(g => g.Key, g => g.First());
 
 			var batchKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			var insertedCount = 0;
@@ -535,7 +543,7 @@ namespace SpicAPI.Controllers
 						continue;
 					}
 
-					var key = name.Trim().ToUpperInvariant();
+					var key = MasterNormalizer.Normalize(name);
 					if (!batchKeys.Add(key))
 					{
 						AddGrouped("Duplicated in this file", $"'{name}' (Row {row.RowNumber()})");
@@ -589,7 +597,12 @@ namespace SpicAPI.Controllers
 			var houses = await _db.GuestHouses
 				.AsNoTracking()
 				.ToListAsync();
-			var houseByName = houses.ToDictionary(h => h.Name.Trim().ToUpperInvariant(), h => h);
+			// GroupBy(...).First() rather than ToDictionary: duplicate guest house names in the
+			// master table used to throw and fail the room upload with a 500.
+			var houseByName = houses
+				.GroupBy(h => MasterNormalizer.Normalize(h.Name))
+				.Where(g => g.Key.Length > 0)
+				.ToDictionary(g => g.Key, g => g.First());
 
 			var rooms = await _db.GuestHouseRooms
 				.AsNoTracking()
@@ -635,7 +648,7 @@ namespace SpicAPI.Controllers
 						continue;
 					}
 
-					if (!houseByName.TryGetValue(houseName.Trim().ToUpperInvariant(), out var house))
+					if (!houseByName.TryGetValue(MasterNormalizer.Normalize(houseName), out var house))
 					{
 						AddGrouped("GuestHouseName not found in database",
 							$"Row {row.RowNumber()}: '{houseName}' has not been created yet. Add this Guest House first, then retry.");
@@ -654,7 +667,7 @@ namespace SpicAPI.Controllers
 						continue;
 					}
 
-					var key = $"{houseName.Trim().ToUpperInvariant()}|{Normalize(RoomKeyPart(roomType))}|{Normalize(RoomKeyPart(roomNumber))}";
+					var key = $"{MasterNormalizer.Normalize(houseName)}|{Normalize(RoomKeyPart(roomType))}|{Normalize(RoomKeyPart(roomNumber))}";
 					if (!batchKeys.Add(key))
 					{
 						AddGrouped("Duplicated in this file",

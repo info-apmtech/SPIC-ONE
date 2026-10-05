@@ -49,6 +49,7 @@ namespace SPIC.Ifms.Automation.Reports
 		private readonly IServiceScopeFactory _scopeFactory;
 		private readonly ISiteProbe _siteProbe;
 		private readonly IReportImporter _importer;
+		private readonly IfmsImportGate _importGate;
 		private readonly IAlertDispatcher _alerts;
 		private readonly IfmsOptions _ifms;
 		private readonly ScheduleOptions _schedule;
@@ -63,6 +64,7 @@ namespace SPIC.Ifms.Automation.Reports
 			IOptions<IfmsOptions> ifms,
 			IOptions<ScheduleOptions> schedule,
 			IOptions<ReportJobsOptions> jobs,
+			IfmsImportGate importGate,
 			ILogger<NightlyRunService> logger)
 		{
 			_scopeFactory = scopeFactory;
@@ -72,6 +74,7 @@ namespace SPIC.Ifms.Automation.Reports
 			_ifms = ifms.Value;
 			_schedule = schedule.Value;
 			_jobs = jobs.Value;
+			_importGate = importGate;
 			_logger = logger;
 		}
 
@@ -82,6 +85,31 @@ namespace SPIC.Ifms.Automation.Reports
 			IReadOnlyCollection<string>? onlyJobKeys,
 			CancellationToken cancellationToken,
 			int? existingRunId = null)
+		{
+			// Only one import may run at a time. Without this, the scheduled trigger, the
+			// manual trigger worker and an operator running a command by hand could all post
+			// the same report date at once, and the report tables that append rather than
+			// upsert would end up with duplicated rows.
+			await using var lease = await _importGate
+				.AcquireAsync($"run for {reportDate:dd-MMM-yyyy}", cancellationToken)
+				.ConfigureAwait(false);
+
+			return await RunLockedAsync(
+				reportDate,
+				trigger,
+				attempt,
+				onlyJobKeys,
+				cancellationToken,
+				existingRunId).ConfigureAwait(false);
+		}
+
+		private async Task<RunSummary> RunLockedAsync(
+			DateTime reportDate,
+			IfmsRunTrigger trigger,
+			int attempt,
+			IReadOnlyCollection<string>? onlyJobKeys,
+			CancellationToken cancellationToken,
+			int? existingRunId)
 		{
 			var startedAt = DateTime.Now;
 

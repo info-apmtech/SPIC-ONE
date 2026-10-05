@@ -3,6 +3,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.Entities;
 
 namespace SpicAPI.Controllers
@@ -261,18 +262,64 @@ var records = _context.RakePointMasters
 			var uploadedCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 			// Pre-load existing rows keyed by code to detect database duplicates.
-			var existingByCode = new Dictionary<string, RakePointMaster>(StringComparer.OrdinalIgnoreCase);
+			// Canonical normalization: a code with stray whitespace or inconsistent casing is
+			// the same code, and pre-existing duplicates must not throw when building the map.
+			var existingByCode = new Dictionary<string, RakePointMaster>(StringComparer.Ordinal);
 			foreach (var existing in _context.RakePointMasters)
-				existingByCode[existing.RakePointCode.Trim()] = existing;
-
-			// Pre-load the State master to resolve the optional "State" column.
-			var stateIdByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-			foreach (var state in _context.States)
 			{
-				if (!string.IsNullOrWhiteSpace(state.StateName))
-					stateIdByName[state.StateName.Trim()] = state.Id;
+				var existingKey = MasterNormalizer.Normalize(existing.RakePointCode);
+				if (existingKey.Length > 0 && !existingByCode.ContainsKey(existingKey))
+					existingByCode[existingKey] = existing;
 			}
 
+			// Pre-load the State master to resolve the optional "State" column.
+			var stateIdByName = new Dictionary<string, int>(StringComparer.Ordinal);
+			foreach (var state in _context.States)
+			{
+				var stateKey = MasterNormalizer.Normalize(state.StateName);
+				if (stateKey.Length > 0 && !stateIdByName.ContainsKey(stateKey))
+					stateIdByName[stateKey] = state.Id;
+			}
+
+			// -----------------------------------------------------------------
+			// VALIDATE REFERENCED MASTERS BEFORE ANY WRITE.
+			//
+			// The State column is optional, but when a row does supply one the State has
+			// to already exist. Previously an unknown State name only skipped that one
+			// row and let the rest of the file commit, so a typo produced a partial
+			// import. Every missing State is now collected for the whole file and the
+			// upload is rejected before anything is written.
+			// -----------------------------------------------------------------
+			var missingMasters = new MissingMasterCollector();
+			foreach (var row in dataRows)
+			{
+				var stateName = GetCellString(row, headerMap, "state");
+				if (MasterNormalizer.IsBlank(stateName))
+					continue;
+
+				if (!stateIdByName.ContainsKey(MasterNormalizer.Normalize(stateName)))
+					missingMasters.Add("State", stateName, row.RowNumber());
+			}
+
+			if (missingMasters.HasAny)
+			{
+				var (missingMessage, missingLines) = missingMasters.Build("RakePoint master");
+
+				return BadRequest(new
+				{
+					success = false,
+					message = missingMessage,
+					missingMasterLines = missingLines,
+					missingMasters = missingMasters.Entries
+						.Select(m => new { kind = m.Kind, value = m.Value, rowNumbers = m.RowNumbers })
+						.ToList()
+				});
+			}
+
+			// Every insert and update for this file commits together, so a failure part way
+			// through cannot leave a half-applied upload behind. The transaction is disposed
+			// uncommitted on any exception, which rolls it back.
+			await using var transaction = await _context.Database.BeginTransactionAsync();
 			try
 			{
 				foreach (var row in dataRows)
@@ -296,7 +343,7 @@ var records = _context.RakePointMasters
 
 					totalRows++;
 
-					var key = code.Trim();
+					var key = MasterNormalizer.Normalize(code);
 
 					// Duplicate SAP Code within the same uploaded Excel file
 					if (!uploadedCodes.Add(key))
@@ -318,19 +365,21 @@ var records = _context.RakePointMasters
 
 					if (!string.IsNullOrWhiteSpace(stateName))
 					{
-						if (!stateIdByName.TryGetValue(
-							stateName,
-							out var stateId))
+					if (!stateIdByName.TryGetValue(
+						MasterNormalizer.Normalize(stateName),
+						out var stateId))
+					{
+						// Unreachable: the validation pass already rejected every unknown
+						// State before the transaction opened.
+						duplicateRecords.Add(new
 						{
-							duplicateRecords.Add(new
-							{
-								rowNumber = row.RowNumber(),
-								sapCode = key,
-								rakePointName = name.Trim(),
-								reason = $"Invalid State: '{stateName}' not found in State Master"
-							});
-							continue;
-						}
+							rowNumber = row.RowNumber(),
+							sapCode = key,
+							rakePointName = name.Trim(),
+							reason = $"Invalid State: '{stateName}' not found in State Master"
+						});
+						continue;
+					}
 
 						resolvedStateId = stateId;
 					}
@@ -364,13 +413,14 @@ var records = _context.RakePointMasters
 							CreatedBy = "bulk-upload",
 							UpdatedBy = "bulk-upload"
 						};
-						_context.RakePointMasters.Add(ent);
-						existingByCode[key] = ent;
-						insertedCount++;
-					}
+					_context.RakePointMasters.Add(ent);
+					existingByCode[key] = ent;
+					insertedCount++;
+				}
 				}
 
 				await _context.SaveChangesAsync();
+				await transaction.CommitAsync();
 			}
 			catch (Exception ex)
 			{

@@ -155,19 +155,37 @@ namespace SPIC.Ifms.Automation.Reports
 				}
 				catch (HttpRequestException ex) when (attempt < attempts)
 				{
-					// Only the network is retried. A rejected file would be rejected
-					// again, and re-posting a file that imported would duplicate rows.
+					// Only a failure to reach the server is retried. A rejected file would be
+					// rejected again, and re-posting a file that imported would duplicate rows.
 					_logger.LogWarning(
 						"Upload of {JobKey} failed to reach {Url} (attempt {Attempt}/{Max}): {Message}",
 						job.Key, url, attempt, attempts, ex.Message);
 
 					await Task.Delay(TimeSpan.FromSeconds(10 * attempt), cancellationToken);
 				}
-				catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested && attempt < attempts)
+				catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
 				{
-					_logger.LogWarning(
-						"Upload of {JobKey} timed out (attempt {Attempt}/{Max}).",
-						job.Key, attempt, attempts);
+					// Deliberately NOT retried.
+					//
+					// HttpClient surfaces its own timeout as TaskCanceledException, and a
+					// timeout is ambiguous: the request may never have been sent, or the
+					// server may have imported the whole file and had the response lost on
+					// the way back. Retrying here is the one case that can silently double
+					// a report's rows, so it is reported instead of repeated. An operator
+					// can check whether the previous attempt landed before deciding.
+					_logger.LogError(
+						ex,
+						"Upload of {JobKey} to {Url} timed out after {Max} attempt(s). " +
+						"Not retried automatically: the server may already have imported " +
+						"this file, and re-posting it could duplicate rows. Verify the " +
+						"import status before running it again.",
+						job.Key, url, attempts);
+
+					throw new InvalidOperationException(
+						$"Upload of '{job.Key}' timed out. The server may already have imported " +
+						"this file, so it was not retried automatically. Check the import status " +
+						"before running it again.",
+						ex);
 				}
 			}
 
