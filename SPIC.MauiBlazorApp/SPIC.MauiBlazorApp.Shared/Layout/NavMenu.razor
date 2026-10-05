@@ -1,4 +1,4 @@
-﻿@inject NavigationManager NavManager
+@inject NavigationManager NavManager
 @inject IJSRuntime JSRuntime
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
 @inject SPIC.MauiBlazorApp.Shared.Services.AppSearchState SearchState
@@ -9,51 +9,6 @@
 
 <nav class="nav nav-pills flex-column nav-section">
 
-    @if (loginState.UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO)
-    {
-        <NavLink class="@NavLinkClass("My Dashboard")" href="/FieldDashboard" Match="NavLinkMatch.All">
-            <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            My Dashboard
-        </NavLink>
-        <NavLink class="@NavLinkClass("My Reports")" href="/FieldReports" Match="NavLinkMatch.All">
-            <i class="bi bi-file-earmark-bar-graph SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            My Reports
-        </NavLink>
-    }
-    @* Team Dashboard / Allocation Requests / Reports: the MDO/MO-level rollup of their
-       JMDOs' task load, approval queue and region reporting - distinct from "My
-       Dashboard"/"My Reports" above, which are each field officer's own personal view. *@
-    @if (loginState.UserRole is AppRole.MO or AppRole.MDO)
-    {
-        <NavLink class="@NavLinkClass("Team Dashboard")" href="/MdoDashboard" Match="NavLinkMatch.All">
-            <i class="bi bi-diagram-3 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Team Dashboard
-        </NavLink>
-        <NavLink class="@NavLinkClass("Allocation Requests")" href="/AllocationRequests" Match="NavLinkMatch.All">
-            <i class="bi bi-person-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Allocation Requests
-        </NavLink>
-        <NavLink class="@NavLinkClass("Task Monitoring")" href="/TaskMonitoring" Match="NavLinkMatch.All">
-            <i class="bi bi-list-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Task Monitoring
-        </NavLink>
-        <NavLink class="@NavLinkClass("Performance Tracker")" href="/PerformanceTracker" Match="NavLinkMatch.All">
-            <i class="bi bi-trophy SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Performance Tracker
-        </NavLink>
-        <NavLink class="@NavLinkClass("Target / Achievement")" href="/TargetAchievement" Match="NavLinkMatch.All">
-            <i class="bi bi-bullseye SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Target / Achievement
-        </NavLink>
-        <NavLink class="@NavLinkClass("Farmer Data")" href="/FarmerData" Match="NavLinkMatch.All">
-            <i class="bi bi-people SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Farmer Data
-        </NavLink>
-        <NavLink class="@NavLinkClass("Reports")" href="/MdoReports" Match="NavLinkMatch.All">
-            <i class="bi bi-bar-chart SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-            Reports
-        </NavLink>
-    }
     @if (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.Dashboard))
     {
         <NavLink class="@NavLinkClass("Dashboard")" href="/Dashboard" Match="NavLinkMatch.All">
@@ -61,6 +16,7 @@
             Register
         </NavLink>
     }
+
      @if (loginState.CanAccess(PagePermission.SubDealerList))
     {
         <NavLink class="@NavLinkClass("Sub Dealer Master")" href="/SubDealerList" Match="NavLinkMatch.All">
@@ -190,7 +146,7 @@
     }
 
 
-    @if (loginState.UserRole == AppRole.Admin)
+    @if (loginState.IsAdmin)
     {
         <NavLink class="@NavLinkClass("IFMS Auto Import")" href="/IfmsAutoImport">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
@@ -460,6 +416,106 @@
             }
         </div>
     }
+
+    @if (AnyJmdoAccessible)
+    {
+        <div class="settings-menu-wrapper">
+            <a href="javascript:void(0);"
+               class="nav-link @(ShowJmdoExpanded ? "active" : "") @MatchClass("JMDO")"
+               @onclick="ToggleJmdoMenu">
+                <i class="bi bi-person-badge SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                JMDO
+                <i class="bi @(ShowJmdoExpanded ? "bi-chevron-up" : "bi-chevron-down") chevron-icon"></i>
+            </a>
+
+            @if (ShowJmdoExpanded)
+            {
+                <ul class="submenu-list">
+                    @if (loginState.CanAccess(PagePermission.FieldDashboard))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("My Dashboard")" href="/FieldDashboard" Match="NavLinkMatch.All">
+                                <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                My Dashboard
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.FieldReports))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("My Reports")" href="/FieldReports" Match="NavLinkMatch.All">
+                                <i class="bi bi-file-earmark-bar-graph SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                My Reports
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.MdoDashboard))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Team Dashboard")" href="/MdoDashboard" Match="NavLinkMatch.All">
+                                <i class="bi bi-diagram-3 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Team Dashboard
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.AllocationRequests))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Allocation Requests")" href="/AllocationRequests" Match="NavLinkMatch.All">
+                                <i class="bi bi-person-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Allocation Requests
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.TaskMonitoring))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Task Monitoring")" href="/TaskMonitoring" Match="NavLinkMatch.All">
+                                <i class="bi bi-list-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Task Monitoring
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.PerformanceTracker))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Performance Tracker")" href="/PerformanceTracker" Match="NavLinkMatch.All">
+                                <i class="bi bi-trophy SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Performance Tracker
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.TargetAchievement))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Target / Achievement")" href="/TargetAchievement" Match="NavLinkMatch.All">
+                                <i class="bi bi-bullseye SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Target / Achievement
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.FarmerData))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Farmer Data")" href="/FarmerData" Match="NavLinkMatch.All">
+                                <i class="bi bi-people SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Farmer Data
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanAccess(PagePermission.MdoReports))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Reports")" href="/MdoReports" Match="NavLinkMatch.All">
+                                <i class="bi bi-bar-chart SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Reports
+                            </NavLink>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
   @*   @if (loginState.CanAccess(PagePermission.BudgetSubmissions))
     {
         <NavLink class="@NavLinkClass("Budget Submissions")" href="/BudgetSubmissions">
@@ -607,19 +663,19 @@
                             <NavLink href="/SubDealerEmployeeMaster" class="@SubmenuLinkClass("Sub Dealer & Employee")" Match="NavLinkMatch.All">Sub Dealer &amp; Employee</NavLink>
                         </li>
                     }
-                    @if (loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                    @if (loginState.CanAccess(PagePermission.GuestHouse))
                     {
                         <li class="submenu-item">
                             <NavLink href="/GuestHouseMaster" class="@SubmenuLinkClass("Guest House")" Match="NavLinkMatch.All">Guest House</NavLink>
                         </li>
                     }
-                    @if (loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                    @if (loginState.CanAccess(PagePermission.SdwaCompanyMaster))
                     {
                         <li class="submenu-item">
                             <NavLink href="/SdwaCompanyMaster" class="@SubmenuLinkClass("Company Details")" Match="NavLinkMatch.All">Company Details</NavLink>
                         </li>
                     }
-                    @if (loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin)
+                    @if (loginState.CanAccess(PagePermission.GuestHouseCancellations))
                     {
                         <li class="submenu-item">
                             <NavLink href="/GuestHouseCancellations" class="@SubmenuLinkClass("Cancellation Requests")" Match="NavLinkMatch.All">Cancellation Requests</NavLink>
@@ -707,7 +763,7 @@
        (PageAuthorization.OpenAccessPages). A designation-driven role such as CommonRole sees this
        block only when its designation grants the keys. Gated through CanAccess so this menu and
        PageGuard answer identically. *@
-    @if (loginState.CanAccess("DemoDocumentation"))
+    @if (loginState.CanAccess(PagePermission.DemoDocumentation))
     {
     <div class="settings-menu-wrapper">
 
@@ -797,7 +853,7 @@
     </div>
     }
 
-    @if (loginState.CanAccess("SalesAudit"))
+    @if (loginState.CanAccess(PagePermission.SalesAudit))
     {
         <NavLink class="@NavLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
@@ -805,7 +861,7 @@
         </NavLink>
     }
 
-    @if (loginState.CanAccess("ExtensionRequests"))
+    @if (loginState.CanAccess(PagePermission.ExtensionRequests))
     {
         <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
@@ -850,6 +906,7 @@
 </style>
 
 @code {
+    private bool isJmdoOpen = false;
     private bool isSettingsOpen = false;
     private bool isSubsidyOpen = false;
     private bool isSdwaOpen = false;
@@ -858,6 +915,7 @@
     private bool ShowDemoDocumentationExpanded { get; set; }
     protected override void OnInitialized()
     {
+        isJmdoOpen = IsJmdoSectionActive();
         isSettingsOpen = IsSettingsSectionActive();
         isSubsidyOpen = IsSubsidySectionActive();
         isSdwaOpen = IsSdwaSectionActive();
@@ -896,6 +954,45 @@
         return string.IsNullOrEmpty(match) ? "submenu-link" : $"submenu-link {match}";
     }
 
+    private bool AnyJmdoAccessible =>
+        loginState.CanAccess(PagePermission.FieldDashboard)
+        || loginState.CanAccess(PagePermission.FieldReports)
+        || loginState.CanAccess(PagePermission.MdoDashboard)
+        || loginState.CanAccess(PagePermission.AllocationRequests)
+        || loginState.CanAccess(PagePermission.TaskMonitoring)
+        || loginState.CanAccess(PagePermission.PerformanceTracker)
+        || loginState.CanAccess(PagePermission.TargetAchievement)
+        || loginState.CanAccess(PagePermission.FarmerData)
+        || loginState.CanAccess(PagePermission.MdoReports);
+
+    private bool AnyJmdoItemMatches =>
+        SearchState.Matches("My Dashboard")
+        || SearchState.Matches("My Reports")
+        || SearchState.Matches("Team Dashboard")
+        || SearchState.Matches("Allocation Requests")
+        || SearchState.Matches("Task Monitoring")
+        || SearchState.Matches("Performance Tracker")
+        || SearchState.Matches("Target / Achievement")
+        || SearchState.Matches("Farmer Data")
+        || SearchState.Matches("Reports")
+        || SearchState.Matches("JMDO");
+
+    private bool ShowJmdoExpanded => isJmdoOpen || AnyJmdoItemMatches;
+
+    private void ToggleJmdoMenu()
+    {
+        if (!isJmdoOpen) { isJmdoOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        else isJmdoOpen = false;
+    }
+
+    private bool IsJmdoSectionActive()
+    {
+        var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
+        return uri == "fielddashboard" || uri == "fieldreports" || uri == "mdodashboard" || uri == "allocationrequests"
+            || uri == "taskmonitoring" || uri == "performancetracker" || uri == "targetachievement"
+            || uri == "farmerdata" || uri == "mdoreports";
+    }
+
     private bool AnySettingsAccessible =>
         loginState.CanAccess(PagePermission.LocationMaster)
         || loginState.CanAccess(PagePermission.Agriculture)
@@ -920,7 +1017,7 @@
 
     private void ToggleSettingsMenu()
     {
-        if (!isSettingsOpen) { isSettingsOpen = true; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        if (!isSettingsOpen) { isSettingsOpen = true; isJmdoOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSettingsOpen = false;
     }
 
@@ -961,7 +1058,7 @@
 
     private void ToggleSubsidyMenu()
     {
-        if (!isSubsidyOpen) { isSubsidyOpen = true; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        if (!isSubsidyOpen) { isSubsidyOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSubsidyOpen = false;
     }
 
@@ -1002,7 +1099,7 @@
 
     private void ToggleSdwaMenu()
     {
-        if (!isSdwaOpen) { isSdwaOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        if (!isSdwaOpen) { isSdwaOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
         else isSdwaOpen = false;
     }
 
@@ -1048,7 +1145,7 @@
 
     private void ToggleMdPortalMenu()
     {
-        if (!isMdPortalOpen) { isMdPortalOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isSchemesOpen = false; }
+        if (!isMdPortalOpen) { isMdPortalOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isSchemesOpen = false; }
         else isMdPortalOpen = false;
     }
 
@@ -1090,7 +1187,7 @@
 
     private void ToggleSchemesMenu()
     {
-        if (!isSchemesOpen) { isSchemesOpen = true; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
+        if (!isSchemesOpen) { isSchemesOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSubsidyOpen = false; isSdwaOpen = false; isMdPortalOpen = false; }
         else isSchemesOpen = false;
     }
 
@@ -1107,3 +1204,4 @@
         ShowDemoDocumentationExpanded = !ShowDemoDocumentationExpanded;
     }
 }
+

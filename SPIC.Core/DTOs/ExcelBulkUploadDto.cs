@@ -21,6 +21,25 @@ namespace SPIC.Core.DTOs
 
 		public ExcelBulkUploadResultMasters NewMastersCreated { get; set; } = new();
 		public List<string> Warnings { get; set; } = new();
+
+		/// <summary>
+		/// Set when the upload was rejected because the file referenced master data that
+		/// does not exist. Nothing was written in that case.
+		/// </summary>
+		public List<ExcelBulkUploadMissingMaster> MissingMasters { get; set; } = new();
+
+		/// <summary>Pre-rendered "Missing {Kind}: {Value} — rows 4, 9" lines for the UI.</summary>
+		public List<string> MissingMasterLines { get; set; } = new();
+	}
+
+	/// <summary>One master value an uploaded file needed but the database did not have.</summary>
+	public sealed class ExcelBulkUploadMissingMaster
+	{
+		public string Kind { get; set; } = string.Empty;
+		public string Value { get; set; } = string.Empty;
+
+		/// <summary>Rows in the uploaded file that referenced this value.</summary>
+		public List<int> RowNumbers { get; set; } = new();
 	}
 
 	public sealed class ExcelBulkUploadResultMasters

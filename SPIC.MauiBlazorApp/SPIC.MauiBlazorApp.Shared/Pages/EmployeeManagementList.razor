@@ -44,10 +44,11 @@
                     </div>
                     <div class="modal-body">
                         <p class="text-muted small mb-3">
-                            Excel columns: <strong>EmployeeID, EmpName, UserName, Permission, State, Region, HQ, PhoneNumber, EmailID, Designation</strong><br />
+                            Excel columns: <strong>EmployeeID, EmpName, UserName, Permission, State, Region, HQ, PhoneNumber, EmailID, Designation, Zone</strong><br />
                             Designation is optional — leave blank for full access. Must match an existing active designation name.<br />
                             Phone number is used as the login password.<br />
-                            Allowed roles: <strong>SMD, SMM</strong> (State) · <strong>RM, RMD</strong> (State + Region) · <strong>MDO, MO, JMDO</strong> (HQ)
+                            Allowed roles: <strong>AVP</strong> (Zone) · <strong>SMD, SMM</strong> (State) · <strong>RM, RMD</strong> (State + Region) · <strong>MDO, MO, JMDO</strong> (State + Region + HQ)<br />
+                            <span class="text-danger">This upload never creates master data. Every Zone / State / Region / HQ must already exist — if one is missing the whole upload is stopped and nothing is saved.</span>
                         </p>
                         <InputFile OnChange="OnEmployeeFileSelected" accept=".xlsx,.xls" />
 
@@ -64,7 +65,25 @@
                         }
                         else if (!string.IsNullOrEmpty(_uploadResult))
                         {
-                            <div class="mt-3 alert alert-danger py-2">@_uploadResult</div>
+                            <div class="mt-3 alert alert-danger py-2" style="white-space: pre-line;">@_uploadResult</div>
+                        }
+
+                        @if (_uploadMissingMasters.Count > 0)
+                        {
+                            <div class="mt-2 alert alert-danger py-2">
+                                <div class="fw-semibold mb-1">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>Missing master data &mdash; nothing was uploaded
+                                </div>
+                                <ul class="mb-1 ps-3" style="font-size: 0.85rem;">
+                                    @foreach (var line in _uploadMissingMasters)
+                                    {
+                                        <li>@line</li>
+                                    }
+                                </ul>
+                                <div class="mt-1" style="font-size: 0.8rem;">
+                                    Create these in <strong>Location Master</strong>, then select the same file again.
+                                </div>
+                            </div>
                         }
 
                         @if (_uploadGroupedErrors.Count > 0)
@@ -129,7 +148,7 @@
 
             <select class="form-inp" @bind="_roleFilter" @bind:after="ApplyFilter">
                 <option value="All">All Role</option>
-                @foreach (var role in Enum.GetValues<AppRole>())
+                @foreach (var role in AllowedRoles)
                 {
                     <option value="@role">@role</option>
                 }
@@ -206,6 +225,26 @@
     private bool _isLoading = true;
     private string _searchText = string.Empty;
     private string _roleFilter = "All";
+
+    // Mirrors EmployeeRegistration.AllowedRoles, which is the source of truth for
+    // the role list. Kept as the same explicit set (not Enum.GetValues<AppRole()>)
+    // so this filter offers exactly the roles the employee editor can assign.
+    private static readonly AppRole[] AllowedRoles = new[]
+    {
+        AppRole.CorporateAdmin,
+        AppRole.Director,
+        AppRole.AVP,
+        AppRole.SMD,
+        AppRole.SMM,
+        AppRole.RM,
+        AppRole.RMD,
+        AppRole.MDO,
+        AppRole.MO,
+        AppRole.JMDO,
+        AppRole.SpecialAdmin,
+        AppRole.CommonRole
+    };
+
     private string _stateFilter = "All";
 
     private bool _showUploadModal = false;
@@ -214,6 +253,7 @@
     private int _uploadInserted = 0;
     private int _uploadSkipped = 0;
     private Dictionary<string, List<string>> _uploadGroupedErrors = new();
+    private List<string> _uploadMissingMasters = new();
 
     private List<EmployeeGridItem> FilteredItems = new();
 
@@ -491,6 +531,7 @@
         _uploadResult = string.Empty;
         _uploadInserted = 0;
         _uploadSkipped = 0;
+        _uploadMissingMasters = new();
         _uploadGroupedErrors.Clear();
     }
 
@@ -503,6 +544,7 @@
         _uploadResult = string.Empty;
         _uploadInserted = 0;
         _uploadSkipped = 0;
+        _uploadMissingMasters = new();
         _uploadGroupedErrors.Clear();
 
         try
@@ -533,7 +575,21 @@
             }
             else
             {
-                _uploadResult = "Upload failed: " + body;
+                // A rejected upload (e.g. missing master data) still returns a readable body.
+                BulkUploadResult? failure = null;
+                try
+                {
+                    failure = System.Text.Json.JsonSerializer.Deserialize<BulkUploadResult>(body,
+                        new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                }
+
+                _uploadMissingMasters = failure?.MissingMasterLines ?? new();
+                _uploadResult = !string.IsNullOrWhiteSpace(failure?.Message)
+                    ? failure!.Message!
+                    : "Upload failed: " + body;
             }
         }
         catch (Exception ex)
@@ -578,6 +634,8 @@
         public int Inserted { get; set; }
         public int Skipped { get; set; }
         public Dictionary<string, List<string>>? GroupedErrors { get; set; }
+        public string? Message { get; set; }
+        public List<string>? MissingMasterLines { get; set; }
     }
 
     public class UserInfoDto

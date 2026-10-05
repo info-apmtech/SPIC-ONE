@@ -115,6 +115,8 @@ builder.Services.AddSingleton<IOtpProvider>(sp =>
 builder.Services.AddScoped<IfmsPortalClient>();
 builder.Services.AddSingleton<IReportImporter, ReportImporter>();
 builder.Services.AddSingleton<INightlyRunService, NightlyRunService>();
+// One import at a time, across every trigger and command. See IfmsImportGate.
+builder.Services.AddSingleton<SPIC.Ifms.Automation.Reports.IfmsImportGate>();
 
 // -------------------------------------------------------------------- alerts
 
@@ -681,6 +683,14 @@ static async Task<int> RunUploadSavedAsync(IServiceProvider services, string[] a
 	var ifms = services.GetRequiredService<IOptions<IfmsOptions>>().Value;
 	var allJobs = services.GetRequiredService<IOptions<ReportJobsOptions>>().Value.Jobs;
 	var importer = services.GetRequiredService<IReportImporter>();
+	var importGate = services.GetRequiredService<SPIC.Ifms.Automation.Reports.IfmsImportGate>();
+
+	// Take the same lock the scheduled and manual runs use. Without it, running this
+	// command while the service happens to be importing would post the same reports
+	// twice, and the tables that append rather than upsert would gain duplicate rows.
+	await using var uploadLease = await importGate
+		.AcquireAsync($"upload-saved for {date:yyyy-MM-dd}", CancellationToken.None)
+		.ConfigureAwait(false);
 
 	var root = ifms.DownloadRoot;
 	if (!System.IO.Path.IsPathRooted(root))

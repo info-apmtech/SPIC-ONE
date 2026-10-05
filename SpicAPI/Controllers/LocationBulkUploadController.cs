@@ -1,7 +1,9 @@
 ﻿using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.Entities;
 using System.Linq;
 using System.IO;
@@ -129,116 +131,277 @@ namespace SpicAPI.Controllers
             var rows = worksheet.RowsUsed().Skip(1).ToList(); // materialize once
             var now = DateTime.UtcNow;
 
-            // ── Pre-load phase: pull all needed reference data into memory before the loop.
-            //    This reduces DB round-trips from O(N) to at most 3 queries per upload, regardless of file size.
-            var existingNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // zone / state name dedup
-            var existingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // "name|parentId" dedup
-            var zoneNameToId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var stateNameToId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            var regionNameToId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            // districtName → [(districtId, stateId)] for state-context narrowing in subdistrict upload
-            var districtsByName = new Dictionary<string, List<(int Id, int StateId)>>(StringComparer.OrdinalIgnoreCase);
+            // ─────────────────────────────────────────────────────────────────────────
+            // PRE-LOAD + VALIDATION PASS (read-only, before the transaction opens).
+            //
+            // The sheet's own subject (Zone / State / District / SubDistrict / Region /
+            // Headquarter) is what the admin is uploading, so those rows are still created.
+            // What must never happen is a *referenced* master being invented: a State row
+            // pointing at a Zone that does not exist, a SubDistrict pointing at a District
+            // that does not exist, and so on. Every unresolved parent across the whole file
+            // is collected here and reported together, before a single row is written.
+            //
+            // All name matching runs through MasterNormalizer via MasterLookup, and the
+            // lookup is built with GroupBy(...).First() so pre-existing duplicate master rows
+            // cannot throw. District/Region/Headquarter resolve parent-scoped.
+            // ─────────────────────────────────────────────────────────────────────────
+            var masters = await MasterLookup.LoadAsync(_db);
 
-            switch (t)
-            {
-                case "zone":
-                    foreach (var n in _db.Zones.Select(z => z.ZoneName).AsEnumerable())
-                        existingNames.Add(n);
-                    break;
-                case "state":
-                    foreach (var n in _db.States.Select(s => s.StateName).AsEnumerable())
-                        existingNames.Add(n);
-                    foreach (var z in _db.Zones.Select(z => new { z.ZoneName, z.Id }).AsEnumerable())
-                        zoneNameToId[z.ZoneName] = z.Id;
-                    break;
-                case "district":
-                    foreach (var d in _db.Districts.Select(d => new { d.DistrictName, d.StateId }).AsEnumerable())
-                        existingKeys.Add($"{d.DistrictName}|{d.StateId}");
-                    foreach (var s in _db.States.Select(s => new { s.StateName, s.Id }).AsEnumerable())
-                        stateNameToId[s.StateName] = s.Id;
-                    break;
-                case "subdistrict":
-                case "sub-district":
-                case "sub_district":
-                    foreach (var sd in _db.SubDistricts.Select(s => new { s.SubDistrictName, s.DistrictId }).AsEnumerable())
-                        existingKeys.Add($"{sd.SubDistrictName}|{sd.DistrictId}");
-                    foreach (var s in _db.States.Select(s => new { s.StateName, s.Id }).AsEnumerable())
-                        stateNameToId[s.StateName] = s.Id;
-                    foreach (var d in _db.Districts.Select(d => new { d.Id, d.DistrictName, d.StateId }).AsEnumerable())
-                    {
-                        if (!districtsByName.TryGetValue(d.DistrictName, out var lst))
-                            districtsByName[d.DistrictName] = lst = new();
-                        lst.Add((d.Id, d.StateId));
-                    }
-                    break;
-                case "region":
-                    foreach (var r in _db.Regions.Select(r => new { r.RegionName, r.StateId }).AsEnumerable())
-                        existingKeys.Add($"{r.RegionName}|{r.StateId}");
-                    foreach (var s in _db.States.Select(s => new { s.StateName, s.Id }).AsEnumerable())
-                        stateNameToId[s.StateName] = s.Id;
-                    break;
-                case "headquarter":
-                case "headquarters":
-                    foreach (var h in _db.Headquarters.Select(h => new { h.HeadquarterName, h.RegionId }).AsEnumerable())
-                        existingKeys.Add($"{h.HeadquarterName}|{h.RegionId}");
-                    foreach (var r in _db.Regions.Select(r => new { r.RegionName, r.Id }).AsEnumerable())
-                        regionNameToId[r.RegionName] = r.Id;
-                    break;
-            }
+            // Numeric-id columns are accepted too, but a raw number is only trusted when it
+            // actually points at a row that exists — previously a stale id was taken at face value.
+            var zoneIdSet = (await _db.Zones.AsNoTracking().Select(z => z.Id).ToListAsync()).ToHashSet();
+            var stateIdSet = (await _db.States.AsNoTracking().Select(s => s.Id).ToListAsync()).ToHashSet();
+            var districtIdSet = (await _db.Districts.AsNoTracking().Select(d => d.Id).ToListAsync()).ToHashSet();
+            var regionIdSet = (await _db.Regions.AsNoTracking().Select(r => r.Id).ToListAsync()).ToHashSet();
+
+            // Unscoped district name → candidates, used only to accept an unambiguous name
+            // when the row carries no state context to scope it with.
+            var districtCandidates = (await _db.Districts.AsNoTracking()
+                    .Select(d => new { d.Id, d.DistrictName, d.StateId })
+                    .ToListAsync())
+                .GroupBy(d => MasterNormalizer.Normalize(d.DistrictName))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.Select(d => (d.Id, d.StateId)).ToList());
+
+            // ── Existing rows, keyed canonically (tracked, so the loop can update them) ──
+            //
+            // Nothing here creates a location master. Each sheet's own subject must already
+            // exist in master maintenance; this upload only updates the existing row. GroupBy
+            // (...First() keeps an existing duplicate in the table from throwing.
+            var zoneByName = (await _db.Zones.ToListAsync())
+                .GroupBy(z => MasterNormalizer.Normalize(z.ZoneName))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var stateByName = (await _db.States.ToListAsync())
+                .GroupBy(s => MasterNormalizer.Normalize(s.StateName))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var districtByKey = (await _db.Districts.ToListAsync())
+                .GroupBy(d => MasterNormalizer.Scoped(d.DistrictName, d.StateId))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var subDistrictByKey = (await _db.SubDistricts.ToListAsync())
+                .GroupBy(sd => MasterNormalizer.Scoped(sd.SubDistrictName, sd.DistrictId))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var regionByKey = (await _db.Regions.ToListAsync())
+                .GroupBy(r => MasterNormalizer.Scoped(r.RegionName, r.StateId))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            var headquarterByKey = (await _db.Headquarters.ToListAsync())
+                .GroupBy(h => MasterNormalizer.Scoped(h.HeadquarterName, h.RegionId))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => g.First());
 
             // In-batch duplicate tracking (separate from DB-existing sets so error messages stay distinct)
-            var batchNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // zone / state
-            var batchKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // "name|parentId"
+            var batchNames = new HashSet<string>(StringComparer.Ordinal); // zone / state
+            var batchKeys = new HashSet<string>(StringComparer.Ordinal);  // Scoped(name, parentId)
 
-            // ── Local FK resolvers: use pre-loaded dicts — zero DB calls inside the loop ──
-            bool TryResolveZoneId(IXLRow row, out int id)
+            // ── Local FK resolvers: pre-loaded dicts only — zero DB calls inside the loop ──
+            // Each returns the value it tried, so a failure can name the exact master to create.
+            bool TryResolveZoneId(IXLRow row, out int id, out string? tried)
             {
                 id = 0;
                 var raw = GetCellString(row, headerMap, "zoneid");
-                if (!string.IsNullOrEmpty(raw) && int.TryParse(raw, out id)) return true;
+                if (!string.IsNullOrEmpty(raw) && int.TryParse(raw, out var parsed))
+                {
+                    tried = raw;
+                    if (zoneIdSet.Contains(parsed)) { id = parsed; return true; }
+                    return false;
+                }
                 var name = GetCellString(row, headerMap, "zonename");
-                return !string.IsNullOrEmpty(name) && zoneNameToId.TryGetValue(name, out id);
+                tried = name;
+                return !MasterNormalizer.IsBlank(name) && masters.TryGetZone(name, out id);
             }
 
-            bool TryResolveStateId(IXLRow row, out int id)
+            bool TryResolveStateId(IXLRow row, out int id, out string? tried)
             {
                 id = 0;
                 // Name columns take priority — numeric stateid may be an LGD code, not a DB id
                 var name = GetCellString(row, headerMap, "fmsstatename");
                 if (string.IsNullOrEmpty(name)) name = GetCellString(row, headerMap, "statename");
-                if (!string.IsNullOrEmpty(name)) return stateNameToId.TryGetValue(name, out id);
+                if (!MasterNormalizer.IsBlank(name))
+                {
+                    tried = name;
+                    return masters.TryGetState(name, out id);
+                }
                 var raw = GetCellString(row, headerMap, "stateid");
-                return !string.IsNullOrEmpty(raw) && int.TryParse(raw, out id);
+                tried = raw;
+                if (!string.IsNullOrEmpty(raw) && int.TryParse(raw, out var parsed) && stateIdSet.Contains(parsed))
+                { id = parsed; return true; }
+                return false;
             }
 
-            bool TryResolveDistrictId(IXLRow row, out int id)
+            bool TryResolveDistrictId(IXLRow row, out int id, out string? tried)
             {
                 id = 0;
                 var distName = GetCellString(row, headerMap, "fmsdistrictname");
                 if (string.IsNullOrEmpty(distName)) distName = GetCellString(row, headerMap, "districtname");
-                if (!string.IsNullOrEmpty(distName) && districtsByName.TryGetValue(distName, out var candidates))
+                if (!MasterNormalizer.IsBlank(distName))
                 {
-                    // narrow by state context when available
+                    tried = distName;
                     var stateName = GetCellString(row, headerMap, "fmsstatename");
                     if (string.IsNullOrEmpty(stateName)) stateName = GetCellString(row, headerMap, "statename");
-                    if (!string.IsNullOrEmpty(stateName) && stateNameToId.TryGetValue(stateName, out var sid))
-                    {
-                        var match = candidates.FirstOrDefault(c => c.StateId == sid);
-                        if (match.Id != 0) { id = match.Id; return true; }
-                    }
-                    if (candidates.Count > 0) { id = candidates[0].Id; return true; }
+                    if (!MasterNormalizer.IsBlank(stateName) && masters.TryGetState(stateName, out var sid))
+                        return masters.TryGetDistrict(distName, sid, out id);
+
+                    // No usable state context: only accept the name when it is unambiguous,
+                    // otherwise guessing a parent is exactly what this rule forbids.
+                    if (districtCandidates.TryGetValue(MasterNormalizer.Normalize(distName), out var cands) &&
+                        cands.Count == 1)
+                    { id = cands[0].Id; return true; }
+                    return false;
                 }
                 var raw = GetCellString(row, headerMap, "districtid");
-                return !string.IsNullOrEmpty(raw) && int.TryParse(raw, out id);
+                tried = raw;
+                if (!string.IsNullOrEmpty(raw) && int.TryParse(raw, out var parsed) && districtIdSet.Contains(parsed))
+                { id = parsed; return true; }
+                return false;
             }
 
-            bool TryResolveRegionId(IXLRow row, out int id)
+            bool TryResolveRegionId(IXLRow row, out int id, out string? tried)
             {
                 id = 0;
                 var name = GetCellString(row, headerMap, "regionname");
-                if (!string.IsNullOrEmpty(name)) return regionNameToId.TryGetValue(name, out id);
+                if (!MasterNormalizer.IsBlank(name))
+                {
+                    tried = name;
+                    // Region is unique per state, so it can only be resolved with its state.
+                    if (!TryResolveStateId(row, out var sid, out _))
+                        return false;
+                    return masters.TryGetRegion(name, sid, out id);
+                }
                 var raw = GetCellString(row, headerMap, "regionid");
-                return !string.IsNullOrEmpty(raw) && int.TryParse(raw, out id);
+                tried = raw;
+                if (!string.IsNullOrEmpty(raw) && int.TryParse(raw, out var parsed) && regionIdSet.Contains(parsed))
+                { id = parsed; return true; }
+                return false;
+            }
+
+            // ── Validation pass ────────────────────────────────────────────────────
+            // A blank parent column on a required relationship is reported too: it is still a
+            // master the row needs, and stopping here beats writing the rest of the file.
+            const string BlankMarker = "<blank>";
+            var missingMasters = new MissingMasterCollector();
+
+            foreach (var row in rows)
+            {
+                switch (t)
+                {
+                    case "zone":
+                        {
+                            var name = GetCellString(row, headerMap, "zonename");
+                            if (MasterNormalizer.IsBlank(name)) break;
+                            if (!zoneByName.ContainsKey(MasterNormalizer.Normalize(name)))
+                                missingMasters.Add("Zone", name, row.RowNumber());
+                            break;
+                        }
+                    case "state":
+                        {
+                            var name = GetCellString(row, headerMap, "statename");
+                            if (string.IsNullOrEmpty(name)) name = GetCellString(row, headerMap, "fmsstatename");
+                            if (MasterNormalizer.IsBlank(name)) break; // row already reported as "Empty name"
+
+                            if (!stateByName.ContainsKey(MasterNormalizer.Normalize(name)))
+                                missingMasters.Add("State", name, row.RowNumber());
+
+                            if (!TryResolveZoneId(row, out _, out var zone))
+                                missingMasters.Add("Zone", MasterNormalizer.IsBlank(zone) ? BlankMarker : zone, row.RowNumber());
+                            break;
+                        }
+                    case "district":
+                        {
+                            var name = GetCellString(row, headerMap, "districtname");
+                            if (MasterNormalizer.IsBlank(name)) break;
+
+                            if (TryResolveStateId(row, out var stateId, out var state))
+                            {
+                                if (!districtByKey.ContainsKey(MasterNormalizer.Scoped(name, stateId)))
+                                    missingMasters.Add("District", name, row.RowNumber());
+                            }
+                            else
+                            {
+                                missingMasters.Add("State", MasterNormalizer.IsBlank(state) ? BlankMarker : state, row.RowNumber());
+                            }
+                            break;
+                        }
+                    case "subdistrict":
+                    case "sub-district":
+                    case "sub_district":
+                        {
+                            var name = GetCellString(row, headerMap, "subdistrictname");
+                            if (MasterNormalizer.IsBlank(name)) break;
+
+                            if (TryResolveDistrictId(row, out var districtId, out var district))
+                            {
+                                if (!subDistrictByKey.ContainsKey(MasterNormalizer.Scoped(name, districtId)))
+                                    missingMasters.Add("SubDistrict", name, row.RowNumber());
+                            }
+                            else
+                            {
+                                missingMasters.Add("District", MasterNormalizer.IsBlank(district) ? BlankMarker : district, row.RowNumber());
+                            }
+                            break;
+                        }
+                    case "region":
+                        {
+                            var name = GetCellString(row, headerMap, "regionname");
+                            if (MasterNormalizer.IsBlank(name)) break;
+
+                            if (TryResolveStateId(row, out var stateId, out var state))
+                            {
+                                if (!regionByKey.ContainsKey(MasterNormalizer.Scoped(name, stateId)))
+                                    missingMasters.Add("Region", name, row.RowNumber());
+                            }
+                            else
+                            {
+                                missingMasters.Add("State", MasterNormalizer.IsBlank(state) ? BlankMarker : state, row.RowNumber());
+                            }
+                            break;
+                        }
+                    case "headquarter":
+                    case "headquarters":
+                        {
+                            var name = GetCellString(row, headerMap, "headquartername");
+                            if (MasterNormalizer.IsBlank(name)) break;
+
+                            if (TryResolveRegionId(row, out var regionId, out var region))
+                            {
+                                if (!headquarterByKey.ContainsKey(MasterNormalizer.Scoped(name, regionId)))
+                                    missingMasters.Add("Headquarter", name, row.RowNumber());
+                            }
+                            else
+                            {
+                                missingMasters.Add("Region", MasterNormalizer.IsBlank(region) ? BlankMarker : region, row.RowNumber());
+                            }
+                            break;
+                        }
+                }
+            }
+
+            if (missingMasters.HasAny)
+            {
+                var (message, missingLines) = missingMasters.Build("location master");
+
+                _logger.LogWarning(
+                    "Location bulk upload rejected: {Count} missing master record(s): {Masters}",
+                    missingMasters.Entries.Count,
+                    string.Join(", ", missingMasters.Entries.Select(m => $"{m.Kind}='{m.Value}'")));
+
+                return BadRequest(new
+                {
+                    Success = false,
+                    Message = message,
+                    MissingMasterLines = missingLines,
+                    MissingMasters = missingMasters.Entries
+                        .Select(m => new { m.Kind, m.Value, RowNumbers = m.RowNumbers })
+                        .ToList()
+                });
             }
 
             using var tx = await _db.Database.BeginTransactionAsync();
@@ -254,18 +417,16 @@ namespace SpicAPI.Controllers
                                 {
                                     var zoneName = GetCellString(row, headerMap, "zonename");
                                     if (string.IsNullOrEmpty(zoneName)) { AddGrouped("Empty name", $"Row {row.RowNumber()}"); break; }
-                                    if (existingNames.Contains(zoneName)) { AddGrouped("Already exists in database", $"'{zoneName}' (Row {row.RowNumber()})"); break; }
-                                    if (!batchNames.Add(zoneName)) { AddGrouped("Duplicated in this file", $"'{zoneName}' (Row {row.RowNumber()})"); break; }
-                                    _db.Zones.Add(new Zone
-                                    {
-                                        ZoneName = zoneName,
-                                        ZoneCode = GetCellString(row, headerMap, "zonecode"),
-                                        ZoneColorCode = GetCellString(row, headerMap, "zonecolorcode"),
-                                        IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now,
-                                        UpdatedAt = now,
-                                        UpdatedBy = "bulk-upload"
-                                    });
+                                    var zoneKey = MasterNormalizer.Normalize(zoneName);
+                                    if (!batchNames.Add(zoneKey)) { AddGrouped("Duplicated in this file", $"'{zoneName}' (Row {row.RowNumber()})"); break; }
+                                    if (!zoneByName.TryGetValue(zoneKey, out var ent)) { AddGrouped("Zone does not exist in master data", $"'{zoneName}' (Row {row.RowNumber()})"); break; }
+                                    var zoneCode = GetCellString(row, headerMap, "zonecode");
+                                    if (!string.IsNullOrEmpty(zoneCode)) ent.ZoneCode = zoneCode;
+                                    var zoneColor = GetCellString(row, headerMap, "zonecolorcode");
+                                    if (!string.IsNullOrEmpty(zoneColor)) ent.ZoneColorCode = zoneColor;
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
                                 }
                                 break;
 
@@ -274,24 +435,20 @@ namespace SpicAPI.Controllers
                                     var stateName = GetCellString(row, headerMap, "statename");
                                     if (string.IsNullOrEmpty(stateName)) stateName = GetCellString(row, headerMap, "fmsstatename");
                                     if (string.IsNullOrEmpty(stateName)) { AddGrouped("Empty name", $"Row {row.RowNumber()}"); break; }
-                                    if (existingNames.Contains(stateName)) { AddGrouped("Already exists in database", $"'{stateName}' (Row {row.RowNumber()})"); break; }
-                                    if (!batchNames.Add(stateName)) { AddGrouped("Duplicated in this file", $"'{stateName}' (Row {row.RowNumber()})"); break; }
-                                    if (!TryResolveZoneId(row, out var zoneId))
+                                    var stateKey = MasterNormalizer.Normalize(stateName);
+                                    if (!batchNames.Add(stateKey)) { AddGrouped("Duplicated in this file", $"'{stateName}' (Row {row.RowNumber()})"); break; }
+                                    if (!stateByName.TryGetValue(stateKey, out var ent)) { AddGrouped("State does not exist in master data", $"'{stateName}' (Row {row.RowNumber()})"); break; }
+                                    if (!TryResolveZoneId(row, out var zoneId, out _))
                                     {
-                                        var triedZone = GetCellString(row, headerMap, "zonename");
-                                        if (string.IsNullOrEmpty(triedZone)) triedZone = GetCellString(row, headerMap, "zoneid");
-                                        AddGrouped($"Zone '{triedZone}' not found in database", $"'{stateName}' (Row {row.RowNumber()})");
+                                        // Unreachable: the validation pass already rejected every
+                                        // unresolvable Zone before the transaction opened.
+                                        AddGrouped("Zone not found in database", $"'{stateName}' (Row {row.RowNumber()})");
                                         break;
                                     }
-                                    _db.States.Add(new State
-                                    {
-                                        StateName = stateName,
-                                        ZoneId = zoneId,
-                                        IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now,
-                                        UpdatedAt = now,
-                                        UpdatedBy = "bulk-upload"
-                                    });
+                                    ent.ZoneId = zoneId;
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
                                 }
                                 break;
 
@@ -299,26 +456,17 @@ namespace SpicAPI.Controllers
                                 {
                                     var districtName = GetCellString(row, headerMap, "districtname");
                                     if (string.IsNullOrEmpty(districtName)) { AddGrouped("Empty name", $"Row {row.RowNumber()}"); break; }
-                                    if (!TryResolveStateId(row, out var stateId))
+                                    if (!TryResolveStateId(row, out var stateId, out _))
                                     {
-                                        var triedState = GetCellString(row, headerMap, "fmsstatename");
-                                        if (string.IsNullOrEmpty(triedState)) triedState = GetCellString(row, headerMap, "statename");
-                                        if (string.IsNullOrEmpty(triedState)) triedState = GetCellString(row, headerMap, "stateid");
-                                        AddGrouped($"State '{triedState}' not found in database", $"'{districtName}' (Row {row.RowNumber()})");
+                                        AddGrouped("State not found in database", $"'{districtName}' (Row {row.RowNumber()})");
                                         break;
                                     }
-                                    var key = $"{districtName}|{stateId}";
-                                    if (existingKeys.Contains(key)) { AddGrouped("Already exists in database", $"'{districtName}' (Row {row.RowNumber()})"); break; }
+                                    var key = MasterNormalizer.Scoped(districtName, stateId);
                                     if (!batchKeys.Add(key)) { AddGrouped("Duplicated in this file", $"'{districtName}' (Row {row.RowNumber()})"); break; }
-                                    _db.Districts.Add(new District
-                                    {
-                                        DistrictName = districtName,
-                                        StateId = stateId,
-                                        IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now,
-                                        UpdatedAt = now,
-                                        UpdatedBy = "bulk-upload"
-                                    });
+                                    if (!districtByKey.TryGetValue(key, out var ent)) { AddGrouped("District does not exist in master data", $"'{districtName}' (Row {row.RowNumber()})"); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
                                 }
                                 break;
 
@@ -328,26 +476,17 @@ namespace SpicAPI.Controllers
                                 {
                                     var subName = GetCellString(row, headerMap, "subdistrictname");
                                     if (string.IsNullOrEmpty(subName)) { AddGrouped("Empty name", $"Row {row.RowNumber()}"); break; }
-                                    if (!TryResolveDistrictId(row, out var districtId))
+                                    if (!TryResolveDistrictId(row, out var districtId, out _))
                                     {
-                                        var triedDistrict = GetCellString(row, headerMap, "fmsdistrictname");
-                                        if (string.IsNullOrEmpty(triedDistrict)) triedDistrict = GetCellString(row, headerMap, "districtname");
-                                        if (string.IsNullOrEmpty(triedDistrict)) triedDistrict = GetCellString(row, headerMap, "districtid");
-                                        AddGrouped($"District '{triedDistrict}' not found in database", $"'{subName}' (Row {row.RowNumber()})");
+                                        AddGrouped("District not found in database", $"'{subName}' (Row {row.RowNumber()})");
                                         break;
                                     }
-                                    var key = $"{subName}|{districtId}";
-                                    if (existingKeys.Contains(key)) { AddGrouped("Already exists in database", $"'{subName}' (Row {row.RowNumber()})"); break; }
+                                    var key = MasterNormalizer.Scoped(subName, districtId);
                                     if (!batchKeys.Add(key)) { AddGrouped("Duplicated in this file", $"'{subName}' (Row {row.RowNumber()})"); break; }
-                                    _db.SubDistricts.Add(new SubDistrict
-                                    {
-                                        SubDistrictName = subName,
-                                        DistrictId = districtId,
-                                        IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now,
-                                        UpdatedAt = now,
-                                        UpdatedBy = "bulk-upload"
-                                    });
+                                    if (!subDistrictByKey.TryGetValue(key, out var ent)) { AddGrouped("SubDistrict does not exist in master data", $"'{subName}' (Row {row.RowNumber()})"); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
                                 }
                                 break;
 
@@ -355,26 +494,17 @@ namespace SpicAPI.Controllers
                                 {
                                     var regionName = GetCellString(row, headerMap, "regionname");
                                     if (string.IsNullOrEmpty(regionName)) { AddGrouped("Empty name", $"Row {row.RowNumber()}"); break; }
-                                    if (!TryResolveStateId(row, out var stateId))
+                                    if (!TryResolveStateId(row, out var stateId, out _))
                                     {
-                                        var triedState = GetCellString(row, headerMap, "fmsstatename");
-                                        if (string.IsNullOrEmpty(triedState)) triedState = GetCellString(row, headerMap, "statename");
-                                        if (string.IsNullOrEmpty(triedState)) triedState = GetCellString(row, headerMap, "stateid");
-                                        AddGrouped($"State '{triedState}' not found in database", $"'{regionName}' (Row {row.RowNumber()})");
+                                        AddGrouped("State not found in database", $"'{regionName}' (Row {row.RowNumber()})");
                                         break;
                                     }
-                                    var key = $"{regionName}|{stateId}";
-                                    if (existingKeys.Contains(key)) { AddGrouped("Already exists in database", $"'{regionName}' (Row {row.RowNumber()})"); break; }
+                                    var key = MasterNormalizer.Scoped(regionName, stateId);
                                     if (!batchKeys.Add(key)) { AddGrouped("Duplicated in this file", $"'{regionName}' (Row {row.RowNumber()})"); break; }
-                                    _db.Regions.Add(new Region
-                                    {
-                                        RegionName = regionName,
-                                        StateId = stateId,
-                                        IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now,
-                                        UpdatedAt = now,
-                                        UpdatedBy = "bulk-upload"
-                                    });
+                                    if (!regionByKey.TryGetValue(key, out var ent)) { AddGrouped("Region does not exist in master data", $"'{regionName}' (Row {row.RowNumber()})"); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
                                 }
                                 break;
 
@@ -383,25 +513,17 @@ namespace SpicAPI.Controllers
                                 {
                                     var hqName = GetCellString(row, headerMap, "headquartername");
                                     if (string.IsNullOrEmpty(hqName)) { AddGrouped("Empty name", $"Row {row.RowNumber()}"); break; }
-                                    if (!TryResolveRegionId(row, out var regionId))
+                                    if (!TryResolveRegionId(row, out var regionId, out _))
                                     {
-                                        var triedRegion = GetCellString(row, headerMap, "regionname");
-                                        if (string.IsNullOrEmpty(triedRegion)) triedRegion = GetCellString(row, headerMap, "regionid");
-                                        AddGrouped($"Region '{triedRegion}' not found in database", $"'{hqName}' (Row {row.RowNumber()})");
+                                        AddGrouped("Region not found in database", $"'{hqName}' (Row {row.RowNumber()})");
                                         break;
                                     }
-                                    var key = $"{hqName}|{regionId}";
-                                    if (existingKeys.Contains(key)) { AddGrouped("Already exists in database", $"'{hqName}' (Row {row.RowNumber()})"); break; }
+                                    var key = MasterNormalizer.Scoped(hqName, regionId);
                                     if (!batchKeys.Add(key)) { AddGrouped("Duplicated in this file", $"'{hqName}' (Row {row.RowNumber()})"); break; }
-                                    _db.Headquarters.Add(new Headquarter
-                                    {
-                                        HeadquarterName = hqName,
-                                        RegionId = regionId,
-                                        IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive")),
-                                        CreatedAt = now,
-                                        UpdatedAt = now,
-                                        UpdatedBy = "bulk-upload"
-                                    });
+                                    if (!headquarterByKey.TryGetValue(key, out var ent)) { AddGrouped("Headquarter does not exist in master data", $"'{hqName}' (Row {row.RowNumber()})"); break; }
+                                    ent.IsActive = ParseBoolCellByValue(GetCellString(row, headerMap, "isactive"));
+                                    ent.UpdatedAt = now;
+                                    ent.UpdatedBy = "bulk-upload";
                                 }
                                 break;
 
@@ -658,7 +780,7 @@ namespace SpicAPI.Controllers
             return false;
         }
 
-        private static string NormalizeHeader(string h) => (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
+        private static string NormalizeHeader(string h) => MasterNormalizer.NormalizeHeader(h);
 
         private static string PrettyHeader(string h)
         {

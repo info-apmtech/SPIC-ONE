@@ -63,7 +63,7 @@ public sealed class CommunityApi
     public bool IsModerator => _login.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
 
     /// <summary>Who may replace a Popular Product picture (same designation as the Digital Library).</summary>
-    public bool CanEditProducts => _login.CanAccess("DigitalLibrary");
+    public bool CanEditProducts => _login.CanAccess(PagePermission.DigitalLibrary);
 
     /// <summary>
     /// Display-only stand-in for the signed-in user: the avatar beside a composer, nothing else.
@@ -615,3 +615,4 @@ public sealed class CommunityApi
         return null;
     }
 }
+

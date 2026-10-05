@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 
@@ -751,17 +752,21 @@ public class SubDealerRegistrationController : ControllerBase
 			.Where(x => x.SubDealerCode != null && codes.Contains(x.SubDealerCode.ToUpper()))
 			.ToListAsync(cancellationToken);
 
+		// GroupBy(...).First() rather than ToDictionary: a duplicate SubDealerCode in the
+		// master table used to throw "An item with the same key has already been added" and
+		// fail the whole registration import. Canonical normalization also means a code with
+		// stray surrounding whitespace now matches the same registration.
 		var existingByCode = existingList
 			.Where(x => !string.IsNullOrWhiteSpace(x.SubDealerCode))
-			.ToDictionary(
-				x => x.SubDealerCode!.Trim(),
-				StringComparer.OrdinalIgnoreCase);
+			.GroupBy(x => MasterNormalizer.Normalize(x.SubDealerCode))
+			.Where(g => g.Key.Length > 0)
+			.ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
 
 		if (isMoImport && currentHqId.HasValue)
 		{
 			foreach (var row in request.Rows)
 			{
-				var code = row.SubDealerCode.Trim();
+				var code = MasterNormalizer.Normalize(row.SubDealerCode);
 				if (existingByCode.TryGetValue(code, out var existing) &&
 					existing.HQ != currentHqId.Value)
 				{

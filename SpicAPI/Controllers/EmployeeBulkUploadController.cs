@@ -1,9 +1,10 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.MasterData;
 using SPIC.Core.Entities;
 using static SPIC.Core.Entities.EmployeeRegistration;
 
@@ -39,21 +40,27 @@ namespace SpicAPI.Controllers
             if (ext != ".xlsx" && ext != ".xls")
                 return BadRequest(new { Success = false, Message = "Only Excel files (.xlsx/.xls) are supported" });
 
-            // Pre-load lookup tables (name → id, case-insensitive)
-            var stateMap = await _db.States
-                .ToDictionaryAsync(s => s.StateName.Trim(), s => s.Id, StringComparer.OrdinalIgnoreCase);
+            // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // MASTER LOOKUPS (read-only).
+            //
+            // MasterLookup centralises the canonical normalization and builds every map with
+            // GroupBy(...).First() rather than ToDictionary, because a master table may already
+            // hold two rows whose names normalize to the same key (for example "Puducherry" and
+            // "Puducherry "). ToDictionary throws "An item with the same key has already been
+            // added" in that case and takes the whole upload down; grouping keeps the first row.
+            //
+            // Region is keyed by (normalized RegionName, StateId) and Headquarter by
+            // (normalized HeadquarterName, RegionId), so the same child name under two different
+            // parents stays two different masters instead of resolving to whichever loaded first.
+            // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            var masters = await MasterLookup.LoadAsync(_db);
 
-            var regionMap = await _db.Regions
-                .ToDictionaryAsync(r => r.RegionName.Trim(), r => r.Id, StringComparer.OrdinalIgnoreCase);
-
-            var hqMap = await _db.Headquarters
-                .ToDictionaryAsync(h => h.HeadquarterName.Trim(), h => h.Id, StringComparer.OrdinalIgnoreCase);
-
-            var designationMap = await _db.Designations
-    .ToDictionaryAsync(
-        d => d.Name.Trim(),
-        d => new { d.Id, d.IsActive },
-        StringComparer.OrdinalIgnoreCase);
+            var designationMap = (await _db.Designations
+                    .Select(d => new { d.Id, d.Name, d.IsActive })
+                    .ToListAsync())
+                .GroupBy(d => MasterNormalizer.Normalize(d.Name))
+                .Where(g => g.Key.Length > 0)
+                .ToDictionary(g => g.Key, g => new { g.First().Id, g.First().IsActive });
 
             using var stream = file.OpenReadStream();
             using var workbook = new XLWorkbook(stream);
@@ -100,6 +107,117 @@ namespace SpicAPI.Controllers
                 .Select(u => u.UserName)
                 .ToHashSetAsync(StringComparer.OrdinalIgnoreCase);
 
+            // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // MASTER VALIDATION PASS (read-only).
+            //
+            // Runs BEFORE the transaction is opened and before any SaveChangesAsync, so
+            // when master data is missing the database is left completely unchanged:
+            // no employee, no user, no employeelogin and no master record is written.
+            //
+            // Bulk upload never creates master data. Every Zone / State / Region /
+            // Headquarters / Designation value the file depends on must already exist.
+            //
+            // Location columns are validated ONLY for the roles that actually require them:
+            //   AVP            -> Zone
+            //   SMD, SMM       -> State
+            //   RM, RMD        -> State + Region
+            //   MDO, MO, JMDO  -> State + Region + Headquarters
+            // A column that is blank or holds an unknown value for a role that does not use it
+            // is ignored, so an SMM row carrying an unrelated Region value is not rejected.
+            //
+            // Rows whose Permission is not an accepted role, and rows with an unparsable
+            // Permission, are left to the row loop below so the existing per-row error
+            // messages stay unchanged.
+            // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            var missing = new MissingMasterCollector();
+
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                var rowNumber = row.RowNumber();
+
+                var permission = Cell(row, "permission");
+                if (!Enum.TryParse<AppRole>(permission, ignoreCase: true, out var role))
+                    continue;
+                if (!IsBulkUploadRole(role))
+                    continue;
+
+                var zoneName = Cell(row, "zone");
+                var stateName = Cell(row, "state");
+                var regionName = Cell(row, "region");
+                var hqName = Cell(row, "hq");
+                var designationName = Cell(row, "designation");
+
+                // Designation is optional, but when supplied it must exist: it is a master
+                // reference like any other and must never be invented here.
+                if (!string.IsNullOrWhiteSpace(designationName) &&
+                    !designationMap.ContainsKey(MasterNormalizer.Normalize(designationName)))
+                {
+                    missing.Add("Designation", designationName, rowNumber);
+                }
+
+                var needsZone = role == AppRole.AVP;
+                var needsState = role == AppRole.SMD || role == AppRole.SMM
+                                 || role == AppRole.RM || role == AppRole.RMD
+                                 || role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
+                var needsRegion = role == AppRole.RM || role == AppRole.RMD
+                                  || role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
+                var needsHq = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
+
+                if (needsZone && !string.IsNullOrWhiteSpace(zoneName) &&
+                    !masters.TryGetZone(zoneName, out _))
+                {
+                    missing.Add("Zone", zoneName, rowNumber);
+                }
+
+                var stateOk = true;
+                if (needsState && !string.IsNullOrWhiteSpace(stateName))
+                    stateOk = masters.TryGetState(stateName, out _);
+
+                if (needsState && stateOk)
+                {
+                    // Region is scoped by StateId and Headquarters by RegionId, so each level is
+                    // resolved against the parent the row actually named. A name that exists under a
+                    // different parent is reported as missing rather than silently mismatched.
+                    if (needsRegion && !string.IsNullOrWhiteSpace(regionName))
+                    {
+                        masters.TryGetState(stateName, out var parentStateId);
+                        if (!masters.TryGetRegion(regionName, parentStateId, out _))
+                            missing.Add("Region", regionName, rowNumber);
+                    }
+
+                    if (needsHq && !string.IsNullOrWhiteSpace(hqName))
+                    {
+                        masters.TryGetState(stateName, out var hqStateId);
+                        var regionIdForHq = 0;
+                        var regionResolvable = !needsRegion ||
+                            masters.TryGetRegion(regionName, hqStateId, out regionIdForHq);
+                        if (regionResolvable && !masters.TryGetHeadquarter(hqName, regionIdForHq, out _))
+                            missing.Add("Headquarters", hqName, rowNumber);
+                    }
+                }
+            }
+
+            if (missing.HasAny)
+            {
+                var (message, missingLines) = missing.Build("employee");
+
+                _logger.LogWarning(
+                    "Employee bulk upload rejected: {Count} missing master record(s): {Masters}",
+                    missing.Entries.Count,
+                    string.Join(", ", missing.Entries.Select(m => $"{m.Kind}='{m.Value}'")));
+
+                return BadRequest(new
+                {
+                    Success = false,
+                    Message = message,
+                    MissingMasterLines = missingLines,
+                    MissingMasters = missing.Entries
+                        .Select(m => new { m.Kind, m.Value, RowNumbers = m.RowNumbers })
+                        .ToList()
+                });
+            }
+
             using var tx = await _db.Database.BeginTransactionAsync();
             try
             {
@@ -116,6 +234,7 @@ namespace SpicAPI.Controllers
                         var stateName = Cell(row, "state");
                         var regionName = Cell(row, "region");
                         var hqName = Cell(row, "hq");
+                        var zoneName = Cell(row, "zone");
                         var phone = Cell(row, "phonenumber");
                         var email = Cell(row, "emailid");
                         var designationName = Cell(row, "designation");
@@ -139,7 +258,7 @@ namespace SpicAPI.Controllers
 
                         if (string.IsNullOrWhiteSpace(phone))
                         {
-                            AddError("Missing Phone", $"Row {rowNum} ({empName}): PhoneNumber is empty — used as password.");
+                            AddError("Missing Phone", $"Row {rowNum} ({empName}): PhoneNumber is empty â€” used as password.");
                             skipped++;
                             continue;
                         }
@@ -167,116 +286,46 @@ namespace SpicAPI.Controllers
                         }
 
                         // --- Role Definitions ---
+                        bool isAvpRole = role == AppRole.AVP;
                         bool isSmRole = role == AppRole.SMD || role == AppRole.SMM;
                         bool isRmRole = role == AppRole.RM || role == AppRole.RMD;
                         bool isMoRole = role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
 
-                        if (!isSmRole && !isRmRole && !isMoRole)
+                        if (!isAvpRole && !isSmRole && !isRmRole && !isMoRole)
                         {
                             AddError("Role Not Allowed", $"Row {rowNum} ({empName}): Role '{role}' cannot be created via bulk upload.");
                             skipped++;
                             continue;
                         }
 
-                        int stateId = 0, regionId = 0, hqId = 0;
+                        int stateId = 0, regionId = 0, hqId = 0, zoneId = 0;
                         var currentUser = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                                           ?? User?.Identity?.Name
                                           ?? "Unknown";
 
-                        // 1. Resolve State (Strictly required to exist)
+                        // Master records are never created here. The read-only validation pass above
+                        // already stopped the upload if any value below was absent from the master
+                        // tables, so these lookups are expected to resolve. Region is resolved under
+                        // the row's State and Headquarters under that row's Region, so an identically
+                        // named master belonging to a different parent is never picked up by mistake.
                         if (!string.IsNullOrWhiteSpace(stateName))
-                        {
-                            if (stateMap.TryGetValue(stateName, out var sId))
-                            {
-                                stateId = sId;
-                            }
-                            else
-                            {
-                                AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found in database.");
-                            }
-                        }
+                            masters.TryGetState(stateName, out stateId);
 
-                        // 2. Resolve Region (Auto-create if missing)
                         if (!string.IsNullOrWhiteSpace(regionName))
-                        {
-                            if (regionMap.TryGetValue(regionName, out var rId))
-                            {
-                                regionId = rId;
-                            }
-                            else if (stateId > 0) // Only auto-create if we have a valid State to link it to
-                            {
-                                var newRegion = new Region
-                                {
-                                    RegionName = regionName,
-                                    StateId = stateId,
-                                    IsActive = true,
-                                    CreatedAt = now,
-                                    UpdatedBy = currentUser
-                                };
+                            masters.TryGetRegion(regionName, stateId, out regionId);
 
-                                _db.Regions.Add(newRegion);
-                                await _db.SaveChangesAsync();
-
-                                regionId = newRegion.Id;
-                                regionMap[regionName] = regionId;
-                            }
-                            else
-                            {
-                                AddError("Missing/Invalid State", $"Row {rowNum} ({empName}): Cannot auto-create Region '{regionName}' because a valid State is missing.");
-                            }
-                        }
-
-                        // 3. Resolve Headquarter (Auto-create if missing)
                         if (!string.IsNullOrWhiteSpace(hqName))
-                        {
-                            if (hqMap.TryGetValue(hqName, out var hId))
-                            {
-                                hqId = hId;
-                            }
-                            else if (regionId > 0) // Only auto-create if we have a valid Region to link it to
-                            {
-                                var newHq = new Headquarter
-                                {
-                                    HeadquarterName = hqName,
-                                    RegionId = regionId,
-                                    IsActive = true,
-                                    CreatedAt = now,
-                                    UpdatedBy = currentUser
-                                };
+                            masters.TryGetHeadquarter(hqName, regionId, out hqId);
 
-                                _db.Headquarters.Add(newHq);
-                                await _db.SaveChangesAsync();
-
-                                hqId = newHq.Id;
-                                hqMap[hqName] = hqId;
-                            }
-                            else
-                            {
-                                AddError("Missing/Invalid Region", $"Row {rowNum} ({empName}): Cannot auto-create HQ '{hqName}' because a valid Region is missing.");
-                            }
-                        }
-
-                        // --- Extract All Provided Locations ---
-                        //if (!string.IsNullOrWhiteSpace(stateName))
-                        //{
-                        //    if (stateMap.TryGetValue(stateName, out var sId)) stateId = sId;
-                        //    else AddError("Unknown State", $"Row {rowNum} ({empName}): State '{stateName}' not found.");
-                        //}
-
-                        //if (!string.IsNullOrWhiteSpace(regionName))
-                        //{
-                        //    if (regionMap.TryGetValue(regionName, out var rId)) regionId = rId;
-                        //    else AddError("Unknown Region", $"Row {rowNum} ({empName}): Region '{regionName}' not found.");
-                        //}
-
-                        //if (!string.IsNullOrWhiteSpace(hqName))
-                        //{
-                        //    if (hqMap.TryGetValue(hqName, out var hId)) hqId = hId;
-                        //    else AddError("Unknown HQ", $"Row {rowNum} ({empName}): HQ '{hqName}' not found.");
-                        //}
+                        if (!string.IsNullOrWhiteSpace(zoneName))
+                            masters.TryGetZone(zoneName, out zoneId);
 
                         // --- Apply Your Specific Rules ---
-                        if (isMoRole) // MO, MDO, JMDO -> Requires State, Region, HQ
+                        if (isAvpRole) // AVP -> Requires Zone
+                        {
+                            if (zoneId == 0) AddError("Missing Zone", $"Row {rowNum} ({empName}): Zone is required for {role}.");
+                        }
+                        else if (isMoRole) // MO, MDO, JMDO -> Requires State, Region, HQ
                         {
                             if (stateId == 0) AddError("Missing State", $"Row {rowNum} ({empName}): State is required for {role}.");
                             if (regionId == 0) AddError("Missing Region", $"Row {rowNum} ({empName}): Region is required for {role}.");
@@ -293,7 +342,8 @@ namespace SpicAPI.Controllers
                         }
 
                         // Skip row if any required location failed validation
-                        if ((isMoRole && (stateId == 0 || regionId == 0 || hqId == 0)) ||
+                        if ((isAvpRole && zoneId == 0) ||
+                            (isMoRole && (stateId == 0 || regionId == 0 || hqId == 0)) ||
                             (isRmRole && (stateId == 0 || regionId == 0)) ||
                             (isSmRole && stateId == 0))
                         {
@@ -305,7 +355,7 @@ namespace SpicAPI.Controllers
                         int? designationId = null;
                         if (!string.IsNullOrWhiteSpace(designationName))
                         {
-                            if (!designationMap.TryGetValue(designationName, out var desig))
+                            if (!designationMap.TryGetValue(MasterNormalizer.Normalize(designationName), out var desig))
                             {
                                 AddError("Unknown Designation",
                                     $"Row {rowNum} ({empName}): Designation '{designationName}' does not exist.");
@@ -366,7 +416,7 @@ namespace SpicAPI.Controllers
 
                         if (!string.IsNullOrWhiteSpace(employeeId) && existingEmployees.TryGetValue(employeeId, out var existingEmp))
                         {
-                            // REUSE existing employee record — update missing fields to match the incoming Excel row
+                            // REUSE existing employee record â€” update missing fields to match the incoming Excel row
                             emp = existingEmp;
                             var changed = false;
                             if (string.IsNullOrWhiteSpace(emp.Name) && !string.IsNullOrWhiteSpace(empName)) { emp.Name = empName; changed = true; }
@@ -415,7 +465,7 @@ namespace SpicAPI.Controllers
                             StateId = stateId,
                             RegionId = regionId,
                             HeadquartersId = hqId,
-                            ZoneId = 0,
+                            ZoneId = zoneId,
                             IsActive = true
                         };
                         _db.Employeelogins.Add(login);
@@ -456,18 +506,20 @@ namespace SpicAPI.Controllers
             var headers = new[]
             {
         "EmployeeID", "EmpName", "UserName", "Permission",
-        "State", "Region", "HQ", "PhoneNumber", "EmailID", "Designation"
+        "State", "Region", "HQ", "PhoneNumber", "EmailID", "Designation", "Zone"
     };
 
             // Sample rows that demonstrate each role tier's location requirement
             var sampleRows = new[]
             {
         // MO/MDO/JMDO -> State + Region + HQ
-        new[] { "EMP001", "Ravi Kumar", "ravi.kumar", "MO", "Tamil Nadu", "Chennai Region", "Chennai HQ", "9876543210", "ravi@example.com", "Field Officer" },
+        new[] { "EMP001", "Ravi Kumar", "ravi.kumar", "MO", "Tamil Nadu", "Chennai Region", "Chennai HQ", "9876543210", "ravi@example.com", "Field Officer", "" },
         // RM/RMD -> State + Region
-        new[] { "EMP002", "Priya S", "priya.s", "RM", "Tamil Nadu", "Chennai Region", "", "9876543211", "priya@example.com", "" },
+        new[] { "EMP002", "Priya S", "priya.s", "RM", "Tamil Nadu", "Chennai Region", "", "9876543211", "priya@example.com", "", "" },
         // SMD/SMM -> State only
-        new[] { "EMP003", "Arun M", "arun.m", "SMM", "Tamil Nadu", "", "", "9876543212", "arun@example.com", "" },
+        new[] { "EMP003", "Arun M", "arun.m", "SMM", "Tamil Nadu", "", "", "9876543212", "arun@example.com", "", "" },
+        // AVP -> Zone only
+        new[] { "EMP004", "Vikram N", "vikram.n", "AVP", "", "", "", "9876543213", "vikram@example.com", "", "South Zone" },
     };
 
             using var wb = new XLWorkbook();
@@ -498,18 +550,22 @@ namespace SpicAPI.Controllers
             {
         "Bulk Upload - Employee Instructions",
         "",
-        "Required columns: EmployeeID, EmpName, UserName, Permission, State, Region, HQ, PhoneNumber, EmailID, Designation",
+        "Columns: EmployeeID, EmpName, UserName, Permission, State, Region, HQ, PhoneNumber, EmailID, Designation, Zone",
         "",
         "PhoneNumber is used as the login password (minimum 6 characters).",
         "Designation is optional. If given, it must match an existing ACTIVE designation name.",
         "",
         "Role -> Required location columns:",
-        "  SMD, SMM    -> State",
-        "  RM, RMD     -> State + Region",
+        "  AVP           -> Zone",
+        "  SMD, SMM      -> State",
+        "  RM, RMD       -> State + Region",
         "  MDO, MO, JMDO -> State + Region + HQ",
         "",
-        "State must already exist in master data.",
-        "Region / HQ are auto-created if missing (only when their parent State/Region is valid).",
+        "IMPORTANT: this upload never creates master data.",
+        "Every Zone / State / Region / HQ value used in this file must already exist in master data.",
+        "If any is missing, the whole upload is stopped, nothing is saved, and all missing",
+        "values are listed so you can create them first and then upload this same file again.",
+        "",
         "UserName must be unique - duplicates are skipped.",
     };
             for (int i = 0; i < lines.Length; i++)
@@ -529,8 +585,18 @@ namespace SpicAPI.Controllers
                 "Employee_Sample_Template.xlsx");
         }
 
-        private static string NormalizeHeader(string h) =>
-            (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("-", "").ToLowerInvariant();
+        private static string NormalizeHeader(string h) => MasterNormalizer.NormalizeHeader(h);
+
+
+		/// <summary>
+		/// Roles accepted by employee bulk upload and the location each one requires:
+		/// AVP -> Zone, SMD/SMM -> State, RM/RMD -> State + Region, MDO/MO/JMDO -> State + Region + HQ.
+		/// </summary>
+		private static bool IsBulkUploadRole(AppRole role) =>
+			role == AppRole.AVP ||
+			role == AppRole.SMD || role == AppRole.SMM ||
+			role == AppRole.RM || role == AppRole.RMD ||
+			role == AppRole.MDO || role == AppRole.MO || role == AppRole.JMDO;
 		private async Task EnsureRoleAndAssignAsync(UserInfo user, AppRole role)
 		{
 			var roleName = role.ToString();
