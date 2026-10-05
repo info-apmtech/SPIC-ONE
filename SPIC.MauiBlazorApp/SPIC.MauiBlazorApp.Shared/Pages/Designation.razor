@@ -33,6 +33,7 @@
     private bool _isSaving;
     private bool _isLoading = true;
     private string _searchText = "";
+    private string _pageSearchText = "";
     private string _statusFilter = "All";
     private string? _message;
     private bool _isError;
@@ -54,6 +55,10 @@
     {
         foreach (var page in _catalogPages)
         {
+            if (!string.IsNullOrWhiteSpace(_pageSearchText) &&
+                !page.DisplayName.Contains(_pageSearchText, StringComparison.OrdinalIgnoreCase))
+                continue;
+
             if (IsParent(page.Key))
                 yield return (page.Key, page.DisplayName, true, 0);
             else if (!IsChild(page.Key))
@@ -81,20 +86,20 @@
         if (IsParent(page))
         {
             var children = GetChildren(page);
-            return children.Length > 0 && children.All(c => _selectedTokens.Contains($"{c}.{action}"));
+            return _selectedTokens.Contains($"{page}.{action}")
+                && children.All(c => _selectedTokens.Contains($"{c}.{action}"));
         }
         return _selectedTokens.Contains($"{page}.{action}");
     }
 
     private void ToggleAction(string page, string action)
     {
-        var token = $"{page}.{action}";
-        var isAdding = !_selectedTokens.Contains(token);
+        var isAdding = !HasAction(page, action);
 
         if (isAdding)
-            _selectedTokens.Add(token);
+            _selectedTokens.Add($"{page}.{action}");
         else
-            _selectedTokens.Remove(token);
+            _selectedTokens.Remove($"{page}.{action}");
 
         if (IsParent(page))
         {
@@ -114,7 +119,8 @@
         if (IsParent(page))
         {
             var children = GetChildren(page);
-            return children.Length > 0 && children.All(c => _actions.All(a => _selectedTokens.Contains($"{c}.{a}")));
+            return _actions.All(a => _selectedTokens.Contains($"{page}.{a}"))
+                && children.All(c => _actions.All(a => _selectedTokens.Contains($"{c}.{a}")));
         }
         return _actions.All(a => _selectedTokens.Contains($"{page}.{a}"));
     }
@@ -147,11 +153,21 @@
         }
     }
 
-    private bool IsAllSelected => _allCatalogKeys.All(IsRowAll);
+    private bool IsAllSelected => _allCatalogKeys.Count > 0 && _allCatalogKeys.All(IsRowAll);
 
-    private void ToggleAllRoles()
+    private void ToggleAllRoles(ChangeEventArgs? e = null)
     {
-        if (IsAllSelected)
+        bool shouldSelect;
+        if (e?.Value is bool isChecked)
+        {
+            shouldSelect = isChecked;
+        }
+        else
+        {
+            shouldSelect = !IsAllSelected;
+        }
+
+        if (!shouldSelect)
         {
             _selectedTokens.Clear();
         }
@@ -213,6 +229,9 @@
 
         foreach (var kv in groups)
         {
+            if (kv.Value.Count <= 1)
+                continue;
+
             var first = kv.Value[0];
             _parentPages.Add(first.Key);
             var children = kv.Value.Skip(1).Select(p => p.Key).ToArray();
@@ -306,6 +325,7 @@
     {
         _model = new DR.Designation { Name = "", IsActive = true };
         _selectedTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _pageSearchText = "";
         _isEditMode = false;
         _message = null;
     }
@@ -729,8 +749,14 @@
 
         <!-- Role Access grid -->
         <div class="desig-roles-box">
+               
             <div class="desig-roles-head">
                 <div class="desig-roles-title">Role Access</div>
+                    <div class="search-box">
+                        <i class="bi bi-search"></i>
+                        <input type="text" placeholder="Search PageName..."
+                               @bind="_pageSearchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+                    </div>
                 <label class="desig-role-all">
                     <input type="checkbox" checked="@IsAllSelected" @onchange="ToggleAllRoles" />
                     Select All
