@@ -127,7 +127,9 @@ namespace SPIC.Core.Entities
                 "SalesAudit",
                 "ExtensionRequests",
                 "FarmDashboard",
-                "FarmOperations"
+                "FarmOperations",
+                "FinanceSummary",
+                "FinanceSummaryOverall"
             };
 
         /// <summary>
