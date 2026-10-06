@@ -25,10 +25,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             // access with an empty RoleAccess.
             AppRole.Admin => DefaultLandingPath,
             AppRole.Dealer => "/SDWADashboard",
-            AppRole.SpecialAdmin => CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome",
-            // No designation assigned at all => /Welcome, the existing screen that tells the user to
-            // contact an administrator. Same signal PageGuard uses for its own no-designation branch,
-            // and keyed off the designation data rather than a role name.
+            // SpecialAdmin used to be hard-routed to /Logistics here. That both skipped the common
+            // landing screen and left the Settings (Logistics) submenu auto-expanded for the whole
+            // session, because NavMenu / MobileSidebar expand the section that owns the current URL
+            // on load. SpecialAdmin is designation-controlled like every other non-admin role, so it
+            // now falls through to the two data-driven arms below: no designation => /Welcome,
+            // designation => DefaultWelcome.
             _ when AllowedPages.Count == 0 => "/Welcome",
             // Has a designation => the default landing page. It is NOT a PagePermission and is not in
             // anyone's RoleAccess: it is a common landing screen, so it must not depend on which pages
@@ -98,15 +100,16 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         // True when this user's role uses PageAccessModel.DesignationOnly - i.e. its effective page
         // permissions are EXACTLY the pages configured on its Designation.RoleAccess, with no
-        // union with any default, role-wide or open-to-all page. Today that is AppRole.CommonRole.
-        // Derived from the MODEL rather than hardcoding a role name, so a role added to
-        // PageAuthorization.RoleModels as DesignationOnly is picked up here automatically, and
-        // used wherever a designation-driven role needs different handling (LandingPage, and the
-        // shell-hub / read-only-library short-circuits in PageGuard).
+        // union with any default, role-wide or open-to-all page. Today that is AppRole.CommonRole
+        // and AppRole.SpecialAdmin. Derived from the MODEL rather than hardcoding a role name, so a
+        // role added to PageAuthorization.RoleModels as DesignationOnly is picked up here
+        // automatically, and used wherever a designation-driven role needs different handling
+        // (the shell-hub / read-only-library short-circuits in PageGuard).
         public bool IsDesignationDrivenRole =>
             PageAuthorization.ModelFor(UserRole) == PageAccessModel.DesignationOnly;
 
-        // Convenience alias for the one role that currently uses the designation-driven model.
+        // Legacy name for the same concept; kept because the phrase reads better in existing call
+        // sites. It means "designation-driven role", not "AppRole.CommonRole".
         public bool IsCommonRole => IsDesignationDrivenRole;
 
         // SAS Lab / payment pages resolved through the DESIGNATION only (product decision 2026-09-27):

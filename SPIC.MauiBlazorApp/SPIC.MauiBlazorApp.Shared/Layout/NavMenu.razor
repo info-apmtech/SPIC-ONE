@@ -25,9 +25,11 @@
         </NavLink>
     }
 
-    @* Digital Library: content is viewable by every signed-in user
-       (PageAuthorization.OpenAccessPages); adding/editing content and the category master need
-       the DigitalLibrary page. Resolved by the SAME CanAccess call the route guard uses. *@
+    @* Digital Library: content is viewable by every signed-in user whose authorization model
+       includes the open-to-all pages (PageAuthorization.OpenAccessPages); a designation-driven
+       role (DesignationOnly: CommonRole, SpecialAdmin) sees it only when its designation grants
+       DigitalLibrary. Adding/editing content and the category master need that same page.
+       Resolved by the SAME CanAccess call the route guard uses. *@
     @if (loginState.CanAccess(PagePermission.DigitalLibrary))
     {
         <NavLink class="@NavLinkClass("Digital Library")" href="/DigitalLibrary">
@@ -146,7 +148,9 @@
     }
 
 
-    @if (loginState.IsAdmin)
+    @* Designation-controlled: Admin / SuperAdmin reach it through the role bypass, every other
+       role (Director, AVP, CorporateAdmin, ...) only when its Designation grants IfmsAutoImport. *@
+    @if (loginState.CanAccess(PagePermission.IfmsAutoImport))
     {
         <NavLink class="@NavLinkClass("IFMS Auto Import")" href="/IfmsAutoImport">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
@@ -154,7 +158,7 @@
         </NavLink>
     }
 
-    @if (loginState.UserRole is AppRole.SuperAdmin)
+    @if (loginState.UserRole is AppRole.Admin or AppRole.SuperAdmin)
     {
         <NavLink class="@NavLinkClass("Data Explorer")" href="/DataExplorer">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
@@ -650,7 +654,7 @@
                             <NavLink href="/WelfareSchemes" class="@SubmenuLinkClass("Welfare Schemes")" Match="NavLinkMatch.All">Welfare Schemes</NavLink>
                         </li>
                     }
-                    @if (loginState.UserRole != AppRole.Dealer && (loginState.CanAccess(PagePermission.SchemeApproval) || loginState.UserRole == AppRole.Director))
+                    @if (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.SchemeApproval))
                     {
                         <li class="submenu-item">
                             <NavLink href="/SchemeApproval" class="@SubmenuLinkClass("Scheme Approval")" Match="NavLinkMatch.All">Scheme Approval</NavLink>
@@ -868,6 +872,17 @@
             Extension Requests
         </NavLink>
     }
+
+    @* The stray comment block below used to leave the guard disabled (the @if line was commented
+       out while the braces stayed live), so Farm Operations rendered for every signed-in user.
+       It is a normal Designation-controlled page now (PagePermission.FarmDashboard). *@
+    @if (loginState.CanAccess(PagePermission.FarmDashboard))
+    {
+        <NavLink class="@NavLinkClass("Farm Operations")" href="/FarmDashboard" Match="NavLinkMatch.Prefix">
+            <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+            Farm Operations
+        </NavLink>
+    }
      @if (loginState.CanAccess(PagePermission.ContactUs))
     {
         <NavLink class="@NavLinkClass("ContactUs")" href="/ContactUs">
@@ -1075,10 +1090,9 @@
     private bool AnySdwaAccessible =>
         loginState.CanAccess(PagePermission.ReportDashboard)
         || loginState.CanAccess(PagePermission.SDWADashboard)
-        || (loginState.UserRole != AppRole.Dealer && (loginState.CanAccess(PagePermission.SchemeApproval) || loginState.UserRole == AppRole.Director))
+        || (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.SchemeApproval))
         || loginState.CanAccess(PagePermission.WelfareSchemes)
         || loginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
-        || loginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
         || loginState.CanAccess(PagePermission.FrontOffice)
         || loginState.CanAccess(PagePermission.GenerateBill);
 
