@@ -1,0 +1,1408 @@
+@page "/ProductRateManagement"
+@inject NavigationManager Nav
+@inject LoginState LoginState
+@inject ToastService Toast
+
+@*
+    SAS portal: farmer product catalog + a rate-change / new-product request workflow.
+    UI-first pass: the product list, requests and approvals below are all in-memory
+    (no backend yet) so the design can be reviewed before a real ProductRateManagement
+    table/controller is built. Gated by PagePermission.ProductRateManagement.
+*@
+
+<div class="prm-page">
+
+    <PageHeader Title="Product & Rate Management"
+                Subtitle="View all product, submit request for new Product or rate change, and track request"
+                ShowBack="false">
+        <Actions>
+            <button type="button" class="prm-btn prm-btn-outline" @onclick="GoToDashboard">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </button>
+            <button type="button" class="prm-btn prm-btn-primary" @onclick="OpenAddModal">
+                <i class="bi bi-plus-lg"></i> Request New Product
+            </button>
+        </Actions>
+    </PageHeader>
+
+    <div class="prm-tabs">
+        <div class="prm-tab-group">
+            <button type="button" class='prm-tab @(currentTab == "All" ? "active" : "")' @onclick='() => SwitchTab("All")'>All Product</button>
+            <button type="button" class='prm-tab @(currentTab == "Livestock" ? "active" : "")' @onclick='() => SwitchTab("Livestock")'>Livestock</button>
+            <button type="button" class='prm-tab @(currentTab == "Orchard" ? "active" : "")' @onclick='() => SwitchTab("Orchard")'>Orchard</button>
+        </div>
+    </div>
+
+    <div class="prm-card">
+        <div class="prm-toolbar">
+            <div class="prm-pills">
+                <button type="button" class='prm-pill @(statusFilter == "All" ? "active" : "")' @onclick='() => SetStatusFilter("All")'>All</button>
+                <button type="button" class='prm-pill @(statusFilter == "Pending" ? "active" : "")' @onclick='() => SetStatusFilter("Pending")'>
+                    Pending <span class="prm-pill-count">@PendingCount</span>
+                </button>
+                <button type="button" class='prm-pill @(statusFilter == "Approved" ? "active" : "")' @onclick='() => SetStatusFilter("Approved")'>
+                    Approved <span class="prm-pill-count">@ApprovedCount</span>
+                </button>
+            </div>
+            <div class="prm-search">
+                <i class="bi bi-search"></i>
+                <input type="text" value="@searchQuery" @oninput="OnSearchChanged" placeholder="Search zones..." />
+            </div>
+        </div>
+
+        <div class="prm-table-scroll">
+            <table class="prm-table">
+                <thead>
+                    <tr>
+                        <th>S.No</th>
+                        <th>Product</th>
+                        <th>Product Group</th>
+                        <th>UOM</th>
+                        <th>Current Rate</th>
+                        <th>Request Rate</th>
+                        <th>Request Type</th>
+                        <th>Status</th>
+                        <th>Request Date</th>
+                        <th class="prm-col-action">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (PageRows.Count == 0)
+                    {
+                        <tr class="prm-state-row">
+                            <td colspan="10">
+                                <EmptyState Title="No products found" Message="No products match your filters. Try a different search or filter." />
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var row in PageRows)
+                        {
+                            <tr @key="row.Id">
+                                <td data-label="S.No">@SerialNoFor(row)</td>
+                                <td data-label="Product">
+                                    <span class="prm-product">
+                                        <span class="prm-icon">@IconFor(row.Name)</span>
+                                        @row.Name
+                                    </span>
+                                </td>
+                                <td data-label="Product Group">
+                                    <span class='prm-group-pill @(row.Group == "Orchard" ? "prm-group-orchard" : "prm-group-livestock")'>@row.Group</span>
+                                </td>
+                                <td data-label="UOM">@row.Uom</td>
+                                <td data-label="Current Rate">@(row.CurrentRateText ?? "-")</td>
+                                <td data-label="Request Rate">@(row.RequestRateText ?? "-")</td>
+                                <td data-label="Request Type">
+                                    @if (row.RequestType is null)
+                                    {
+                                        @:-
+                                    }
+                                    else
+                                    {
+                                        <span class='prm-type-pill @(row.RequestType == "New Product" ? "prm-type-new" : "prm-type-rate")'>@row.RequestType</span>
+                                    }
+                                </td>
+                                <td data-label="Status">
+                                    <span class='prm-status-pill @StatusPillClass(row.Status)'>@row.Status</span>
+                                </td>
+                                <td data-label="Request Date">@(row.RequestDate ?? "-")</td>
+                                <td data-label="Action" class="prm-col-action">
+                                    <div class="prm-action-wrap">
+                                        <button type="button" class="prm-action-btn prm-action-view" title="View" @onclick="() => ViewRow(row)">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button type="button" class="prm-action-btn prm-action-edit" title="Edit" @onclick="() => EditRow(row)">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button type="button" class="prm-action-btn prm-action-delete" title="Delete" @onclick="() => DeleteRow(row)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="prm-pagination">
+            <div class="prm-items-per-page">
+                <span>Items Per Page</span>
+                <select value="@itemsPerPage" @onchange="ChangeItemsPerPage">
+                    <option value="8">8</option>
+                    <option value="16">16</option>
+                    <option value="24">24</option>
+                    <option value="32">32</option>
+                </select>
+            </div>
+            <div class="prm-pagination-buttons">
+                <button type="button" class="prm-page-btn" disabled="@(currentPage == 1)" @onclick="() => SetPage(currentPage - 1)">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                @foreach (var p in PaginationPages)
+                {
+                    if (p is "...")
+                    {
+                        <span class="prm-page-ellipsis">...</span>
+                    }
+                    else
+                    {
+                        <button type="button" class='prm-page-btn @((int)p == currentPage ? "active" : "")' @onclick='() => SetPage((int)p)'>@p</button>
+                    }
+                }
+                <button type="button" class="prm-page-btn" disabled="@(currentPage == TotalPages)" @onclick="() => SetPage(currentPage + 1)">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="prm-info">
+        <div class="prm-info-icon"><i class="bi bi-info-circle"></i></div>
+        <div class="prm-info-body">
+            <h3>Information</h3>
+            <ul>
+                <li>You can request to add a new product or request a rate change.</li>
+                <li>Requests for new products and rate changes will be reviewed by Admin.</li>
+                <li>Once approved, the product and updated rate will be available in inventory and income entry.</li>
+                <li>Products without any request will show as "No Request".</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+@if (showFormModal)
+{
+    <div class="prm-modal-backdrop" @onclick="CloseFormModal">
+        <div class="prm-modal" @onclick:stopPropagation="true">
+            <div class="prm-modal-header">
+                <div>
+                    <h3>@(editingRow is null ? "Request New Product" : "Request Rate Change")</h3>
+                    <p class="prm-modal-subtitle">
+                        @(editingRow is null
+                            ? "Tell Admin what you want to add to the catalog."
+                            : $"Tell Admin the new rate you want for {editingRow.Name}.")
+                    </p>
+                </div>
+                <button type="button" class="prm-modal-close" @onclick="CloseFormModal" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="prm-modal-body">
+                @if (editingRow is null)
+                {
+                    <div class="prm-toggle-group">
+                        <button type="button" class='prm-toggle-btn @(formProductGroup == "Live Stock" ? "active" : "")' @onclick='() => formProductGroup = "Live Stock"'>Live Stock</button>
+                        <button type="button" class='prm-toggle-btn @(formProductGroup == "Orchard" ? "active" : "")' @onclick='() => formProductGroup = "Orchard"'>Orchard</button>
+                    </div>
+
+                    <div class="prm-field">
+                        <label>Product</label>
+                        <input type="text" @bind="formProductName" placeholder="e.g. Sheep" />
+                    </div>
+
+                    <div class="prm-field-row">
+                        <div class="prm-field">
+                            <label>UOM</label>
+                            <select @bind="formUom">
+                                <option value="Kg">Kg</option>
+                                <option value="Unit">Unit</option>
+                                <option value="Litre">Litre</option>
+                                <option value="Nos">Nos</option>
+                            </select>
+                        </div>
+                        <div class="prm-field">
+                            <label>Price (₹)</label>
+                            <input type="number" min="0" @bind="formRate" placeholder="Enter Price" />
+                        </div>
+                    </div>
+
+                    <div class="prm-field">
+                        <label>Reason</label>
+                        <textarea @bind="formReason" rows="3" placeholder="e.g. Need to track dairy cattle separately."></textarea>
+                    </div>
+
+                    <div class="prm-note">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <span>This will appear as a new product awaiting Admin approval.</span>
+                    </div>
+                }
+                else
+                {
+                    <div class="prm-field">
+                        <label>Product</label>
+                        <select @bind="formExistingProductId" disabled>
+                            <option value="">Select a product</option>
+                            @foreach (var p in rows)
+                            {
+                                <option value="@p.Id">@p.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="prm-field">
+                        <label>Request Rate (₹)</label>
+                        <input type="number" min="0" @bind="formRate" placeholder="Enter Price" />
+                    </div>
+
+                    <div class="prm-field">
+                        <label>Reason</label>
+                        <textarea @bind="formReason" rows="3" placeholder="e.g. Market price increased."></textarea>
+                    </div>
+
+                    <div class="prm-note">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <span>This rate will apply only after Admin approves the request.</span>
+                    </div>
+                }
+            </div>
+
+            <div class="prm-modal-footer">
+                <button type="button" class="prm-btn prm-btn-outline" @onclick="CloseFormModal">Close</button>
+                <button type="button" class="prm-btn prm-btn-primary" @onclick="SubmitForm">
+                    @(editingRow is null ? "Request Product" : "Request Rate Change")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (viewingRow is not null)
+{
+    <div class="prm-modal-backdrop" @onclick="() => viewingRow = null">
+        <div class="prm-modal" @onclick:stopPropagation="true">
+            <div class="prm-modal-header">
+                <h3>
+                    <span class="prm-icon prm-icon-lg">@IconFor(viewingRow.Name)</span>
+                    @viewingRow.Name
+                </h3>
+                <button type="button" class="prm-modal-close" @onclick="() => viewingRow = null" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="prm-modal-body prm-view-body">
+                <div class="prm-view-row"><span>Product Group</span><strong>@viewingRow.Group</strong></div>
+                <div class="prm-view-row"><span>UOM</span><strong>@viewingRow.Uom</strong></div>
+                <div class="prm-view-row"><span>Current Rate</span><strong>@(viewingRow.CurrentRateText ?? "-")</strong></div>
+                <div class="prm-view-row"><span>Request Rate</span><strong>@(viewingRow.RequestRateText ?? "-")</strong></div>
+                <div class="prm-view-row"><span>Request Type</span><strong>@(viewingRow.RequestType ?? "-")</strong></div>
+                <div class="prm-view-row">
+                    <span>Status</span>
+                    <strong><span class='prm-status-pill @StatusPillClass(viewingRow.Status)'>@viewingRow.Status</span></strong>
+                </div>
+                <div class="prm-view-row"><span>Request Date</span><strong>@(viewingRow.RequestDate ?? "-")</strong></div>
+            </div>
+
+            <div class="prm-modal-footer">
+                <button type="button" class="prm-btn prm-btn-primary" @onclick="() => viewingRow = null">Close</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .prm-page {
+        --prm-blue-bg: #dbeafe;
+        --prm-blue-text: #1d4ed8;
+        --prm-blue-border: #93c5fd;
+        --prm-mint-bg: #dcfce7;
+        --prm-mint-text: #15803d;
+        --prm-mint-border: #86efac;
+        --prm-violet-bg: #ede9fe;
+        --prm-violet-text: #6d28d9;
+        --prm-violet-border: #c4b5fd;
+        --prm-amber-bg: #fef3c7;
+        --prm-amber-text: #92400e;
+        --prm-amber-border: #fcd34d;
+        --prm-emerald-bg: #d1fae5;
+        --prm-emerald-text: #065f46;
+        --prm-emerald-border: #6ee7b7;
+        --prm-gray-bg: #f3f4f6;
+        --prm-gray-text: #6b7280;
+        --prm-gray-border: #e5e7eb;
+        color: var(--text-main);
+    }
+
+    .prm-page .shell-page-actions {
+        gap: 10px;
+    }
+
+    .prm-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .15s ease;
+        white-space: nowrap;
+    }
+
+    .prm-btn-outline {
+        background: #fff;
+        border: 1px solid var(--primary);
+        color: var(--primary);
+    }
+
+        .prm-btn-outline:hover {
+            background: var(--primary-soft);
+        }
+
+    .prm-btn-primary {
+        background: var(--primary);
+        border: 1px solid var(--primary);
+        color: #fff;
+    }
+
+        .prm-btn-primary:hover {
+            background: var(--primary-dark);
+        }
+
+    /* Tabs */
+    .prm-tabs {
+        display: flex;
+        margin: 20px 0;
+    }
+
+    .prm-tab-group {
+        display: flex;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 4px;
+        gap: 4px;
+    }
+
+    .prm-tab {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-soft);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .15s ease;
+        position: relative;
+    }
+
+        .prm-tab:hover {
+            color: var(--text-main);
+        }
+
+        .prm-tab.active {
+            color: var(--primary);
+        }
+
+            .prm-tab.active::after {
+                content: "";
+                position: absolute;
+                left: 14px;
+                right: 14px;
+                bottom: -4px;
+                height: 2px;
+                background: var(--primary);
+                border-radius: 2px;
+            }
+
+    /* Card + toolbar */
+    .prm-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 1px 2px rgba(0,0,0,.05);
+        overflow: hidden;
+    }
+
+    .prm-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 20px;
+        flex-wrap: wrap;
+    }
+
+    .prm-pills {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .prm-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--text-soft);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .15s ease;
+    }
+
+        .prm-pill.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+    .prm-pill-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 999px;
+        background: rgba(0,0,0,.08);
+        font-size: 11px;
+    }
+
+        .prm-pill.active .prm-pill-count {
+            background: rgba(255,255,255,.25);
+        }
+
+    .prm-search {
+        position: relative;
+        width: 260px;
+        max-width: 100%;
+    }
+
+        .prm-search i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-soft);
+            font-size: 14px;
+        }
+
+        .prm-search input {
+            width: 100%;
+            padding: 9px 12px 9px 34px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg);
+            font-size: 13px;
+            color: var(--text-main);
+        }
+
+            .prm-search input:focus {
+                outline: none;
+                border-color: var(--primary);
+                background: #fff;
+            }
+
+    /* Table */
+    .prm-table-scroll {
+        overflow-x: auto;
+        border-top: 1px solid var(--border);
+    }
+
+    .prm-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+
+        .prm-table thead {
+            background: #f9fafb;
+        }
+
+        .prm-table th {
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 700;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: var(--text-soft);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .prm-table .prm-col-action {
+            text-align: center;
+        }
+
+        .prm-table td {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-main);
+            white-space: nowrap;
+        }
+
+        .prm-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .prm-table tbody tr:hover {
+            background: rgba(11,107,58,.03);
+        }
+
+    .prm-product {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .prm-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        flex-shrink: 0;
+    }
+
+        .prm-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+    .prm-icon-lg {
+        width: 30px;
+        height: 30px;
+    }
+
+        .prm-icon-lg svg {
+            width: 26px;
+            height: 26px;
+        }
+
+    .prm-group-pill, .prm-type-pill, .prm-status-pill {
+        display: inline-block;
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid;
+        white-space: nowrap;
+    }
+
+    .prm-group-livestock, .prm-type-rate {
+        background: var(--prm-blue-bg);
+        color: var(--prm-blue-text);
+        border-color: var(--prm-blue-border);
+    }
+
+    .prm-group-orchard {
+        background: var(--prm-mint-bg);
+        color: var(--prm-mint-text);
+        border-color: var(--prm-mint-border);
+    }
+
+    .prm-type-new {
+        background: var(--prm-violet-bg);
+        color: var(--prm-violet-text);
+        border-color: var(--prm-violet-border);
+    }
+
+    .prm-status-pending {
+        background: var(--prm-amber-bg);
+        color: var(--prm-amber-text);
+        border-color: var(--prm-amber-border);
+    }
+
+    .prm-status-approved {
+        background: var(--prm-emerald-bg);
+        color: var(--prm-emerald-text);
+        border-color: var(--prm-emerald-border);
+    }
+
+    .prm-status-none {
+        background: var(--prm-gray-bg);
+        color: var(--prm-gray-text);
+        border-color: var(--prm-gray-border);
+    }
+
+    .prm-action-wrap {
+        display: flex;
+        gap: 6px;
+        justify-content: center;
+    }
+
+    .prm-action-btn {
+        width: 30px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        border: 1px solid transparent;
+        background: transparent;
+        cursor: pointer;
+        transition: all .15s ease;
+        font-size: 14px;
+    }
+
+    .prm-action-view {
+        color: var(--prm-blue-text);
+    }
+
+        .prm-action-view:hover {
+            background: var(--prm-blue-bg);
+            border-color: var(--prm-blue-border);
+        }
+
+    .prm-action-edit {
+        color: var(--prm-violet-text);
+    }
+
+        .prm-action-edit:hover {
+            background: var(--prm-violet-bg);
+            border-color: var(--prm-violet-border);
+        }
+
+    .prm-action-delete {
+        color: #dc2626;
+    }
+
+        .prm-action-delete:hover {
+            background: #fee2e2;
+            border-color: #fecaca;
+        }
+
+    /* Pagination */
+    .prm-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 20px;
+        border-top: 1px solid var(--border);
+        flex-wrap: wrap;
+    }
+
+    .prm-items-per-page {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--text-soft);
+    }
+
+        .prm-items-per-page select {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 12px;
+            background: #fff;
+        }
+
+    .prm-pagination-buttons {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    .prm-page-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 32px;
+        height: 32px;
+        padding: 0 8px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--text-soft);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .prm-page-btn:hover:not(:disabled) {
+            background: var(--bg);
+        }
+
+        .prm-page-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: #fff;
+        }
+
+        .prm-page-btn:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+        }
+
+    .prm-page-ellipsis {
+        padding: 0 4px;
+        color: var(--text-soft);
+        font-size: 12px;
+    }
+
+    /* Info callout */
+    .prm-info {
+        display: flex;
+        gap: 14px;
+        margin-top: 20px;
+        padding: 18px 20px;
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 12px;
+    }
+
+    .prm-info-icon {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 2px solid #1e293b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        color: #1e293b;
+    }
+
+    .prm-info-body h3 {
+        margin: 0 0 8px;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+
+    .prm-info-body ul {
+        margin: 0;
+        padding-left: 18px;
+        font-size: 13px;
+        color: var(--text-soft);
+        line-height: 1.7;
+    }
+
+    /* Modal */
+    .prm-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, .5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        z-index: 1050;
+    }
+
+    .prm-modal {
+        width: 100%;
+        max-width: 440px;
+        max-height: 90vh;
+        overflow-y: auto;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 20px 50px rgba(0,0,0,.25);
+    }
+
+    .prm-modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 18px 20px;
+        background: #f3f5f4;
+        border-bottom: 1px solid var(--border);
+        border-radius: 14px 14px 0 0;
+    }
+
+        .prm-modal-header h3 {
+            margin: 0;
+            font-size: 17px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .prm-modal-subtitle {
+            margin: 4px 0 0;
+            font-size: 13px;
+            color: var(--text-soft);
+        }
+
+    .prm-modal-close {
+        width: 30px;
+        height: 30px;
+        border: none;
+        background: transparent;
+        border-radius: 8px;
+        color: var(--text-soft);
+        cursor: pointer;
+    }
+
+        .prm-modal-close:hover {
+            background: var(--bg);
+        }
+
+    .prm-modal-body {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .prm-field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-soft);
+        text-transform: uppercase;
+        letter-spacing: .4px;
+        margin-bottom: 6px;
+    }
+
+    .prm-field input,
+    .prm-field select,
+    .prm-field textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 14px;
+        color: var(--text-main);
+        background: #fff;
+        font-family: inherit;
+        resize: vertical;
+    }
+
+        .prm-field input:focus,
+        .prm-field select:focus,
+        .prm-field textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+    .prm-field-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+    }
+
+    .prm-toggle-group {
+        display: flex;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .prm-toggle-btn {
+        flex: 1;
+        padding: 11px 12px;
+        border: none;
+        background: #fff;
+        color: var(--text-main);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all .15s ease;
+    }
+
+        .prm-toggle-btn + .prm-toggle-btn {
+            border-left: 1px solid var(--border);
+        }
+
+        .prm-toggle-btn.active {
+            background: var(--primary);
+            color: #fff;
+        }
+
+    .prm-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 14px;
+        background: var(--primary-soft);
+        border-left: 3px solid var(--primary);
+        border-radius: 6px;
+        font-size: 13px;
+        color: var(--text-main);
+    }
+
+        .prm-note i {
+            margin-top: 2px;
+            color: var(--primary);
+        }
+
+    .prm-view-body {
+        gap: 0;
+    }
+
+    .prm-view-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+    }
+
+        .prm-view-row:last-child {
+            border-bottom: none;
+        }
+
+        .prm-view-row span {
+            color: var(--text-soft);
+        }
+
+    .prm-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 20px;
+        border-top: 1px solid var(--border);
+    }
+
+    /* native: tablet */
+    @@media (min-width: 768px) and (max-width: 1199.98px) {
+        .prm-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .prm-search {
+            width: 100%;
+        }
+    }
+
+    /* native: phone */
+    @@media (max-width: 767.98px) {
+        .prm-field-row {
+            grid-template-columns: 1fr;
+            gap: 14px;
+        }
+
+        .prm-page .shell-page-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .prm-btn {
+            width: 100%;
+            justify-content: center;
+            /* The base rule's white-space:nowrap made "Request New Product" overflow
+               its half-width button instead of wrapping - allow it to wrap here. */
+            white-space: normal;
+            text-align: center;
+            line-height: 1.2;
+            font-size: 13px;
+            padding: 10px 6px;
+            gap: 6px;
+        }
+
+        .prm-tab-group {
+            width: 100%;
+        }
+
+        .prm-tab {
+            flex: 1;
+            text-align: center;
+            padding: 10px 8px;
+            font-size: 13px;
+        }
+
+        .prm-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .prm-pills {
+            /* flex:1 pills inside a wrapping flex row split unevenly across lines
+               (2 pills on row 1, 1 alone stretched full-width on row 2) - a fixed
+               3-column grid keeps all three the same size on one row instead. */
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            width: 100%;
+        }
+
+        .prm-pill {
+            justify-content: center;
+            padding: 8px 6px;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .prm-search {
+            width: 100%;
+        }
+
+        /* Table -> one card per row, column labels from data-label */
+        .prm-table-scroll {
+            overflow-x: hidden;
+        }
+
+        .prm-table thead {
+            display: none;
+        }
+
+        .prm-table, .prm-table tbody, .prm-table tr, .prm-table td {
+            display: block;
+            width: 100%;
+        }
+
+        .prm-table tr {
+            padding: 10px 16px;
+            border-bottom: 8px solid var(--bg);
+        }
+
+        .prm-table tr.prm-state-row {
+            padding: 0;
+            border-bottom: none;
+        }
+
+        .prm-table td {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            text-align: right;
+            white-space: normal;
+        }
+
+            .prm-table td::before {
+                content: attr(data-label);
+                flex: 0 0 42%;
+                text-align: left;
+                font-weight: 600;
+                font-size: 12px;
+                color: var(--text-soft);
+            }
+
+            .prm-table tr.prm-state-row td::before {
+                content: none;
+            }
+
+            .prm-table tr.prm-state-row td {
+                display: block;
+                padding: 0;
+                border-bottom: none;
+            }
+
+        .prm-table td:last-child {
+            border-bottom: none;
+        }
+
+        .prm-action-wrap {
+            justify-content: flex-end;
+        }
+
+        .prm-pagination {
+            flex-direction: row;
+            /* The base rule's flex-wrap:wrap let these two groups wrap onto separate
+               rows once they didn't both fit on one line, both left-aligned instead
+               of split across the row - force a single row so space-between works. */
+            flex-wrap: nowrap;
+            justify-content: space-between;
+            padding: 12px 14px;
+            gap: 8px;
+        }
+
+        .prm-items-per-page {
+            gap: 6px;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+            .prm-items-per-page span {
+                white-space: nowrap;
+            }
+
+            .prm-items-per-page select {
+                padding: 4px 22px 4px 8px;
+                font-size: 12px;
+            }
+
+        .prm-pagination-buttons .prm-page-ellipsis,
+        .prm-pagination-buttons .prm-page-btn:not(.active):not(:first-child):not(:last-child) {
+            display: none;
+        }
+    }
+</style>
+
+@code {
+    private class ProductRow
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string Group { get; set; } = "Live Stock";
+        public string Uom { get; set; } = "Kg";
+        public string? CurrentRateText { get; set; }
+        public string? RequestRateText { get; set; }
+        public string? RequestType { get; set; }
+        public string Status { get; set; } = "No Request";
+        public string? RequestDate { get; set; }
+    }
+
+    private List<ProductRow> rows = new()
+    {
+        new ProductRow { Id = 1, Name = "Chicken", Group = "Live Stock", Uom = "Kg", CurrentRateText = "₹ 250 / Kg", RequestRateText = "₹ 278 / Kg", RequestType = "Rate Change", Status = "Pending", RequestDate = "02 Oct 2026" },
+        new ProductRow { Id = 2, Name = "Chicken Eggs", Group = "Live Stock", Uom = "Unit", CurrentRateText = "₹ 250 / Kg", RequestRateText = null, RequestType = null, Status = "No Request", RequestDate = null },
+        new ProductRow { Id = 3, Name = "Goat", Group = "Live Stock", Uom = "Kg", CurrentRateText = "₹ 250 / Kg", RequestRateText = "₹ 450 / Kg", RequestType = "Rate Change", Status = "Approved", RequestDate = "02 Oct 2026" },
+        new ProductRow { Id = 4, Name = "Goat", Group = "Live Stock", Uom = "Kg", CurrentRateText = "₹ 250 / Kg", RequestRateText = "₹ 350 / Kg", RequestType = "Rate Change", Status = "Pending", RequestDate = "02 Oct 2026" },
+        new ProductRow { Id = 5, Name = "Dragon Fruit", Group = "Orchard", Uom = "Kg", CurrentRateText = null, RequestRateText = "₹ 170 / Kg", RequestType = "New Product", Status = "Approved", RequestDate = null },
+    };
+
+    private int _nextId = 6;
+
+    private static readonly Dictionary<string, string> ProductIconSvgs = new()
+    {
+        ["Chicken"] = """
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M19.2222 15.8052C19.2222 15.8052 21.5254 19.3314 21.5254 21.6725C21.5254 23.3159 20.1907 24.6517 18.5462 24.6517C16.9017 24.6517 15.5671 23.3159 15.5671 21.6725C15.5671 19.3314 17.8702 15.8052 17.8702 15.8052C17.9444 15.6939 18.045 15.6027 18.1629 15.5396C18.2808 15.4765 18.4125 15.4434 18.5462 15.4434C18.68 15.4434 18.8117 15.4765 18.9296 15.5396C19.0475 15.6027 19.148 15.6939 19.2222 15.8052ZM20.6641 11.7882C22.7333 12.2421 23.7982 13.6959 24.3605 14.7619L24.3919 14.8291C24.4935 15.0751 24.5329 15.3423 24.5067 15.6071C24.4806 15.8719 24.3896 16.1262 24.2418 16.3476C24.094 16.5689 23.894 16.7504 23.6595 16.8761C23.4249 17.0019 23.163 17.0679 22.8969 17.0684H20.4247L20.9469 14.4608C20.9707 14.338 20.983 14.2141 20.9837 14.0892C20.9837 13.2919 20.8721 12.5194 20.6641 11.7882ZM4.28089 12.4555C3.74464 11.9128 3.14773 11.2313 2.71114 10.5196C2.19981 9.68435 1.91706 8.79927 2.03406 8.0106C2.27456 6.39318 3.10114 5.7226 4.26898 5.2806C4.87889 5.04877 5.60364 4.89277 6.38581 4.64685C7.21889 4.38468 7.33048 3.87443 7.55148 3.42702C7.82773 2.86585 8.17764 2.34151 9.00639 1.9721C9.99331 1.53118 10.8535 1.69585 11.653 1.99268C12.1578 2.17901 12.6128 2.46935 13.0851 2.44443C13.447 2.42385 13.5997 2.24726 13.8056 2.09235C14.2216 1.77926 14.7156 1.44885 15.7707 1.36218C16.7934 1.27876 17.2776 1.59185 17.6579 1.99051C17.789 2.12918 17.9049 2.28626 18.0273 2.44876C18.1866 2.65893 18.3675 2.89185 18.7846 3.02076C19.3717 3.2006 19.9708 3.24826 20.5201 3.37285C21.6251 3.62418 22.5795 4.09868 23.1092 5.7096C23.4602 6.77668 23.132 7.97485 22.3704 8.98235C21.8115 9.70773 21.0902 10.2918 20.2644 10.6875C19.6046 9.20206 18.5283 7.93973 17.1659 7.05336C15.8035 6.16699 14.2133 5.69459 12.5879 5.69335C10.9546 5.69433 9.357 6.17106 7.99027 7.06528C6.62353 7.95951 5.54689 9.2325 4.89189 10.7287C4.87311 10.772 4.85614 10.8161 4.84098 10.8608L4.28089 12.4555Z" fill="#006139"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M15.6827 24.5528C15.5529 24.6232 15.4063 24.6568 15.2588 24.6502C15.1112 24.6435 14.9683 24.5967 14.8453 24.5149L12.046 22.6483L9.24666 24.5149C9.09027 24.6192 8.90255 24.6661 8.71548 24.6475C8.52841 24.6289 8.35356 24.5461 8.22074 24.413L6.46899 22.6602L2.65891 24.5647C2.51424 24.6376 2.35108 24.6655 2.19042 24.6448C2.02975 24.6242 1.87895 24.5559 1.75741 24.4489C1.63588 24.3418 1.54917 24.2008 1.50846 24.044C1.46776 23.8872 1.4749 23.7218 1.52899 23.5691L5.86232 11.2191L5.88507 11.1628C6.45441 9.85884 7.39179 8.74931 8.58233 7.97018C9.77286 7.19105 11.1648 6.77617 12.5877 6.77637C14.5268 6.77723 16.3863 7.54793 17.7574 8.9191C19.1286 10.2903 19.8993 12.1497 19.9002 14.0889C19.8987 14.1423 19.8932 14.1955 19.8839 14.2481L19.7723 14.8093C19.5677 14.6358 19.3287 14.5078 19.0709 14.4335C18.8132 14.3593 18.5426 14.3407 18.2771 14.3787C18.0116 14.4168 17.7572 14.5108 17.5307 14.6545C17.3042 14.7982 17.1108 14.9883 16.9632 15.2123C16.9632 15.2123 14.4835 19.1025 14.4835 21.6722C14.4835 22.7978 14.9417 23.8172 15.6827 24.5528ZM15.0252 11.3805C14.9185 11.3805 14.8128 11.4016 14.7142 11.4424C14.6157 11.4832 14.5261 11.5431 14.4506 11.6185C14.3752 11.694 14.3153 11.7835 14.2745 11.8821C14.2337 11.9807 14.2127 12.0863 14.2127 12.193C14.2127 12.2997 14.2337 12.4054 14.2745 12.504C14.3153 12.6025 14.3752 12.6921 14.4506 12.7676C14.5261 12.843 14.6157 12.9029 14.7142 12.9437C14.8128 12.9845 14.9185 13.0055 15.0252 13.0055C15.2406 13.0055 15.4473 12.9199 15.5997 12.7676C15.7521 12.6152 15.8377 12.4085 15.8377 12.193C15.8377 11.9775 15.7521 11.7709 15.5997 11.6185C15.4473 11.4661 15.2406 11.3805 15.0252 11.3805Z" fill="#006139"/>
+            </svg>
+            """,
+        ["Chicken Eggs"] = """
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18.3465 23.1412C13.9614 23.1412 10.693 19.4241 10.693 14.7223C10.693 9.58675 14.4861 2.85938 18.3465 2.85938C22.1763 2.85938 26 9.71315 26 14.7223C26 19.2979 22.6778 23.1412 18.3465 23.1412ZM10.9939 20.7793C8.39591 22.1361 5.03812 21.6417 2.98981 19.2006C0.176954 15.8484 -1.20333 9.23129 1.33188 7.10399C3.24119 5.50187 7.32256 6.57415 10.4343 8.65438C9.63439 10.6003 9.16234 12.7186 9.16234 14.7223C9.16229 17.0149 9.83555 19.1096 10.9939 20.7793Z" fill="#006139"/>
+            </svg>
+            """,
+        ["Goat"] = """
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20.2448 12.9045C20.613 10.7521 17.6676 8.6846 17.1295 8.85453C16.5914 8.99613 15.2037 9.16606 14.354 9.95906C13.5044 10.7521 11.3236 9.95906 11.3236 9.95906C10.389 9.73249 7.13207 13.1877 5.63104 14.8303C5.03629 15.4817 4.69643 16.303 4.66811 17.181C4.58315 20.4663 7.10375 22.3355 8.49149 23.1285C9.00128 23.4117 9.62434 23.2984 10.0208 22.8736L12.0033 20.7212C12.0033 20.7212 19.1403 22.2222 20.2448 22.1372C20.8113 22.1089 21.4343 22.3355 21.8875 22.5621C22.5106 22.8736 23.2469 22.7886 23.785 22.3921C24.1815 22.1089 24.663 21.6841 25.2011 21.0893C26.6738 19.4184 20.2448 12.9045 20.2448 12.9045ZM16.1099 15.0286C15.6001 15.0003 15.0337 14.0373 15.0337 14.0373C15.7807 14.9004 17.1861 14.0373 17.1861 14.0373C17.1861 14.0373 16.648 15.0569 16.1099 15.0286Z" fill="#006139"/>
+            <path d="M11.3515 9.47712C11.3515 9.47712 12.9658 10.0436 13.7021 9.73202C14.4385 9.42048 15.3164 8.82573 15.3164 8.82573C15.3164 8.82573 12.2011 4.94571 8.26443 5.03067C4.32776 5.11564 1.9346 7.40963 1 10.2984C1 10.2984 3.27987 7.01313 4.89418 6.75824C6.5085 6.50335 9.85042 6.75824 11.3515 9.47712Z" fill="#006139"/>
+            <path d="M9.85078 4.69075C9.85078 4.69075 9.85078 3.86324 10.134 3.9482C10.4172 4.00484 11.8899 4.69075 12.6829 6.10682C12.6829 6.10682 14.8353 7.38128 15.685 8.5991L16.478 8.31588C16.478 8.31588 13.0794 2.62329 10.134 3.01979C10.134 3.01979 8.66128 3.1614 9.85078 4.69075ZM18.2339 8.82567L21.0908 5.7736L16.7612 8.03267L17.3276 8.5991L18.2339 8.82567ZM19.2251 9.47706C19.8765 9.36377 21.151 8.17428 21.8024 6.95646C22.4538 5.73864 22.3122 4.80404 22.3122 4.80404C21.7457 5.2855 18.5454 9.10888 18.5454 9.10888L19.2251 9.47706Z" fill="#006139"/>
+            </svg>
+            """,
+        ["Quail"] = """
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12.2133 10.7472C13.6389 10.3837 15.0614 10.9362 16.0188 12.2249C16.6935 13.133 17.0684 14.3386 17.0745 15.6195C17.0813 17.0507 16.6349 18.5536 15.7836 19.9659C15.209 20.9093 14.4772 21.7474 13.6199 22.444L22.2807 23.7605C22.3616 23.7721 22.4438 23.7512 22.5095 23.7026C22.5752 23.6539 22.619 23.5813 22.6314 23.5005C23.1962 19.952 22.0028 17.3329 19.9627 13.4698C18.3792 12.7817 16.4763 11.4228 16.1978 8.82489C16.1065 7.90521 16.2101 6.97661 16.5018 6.09966C16.3716 5.94895 16.2934 5.76028 16.2789 5.56163C16.2644 5.36298 16.3143 5.16494 16.4212 4.99688C16.5281 4.82882 16.6863 4.6997 16.8724 4.62866C17.0585 4.55763 17.2625 4.54846 17.4542 4.60253C18.7603 3.67232 19.9212 4.097 20.6122 4.55094C20.4772 4.21728 20.2952 3.90462 20.0717 3.62245C19.2174 2.5528 17.8737 2.0978 16.0767 2.26979C14.2959 2.44042 12.7285 3.85138 11.4183 6.46346C10.3265 8.63969 9.69136 11.0947 9.35 12.4139C9.26931 12.7258 9.20553 12.9721 9.15485 13.1411C9.13093 13.2209 9.10646 13.2989 9.08203 13.3771C9.92627 12.2976 11.1161 11.0269 12.2133 10.7472Z" fill="#006139"/>
+            <path d="M20.2401 7.4521L21.2226 7.07561L19.8487 6.89635L20.2401 7.4521ZM15.3494 19.7041C16.1526 18.3717 16.5738 16.9603 16.5674 15.6223C16.5618 14.4488 16.2224 13.35 15.6119 12.5281C14.7816 11.4106 13.5581 10.929 12.3394 11.2397C10.6267 11.6764 8.48003 15.0971 8.38355 15.2519C7.32054 17.6227 5.82687 19.0928 3.37144 20.319C3.31175 20.3473 3.26301 20.3945 3.23273 20.4532C3.20245 20.5119 3.19231 20.5789 3.20386 20.644C3.21254 20.7091 3.24248 20.7696 3.28904 20.8159C3.3356 20.8622 3.39616 20.8919 3.46132 20.9003L12.9316 22.3398C13.9342 21.5883 14.7477 20.7023 15.3494 19.7041ZM14.941 15.5328C14.9424 15.4655 14.9704 15.4014 15.019 15.3548C15.0676 15.3081 15.1327 15.2826 15.2 15.284C15.2674 15.2853 15.3314 15.3134 15.3781 15.3619C15.4247 15.4105 15.4502 15.4756 15.4488 15.543C15.447 15.6319 15.4435 15.7208 15.4382 15.8096C15.4344 15.8742 15.406 15.9349 15.359 15.9793C15.3119 16.0237 15.2497 16.0485 15.185 16.0486C15.1799 16.0486 15.1748 16.0486 15.1698 16.0481C15.1025 16.0441 15.0397 16.0136 14.9949 15.9632C14.9502 15.9129 14.9274 15.8468 14.9313 15.7796C14.9361 15.6972 14.9394 15.6141 14.941 15.5328ZM13.2461 20.1617C13.4167 19.9332 13.5777 19.6936 13.7244 19.4502C14.213 18.6548 14.5687 17.785 14.7774 16.8751C14.7919 16.8094 14.8319 16.752 14.8887 16.7158C14.9454 16.6796 15.0143 16.6673 15.08 16.6818C15.1458 16.6963 15.2031 16.7364 15.2393 16.7931C15.2756 16.8499 15.2878 16.9187 15.2733 16.9845C15.0527 17.9483 14.6764 18.8697 14.1593 19.7124C14.003 19.9715 13.834 20.2227 13.6532 20.4654C13.6129 20.5193 13.5528 20.5551 13.4862 20.5648C13.4196 20.5745 13.3518 20.5573 13.2978 20.5171C13.2438 20.4768 13.2081 20.4168 13.1984 20.3501C13.1887 20.2835 13.2058 20.2157 13.2461 20.1617ZM21.0652 5.61133L20.0171 6.40621L22.181 6.68855L21.0652 5.61133Z" fill="#006139"/>
+            <path d="M17.1763 5.99611C17.4085 5.99611 17.5967 5.80788 17.5967 5.57569C17.5967 5.3435 17.4085 5.15527 17.1763 5.15527C16.9441 5.15527 16.7559 5.3435 16.7559 5.57569C16.7559 5.80788 16.9441 5.99611 17.1763 5.99611Z" fill="#006139"/>
+            <path d="M17.9212 4.90304C18.0487 5.05592 18.1236 5.24579 18.1349 5.44455C18.1462 5.64332 18.0931 5.84044 17.9837 6.00674C17.8742 6.17304 17.7142 6.2997 17.5271 6.36797C17.3401 6.43625 17.1361 6.44252 16.9453 6.38585C16.8128 6.81597 16.5898 7.738 16.7066 8.78948C16.8965 10.5023 17.8692 11.8262 19.5995 12.7328C18.9185 11.23 18.7441 9.93643 19.0816 8.88023C19.2172 8.43482 19.4656 8.03202 19.8027 7.71089L19.3106 7.01224C19.2228 6.88862 19.1867 6.73561 19.21 6.58577C19.2332 6.43593 19.3141 6.30108 19.4352 6.2099L20.7017 5.24932C20.2791 4.86638 19.2061 4.11659 17.9212 4.90304Z" fill="#006139"/>
+            </svg>
+            """,
+        ["Dragon Fruit"] = """
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8.16709 7.20371C6.71136 7.20371 5.52728 8.38807 5.52728 9.84353C5.52728 11.299 6.71136 12.4833 8.16709 12.4833C9.62282 12.4833 10.8069 11.299 10.8069 9.84353C10.8069 8.38807 9.62282 7.20371 8.16709 7.20371ZM7.65467 9.42211C7.59238 9.48386 7.50571 9.52096 7.41878 9.52096C7.32561 9.52096 7.23867 9.48386 7.17638 9.42211C7.14413 9.39058 7.11867 9.35279 7.10158 9.31106C7.08448 9.26932 7.07611 9.22453 7.07698 9.17944C7.07698 9.08655 7.10813 8.99934 7.17638 8.93759C7.30069 8.81328 7.53063 8.81328 7.65467 8.93759C7.72292 8.99934 7.76057 9.08682 7.76057 9.17944C7.76057 9.27288 7.72292 9.35359 7.65467 9.42211ZM14.13 7.20371C12.6743 7.20371 11.4902 8.38807 11.4902 9.84353C11.4902 11.299 12.6743 12.4833 14.13 12.4833C15.5855 12.4833 16.7698 11.299 16.7698 9.84353C16.7698 8.38807 15.5855 7.20371 14.13 7.20371ZM14.6657 9.42211C14.6006 9.48499 14.5138 9.52039 14.4233 9.52096C14.3302 9.52096 14.2432 9.48386 14.1815 9.42211C14.1491 9.39068 14.1236 9.35291 14.1065 9.31115C14.0894 9.26939 14.0811 9.22455 14.0821 9.17944C14.0821 9.08655 14.1195 8.99934 14.1815 8.93759C14.3118 8.81328 14.5355 8.81328 14.6657 8.93759C14.728 8.99934 14.7651 9.08682 14.7651 9.17944C14.7654 9.27288 14.728 9.35359 14.6657 9.42211ZM12.1424 13.1664C10.6867 13.1664 9.50257 14.3507 9.50257 15.8062C9.50257 17.2622 10.6867 18.4468 12.1424 18.4468C13.5981 18.4468 14.7819 17.2625 14.7819 15.8062C14.7819 14.3507 13.5981 13.1664 12.1424 13.1664ZM13.4673 16.3151C13.4489 16.3586 13.4241 16.3958 13.3928 16.4267C13.3274 16.4887 13.2411 16.5241 13.151 16.5261C13.0578 16.5261 12.9709 16.489 12.9086 16.4267C12.8769 16.3946 12.8517 16.3567 12.8344 16.3151C12.8172 16.2738 12.8087 16.2295 12.8094 16.1848C12.8094 16.0982 12.8403 16.0047 12.9086 15.943C13.0329 15.8127 13.2625 15.8127 13.3928 15.943C13.4249 15.9736 13.4485 16.0121 13.4613 16.0545C13.48 16.0982 13.4922 16.1412 13.4922 16.1848C13.4922 16.2284 13.48 16.2712 13.4673 16.3151ZM6.17944 13.1664C4.72398 13.1664 3.53963 14.3507 3.53963 15.8062C3.53963 17.2622 4.72398 18.4468 6.17944 18.4468C7.6349 18.4468 8.81926 17.2625 8.81926 15.8062C8.81926 14.3507 7.6349 13.1664 6.17944 13.1664ZM6.45596 16.9548C6.44117 16.996 6.41553 17.0325 6.38176 17.0604C6.31946 17.1284 6.23253 17.166 6.13936 17.166C6.05269 17.166 5.96521 17.1284 5.90346 17.0604C5.86928 17.0328 5.84348 16.9963 5.82898 16.9548C5.81181 16.9135 5.80333 16.8692 5.80407 16.8245C5.80407 16.7747 5.81003 16.7311 5.82898 16.6875C5.84385 16.6462 5.86959 16.6097 5.90346 16.5819C6.02778 16.4516 6.25744 16.4516 6.38176 16.5819C6.45001 16.6444 6.48738 16.7311 6.48738 16.8245C6.48711 16.8673 6.47465 16.9112 6.45596 16.9548ZM10.0377 19.48C8.58228 19.48 7.39792 20.6644 7.39792 22.1199C7.39792 23.5753 8.58228 24.7597 10.0377 24.7597C11.4932 24.7597 12.6775 23.5753 12.6775 22.1199C12.6775 20.6644 11.4932 19.48 10.0377 19.48ZM10.207 21.5189C10.1756 21.5515 10.1381 21.5777 10.0966 21.5958C10.0551 21.6139 10.0104 21.6237 9.96515 21.6245C9.87171 21.6245 9.78505 21.5874 9.72276 21.5189C9.69115 21.4871 9.66613 21.4493 9.64912 21.4078C9.63211 21.3663 9.62345 21.3219 9.62363 21.277C9.62363 21.1898 9.66073 21.1029 9.72276 21.0344C9.75363 21.0025 9.79214 20.9791 9.83461 20.9664C9.89653 20.94 9.96481 20.9324 10.031 20.9445C10.0972 20.9566 10.1584 20.9878 10.207 21.0344C10.2693 21.1029 10.3064 21.1895 10.3064 21.277C10.3064 21.3696 10.269 21.4571 10.207 21.5189ZM16.3514 18.4303C14.8957 18.4303 13.7116 19.6146 13.7116 21.0701C13.7116 22.5256 14.8957 23.7099 16.3514 23.7099C17.8069 23.7099 18.9912 22.5256 18.9912 21.0701C18.9912 19.6146 17.8069 18.4303 16.3514 18.4303ZM15.9392 20.246C15.8766 20.3145 15.79 20.3454 15.6968 20.3454C15.6036 20.3454 15.5167 20.3145 15.4544 20.246C15.4227 20.2142 15.3977 20.1764 15.3806 20.1349C15.3636 20.0934 15.3549 20.049 15.355 20.0041C15.355 19.9605 15.3615 19.9169 15.3799 19.8738C15.3986 19.8362 15.4235 19.7994 15.4544 19.7677C15.4831 19.7321 15.5221 19.7063 15.566 19.6937C15.647 19.6561 15.7461 19.6561 15.8271 19.6937C15.871 19.7064 15.91 19.7322 15.9389 19.7677C15.9698 19.7991 15.9947 19.8362 16.0131 19.8738C16.0256 19.9169 16.038 19.9605 16.038 20.0041C16.0383 20.0967 16.0009 20.1842 15.9392 20.246ZM18.4558 2.00642C17.0003 2.00642 15.816 3.19078 15.816 4.64705C15.816 6.10251 17.0003 7.28686 18.4558 7.28686C19.9115 7.28686 21.0956 6.10251 21.0956 4.64705C21.0959 3.19078 19.9118 2.00642 18.4558 2.00642ZM19.8324 4.21128C19.814 4.25461 19.7892 4.29198 19.7579 4.3234C19.6962 4.39138 19.609 4.42225 19.5161 4.42225C19.4229 4.42225 19.3419 4.39138 19.2737 4.3234C19.242 4.29114 19.2168 4.25307 19.1995 4.21128C19.1841 4.16951 19.1757 4.1255 19.1746 4.08101C19.1746 3.99434 19.2117 3.90686 19.2737 3.83915C19.3048 3.80749 19.3432 3.78396 19.3855 3.77063C19.4266 3.75229 19.471 3.74281 19.516 3.74281C19.5609 3.74281 19.6053 3.75229 19.6464 3.77063C19.6886 3.784 19.7269 3.80753 19.7579 3.83915C19.8205 3.9009 19.8573 3.99434 19.8573 4.08101C19.8573 4.13057 19.8514 4.17444 19.8324 4.21128ZM22.2775 7.10161C20.8218 7.10161 19.6377 8.28596 19.6377 9.74142C19.6377 11.1974 20.8218 12.382 22.2775 12.382C23.7332 12.382 24.9173 11.1977 24.9173 9.74169C24.9173 8.28623 23.7332 7.10161 22.2775 7.10161ZM22.3788 10.5826C22.3661 10.6267 22.3402 10.6658 22.3046 10.6948C22.2418 10.7573 22.1571 10.793 22.0684 10.7942C21.9753 10.7942 21.8886 10.7565 21.826 10.6948C21.7952 10.6639 21.7643 10.6262 21.7518 10.5826C21.7346 10.5414 21.7262 10.497 21.7269 10.4524C21.7269 10.3657 21.7578 10.2723 21.8201 10.2105C21.8702 10.1642 21.9322 10.1327 21.9991 10.1196C22.0661 10.1064 22.1353 10.1121 22.1992 10.136C22.2363 10.1547 22.2734 10.1796 22.3049 10.2105C22.3731 10.2723 22.4105 10.3657 22.4105 10.4524C22.4084 10.4974 22.3976 10.5416 22.3788 10.5826ZM18.4558 12.1142C17.0003 12.1142 15.816 13.2985 15.816 14.754C15.816 16.2095 17.0003 17.3938 18.4558 17.3938C19.9115 17.3938 21.0956 16.2095 21.0956 14.754C21.0956 13.2985 19.9118 12.1142 18.4558 12.1142ZM19.1185 13.8746C19.0562 13.9426 18.9695 13.9802 18.8826 13.9802C18.7894 13.9802 18.7025 13.9426 18.6402 13.8746C18.6086 13.8447 18.5832 13.8088 18.5657 13.769C18.5486 13.7277 18.5401 13.6834 18.5408 13.6387C18.5408 13.5889 18.5473 13.5453 18.5657 13.5084C18.5845 13.4647 18.6093 13.4274 18.6402 13.3963C18.6865 13.3497 18.7087 13.3405 18.7521 13.3218C18.7931 13.3035 18.8375 13.294 18.8825 13.294C18.9274 13.294 18.9719 13.3035 19.0129 13.3218C19.0503 13.3405 19.0939 13.3654 19.1185 13.3963C19.1868 13.4589 19.2244 13.5455 19.2244 13.639C19.2245 13.6835 19.215 13.7276 19.1968 13.7682C19.1785 13.8088 19.1518 13.8451 19.1185 13.8746ZM22.0836 17.1536C20.6281 17.1536 19.4438 18.3379 19.4438 19.7942C19.4438 21.2497 20.6281 22.434 22.0836 22.434C23.539 22.434 24.7234 21.2497 24.7234 19.7942C24.7237 18.3382 23.539 17.1536 22.0836 17.1536ZM23.5835 20.246C23.5518 20.2779 23.5142 20.3031 23.4726 20.3202C23.4311 20.3372 23.3865 20.3458 23.3416 20.3454C23.2968 20.3475 23.2522 20.339 23.2113 20.3204C23.1677 20.3077 23.1306 20.2768 23.0995 20.246C23.0683 20.2151 23.0434 20.1774 23.025 20.1344C23.007 20.0934 22.9985 20.0489 23.0001 20.0041C23.0001 19.9605 23.0066 19.9169 23.025 19.8738C23.0434 19.8362 23.0683 19.7994 23.0995 19.7677C23.128 19.7318 23.1672 19.7059 23.2113 19.6937C23.292 19.6561 23.3852 19.6561 23.4722 19.6937C23.5093 19.706 23.5465 19.7307 23.5837 19.7677C23.6149 19.7991 23.6395 19.8362 23.6523 19.8738C23.6707 19.9169 23.6772 19.9605 23.6772 20.0041C23.6769 20.0967 23.6455 20.1842 23.5835 20.246ZM3.7238 19.48C2.26834 19.48 1.08398 20.6644 1.08398 22.1199C1.08398 23.5753 2.26834 24.7597 3.7238 24.7597C5.17953 24.7597 6.36361 23.5753 6.36361 22.1199C6.36361 20.6644 5.1798 19.48 3.7238 19.48ZM3.2019 22.7918C3.17046 22.8245 3.13286 22.8507 3.09126 22.8688C3.04966 22.887 3.00488 22.8967 2.95951 22.8974C2.91405 22.8977 2.86903 22.8885 2.82737 22.8703C2.78571 22.8521 2.74834 22.8253 2.71765 22.7918C2.68545 22.7617 2.65996 22.7251 2.64284 22.6844C2.62571 22.6438 2.61734 22.6 2.61826 22.5559C2.61807 22.4882 2.63803 22.422 2.6756 22.3656C2.71317 22.3093 2.76665 22.2654 2.82923 22.2396C2.95355 22.1838 3.10278 22.2146 3.2019 22.314C3.26419 22.3758 3.30103 22.4633 3.30103 22.5559C3.3013 22.6434 3.26419 22.73 3.2019 22.7918ZM12.1424 1.24023C10.6867 1.24023 9.50257 2.42459 9.50257 3.88005C9.50257 5.33605 10.6867 6.52067 12.1424 6.52067C13.5981 6.52067 14.7819 5.33632 14.7819 3.88005C14.7819 2.42486 13.5981 1.24023 12.1424 1.24023ZM12.1137 3.04994C12.0835 3.08214 12.047 3.10763 12.0063 3.12476C11.9657 3.14188 11.9219 3.15026 11.8778 3.14934C11.7843 3.14934 11.6977 3.11846 11.6354 3.04994C11.5671 2.98819 11.536 2.90126 11.536 2.80809C11.536 2.76448 11.5425 2.72142 11.5609 2.67782C11.5736 2.63383 11.5996 2.59486 11.6354 2.56623C11.7285 2.4728 11.8778 2.44192 12.008 2.49176C12.0452 2.5099 12.0825 2.53482 12.1137 2.56623C12.1445 2.59693 12.1694 2.63403 12.1882 2.67755C12.2066 2.72115 12.2131 2.76421 12.2131 2.80782C12.2131 2.90153 12.1819 2.98819 12.1137 3.04994Z" fill="#006139"/>
+            </svg>
+            """,
+    };
+
+    private MarkupString IconFor(string name) =>
+        new(ProductIconSvgs.TryGetValue(name, out var svg) ? svg : "<i class=\"bi bi-box-seam\"></i>");
+
+    private string currentTab = "All";
+    private string statusFilter = "All";
+    private string searchQuery = "";
+    private int currentPage = 1;
+    private int itemsPerPage = 16;
+
+    private bool showFormModal;
+    private ProductRow? editingRow;
+    private ProductRow? viewingRow;
+
+    private string formExistingProductId = "";
+    private string formProductName = "";
+    private string formProductGroup = "Live Stock";
+    private string formUom = "Kg";
+    private decimal? formRate;
+    private string formReason = "";
+
+    private List<ProductRow> TabRows => currentTab switch
+    {
+        "Livestock" => rows.Where(r => r.Group == "Live Stock").ToList(),
+        "Orchard" => rows.Where(r => r.Group == "Orchard").ToList(),
+        _ => rows
+    };
+
+    private int PendingCount => TabRows.Count(r => r.Status == "Pending");
+    private int ApprovedCount => TabRows.Count(r => r.Status == "Approved");
+
+    private List<ProductRow> FilteredRows
+    {
+        get
+        {
+            var filtered = TabRows.AsEnumerable();
+
+            if (statusFilter != "All")
+                filtered = filtered.Where(r => r.Status == statusFilter);
+
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                var q = searchQuery.Trim();
+                filtered = filtered.Where(r => r.Name.Contains(q, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return filtered.ToList();
+        }
+    }
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling((double)FilteredRows.Count / itemsPerPage));
+
+    private List<ProductRow> PageRows
+    {
+        get
+        {
+            var filtered = FilteredRows;
+            var start = (currentPage - 1) * itemsPerPage;
+            return filtered.Skip(start).Take(itemsPerPage).ToList();
+        }
+    }
+
+    private int SerialNoFor(ProductRow row) => FilteredRows.IndexOf(row) + 1;
+
+    private List<object> PaginationPages
+    {
+        get
+        {
+            var pages = new List<object>();
+            var total = TotalPages;
+            if (total <= 7)
+            {
+                for (int i = 1; i <= total; i++) pages.Add(i);
+            }
+            else
+            {
+                pages.Add(1); pages.Add(2); pages.Add(3);
+                if (currentPage > 5) pages.Add("...");
+                if (currentPage > 3 && currentPage < total - 2) pages.Add(currentPage);
+                if (currentPage < total - 4) pages.Add("...");
+                pages.Add(total - 2); pages.Add(total - 1); pages.Add(total);
+            }
+            return pages.Distinct().ToList();
+        }
+    }
+
+    private static string StatusPillClass(string status) => status switch
+    {
+        "Pending" => "prm-status-pending",
+        "Approved" => "prm-status-approved",
+        _ => "prm-status-none"
+    };
+
+    private void GoToDashboard() => Nav.NavigateTo(LoginState.LandingPage);
+
+    private void SwitchTab(string tab)
+    {
+        currentTab = tab;
+        statusFilter = "All";
+        currentPage = 1;
+    }
+
+    private void SetStatusFilter(string status)
+    {
+        statusFilter = status;
+        currentPage = 1;
+    }
+
+    private void OnSearchChanged(ChangeEventArgs e)
+    {
+        searchQuery = e.Value?.ToString() ?? "";
+        currentPage = 1;
+    }
+
+    private void SetPage(int page) => currentPage = page;
+
+    private void ChangeItemsPerPage(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var val))
+            itemsPerPage = val;
+        currentPage = 1;
+    }
+
+    private void OpenAddModal()
+    {
+        editingRow = null;
+        formExistingProductId = "";
+        formProductName = "";
+        formProductGroup = "Live Stock";
+        formUom = "Kg";
+        formRate = null;
+        formReason = "";
+        showFormModal = true;
+    }
+
+    private void EditRow(ProductRow row)
+    {
+        editingRow = row;
+        formExistingProductId = row.Id.ToString();
+        formRate = null;
+        formReason = "";
+        showFormModal = true;
+    }
+
+    private void CloseFormModal() => showFormModal = false;
+
+    private void ViewRow(ProductRow row) => viewingRow = row;
+
+    private async Task DeleteRow(ProductRow row)
+    {
+        var ok = await Toast.ConfirmAsync("Delete product?", $"Delete \"{row.Name}\" from the catalog? This cannot be undone.", "Delete", danger: true);
+        if (!ok) return;
+
+        rows.Remove(row);
+        Toast.Success($"\"{row.Name}\" deleted.");
+    }
+
+    private void SubmitForm()
+    {
+        if (formRate is null || formRate < 0)
+        {
+            Toast.Error("Enter a valid rate.");
+            return;
+        }
+
+        var today = DateTime.Now.ToString("dd MMM yyyy");
+
+        if (editingRow is not null)
+        {
+            if (!int.TryParse(formExistingProductId, out var id))
+            {
+                Toast.Error("Select a product.");
+                return;
+            }
+
+            var target = rows.FirstOrDefault(r => r.Id == id);
+            if (target is null)
+            {
+                Toast.Error("Select a product.");
+                return;
+            }
+
+            target.RequestRateText = $"₹ {formRate.Value:N0} / {target.Uom}";
+            target.RequestType = "Rate Change";
+            target.Status = "Pending";
+            target.RequestDate = today;
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(formProductName) || string.IsNullOrWhiteSpace(formUom))
+            {
+                Toast.Error("Enter a product name and UOM.");
+                return;
+            }
+
+            rows.Add(new ProductRow
+            {
+                Id = _nextId++,
+                Name = formProductName.Trim(),
+                Group = formProductGroup,
+                Uom = formUom.Trim(),
+                CurrentRateText = null,
+                RequestRateText = $"₹ {formRate.Value:N0} / {formUom.Trim()}",
+                RequestType = "New Product",
+                Status = "Pending",
+                RequestDate = today
+            });
+        }
+
+        Toast.Success("Request submitted.");
+        showFormModal = false;
+    }
+}
