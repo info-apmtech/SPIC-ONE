@@ -111,7 +111,10 @@ namespace SPIC.Core.Entities
         // Added for menu permissions
         FieldDashboard, FieldReports, MdoDashboard, AllocationRequests, TaskMonitoring,
         PerformanceTracker, TargetAchievement, FarmerData, MdoReports, SdwaCompanyMaster,
-        GuestHouseCancellations, DemoDocumentation, SalesAudit, ExtensionRequests, MarkAttendance, TasksAllocation
+        GuestHouseCancellations, DemoDocumentation, SalesAudit, ExtensionRequests, MarkAttendance, TasksAllocation,
+
+        // MD Portal - Program Master (Program Type / Program Master / State Mapping). Appended at the END on purpose.
+        ProgramMaster
 
     }
 }

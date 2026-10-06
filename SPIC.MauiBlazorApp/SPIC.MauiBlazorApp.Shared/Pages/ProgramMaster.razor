@@ -1,0 +1,1035 @@
+@page "/ProgramMaster"
+@using System.Net.Http.Json
+@using System.Text.Json
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+@* MD Portal - Program Master: Program Types, Program Master and state-wise applicability
+   (ProgramStateMappings). Layout, tabs, form card, metric cards and SpicDataTable follow
+   LocationMaster.razor. ProgramTypes/ProgramMasters have no IsActive column, so there is no
+   Active/Inactive status here; the only toggles are MO/RMDO/SMDO eligibility on the form and
+   Applicable/Not Applicable per state. *@
+
+<style>
+	.searchable-select-input {
+		cursor: pointer;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 12px center;
+		padding-right: 32px;
+	}
+	.searchable-dropdown-container {
+		position: absolute;
+		width: 100%;
+		background: #ffffff;
+		border: 1px solid #059669;
+		border-radius: 6px;
+		max-height: 220px;
+		overflow-y: auto;
+		z-index: 1050;
+		box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+		margin-top: 4px;
+	}
+	.searchable-dropdown-item {
+		padding: 10px 14px;
+		font-size: 0.85rem;
+		color: #374151;
+		cursor: pointer;
+		border-bottom: 1px solid #F3F4F6;
+		transition: background-color 0.1s ease;
+	}
+	.searchable-dropdown-item:last-child {
+		border-bottom: none;
+	}
+	.searchable-dropdown-item:hover {
+		background-color: #DCFCE7;
+		color: #059669;
+	}
+
+	/* State applicability grid */
+	.pm-page .pm-program-summary {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 20px;
+		font-size: 0.85rem;
+		color: #4B5563;
+		margin-bottom: 16px;
+	}
+	.pm-page .pm-program-summary strong {
+		color: #111827;
+	}
+	.pm-page .pm-state-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+		gap: 12px;
+	}
+	.pm-page .pm-state-card {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 12px 14px;
+		border: 1px solid #E5E7EB;
+		border-radius: 8px;
+		background: #ffffff;
+		transition: border-color 0.15s ease, background-color 0.15s ease;
+	}
+	.pm-page .pm-state-card.is-applicable {
+		border-color: #A7F3D0;
+		background: #F0FDF4;
+	}
+	.pm-page .pm-state-name {
+		font-weight: 600;
+		font-size: 0.9rem;
+		color: #111827;
+	}
+	.pm-page .pm-state-sub {
+		font-size: 0.75rem;
+		color: #9CA3AF;
+	}
+	.pm-page .pm-state-toggle {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: 0.8rem;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.pm-page .pm-state-toggle .pm-label-on { color: #059669; }
+	.pm-page .pm-state-toggle .pm-label-off { color: #6B7280; }
+	.pm-page .pm-state-tools {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		margin-bottom: 14px;
+	}
+	.pm-page .pm-link {
+		color: #059669;
+		cursor: pointer;
+		text-decoration: underline;
+	}
+	.pm-page .pm-empty {
+		padding: 32px 16px;
+		text-align: center;
+		color: #6B7280;
+		font-size: 0.9rem;
+	}
+
+	/* native: phone */
+	@@media (max-width: 767.98px) {
+		.pm-page .tab-item {
+			padding: 10px 18px;
+			min-height: var(--tap-min, 44px);
+			display: inline-flex;
+			align-items: center;
+		}
+		.pm-page .form-control-custom,
+		.pm-page .searchable-select-input {
+			min-height: var(--tap-min, 44px);
+			font-size: 16px; /* prevents iOS zoom on focus */
+		}
+		.pm-page .status-toggle-box {
+			min-height: var(--tap-min, 44px);
+		}
+		.pm-page .pm-form-actions {
+			flex-wrap: nowrap;
+			gap: 10px;
+		}
+		.pm-page .pm-form-actions .fb-actionbar__secondary,
+		.pm-page .pm-form-actions .fb-actionbar__primary {
+			flex: 1 1 0;
+			min-width: 0;
+		}
+		.pm-page .pm-form-actions button {
+			flex: 1 1 0;
+			width: 100%;
+			min-height: var(--tap-min, 44px);
+			justify-content: center;
+		}
+		.pm-page .row.g-3.mb-4:has(.metric-card) {
+			--bs-gutter-x: 8px;
+		}
+		.pm-page .row.g-3.mb-4 > .col-md-4:has(.metric-card) {
+			flex: 0 0 33.333%;
+			max-width: 33.333%;
+		}
+		.pm-page .metric-card {
+			padding: 12px 10px;
+		}
+		.pm-page .metric-title {
+			font-size: 0.72rem;
+		}
+		.pm-page .metric-val {
+			font-size: 1.25rem;
+		}
+		.pm-page .pm-state-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+	@@media (min-width: 768px) and (max-width: 1199.98px) {
+		.pm-page .tab-item {
+			padding: 8px 20px;
+		}
+	}
+	@@media (min-width: 768px) {
+		.pm-page .pm-form-actions.fb-actionbar { padding-top: 0; padding-bottom: 0; }
+	}
+</style>
+
+<div class="container-fluid pm-page mf-page">
+
+	<PageHeader Title="Program Master" Subtitle="Program types, programs and state-wise applicability" />
+
+	@if (!string.IsNullOrEmpty(_message))
+	{
+		<div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show" role="alert">
+			@_message
+			<button type="button" class="btn-close" @onclick="() => _message = null"></button>
+		</div>
+	}
+
+	<div class="tabs-wrapper">
+		<div class="tabs-container">
+			@foreach (var tab in TabOptions)
+			{
+				<div class="tab-item @(ActiveTab == tab ? "active" : "")" @onclick="() => SetActiveTab(tab)">
+					@tab
+				</div>
+			}
+		</div>
+	</div>
+
+	@if (ActiveTab == TabTypes)
+	{
+		<div class="main-card mf-form-card">
+			<div class="section-header">
+				<h3 class="section-title">@(_typeEditingId.HasValue ? "Edit Program Type" : "Add New Program Type")</h3>
+			</div>
+
+			<div class="row g-3 mb-4 mf-form-row">
+				<div class="col-md-6 col-lg-4">
+					<label class="form-label-custom">Program Type Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Program Type Name"
+						   @bind="_typeForm.Name" @ref="_typeNameRef" />
+				</div>
+			</div>
+
+			<ActionBar Sticky="false" CssClass="pm-form-actions mf-form-actions pt-2 mt-4">
+				<Secondary>
+					<button class="btn-cancel mt-3" @onclick="ResetTypeForm"><i class="bi bi-x"></i> Cancel</button>
+				</Secondary>
+				<ChildContent>
+					@if (CanSave(_typeEditingId.HasValue))
+					{
+						<button class="btn-save mt-3" @onclick="SaveProgramType" disabled="@_isSaving">
+							<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+						</button>
+					}
+				</ChildContent>
+			</ActionBar>
+		</div>
+
+		<div class="row g-3 mb-4">
+			<div class="col-md-4">
+				<div class="metric-card bg-blue-light">
+					<div class="metric-header"><h4 class="metric-title">Total Program Types</h4></div>
+					<div class="metric-val">@_types.Count</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="metric-card bg-mint-light">
+					<div class="metric-header"><h4 class="metric-title">Types With Programs</h4></div>
+					<div class="metric-val">@_types.Count(t => t.ProgramCount > 0)</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="metric-card bg-gray-light">
+					<div class="metric-header"><h4 class="metric-title">Total Programs</h4></div>
+					<div class="metric-val">@_types.Sum(t => t.ProgramCount)</div>
+				</div>
+			</div>
+		</div>
+
+		<SpicDataTable Items="_types"
+					   IsLoading="_isLoading"
+					   Title="Existing Program Types"
+					   FileName="ProgramTypes"
+					   ExportColumns="TypeExportColumns()"
+					   SearchText="@_typeSearch"
+					   EmptyTitle="No program types yet"
+					   EmptyMessage="Use the form above to add the first program type.">
+
+			<FilterControls>
+				<div class="search-box">
+					<i class="bi bi-search"></i>
+					<input type="text" placeholder="Search program types..."
+						   @bind="_typeSearch" @bind:event="oninput" @bind:after="StateHasChanged" />
+				</div>
+			</FilterControls>
+
+			<TableHeader>
+				<th>Program Type</th>
+				<th>Programs</th>
+				<th>Created At</th>
+				@if (CanUpdate)
+				{
+					<th>Action</th>
+				}
+			</TableHeader>
+
+			<TableRow Context="item">
+				<td>@item.Name</td>
+				<td>@item.ProgramCount</td>
+				<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
+				@if (CanUpdate)
+				{
+					<td>
+						<div class="action-icons">
+							<i class="bi bi-pencil-square icon-edit" title="Edit" @onclick="() => EditProgramType(item)"></i>
+						</div>
+					</td>
+				}
+			</TableRow>
+
+			<CardActions Context="item">
+				@if (CanUpdate)
+				{
+					<button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditProgramType(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+				}
+			</CardActions>
+		</SpicDataTable>
+	}
+	else if (ActiveTab == TabPrograms)
+	{
+		<div class="main-card mf-form-card">
+			<div class="section-header">
+				<h3 class="section-title">@(_programEditingId.HasValue ? "Edit Program" : "Add New Program")</h3>
+			</div>
+
+			<div class="row g-3 mb-4 mf-form-row">
+				<div class="col-md-6 col-lg-3">
+					<label class="form-label-custom">Program Type</label>
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select Program Type --"
+							   @bind="_programTypeSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showProgramTypeDropdown = true"
+							   @onblur="HideProgramTypeDropdown" />
+						@if (_showProgramTypeDropdown)
+						{
+							<div class="searchable-dropdown-container">
+								<div class="searchable-dropdown-item" @onmousedown='() => SelectProgramType(0, "")'>
+									-- Select Program Type --
+								</div>
+								@foreach (var t in _types.Where(t => string.IsNullOrWhiteSpace(_programTypeSearch) ||
+									t.Name.Contains(_programTypeSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown='() => SelectProgramType(t.Id, t.Name)'>
+										@t.Name
+									</div>
+								}
+							</div>
+						}
+					</div>
+				</div>
+				<div class="col-md-6 col-lg-3">
+					<label class="form-label-custom">Program Name</label>
+					<input type="text" class="form-control-custom w-100" placeholder="Enter Program Name"
+						   @bind="_programForm.Name" @ref="_programNameRef" />
+				</div>
+				<div class="col-md-4 col-lg-2">
+					<label class="form-label-custom">MO</label>
+					<div class="status-toggle-box @(_programForm.IsMO ? "" : "status-toggle-inactive")">
+						<span>@(_programForm.IsMO ? "Eligible" : "Not Eligible")</span>
+						<label class="switch">
+							<input type="checkbox" @bind="_programForm.IsMO">
+							<span class="slider"></span>
+						</label>
+					</div>
+				</div>
+				<div class="col-md-4 col-lg-2">
+					<label class="form-label-custom">RMDO</label>
+					<div class="status-toggle-box @(_programForm.IsRMDO ? "" : "status-toggle-inactive")">
+						<span>@(_programForm.IsRMDO ? "Eligible" : "Not Eligible")</span>
+						<label class="switch">
+							<input type="checkbox" @bind="_programForm.IsRMDO">
+							<span class="slider"></span>
+						</label>
+					</div>
+				</div>
+				<div class="col-md-4 col-lg-2">
+					<label class="form-label-custom">SMDO</label>
+					<div class="status-toggle-box @(_programForm.IsSMDO ? "" : "status-toggle-inactive")">
+						<span>@(_programForm.IsSMDO ? "Eligible" : "Not Eligible")</span>
+						<label class="switch">
+							<input type="checkbox" @bind="_programForm.IsSMDO">
+							<span class="slider"></span>
+						</label>
+					</div>
+				</div>
+			</div>
+
+			<ActionBar Sticky="false" CssClass="pm-form-actions mf-form-actions pt-2 mt-4">
+				<Secondary>
+					<button class="btn-cancel mt-3" @onclick="ResetProgramForm"><i class="bi bi-x"></i> Cancel</button>
+				</Secondary>
+				<ChildContent>
+					@if (CanSave(_programEditingId.HasValue))
+					{
+						<button class="btn-save mt-3" @onclick="SaveProgram" disabled="@_isSaving">
+							<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
+						</button>
+					}
+				</ChildContent>
+			</ActionBar>
+		</div>
+
+		<div class="row g-3 mb-4">
+			<div class="col-md-4">
+				<div class="metric-card bg-blue-light">
+					<div class="metric-header"><h4 class="metric-title">Total Programs</h4></div>
+					<div class="metric-val">@_programs.Count</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="metric-card bg-mint-light">
+					<div class="metric-header"><h4 class="metric-title">Mapped To States</h4></div>
+					<div class="metric-val">@_programs.Count(p => p.ApplicableStateCount > 0)</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="metric-card bg-gray-light">
+					<div class="metric-header"><h4 class="metric-title">No Applicable State</h4></div>
+					<div class="metric-val">@_programs.Count(p => p.ApplicableStateCount == 0)</div>
+				</div>
+			</div>
+		</div>
+
+		<SpicDataTable Items="_filteredPrograms"
+					   IsLoading="_isLoading"
+					   Title="Existing Programs"
+					   FileName="ProgramMaster"
+					   ExportColumns="ProgramExportColumns()"
+					   SearchText="@_programSearch"
+					   EmptyTitle="No programs yet"
+					   EmptyMessage="Use the form above to add the first program.">
+
+			<FilterControls>
+				<div class="search-box">
+					<i class="bi bi-search"></i>
+					<input type="text" placeholder="Search programs..."
+						   @bind="_programSearch" @bind:event="oninput" @bind:after="StateHasChanged" />
+				</div>
+				<select class="filter-select" @bind="_programTypeFilter" @bind:after="ApplyProgramFilter">
+					<option value="0">All Program Types</option>
+					@foreach (var t in _types)
+					{
+						<option value="@t.Id">@t.Name</option>
+					}
+				</select>
+			</FilterControls>
+
+			<TableHeader>
+				<th>Program Type</th>
+				<th>Program Name</th>
+				<th>MO</th>
+				<th>RMDO</th>
+				<th>SMDO</th>
+				<th>Applicable States</th>
+				<th>Action</th>
+			</TableHeader>
+
+			<TableRow Context="item">
+				<td>@item.ProgramType</td>
+				<td>@item.Name</td>
+				<td><span class="status-pill @(item.IsMO ? "status-active" : "status-inactive")">@YesNo(item.IsMO)</span></td>
+				<td><span class="status-pill @(item.IsRMDO ? "status-active" : "status-inactive")">@YesNo(item.IsRMDO)</span></td>
+				<td><span class="status-pill @(item.IsSMDO ? "status-active" : "status-inactive")">@YesNo(item.IsSMDO)</span></td>
+				<td>
+					<span class="pm-link" title="Configure state applicability" @onclick="() => OpenStateMapping(item)">
+						@item.ApplicableStateCount @(item.ApplicableStateCount == 1 ? "state" : "states")
+					</span>
+				</td>
+				<td>
+					<div class="action-icons">
+						<i class="bi bi-geo-alt icon-edit" title="State Mapping" @onclick="() => OpenStateMapping(item)"></i>
+						@if (CanUpdate)
+						{
+							<i class="bi bi-pencil-square icon-edit" title="Edit" @onclick="() => EditProgram(item)"></i>
+						}
+					</div>
+				</td>
+			</TableRow>
+
+			<CardActions Context="item">
+				<button type="button" class="btn btn-sm btn-outline-success" @onclick="() => OpenStateMapping(item)"><i class="bi bi-geo-alt"></i> States (@item.ApplicableStateCount)</button>
+				@if (CanUpdate)
+				{
+					<button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditProgram(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+				}
+			</CardActions>
+		</SpicDataTable>
+	}
+	else
+	{
+		<div class="main-card mf-form-card">
+			<div class="section-header">
+				<h3 class="section-title">State Applicability</h3>
+			</div>
+
+			<div class="row g-3 mb-3 mf-form-row">
+				<div class="col-md-8 col-lg-5">
+					<label class="form-label-custom">Program</label>
+					<div class="position-relative">
+						<input type="text" class="form-control-custom searchable-select-input w-100"
+							   placeholder="-- Select Program --"
+							   @bind="_mappingProgramSearch"
+							   @bind:event="oninput"
+							   @onfocus="() => _showMappingProgramDropdown = true"
+							   @onblur="HideMappingProgramDropdown" />
+						@if (_showMappingProgramDropdown)
+						{
+							<div class="searchable-dropdown-container">
+								@foreach (var p in _programs.Where(p => string.IsNullOrWhiteSpace(_mappingProgramSearch) ||
+									p.Name.Contains(_mappingProgramSearch, StringComparison.OrdinalIgnoreCase) ||
+									p.ProgramType.Contains(_mappingProgramSearch, StringComparison.OrdinalIgnoreCase)))
+								{
+									<div class="searchable-dropdown-item" @onmousedown="() => SelectMappingProgram(p)">
+										@p.Name <span class="text-muted">· @p.ProgramType</span>
+									</div>
+								}
+							</div>
+						}
+					</div>
+				</div>
+			</div>
+
+			@if (_mappingProgram == null)
+			{
+				<div class="pm-empty">
+					<i class="bi bi-geo-alt d-block mb-2" style="font-size:1.6rem;"></i>
+					Select a program to view and change the states it applies to.
+				</div>
+			}
+			else
+			{
+				<div class="pm-program-summary">
+					<span>Program Type: <strong>@_mappingProgram.ProgramType</strong></span>
+					<span>MO: <strong>@YesNo(_mappingProgram.IsMO)</strong></span>
+					<span>RMDO: <strong>@YesNo(_mappingProgram.IsRMDO)</strong></span>
+					<span>SMDO: <strong>@YesNo(_mappingProgram.IsSMDO)</strong></span>
+				</div>
+
+				<div class="row g-3 mb-4">
+					<div class="col-md-4">
+						<div class="metric-card bg-blue-light">
+							<div class="metric-header"><h4 class="metric-title">Total States</h4></div>
+							<div class="metric-val">@_stateMappings.Count</div>
+						</div>
+					</div>
+					<div class="col-md-4">
+						<div class="metric-card bg-mint-light">
+							<div class="metric-header"><h4 class="metric-title">Applicable</h4></div>
+							<div class="metric-val">@_stateMappings.Count(s => s.IsApplicable)</div>
+						</div>
+					</div>
+					<div class="col-md-4">
+						<div class="metric-card bg-gray-light">
+							<div class="metric-header"><h4 class="metric-title">Not Applicable</h4></div>
+							<div class="metric-val">@_stateMappings.Count(s => !s.IsApplicable)</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="pm-state-tools">
+					<div class="search-box">
+						<i class="bi bi-search"></i>
+						<input type="text" placeholder="Search states..."
+							   @bind="_stateSearch" @bind:event="oninput" />
+					</div>
+					@if (!CanUpdate)
+					{
+						<small class="text-muted"><i class="bi bi-lock"></i> View only - you do not have update permission.</small>
+					}
+				</div>
+
+				@if (_isMappingLoading)
+				{
+					<div class="d-flex align-items-center gap-2 text-muted py-3">
+						<span class="spinner-border spinner-border-sm"></span>
+						<span>Loading states...</span>
+					</div>
+				}
+				else if (_stateMappings.Count == 0)
+				{
+					<div class="pm-empty">No states found in the State master.</div>
+				}
+				else
+				{
+					<div class="pm-state-grid">
+						@foreach (var s in VisibleStateMappings)
+						{
+							<div class="pm-state-card @(s.IsApplicable ? "is-applicable" : "")">
+								<div>
+									<div class="pm-state-name">@s.StateName</div>
+									@if (!s.HasMapping)
+									{
+										<div class="pm-state-sub">Not configured yet</div>
+									}
+								</div>
+								<div class="pm-state-toggle">
+									<span class="@(s.IsApplicable ? "pm-label-on" : "pm-label-off")">
+										@(s.IsApplicable ? "Applicable" : "Not Applicable")
+									</span>
+									<label class="switch">
+										<input type="checkbox" checked="@s.IsApplicable"
+											   @key="@($"{s.StateId}-{_toggleResetVersion}")"
+											   disabled="@(!CanUpdate || _savingStateIds.Contains(s.StateId))"
+											   @onchange="e => ToggleStateApplicability(s, e)">
+										<span class="slider"></span>
+									</label>
+								</div>
+							</div>
+						}
+					</div>
+				}
+			}
+		</div>
+	}
+
+</div>
+
+@code {
+	private const string TabTypes = "Program Types";
+	private const string TabPrograms = "Program Master";
+	private const string TabMapping = "State Mapping";
+	private readonly List<string> TabOptions = [TabTypes, TabPrograms, TabMapping];
+	private const SPIC.Core.Entities.PagePermission Page = SPIC.Core.Entities.PagePermission.ProgramMaster;
+
+	private string ActiveTab { get; set; } = TabTypes;
+
+	// Data
+	private List<ProgramTypeItem> _types = new();
+	private List<ProgramItem> _programs = new();
+	private List<ProgramItem> _filteredPrograms = new();
+	private List<StateApplicabilityItem> _stateMappings = new();
+
+	// Program Type form
+	private ProgramTypeFormModel _typeForm = new();
+	private int? _typeEditingId;
+	private ElementReference _typeNameRef;
+	private string _typeSearch = "";
+
+	// Program form
+	private ProgramFormModel _programForm = new();
+	private int? _programEditingId;
+	private ElementReference _programNameRef;
+	private string _programTypeSearch = "";
+	private bool _showProgramTypeDropdown;
+	private string _programSearch = "";
+	private int _programTypeFilter;
+
+	// State mapping
+	private ProgramItem? _mappingProgram;
+	private string _mappingProgramSearch = "";
+	private bool _showMappingProgramDropdown;
+	private string _stateSearch = "";
+	private bool _isMappingLoading;
+	private readonly HashSet<int> _savingStateIds = new();
+	private int _toggleResetVersion; // bumped to re-create checkboxes after a failed save
+
+	// UI state
+	private bool _isLoading = true;
+	private bool _isSaving;
+	private string? _message;
+	private bool _isError;
+
+	private bool CanUpdate => LoginState.Can(Page, "Update");
+	private bool CanSave(bool editing) => editing ? CanUpdate : LoginState.Can(Page, "Entry");
+
+	private IEnumerable<StateApplicabilityItem> VisibleStateMappings =>
+		string.IsNullOrWhiteSpace(_stateSearch)
+			? _stateMappings
+			: _stateMappings.Where(s => s.StateName.Contains(_stateSearch.Trim(), StringComparison.OrdinalIgnoreCase));
+
+	private static string YesNo(bool value) => value ? "Yes" : "No";
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadTypes();
+		await LoadPrograms();
+		_isLoading = false;
+	}
+
+	private async Task LoadTypes()
+	{
+		try
+		{
+			_types = await Http.GetFromJsonAsync<List<ProgramTypeItem>>("api/ProgramType/all") ?? new();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load program types: {ex.Message}", true);
+		}
+	}
+
+	private async Task LoadPrograms()
+	{
+		try
+		{
+			_programs = await Http.GetFromJsonAsync<List<ProgramItem>>("api/ProgramMaster/all") ?? new();
+			ApplyProgramFilter();
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Failed to load programs: {ex.Message}", true);
+		}
+	}
+
+	private void SetActiveTab(string tab)
+	{
+		if (ActiveTab == tab) return;
+		ActiveTab = tab;
+		_message = null;
+		ResetTypeForm();
+		ResetProgramForm();
+	}
+
+	// ------------------------------------------------------------------ Program Types
+
+	private List<ExportColumn<ProgramTypeItem>> TypeExportColumns() => new()
+	{
+		new ExportColumn<ProgramTypeItem> { Header = "S:No", ValueSelector = item => (_types.IndexOf(item) + 1).ToString() },
+		new ExportColumn<ProgramTypeItem> { Header = "Program Type", ValueSelector = item => item.Name },
+		new ExportColumn<ProgramTypeItem> { Header = "Programs", ValueSelector = item => item.ProgramCount.ToString() },
+		new ExportColumn<ProgramTypeItem> { Header = "Created At", ValueSelector = item => item.CreatedAt.ToString("yyyy-MM-dd") }
+	};
+
+	private async Task SaveProgramType()
+	{
+		var name = _typeForm.Name?.Trim() ?? "";
+		if (string.IsNullOrWhiteSpace(name))
+		{
+			ShowMessage("Program Type name is required.", true);
+			return;
+		}
+
+		if (_types.Any(t => t.Id != _typeEditingId && string.Equals(t.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+		{
+			ShowMessage($"Program Type \"{name}\" already exists.", true);
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+			var payload = new { Name = name };
+			var response = _typeEditingId.HasValue
+				? await Http.PutAsJsonAsync($"api/ProgramType/{_typeEditingId.Value}", payload)
+				: await Http.PostAsJsonAsync("api/ProgramType", payload);
+
+			if (!response.IsSuccessStatusCode)
+			{
+				ShowMessage($"{(_typeEditingId.HasValue ? "Update" : "Create")} failed: {await ReadError(response)}", true);
+				return;
+			}
+
+			ShowMessage($"Program Type {(_typeEditingId.HasValue ? "updated" : "created")} successfully.", false);
+			ResetTypeForm();
+			await LoadTypes();
+			await LoadPrograms(); // program rows show the type name
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private async Task EditProgramType(ProgramTypeItem item)
+	{
+		_typeEditingId = item.Id;
+		_typeForm = new ProgramTypeFormModel { Name = item.Name };
+		try { await _typeNameRef.FocusAsync(); } catch { }
+	}
+
+	private void ResetTypeForm()
+	{
+		_typeForm = new ProgramTypeFormModel();
+		_typeEditingId = null;
+	}
+
+	// ------------------------------------------------------------------ Program Master
+
+	private List<ExportColumn<ProgramItem>> ProgramExportColumns() => new()
+	{
+		new ExportColumn<ProgramItem> { Header = "S:No", ValueSelector = item => (_filteredPrograms.IndexOf(item) + 1).ToString() },
+		new ExportColumn<ProgramItem> { Header = "Program Type", ValueSelector = item => item.ProgramType },
+		new ExportColumn<ProgramItem> { Header = "Program Name", ValueSelector = item => item.Name },
+		new ExportColumn<ProgramItem> { Header = "MO", ValueSelector = item => YesNo(item.IsMO) },
+		new ExportColumn<ProgramItem> { Header = "RMDO", ValueSelector = item => YesNo(item.IsRMDO) },
+		new ExportColumn<ProgramItem> { Header = "SMDO", ValueSelector = item => YesNo(item.IsSMDO) },
+		new ExportColumn<ProgramItem> { Header = "Applicable States", ValueSelector = item => item.ApplicableStateCount.ToString() }
+	};
+
+	private void ApplyProgramFilter()
+	{
+		_filteredPrograms = _programs
+			.Where(p => _programTypeFilter == 0 || p.ProgramTypeId == _programTypeFilter)
+			.ToList();
+	}
+
+	private async Task SaveProgram()
+	{
+		var name = _programForm.Name?.Trim() ?? "";
+		if (_programForm.ProgramTypeId <= 0)
+		{
+			ShowMessage("Please select a Program Type.", true);
+			return;
+		}
+		if (string.IsNullOrWhiteSpace(name))
+		{
+			ShowMessage("Program name is required.", true);
+			return;
+		}
+		if (_programs.Any(p => p.Id != _programEditingId &&
+							   p.ProgramTypeId == _programForm.ProgramTypeId &&
+							   string.Equals(p.Name.Trim(), name, StringComparison.OrdinalIgnoreCase)))
+		{
+			ShowMessage($"Program \"{name}\" already exists under this Program Type.", true);
+			return;
+		}
+
+		try
+		{
+			_isSaving = true;
+			var payload = new
+			{
+				Name = name,
+				_programForm.ProgramTypeId,
+				_programForm.IsMO,
+				_programForm.IsRMDO,
+				_programForm.IsSMDO
+			};
+			var response = _programEditingId.HasValue
+				? await Http.PutAsJsonAsync($"api/ProgramMaster/{_programEditingId.Value}", payload)
+				: await Http.PostAsJsonAsync("api/ProgramMaster", payload);
+
+			if (!response.IsSuccessStatusCode)
+			{
+				ShowMessage($"{(_programEditingId.HasValue ? "Update" : "Create")} failed: {await ReadError(response)}", true);
+				return;
+			}
+
+			ShowMessage($"Program {(_programEditingId.HasValue ? "updated" : "created")} successfully.", false);
+			ResetProgramForm();
+			await LoadPrograms();
+			await LoadTypes(); // program counts per type
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_isSaving = false;
+		}
+	}
+
+	private async Task EditProgram(ProgramItem item)
+	{
+		_programEditingId = item.Id;
+		_programForm = new ProgramFormModel
+		{
+			Name = item.Name,
+			ProgramTypeId = item.ProgramTypeId,
+			IsMO = item.IsMO,
+			IsRMDO = item.IsRMDO,
+			IsSMDO = item.IsSMDO
+		};
+		_programTypeSearch = item.ProgramType;
+		try { await _programNameRef.FocusAsync(); } catch { }
+	}
+
+	private void ResetProgramForm()
+	{
+		_programForm = new ProgramFormModel();
+		_programEditingId = null;
+		_programTypeSearch = "";
+	}
+
+	private void SelectProgramType(int id, string name)
+	{
+		_programForm.ProgramTypeId = id;
+		_programTypeSearch = name;
+		_showProgramTypeDropdown = false;
+	}
+
+	private async Task HideProgramTypeDropdown()
+	{
+		await Task.Delay(150);
+		_showProgramTypeDropdown = false;
+	}
+
+	// ------------------------------------------------------------------ State Mapping
+
+	private async Task OpenStateMapping(ProgramItem item)
+	{
+		ActiveTab = TabMapping;
+		_message = null;
+		ResetTypeForm();
+		ResetProgramForm();
+		await SelectMappingProgram(item);
+	}
+
+	private async Task SelectMappingProgram(ProgramItem item)
+	{
+		_mappingProgram = item;
+		_mappingProgramSearch = item.Name;
+		_showMappingProgramDropdown = false;
+		_stateSearch = "";
+		await LoadStateMappings();
+	}
+
+	private async Task HideMappingProgramDropdown()
+	{
+		await Task.Delay(150);
+		_showMappingProgramDropdown = false;
+		// Typing without picking keeps the current program visible in the box.
+		if (_mappingProgram != null) _mappingProgramSearch = _mappingProgram.Name;
+	}
+
+	private async Task LoadStateMappings()
+	{
+		if (_mappingProgram == null) return;
+		try
+		{
+			_isMappingLoading = true;
+			_stateMappings = await Http.GetFromJsonAsync<List<StateApplicabilityItem>>(
+				$"api/ProgramMaster/{_mappingProgram.Id}/state-mappings") ?? new();
+		}
+		catch (Exception ex)
+		{
+			_stateMappings = new();
+			ShowMessage($"Failed to load state mapping: {ex.Message}", true);
+		}
+		finally
+		{
+			_isMappingLoading = false;
+		}
+	}
+
+	// Saves one (ProgramId, StateId) row; the card only changes after the API confirms,
+	// and the checkbox is reset to the saved value when the save fails.
+	private async Task ToggleStateApplicability(StateApplicabilityItem state, ChangeEventArgs e)
+	{
+		if (_mappingProgram == null || !CanUpdate) return;
+
+		var requested = e.Value is bool b && b;
+		var program = _mappingProgram;
+		_savingStateIds.Add(state.StateId);
+
+		try
+		{
+			var response = await Http.PutAsJsonAsync(
+				$"api/ProgramMaster/{program.Id}/state-mappings/{state.StateId}",
+				new { IsApplicable = requested });
+
+			if (response.IsSuccessStatusCode)
+			{
+				var wasApplicable = state.IsApplicable;
+				state.IsApplicable = requested;
+				state.HasMapping = true;
+
+				if (wasApplicable != requested)
+					program.ApplicableStateCount += requested ? 1 : -1;
+
+				ShowMessage($"{program.Name}: {state.StateName} marked {(requested ? "Applicable" : "Not Applicable")}.", false);
+			}
+			else
+			{
+				ShowMessage($"Update failed: {await ReadError(response)}", true);
+			}
+		}
+		catch (Exception ex)
+		{
+			ShowMessage($"Error: {ex.Message}", true);
+		}
+		finally
+		{
+			_savingStateIds.Remove(state.StateId);
+			if (state.IsApplicable != requested) _toggleResetVersion++;
+		}
+	}
+
+	// ------------------------------------------------------------------ Helpers
+
+	private void ShowMessage(string message, bool isError)
+	{
+		_message = message;
+		_isError = isError;
+	}
+
+	private static async Task<string> ReadError(HttpResponseMessage response)
+	{
+		var body = await response.Content.ReadAsStringAsync();
+		try
+		{
+			using var doc = JsonDocument.Parse(body);
+			if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+				doc.RootElement.TryGetProperty("message", out var msg))
+				return msg.GetString() ?? body;
+		}
+		catch { }
+		return string.IsNullOrWhiteSpace(body) ? response.ReasonPhrase ?? "Unknown error" : body;
+	}
+
+	public class ProgramTypeItem
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
+		public int ProgramCount { get; set; }
+		public DateTime CreatedAt { get; set; }
+	}
+
+	public class ProgramItem
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
+		public int ProgramTypeId { get; set; }
+		public string ProgramType { get; set; } = "";
+		public bool IsMO { get; set; }
+		public bool IsRMDO { get; set; }
+		public bool IsSMDO { get; set; }
+		public int ApplicableStateCount { get; set; }
+		public DateTime CreatedAt { get; set; }
+	}
+
+	public class StateApplicabilityItem
+	{
+		public int StateId { get; set; }
+		public string StateName { get; set; } = "";
+		public bool IsApplicable { get; set; }
+		public bool HasMapping { get; set; }
+	}
+
+	private class ProgramTypeFormModel
+	{
+		public string Name { get; set; } = "";
+	}
+
+	private class ProgramFormModel
+	{
+		public string Name { get; set; } = "";
+		public int ProgramTypeId { get; set; }
+		public bool IsMO { get; set; }
+		public bool IsRMDO { get; set; }
+		public bool IsSMDO { get; set; }
+	}
+}

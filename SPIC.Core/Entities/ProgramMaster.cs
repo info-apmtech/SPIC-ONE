@@ -47,6 +47,23 @@ namespace SPIC.Core.Entities
            = new List<ProgramRegionBudget>();
     }
 
+    // State-wise applicability of a program (one row per Program + State), kept as rows
+    // rather than per-state columns so new states need no schema change.
+    public class ProgramStateMapping
+    {
+        [Key]
+        public int Id { get; set; }
+        public int ProgramId { get; set; }
+        public ProgramMaster? Program { get; set; }
+        public int StateId { get; set; }
+        public State? State { get; set; }
+        public bool IsApplicable { get; set; }
+        public string CreatedBy { get; set; } = "";
+        public string? UpdatedBy { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public DateTime UpdatedAt { get; set; } = DateTime.Now;
+    }
+
     public class ProgramRegionBudget
     {
         [Key]
