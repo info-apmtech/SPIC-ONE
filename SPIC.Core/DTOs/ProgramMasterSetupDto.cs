@@ -45,4 +45,21 @@ namespace SPIC.Core.DTOs
     {
         public bool IsApplicable { get; set; }
     }
+
+    // Returned by GET api/ProgramMaster/{id}/state-budgets.
+    // One entry per active State; BudgetAmount is null when no ProgramStateBudgets row
+    // exists yet for that Program + State combination.
+    public class ProgramStateBudgetDto
+    {
+        public int StateId { get; set; }
+        public string StateName { get; set; } = "";
+        public decimal? BudgetAmount { get; set; }   // null = no record yet
+        public bool HasBudget { get; set; }           // true when a ProgramStateBudgets row exists
+    }
+
+    // Body for PUT api/ProgramMaster/{id}/state-budgets/{stateId}.
+    public class ProgramStateBudgetSaveRequest
+    {
+        public decimal BudgetAmount { get; set; }
+    }
 }

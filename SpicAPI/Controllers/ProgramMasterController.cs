@@ -222,5 +222,112 @@ namespace SpicAPI.Controllers
 
             return null;
         }
+
+        // ─── State-wise Program Amount (ProgramStateBudgets) ──────────────────────
+        // Returns every active State alongside the existing BudgetAmount for this
+        // program, or null when no ProgramStateBudgets row exists yet.
+        // This is READ-ONLY access that does NOT interfere with the BudgetController
+        // workflow, which only reads ProgramStateBudgets via GetAll() to validate
+        // that a program is allocated to a state before accepting a budget submission.
+        [HttpGet("{id}/state-budgets")]
+        public async Task<IActionResult> GetStateBudgets(int id)
+        {
+            if (!await _db.ProgramMasters.AnyAsync(x => x.Id == id))
+                return NotFound(new { message = "Program not found." });
+
+            // Load existing ProgramStateBudgets rows for this program.
+            var existingBudgets = await _db.ProgramStateBudgets
+                .AsNoTracking()
+                .Where(b => b.ProgramId == id)
+                .ToDictionaryAsync(b => b.StateId, b => b.BudgetAmount);
+
+            // Return active states; also include any state that already has a budget
+            // row even if it has since been deactivated, so existing amounts are
+            // never hidden.
+            var budgetedStateIds = existingBudgets.Keys.ToList();
+            var states = await _db.States
+                .AsNoTracking()
+                .Where(s => s.IsActive || budgetedStateIds.Contains(s.Id))
+                .OrderBy(s => s.StateName)
+                .Select(s => new { s.Id, s.StateName })
+                .ToListAsync();
+
+            var result = states.Select(s => new ProgramStateBudgetDto
+            {
+                StateId = s.Id,
+                StateName = s.StateName,
+                HasBudget = existingBudgets.ContainsKey(s.Id),
+                BudgetAmount = existingBudgets.TryGetValue(s.Id, out var amt) ? amt : null
+            }).ToList();
+
+            return Ok(result);
+        }
+
+        // Upsert for a single (ProgramId, StateId) row in ProgramStateBudgets.
+        // Prevents duplicate rows: if one already exists it is updated, not inserted.
+        // The existing BudgetController behaviour is unchanged because it only calls
+        // _programStateBudgetRepo.GetAll() / FirstOrDefault on ProgramStateBudgets
+        // for validation/display; it does NOT insert/update ProgramStateBudgets rows.
+        [HttpPut("{id}/state-budgets/{stateId}")]
+        public async Task<IActionResult> SetStateBudget(int id, int stateId,
+            [FromBody] ProgramStateBudgetSaveRequest request)
+        {
+            if (request == null)
+                return BadRequest(new { message = "Request body is required." });
+
+            if (request.BudgetAmount < 0)
+                return BadRequest(new { message = "Program Amount must not be negative." });
+
+            if (!await _db.ProgramMasters.AnyAsync(x => x.Id == id))
+                return NotFound(new { message = "Program not found." });
+
+            if (!await _db.States.AnyAsync(s => s.Id == stateId))
+                return NotFound(new { message = "State not found." });
+
+            var existing = await _db.ProgramStateBudgets
+                .FirstOrDefaultAsync(b => b.ProgramId == id && b.StateId == stateId);
+
+            if (existing == null)
+            {
+                existing = new ProgramStateBudget
+                {
+                    ProgramId = id,
+                    StateId = stateId,
+                    BudgetAmount = request.BudgetAmount
+                };
+                _db.ProgramStateBudgets.Add(existing);
+            }
+            else
+            {
+                existing.BudgetAmount = request.BudgetAmount;
+            }
+
+            try
+            {
+                await _db.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // Concurrent request won the race; apply the value to the winning row.
+                _db.ChangeTracker.Clear();
+                var concurrent = await _db.ProgramStateBudgets
+                    .FirstOrDefaultAsync(b => b.ProgramId == id && b.StateId == stateId);
+                if (concurrent == null) throw;
+                concurrent.BudgetAmount = request.BudgetAmount;
+                await _db.SaveChangesAsync();
+                existing = concurrent;
+            }
+
+            return Ok(new
+            {
+                message = $"Program Amount saved successfully.",
+                data = new ProgramStateBudgetDto
+                {
+                    StateId = stateId,
+                    BudgetAmount = existing.BudgetAmount,
+                    HasBudget = true
+                }
+            });
+        }
     }
 }
