@@ -13,5 +13,10 @@ namespace SPIC.Core.DTOs
         public string? CreatedBy { get; set; }
 
         public string? UpdatedBy { get; set; }
+
+        // MD Portal - Program Master page: number of ProgramMasters under this type.
+        public int ProgramCount { get; set; }
+
+        public DateTime CreatedAt { get; set; }
     }
 }
