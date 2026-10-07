@@ -14,30 +14,11 @@ namespace Spic.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "JMDOAttendances",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    UserId = table.Column<string>(type: "text", nullable: false),
-                    UserName = table.Column<string>(type: "text", nullable: true),
-                    Date = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    VisitArea = table.Column<string>(type: "text", nullable: true),
-                    AttendanceStatus = table.Column<int>(type: "integer", nullable: false),
-                    DutyStatus = table.Column<int>(type: "integer", nullable: false),
-                    AttendanceUpdatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    AttendanceLatitude = table.Column<double>(type: "double precision", nullable: true),
-                    AttendanceLongitude = table.Column<double>(type: "double precision", nullable: true),
-                    CreatedBy = table.Column<string>(type: "text", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    UpdatedBy = table.Column<string>(type: "text", nullable: true),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_JMDOAttendances", x => x.Id);
-                });
+            // 2026-10-07 (pre-deploy dry run): this migration was scaffolded on a branch without
+            // v19JmdoAttendanceTrackingAndPageCatalogue and therefore also created JMDOAttendances /
+            // JMDOTrackingSessions / JMDOTrackingPoints. Those tables already exist in production
+            // (v19 applied 2026-10-06), so the duplicate CreateTable / CreateIndex / DropTable calls
+            // were removed here. Only ProgramStateMappings and its data belong to this migration.
 
             migrationBuilder.CreateTable(
                 name: "ProgramStateMappings",
@@ -70,82 +51,6 @@ namespace Spic.Infrastructure.Migrations
                         onDelete: ReferentialAction.Restrict);
                 });
 
-            migrationBuilder.CreateTable(
-                name: "JMDOTrackingSessions",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    AttendanceId = table.Column<int>(type: "integer", nullable: false),
-                    UserId = table.Column<string>(type: "text", nullable: false),
-                    UserName = table.Column<string>(type: "text", nullable: true),
-                    StartTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    EndTime = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    Duration = table.Column<TimeSpan>(type: "interval", nullable: true),
-                    StartLatitude = table.Column<double>(type: "double precision", nullable: true),
-                    StartLongitude = table.Column<double>(type: "double precision", nullable: true),
-                    EndLatitude = table.Column<double>(type: "double precision", nullable: true),
-                    EndLongitude = table.Column<double>(type: "double precision", nullable: true),
-                    Status = table.Column<int>(type: "integer", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_JMDOTrackingSessions", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_JMDOTrackingSessions_JMDOAttendances_AttendanceId",
-                        column: x => x.AttendanceId,
-                        principalTable: "JMDOAttendances",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "JMDOTrackingPoints",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    TrackingSessionId = table.Column<int>(type: "integer", nullable: false),
-                    Latitude = table.Column<double>(type: "double precision", nullable: false),
-                    Longitude = table.Column<double>(type: "double precision", nullable: false),
-                    RecordedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
-                    Accuracy = table.Column<double>(type: "double precision", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_JMDOTrackingPoints", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_JMDOTrackingPoints_JMDOTrackingSessions_TrackingSessionId",
-                        column: x => x.TrackingSessionId,
-                        principalTable: "JMDOTrackingSessions",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_JMDOAttendances_UserId_Date",
-                table: "JMDOAttendances",
-                columns: new[] { "UserId", "Date" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_JMDOTrackingPoints_TrackingSessionId",
-                table: "JMDOTrackingPoints",
-                column: "TrackingSessionId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_JMDOTrackingSessions_AttendanceId",
-                table: "JMDOTrackingSessions",
-                column: "AttendanceId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_JMDOTrackingSessions_UserId",
-                table: "JMDOTrackingSessions",
-                column: "UserId");
-
             migrationBuilder.CreateIndex(
                 name: "IX_ProgramStateMappings_ProgramId_StateId",
                 table: "ProgramStateMappings",
@@ -161,6 +66,8 @@ namespace Spic.Infrastructure.Migrations
             // existing ProgramMasters by Name and states to the existing States by StateName
             // (trimmed, case-insensitive) - no ProgramMasters/States rows are created or modified.
             // CSV entries with no match are skipped and reported via RAISE NOTICE for manual review.
+            // 2026-10-07: the dollar quotes of the DO block were "$" instead of "$$" (PostgreSQL
+            // syntax error at "$"), fixed on the pre-deploy dry run.
             migrationBuilder.Sql(@"
                 CREATE TEMP TABLE ""_ProgramStateCsv"" (""ProgramName"" text, ""StateName"" text, ""IsApplicable"" boolean) ON COMMIT DROP;
 
@@ -650,7 +557,7 @@ namespace Spic.Infrastructure.Migrations
                     ('Dealer Tour', 'Bihar', false),
                     ('Dealer Tour', 'West Bengal', false);
 
-                DO $
+                DO $$
                 DECLARE r record;
                 BEGIN
                     FOR r IN
@@ -668,7 +575,7 @@ namespace Spic.Infrastructure.Migrations
                     LOOP
                         RAISE NOTICE 'ProgramStateMapping: CSV state not matched to States: %', r.""StateName"";
                     END LOOP;
-                END $;
+                END $$;
 
                 INSERT INTO ""ProgramStateMappings"" (""ProgramId"", ""StateId"", ""IsApplicable"", ""CreatedBy"", ""UpdatedBy"", ""CreatedAt"", ""UpdatedAt"")
                 SELECT p.""Id"", s.""Id"", c.""IsApplicable"", 'System', 'System', LOCALTIMESTAMP, LOCALTIMESTAMP
@@ -697,17 +604,9 @@ SELECT setval(pg_get_serial_sequence('""Pages""', 'Id'), GREATEST((SELECT COALES
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "JMDOTrackingPoints");
 
             migrationBuilder.DropTable(
                 name: "ProgramStateMappings");
-
-            migrationBuilder.DropTable(
-                name: "JMDOTrackingSessions");
-
-            migrationBuilder.DropTable(
-                name: "JMDOAttendances");
 
             // The ProgramMaster Pages row is kept (harmless, and designations may already reference it).
         }
