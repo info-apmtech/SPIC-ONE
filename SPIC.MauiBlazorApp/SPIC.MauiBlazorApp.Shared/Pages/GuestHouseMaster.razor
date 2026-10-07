@@ -125,7 +125,13 @@
 		<div class="tab-hint">@(ActiveTab == TabHouse ? "Create / update the Guest House records first, then map Rooms to them." : "Map rooms to an existing Guest House. Guest Houses are created on the Guest House tab.")</div>
 	</div>
 
-	@if (IsAdmin)
+	@* The WHOLE content block (form + metric cards + both tables) used to be gated on IsAdmin only,
+	   so a Designation holding PagePermission.GuestHouse saw the header/tabs and nothing else.
+	   CanViewPage is the page's own single access decision - IsAdmin OR CanAccess(GuestHouse) -
+	   the same PagePermission.GuestHouse PageGuard uses for this route, so the existing full page
+	   now renders for that Designation. Write actions stay behind the API's Admin/CorporateAdmin
+	   rule (GuestHouseMasterAccessAttribute); this only decides what is VIEWED. *@
+	@if (CanViewPage)
 	{
 		<div class="main-card">
 			<div class="section-header">
@@ -552,7 +558,11 @@
 	private string CurrentUploadType => ActiveTab == TabHouse ? "house" : "rooms";
 
 	private bool IsAdmin => LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
-	private bool CanViewPage => IsAdmin;
+	// Same rule PageGuard applies to /GuestHouseMaster (ShellNavigation maps that first segment to
+	// PagePermission.GuestHouse) and the same rule the SDWA sidebar entry uses to show the link.
+	// IsAdmin alone bounced every designation holder off this page to /Dashboard, which PageGuard
+	// then bounced to the landing page - so the visible menu item could never be opened.
+	private bool CanViewPage => IsAdmin || LoginState.CanAccess(PagePermission.GuestHouse);
 
 	// Upload modal state
 	private bool _showUploadModal = false;

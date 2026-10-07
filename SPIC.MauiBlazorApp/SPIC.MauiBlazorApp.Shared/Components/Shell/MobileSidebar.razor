@@ -1,4 +1,4 @@
-@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
 @implements IDisposable
 
 @using SPIC.Core.Entities
@@ -280,19 +280,10 @@
             }
 
 
-            @* ================= IFMS AUTOMATION (phone) ================= *@
-            @if (LoginState.CanAccess(PagePermission.IfmsRelaySetup))
-            {
-                <NavLink class="nav-link"
-                         href="/IfmsRelaySetup">
-
-                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg"
-                         class="SideBariconimg" />
-
-                    IFMS OTP Relay
-
-                </NavLink>
-            }
+            @* IFMS OTP Relay used to link to /IfmsRelaySetup here, but no such @page exists - it
+               was a dead route. The IfmsRelaySetup permission is unchanged and still gates the
+               IFMS Logins entry below, which is the real IFMS page (same key ShellNavigation uses).
+               Removed rather than repointed: a second link to /IfmsLogins would duplicate it. *@
 
             @* Designation-controlled: Admin / SuperAdmin reach it through the role bypass, every
                other role (Director, AVP, CorporateAdmin, ...) only when its Designation grants
@@ -813,6 +804,22 @@
                             }
 
 
+                            @if (LoginState.CanAccess(PagePermission.ProgramMaster))
+                            {
+                                <li class="submenu-item">
+
+                                    <NavLink href="/ProgramMaster"
+                                             class="submenu-link"
+                                             Match="NavLinkMatch.All">
+
+                                        Program Master
+
+                                    </NavLink>
+
+                                </li>
+                            }
+
+
                             @if (LoginState.CanAccess(PagePermission.CSR1Create))
                             {
                                 <li class="submenu-item">
@@ -1200,6 +1207,13 @@
                                         || (LoginState.UserRole != AppRole.Dealer && LoginState.CanAccess(PagePermission.SchemeApproval))
                                         || LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
                                         || LoginState.CanAccess(PagePermission.WelfareSchemes)
+                                        // Dealer fallback (PageGuard + ShellNavigation): a Dealer always
+                                        // opens /SDWADashboard and /WelfareSchemes, and the two children
+                                        // below use that same rule - see NavMenu.AnySdwaAccessible.
+                                        || LoginState.UserRole == AppRole.Dealer
+                                        || LoginState.CanAccess(PagePermission.GuestHouse)
+                                        || LoginState.CanAccess(PagePermission.SdwaCompanyMaster)
+                                        || LoginState.CanAccess(PagePermission.GuestHouseCancellations)
                                         || LoginState.CanAccess(PagePermission.FrontOffice)
                                         || LoginState.CanAccess(PagePermission.GenerateBill)
                                     )
@@ -1229,7 +1243,7 @@
 
                         <ul class="submenu-list">
 
-                            @if (LoginState.CanAccess(PagePermission.SDWADashboard))
+                            @if (LoginState.UserRole == AppRole.Dealer || LoginState.CanAccess(PagePermission.SDWADashboard))
                             {
                                 <li class="submenu-item">
 
@@ -1274,7 +1288,7 @@
                                 </li>
                             }
 
-                            @if (LoginState.CanAccess(PagePermission.WelfareSchemes))
+                            @if (LoginState.UserRole == AppRole.Dealer || LoginState.CanAccess(PagePermission.WelfareSchemes))
                             {
                                 <li class="submenu-item">
 
@@ -1388,6 +1402,131 @@
             }
 
 
+            @* ================= DEMO DOCUMENTATION (mirrors NavMenu.razor) ================= *@
+            @* Same gate and same per-child rules as the desktop sidebar: the group opens when at
+               least one child is reachable, and each child is rendered only when PageGuard would
+               allow the route - so a DesignationOnly role granted DemoDocumentation sees no dead
+               links. Before this block the whole subtree had no entry here at all, leaving
+               phone / tablet users with no menu path to it. *@
+            @if (AnyDemoDocumentationAccessible)
+            {
+                <div class="settings-menu-wrapper">
+
+                    <a href="javascript:void(0);"
+                       class="nav-link mt-2 @(isDemoDocumentationOpen ? "active" : "")"
+                       @onclick="ToggleDemoDocumentationMenu">
+
+                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DemoDocumentationIcon.svg"
+                             class="SideBariconimg" />
+
+                        Demo Documentation
+
+                        <i class="bi @(isDemoDocumentationOpen
+                                                                                                                    ? "bi-chevron-up"
+                                                                                                                    : "bi-chevron-down") chevron-icon">
+                        </i>
+
+                    </a>
+
+                    @if (isDemoDocumentationOpen)
+                    {
+                        <ul class="submenu-list">
+
+                            @if (LoginState.CanAccess(PagePermission.DemoDocumentation))
+                            {
+                                <li class="submenu-item">
+                                    <NavLink href="/DemoDocumentation" class="submenu-link" Match="NavLinkMatch.All">
+                                        Demo Documentation
+                                    </NavLink>
+                                </li>
+                            }
+
+                            @if (OpenDocumentationChildReachable)
+                            {
+                                <li class="submenu-item">
+                                    <NavLink href="/StartDocumentation" class="submenu-link" Match="NavLinkMatch.All">
+                                        Start Documentation
+                                    </NavLink>
+                                </li>
+                            }
+
+                            @if (OpenDocumentationChildReachable)
+                            {
+                                <li class="submenu-item">
+                                    <NavLink href="/DemoDetails" class="submenu-link" Match="NavLinkMatch.All">
+                                        Demo Details
+                                    </NavLink>
+                                </li>
+                            }
+
+                            @if (OpenDocumentationChildReachable)
+                            {
+                                <li class="submenu-item">
+                                    <NavLink href="/TreatmentDetails" class="submenu-link" Match="NavLinkMatch.All">
+                                        Treatment Details
+                                    </NavLink>
+                                </li>
+                            }
+
+                            @if (OpenDocumentationChildReachable)
+                            {
+                                <li class="submenu-item">
+                                    <NavLink href="/Treatment01" class="submenu-link" Match="NavLinkMatch.All">
+                                        Treatment 01
+                                    </NavLink>
+                                </li>
+                            }
+
+                            @if (OpenDocumentationChildReachable)
+                            {
+                                <li class="submenu-item">
+                                    <NavLink href="/TreatmentDemoDetails" class="submenu-link" Match="NavLinkMatch.All">
+                                        Treatment Demo Details
+                                    </NavLink>
+                                </li>
+                            }
+
+                            @if (OpenDocumentationChildReachable)
+                            {
+                                <li class="submenu-item">
+                                    <NavLink href="/Treatment02" class="submenu-link" Match="NavLinkMatch.All">
+                                        Treatment 02
+                                    </NavLink>
+                                </li>
+                            }
+
+                        </ul>
+                    }
+
+                </div>
+            }
+
+
+            @* ================= SALES AUDIT / EXTENSION REQUESTS / FARM OPERATIONS
+                (mirrors NavMenu.razor; same PagePermission keys, no new authorization) *@
+            @if (LoginState.CanAccess(PagePermission.SalesAudit))
+            {
+                <NavLink class="nav-link" href="/SalesAudit" Match="NavLinkMatch.All">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+                    Sales Audit
+                </NavLink>
+            }
+            @if (LoginState.CanAccess(PagePermission.ExtensionRequests))
+            {
+                <NavLink class="nav-link" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
+                    <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
+                    Extension Requests
+                </NavLink>
+            }
+            @if (LoginState.CanAccess(PagePermission.FarmDashboard))
+            {
+                <NavLink class="nav-link" href="/FarmDashboard" Match="NavLinkMatch.Prefix">
+                    <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Farm Operations
+                </NavLink>
+            }
+
+
             @* ================= CONTACT US ================= *@
             @if (LoginState.CanAccess(PagePermission.ContactUs))
             {
@@ -1426,6 +1565,8 @@
     private bool isMdPortalOpen = false;
 
     private bool isSchemesOpen = false;
+
+    private bool isDemoDocumentationOpen = false;
 
 
     protected override void OnInitialized()
@@ -1479,48 +1620,66 @@
 
     private void ToggleJmdoMenu()
     {
-        if (!isJmdoOpen) { isJmdoOpen = true; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        if (!isJmdoOpen) { isJmdoOpen = true; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
         else isJmdoOpen = false;
     }
 
     private void ToggleSettingsMenu()
     {
-        if (!isSettingsOpen) { isSettingsOpen = true; isJmdoOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        if (!isSettingsOpen) { isSettingsOpen = true; isJmdoOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
         else isSettingsOpen = false;
     }
 
 
     private void ToggleSdwaMenu()
     {
-        if (!isSdwaOpen) { isSdwaOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        if (!isSdwaOpen) { isSdwaOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
         else isSdwaOpen = false;
     }
 
 
     private void ToggleSubsidyMenu()
     {
-        if (!isSubsidyOpen) { isSubsidyOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        if (!isSubsidyOpen) { isSubsidyOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isMdPortalOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
         else isSubsidyOpen = false;
     }
 
 
     private void ToggleMdPortalMenu()
     {
-        if (!isMdPortalOpen) { isMdPortalOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isSchemesOpen = false; }
+        if (!isMdPortalOpen) { isMdPortalOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isSchemesOpen = false; isDemoDocumentationOpen = false; }
         else isMdPortalOpen = false;
     }
 
 
     private void ToggleSchemesMenu()
     {
-        if (!isSchemesOpen) { isSchemesOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; }
+        if (!isSchemesOpen) { isSchemesOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isDemoDocumentationOpen = false; }
         else isSchemesOpen = false;
+    }
+
+    private void ToggleDemoDocumentationMenu()
+    {
+        if (!isDemoDocumentationOpen) { isDemoDocumentationOpen = true; isJmdoOpen = false; isSettingsOpen = false; isSdwaOpen = false; isSubsidyOpen = false; isMdPortalOpen = false; isSchemesOpen = false; }
+        else isDemoDocumentationOpen = false;
     }
 
 
     /* =========================================================
        ACTIVE SECTION DETECTION
        ========================================================= */
+
+    // The six route-only documentation children (PageAuthorization.OpenAccessRoutes), identical
+    // to NavMenu's helper: PageGuard answers for them with the Admin / SuperAdmin bypass, or a
+    // designation-bearing user on a DesignationOnly model (its only other way through the
+    // open-pages check).
+    private bool OpenDocumentationChildReachable =>
+        LoginState.UserRole is AppRole.Admin or AppRole.SuperAdmin
+        || (LoginState.AllowedPages.Count > 0 && !LoginState.IsDesignationDrivenRole);
+
+    private bool AnyDemoDocumentationAccessible =>
+        LoginState.CanAccess(PagePermission.DemoDocumentation)
+        || OpenDocumentationChildReachable;
 
     private bool AnyJmdoAccessible =>
         LoginState.CanAccess(PagePermission.FieldDashboard)
@@ -1564,7 +1723,9 @@
             || uri == "financial"
             || uri == "relationship"
             || uri == "designation"
-            || uri == "metrics";
+            || uri == "metrics"
+            // Same query-string form NavMenu matches, so /Metrics?mode=x lights up Settings here.
+            || uri.StartsWith("metrics?");
     }
 
 
@@ -1582,6 +1743,9 @@
             || uri == "subdealeremployeemaster"
             || uri == "guesthousemaster"
             || uri == "sdwacompanymaster"
+            // Guest House Cancellations is a child of this group but was missing from the
+            // active-section list, so /GuestHouseCancellations left the SDWA group closed.
+            || uri == "guesthousecancellations"
             || uri == "frontoffice"
             || uri == "generatebill";
     }
@@ -1626,6 +1790,7 @@
         || LoginState.CanAccess(PagePermission.BudgetingManagements)
         || LoginState.CanAccess(PagePermission.BudgetSubmissions)
         || LoginState.CanAccess(PagePermission.AnnualBudgeting)
+        || LoginState.CanAccess(PagePermission.ProgramMaster)
         || LoginState.CanAccess(PagePermission.CSR1Create)
         || LoginState.CanAccess(PagePermission.CSR1Management)
         || LoginState.CanAccess(PagePermission.CSR2)
@@ -1645,13 +1810,17 @@
         return uri == "budgetoverview"
             || uri == "budgetingmanagements"
             || uri == "budgetsubmissions"
+            // Annual Budgeting is a child of this group (and an open-page route) but was
+            // missing from the list, so /AnnualBudgeting left the MD Portal group closed.
+            || uri == "annualbudgeting"
             || uri == "create-csr-1management"
             || uri == "csr-1list"
             || uri == "csr2"
             || uri == "finalreportcsrview"
             || uri == "rmdvalidationqueue"
             || uri == "mosubmissionvalidation"
-            || uri == "rmapprovalstatus";
+            || uri == "rmapprovalstatus"
+            || uri == "programmaster";
     }
 
 

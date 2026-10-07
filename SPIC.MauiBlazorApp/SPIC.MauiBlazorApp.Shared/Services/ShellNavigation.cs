@@ -69,6 +69,7 @@ public static class ShellNavigation
     public const string GroupGuestHouse = "Guest House";
     public const string GroupApprovals = "Approvals & Reports";
     public const string GroupSchemes = "Schemes";
+    public const string GroupDemoDocumentation = "Demo Documentation";
 
     // Convenience so the rules read like NavMenu.razor.
     private static bool IsAdmin(LoginState s) => s.UserRole is AppRole.Admin;
@@ -286,7 +287,10 @@ public static class ShellNavigation
         },
         new("DataExplorer", "Data Explorer", "bi-database-fill", "/DataExplorer", "DataExplorer")
         {
-            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.SuperAdmin
+            // Mirrors NavMenu.razor / MobileSidebar.razor: BOTH list Data Explorer for Admin or
+            // SuperAdmin, and PageGuard lets those two roles through the role bypass - so the shell
+            // rule must not be narrower than the sidebar or Admin loses the entry here.
+            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.Admin or AppRole.SuperAdmin
         },
         new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", nameof(PagePermission.IfmsRelaySetup))
         {
@@ -317,6 +321,7 @@ public static class ShellNavigation
         new("BudgetingManagements", "Budgeting Management", "bi-cash-stack", "/BudgetingManagements", nameof(PagePermission.BudgetingManagements)) { Group = GroupMdPortal },
         new("BudgetSubmissions", "Budget Submissions", "bi-journal-text", "/BudgetSubmissions", nameof(PagePermission.BudgetSubmissions)) { Group = GroupMdPortal },
         new("AnnualBudgeting", "Annual Budgeting", "bi-wallet-fill", "/AnnualBudgeting", nameof(PagePermission.AnnualBudgeting)) { Group = GroupMdPortal },
+        new("ProgramMaster", "Program Master", "bi-diagram-3", "/ProgramMaster", nameof(PagePermission.ProgramMaster)) { Group = GroupMdPortal },
         new("CREATE-CSR-1Management", "CSR-1 Create", "bi-file-earmark-text", "/CREATE-CSR-1Management", nameof(PagePermission.CSR1Create)) { Group = GroupMdPortal },
         new("CSR-1List", "CSR-1 Management", "bi-kanban-fill", "/CSR-1List", nameof(PagePermission.CSR1Management)) { Group = GroupMdPortal },
         new("CSR2", "CSR-2", "bi-layout-text-window-reverse", "/CSR2", nameof(PagePermission.CSR2)) { Group = GroupMdPortal },
@@ -373,6 +378,29 @@ public static class ShellNavigation
         new("Relationship", "Relationship Master", "bi-link-45deg", "/Relationship", nameof(PagePermission.Relationship)) { Group = GroupSettings },
         // ---- Contact ----
         new("ContactUs", "Contact Us", "bi-headset", "/ContactUs", nameof(PagePermission.ContactUs)),
+
+        // ---- Demo documentation subtree (mirrors the NavMenu / MobileSidebar accordion).
+        //      Appended at the END on purpose: every existing candidate keeps its position, so
+        //      More-sheet order and the role tab/rail fill are unchanged.
+        //      PermissionKey: DemoDocumentation is the PagePermission member; the other six are
+        //      route-only pages (PageAuthorization.OpenAccessRoutes) whose key is their first URL
+        //      segment - the exact value PageGuard already falls back to, so adding them here does
+        //      not change any route decision. MoreOnly: grouped menu entries only, never a tab or
+        //      rail slot. ----
+        new("DemoDocumentation", "Demo Documentation", "bi-journal-richtext", "/DemoDocumentation", nameof(PagePermission.DemoDocumentation)) { Group = GroupDemoDocumentation, MoreOnly = true },
+        new("StartDocumentation", "Start Documentation", "bi-pencil-square", "/StartDocumentation", "StartDocumentation") { Group = GroupDemoDocumentation, MoreOnly = true },
+        new("DemoDetails", "Demo Details", "bi-clipboard2-data", "/DemoDetails", "DemoDetails") { Group = GroupDemoDocumentation, MoreOnly = true },
+        new("TreatmentDetails", "Treatment Details", "bi-list-check", "/TreatmentDetails", "TreatmentDetails") { Group = GroupDemoDocumentation, MoreOnly = true },
+        new("Treatment01", "Treatment 01", "bi-1-circle", "/Treatment01", "Treatment01") { Group = GroupDemoDocumentation, MoreOnly = true },
+        new("TreatmentDemoDetails", "Treatment Demo Details", "bi-easel", "/TreatmentDemoDetails", "TreatmentDemoDetails") { Group = GroupDemoDocumentation, MoreOnly = true },
+        new("Treatment02", "Treatment 02", "bi-2-circle", "/Treatment02", "Treatment02") { Group = GroupDemoDocumentation, MoreOnly = true },
+
+        // ---- sidebar entries that had no shell destination (desktop/mobile menu parity).
+        //      Same PermissionKey / condition as NavMenu.razor, MoreOnly so the phone tab bar and
+        //      tablet rail keep exactly the items they show today. ----
+        new("SalesAudit", "Sales Audit", "bi-clipboard-data", "/SalesAudit", nameof(PagePermission.SalesAudit)) { MoreOnly = true },
+        new("ExtensionRequests", "Extension Requests", "bi-hourglass-split", "/ExtensionRequests", nameof(PagePermission.ExtensionRequests)) { MoreOnly = true },
+        new("FarmDashboard", "Farm Operations", "bi-speedometer2", "/FarmDashboard", nameof(PagePermission.FarmDashboard)) { MoreOnly = true },
     };
 
     // ---------------------------------------------------------------------------------------------

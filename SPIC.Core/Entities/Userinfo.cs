@@ -118,7 +118,7 @@ namespace SPIC.Core.Entities
         // every other normal page; Admin / SuperAdmin keep reaching them through the role bypass.
         // Appended at the END on purpose: ApplicationPage seed ids are enum-index based
         // (see AppDbContext).
-        FarmDashboard, IfmsAutoImport
+        FarmDashboard, IfmsAutoImport, ProgramMaster
 
     }
 }
