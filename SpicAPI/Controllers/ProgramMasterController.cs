@@ -42,7 +42,7 @@ namespace SpicAPI.Controllers
                     IsMO = x.IsMO,
                     IsRMDO = x.IsRMDO,
                     IsSMDO = x.IsSMDO,
-                    ApplicableStateCount = _db.ProgramStateMappings
+                    ApplicableStateCount = _db.ProgramStateBudgets
                         .Count(m => m.ProgramId == x.Id && m.IsApplicable),
                     CreatedAt = x.CreatedAt
                 })
@@ -239,7 +239,7 @@ namespace SpicAPI.Controllers
             var existingBudgets = await _db.ProgramStateBudgets
                 .AsNoTracking()
                 .Where(b => b.ProgramId == id)
-                .ToDictionaryAsync(b => b.StateId, b => b.BudgetAmount);
+                .ToDictionaryAsync(b => b.StateId, b => new { b.BudgetAmount, b.IsApplicable });
 
             // Return active states; also include any state that already has a budget
             // row even if it has since been deactivated, so existing amounts are
@@ -252,12 +252,17 @@ namespace SpicAPI.Controllers
                 .Select(s => new { s.Id, s.StateName })
                 .ToListAsync();
 
-            var result = states.Select(s => new ProgramStateBudgetDto
+            var result = states.Select(s =>
             {
-                StateId = s.Id,
-                StateName = s.StateName,
-                HasBudget = existingBudgets.ContainsKey(s.Id),
-                BudgetAmount = existingBudgets.TryGetValue(s.Id, out var amt) ? amt : null
+                var hasBudget = existingBudgets.TryGetValue(s.Id, out var b);
+                return new ProgramStateBudgetDto
+                {
+                    StateId = s.Id,
+                    StateName = s.StateName,
+                    HasBudget = hasBudget,
+                    BudgetAmount = hasBudget ? b!.BudgetAmount : null,
+                    IsApplicable = hasBudget && b!.IsApplicable
+                };
             }).ToList();
 
             return Ok(result);
@@ -265,9 +270,7 @@ namespace SpicAPI.Controllers
 
         // Upsert for a single (ProgramId, StateId) row in ProgramStateBudgets.
         // Prevents duplicate rows: if one already exists it is updated, not inserted.
-        // The existing BudgetController behaviour is unchanged because it only calls
-        // _programStateBudgetRepo.GetAll() / FirstOrDefault on ProgramStateBudgets
-        // for validation/display; it does NOT insert/update ProgramStateBudgets rows.
+        // Updates IsApplicable and/or BudgetAmount without disturbing existing data.
         [HttpPut("{id}/state-budgets/{stateId}")]
         public async Task<IActionResult> SetStateBudget(int id, int stateId,
             [FromBody] ProgramStateBudgetSaveRequest request)
@@ -275,7 +278,7 @@ namespace SpicAPI.Controllers
             if (request == null)
                 return BadRequest(new { message = "Request body is required." });
 
-            if (request.BudgetAmount < 0)
+            if (request.BudgetAmount.HasValue && request.BudgetAmount.Value < 0)
                 return BadRequest(new { message = "Program Amount must not be negative." });
 
             if (!await _db.ProgramMasters.AnyAsync(x => x.Id == id))
@@ -293,13 +296,17 @@ namespace SpicAPI.Controllers
                 {
                     ProgramId = id,
                     StateId = stateId,
-                    BudgetAmount = request.BudgetAmount
+                    BudgetAmount = request.BudgetAmount ?? 0,
+                    IsApplicable = request.IsApplicable ?? true
                 };
                 _db.ProgramStateBudgets.Add(existing);
             }
             else
             {
-                existing.BudgetAmount = request.BudgetAmount;
+                if (request.BudgetAmount.HasValue)
+                    existing.BudgetAmount = request.BudgetAmount.Value;
+                if (request.IsApplicable.HasValue)
+                    existing.IsApplicable = request.IsApplicable.Value;
             }
 
             try
@@ -313,18 +320,22 @@ namespace SpicAPI.Controllers
                 var concurrent = await _db.ProgramStateBudgets
                     .FirstOrDefaultAsync(b => b.ProgramId == id && b.StateId == stateId);
                 if (concurrent == null) throw;
-                concurrent.BudgetAmount = request.BudgetAmount;
+                if (request.BudgetAmount.HasValue)
+                    concurrent.BudgetAmount = request.BudgetAmount.Value;
+                if (request.IsApplicable.HasValue)
+                    concurrent.IsApplicable = request.IsApplicable.Value;
                 await _db.SaveChangesAsync();
                 existing = concurrent;
             }
 
             return Ok(new
             {
-                message = $"Program Amount saved successfully.",
+                message = "Program State Budget saved successfully.",
                 data = new ProgramStateBudgetDto
                 {
                     StateId = stateId,
                     BudgetAmount = existing.BudgetAmount,
+                    IsApplicable = existing.IsApplicable,
                     HasBudget = true
                 }
             });

@@ -55,11 +55,13 @@ namespace SPIC.Core.DTOs
         public string StateName { get; set; } = "";
         public decimal? BudgetAmount { get; set; }   // null = no record yet
         public bool HasBudget { get; set; }           // true when a ProgramStateBudgets row exists
+        public bool IsApplicable { get; set; } = true;
     }
 
     // Body for PUT api/ProgramMaster/{id}/state-budgets/{stateId}.
     public class ProgramStateBudgetSaveRequest
     {
-        public decimal BudgetAmount { get; set; }
+        public decimal? BudgetAmount { get; set; }
+        public bool? IsApplicable { get; set; }
     }
 }

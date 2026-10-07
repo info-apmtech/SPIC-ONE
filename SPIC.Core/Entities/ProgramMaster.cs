@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -43,6 +43,7 @@ namespace SPIC.Core.Entities
         public int StateId { get; set; }
         public State? State { get; set; }
         public decimal BudgetAmount { get; set; }
+        public bool IsApplicable { get; set; } = true;
         public ICollection<ProgramRegionBudget> Regions { get; set; }
            = new List<ProgramRegionBudget>();
     }

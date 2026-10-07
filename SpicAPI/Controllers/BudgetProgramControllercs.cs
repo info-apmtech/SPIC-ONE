@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MimeKit.Cryptography;
@@ -290,7 +290,8 @@ namespace SpicAPI.Controllers
                         .Where(x =>
                             stateBudgets.Any(psb =>
                                 psb.ProgramId == x.Id &&
-                                psb.StateId == stateId
+                                psb.StateId == stateId &&
+                                psb.IsApplicable
                             ))
 
                         .Where(x =>
@@ -852,7 +853,8 @@ namespace SpicAPI.Controllers
                 // 1. Only programs allocated to the logged-in user's state.
                 .Where(x => stateBudgets.Any(psb =>
                     psb.ProgramId == x.Id &&
-                    psb.StateId == stateId
+                    psb.StateId == stateId &&
+                    psb.IsApplicable
                 ))
 
                 // 2. Only programs enabled for the logged-in user's role.
@@ -870,7 +872,8 @@ namespace SpicAPI.Controllers
                     StateBudget = stateBudgets
                         .FirstOrDefault(psb =>
                             psb.ProgramId == x.Id &&
-                            psb.StateId == stateId
+                            psb.StateId == stateId &&
+                            psb.IsApplicable
                         ),
 
                     // Existing monthly budget selection: unchanged.
