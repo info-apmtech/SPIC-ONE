@@ -131,7 +131,13 @@ namespace SPIC.Core.Entities
                 "TreatmentDetails",
                 "Treatment01",
                 "TreatmentDemoDetails",
-                "Treatment02"
+                "Treatment02",
+                "SalesAudit",
+                "ExtensionRequests",
+                "FarmDashboard",
+                "FarmOperations",
+                "FinanceSummary",
+                "FinanceSummaryOverall"
             };
 
         /// <summary>

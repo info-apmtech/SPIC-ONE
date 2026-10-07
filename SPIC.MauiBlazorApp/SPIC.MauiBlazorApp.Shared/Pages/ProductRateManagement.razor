@@ -183,7 +183,7 @@
                     <p class="prm-modal-subtitle">
                         @(editingRow is null
                             ? "Tell Admin what you want to add to the catalog."
-                            : $"Tell Admin the new rate you want for {editingRow.Name}.")
+                            : "Request a new rate for an existing product, it wil be reviewed and approved by admin")
                     </p>
                 </div>
                 <button type="button" class="prm-modal-close" @onclick="CloseFormModal" aria-label="Close">
@@ -215,7 +215,7 @@
                             </select>
                         </div>
                         <div class="prm-field">
-                            <label>Price (₹)</label>
+                            <label>Price</label>
                             <input type="number" min="0" @bind="formRate" placeholder="Enter Price" />
                         </div>
                     </div>
@@ -232,38 +232,51 @@
                 }
                 else
                 {
-                    <div class="prm-field">
-                        <label>Product</label>
-                        <select @bind="formExistingProductId" disabled>
-                            <option value="">Select a product</option>
-                            @foreach (var p in rows)
-                            {
-                                <option value="@p.Id">@p.Name</option>
-                            }
-                        </select>
+                    <div class="prm-field-row">
+                        <div class="prm-field">
+                            <label>Product Group</label>
+                            <select disabled>
+                                <option>@editingRow.Group</option>
+                            </select>
+                        </div>
+                        <div class="prm-field">
+                            <label>Product</label>
+                            <select disabled>
+                                <option>@editingRow.Name</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <div class="prm-field">
-                        <label>Request Rate (₹)</label>
-                        <input type="number" min="0" @bind="formRate" placeholder="Enter Price" />
+                    <div class="prm-field-row">
+                        <div class="prm-field">
+                            <label>UOM</label>
+                            <select disabled>
+                                <option>@editingRow.Uom</option>
+                            </select>
+                        </div>
+                        <div class="prm-field">
+                            <label>Price</label>
+                            <input type="number" min="0" @bind="formRate" placeholder="Enter Price" />
+                        </div>
                     </div>
 
                     <div class="prm-field">
                         <label>Reason</label>
-                        <textarea @bind="formReason" rows="3" placeholder="e.g. Market price increased."></textarea>
+                        <textarea @bind="formReason" rows="3" placeholder="Need to track dairy cattle separately."></textarea>
                     </div>
 
-                    <div class="prm-note">
-                        <i class="bi bi-exclamation-triangle"></i>
-                        <span>This rate will apply only after Admin approves the request.</span>
-                    </div>
+                    <p style="font-size: 13px; color: var(--text-soft); margin-top: 5px;">
+                        @(editingRow.Name) will be added inside the @(editingRow.Group.ToLower()) section.
+                        <br/>
+                        Product not Listed <a href="#" @onclick:preventDefault @onclick="OpenAddModal" style="color: var(--primary); font-weight: 600; text-decoration: underline;">Request New Product</a>
+                    </p>
                 }
             </div>
 
             <div class="prm-modal-footer">
-                <button type="button" class="prm-btn prm-btn-outline" @onclick="CloseFormModal">Close</button>
+                <button type="button" class="prm-btn prm-btn-outline" style="background: #f3f4f6; color: var(--text-main); border:none;" @onclick="CloseFormModal">Close</button>
                 <button type="button" class="prm-btn prm-btn-primary" @onclick="SubmitForm">
-                    @(editingRow is null ? "Request Product" : "Request Rate Change")
+                    @(editingRow is null ? "Request Product" : "Update Request")
                 </button>
             </div>
         </div>
@@ -272,33 +285,74 @@
 
 @if (viewingRow is not null)
 {
-    <div class="prm-modal-backdrop" @onclick="() => viewingRow = null">
-        <div class="prm-modal" @onclick:stopPropagation="true">
-            <div class="prm-modal-header">
+    <div class="prm-sidepanel-backdrop" @onclick="() => viewingRow = null">
+        <div class="prm-sidepanel" @onclick:stopPropagation="true">
+            <div class="prm-sidepanel-header">
                 <h3>
-                    <span class="prm-icon prm-icon-lg">@IconFor(viewingRow.Name)</span>
-                    @viewingRow.Name
+                    <button type="button" class="prm-modal-close" style="margin-right: 10px;" @onclick="() => viewingRow = null">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    Request Details
                 </h3>
-                <button type="button" class="prm-modal-close" @onclick="() => viewingRow = null" aria-label="Close">
-                    <i class="bi bi-x-lg"></i>
-                </button>
             </div>
-
-            <div class="prm-modal-body prm-view-body">
-                <div class="prm-view-row"><span>Product Group</span><strong>@viewingRow.Group</strong></div>
-                <div class="prm-view-row"><span>UOM</span><strong>@viewingRow.Uom</strong></div>
-                <div class="prm-view-row"><span>Current Rate</span><strong>@(viewingRow.CurrentRateText ?? "-")</strong></div>
-                <div class="prm-view-row"><span>Request Rate</span><strong>@(viewingRow.RequestRateText ?? "-")</strong></div>
-                <div class="prm-view-row"><span>Request Type</span><strong>@(viewingRow.RequestType ?? "-")</strong></div>
-                <div class="prm-view-row">
-                    <span>Status</span>
-                    <strong><span class='prm-status-pill @StatusPillClass(viewingRow.Status)'>@viewingRow.Status</span></strong>
+            
+            <div class="prm-sidepanel-body">
+                <div class="prm-info-card">
+                    <h4>Product Information</h4>
+                    <div class="prm-info-grid">
+                        <div class="prm-info-label">Product Name</div>
+                        <div class="prm-info-value">: @viewingRow.Name</div>
+                        <div class="prm-info-label">Product Group</div>
+                        <div class="prm-info-value">: <span class='prm-group-pill @(viewingRow.Group == "Orchard" ? "prm-group-orchard" : "prm-group-livestock")'>@viewingRow.Group</span></div>
+                        <div class="prm-info-label">Unit (UOM)</div>
+                        <div class="prm-info-value">: @viewingRow.Uom</div>
+                    </div>
                 </div>
-                <div class="prm-view-row"><span>Request Date</span><strong>@(viewingRow.RequestDate ?? "-")</strong></div>
+
+                <div class="prm-info-card">
+                    <h4>Rate Details</h4>
+                    <div class="prm-rate-cards">
+                        <div class="prm-rate-box">
+                            <div class="prm-rate-header">
+                                <span>Current Rate</span>
+                                <i class="bi bi-file-earmark-text"></i>
+                            </div>
+                            <div class="prm-rate-amount">@(viewingRow.CurrentRateText ?? "-")</div>
+                            <div class="prm-rate-sub">(This 15 Day) 01 - 15 Sep 2026</div>
+                        </div>
+                        <div class="prm-rate-box">
+                            <div class="prm-rate-header">
+                                <span>Request Rate</span>
+                                <i class="bi bi-file-earmark-arrow-up"></i>
+                            </div>
+                            <div class="prm-rate-amount">@(viewingRow.RequestRateText ?? "-")</div>
+                            <div class="prm-rate-sub">(This 15 Day) 16 - 30 Sep 2026</div>
+                        </div>
+                    </div>
+                    <div class="prm-rate-type">
+                        <span style="font-weight: 700; color: var(--text-main); font-size: 13px;">Request Type</span>
+                        <span class="prm-type-pill prm-type-rate" style="background:#eef2ff; color:#4f46e5; border:none; padding:6px 12px; border-radius:6px;">@(viewingRow.RequestType ?? "-")</span>
+                    </div>
+                </div>
+
+                <div class="prm-info-card">
+                    <h4>Request Information</h4>
+                    <div class="prm-info-grid" style="grid-template-columns: 100px 1fr;">
+                        <div class="prm-info-label">Request Date</div>
+                        <div class="prm-info-value">: @(viewingRow.RequestDate ?? "-"), 10:30 AM</div>
+                        <div class="prm-info-label">Requested By</div>
+                        <div class="prm-info-value">: Rajesh Kumar (Office)</div>
+                        <div class="prm-info-label" style="grid-column: 1 / -1; margin-top: 10px;">Reason</div>
+                        <div class="prm-info-value" style="grid-column: 1 / -1;">
+                            <div class="prm-reason-box">Market rate increased. Requesting new rate for next 15 days.</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="prm-modal-footer">
-                <button type="button" class="prm-btn prm-btn-primary" @onclick="() => viewingRow = null">Close</button>
+            <div class="prm-sidepanel-footer">
+                <button type="button" class="prm-btn prm-btn-outline" @onclick="() => viewingRow = null">Back to Batch List</button>
+                <button type="button" class="prm-btn" style="background: #e5e7eb; color: var(--text-main); border:none;" @onclick="() => viewingRow = null">Close</button>
             </div>
         </div>
     </div>
@@ -794,7 +848,7 @@
         align-items: center;
         justify-content: center;
         padding: 16px;
-        z-index: 1050;
+        z-index: 10500;
     }
 
     .prm-modal {
@@ -884,6 +938,29 @@
             outline: none;
             border-color: var(--primary);
         }
+
+        /* Same decorative up/down chevron used on the Inventory/Income/Expense
+           report's editable number fields, for a consistent look across pages. */
+        .prm-field input[type="number"] {
+            padding-right: 30px;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='16' viewBox='0 0 10 16'%3E%3Cpath fill='%239ca3af' d='M5 1L9 6H1z'/%3E%3Cpath fill='%239ca3af' d='M5 15L1 10H9z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 9px 14px;
+        }
+
+            .prm-field input[type="number"]::-webkit-inner-spin-button,
+            .prm-field input[type="number"]::-webkit-outer-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+            }
+
+            .prm-field input[type="number"] {
+                -moz-appearance: textfield;
+            }
 
     .prm-field-row {
         display: grid;
@@ -1131,6 +1208,151 @@
         .prm-pagination-buttons .prm-page-btn:not(.active):not(:first-child):not(:last-child) {
             display: none;
         }
+    }
+
+    /* Side Panel */
+    .prm-sidepanel-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, .4);
+        display: flex;
+        justify-content: flex-end;
+        z-index: 10500;
+    }
+
+    .prm-sidepanel {
+        width: 100%;
+        max-width: 500px;
+        background: #f9fafb;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: -5px 0 25px rgba(0,0,0,.1);
+        animation: slideInRight 0.3s ease;
+    }
+
+    @@keyframes slideInRight {
+        from { transform: translateX(100%); }
+        to { transform: translateX(0); }
+    }
+
+    .prm-sidepanel-header {
+        padding: 20px;
+        background: #fff;
+        border-bottom: 1px solid var(--border);
+    }
+    .prm-sidepanel-header h3 {
+        margin: 0;
+        font-size: 18px;
+        display: flex;
+        align-items: center;
+        color: var(--text-main);
+    }
+
+    .prm-sidepanel-body {
+        padding: 20px;
+        flex: 1;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .prm-info-card {
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+    }
+
+    .prm-info-card h4 {
+        margin: 0 0 16px 0;
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-main);
+    }
+
+    .prm-info-grid {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 10px;
+        font-size: 13px;
+    }
+
+    .prm-info-label {
+        color: var(--text-soft);
+        font-weight: 500;
+    }
+    .prm-info-value {
+        color: var(--text-main);
+        font-weight: 600;
+    }
+
+    .prm-rate-cards {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .prm-rate-box {
+        flex: 1;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+        background: #fdfdfd;
+    }
+
+    .prm-rate-header {
+        display: flex;
+        justify-content: space-between;
+        color: var(--text-soft);
+        font-size: 12px;
+        margin-bottom: 8px;
+    }
+
+    .prm-rate-header i {
+        color: #93c5fd;
+        background: #eff6ff;
+        padding: 4px;
+        border-radius: 4px;
+    }
+
+    .prm-rate-amount {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-main);
+        margin-bottom: 4px;
+    }
+
+    .prm-rate-sub {
+        font-size: 11px;
+        color: var(--text-soft);
+    }
+
+    .prm-rate-type {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+    }
+
+    .prm-reason-box {
+        background: #f9fafb;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        color: var(--text-soft);
+        font-size: 13px;
+        font-weight: 400;
+    }
+
+    .prm-sidepanel-footer {
+        padding: 16px 20px;
+        background: #fff;
+        border-top: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
     }
 </style>
 
