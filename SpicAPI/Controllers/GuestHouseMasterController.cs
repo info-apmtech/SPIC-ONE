@@ -2,6 +2,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using Spic.Infrastructure.Services.MasterData;
@@ -9,11 +10,16 @@ using SPIC.Core.Entities;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Claims;
 
 namespace SpicAPI.Controllers
 {
 	/// <summary>
-	/// Guest House + Room master data management (Settings > Guest House), admin only.
+	/// Guest House + Room master data management (Settings > Guest House).
+	///
+	/// Access is decided by <see cref="GuestHouseMasterAccessAttribute"/> below (the old class-level
+	/// [Authorize(Roles = "Admin,CorporateAdmin")] could only read the JWT role claim and therefore
+	/// never saw a Designation).
 	///
 	/// The UI works in two steps on the same page (tabbed, SubDealerEmployeeMaster style):
 	///   1) Guest House tab  - create/update the guest house records first.
@@ -26,7 +32,8 @@ namespace SpicAPI.Controllers
 	/// Upsert behaviour: matching (Guest House + RoomType + RoomNumber) room rows are
 	/// updated in place, new ones are inserted. Nothing is ever deleted by the upload.
 	/// </summary>
-	[Authorize(Roles = "Admin,CorporateAdmin")]
+	[Authorize]
+	[GuestHouseMasterAccess]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class GuestHouseMasterController : ControllerBase
@@ -812,5 +819,116 @@ namespace SpicAPI.Controllers
 		public decimal PricePerNight { get; set; }
 		public int AvailableQuantity { get; set; } = 1;
 		public bool IsActive { get; set; } = true;
+	}
+
+	/// <summary>
+	/// Route guard for the Guest House &amp; Room master page (every <c>/api/GuestHouseMaster/*</c> action).
+	///
+	/// WHY THIS EXISTS: the controller used to carry <c>[Authorize(Roles = "Admin,CorporateAdmin")]</c>,
+	/// which only reads the JWT role claim and can therefore never honour a Designation. The SDWA
+	/// sidebar entry, PageGuard and GuestHouseMaster.razor all decide with
+	/// <c>LoginState.CanAccess(PagePermission.GuestHouse)</c>, so an employee whose Designation grants
+	/// GuestHouse could open the page and then got 403 from here ("You do not have permission to view
+	/// this data.").
+	///
+	/// IT IS NOT A SECOND PERMISSION SYSTEM: the Designation check below is the SAME primitive the
+	/// rest of the API already uses for this exact purpose (LibraryController.CanManageAsync,
+	/// CommunityController.CanManageLibraryAsync, LabReportsController.ResolveAccessAsync,
+	/// SasPaymentsController.ResolveAccessAsync, WelfareSchemeApprovalController.
+	/// UserHasDesignationPermissionAsync) -
+	/// <c>UserInfo.DesignationId -&gt; Designation.RoleAccess -&gt; RoleAccessPermissions.HasPage</c>,
+	/// resolved exactly the way AuthenticationController.Login resolves RoleAccess client-side.
+	///
+	/// RULES:
+	/// <list type="bullet">
+	/// <item>Admin / CorporateAdmin - unchanged: they keep every action, exactly as the previous
+	/// <c>[Authorize(Roles = ...)]</c> granted them.</item>
+	/// <item>Any other signed-in user - READS only, and only when their Designation's RoleAccess
+	/// grants <c>PagePermission.GuestHouse</c>. No SDWA / FrontOffice / GenerateBill token, and no
+	/// AppRole, substitutes for it.</item>
+	/// <item>Everything else - 403, which GuestHouseMaster.razor already renders as
+	/// "You do not have permission to view this data." (the previous outcome for these callers too,
+	/// so no caller gets a new answer).</item>
+	/// </list>
+	/// The WRITE actions (POST / PUT / DELETE / PATCH, incl. bulk-upload and image upload) keep their
+	/// original Admin/CorporateAdmin-only restriction - they are the CRUD rules of this master page.
+	/// </summary>
+	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
+	internal sealed class GuestHouseMasterAccessAttribute : Attribute, IAsyncAuthorizationFilter
+	{
+		public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+		{
+			var user = context.HttpContext.User;
+			if (user?.Identity?.IsAuthenticated != true)
+			{
+				context.Result = new UnauthorizedObjectResult(new { Success = false, Message = "Authentication required." });
+				return;
+			}
+
+			// Existing role rule, verbatim from [Authorize(Roles = "Admin,CorporateAdmin")].
+			if (user.IsInRole(nameof(AppRole.Admin)) || user.IsInRole(nameof(AppRole.CorporateAdmin)))
+				return;
+
+			// Writes keep the original Admin/CorporateAdmin-only restriction.
+			if (!string.Equals(context.HttpContext.Request.Method, "GET", StringComparison.OrdinalIgnoreCase))
+			{
+				context.Result = Forbidden();
+				return;
+			}
+
+			// Designation rule: does THIS user's Designation.RoleAccess grant one of the
+			// PagePermissions this route is allowed to read?
+			var allowedPermissions = ReadPermissionsFor(context.HttpContext.Request);
+			var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (allowedPermissions.Length > 0 && !string.IsNullOrWhiteSpace(userId))
+			{
+				var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+				var designationId = await db.Users
+					.AsNoTracking()
+					.Where(u => u.Id == userId)
+					.Select(u => u.DesignationId)
+					.FirstOrDefaultAsync();
+
+				if (designationId is > 0)
+				{
+					var roleAccess = await db.Designations
+						.AsNoTracking()
+						.Where(d => d.Id == designationId && d.IsActive)
+						.Select(d => d.RoleAccess)
+						.FirstOrDefaultAsync();
+
+					foreach (var allowed in allowedPermissions)
+					{
+						if (RoleAccessPermissions.HasPage(roleAccess, allowed))
+							return;
+					}
+				}
+			}
+
+			context.Result = Forbidden();
+		}
+
+		/// <summary>
+		/// PagePermissions allowed to READ this route.
+		///
+		/// The house list is the Guest House grid's own data (PagePermission.GuestHouse) and it is
+		/// ALSO the "Guest House" picker of the SDWA Company Details page, which is guarded by its
+		/// own PagePermission.SdwaCompanyMaster - so that one endpoint additionally accepts the
+		/// SdwaCompanyMaster Designation grant. Every other endpoint keeps PagePermission.GuestHouse
+		/// only; no endpoint is opened by being logged in.
+		/// </summary>
+		private static PagePermission[] ReadPermissionsFor(HttpRequest request)
+		{
+			if (request.Path.StartsWithSegments("/api/GuestHouseMaster/houses", StringComparison.OrdinalIgnoreCase))
+				return new[] { PagePermission.GuestHouse, PagePermission.SdwaCompanyMaster };
+
+			return new[] { PagePermission.GuestHouse };
+		}
+
+		private static ObjectResult Forbidden() =>
+			new(new { Success = false, Message = "You do not have permission to view this data." })
+			{
+				StatusCode = StatusCodes.Status403Forbidden
+			};
 	}
 }
