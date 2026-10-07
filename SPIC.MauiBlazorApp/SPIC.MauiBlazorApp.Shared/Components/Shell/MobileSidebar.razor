@@ -87,8 +87,10 @@
 
 
             @* ================= DIGITAL LIBRARY (mirrors NavMenu.razor) ================= *@
-            @* Read-only content is open to every signed-in user (PageAuthorization.OpenAccessPages); the
-               category master needs the DigitalLibrary page. Same CanAccess call as NavMenu/PageGuard. *@
+            @* Read-only content is open to every signed-in user whose model includes the
+               open-to-all pages (PageAuthorization.OpenAccessPages); a designation-driven role
+               (DesignationOnly: CommonRole, SpecialAdmin) needs DigitalLibrary on its
+               designation. Same CanAccess call as NavMenu/PageGuard. *@
             @if (LoginState.CanAccess(PagePermission.DigitalLibrary))
             {
                 <NavLink class="nav-link"
@@ -292,9 +294,10 @@
                 </NavLink>
             }
 
-            @* IsAdmin = Admin, CorporateAdmin, Director, AVP: the people who hold the
-               IFMS SIM are senior staff, not necessarily the admin login. *@
-            @if (LoginState.IsAdmin)
+            @* Designation-controlled: Admin / SuperAdmin reach it through the role bypass, every
+               other role (Director, AVP, CorporateAdmin, ...) only when its Designation grants
+               IfmsAutoImport. Same condition as NavMenu. *@
+            @if (LoginState.CanAccess(PagePermission.IfmsAutoImport))
             {
                 <NavLink class="nav-link"
                          href="/IfmsAutoImport">
@@ -307,7 +310,7 @@
                 </NavLink>
             }
 
-            @if (LoginState.UserRole is AppRole.SuperAdmin)
+            @if (LoginState.UserRole is AppRole.Admin or AppRole.SuperAdmin)
             {
                 <NavLink class="nav-link" href="/DataExplorer">
                     <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/SettingsIcon.svg" class="SideBariconimg" />
@@ -1210,10 +1213,12 @@
 @if (
                                         LoginState.CanAccess(PagePermission.ReportDashboard)
                                         || LoginState.CanAccess(PagePermission.SDWADashboard)
-                                        || (LoginState.UserRole != AppRole.Dealer && (LoginState.CanAccess(PagePermission.SchemeApproval) || LoginState.UserRole == AppRole.Director))
+                                        || (LoginState.UserRole != AppRole.Dealer && LoginState.CanAccess(PagePermission.SchemeApproval))
                                         || LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
                                         || LoginState.CanAccess(PagePermission.WelfareSchemes)
-                                        || LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin
+                                        || LoginState.CanAccess(PagePermission.GuestHouse)
+                                        || LoginState.CanAccess(PagePermission.SdwaCompanyMaster)
+                                        || LoginState.CanAccess(PagePermission.GuestHouseCancellations)
                                         || LoginState.CanAccess(PagePermission.FrontOffice)
                                         || LoginState.CanAccess(PagePermission.GenerateBill)
                                     )
@@ -1273,7 +1278,7 @@
                                 </li>
                             }
 
-                            @if (LoginState.UserRole != AppRole.Dealer && (LoginState.CanAccess(PagePermission.SchemeApproval) || LoginState.UserRole == AppRole.Director))
+                            @if (LoginState.UserRole != AppRole.Dealer && LoginState.CanAccess(PagePermission.SchemeApproval))
                             {
                                 <li class="submenu-item">
 

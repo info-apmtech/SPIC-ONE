@@ -18,9 +18,11 @@ public sealed record ShellTab(string Key, string Label, string Icon, string Href
 {
     /// <summary>
     /// Optional extra visibility rule that REPLACES the plain <c>CanAccess(PermissionKey)</c> check.
-    /// Mirrors the non-trivial conditions in NavMenu.razor (role-only items, Dealer / Director
-    /// special cases). Admin and CorporateAdmin already bypass <c>CanAccess</c> inside LoginState,
-    /// except for the designation-only SAS Lab / payment keys (those use <c>HasPageStrict</c>).
+    /// Only use it to RESTRICT (a role that must never see an open page) or for pages that are not
+    /// Designation-controlled at all (Admin / SuperAdmin-only features). Admin and SuperAdmin
+    /// already bypass <c>CanAccess</c> inside LoginState, except for the designation-only SAS Lab
+    /// / payment keys (those use <c>HasPageStrict</c>), so a normal page needs no Rule to stay
+    /// visible to them.
     /// </summary>
     public Func<LoginState, bool>? Rule { get; init; }
 
@@ -69,7 +71,7 @@ public static class ShellNavigation
     public const string GroupSchemes = "Schemes";
 
     // Convenience so the rules read like NavMenu.razor.
-    private static bool IsAdminOrCorporate(LoginState s) => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
+    private static bool IsAdmin(LoginState s) => s.UserRole is AppRole.Admin;
 
     // Field staff: their phone bar is built around activities, dealer work and farmer work (product owner, 2026-09-20).
     private static bool IsFieldStaff(LoginState s) => s.UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
@@ -232,8 +234,11 @@ public static class ShellNavigation
         new("SchemeApproval", "Scheme Approval", "bi-check2-square", "/SchemeApproval", nameof(PagePermission.SchemeApproval))
         {
             ShortLabel = "Approvals", Group = GroupSdwa,
+            // No Director role term: the Designation decides, exactly like NavMenu now does.
+            // (PageGuard still lets a Director open the approval ROUTES - that is the server-side
+            // capability documented there - but the menu entry itself is Designation-controlled.)
             Rule = s => s.UserRole != AppRole.Dealer
-                        && (s.CanAccess(nameof(PagePermission.SchemeApproval)) || s.UserRole == AppRole.Director)
+                        && s.CanAccess(nameof(PagePermission.SchemeApproval))
         },
         new("SMMApprovals", "SMM Approvals", "bi-clipboard2-check-fill", "/SMMApprovals", nameof(PagePermission.SMMApprovals))
         {
@@ -275,7 +280,9 @@ public static class ShellNavigation
         // ---- admin tools (mirrors NavMenu.razor) ----
         new("IfmsAutoImport", "IFMS Auto Import", "bi-cloud-upload-fill", "/IfmsAutoImport", "IfmsAutoImport")
         {
-            Group = GroupAdminTools, Rule = s => s.UserRole == AppRole.Admin
+            // No Rule: Admin / SuperAdmin reach it through the role bypass, every other role
+            // through its Designation (PagePermission.IfmsAutoImport).
+            Group = GroupAdminTools
         },
         new("DataExplorer", "Data Explorer", "bi-database-fill", "/DataExplorer", "DataExplorer")
         {
@@ -299,9 +306,10 @@ public static class ShellNavigation
         new("TopRankingRetailers", "Top Ranking Retailers", "bi-shop", "/TopRankingRetailers", nameof(PagePermission.TopRankingRetailers)) { Group = GroupSubsidy },
         new("ProductWiseStockAvailability", "Productwise Stock Availability", "bi-columns-gap", "/ProductWiseStockAvailability", nameof(PagePermission.ProductWiseStockAvailability)) { Group = GroupSubsidy },
         new("StockDetails", "Stock Details", "bi-inboxes-fill", "/StockDetails", nameof(PagePermission.StockDetails)) { Group = GroupSubsidy },
+        // Admin-only tool: no PagePermission exists for it on purpose (it is not a Designation page).
         new("ExcelFormatFileUpload", "File Upload", "bi-file-earmark-arrow-up-fill", "/ExcelFormatFileUpload", "ExcelFormatFileUpload")
         {
-            Group = GroupSubsidy, Rule = s => s.UserRole == AppRole.Admin
+            Group = GroupSubsidy, Rule = IsAdmin
         },
 
         // ---- MD Portal accordion ----
@@ -339,17 +347,22 @@ public static class ShellNavigation
         // ---- SDWA accordion (remaining items) ----
         new("ReportDashboard", "Admin Dashboard", "bi-grid-fill", "/ReportDashboard", nameof(PagePermission.ReportDashboard)) { Group = GroupSdwa },
         new("SubDealerEmployeeMaster", "Sub Dealer & Employee", "bi-people-fill", "/SubDealerEmployeeMaster", nameof(PagePermission.SubDealerEmployeeMaster)) { Group = GroupSdwa },
-        new("GuestHouseMaster", "Guest House Master", "bi-building-fill", "/GuestHouseMaster", "GuestHouseMaster")
+        // The three SDWA master pages are Designation-controlled, exactly like the desktop
+        // sidebar entries for them (NavMenu / MobileSidebar use CanAccess too), so no Rule.
+        // Admin still reaches them through the role bypass; CorporateAdmin needs the grant.
+        // Guest House Master shares the GuestHouse permission with its sidebar entry and
+        // /GuestHouse, so its PermissionKey is the GuestHouse key rather than the URL segment.
+        new("GuestHouseMaster", "Guest House Master", "bi-building-fill", "/GuestHouseMaster", nameof(PagePermission.GuestHouse))
         {
-            Group = GroupSdwa, Rule = IsAdminOrCorporate
+            Group = GroupSdwa
         },
-        new("SdwaCompanyMaster", "Company Details", "bi-briefcase-fill", "/SdwaCompanyMaster", "SdwaCompanyMaster")
+        new("SdwaCompanyMaster", "Company Details", "bi-briefcase-fill", "/SdwaCompanyMaster", nameof(PagePermission.SdwaCompanyMaster))
         {
-            Group = GroupSdwa, Rule = IsAdminOrCorporate
+            Group = GroupSdwa
         },
-        new("GuestHouseCancellations", "Cancellation Requests", "bi-x-octagon-fill", "/GuestHouseCancellations", "GuestHouseCancellations")
+        new("GuestHouseCancellations", "Cancellation Requests", "bi-x-octagon-fill", "/GuestHouseCancellations", nameof(PagePermission.GuestHouseCancellations))
         {
-            Group = GroupSdwa, Rule = IsAdminOrCorporate
+            Group = GroupSdwa
         },
         new("FrontOffice", "Front Office", "bi-door-open-fill", "/FrontOffice", nameof(PagePermission.FrontOffice)) { Group = GroupSdwa },
         new("GenerateBill", "Generate Bill", "bi-receipt", "/GenerateBill", nameof(PagePermission.GenerateBill)) { Group = GroupSdwa },
