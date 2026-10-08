@@ -17,18 +17,20 @@
         "notfound",
         "forbidden",
         "Welcome",
-        // Default landing pages (LoginState). Each is the destination of LandingPage for the role it
-        // belongs to, so both must be open to every signed-in user; otherwise the redirect at the
-        // bottom of Check() sends the user back to LandingPage - the very route - and loops. These
-        // are common landing screens, NOT designation permissions: they are not PagePermission
-        // members and appear in no RoleAccess. Listed without the leading slash, matching above.
-        LoginState.DefaultLandingPath.TrimStart('/'),
-        LoginState.AdminLandingPath.TrimStart('/')
+        // Default landing page (LoginState). It is the destination of LandingPage for every role
+        // without its own special-cased landing route (including Admin), so it must be open to every
+        // signed-in user; otherwise the redirect at the bottom of Check() sends the user back to
+        // LandingPage - the very route - and loops. This is a common landing screen, NOT a
+        // designation permission: it is not a PagePermission member and appears in no RoleAccess.
+        // Listed without the leading slash, matching above.
+        LoginState.DefaultLandingPath.TrimStart('/')
     };
 
     // Shell hub pages (phone tab bar / top bar destinations). Each hub only LINKS to pages the
     // user can already open (every link is filtered by LoginState.CanAccess), so they are open to
-    // every signed-in user who has a designation.
+    // every signed-in user who has a designation - EXCEPT a designation-driven role
+    // (PageAccessModel.DesignationOnly: CommonRole, SpecialAdmin), for which the short-circuit
+    // below is skipped and the hub itself must be on its designation.
     // Product decision 2026-09-20: the Knowledge Community is usable by everyone, and Digital
     // Library CONTENT is viewable by everyone; only adding/editing content (/DigitalLibrary/add/...)
     // needs the DigitalLibrary page in the user's designation (the API enforces the same rule).
@@ -89,26 +91,18 @@
         var firstSegment = segments.FirstOrDefault() ?? "";
         var secondSegment = segments.Skip(1).FirstOrDefault() ?? "";
 
-        // Data Explorer is SuperAdmin only. Admin is explicitly
-        // excluded here, even though Admin otherwise bypasses every other page
-        // check below - this must run BEFORE the general Admin bypass.
-        if (firstSegment.Equals("DataExplorer", StringComparison.OrdinalIgnoreCase)
-            && LoginState.UserRole == AppRole.Admin)
-        {
-            Nav.NavigateTo("/Dashboard", replace: true);
-            return;
-        }
-
         // SuperAdmin bypasses everything else.
         if (LoginState.UserRole == AppRole.SuperAdmin) return;
 
-        // Admin and CorporateAdmin bypass everything EXCEPT the SAS Lab (/Lab/...) and payment
+        // Admin bypasses everything EXCEPT the SAS Lab (/Lab/...) and payment
         // (/Sas/Payments...) routes: those are reached through the designation only (product
         // decision 2026-09-27), so admins go through the strict checks below like everyone else.
+        // SuperAdmin is handled above. Every other role - including CorporateAdmin, Director and
+        // AVP - falls through to the Designation check at the bottom of this method.
         bool designationOnlyRoute = firstSegment.Equals("Lab", StringComparison.OrdinalIgnoreCase)
             || (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase)
                 && secondSegment.Equals("Payments", StringComparison.OrdinalIgnoreCase));
-        if ((LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin) && !designationOnlyRoute) return;
+        if (LoginState.UserRole is AppRole.Admin && !designationOnlyRoute) return;
 
         // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
         // but must NEVER reach the SchemeApproval page.
@@ -151,15 +145,12 @@
                                     || firstSegment.Equals("WelfareSchemes", StringComparison.OrdinalIgnoreCase)
                                     || firstSegment.Equals("ApplyWelfareScheme", StringComparison.OrdinalIgnoreCase)
                                     || firstSegment.Equals("WellfareApplication", StringComparison.OrdinalIgnoreCase));
-            // The default landing routes are in _alwaysOpen so users WITH a designation (and Admin,
-            // who bypasses this branch entirely) can reach them, so they are excluded here to keep
-            // this branch's existing behaviour: a user with no designation still lands on /Welcome,
-            // the screen telling them to contact an administrator. /Welcome is allowed, so this
-            // cannot loop. Listed as data so a new landing route is covered by adding one entry.
+            // The default landing route is in _alwaysOpen so users WITH a designation (and Admin,
+            // who bypasses this branch entirely) can reach it, so it is excluded here to keep this
+            // branch's existing behaviour: a user with no designation still lands on /Welcome, the
+            // screen telling them to contact an administrator. /Welcome is allowed, so this cannot loop.
             bool isDefaultLanding = firstSegment.Equals(
-                                        LoginState.DefaultLandingPath.TrimStart('/'), StringComparison.OrdinalIgnoreCase)
-                                    || firstSegment.Equals(
-                                        LoginState.AdminLandingPath.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
+                LoginState.DefaultLandingPath.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
 
             bool isInfra = _alwaysOpen.Contains(firstSegment)
                            && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase)
@@ -242,7 +233,15 @@
             || firstSegment.Equals("ApprovalDetail", StringComparison.OrdinalIgnoreCase))
         {
             firstSegment = "SchemeApproval";
-        }      
+        }
+
+        // /FarmOperations is the legacy second @page route of FarmDashboard.razor; without this
+        // alias it resolves to the literal key "FarmOperations", which no Designation ever grants,
+        // so a non-bypass user holding PagePermission.FarmDashboard would be bounced away.
+        if (firstSegment.Equals("FarmOperations", StringComparison.OrdinalIgnoreCase))
+        {
+            firstSegment = "FarmDashboard";
+        }
 
         // CanAccess understands "Page.Action" tokens (page reachable if any action
         // is granted) as well as legacy bare page tokens. Dynamically registered
@@ -260,8 +259,9 @@
         if (!allowed && !isDirectorSchemeApproval)
         {
             // Redirect to the SAME landing page the login flow uses. That keeps the existing
-            // per-role destinations exactly as they were (Dealer -> /SDWADashboard, SpecialAdmin ->
-            // /Logistics or /Welcome, everyone else -> /Dashboard) and, because LandingPage is the
+            // per-role destinations exactly as they were (Dealer -> /SDWADashboard, Admin ->
+            // /DefaultWelcome, a role with no designation -> /Welcome, everyone else ->
+            // /DefaultWelcome) and, because LandingPage is the
             // one place that knows which pages a role actually has, it also gives a
             // designation-driven role such as CommonRole a destination it is allowed to open. The
             // previous hardcoded "/Dashboard" fallback would have bounced a CommonRole user whose

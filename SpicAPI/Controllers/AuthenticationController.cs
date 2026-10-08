@@ -104,6 +104,41 @@ namespace SpicAPI.Controllers
             return Ok(new { message = "Logged out successfully" });
         }
 
+        /// <summary>
+        /// The signed-in user's Designation.RoleAccess, re-read from the database.
+        ///
+        /// Login captures RoleAccess once and the client keeps that snapshot for the whole
+        /// session; without this endpoint a Designation edited by an administrator would never
+        /// reach a user who is already signed in. MainLayout calls it exactly once per app load
+        /// (no polling, no refresh loop) and falls back to the session snapshot on any failure.
+        /// Returns "" when the user has no active designation or no grant, matching the shape of
+        /// the login response.
+        /// </summary>
+        [HttpGet("permissions")]
+        public async Task<IActionResult> Permissions()
+        {
+            // Resolve by the NameIdentifier claim, the same way every other controller in this
+            // project identifies the caller, rather than by username lookup.
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var user = userId is null ? null : await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
+
+            string? roleAccess = null;
+            if (user.DesignationId.HasValue && user.DesignationId.Value > 0)
+            {
+                var desig = await _db.Designations
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(d => d.Id == user.DesignationId.Value && d.IsActive);
+
+                if (desig != null && !string.IsNullOrWhiteSpace(desig.RoleAccess))
+                {
+                    roleAccess = desig.RoleAccess;
+                }
+            }
+
+            return Ok(roleAccess ?? string.Empty);
+        }
+
         private async Task<string> GenerateJwtToken(UserInfo user)
         {
             var jwtConfig = _config.GetSection("Jwt");
