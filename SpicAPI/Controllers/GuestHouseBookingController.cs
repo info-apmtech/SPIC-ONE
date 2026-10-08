@@ -9,6 +9,7 @@ using SpicAPI.Services;
 using SPIC.Core.Entities;
 using System.Data;
 using System.IO;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace SpicAPI.Controllers
@@ -440,16 +441,38 @@ namespace SpicAPI.Controllers
             var tax = Math.Round(subtotal * 0.05m, 2, MidpointRounding.AwayFromZero);
             var total = subtotal + tax;
 
+            // Employee free booking: decided ONLY from the authenticated user's AppRole claim
+            // (signed JWT) - never from anything the client sends. Anonymous / no-role users
+            // and the paid roles (Admin, Dealer, SuperAdmin, Farmer) fall through unchanged.
+            // A free booking is stored as a ₹0 Confirmed + Paid booking so check-in, check-out,
+            // billing, invoice and cancellation keep working without special cases.
+            var isFreeBooking = User.Identity?.IsAuthenticated == true
+                && Enum.TryParse<AppRole>(User.FindFirstValue(ClaimTypes.Role), out var actorRole)
+                && GuestHouseBookingPolicy.IsEmployeeFreeBooking(actorRole);
+            if (isFreeBooking)
+            {
+                roomPrice = 0m;
+                extraCotPrice = 0m;
+                subtotal = 0m;
+                tax = 0m;
+                total = 0m;
+            }
+            else if (request.PaymentMethod == GuestHousePaymentMethod.Complimentary)
+            {
+                // Complimentary is only ever assigned server-side - a client cannot request it.
+                return BadRequest(new { Success = false, Message = "Invalid payment method." });
+            }
+
             // Payment method & status.
-            var paymentMethod = request.PaymentMethod;
+            var paymentMethod = isFreeBooking ? GuestHousePaymentMethod.Complimentary : request.PaymentMethod;
             var isPayAfterStay = paymentMethod == GuestHousePaymentMethod.PayAfterStay;
             // PayAfterStay is confirmed immediately (settled later at the Front Office).
             // Every online method is PendingPayment until Razorpay verification succeeds
             // (see POST bookings/{id}/payment/verify) - the room itself is already held
             // from this point on, since GetCommittedRoomsByRoomAsync counts every status
             // except Cancelled/Completed, so this does not change availability at all.
-            var bookingStatus = isPayAfterStay ? GuestHouseBookingStatus.Confirmed : GuestHouseBookingStatus.PendingPayment;
-            var paymentStatus = GuestHousePaymentStatus.Pending;
+            var bookingStatus = isFreeBooking || isPayAfterStay ? GuestHouseBookingStatus.Confirmed : GuestHouseBookingStatus.PendingPayment;
+            var paymentStatus = isFreeBooking ? GuestHousePaymentStatus.Paid : GuestHousePaymentStatus.Pending;
 
             // The availability re-check and the insert must happen atomically: without this,
             // two nearly-simultaneous requests for the same room/overlapping dates could both
@@ -538,8 +561,10 @@ namespace SpicAPI.Controllers
                         // No payment has happened yet for ANY method at this point (PayAfterStay
                         // is settled later at the Front Office; online payment is settled by
                         // POST bookings/{id}/payment/verify). PaymentDate is only ever set when
-                        // a payment actually completes.
-                        PaymentDate = null,
+                        // a payment actually completes. A free employee booking is settled
+                        // (₹0) right here, so it gets a PaymentDate and a clear marker.
+                        PaymentDate = isFreeBooking ? DateTime.Now : null,
+                        TransactionId = isFreeBooking ? "EMPLOYEE-FREE" : null,
                         CreatedAt = DateTime.Now,
                         UpdatedAt = DateTime.Now
                     }
@@ -600,6 +625,7 @@ namespace SpicAPI.Controllers
                 PaymentMethod = paymentMethod,
                 PaymentStatus = paymentStatus,
                 BookingStatus = bookingStatus,
+                IsFreeBooking = isFreeBooking,
                 DocumentWarning = documentWarning
             });
         }
@@ -1493,6 +1519,7 @@ namespace SpicAPI.Controllers
 				GuestHousePaymentMethod.Card => "Card",
 				GuestHousePaymentMethod.NetBanking => "Net Banking",
 				GuestHousePaymentMethod.PayAfterStay => "Pay After Stay",
+				GuestHousePaymentMethod.Complimentary => "Complimentary",
 				_ => method.ToString()
 			};
 		}
@@ -1828,6 +1855,10 @@ namespace SpicAPI.Controllers
 		public GuestHousePaymentMethod PaymentMethod { get; set; }
 		public GuestHousePaymentStatus PaymentStatus { get; set; }
 		public GuestHouseBookingStatus BookingStatus { get; set; }
+
+		// True when the server booked this as a free (₹0) employee booking - the client must
+		// show the confirmation directly and never open Razorpay. Response-only, not stored.
+		public bool IsFreeBooking { get; set; }
 
 		// Non-null only when an ID Proof was supplied but could not be attached; the
 		// booking itself is always created successfully regardless of this value.

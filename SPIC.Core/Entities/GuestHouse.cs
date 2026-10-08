@@ -34,7 +34,26 @@ public enum GuestHousePaymentMethod
 	UPI = 1,          // UPI ID / QR code
 	Card = 2,         // Credit / Debit Card
 	NetBanking = 3,   // Net Banking
-	PayAfterStay = 4  // Pay at the guest house after the stay
+	PayAfterStay = 4, // Pay at the guest house after the stay
+	Complimentary = 5 // Free ₹0 employee booking - no payment taken (see GuestHouseBookingPolicy)
+}
+
+/// <summary>
+/// Who books guest house rooms free of charge. Decided from the user's actual AppRole only
+/// (never page / designation permissions): company employees book free, while Admin, Dealer,
+/// SuperAdmin, Farmer and anyone without an authenticated role pay through Razorpay.
+/// </summary>
+public static class GuestHouseBookingPolicy
+{
+	private static readonly HashSet<AppRole> EmployeeFreeRoles = new()
+	{
+		AppRole.CorporateAdmin, AppRole.Director, AppRole.AVP, AppRole.SMD, AppRole.SMM,
+		AppRole.RM, AppRole.RMD, AppRole.MDO, AppRole.MO, AppRole.JMDO,
+		AppRole.SpecialAdmin, AppRole.CommonRole
+	};
+
+	public static bool IsEmployeeFreeBooking(AppRole? role) =>
+		role.HasValue && EmployeeFreeRoles.Contains(role.Value);
 }
 
 /// <summary>
@@ -73,6 +92,7 @@ public class GuestHouse
 	public string? PhoneNumber { get; set; }                             // Contact phone number displayed on the card
 	public string? Description { get; set; }                             // Short description / overview of the guest house
 	public bool IsActive { get; set; } = true;                           // Whether the guest house is available for booking
+	public int? StateId { get; set; }                                    // Id of the State (States table) the guest house belongs to (scopes Receptionists to their state's guest house)
 
 	// Audit
 	public string? CreatedBy { get; set; }                               // User who created the record

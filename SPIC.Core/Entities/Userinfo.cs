@@ -126,7 +126,7 @@ namespace SPIC.Core.Entities
         // (see AppDbContext) - inserting in the middle would renumber every later row.
         Activities, Farmers, Alerts,
         StartDocumentation, DemoDetails, TreatmentDetails,
-        Treatment01, Treatment02, TreatmentDemoDetails
+        Treatment01, Treatment02, TreatmentDemoDetails,GHAdmin
 
     }
 }

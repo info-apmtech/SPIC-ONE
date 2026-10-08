@@ -164,6 +164,16 @@
 						<input type="text" class="form-control-custom w-100" placeholder="Enter Phone Number"
 							   @bind="_houseForm.PhoneNumber" />
 					</div>
+					<div class="col-md-6 col-lg-4">
+						<label class="form-label-custom">State</label>
+						<select class="form-control-custom w-100" @bind="_houseForm.StateId">
+							<option value="0">-- Select State --</option>
+							@foreach (var state in _states)
+							{
+								<option value="@state.Id">@state.StateName</option>
+							}
+						</select>
+					</div>
 <div class="col-md-12 col-lg-4">
 					<label class="form-label-custom">Description</label>
 					<input type="text" class="form-control-custom w-100" placeholder="Short description"
@@ -318,6 +328,7 @@
 					<th>Name</th>
 					<th>Image</th>
 					<th>Address</th>
+					<th>State</th>
 					<th>Phone</th>
 					<th>Description</th>
 					<th>Rooms</th>
@@ -336,6 +347,7 @@
 						}
 					</td>
 					<td>@(item.Address ?? "-")</td>
+					<td>@(item.StateName ?? "-")</td>
 					<td>@(item.PhoneNumber ?? "-")</td>
 					<td>@(item.Description ?? "-")</td>
 					<td>@item.RoomCount</td>
@@ -630,8 +642,22 @@
 		}
 		catch { }
 
+		await LoadStatesAsync();
 		await LoadTabData();
 		_isLoading = false;
+	}
+
+	// States for the Guest House "State" dropdown, from the existing States master.
+	private List<StateOption> _states = new();
+
+	private async Task LoadStatesAsync()
+	{
+		try
+		{
+			var states = await Http.GetFromJsonAsync<List<StateOption>>("api/State/all") ?? new();
+			_states = states.Where(s => s.IsActive).OrderBy(s => s.StateName).ToList();
+		}
+		catch { _states = new(); }
 	}
 
 	private async Task SetActiveTab(string tabName)
@@ -792,6 +818,7 @@
 				_houseForm.Address,
 				_houseForm.PhoneNumber,
 				_houseForm.Description,
+				StateId = _houseForm.StateId > 0 ? _houseForm.StateId : (int?)null,
 				_houseForm.IsActive
 			};
 		}
@@ -896,6 +923,7 @@
 				Address = house.Address,
 				PhoneNumber = house.PhoneNumber,
 				Description = house.Description,
+				StateId = house.StateId ?? 0,
 				ImagePath = house.ImagePath,
 				IsActive = house.IsActive
 			};
@@ -1310,6 +1338,8 @@
 		public string? Address { get; set; }
 		public string? PhoneNumber { get; set; }
 		public string? Description { get; set; }
+		public int? StateId { get; set; }
+		public string? StateName { get; set; }
 		public string? ImagePath { get; set; }
 		public bool IsActive { get; set; }
 		public int RoomCount { get; set; }
@@ -1335,12 +1365,20 @@
 			$"{GuestHouseName} - {RoomType} ({(string.IsNullOrEmpty(RoomNumber) ? "All Rooms" : RoomNumber)})";
 	}
 
+	public class StateOption
+	{
+		public int Id { get; set; }
+		public string StateName { get; set; } = "";
+		public bool IsActive { get; set; }
+	}
+
 	public class GuestHouseFormModel
 	{
 		public string Name { get; set; } = "";
 		public string? Address { get; set; }
 		public string? PhoneNumber { get; set; }
 		public string? Description { get; set; }
+		public int StateId { get; set; }
 		public string? ImagePath { get; set; }
 		public bool IsActive { get; set; } = true;
 	}

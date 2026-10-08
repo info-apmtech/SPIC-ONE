@@ -29,8 +29,14 @@ namespace SpicAPI.Controllers
         
         private readonly IGenericRepository<ProgramStateBudget> _programStateBudgetRepo;
         private readonly IGenericRepository<StateBudgetAllocation> _stateBudgetAllocationRepo;
-        private string CurrentUser =>
-    User.Identity?.Name ?? "System";
+        private string CurrentUserId =>
+            User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value
+            ?? User.FindFirst("id")?.Value
+            ?? User.Identity?.Name
+            ?? "System";
+
+        private string CurrentUser => CurrentUserId;
 
         /// <summary>
         /// True for the "Admin" role group used throughout the app (mirrors LoginState.IsAdmin):
@@ -601,7 +607,7 @@ namespace SpicAPI.Controllers
                             financialYear,
 
                         CreatedBy =
-                            CurrentUser,
+                            CurrentUserId,
 
                         CreatedAt =
                             DateTime.Now,
@@ -1020,21 +1026,79 @@ namespace SpicAPI.Controllers
         {
             var drafts = await _budgetRepo
                 .GetAll()
-                //.Where(x => x.Status == "Draft")
+                .Where(x => x.BudgetProgramMain == null || x.BudgetProgramMain.Status == "Draft")
                 .ToListAsync();
 
             return Ok(drafts);
         }
 
+        private async Task NormalizeBudgetProgramMainUserIdsAsync()
+        {
+            try
+            {
+                var mains = await _db.Set<BudgetProgramMains>()
+                    .Where(m => (!string.IsNullOrEmpty(m.CreatedBy) && !m.CreatedBy.Contains("-"))
+                             || (!string.IsNullOrEmpty(m.ApprovedBy) && !m.ApprovedBy.Contains("-")))
+                    .ToListAsync();
+
+                if (mains.Count > 0)
+                {
+                    var users = await _db.Users.AsNoTracking().ToListAsync();
+                    var changed = false;
+
+                    foreach (var m in mains)
+                    {
+                        if (!string.IsNullOrEmpty(m.CreatedBy) && !m.CreatedBy.Contains("-"))
+                        {
+                            var user = users.FirstOrDefault(u =>
+                                string.Equals(u.UserName, m.CreatedBy, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(u.Name, m.CreatedBy, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(u.Email, m.CreatedBy, StringComparison.OrdinalIgnoreCase));
+                            if (user != null)
+                            {
+                                m.CreatedBy = user.Id;
+                                changed = true;
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(m.ApprovedBy) && !m.ApprovedBy.Contains("-"))
+                        {
+                            var user = users.FirstOrDefault(u =>
+                                string.Equals(u.UserName, m.ApprovedBy, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(u.Name, m.ApprovedBy, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(u.Email, m.ApprovedBy, StringComparison.OrdinalIgnoreCase));
+                            if (user != null)
+                            {
+                                m.ApprovedBy = user.Id;
+                                changed = true;
+                            }
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        await _db.SaveChangesAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Budget] NormalizeBudgetProgramMainUserIds error: {ex.Message}");
+            }
+        }
+
         [HttpGet("submissions")]
         public async Task<IActionResult> GetBudgetSubmissions()
         {
+            await NormalizeBudgetProgramMainUserIdsAsync();
+
             var data =
                 await _budgetRepo
                 .GetAll()
                 .AsNoTracking()
                 .Include(x => x.Program)
                 .ThenInclude(x => x.ProgramType)
+                .Include(x => x.BudgetProgramMain)
                 .Select(x => new BudgetSubmissionDto
                 {
                     Id = x.Id,
@@ -1045,69 +1109,62 @@ namespace SpicAPI.Controllers
                         ? x.Program.ProgramType.Name
                         : "",
 
-
                     ProgramName =
                         x.Program != null
                         ? x.Program.Name
                         : "",
 
-
                     TotalBudget =
                         x.TotalBudget,
 
+                    SubmittedDate =
+                        x.BudgetProgramMain != null
+                        ? x.BudgetProgramMain.CreatedAt
+                        : DateTime.Now,
 
-                   // SubmittedDate =
-                        //x.CreatedAt,
+                    Status =
+                        x.BudgetProgramMain != null && !string.IsNullOrEmpty(x.BudgetProgramMain.Status)
+                        ? x.BudgetProgramMain.Status
+                        : "Draft",
 
-
-                    //Status =
-                       // x.Status,
-
-
-                    ValidationDue = null
-
+                    ValidationDue =
+                        x.BudgetProgramMain != null
+                        ? x.BudgetProgramMain.ValidateAt
+                        : null
                 })
                 .ToListAsync();
 
-
             return Ok(data);
         }
+
         [HttpGet("submission-summary")]
         public async Task<IActionResult> GetSubmissionSummary()
         {
-
             var result =
                 await _budgetRepo
                 .GetAll()
                 .AsNoTracking()
                 .GroupBy(x => 1)
-                .Select(x => new
+                .Select(x => new BudgetSubmissionSummaryDto
                 {
-
                     Total =
                         x.Count(),
 
+                    Approved =
+                        x.Count(a => a.BudgetProgramMain != null && a.BudgetProgramMain.Status == "Approved"),
 
-                    Approved =0,
-                        //x.Count(a => a.Status == "Approved"),
+                    Pending =
+                        x.Count(a => a.BudgetProgramMain != null && (a.BudgetProgramMain.Status == "Pending" || a.BudgetProgramMain.Status == "Submitted" || a.BudgetProgramMain.Status == "Validated")),
 
+                    Rejected =
+                        x.Count(a => a.BudgetProgramMain != null && a.BudgetProgramMain.Status == "Rejected"),
 
-                    Pending =0,
-                        //x.Count(a => a.Status == "Pending"),
-
-
-                    Rejected =0,
-                       // x.Count(a => a.Status == "Rejected"),
-
-
-                    Draft =0
-                      //  x.Count(a => a.Status == "Draft")
-
+                    Draft =
+                        x.Count(a => a.BudgetProgramMain == null || a.BudgetProgramMain.Status == "Draft")
                 })
                 .FirstOrDefaultAsync();
 
-
-            return Ok(result);
+            return Ok(result ?? new BudgetSubmissionSummaryDto());
         }
 
         [HttpGet("headquarters")]
@@ -1533,6 +1590,16 @@ namespace SpicAPI.Controllers
                 _db.Set<HeadquarterBudgetSummaryHistory>().Add(ToHeadquarterSummaryHistory(row, "Validated"));
             }
 
+            var programMains = await _db.Set<BudgetProgramMains>()
+                .Where(m => m.FinancialYear == fy && m.Status == "Submitted")
+                .ToListAsync();
+            foreach (var pm in programMains)
+            {
+                pm.Status = "Validated";
+                pm.ValidateBy = CurrentUserId;
+                pm.ValidateAt = now;
+            }
+
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
@@ -1644,12 +1711,65 @@ namespace SpicAPI.Controllers
                 _db.Set<HeadquarterBudgetSummaryHistory>().Add(ToHeadquarterSummaryHistory(row, "Approved"));
             }
 
+            // Also cascade approval to BudgetProgramMains for this FY
+            var programMains = await _db.Set<BudgetProgramMains>()
+                .Where(m => m.FinancialYear == fy && (m.Status == "Validated" || m.Status == "Submitted"))
+                .ToListAsync();
+            foreach (var pm in programMains)
+            {
+                pm.Status = "Approved";
+                pm.ApprovedBy = CurrentUserId;
+                pm.ApprovedAt = now;
+            }
+
             await _db.SaveChangesAsync();
             await transaction.CommitAsync();
 
             return Ok(new
             {
                 message = $"State budget allocation for FY {fy} approved successfully."
+            });
+        }
+
+        [HttpPut("main/{id}/approve")]
+        public async Task<IActionResult> ApproveBudgetProgramMain(int id)
+        {
+            var main = await _db.Set<BudgetProgramMains>().FindAsync(id);
+            if (main == null)
+            {
+                return NotFound(new { message = $"Budget submission #{id} not found." });
+            }
+
+            main.Status = "Approved";
+            main.ApprovedBy = CurrentUserId;
+            main.ApprovedAt = DateTime.Now;
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = $"Budget #{id} approved successfully.",
+                data = main
+            });
+        }
+
+        [HttpPut("main/{id}/validate")]
+        public async Task<IActionResult> ValidateBudgetProgramMain(int id)
+        {
+            var main = await _db.Set<BudgetProgramMains>().FindAsync(id);
+            if (main == null)
+            {
+                return NotFound(new { message = $"Budget submission #{id} not found." });
+            }
+
+            main.Status = "Validated";
+            main.ValidateBy = CurrentUserId;
+            main.ValidateAt = DateTime.Now;
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = $"Budget #{id} validated successfully.",
+                data = main
             });
         }
 
