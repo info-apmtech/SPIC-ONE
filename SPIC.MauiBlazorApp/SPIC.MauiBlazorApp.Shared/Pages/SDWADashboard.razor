@@ -655,10 +655,12 @@
     private EligibilityResultDto? _eligibilityResult;
     private string? _eligibilityError;
 
-    // SDWA Admin is resolved from the user's EXISTING RoleAccess permission
-    // (PagePermission.SDWAAdmin), same as SchemeApproval. SDWA Admins don't apply
-    // for welfare, so the Apply Welfare / My Applications cards are hidden for them.
-    private bool IsSdwaAdmin => loginState.CanAccess(PagePermission.SDWAAdmin);
+    // SDWA Admin is resolved from the user's EXISTING Designation RoleAccess
+    // (PagePermission.SDWAAdmin), matching WelfareSchemeApprovalController's server-side
+    // check. HasPageStrict (not CanAccess) so the Admin / SuperAdmin role bypass does not
+    // count as SDWA Admin. SDWA Admins don't apply for welfare, so the Apply Welfare /
+    // My Applications cards are hidden for them.
+    private bool IsSdwaAdmin => loginState.HasPageStrict(PagePermission.SDWAAdmin);
 
     private MyBookingDto? _dashBooking;
     private bool _isLoadingBooking = true;
