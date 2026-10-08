@@ -1,74 +1,140 @@
 @page "/AllocationRequests"
+@using System.Net.Http.Json
 @inject NavigationManager Navigation
+@inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 
 <div class="container-fluid py-4 px-0 alreq-page">
 
     <h2 class="alreq-title">Allocation Requests</h2>
     <p class="alreq-subtitle">Review and approve each JMDO's daily allocation &mdash; dealer tasks, SPCM &amp; soil sample targets, and MD programs.</p>
 
-    <div class="alreq-notice-banner">
-        <i class="bi bi-info-circle-fill"></i>
-        <span>@Rows.Count JMDO(s) have submitted today's allocation for your approval. Review and approve them one by one.</span>
-    </div>
+    @if (!_isLoading && !_loadFailed && Rows.Any())
+    {
+        <div class="alreq-notice-banner">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>@Rows.Count JMDO(s) have submitted their allocation for your approval. Review and approve them one by one.</span>
+        </div>
+    }
 
     <div class="alreq-card alreq-list-card">
-        <div class="alreq-table-scroll">
-            <table class="alreq-table alreq-list-table">
-                <thead>
-                    <tr>
-                        <th>JMDO</th>
-                        <th>Submitted</th>
-                        <th>Dealer Tasks</th>
-                        <th>SPCM Target</th>
-                        <th>Soil Target</th>
-                        <th>MD Programs</th>
-                        <th>Pos Liquidation</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in Rows)
-                    {
+        @if (_isLoading)
+        {
+            <div class="p-3 text-muted">Loading allocation requests...</div>
+        }
+        else if (_loadFailed)
+        {
+            <div class="p-3 text-muted">Couldn't load allocation requests. Please try again in a moment.</div>
+        }
+        else if (!Rows.Any())
+        {
+            <div class="p-3 text-muted">No pending allocation requests right now.</div>
+        }
+        else
+        {
+            <div class="alreq-table-scroll">
+                <table class="alreq-table alreq-list-table">
+                    <thead>
                         <tr>
-                            <td class="alreq-cell-header">
-                                <div class="alreq-jmdo-cell">
-                                    <span class="alreq-avatar">@row.Initials</span>
-                                    <div>
-                                        <div class="alreq-jmdo-name">@row.Name</div>
-                                        <div class="alreq-jmdo-sub">@row.Code &middot; @row.Location</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td data-label="Submitted">@row.Submitted</td>
-                            <td data-label="Dealer Tasks">@row.DealerTasks</td>
-                            <td data-label="SPCM Target">@row.SpcmTarget</td>
-                            <td data-label="Soil Target">@row.SoilTarget</td>
-                            <td data-label="MD Programs">@row.MdPrograms</td>
-                            <td data-label="Pos Liquidation">@row.PosLiquidation</td>
-                            <td class="alreq-cell-actions">
-                                <button type="button" class="alreq-btn-review" @onclick='() => Navigation.NavigateTo($"/AllocationRequestReview?jmdo={Uri.EscapeDataString(row.Name)}")'>
-                                    Review <i class="bi bi-arrow-right"></i>
-                                </button>
-                            </td>
+                            <th>JMDO</th>
+                            <th>Submitted</th>
+                            <th>Dealer Tasks</th>
+                            <th>SPCM Target</th>
+                            <th>Soil Target</th>
+                            <th>MD Programs</th>
+                            <th>Pos Liquidation</th>
+                            <th></th>
                         </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Rows)
+                        {
+                            <tr>
+                                <td class="alreq-cell-header">
+                                    <div class="alreq-jmdo-cell">
+                                        <span class="alreq-avatar">@Initials(row.JmdoName)</span>
+                                        <div>
+                                            <div class="alreq-jmdo-name">@row.JmdoName</div>
+                                            <div class="alreq-jmdo-sub">@(row.JmdoCode ?? "Code Pending") &middot; @(row.Location ?? "—")</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td data-label="Submitted">@row.SubmittedAt.ToString("dd MMM yyyy")</td>
+                                <td data-label="Dealer Tasks">@row.DealerCount</td>
+                                <td data-label="SPCM Target">@(row.SpcmTarget ?? 0)</td>
+                                <td data-label="Soil Target">@(row.SoilSampleTarget ?? 0)</td>
+                                <td data-label="MD Programs">@row.ProgramCount</td>
+                                <td data-label="Pos Liquidation">@row.PosLiquidationFieldCount</td>
+                                <td class="alreq-cell-actions">
+                                    <button type="button" class="alreq-btn-review" @onclick='() => Navigation.NavigateTo($"/AllocationRequestReview?allocationId={row.AllocationId}")'>
+                                        Review <i class="bi bi-arrow-right"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 
 </div>
 
 @code {
-    private sealed record RequestRow(string Initials, string Name, string Code, string Location, string Submitted, int DealerTasks, int SpcmTarget, int SoilTarget, int MdPrograms, int PosLiquidation);
-
-    // Static placeholder: no Allocation-approval API exists yet. Matches the
-    // per-JMDO seed data in AllocationRequestReview.razor (the "Review"
-    // destination) row for row.
-    private static readonly List<RequestRow> Rows = new()
+    private sealed class PendingAllocationRowDto
     {
-        new("KR", "Karthik Raja", "JMDO-104", "Coimbatore", "24 Sep 2026", 1, 12, 6, 2, 2),
-        new("SM", "Selvam M", "JMDO-108", "Pollachi", "24 Sep 2026", 1, 10, 5, 1, 1),
-        new("PD", "Priya Dharshini", "JMDO-112", "Udumalpet", "24 Sep 2026", 1, 8, 4, 2, 2)
-    };
+        public int AllocationId { get; set; }
+        public string JmdoName { get; set; } = "";
+        public string? JmdoCode { get; set; }
+        public string? Location { get; set; }
+        public DateTime SubmittedAt { get; set; }
+        public int DealerCount { get; set; }
+        public int? SpcmTarget { get; set; }
+        public int? SoilSampleTarget { get; set; }
+        public int ProgramCount { get; set; }
+        public int PosLiquidationFieldCount { get; set; }
+    }
+
+    private bool _isLoading = true;
+    private bool _loadFailed;
+    private List<PendingAllocationRowDto> Rows = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPendingAsync();
+    }
+
+    // Scoped server-side to "same HQ as the signed-in MDO" - there's no literal
+    // reporting-line field anywhere in the data model (see api/Team/jmdos).
+    private async Task LoadPendingAsync()
+    {
+        _isLoading = true;
+        _loadFailed = false;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<PendingAllocationRowDto>>("api/JmdoTaskAllocation/pending");
+            Rows = result ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Pending allocation list load failed: {ex.Message}");
+            Toast.Error("Could not load allocation requests. Please try again.");
+            _loadFailed = true;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static string Initials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "—",
+            1 => parts[0][..Math.Min(2, parts[0].Length)].ToUpperInvariant(),
+            _ => $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant()
+        };
+    }
 }
