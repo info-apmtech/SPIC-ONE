@@ -1,13 +1,15 @@
 @page "/MdoDashboard"
+@using System.Net.Http.Json
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject NavigationManager Navigation
+@inject HttpClient Http
 
 <div class="container-fluid py-4 px-0 mdo-page">
 
     <div class="mdo-header-row">
         <div>
-            <h2 class="mdo-title">Dashboard</h2>
-            <p class="mdo-subtitle">Overview of task creation, assignment and field progress across your JMDOs.</p>
+            <h2 class="mdo-title">Team Dashboard</h2>
+            <p class="mdo-subtitle">Overview of task creation, assignment and field progress across your region.</p>
         </div>
 
         <div class="mdo-header-actions">
@@ -23,11 +25,11 @@
     <div class="mdo-stats-grid">
         <div class="mdo-stat-card mdo-stat-total">
             <div class="mdo-stat-top">
-                <span class="mdo-stat-label">Total Tasks</span>
+                <span class="mdo-stat-label">Total Completed</span>
                 <span class="mdo-stat-icon"><i class="bi bi-clipboard"></i></span>
             </div>
-            <div class="mdo-stat-number">14</div>
-            <div class="mdo-stat-desc">Across all statuses</div>
+            <div class="mdo-stat-number">@(_isLoadingDealers ? "..." : _completedDealers.Count.ToString())</div>
+            <div class="mdo-stat-desc">Fully registered dealers</div>
         </div>
 
         <div class="mdo-stat-card mdo-stat-unassigned">
@@ -41,7 +43,7 @@
 
         <div class="mdo-stat-card mdo-stat-requested">
             <div class="mdo-stat-top">
-                <span class="mdo-stat-label">Requested by JMDO</span>
+                <span class="mdo-stat-label">Requested</span>
                 <span class="mdo-stat-icon"><i class="bi bi-person-check"></i></span>
             </div>
             <div class="mdo-stat-number">1</div>
@@ -77,57 +79,102 @@
     </div>
 
     <div class="mdo-table-card">
-        <h3 class="mdo-table-title">JMDO-wise summary</h3>
-        <p class="mdo-table-subtitle">Task load and progress per field officer in your region.</p>
+        <h3 class="mdo-table-title">100% Completed Dealers</h3>
+        <p class="mdo-table-subtitle">Dealers in your region who have completed all registration steps.</p>
 
-        <div class="mdo-table-scroll">
-            <table class="mdo-table">
-                <thead>
-                    <tr>
-                        <th>JMDO</th>
-                        <th>Status</th>
-                        <th>Assigned</th>
-                        <th>In Progress</th>
-                        <th>Completed</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var jmdo in Jmdos)
-                    {
+        @if (_isLoadingDealers)
+        {
+            <div class="p-3 text-muted">Loading completed dealers...</div>
+        }
+        else if (!_completedDealers.Any())
+        {
+            <div class="p-3 text-muted">No fully completed dealers found in your region.</div>
+        }
+        else
+        {
+            <div class="mdo-table-scroll">
+                <table class="mdo-table">
+                    <thead>
                         <tr>
-                            <td class="mdo-cell-header">
-                                <div class="mdo-jmdo-name">@jmdo.Name</div>
-                                <div class="mdo-jmdo-sub">@jmdo.Code &middot; @jmdo.Location</div>
-                            </td>
-                            <td data-label="Status"><span class="mdo-status-pill @(jmdo.OnLeave ? "mdo-status-leave" : "mdo-status-active")"><span class="mdo-status-dot"></span>@(jmdo.OnLeave ? "On Leave" : "Active")</span></td>
-                            <td data-label="Assigned">@jmdo.Assigned</td>
-                            <td data-label="In Progress">@jmdo.InProgress</td>
-                            <td data-label="Completed">@jmdo.Completed</td>
+                            <th>Dealer Name</th>
+                            <th>Status</th>
                         </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody>
+                        @foreach (var dealer in _completedDealers)
+                        {
+                            <tr>
+                                <td class="mdo-cell-header">
+                                    <div class="mdo-jmdo-name">@(string.IsNullOrWhiteSpace(dealer.FirmName) ? "Unnamed Firm" : dealer.FirmName)</div>
+                                    <div class="mdo-jmdo-sub">@(string.IsNullOrWhiteSpace(dealer.DealerCode) ? "Code Pending" : $"Dealer Code: {dealer.DealerCode}")</div>
+                                </td>
+                                <td data-label="Status">
+                                    <span class="mdo-status-pill mdo-status-active">
+                                        <span class="mdo-status-dot"></span>100% Complete
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 
 </div>
 
 @code {
-    private sealed record JmdoSummary(string Name, string Code, string Location, bool OnLeave, int Assigned, int InProgress, int Completed);
-
-    // Static placeholder: no team/allocation-approval API exists yet - this
-    // mirrors the JMDOs a Coimbatore-region MDO would oversee (Karthik Raja
-    // is the same JMDO used as the signed-in field exec elsewhere).
-    private static readonly List<JmdoSummary> Jmdos = new()
+    private void Refresh()
     {
-        new("Karthik Raja", "JMDO-104", "Coimbatore", false, 4, 2, 0),
-        new("Selvam M", "JMDO-108", "Pollachi", false, 3, 0, 1),
-        new("Priya Dharshini", "JMDO-112", "Udumalpet", false, 3, 0, 1),
-        new("Ganesh Kumar", "JMDO-119", "Mettupalayam", true, 2, 0, 2),
-        new("Lakshmi Narayanan", "JMDO-121", "Annur", false, 0, 0, 0)
-    };
-
-    private void Refresh() => Toast.Info("Dashboard refreshed.");
+        Toast.Info("Dashboard refreshed.");
+        _ = LoadCompletedDealers();
+    }
 
     private void OpenAllocationRequests() => Navigation.NavigateTo("/AllocationRequests");
+
+    private class MdoDealerDto
+    {
+        public string? FirmName { get; set; }
+        public string? DealerCode { get; set; }
+        public int StepCount { get; set; }
+    }
+
+    private class MdoDashboardPageResponse
+    {
+        public int Total { get; set; }
+        public List<MdoDealerDto> Items { get; set; } = new();
+    }
+
+    private bool _isLoadingDealers = true;
+    private List<MdoDealerDto> _completedDealers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCompletedDealers();
+    }
+
+    private async Task LoadCompletedDealers()
+    {
+        _isLoadingDealers = true;
+        try
+        {
+            var url = "api/DealerRegistration/dashboard/page?page=1&pageSize=1000&status=-1&workflowStatus=Approved&sort=recent";
+            var response = await Http.GetFromJsonAsync<MdoDashboardPageResponse>(url);
+            
+            if (response != null && response.Items != null)
+            {
+                // MDO should only see dealers that have completed all 11 steps and are approved
+                _completedDealers = response.Items.Where(d => d.StepCount >= 11).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading completed dealers: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingDealers = false;
+            StateHasChanged();
+        }
+    }
 }
