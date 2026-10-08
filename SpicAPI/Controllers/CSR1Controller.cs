@@ -1,9 +1,11 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using System.Security.Claims;
 using static SPIC.Core.Entities.EmployeeRegistration;
 
 namespace SpicAPI.Controllers
@@ -27,6 +29,7 @@ namespace SpicAPI.Controllers
         private readonly IGenericRepository<Zone> _zoneRepo;
 
         private readonly IGenericRepository<EmployeeInformation> _employeeRepo;
+        private readonly AppDbContext _db;
 
         public CSR1Controller(
             IGenericRepository<CSR1> csr1Repo,
@@ -39,7 +42,8 @@ namespace SpicAPI.Controllers
             IGenericRepository<Product> productRepo,
             IGenericRepository<Headquarter> headquarterRepo,
             IGenericRepository<Zone> zoneRepo,
-            IGenericRepository<EmployeeInformation> employeeRepo)
+            IGenericRepository<EmployeeInformation> employeeRepo,
+            AppDbContext db)
         {
             _csr1Repo = csr1Repo;
             _programMasterRepo = programMasterRepo;
@@ -54,6 +58,71 @@ namespace SpicAPI.Controllers
             _headquarterRepo = headquarterRepo;
             _zoneRepo = zoneRepo;
             _employeeRepo = employeeRepo;
+            _db = db;
+        }
+
+        private string CurrentUserId =>
+            User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User?.FindFirst("sub")?.Value
+            ?? User?.FindFirst("id")?.Value
+            ?? User?.Identity?.Name
+            ?? "System";
+
+        private string CurrentUser => CurrentUserId;
+
+        private async Task NormalizeCSR1UserIdsAsync()
+        {
+            try
+            {
+                var csr1s = await _db.CSR1
+                    .Where(c => (!string.IsNullOrEmpty(c.CreatedBy) && !c.CreatedBy.Contains("-"))
+                             || (!string.IsNullOrEmpty(c.UpdatedBy) && !c.UpdatedBy.Contains("-")))
+                    .ToListAsync();
+
+                if (csr1s.Count > 0)
+                {
+                    var users = await _db.Users.AsNoTracking().ToListAsync();
+                    var changed = false;
+
+                    foreach (var c in csr1s)
+                    {
+                        if (!string.IsNullOrEmpty(c.CreatedBy) && !c.CreatedBy.Contains("-"))
+                        {
+                            var user = users.FirstOrDefault(u =>
+                                string.Equals(u.UserName, c.CreatedBy, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(u.Name, c.CreatedBy, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(u.Email, c.CreatedBy, StringComparison.OrdinalIgnoreCase));
+                            if (user != null)
+                            {
+                                c.CreatedBy = user.Id;
+                                changed = true;
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(c.UpdatedBy) && !c.UpdatedBy.Contains("-"))
+                        {
+                            var user = users.FirstOrDefault(u =>
+                                string.Equals(u.UserName, c.UpdatedBy, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(u.Name, c.UpdatedBy, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(u.Email, c.UpdatedBy, StringComparison.OrdinalIgnoreCase));
+                            if (user != null)
+                            {
+                                c.UpdatedBy = user.Id;
+                                changed = true;
+                            }
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        await _db.SaveChangesAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[CSR1] NormalizeCSR1UserIds error: {ex.Message}");
+            }
         }
 
 
@@ -175,8 +244,10 @@ namespace SpicAPI.Controllers
                 // AUDIT
                 // =====================================================
 
-                var currentUser =
-                    User?.Identity?.Name ?? "System";
+                var currentUserId = CurrentUserId;
+                var resolvedUserId = (!string.IsNullOrWhiteSpace(currentUserId) && currentUserId != "System" && currentUserId.Contains("-"))
+                    ? currentUserId
+                    : (!string.IsNullOrWhiteSpace(model.CreatedBy) && model.CreatedBy.Contains("-") ? model.CreatedBy : currentUserId);
 
                 var currentDate =
                     DateTime.Now;
@@ -189,10 +260,10 @@ namespace SpicAPI.Controllers
                     currentDate;
 
                 model.CreatedBy =
-                    currentUser;
+                    resolvedUserId;
 
                 model.UpdatedBy =
-                    currentUser;
+                    resolvedUserId;
 
                 model.IsActive =
                     true;
@@ -397,6 +468,8 @@ namespace SpicAPI.Controllers
         {
             try
             {
+                await NormalizeCSR1UserIdsAsync();
+
                 var items = await _csr1Repo
                     .GetAll()
                     .OrderByDescending(x => x.Id)
@@ -429,6 +502,8 @@ namespace SpicAPI.Controllers
         {
             try
             {
+                await NormalizeCSR1UserIdsAsync();
+
                 var items = await _csr1Repo
                     .GetAllWithInactive()
                     .OrderByDescending(x => x.Id)
@@ -461,6 +536,8 @@ namespace SpicAPI.Controllers
         {
             try
             {
+                await NormalizeCSR1UserIdsAsync();
+
                 var item =
                     await _csr1Repo.GetByIdAsync(id);
 
@@ -618,14 +695,27 @@ namespace SpicAPI.Controllers
                 entity.Id =
                     id;
 
+                var currentUserId = CurrentUserId;
+                var resolvedUserId = (!string.IsNullOrWhiteSpace(currentUserId) && currentUserId != "System" && currentUserId.Contains("-"))
+                    ? currentUserId
+                    : (!string.IsNullOrWhiteSpace(entity.UpdatedBy) && entity.UpdatedBy.Contains("-") ? entity.UpdatedBy : currentUserId);
+
+                // Preserve CreatedBy, but heal if existing record saved username instead of ID
+                var createdBy = existing.CreatedBy;
+                if ((string.IsNullOrWhiteSpace(createdBy) || !createdBy.Contains("-")) 
+                    && !string.IsNullOrWhiteSpace(entity.CreatedBy) && entity.CreatedBy.Contains("-"))
+                {
+                    createdBy = entity.CreatedBy;
+                }
+
                 entity.CreatedBy =
-                    existing.CreatedBy;
+                    createdBy;
 
                 entity.CreatedAt =
                     existing.CreatedAt;
 
                 entity.UpdatedBy =
-                    User?.Identity?.Name ?? "System";
+                    resolvedUserId;
 
                 entity.UpdatedAt =
                     DateTime.Now;
@@ -916,6 +1006,8 @@ namespace SpicAPI.Controllers
         {
             try
             {
+                await NormalizeCSR1UserIdsAsync();
+
                 var csr1Records = await _csr1Repo
                     .GetAll()
                     .OrderByDescending(x => x.Id)
@@ -1024,6 +1116,8 @@ namespace SpicAPI.Controllers
         {
             try
             {
+                await NormalizeCSR1UserIdsAsync();
+
                 // =====================================================
                 // CSR1
                 // =====================================================
@@ -1143,6 +1237,16 @@ namespace SpicAPI.Controllers
                 // RESPONSE
                 // =====================================================
 
+                var createdByUser = !string.IsNullOrEmpty(csr1.CreatedBy)
+                    ? await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == csr1.CreatedBy)
+                    : null;
+                var createdByName = createdByUser?.Name ?? createdByUser?.UserName ?? csr1.CreatedBy;
+
+                var updatedByUser = !string.IsNullOrEmpty(csr1.UpdatedBy)
+                    ? await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == csr1.UpdatedBy)
+                    : null;
+                var updatedByName = updatedByUser?.Name ?? updatedByUser?.UserName ?? csr1.UpdatedBy;
+
                 var result =
                     new CSR1DetailsDto
                     {
@@ -1230,12 +1334,18 @@ namespace SpicAPI.Controllers
                             csr1.Remarks,
 
                         CreatedBy =
+                            createdByName,
+
+                        CreatedById =
                             csr1.CreatedBy,
 
                         CreatedAt =
                             csr1.CreatedAt,
 
                         UpdatedBy =
+                            updatedByName,
+
+                        UpdatedById =
                             csr1.UpdatedBy,
 
                         UpdatedAt =
