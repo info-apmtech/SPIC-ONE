@@ -1285,7 +1285,8 @@ namespace SpicAPI.Controllers
 				LineItems = lines,
 				AdvancePayment = advancePayment,
 				ExistingBillId = existing?.Id,
-				ExistingBillNumber = existing?.BillNumber
+				ExistingBillNumber = existing?.BillNumber,
+				IsComplimentary = booking.Payments.Any(p => p.PaymentMethod == GuestHousePaymentMethod.Complimentary)
 			};
 
 			return Ok(draft);
@@ -1635,6 +1636,10 @@ namespace SpicAPI.Controllers
 		public decimal? AdvancePayment { get; set; }
 		public int? ExistingBillId { get; set; }
 		public string? ExistingBillNumber { get; set; }
+
+		// True for a free (₹0) employee booking (payment method Complimentary). Lets the
+		// Generate Bill page keep the ₹0 Room line so the bill still has a line item.
+		public bool IsComplimentary { get; set; }
 	}
 
 	public class BillListItemDto

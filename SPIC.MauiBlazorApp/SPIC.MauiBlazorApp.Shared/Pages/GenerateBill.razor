@@ -515,6 +515,10 @@
                                 <option value="2">Card</option>
                                 <option value="3">Net Banking</option>
                                 <option value="4">Cash</option>
+                                @if (_draft?.IsComplimentary == true)
+                                {
+                                    <option value="5">Complimentary</option>
+                                }
                             </select>
                         </div>
                         <div style="display:flex; align-items:center; gap:8px;">
@@ -1061,7 +1065,8 @@
         _discount = 0;
         _advance = _draft?.AdvancePayment ?? 0;
         _roundOff = 0;
-        _paymentMethod = 0;
+        // A Complimentary booking's bill records Complimentary (5) as its payment method.
+        _paymentMethod = _draft?.IsComplimentary == true ? 5 : 0;
         _paymentReceived = true;
         _remarks = "";
     }
@@ -1224,8 +1229,11 @@
             var payload = new
             {
                 BookingId = _draft.BookingId,
+                // Zero-value lines are dropped as before. A Complimentary (free employee)
+                // booking is ₹0 throughout, so its Room line is kept (actual quantity, ₹0
+                // rate) - otherwise the bill would have no line item at all.
                 LineItems = _billItems
-                    .Where(l => l.Amount != 0)
+                    .Where(l => l.Amount != 0 || (_draft.IsComplimentary && l.Category == BillItemCategory.Room))
                     .Select(l => new
                     {
                         Description = l.Description,
@@ -1346,6 +1354,7 @@
         1 => "UPI",
         2 => "Card",
         3 => "Net Banking",
+        5 => "Complimentary",
         _ => method.ToString()
     };
 
@@ -1465,6 +1474,7 @@
         public decimal? AdvancePayment { get; set; }
         public int? ExistingBillId { get; set; }
         public string? ExistingBillNumber { get; set; }
+        public bool IsComplimentary { get; set; }
     }
 
     public class CompletedBookingForBillingDto

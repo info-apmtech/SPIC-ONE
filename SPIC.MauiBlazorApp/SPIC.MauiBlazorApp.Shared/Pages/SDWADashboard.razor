@@ -2,7 +2,9 @@
 @inject NavigationManager NavigationManager
 @inject HttpClient Http
 @inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
 @using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 
 
 <PageHeader Title="Dashboard" Subtitle="Welfare applications and guest house bookings" ShowBack="false" />
@@ -120,6 +122,8 @@
   <div class="qa-panel-ttl">Quick Actions</div>
   <div class="qact-grid">
 
+    @if (!IsSdwaAdmin)
+    {
     <div class="qact-cell theme-yellow">
       <div class="qact-icon-wrap">
         <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -162,6 +166,7 @@
       <div class="qact-hint">Track your submitted welfare applications.</div>
       <button class="qact-go-btn" @onclick="NavigateToMyApplications">View Now</button>
     </div>
+    }
 
     <div class="qact-cell theme-pink">
       <div class="qact-icon-wrap">
@@ -649,6 +654,13 @@
     private bool _showEligibilityModal = false;
     private EligibilityResultDto? _eligibilityResult;
     private string? _eligibilityError;
+
+    // SDWA Admin is resolved from the user's EXISTING Designation RoleAccess
+    // (PagePermission.SDWAAdmin), matching WelfareSchemeApprovalController's server-side
+    // check. HasPageStrict (not CanAccess) so the Admin / SuperAdmin role bypass does not
+    // count as SDWA Admin. SDWA Admins don't apply for welfare, so the Apply Welfare /
+    // My Applications cards are hidden for them.
+    private bool IsSdwaAdmin => loginState.HasPageStrict(PagePermission.SDWAAdmin);
 
     private MyBookingDto? _dashBooking;
     private bool _isLoadingBooking = true;

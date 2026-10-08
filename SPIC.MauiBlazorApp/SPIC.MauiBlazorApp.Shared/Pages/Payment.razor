@@ -6,6 +6,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
 @inject ToastService Toast
 @inject IJSRuntime JS
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 @using System.Globalization
 @using System.Net.Http.Json
@@ -470,7 +471,22 @@
                     <h3 class="payment-card-title">Select Payment Method</h3>
                 </div>
                 <div class="payment-card-body">
-                    
+
+                    @if (ShowComplimentary)
+                    {
+                    <div class="payment-option active">
+                        <div class="pay-icon-box icon-paylater">
+                            <i class="bi bi-gift"></i>
+                        </div>
+                        <div class="pay-details">
+                            <div class="pay-name">Complimentary (Employee)</div>
+                            <div class="pay-desc">Free booking for company employees. No payment required.</div>
+                        </div>
+                        <div class="custom-radio"></div>
+                    </div>
+                    }
+                    else
+                    {
                     <div class="payment-option @(selectedMethod == "Online" ? "active" : "")" @onclick='() => SelectPaymentMethod("Online")'>
                         <div class="pay-icon-box icon-razorpay">
                             <i class="bi bi-shield-check"></i>
@@ -481,6 +497,7 @@
                         </div>
                         <div class="custom-radio"></div>
                     </div>
+                    }
 
                     @* Pay After Stay / Cash After Payment - temporarily hidden from the payment
                        selection UI so Online Payment (Razorpay) is the only selectable option.
@@ -504,7 +521,24 @@
                 </div>
             </div>
 
-            @if (selectedMethod == "PayAfterStay")
+            @if (ShowComplimentary)
+            {
+                <div class="payment-card">
+                    <div class="payment-card-header">
+                        <h3 class="payment-card-title">Complimentary (Employee)</h3>
+                    </div>
+                    <div class="payment-card-body">
+                        <div class="info-alert info-alert-green">
+                            <i class="bi bi-info-circle"></i>
+                            <div>
+                                As a company employee, this booking is free of charge. No online payment
+                                is required - your booking is confirmed as soon as you complete it.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            else if (selectedMethod == "PayAfterStay")
             {
                 <div class="payment-card">
                     <div class="payment-card-header">
@@ -608,8 +642,8 @@
                     <div class="summary-divider"></div>
 
                     <div class="kv-row mt-3">
-                        <span class="kv-label total-lbl">Total</span>
-                        <span class="kv-value total-val">@_money(BookingState.Total)</span>
+                        <span class="kv-label total-lbl">Total@(ShowComplimentary ? " (Complimentary)" : "")</span>
+                        <span class="kv-value total-val">@_money(DisplayTotal)</span>
                     </div>
 
                 </div>
@@ -665,7 +699,11 @@
                 </div>
                 <div>
                     <div class="m-lbl mb-1 text-end">Payment Status</div>
-                    @if (IsPayAfterStay)
+                    @if (_isFreeBooking)
+                    {
+                        <span class="status-pill-confirmed">Complimentary</span>
+                    }
+                    else if (IsPayAfterStay)
                     {
                         <span class="status-pill-pending">Pay After Stay</span>
                     }
@@ -703,11 +741,18 @@
                 </div>
                 <div class="m-row">
                     <span class="m-lbl">Total Amount</span>
-                    <span class="m-val">@_money(BookingState.Total)</span>
+                    <span class="m-val">@_money(DisplayTotal)</span>
                 </div>
             </div>
 
-            @if (IsPayAfterStay)
+            @if (_isFreeBooking)
+            {
+                <div class="modal-alert modal-alert-green">
+                    <i class="bi bi-check-circle"></i>
+                    <div>Complimentary (Employee) booking - no payment is required.</div>
+                </div>
+            }
+            else if (IsPayAfterStay)
             {
                 <div class="modal-alert modal-alert-green">
                     <i class="bi bi-info-circle"></i>
@@ -758,6 +803,14 @@
     private string _bookingReference = "";
     private string? _documentWarning;
     private bool IsPayAfterStay => selectedMethod == "PayAfterStay";
+
+    // Employee free booking. The SERVER decides (BookingResultDto.IsFreeBooking, from the
+    // authenticated AppRole); the role check here only drives the display before submitting.
+    // Once a paid booking exists (_pendingBookingId) the Razorpay UI is shown as before.
+    private bool _isFreeBooking;
+    private bool ShowComplimentary => _isFreeBooking
+        || (!_pendingBookingId.HasValue && SPIC.Core.Entities.GuestHouseBookingPolicy.IsEmployeeFreeBooking(LoginState.UserRole));
+    private decimal DisplayTotal => ShowComplimentary ? 0m : BookingState.Total;
 
     // Set once the booking row exists (Draft/PendingPayment) so a page reload of the
     // Payment step, a dismissed Checkout, or a failed attempt never re-submits the
@@ -863,7 +916,13 @@
                     _bookingReference = result.BookingReference;
                     _documentWarning = result.DocumentWarning;
 
-                    if (IsPayAfterStay)
+                    if (result.IsFreeBooking)
+                    {
+                        // Free employee booking: already Confirmed + Paid (₹0) server-side - never open Razorpay.
+                        _isFreeBooking = true;
+                        isBookingConfirmed = true;
+                    }
+                    else if (IsPayAfterStay)
                     {
                         // Unchanged: no online payment involved, booking is already Confirmed server-side.
                         isBookingConfirmed = true;
@@ -1155,6 +1214,7 @@
         public int NumberOfNights { get; set; }
         public decimal TotalAmount { get; set; }
         public int PaymentMethod { get; set; }
+        public bool IsFreeBooking { get; set; }
         public string? DocumentWarning { get; set; }
     }
 
