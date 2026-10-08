@@ -277,12 +277,8 @@
 
 
 @code {
-    private DateTime? FromDate { get; set; } =
-        new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
-
-
-    private DateTime? ToDate { get; set; } =
-        DateTime.Now;
+    private DateTime? FromDate { get; set; } = null;
+    private DateTime? ToDate { get; set; } = null;
     private bool _isLoading = false;
 
     private bool isBudgetSubmissionsDrawerOpen = false;
@@ -471,6 +467,12 @@
                 items.Count(x =>
                     string.Equals(
                         x.Status,
+                        "Pending",
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                    ||
+                    string.Equals(
+                        x.Status,
                         "Submitted",
                         StringComparison.OrdinalIgnoreCase
                     )
@@ -501,62 +503,66 @@
 
     private IEnumerable<BudgetSubmissionDto> FilteredSubmissions =>
       submissions
-
       .Where(x =>
           string.IsNullOrEmpty(selectedProgramType)
           ||
-          x.ProgramType == selectedProgramType)
-
+          string.Equals(x.ProgramType, selectedProgramType, StringComparison.OrdinalIgnoreCase))
       .Where(x =>
           string.IsNullOrEmpty(selectedProgramName)
           ||
-          x.ProgramName == selectedProgramName)
-
+          string.Equals(x.ProgramName, selectedProgramName, StringComparison.OrdinalIgnoreCase))
       .Where(x =>
           string.IsNullOrEmpty(selectedStatus)
           ||
-          x.Status == selectedStatus)
-
+          string.Equals(x.Status, selectedStatus, StringComparison.OrdinalIgnoreCase))
       .Where(x =>
           !FromDate.HasValue
           ||
           x.SubmittedDate.Date >= FromDate.Value.Date)
-
       .Where(x =>
           !ToDate.HasValue
           ||
           x.SubmittedDate.Date <= ToDate.Value.Date)
-
       .Where(x =>
           string.IsNullOrEmpty(_searchText)
           ||
-          x.ProgramName.Contains(
-              _searchText,
-              StringComparison.OrdinalIgnoreCase)
+          (!string.IsNullOrEmpty(x.ProgramName) && x.ProgramName.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
           ||
-          x.ProgramType.Contains(
-              _searchText,
-              StringComparison.OrdinalIgnoreCase));
+          (!string.IsNullOrEmpty(x.ProgramType) && x.ProgramType.Contains(_searchText, StringComparison.OrdinalIgnoreCase)));
 
 
     private List<string> ProgramTypes =>
-        submissions.Select(x => x.ProgramType).Distinct().ToList();
+        submissions
+            .Select(x => x.ProgramType)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
 
 
     private List<string> ProgramNames =>
     submissions
         .Where(x =>
             string.IsNullOrEmpty(selectedProgramType)
-            || x.ProgramType == selectedProgramType)
+            || string.Equals(x.ProgramType, selectedProgramType, StringComparison.OrdinalIgnoreCase))
         .Select(x => x.ProgramName)
         .Where(x => !string.IsNullOrWhiteSpace(x))
-        .Distinct()
+        .Distinct(StringComparer.OrdinalIgnoreCase)
         .OrderBy(x => x)
         .ToList();
 
 
-    private List<string> StatusList =>
-        submissions.Select(x => x.Status).Distinct().ToList();
+    private List<string> StatusList
+    {
+        get
+        {
+            var standard = new[] { "Draft", "Submitted", "Validated", "Approved", "Rejected" };
+            var fromData = submissions
+                .Select(x => x.Status)
+                .Where(x => !string.IsNullOrWhiteSpace(x));
+            return standard.Union(fromData, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+    }
 
 
     private void ApplyFilter()

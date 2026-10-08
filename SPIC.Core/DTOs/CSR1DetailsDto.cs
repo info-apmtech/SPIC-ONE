@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -52,9 +52,13 @@ namespace SPIC.Core.DTOs
 
         public string? CreatedBy { get; set; }
 
+        public string? CreatedById { get; set; }
+
         public DateTime CreatedAt { get; set; }
 
         public string? UpdatedBy { get; set; }
+
+        public string? UpdatedById { get; set; }
 
         public DateTime? UpdatedAt { get; set; }
 
