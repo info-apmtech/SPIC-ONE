@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -9,6 +10,7 @@ using SpicAPI.Services;
 using SPIC.Core.Entities;
 using System.Data;
 using System.Globalization;
+using System.Security.Claims;
 
 namespace SpicAPI.Controllers
 {
@@ -29,9 +31,17 @@ namespace SpicAPI.Controllers
 	///
 	/// Accessible only to Admin / CorporateAdmin (the existing administrative roles).
 	/// </summary>
+	/// <remarks>
+	/// Reads are additionally open to the Designation permission of the SDWA page that owns them
+	/// (FrontOffice / GenerateBill / GuestHouseCancellations); see
+	/// <see cref="GuestHouseFrontOfficeAccessAttribute"/> below. The old class-level
+	/// [Authorize(Roles = "Admin,CorporateAdmin")] could only read the JWT role claim and therefore
+	/// never saw a Designation. Every write stays Admin / CorporateAdmin only.
+	/// </remarks>
 	[ApiController]
 	[Route("api/[controller]")]
-	[Authorize(Roles = "Admin,CorporateAdmin")]
+	[Authorize]
+	[GuestHouseFrontOfficeAccess]
 	public class GuestHouseFrontOfficeController : ControllerBase
 	{
 		private readonly AppDbContext _db;
@@ -1757,5 +1767,90 @@ namespace SpicAPI.Controllers
 		public string? Remarks { get; set; }
 		public string? RefundReference { get; set; }
 		public DateTime? EstimatedRefundDate { get; set; } // 2-working-day target (client requirement)
+	}
+
+	/// <summary>
+	/// Read/write gate for the Front Office cluster (Front Office / Generate Bill / Cancellation Requests).
+	///
+	/// Admin + CorporateAdmin keep every endpoint exactly as they did under
+	/// [Authorize(Roles = "Admin,CorporateAdmin")].
+	///
+	/// Everything else must be an authenticated GET whose route maps to a PagePermission that this
+	/// user's Designation (Designation.RoleAccess) actually grants - the same PagePermission the
+	/// sidebar, ShellNavigation.PermissionKey and PageGuard already use for that page. Every non-GET
+	/// (check-in, payment, check-out, generate bill, approve, reject) keeps the original
+	/// Admin / CorporateAdmin-only restriction.
+	/// </summary>
+	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
+	internal sealed class GuestHouseFrontOfficeAccessAttribute : Attribute, IAsyncAuthorizationFilter
+	{
+		public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+		{
+			var user = context.HttpContext.User;
+			if (user?.Identity?.IsAuthenticated != true)
+			{
+				context.Result = new UnauthorizedObjectResult(new { Success = false, Message = "Authentication required." });
+				return;
+			}
+
+			// Existing role rule, verbatim from [Authorize(Roles = "Admin,CorporateAdmin")].
+			if (user.IsInRole(nameof(AppRole.Admin)) || user.IsInRole(nameof(AppRole.CorporateAdmin)))
+				return;
+
+			// Actions stay Admin / CorporateAdmin only - this filter only opens READS.
+			if (!string.Equals(context.HttpContext.Request.Method, "GET", StringComparison.OrdinalIgnoreCase))
+			{
+				context.Result = Forbidden();
+				return;
+			}
+
+			var requiredPermission = RequiredReadPermission(context.HttpContext.Request.Path.Value ?? string.Empty);
+			if (requiredPermission is null)
+			{
+				context.Result = Forbidden();
+				return;
+			}
+
+			// Designation rule: does THIS user's Designation.RoleAccess grant that PagePermission?
+			var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (!string.IsNullOrWhiteSpace(userId))
+			{
+				var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+				var designationId = await db.Users
+					.AsNoTracking()
+					.Where(u => u.Id == userId)
+					.Select(u => u.DesignationId)
+					.FirstOrDefaultAsync();
+
+				if (designationId is > 0)
+				{
+					var roleAccess = await db.Designations
+						.AsNoTracking()
+						.Where(d => d.Id == designationId && d.IsActive)
+						.Select(d => d.RoleAccess)
+						.FirstOrDefaultAsync();
+
+					if (RoleAccessPermissions.HasPage(roleAccess, requiredPermission.Value))
+						return;
+				}
+			}
+
+			context.Result = Forbidden();
+		}
+
+		// Route -> the PagePermission of the SDWA page that reads it. Unmapped GETs stay closed.
+		private static PagePermission? RequiredReadPermission(string path) =>
+			path.Contains("/cancellations", StringComparison.OrdinalIgnoreCase) ? PagePermission.GuestHouseCancellations
+			: path.Contains("/bill", StringComparison.OrdinalIgnoreCase) ? PagePermission.GenerateBill
+			: path.Contains("/rooms", StringComparison.OrdinalIgnoreCase) ? PagePermission.FrontOffice
+			: path.Contains("/bookings/", StringComparison.OrdinalIgnoreCase) ? PagePermission.FrontOffice
+			: path.Contains("/checkout/", StringComparison.OrdinalIgnoreCase) ? PagePermission.FrontOffice
+			: null;
+
+		private static ObjectResult Forbidden() =>
+			new(new { Success = false, Message = "You do not have permission to view this data." })
+			{
+				StatusCode = StatusCodes.Status403Forbidden
+			};
 	}
 }
