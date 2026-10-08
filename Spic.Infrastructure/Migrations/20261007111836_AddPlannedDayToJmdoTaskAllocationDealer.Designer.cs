@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261007111836_AddPlannedDayToJmdoTaskAllocationDealer")]
+    partial class AddPlannedDayToJmdoTaskAllocationDealer
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2203,45 +2206,6 @@ namespace Spic.Infrastructure.Migrations
                             SortOrder = 120,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 122,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "FarmDashboard",
-                            Name = "Farm Dashboard",
-                            SortOrder = 121,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 123,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "IfmsAutoImport",
-                            Name = "Ifms Auto Import",
-                            SortOrder = 122,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 124,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "ProgramMaster",
-                            Name = "Program Master",
-                            SortOrder = 123,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
                         });
                 });
 
@@ -2409,9 +2373,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("FinancialYear")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<int?>("HeadQuartersId")
-                        .HasColumnType("integer");
 
                     b.Property<int?>("RegionId")
                         .HasColumnType("integer");
@@ -8234,9 +8195,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("BudgetAmount")
                         .HasColumnType("numeric");
 
-                    b.Property<bool>("IsApplicable")
-                        .HasColumnType("boolean");
-
                     b.Property<int>("ProgramId")
                         .HasColumnType("integer");
 
@@ -8250,46 +8208,6 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("StateId");
 
                     b.ToTable("ProgramStateBudgets");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.ProgramStateMapping", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsApplicable")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("ProgramId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("StateId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StateId");
-
-                    b.HasIndex("ProgramId", "StateId")
-                        .IsUnique();
-
-                    b.ToTable("ProgramStateMappings");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.ProgramType", b =>
@@ -12256,25 +12174,6 @@ namespace Spic.Infrastructure.Migrations
                         .WithMany()
                         .HasForeignKey("StateId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Program");
-
-                    b.Navigation("State");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.ProgramStateMapping", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.ProgramMaster", "Program")
-                        .WithMany()
-                        .HasForeignKey("ProgramId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("SPIC.Core.Entities.State", "State")
-                        .WithMany()
-                        .HasForeignKey("StateId")
-                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Program");

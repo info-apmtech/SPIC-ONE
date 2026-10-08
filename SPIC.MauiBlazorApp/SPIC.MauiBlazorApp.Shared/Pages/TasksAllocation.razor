@@ -78,7 +78,25 @@
                         @if (currentStep == 1)
                         {
                             <div class="ta-step-panel">
-                                <p class="ta-step-instruction">Step 1 of 5 &mdash; select the dealer tasks you plan to work on today.</p>
+                                <p class="ta-step-instruction">Step 1 of 5 &mdash; plan which dealers you'll visit on each day of the week.</p>
+
+                                <div class="ta-day-tabs" role="tablist">
+                                    @foreach (var day in WeekDays)
+                                    {
+                                        var count = selectionsByDay[day].Count;
+                                        <button type="button"
+                                                class="ta-day-tab @(selectedDay == day ? "active" : "")"
+                                                role="tab"
+                                                aria-selected="@(selectedDay == day ? "true" : "false")"
+                                                @onclick="() => selectedDay = day">
+                                            @DayLabel(day)
+                                            @if (count > 0)
+                                            {
+                                                <span class="ta-day-tab-count">@count</span>
+                                            }
+                                        </button>
+                                    }
+                                </div>
 
                                 <div class="ta-step-toolbar">
                                     <div class="ta-search-box">
@@ -101,10 +119,11 @@
                                     {
                                         @foreach (var dealer in FilteredDealers)
                                         {
-                                            <div class="ta-dealer-card @(dealer.IsSelected ? "selected" : "")" @onclick="() => ToggleDealer(dealer)">
+                                            var isSelected = IsDealerSelected(dealer);
+                                            <div class="ta-dealer-card @(isSelected ? "selected" : "")" @onclick="() => ToggleDealer(dealer)">
                                                 <div class="ta-dealer-top">
-                                                    <span class="ta-checkbox @(dealer.IsSelected ? "checked" : "")">
-                                                        @if (dealer.IsSelected)
+                                                    <span class="ta-checkbox @(isSelected ? "checked" : "")">
+                                                        @if (isSelected)
                                                         {
                                                             <i class="bi bi-check-lg"></i>
                                                         }
@@ -170,16 +189,17 @@
 
                                 <div class="ta-step-footer">
                                     <div class="ta-selected-summary">
-                                        @if (SelectedDealers.Any())
+                                        @{ var selectedForDay = SelectedDealersFor(selectedDay).ToList(); }
+                                        @if (selectedForDay.Any())
                                         {
-                                            @string.Join("  ·  ", SelectedDealers.Select(d => $"{d.Name} - dealer Code : {d.DealerCode}"))
+                                            @($"{DayLabel(selectedDay)}: ") @string.Join("  ·  ", selectedForDay.Select(d => $"{d.Name} - dealer Code : {d.DealerCode}"))
                                         }
                                         else
                                         {
-                                            <span>Select at least one dealer to continue.</span>
+                                            <span>Select at least one dealer for @DayLabel(selectedDay), or switch tabs to plan another day.</span>
                                         }
                                     </div>
-                                    <button type="button" class="ta-btn ta-btn-next" disabled="@(!SelectedDealers.Any())" @onclick="() => GoToStep(2)">
+                                    <button type="button" class="ta-btn ta-btn-next" disabled="@(!HasAnyDealerSelection)" @onclick="() => GoToStep(2)">
                                         Next: SPCM Target <i class="bi bi-arrow-right"></i>
                                     </button>
                                 </div>
@@ -737,10 +757,20 @@
     protected override async Task OnInitializedAsync()
     {
         await Task.WhenAll(
-            LoadDealersAsync(),
+            LoadDealersWithEnrichmentAsync(),
             LoadProgramsAsync(),
             LookupCache.EnsureLoadedAsync(),
             CheckExistingAllocationAsync());
+    }
+
+    // Enrichment (Pending Ack./PoS Liquidation) is scope-only, so it doesn't
+    // need the dealer list first - load it before LoadDealersAsync so the
+    // dealer cards can be populated with real values on first render instead
+    // of needing a second re-render pass.
+    private async Task LoadDealersWithEnrichmentAsync()
+    {
+        await LoadDealerEnrichmentAsync();
+        await LoadDealersAsync();
     }
 
     private string HeaderSubtitle => currentTab switch
@@ -916,7 +946,9 @@
         {
             var dto = new JmdoTaskAllocationCreateDto
             {
-                DealerIds = SelectedDealers.Select(d => d.Id).ToList(),
+                DealerAssignments = selectionsByDay
+                    .SelectMany(kvp => kvp.Value.Select(dealerId => new JmdoDealerDayAssignmentDto { DealerId = dealerId, Day = kvp.Key }))
+                    .ToList(),
                 SpcmTarget = ParseTargetOrNull(spcmTarget),
                 SoilSampleTarget = ParseTargetOrNull(soilTarget),
                 ProgramIds = SelectedPrograms.Select(p => p.Id).ToList(),
@@ -969,6 +1001,12 @@
             var existing = await response.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
             if (existing is null) return;
 
+            foreach (var assignment in existing.DealerAssignments)
+            {
+                if (assignment.Day is { } day)
+                    selectionsByDay[day].Add(assignment.DealerId);
+            }
+
             submittedSummary = BuildSubmittedSummary(existing);
             isAllocationSubmitted = true;
         }
@@ -996,24 +1034,48 @@
         public int Id { get; init; }
         public string Name { get; init; } = "";
         public string DealerCode { get; init; } = "";
-        // No backend source yet for these four (confirmed via a repo-wide
-        // search - "Dues" doesn't exist anywhere server-side, and iFMS
-        // ID/PoS Liquidation/Pending Ack. live on other, unrelated APIs that
-        // aren't joined to the dealer list). Null renders as "—" below
-        // instead of a fabricated number.
+        // iFMS ID has no backend source anywhere in the system (confirmed via
+        // a repo-wide search - the one column that used to hold it was
+        // dropped by a past migration) and "Dues" has none either - both stay
+        // null and render as "—" below instead of a fabricated number.
+        // PosLiquidation/PendingAckMt are populated from the same real APIs
+        // that back the CompanySales (Pending Ack.) and LiquidationCycle
+        // pages, matched onto this dealer by DealerCode - see
+        // LoadDealerEnrichmentAsync.
         public string? IfmsId { get; init; }
         public string? PosLiquidation { get; init; }
         public int? DuesLakhs { get; init; }
         public int? PendingAckMt { get; init; }
         public string TypeLabel { get; init; } = "Dealer";
-        public bool IsSelected { get; set; }
     }
+
+    // Sun-Sat tabs (confirmed with the user: full weekly planning, not just a
+    // filter) - DayOfWeek's own numeric order already runs Sunday(0)..Saturday(6).
+    private static readonly DayOfWeek[] WeekDays =
+    {
+        DayOfWeek.Sunday, DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
+        DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday
+    };
+
+    private static string DayLabel(DayOfWeek day) => day.ToString();
+
+    private DayOfWeek selectedDay = DateTime.Today.DayOfWeek;
+
+    // One independent dealer-id set per weekday - a dealer can be picked for
+    // more than one day, and switching tabs must not lose another day's picks.
+    private readonly Dictionary<DayOfWeek, HashSet<int>> selectionsByDay =
+        WeekDays.ToDictionary(d => d, _ => new HashSet<int>());
 
     private string dealerSearch = "";
     private bool isLoadingDealers = true;
     private bool dealersLoadFailed;
 
     private readonly List<DealerOption> Dealers = new();
+
+    // Keyed by trimmed DealerCode (case-insensitive) - populated by
+    // LoadDealerEnrichmentAsync before the dealer list is built.
+    private Dictionary<string, int> pendingAckByDealerCode = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> liquidationByDealerCode = new(StringComparer.OrdinalIgnoreCase);
 
     // Real dealer list, scoped to the signed-in JMDO/MDO/MO's HQ (falling
     // back to region/state) - same endpoint and scope-derivation pattern as
@@ -1037,11 +1099,24 @@
             var result = await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
 
             Dealers.Clear();
-            Dealers.AddRange((result?.Items ?? new()).Select(item => new DealerOption
+            Dealers.AddRange((result?.Items ?? new()).Select(item =>
             {
-                Id = item.Id,
-                Name = item.FirmName,
-                DealerCode = item.SubDealerCode
+                var code = item.SubDealerCode?.Trim() ?? "";
+                return new DealerOption
+                {
+                    Id = item.Id,
+                    Name = item.FirmName,
+                    DealerCode = item.SubDealerCode,
+                    // SubDealerRegistration carries both a wholesale and a
+                    // retail mFMS id slot per dealer, but never both at once
+                    // in practice - whichever is populated is this dealer's
+                    // real type (replaces the old generic "Dealer" badge).
+                    TypeLabel = !string.IsNullOrWhiteSpace(item.WholesaleMFMSId) ? "Wholesaler"
+                        : !string.IsNullOrWhiteSpace(item.RetailMFMSId) ? "Retailer"
+                        : "Dealer",
+                    PendingAckMt = pendingAckByDealerCode.TryGetValue(code, out var ack) ? ack : null,
+                    PosLiquidation = liquidationByDealerCode.TryGetValue(code, out var liq) ? liq : null
+                };
             }));
         }
         catch (Exception ex)
@@ -1056,6 +1131,57 @@
         }
     }
 
+    // Pulls real figures onto the dealer cards from the same dashboards
+    // CompanySales (Pending Ack.) and LiquidationCycle already use. There's
+    // no formal FK between SubDealerRegistration and these two systems'
+    // dealer records, so rows are matched onto a dealer by DealerCode -
+    // the one field both sides carry.
+    private async Task LoadDealerEnrichmentAsync()
+    {
+        try
+        {
+            var pendingAckFilter = new PendingAckFilter { PageSize = 2000 };
+            var liqFilter = new LiqCycleFilter { PageSize = 2000 };
+            ApplyLocationScope(pendingAckFilter.HeadQuarterIds, pendingAckFilter.RegionIds, pendingAckFilter.StateIds);
+            ApplyLocationScope(liqFilter.HeadQuarterIds, liqFilter.RegionIds, liqFilter.StateIds);
+
+            var pendingAckResponse = await Http.PostAsJsonAsync("api/PendingAck/dashboard", pendingAckFilter);
+            if (pendingAckResponse.IsSuccessStatusCode)
+            {
+                var dashboard = await pendingAckResponse.Content.ReadFromJsonAsync<PendingAckDashboardDto>();
+                pendingAckByDealerCode = (dashboard?.Grid.Items ?? new())
+                    .Where(r => !string.IsNullOrWhiteSpace(r.DealerCode))
+                    .GroupBy(r => r.DealerCode!.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => (int)Math.Round(g.Sum(r => r.QuantityMT)), StringComparer.OrdinalIgnoreCase);
+            }
+
+            var liqResponse = await Http.PostAsJsonAsync("api/LiquidationCycle/dashboard", liqFilter);
+            if (liqResponse.IsSuccessStatusCode)
+            {
+                var dashboard = await liqResponse.Content.ReadFromJsonAsync<LiqCycleDashboardDto>();
+                liquidationByDealerCode = (dashboard?.Grid.Items ?? new())
+                    .Where(r => !string.IsNullOrWhiteSpace(r.DealerCode))
+                    .GroupBy(r => r.DealerCode.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => $"{g.Sum(r => r.Stock):0.#} mT · {g.Max(r => r.AgeingDays)} days",
+                        StringComparer.OrdinalIgnoreCase);
+            }
+        }
+        catch (Exception ex)
+        {
+            // Non-fatal: the dealer cards simply show "—" for these two fields.
+            Console.WriteLine($"Dealer enrichment load failed: {ex.Message}");
+        }
+    }
+
+    private void ApplyLocationScope(List<int> hqIds, List<int> regionIds, List<int> stateIds)
+    {
+        if (LoginState.HQId > 0) hqIds.Add(LoginState.HQId);
+        else if (LoginState.RegionId > 0) regionIds.Add(LoginState.RegionId);
+        else if (LoginState.StateId > 0) stateIds.Add(LoginState.StateId);
+    }
+
     private IEnumerable<DealerOption> FilteredDealers =>
         string.IsNullOrWhiteSpace(dealerSearch)
             ? Dealers
@@ -1063,9 +1189,19 @@
                 d.Name.Contains(dealerSearch, StringComparison.OrdinalIgnoreCase) ||
                 d.DealerCode.Contains(dealerSearch, StringComparison.OrdinalIgnoreCase));
 
-    private IEnumerable<DealerOption> SelectedDealers => Dealers.Where(d => d.IsSelected);
+    private bool IsDealerSelected(DealerOption dealer) => selectionsByDay[selectedDay].Contains(dealer.Id);
 
-    private void ToggleDealer(DealerOption dealer) => dealer.IsSelected = !dealer.IsSelected;
+    private IEnumerable<DealerOption> SelectedDealersFor(DayOfWeek day) =>
+        Dealers.Where(d => selectionsByDay[day].Contains(d.Id));
+
+    private bool HasAnyDealerSelection => selectionsByDay.Values.Any(s => s.Count > 0);
+
+    private void ToggleDealer(DealerOption dealer)
+    {
+        var set = selectionsByDay[selectedDay];
+        if (!set.Add(dealer.Id))
+            set.Remove(dealer.Id);
+    }
 
     private sealed class ProgramOption
     {

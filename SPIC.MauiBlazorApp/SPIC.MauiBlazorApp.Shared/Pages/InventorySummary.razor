@@ -1,0 +1,693 @@
+@page "/InventorySummary"
+@inject NavigationManager Nav
+
+<PageTitle>Inventory Summary · SPIC ONE</PageTitle>
+
+<div class="is-page">
+
+        <PageHeader Title="Inventory Summary"
+                    Subtitle="View stock movement and closing balance for each 15-days reporting period (Livestock / Orchard)"
+                    ShowBack="false">
+            <Actions>
+                <button type="button" class="is-btn-back" @onclick="GoBack">
+                    <i class="bi bi-arrow-left"></i> Back to Inventory Entry
+                </button>
+            </Actions>
+        </PageHeader>
+
+    <!-- Filters -->
+    <div class="is-card is-filters-card">
+        <div class="is-filters-header" @onclick="ToggleFilters">
+            <div class="is-filters-title">
+                <i class="bi bi-filter"></i> Filters
+            </div>
+            <i class="bi @(filtersExpanded ? "bi-chevron-down" : "bi-chevron-up")"></i>
+        </div>
+        
+        @if (filtersExpanded)
+        {
+            <div class="is-filters-body">
+                <div class="is-filters-grid">
+                    <div class="is-filter-group">
+                        <label>Year</label>
+                        <select class="is-select-date">
+                            <option>2026</option>
+                        </select>
+                    </div>
+                    <div class="is-filter-group">
+                        <label>Month</label>
+                        <select class="is-select-date">
+                            <option>September</option>
+                        </select>
+                    </div>
+                    <div class="is-filter-group">
+                        <label>Reporting Period</label>
+                        <select class="is-select-chevron">
+                            <option>All Periods</option>
+                        </select>
+                    </div>
+                    <div class="is-filter-group">
+                        <label>Category</label>
+                        <select class="is-select-chevron">
+                            <option>All</option>
+                        </select>
+                    </div>
+                    <div class="is-filter-group">
+                        <label>Product</label>
+                        <select class="is-select-chevron">
+                            <option>All Product</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="is-filters-actions">
+                    <button type="button" class="is-btn-clear"><i class="bi bi-x"></i> Clear All</button>
+                    <button type="button" class="is-btn-primary"><i class="bi bi-filter"></i> Apply Filters</button>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Tabs -->
+    <div class="is-tabs">
+        <button type="button" class='is-tab active'>
+            <span class="is-tab-icon">
+                <svg width="20" height="20" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M19.2222 15.8052C19.2222 15.8052 21.5254 19.3314 21.5254 21.6725C21.5254 23.3159 20.1907 24.6517 18.5462 24.6517C16.9017 24.6517 15.5671 23.3159 15.5671 21.6725C15.5671 19.3314 17.8702 15.8052 17.8702 15.8052C17.9444 15.6939 18.045 15.6027 18.1629 15.5396C18.2808 15.4765 18.4125 15.4434 18.5462 15.4434C18.68 15.4434 18.8117 15.4765 18.9296 15.5396C19.0475 15.6027 19.148 15.6939 19.2222 15.8052ZM20.6641 11.7882C22.7333 12.2421 23.7982 13.6959 24.3605 14.7619L24.3919 14.8291C24.4935 15.0751 24.5329 15.3423 24.5067 15.6071C24.4806 15.8719 24.3896 16.1262 24.2418 16.3476C24.094 16.5689 23.894 16.7504 23.6595 16.8761C23.4249 17.0019 23.163 17.0679 22.8969 17.0684H20.4247L20.9469 14.4608C20.9707 14.338 20.983 14.2141 20.9837 14.0892C20.9837 13.2919 20.8721 12.5194 20.6641 11.7882ZM4.28089 12.4555C3.74464 11.9128 3.14773 11.2313 2.71114 10.5196C2.19981 9.68435 1.91706 8.79927 2.03406 8.0106C2.27456 6.39318 3.10114 5.7226 4.26898 5.2806C4.87889 5.04877 5.60364 4.89277 6.38581 4.64685C7.21889 4.38468 7.33048 3.87443 7.55148 3.42702C7.82773 2.86585 8.17764 2.34151 9.00639 1.9721C9.99331 1.53118 10.8535 1.69585 11.653 1.99268C12.1578 2.17901 12.6128 2.46935 13.0851 2.44443C13.447 2.42385 13.5997 2.24726 13.8056 2.09235C14.2216 1.77926 14.7156 1.44885 15.7707 1.36218C16.7934 1.27876 17.2776 1.59185 17.6579 1.99051C17.789 2.12918 17.9049 2.28626 18.0273 2.44876C18.1866 2.65893 18.3675 2.89185 18.7846 3.02076C19.3717 3.2006 19.9708 3.24826 20.5201 3.37285C21.6251 3.62418 22.5795 4.09868 23.1092 5.7096C23.4602 6.77668 23.132 7.97485 22.3704 8.98235C21.8115 9.70773 21.0902 10.2918 20.2644 10.6875C19.6046 9.20206 18.5283 7.93973 17.1659 7.05336C15.8035 6.16699 14.2133 5.69459 12.5879 5.69335C10.9546 5.69433 9.357 6.17106 7.99027 7.06528C6.62353 7.95951 5.54689 9.2325 4.89189 10.7287C4.87311 10.772 4.85614 10.8161 4.84098 10.8608L4.28089 12.4555Z" fill="currentColor"/>
+                    <path fill-rule="evenodd" clip-rule="evenodd" d="M15.6827 24.5528C15.5529 24.6232 15.4063 24.6568 15.2588 24.6502C15.1112 24.6435 14.9683 24.5967 14.8453 24.5149L12.046 22.6483L9.24666 24.5149C9.09027 24.6192 8.90255 24.6661 8.71548 24.6475C8.52841 24.6289 8.35356 24.5461 8.22074 24.413L6.46899 22.6602L2.65891 24.5647C2.51424 24.6376 2.35108 24.6655 2.19042 24.6448C2.02975 24.6242 1.87895 24.5559 1.75741 24.4489C1.63588 24.3418 1.54917 24.2008 1.50846 24.044C1.46776 23.8872 1.4749 23.7218 1.52899 23.5691L5.86232 11.2191L5.88507 11.1628C6.45441 9.85884 7.39179 8.74931 8.58233 7.97018C9.77286 7.19105 11.1648 6.77617 12.5877 6.77637C14.5268 6.77723 16.3863 7.54793 17.7574 8.9191C19.1286 10.2903 19.8993 12.1497 19.9002 14.0889C19.8987 14.1423 19.8932 14.1955 19.8839 14.2481L19.7723 14.8093C19.5677 14.6358 19.3287 14.5078 19.0709 14.4335C18.8132 14.3593 18.5426 14.3407 18.2771 14.3787C18.0116 14.4168 17.7572 14.5108 17.5307 14.6545C17.3042 14.7982 17.1108 14.9883 16.9632 15.2123C16.9632 15.2123 14.4835 19.1025 14.4835 21.6722C14.4835 22.7978 14.9417 23.8172 15.6827 24.5528ZM15.0252 11.3805C14.9185 11.3805 14.8128 11.4016 14.7142 11.4424C14.6157 11.4832 14.5261 11.5431 14.4506 11.6185C14.3752 11.694 14.3153 11.7835 14.2745 11.8821C14.2337 11.9807 14.2127 12.0863 14.2127 12.193C14.2127 12.2997 14.2337 12.4054 14.2745 12.504C14.3153 12.6025 14.3752 12.6921 14.4506 12.7676C14.5261 12.843 14.6157 12.9029 14.7142 12.9437C14.8128 12.9845 14.9185 13.0055 15.0252 13.0055C15.2406 13.0055 15.4473 12.9199 15.5997 12.7676C15.7521 12.6152 15.8377 12.4085 15.8377 12.193C15.8377 11.9775 15.7521 11.7709 15.5997 11.6185C15.4473 11.4661 15.2406 11.3805 15.0252 11.3805Z" fill="currentColor"/>
+                </svg>
+            </span> Chicken
+        </button>
+        <button type="button" class='is-tab'>
+            <span class="is-tab-icon">
+                <svg width="20" height="20" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18.3465 23.1412C13.9614 23.1412 10.693 19.4241 10.693 14.7223C10.693 9.58675 14.4861 2.85938 18.3465 2.85938C22.1763 2.85938 26 9.71315 26 14.7223C26 19.2979 22.6778 23.1412 18.3465 23.1412ZM10.9939 20.7793C8.39591 22.1361 5.03812 21.6417 2.98981 19.2006C0.176954 15.8484 -1.20333 9.23129 1.33188 7.10399C3.24119 5.50187 7.32256 6.57415 10.4343 8.65438C9.63439 10.6003 9.16234 12.7186 9.16234 14.7223C9.16229 17.0149 9.83555 19.1096 10.9939 20.7793Z" fill="currentColor"/>
+                </svg>
+            </span> Chicken Eggs
+        </button>
+        <button type="button" class='is-tab'>
+            <span class="is-tab-icon">
+                <svg width="20" height="20" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20.2448 12.9045C20.613 10.7521 17.6676 8.6846 17.1295 8.85453C16.5914 8.99613 15.2037 9.16606 14.354 9.95906C13.5044 10.7521 11.3236 9.95906 11.3236 9.95906C10.389 9.73249 7.13207 13.1877 5.63104 14.8303C5.03629 15.4817 4.69643 16.303 4.66811 17.181C4.58315 20.4663 7.10375 22.3355 8.49149 23.1285C9.00128 23.4117 9.62434 23.2984 10.0208 22.8736L12.0033 20.7212C12.0033 20.7212 19.1403 22.2222 20.2448 22.1372C20.8113 22.1089 21.4343 22.3355 21.8875 22.5621C22.5106 22.8736 23.2469 22.7886 23.785 22.3921C24.1815 22.1089 24.663 21.6841 25.2011 21.0893C26.6738 19.4184 20.2448 12.9045 20.2448 12.9045ZM16.1099 15.0286C15.6001 15.0003 15.0337 14.0373 15.0337 14.0373C15.7807 14.9004 17.1861 14.0373 17.1861 14.0373C17.1861 14.0373 16.648 15.0569 16.1099 15.0286Z" fill="currentColor"/>
+                    <path d="M11.3515 9.47712C11.3515 9.47712 12.9658 10.0436 13.7021 9.73202C14.4385 9.42048 15.3164 8.82573 15.3164 8.82573C15.3164 8.82573 12.2011 4.94571 8.26443 5.03067C4.32776 5.11564 1.9346 7.40963 1 10.2984C1 10.2984 3.27987 7.01313 4.89418 6.75824C6.5085 6.50335 9.85042 6.75824 11.3515 9.47712Z" fill="currentColor"/>
+                    <path d="M9.85078 4.69075C9.85078 4.69075 9.85078 3.86324 10.134 3.9482C10.4172 4.00484 11.8899 4.69075 12.6829 6.10682C12.6829 6.10682 14.8353 7.38128 15.685 8.5991L16.478 8.31588C16.478 8.31588 13.0794 2.62329 10.134 3.01979C10.134 3.01979 8.66128 3.1614 9.85078 4.69075ZM18.2339 8.82567L21.0908 5.7736L16.7612 8.03267L17.3276 8.5991L18.2339 8.82567ZM19.2251 9.47706C19.8765 9.36377 21.151 8.17428 21.8024 6.95646C22.4538 5.73864 22.3122 4.80404 22.3122 4.80404C21.7457 5.2855 18.5454 9.10888 18.5454 9.10888L19.2251 9.47706Z" fill="currentColor"/>
+                </svg>
+            </span> Goat
+        </button>
+        <button type="button" class='is-tab'>
+            <span class="is-tab-icon">
+                <svg width="20" height="20" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12.2133 10.7472C13.6389 10.3837 15.0614 10.9362 16.0188 12.2249C16.6935 13.133 17.0684 14.3386 17.0745 15.6195C17.0813 17.0507 16.6349 18.5536 15.7836 19.9659C15.209 20.9093 14.4772 21.7474 13.6199 22.444L22.2807 23.7605C22.3616 23.7721 22.4438 23.7512 22.5095 23.7026C22.5752 23.6539 22.619 23.5813 22.6314 23.5005C23.1962 19.952 22.0028 17.3329 19.9627 13.4698C18.3792 12.7817 16.4763 11.4228 16.1978 8.82489C16.1065 7.90521 16.2101 6.97661 16.5018 6.09966C16.3716 5.94895 16.2934 5.76028 16.2789 5.56163C16.2644 5.36298 16.3143 5.16494 16.4212 4.99688C16.5281 4.82882 16.6863 4.6997 16.8724 4.62866C17.0585 4.55763 17.2625 4.54846 17.4542 4.60253C18.7603 3.67232 19.9212 4.097 20.6122 4.55094C20.4772 4.21728 20.2952 3.90462 20.0717 3.62245C19.2174 2.5528 17.8737 2.0978 16.0767 2.26979C14.2959 2.44042 12.7285 3.85138 11.4183 6.46346C10.3265 8.63969 9.69136 11.0947 9.35 12.4139C9.26931 12.7258 9.20553 12.9721 9.15485 13.1411C9.13093 13.2209 9.10646 13.2989 9.08203 13.3771C9.92627 12.2976 11.1161 11.0269 12.2133 10.7472Z" fill="currentColor"/>
+                    <path d="M20.2401 7.4521L21.2226 7.07561L19.8487 6.89635L20.2401 7.4521ZM15.3494 19.7041C16.1526 18.3717 16.5738 16.9603 16.5674 15.6223C16.5618 14.4488 16.2224 13.35 15.6119 12.5281C14.7816 11.4106 13.5581 10.929 12.3394 11.2397C10.6267 11.6764 8.48003 15.0971 8.38355 15.2519C7.32054 17.6227 5.82687 19.0928 3.37144 20.319C3.31175 20.3473 3.26301 20.3945 3.23273 20.4532C3.20245 20.5119 3.19231 20.5789 3.20386 20.644C3.21254 20.7091 3.24248 20.7696 3.28904 20.8159C3.3356 20.8622 3.39616 20.8919 3.46132 20.9003L12.9316 22.3398C13.9342 21.5883 14.7477 20.7023 15.3494 19.7041ZM14.941 15.5328C14.9424 15.4655 14.9704 15.4014 15.019 15.3548C15.0676 15.3081 15.1327 15.2826 15.2 15.284C15.2674 15.2853 15.3314 15.3134 15.3781 15.3619C15.4247 15.4105 15.4502 15.4756 15.4488 15.543C15.447 15.6319 15.4435 15.7208 15.4382 15.8096C15.4344 15.8742 15.406 15.9349 15.359 15.9793C15.3119 16.0237 15.2497 16.0485 15.185 16.0486C15.1799 16.0486 15.1748 16.0486 15.1698 16.0481C15.1025 16.0441 15.0397 16.0136 14.9949 15.9632C14.9502 15.9129 14.9274 15.8468 14.9313 15.7796C14.9361 15.6972 14.9394 15.6141 14.941 15.5328ZM13.2461 20.1617C13.4167 19.9332 13.5777 19.6936 13.7244 19.4502C14.213 18.6548 14.5687 17.785 14.7774 16.8751C14.7919 16.8094 14.8319 16.752 14.8887 16.7158C14.9454 16.6796 15.0143 16.6673 15.08 16.6818C15.1458 16.6963 15.2031 16.7364 15.2393 16.7931C15.2756 16.8499 15.2878 16.9187 15.2733 16.9845C15.0527 17.9483 14.6764 18.8697 14.1593 19.7124C14.003 19.9715 13.834 20.2227 13.6532 20.4654C13.6129 20.5193 13.5528 20.5551 13.4862 20.5648C13.4196 20.5745 13.3518 20.5573 13.2978 20.5171C13.2438 20.4768 13.2081 20.4168 13.1984 20.3501C13.1887 20.2835 13.2058 20.2157 13.2461 20.1617ZM21.0652 5.61133L20.0171 6.40621L22.181 6.68855L21.0652 5.61133Z" fill="currentColor"/>
+                    <path d="M17.1763 5.99611C17.4085 5.99611 17.5967 5.80788 17.5967 5.57569C17.5967 5.3435 17.4085 5.15527 17.1763 5.15527C16.9441 5.15527 16.7559 5.3435 16.7559 5.57569C16.7559 5.80788 16.9441 5.99611 17.1763 5.99611Z" fill="currentColor"/>
+                    <path d="M17.9212 4.90304C18.0487 5.05592 18.1236 5.24579 18.1349 5.44455C18.1462 5.64332 18.0931 5.84044 17.9837 6.00674C17.8742 6.17304 17.7142 6.2997 17.5271 6.36797C17.3401 6.43625 17.1361 6.44252 16.9453 6.38585C16.8128 6.81597 16.5898 7.738 16.7066 8.78948C16.8965 10.5023 17.8692 11.8262 19.5995 12.7328C18.9185 11.23 18.7441 9.93643 19.0816 8.88023C19.2172 8.43482 19.4656 8.03202 19.8027 7.71089L19.3106 7.01224C19.2228 6.88862 19.1867 6.73561 19.21 6.58577C19.2332 6.43593 19.3141 6.30108 19.4352 6.2099L20.7017 5.24932C20.2791 4.86638 19.2061 4.11659 17.9212 4.90304Z" fill="currentColor"/>
+                </svg>
+            </span> Quail
+        </button>
+        <button type="button" class='is-tab'>
+            <span class="is-tab-icon">
+                <svg width="20" height="20" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18.3465 23.1412C13.9614 23.1412 10.693 19.4241 10.693 14.7223C10.693 9.58675 14.4861 2.85938 18.3465 2.85938C22.1763 2.85938 26 9.71315 26 14.7223C26 19.2979 22.6778 23.1412 18.3465 23.1412ZM10.9939 20.7793C8.39591 22.1361 5.03812 21.6417 2.98981 19.2006C0.176954 15.8484 -1.20333 9.23129 1.33188 7.10399C3.24119 5.50187 7.32256 6.57415 10.4343 8.65438C9.63439 10.6003 9.16234 12.7186 9.16234 14.7223C9.16229 17.0149 9.83555 19.1096 10.9939 20.7793Z" fill="currentColor"/>
+                </svg>
+            </span> Quail Eggs
+        </button>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="is-summary-grid">
+        <div class="is-summary-card">
+            <div class="is-summary-label">Total Purchased</div>
+            <div class="is-summary-value">180 Nos</div>
+            <div class="is-summary-desc">Total purchased during period</div>
+            <div class="is-summary-icon is-icon-blue"><i class="bi bi-file-earmark-plus"></i></div>
+        </div>
+        <div class="is-summary-card">
+            <div class="is-summary-label">Total Hatched</div>
+            <div class="is-summary-value">7</div>
+            <div class="is-summary-desc">Total hatched during period</div>
+            <div class="is-summary-icon is-icon-orange"><i class="bi bi-clock-history"></i></div>
+        </div>
+        <div class="is-summary-card">
+            <div class="is-summary-label">Total Sold</div>
+            <div class="is-summary-value">22</div>
+            <div class="is-summary-desc">Total sold during period</div>
+            <div class="is-summary-icon is-icon-teal"><i class="bi bi-file-earmark-arrow-up"></i></div>
+        </div>
+        <div class="is-summary-card">
+            <div class="is-summary-label">Mortality</div>
+            <div class="is-summary-value">2</div>
+            <div class="is-summary-desc">Total deaths during period</div>
+            <div class="is-summary-icon is-icon-red"><i class="bi bi-file-earmark-minus"></i></div>
+        </div>
+        <div class="is-summary-card">
+            <div class="is-summary-label">Closing Stock</div>
+            <div class="is-summary-value">2</div>
+            <div class="is-summary-desc">As on 30 Sep 2026</div>
+            <div class="is-summary-icon is-icon-green"><i class="bi bi-file-earmark-check"></i></div>
+        </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="is-card is-table-card">
+        <div class="is-table-top-header">
+            <div class="is-table-title-row">
+                <h2>Chicken Stock Movement History</h2>
+                <span class="is-table-subtitle">15 - day reporting periods</span>
+            </div>
+            <div class="is-table-actions">
+                <button type="button" class="is-btn-outline"><i class="bi bi-file-earmark-excel"></i> Download Excel</button>
+                <button type="button" class="is-btn-outline"><i class="bi bi-file-earmark-pdf"></i> Download PDF</button>
+            </div>
+        </div>
+
+        <div class="is-table-scroll">
+            <table class="is-table">
+                <thead>
+                    <tr>
+                        <th>Period</th>
+                        <th>Opening Stock</th>
+                        <th>Purchase</th>
+                        <th>Hatched</th>
+                        <th>Sales <span class="is-badge-auto">Auto from Income</span></th>
+                        <th>Mortality</th>
+                        <th>Closing Stock</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>01 - 15 Jan</td>
+                        <td>100</td>
+                        <td>10</td>
+                        <td>0</td>
+                        <td>6</td>
+                        <td>1</td>
+                        <td>120</td>
+                    </tr>
+                    <tr>
+                        <td>16 - 21 Jan</td>
+                        <td>103</td>
+                        <td>10</td>
+                        <td>2</td>
+                        <td>10</td>
+                        <td>10</td>
+                        <td>120</td>
+                    </tr>
+                    <tr>
+                        <td>01 - 15 Feb</td>
+                        <td>100</td>
+                        <td>10</td>
+                        <td>0</td>
+                        <td>6</td>
+                        <td>1</td>
+                        <td>120</td>
+                    </tr>
+                    <tr>
+                        <td>16 - 21 Feb</td>
+                        <td>103</td>
+                        <td>10</td>
+                        <td>2</td>
+                        <td>10</td>
+                        <td>10</td>
+                        <td>120</td>
+                    </tr>
+                    <tr>
+                        <td>01 - 15 Mar</td>
+                        <td>100</td>
+                        <td>10</td>
+                        <td>0</td>
+                        <td>6</td>
+                        <td>1</td>
+                        <td>120</td>
+                    </tr>
+                    <tr>
+                        <td>16 - 21 Mar</td>
+                        <td>103</td>
+                        <td>10</td>
+                        <td>2</td>
+                        <td>10</td>
+                        <td>10</td>
+                        <td>120</td>
+                    </tr>
+                    <tr class="is-row-highlight">
+                        <td>01 - 15 Sep <span class="is-badge-draft">Draft</span></td>
+                        <td>100</td>
+                        <td>10</td>
+                        <td>0</td>
+                        <td>6</td>
+                        <td>1</td>
+                        <td>120</td>
+                    </tr>
+                    <tr>
+                        <td>16 - 21 Sep</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="is-pagination">
+            <div class="is-items-per-page">
+                <span>Items Per Page</span>
+                <select>
+                    <option>16</option>
+                </select>
+            </div>
+            <div class="is-pagination-buttons">
+                <button type="button" class="is-page-btn"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="is-page-btn">1</button>
+                <button type="button" class="is-page-btn">2</button>
+                <button type="button" class="is-page-btn">3</button>
+                <span class="is-page-ellipsis">..</span>
+                <button type="button" class="is-page-btn">8</button>
+                <button type="button" class="is-page-btn">9</button>
+                <button type="button" class="is-page-btn">10</button>
+                <button type="button" class="is-page-btn"><i class="bi bi-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .is-page {
+        color: #1f2937;
+        font-family: inherit;
+    }
+
+
+    .is-btn-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: #fff;
+        border: 1px solid #065f46;
+        color: #065f46;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .is-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 2px rgba(0,0,0,.03);
+    }
+
+    /* Filters: header strip keeps the mint tint, the expanded body below it is
+       plain white. overflow:hidden on the card clips both to its own rounded
+       corners, so the header alone still looks fully rounded while collapsed
+       (no body) and doesn't need its own conditional border-radius. */
+    .is-filters-card {
+        overflow: hidden;
+    }
+
+    .is-filters-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        cursor: pointer;
+        background-color: #F5F8F6;
+    }
+
+    .is-filters-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .is-filters-body {
+        padding: 0 20px 20px 20px;
+        background-color: #FFFFFF;
+    }
+
+    .is-filters-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+        margin-bottom: 20px;
+    }
+
+    .is-filter-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 6px;
+    }
+
+    .is-filter-group select {
+        width: 100%;
+        padding: 10px 32px 10px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #374151;
+        background-color: #F8F9FA;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+    }
+
+    .is-select-date {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+    }
+
+    .is-select-chevron {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+    }
+
+    .is-filters-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+    }
+
+    .is-btn-clear {
+        padding: 8px 16px;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        color: #374151;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .is-btn-primary {
+        padding: 8px 20px;
+        background: #4f46e5;
+        border: none;
+        color: #fff;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    /* Tabs */
+    .is-tabs {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+
+    .is-tab {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #6b7280;
+        cursor: pointer;
+    }
+
+    .is-tab.active {
+        background: #065f46;
+        color: #fff;
+        border-color: #065f46;
+    }
+
+    .is-tab-icon {
+        font-size: 14px;
+    }
+
+    /* Summary Grid */
+    .is-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+
+    .is-summary-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 16px;
+        position: relative;
+        box-shadow: 0 1px 2px rgba(0,0,0,.02);
+    }
+
+    .is-summary-label {
+        font-size: 12px;
+        color: #6b7280;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+
+    .is-summary-value {
+        font-size: 22px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 6px;
+    }
+
+    .is-summary-desc {
+        font-size: 11px;
+        color: #9ca3af;
+    }
+
+    .is-summary-icon {
+        position: absolute;
+        right: 16px;
+        top: 16px;
+        width: 34px;
+        height: 34px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+    }
+
+    .is-icon-blue { background: #eff6ff; color: #3b82f6; }
+    .is-icon-orange { background: #fff7ed; color: #f97316; }
+    .is-icon-teal { background: #f0fdfa; color: #14b8a6; }
+    .is-icon-red { background: #fef2f2; color: #ef4444; }
+    .is-icon-green { background: #f0fdf4; color: #22c55e; }
+
+    /* Table */
+    .is-table-top-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px;
+    }
+
+    .is-table-title-row h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        display: inline-block;
+        margin-right: 12px;
+        color: #111827;
+    }
+
+    .is-table-subtitle {
+        font-size: 12px;
+        color: #6b7280;
+    }
+
+    .is-table-actions {
+        display: flex;
+        gap: 12px;
+    }
+
+    .is-btn-outline {
+        padding: 6px 12px;
+        background: #fff;
+        border: 1px solid #065f46;
+        color: #065f46;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .is-btn-outline i {
+        font-size: 14px;
+    }
+
+    .is-table-scroll {
+        overflow-x: auto;
+    }
+
+    .is-table-card {
+        overflow: hidden;
+    }
+
+    .is-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: center;
+    }
+
+    .is-table th {
+        padding: 14px 16px;
+        background: #f3f4f6;
+        font-size: 13px;
+        font-weight: 700;
+        color: #374151;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .is-table td {
+        padding: 14px 16px;
+        font-size: 13px;
+        color: #4b5563;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .is-table td:first-child, .is-table th:first-child {
+        text-align: left;
+    }
+
+    .is-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .is-table td:last-child {
+        background: #f0fdf4; /* Pale green for Closing Stock - header stays the
+                                 same gray as every other column (see .is-table th). */
+    }
+
+    .is-row-highlight {
+        background: #fffbeb;
+    }
+
+        /* A td's own background always paints over its row's background, so this
+           isn't strictly required for the colors to be correct - but it makes the
+           intent explicit: Closing Stock stays green even in the Draft (highlighted)
+           row, instead of being read as "inheriting" the row's amber tint. */
+        .is-row-highlight td:last-child {
+            background: #f0fdf4;
+        }
+
+        /* Belt-and-suspenders: the very last row (the upcoming/placeholder period,
+           all "-") gets the same green explicitly, at higher specificity than any
+           other rule here, so there's no ambiguity about it keeping the column's
+           background like every other row. */
+        .is-table tbody tr:last-child td:last-child {
+            background: #f0fdf4;
+        }
+
+    .is-badge-draft {
+        background: #fde68a;
+        color: #92400e;
+        padding: 2px 8px;
+        border-radius: 99px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-left: 8px;
+    }
+
+    .is-badge-auto {
+        background: #fef3c7;
+        color: #b45309;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        margin-left: 6px;
+        text-transform: none;
+    }
+
+    /* Pagination */
+    .is-pagination {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .is-items-per-page {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: #6b7280;
+    }
+
+    .is-items-per-page select {
+        padding: 6px 28px 6px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        background: #fff;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 8px center;
+    }
+
+    .is-pagination-buttons {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .is-page-btn {
+        min-width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        font-size: 13px;
+        color: #374151;
+        cursor: pointer;
+    }
+
+    .is-page-btn:hover {
+        background: #f3f4f6;
+    }
+
+    .is-page-ellipsis {
+        color: #9ca3af;
+        padding: 0 4px;
+    }
+</style>
+
+@code {
+    private bool filtersExpanded = true;
+
+    private void GoBack()
+    {
+        Nav.NavigateTo("/15daysEntry");
+    }
+
+    private void ToggleFilters()
+    {
+        filtersExpanded = !filtersExpanded;
+    }
+}

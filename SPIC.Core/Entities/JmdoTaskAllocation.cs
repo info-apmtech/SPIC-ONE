@@ -56,6 +56,10 @@ public class JmdoTaskAllocationDealer
     public int SubDealerId { get; set; }
     public string DealerName { get; set; } = string.Empty;
     public string DealerCode { get; set; } = string.Empty;
+
+    /// <summary>Weekday this dealer visit is planned for (Sun-Sat tabs in the wizard). Nullable so
+    /// rows created before this field existed don't need a backfilled value.</summary>
+    public DayOfWeek? PlannedDay { get; set; }
 }
 
 /// <summary>One picked MD/training program. Name/Budget are a snapshot at submission time, same

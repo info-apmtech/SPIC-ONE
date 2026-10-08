@@ -3,9 +3,15 @@ using System.Collections.Generic;
 
 namespace SPIC.Core.DTOs
 {
+    public class JmdoDealerDayAssignmentDto
+    {
+        public int DealerId { get; set; }
+        public DayOfWeek Day { get; set; }
+    }
+
     public class JmdoTaskAllocationCreateDto
     {
-        public List<int> DealerIds { get; set; } = new();
+        public List<JmdoDealerDayAssignmentDto> DealerAssignments { get; set; } = new();
         public int? SpcmTarget { get; set; }
         public int? SoilSampleTarget { get; set; }
         public List<int> ProgramIds { get; set; } = new();
@@ -13,6 +19,14 @@ namespace SPIC.Core.DTOs
         public int? DapTarget { get; set; }
         public int? NpsTarget { get; set; }
         public int? OthersTarget { get; set; }
+    }
+
+    public class JmdoDealerAssignmentResponseDto
+    {
+        public int DealerId { get; set; }
+        public string DealerName { get; set; } = "";
+        public string DealerCode { get; set; } = "";
+        public DayOfWeek? Day { get; set; }
     }
 
     public class JmdoTaskAllocationResponseDto
@@ -24,6 +38,7 @@ namespace SPIC.Core.DTOs
 
         public int DealerCount { get; set; }
         public int ProgramCount { get; set; }
+        public List<JmdoDealerAssignmentResponseDto> DealerAssignments { get; set; } = new();
         public int? SpcmTarget { get; set; }
         public int? SoilSampleTarget { get; set; }
         public int? UreaTarget { get; set; }

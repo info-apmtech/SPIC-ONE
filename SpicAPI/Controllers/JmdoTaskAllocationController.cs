@@ -58,7 +58,7 @@ public class JmdoTaskAllocationController : ControllerBase
         // A JMDO can submit having only filled in some of the 5 steps (e.g. skip MD Program
         // entirely via the sidebar) - only reject a submission that has nothing at all in it.
         var hasAnyData =
-            dto.DealerIds.Count > 0 ||
+            dto.DealerAssignments.Count > 0 ||
             dto.ProgramIds.Count > 0 ||
             dto.SpcmTarget.HasValue ||
             dto.SoilSampleTarget.HasValue ||
@@ -74,11 +74,13 @@ public class JmdoTaskAllocationController : ControllerBase
         if (string.IsNullOrWhiteSpace(userId))
             return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
 
+        var dealerIds = dto.DealerAssignments.Select(a => a.DealerId).Distinct().ToList();
         var dealers = await _db.SubDealerRegistrations
-            .Where(d => dto.DealerIds.Contains(d.Id))
+            .Where(d => dealerIds.Contains(d.Id))
             .ToListAsync();
-        if (dealers.Count != dto.DealerIds.Distinct().Count())
+        if (dealers.Count != dealerIds.Count)
             return BadRequest(new { Success = false, Message = "One or more selected dealers could not be found." });
+        var dealersById = dealers.ToDictionary(d => d.Id);
 
         var programs = await _db.CSR1
             .Where(p => dto.ProgramIds.Contains(p.Id))
@@ -115,14 +117,16 @@ public class JmdoTaskAllocationController : ControllerBase
         _db.JmdoTaskAllocations.Add(allocation);
         await _db.SaveChangesAsync();
 
-        foreach (var dealer in dealers)
+        foreach (var assignment in dto.DealerAssignments)
         {
+            var dealer = dealersById[assignment.DealerId];
             _db.JmdoTaskAllocationDealers.Add(new JmdoTaskAllocationDealer
             {
                 AllocationId = allocation.Id,
                 SubDealerId = dealer.Id,
                 DealerName = dealer.FirmName,
-                DealerCode = dealer.SubDealerCode ?? ""
+                DealerCode = dealer.SubDealerCode ?? "",
+                PlannedDay = assignment.Day
             });
         }
 
@@ -140,7 +144,11 @@ public class JmdoTaskAllocationController : ControllerBase
         await _db.SaveChangesAsync();
         await tx.CommitAsync();
 
-        return StatusCode(201, ToResponseDto(allocation, dealers.Count, programs.Count));
+        var allocationDealers = await _db.JmdoTaskAllocationDealers
+            .Where(d => d.AllocationId == allocation.Id)
+            .ToListAsync();
+
+        return StatusCode(201, ToResponseDto(allocation, allocationDealers, programs.Count));
     }
 
     // GET api/JmdoTaskAllocation/mine/today
@@ -162,17 +170,27 @@ public class JmdoTaskAllocationController : ControllerBase
         if (allocation == null)
             return NoContent();
 
-        return Ok(ToResponseDto(allocation, allocation.Dealers.Count, allocation.Programs.Count));
+        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.Count));
     }
 
-    private static JmdoTaskAllocationResponseDto ToResponseDto(JmdoTaskAllocation allocation, int dealerCount, int programCount) => new()
+    private static JmdoTaskAllocationResponseDto ToResponseDto(
+        JmdoTaskAllocation allocation,
+        List<JmdoTaskAllocationDealer> dealers,
+        int programCount) => new()
     {
         Id = allocation.Id,
         AllocationDate = allocation.AllocationDate,
         Status = allocation.Status.ToString(),
         SubmittedAt = allocation.SubmittedAt,
-        DealerCount = dealerCount,
+        DealerCount = dealers.Count,
         ProgramCount = programCount,
+        DealerAssignments = dealers.Select(d => new JmdoDealerAssignmentResponseDto
+        {
+            DealerId = d.SubDealerId,
+            DealerName = d.DealerName,
+            DealerCode = d.DealerCode,
+            Day = d.PlannedDay
+        }).ToList(),
         SpcmTarget = allocation.SpcmTarget,
         SoilSampleTarget = allocation.SoilSampleTarget,
         UreaTarget = allocation.UreaTarget,
