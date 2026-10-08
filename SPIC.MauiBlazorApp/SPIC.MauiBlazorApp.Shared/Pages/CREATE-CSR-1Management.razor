@@ -402,13 +402,12 @@
                 </td>
                 <td>
                     ₹@program.TotalBudget.ToString(
-                                                                                                                                                "N0",
-                                                                                                                                                CultureInfo.CreateSpecificCulture("en-IN"))
+                                                                                                                                                                    "N0",
+                                                                                                                                                                    CultureInfo.CreateSpecificCulture("en-IN"))
                 </td>
                 <td style="text-align:right;">
                     <button type="button"
-                            class="csr-apply-btn @(loginState.UserRole == AppRole.Admin ? "csr-btn-disabled" : "")"
-                            disabled="@(loginState.UserRole == AppRole.Admin)"
+                            class="csr-apply-btn"
                             @onclick="() => PopulateFormFromProgram(program)">
                         Apply CSR 1
                     </button>
@@ -1475,8 +1474,8 @@
             font-weight: 700;
         }
     /* =========================================================
-                                   BUDGET PLAN FILTER
-                                   ========================================================= */
+                                       BUDGET PLAN FILTER
+                                       ========================================================= */
 
     .csr-filter-card {
         background: #ffffff;
@@ -1813,7 +1812,7 @@
                 min-height: 44px;
             }
         /* minmax(0,…) so a long "₹ 50,00,000" cannot push the tile (and the
-                                       page) wider than the 392px viewport. */
+                                           page) wider than the 392px viewport. */
         .csr-stats-grid-4 {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
@@ -1852,7 +1851,7 @@
             display: none; /* decorative only */
         }
         /* Program table becomes one card per program so "Apply CSR 1" and the
-                                       budget columns are on screen instead of off the right edge. */
+                                           budget columns are on screen instead of off the right edge. */
         .csr-table-container {
             overflow: visible;
             padding: 0 12px 4px;
@@ -2017,7 +2016,7 @@
         }
 
     /* Budget plan list (SpicDataTable) pagination on phones: one row, "Items Per Page"
-       left and the pager right, only prev / current / next — same as the other lists. */
+           left and the pager right, only prev / current / next — same as the other lists. */
     @@media (max-width: 767.98px) {
         .csr1c-page .spic-dt .pagination-container {
             flex-direction: row;
@@ -2033,13 +2032,13 @@
             white-space: nowrap;
         }
 
-        .csr1c-page .spic-dt .items-per-page select {
-            width: 58px;
-            height: 30px;
-            min-height: 30px;
-            padding: 0 6px;
-            font-size: 12px;
-        }
+            .csr1c-page .spic-dt .items-per-page select {
+                width: 58px;
+                height: 30px;
+                min-height: 30px;
+                padding: 0 6px;
+                font-size: 12px;
+            }
 
         .csr1c-page .spic-dt .spic-page-status {
             display: none;
@@ -2057,9 +2056,9 @@
             border-radius: 6px;
         }
 
-        .csr1c-page .spic-dt .page-btn.spic-pg-near:not(.active) {
-            display: none;
-        }
+            .csr1c-page .spic-dt .page-btn.spic-pg-near:not(.active) {
+                display: none;
+            }
     }
 </style>
 
@@ -2212,7 +2211,7 @@
 
     // =========================================================
     // BudgetPrograms API DTO
-    // api/Budget/program-master-list must return these fields.
+    // api/Budget/approved-programs must return these fields.
     // =========================================================
     private class BudgetProgramFilterDto
     {
@@ -2232,22 +2231,40 @@
 
         public string FinancialYear { get; set; } = "";
 
+        public int? StateId { get; set; }
+
+        public int? RegionId { get; set; }
+
+        public int? HeadQuartersId { get; set; }
+
         // Monthly Program Counts
-        public int AprilCount { get; set; }
-        public int MayCount { get; set; }
-        public int JuneCount { get; set; }
-        public int JulyCount { get; set; }
-        public int AugustCount { get; set; }
-        public int SeptemberCount { get; set; }
-        public int OctoberCount { get; set; }
-        public int NovemberCount { get; set; }
-        public int DecemberCount { get; set; }
-        public int JanuaryCount { get; set; }
-        public int FebruaryCount { get; set; }
-        public int MarchCount { get; set; }
+        // Changed int -> decimal
+        public decimal AprilCount { get; set; }
+
+        public decimal MayCount { get; set; }
+
+        public decimal JuneCount { get; set; }
+
+        public decimal JulyCount { get; set; }
+
+        public decimal AugustCount { get; set; }
+
+        public decimal SeptemberCount { get; set; }
+
+        public decimal OctoberCount { get; set; }
+
+        public decimal NovemberCount { get; set; }
+
+        public decimal DecemberCount { get; set; }
+
+        public decimal JanuaryCount { get; set; }
+
+        public decimal FebruaryCount { get; set; }
+
+        public decimal MarchCount { get; set; }
 
         // Automatically calculate total number of programs
-        public int NumberOfPrograms =>
+        public decimal NumberOfPrograms =>
             AprilCount +
             MayCount +
             JuneCount +
@@ -2345,19 +2362,122 @@
     private async Task LoadBudgetPrograms()
     {
         isBudgetDataLoading = true;
+
         budgetLoadError = "";
 
         try
         {
+            using var response =
+                await Http.GetAsync(
+                    "api/Budget/approved-programs"
+                );
+
+            var body =
+                await response.Content
+                    .ReadAsStringAsync();
+
+            Console.WriteLine(
+                $"Approved Program API => " +
+                $"Status={(int)response.StatusCode} " +
+                $"{response.StatusCode}"
+            );
+
+            Console.WriteLine(
+                $"Approved Program Response => {body}"
+            );
+
+            if (!response.IsSuccessStatusCode)
+            {
+                budgetPrograms = new();
+
+                budgetLoadError =
+                    $"Unable to load approved programs. " +
+                    $"HTTP {(int)response.StatusCode}. " +
+                    $"{body}";
+
+                Console.WriteLine(
+                    budgetLoadError
+                );
+
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                budgetPrograms = new();
+
+                budgetLoadError =
+                    "Approved program API returned empty response.";
+
+                Console.WriteLine(
+                    budgetLoadError
+                );
+
+                return;
+            }
+
+            var options =
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+            var data =
+                System.Text.Json.JsonSerializer.Deserialize<
+                    List<BudgetProgramFilterDto>>
+                (
+                    body,
+                    options
+                );
+
             budgetPrograms =
-                await Http.GetFromJsonAsync<List<BudgetProgramFilterDto>>(
-                    "api/Budget/program-master-list") ?? new();
+                data ?? new();
+
+            Console.WriteLine(
+                $"Approved Programs Loaded: " +
+                $"{budgetPrograms.Count}"
+            );
+
+            foreach (var item in budgetPrograms)
+            {
+                Console.WriteLine(
+                    $"Program => " +
+                    $"Id={item.Id}, " +
+                    $"ProgramId={item.ProgramId}, " +
+                    $"Type={item.ProgramType}, " +
+                    $"Name={item.ProgramName}, " +
+                    $"Status={item.Status}, " +
+                    $"FY={item.FinancialYear}, " +
+                    $"Budget={item.TotalBudget}, " +
+                    $"Programs={item.NumberOfPrograms}"
+                );
+            }
+
+            StateHasChanged();
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            budgetPrograms = new();
+
+            budgetLoadError =
+                $"JSON deserialize error: " +
+                $"{ex.Message}";
+
+            Console.WriteLine(
+                $"Approved Program JSON Error => {ex}"
+            );
         }
         catch (Exception ex)
         {
             budgetPrograms = new();
-            budgetLoadError = ex.Message;
-            Console.WriteLine($"Error loading BudgetPrograms: {ex.Message}");
+
+            budgetLoadError =
+                ex.Message;
+
+            Console.WriteLine(
+                $"Error loading approved programs: " +
+                $"{ex}"
+            );
         }
         finally
         {
@@ -2372,13 +2492,8 @@
             IEnumerable<BudgetProgramFilterDto> result = budgetPrograms;
 
 
-            // Only approved records
-            result = result.Where(x =>
-                string.IsNullOrWhiteSpace(x.Status)
-                ||
-                x.Status.Equals(
-                    "Approved",
-                    StringComparison.OrdinalIgnoreCase));
+            // API already returns only Approved / Validated records.
+            // Do not hard-filter to Approved here, otherwise Validated rows disappear.
 
 
             // Program Type
@@ -2538,9 +2653,9 @@
         selectedBudget = program.TotalBudget;
 
         programCount =
-            program.NumberOfPrograms > 0
-                ? program.NumberOfPrograms
-                : 1;
+       program.NumberOfPrograms > 0
+           ? (int)program.NumberOfPrograms
+           : 1;
 
         isFormView = true;
     }
