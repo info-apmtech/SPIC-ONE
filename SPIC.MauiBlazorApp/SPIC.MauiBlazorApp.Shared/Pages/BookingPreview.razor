@@ -2,6 +2,7 @@
 
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.GuestHouseBookingState BookingState
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 @using System.Globalization
 
@@ -300,8 +301,8 @@
                         </div>
                         <div class="summary-divider"></div>
                         <div class="kv-row mt-3">
-                            <span class="kv-label total-lbl">Total</span>
-                            <span class="kv-value total-val">@_money(BookingState.Total)</span>
+                            <span class="kv-label total-lbl">Total@(IsEmployeeFree ? " (Complimentary)" : "")</span>
+                            <span class="kv-value total-val">@_money(IsEmployeeFree ? 0m : BookingState.Total)</span>
                         </div>
                     </div>
                 </div>
@@ -381,6 +382,9 @@
 </div>
 
 @code {
+
+    // Display only: employees book free (the server decides and stores ₹0 at booking time).
+    private bool IsEmployeeFree => SPIC.Core.Entities.GuestHouseBookingPolicy.IsEmployeeFreeBooking(LoginState.UserRole);
 
     private void GoToStart()
     {
