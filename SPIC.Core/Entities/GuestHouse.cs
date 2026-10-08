@@ -92,6 +92,7 @@ public class GuestHouse
 	public string? PhoneNumber { get; set; }                             // Contact phone number displayed on the card
 	public string? Description { get; set; }                             // Short description / overview of the guest house
 	public bool IsActive { get; set; } = true;                           // Whether the guest house is available for booking
+	public int? StateId { get; set; }                                    // Id of the State (States table) the guest house belongs to (scopes Receptionists to their state's guest house)
 
 	// Audit
 	public string? CreatedBy { get; set; }                               // User who created the record

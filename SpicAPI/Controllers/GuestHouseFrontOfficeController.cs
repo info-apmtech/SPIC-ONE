@@ -78,9 +78,13 @@ namespace SpicAPI.Controllers
 		[HttpGet("rooms")]
 		public async Task<IActionResult> GetRooms()
 		{
+			// Receptionist state scope (null = unrestricted): only the user's state's guest house.
+			var scope = await GetGuestHouseScopeAsync();
+
 			var houses = await _db.GuestHouses
 				.AsNoTracking()
 				.Where(h => h.IsActive)
+				.Where(h => scope == null || scope.Contains(h.Id))
 				.OrderBy(h => h.Name)
 				.Select(h => new FrontOfficeHouseDto
 				{
@@ -92,6 +96,7 @@ namespace SpicAPI.Controllers
 			var rooms = await _db.GuestHouseRooms
 				.AsNoTracking()
 				.Where(r => r.IsActive)
+				.Where(r => scope == null || scope.Contains(r.GuestHouseId))
 				.Include(r => r.GuestHouse)
 				.OrderBy(r => r.GuestHouseId)
 				.ThenBy(r => r.RoomNumber)
@@ -113,6 +118,7 @@ namespace SpicAPI.Controllers
 					&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
 					&& b.CheckInDate.Value.Date < todayEnd
 					&& b.CheckOutDate.Value.Date > todayStart)
+				.Where(b => scope == null || scope.Contains(b.GuestHouseId))
 				.Include(b => b.Guests)
 				.ToListAsync();
 
@@ -608,6 +614,10 @@ namespace SpicAPI.Controllers
 				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.Payments)
 				.AsQueryable();
 
+			var scope = await GetGuestHouseScopeAsync();
+			if (scope != null)
+				query = query.Where(c => scope.Contains(c.GuestHouseBooking!.GuestHouseId));
+
 			if (string.IsNullOrWhiteSpace(status))
 			{
 				query = query.Where(c => c.ApprovalStatus == GuestHouseCancellationApprovalStatus.PendingApproval);
@@ -686,9 +696,11 @@ namespace SpicAPI.Controllers
 		{
 			var adminName = User.Identity?.Name;
 
+			var scope = await GetGuestHouseScopeAsync();
 			var cancellation = await _db.Set<GuestHouseBookingCancellation>()
 				.AsNoTracking()
 				.Include(c => c.GuestHouseBooking!).ThenInclude(b => b.Payments)
+				.Where(c => scope == null || scope.Contains(c.GuestHouseBooking!.GuestHouseId))
 				.FirstOrDefaultAsync(c => c.Id == id);
 			if (cancellation == null || cancellation.GuestHouseBooking == null)
 				return NotFound(new { Success = false, Message = "Cancellation request not found." });
@@ -773,6 +785,12 @@ namespace SpicAPI.Controllers
 			var adminName = User.Identity?.Name;
 			var now = DateTime.Now;
 
+			// Receptionist state scope: another state's cancellation is "not found".
+			var scope = await GetGuestHouseScopeAsync();
+			if (scope != null && !await _db.Set<GuestHouseBookingCancellation>()
+					.AnyAsync(c => c.Id == id && scope.Contains(c.GuestHouseBooking!.GuestHouseId)))
+				return NotFound(new { Success = false, Message = "Cancellation request not found." });
+
 			// Conditional update so a reject can never race an in-flight approval/refund.
 			var updated = await _db.Set<GuestHouseBookingCancellation>()
 				.Where(c => c.Id == id
@@ -823,11 +841,13 @@ namespace SpicAPI.Controllers
 			if (string.IsNullOrWhiteSpace(reference))
 				return BadRequest(new { Success = false, Message = "Booking reference is required." });
 
+			var scope = await GetGuestHouseScopeAsync();
 			var booking = await _db.GuestHouseBookings
 				.Include(b => b.GuestHouse)
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.Guests)
 				.Include(b => b.Payments)
+				.Where(b => scope == null || scope.Contains(b.GuestHouseId))
 				.FirstOrDefaultAsync(b => b.BookingReference == reference.Trim());
 
 			if (booking == null)
@@ -861,8 +881,10 @@ namespace SpicAPI.Controllers
 				rangeTo = target.AddDays(1);
 			}
 
+			var scope = await GetGuestHouseScopeAsync();
 			var bookings = await _db.GuestHouseBookings
 				.AsNoTracking()
+				.Where(b => scope == null || scope.Contains(b.GuestHouseId))
 				.Where(b =>
 					b.BookingStatus == GuestHouseBookingStatus.Completed
 					&& (b.PaymentStatus == GuestHousePaymentStatus.Paid
@@ -916,7 +938,10 @@ namespace SpicAPI.Controllers
 		[HttpGet("bills")]
 		public async Task<IActionResult> GetBills([FromQuery] DateTime? from, [FromQuery] DateTime? to)
 		{
-			var query = _db.GuestHouseBills.AsNoTracking().AsQueryable();
+			var scope = await GetGuestHouseScopeAsync();
+			var query = _db.GuestHouseBills.AsNoTracking()
+				.Where(b => scope == null || scope.Contains(b.GuestHouseBooking!.GuestHouseId))
+				.AsQueryable();
 
 			if (from.HasValue)
 				query = query.Where(b => b.BillDate >= from.Value.Date);
@@ -951,9 +976,11 @@ namespace SpicAPI.Controllers
 		[HttpGet("bill/{billId:int}")]
 		public async Task<IActionResult> GetBill(int billId)
 		{
+			var scope = await GetGuestHouseScopeAsync();
 			var bill = await _db.GuestHouseBills
 				.AsNoTracking()
 				.Include(b => b.LineItems)
+				.Where(b => scope == null || scope.Contains(b.GuestHouseBooking!.GuestHouseId))
 				.FirstOrDefaultAsync(b => b.Id == billId);
 			if (bill == null)
 				return NotFound(new { Success = false, Message = "Bill not found." });
@@ -1152,9 +1179,11 @@ namespace SpicAPI.Controllers
 		[HttpGet("bill/{billId:int}/pdf")]
 		public async Task<IActionResult> GetBillPdf(int billId)
 		{
+			var scope = await GetGuestHouseScopeAsync();
 			var bill = await _db.GuestHouseBills
 				.AsNoTracking()
 				.Include(b => b.LineItems)
+				.Where(b => scope == null || scope.Contains(b.GuestHouseBooking!.GuestHouseId))
 				.FirstOrDefaultAsync(b => b.Id == billId);
 			if (bill == null)
 				return NotFound(new { Success = false, Message = "Bill not found." });
@@ -1295,14 +1324,36 @@ namespace SpicAPI.Controllers
 		// ---- Helpers ----
 
 		private async Task<GuestHouseBooking?> LoadBookingAsync(int bookingId)		{
-			return await _db.GuestHouseBookings
+			var query = _db.GuestHouseBookings
 				.Include(b => b.GuestHouse)
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.Guests)
 				.Include(b => b.Payments)
 				.Include(b => b.RoomAllocations)
 				.Include(b => b.Documents)
-				.FirstOrDefaultAsync(b => b.Id == bookingId);
+				.AsQueryable();
+
+			// Receptionist state scope: a booking of another state's guest house is "not found".
+			var scope = await GetGuestHouseScopeAsync();
+			if (scope != null)
+				query = query.Where(b => scope.Contains(b.GuestHouseId));
+
+			return await query.FirstOrDefaultAsync(b => b.Id == bookingId);
+		}
+
+		// Guest house ids the signed-in user may see/operate on, or null when unrestricted.
+		// Resolved once per request - see GuestHouseReceptionistScope.
+		private List<int>? _guestHouseScope;
+		private bool _guestHouseScopeResolved;
+
+		private async Task<List<int>?> GetGuestHouseScopeAsync()
+		{
+			if (!_guestHouseScopeResolved)
+			{
+				_guestHouseScope = await GuestHouseReceptionistScope.GetAllowedGuestHouseIdsAsync(_db, User);
+				_guestHouseScopeResolved = true;
+			}
+			return _guestHouseScope;
 		}
 
 		// ---- Physical room helpers ----
@@ -1782,9 +1833,10 @@ namespace SpicAPI.Controllers
 	///
 	/// Everything else must be an authenticated GET whose route maps to a PagePermission that this
 	/// user's Designation (Designation.RoleAccess) actually grants - the same PagePermission the
-	/// sidebar, ShellNavigation.PermissionKey and PageGuard already use for that page. Every non-GET
-	/// (check-in, payment, check-out, generate bill, approve, reject) keeps the original
-	/// Admin / CorporateAdmin-only restriction.
+	/// sidebar, ShellNavigation.PermissionKey and PageGuard already use for that page. Non-GET
+	/// actions keep the original Admin / CorporateAdmin-only restriction, except check-in, payment,
+	/// check-out (FrontOffice) and generate bill (GenerateBill), which a "Receptionist" designation
+	/// granting that page may also perform for its own state's guest house only.
 	/// </summary>
 	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
 	internal sealed class GuestHouseFrontOfficeAccessAttribute : Attribute, IAsyncAuthorizationFilter
@@ -1802,14 +1854,14 @@ namespace SpicAPI.Controllers
 			if (user.IsInRole(nameof(AppRole.Admin)) || user.IsInRole(nameof(AppRole.CorporateAdmin)))
 				return;
 
-			// Actions stay Admin / CorporateAdmin only - this filter only opens READS.
-			if (!string.Equals(context.HttpContext.Request.Method, "GET", StringComparison.OrdinalIgnoreCase))
-			{
-				context.Result = Forbidden();
-				return;
-			}
-
-			var requiredPermission = RequiredReadPermission(context.HttpContext.Request.Path.Value ?? string.Empty);
+			// Reads are opened by the Designation's page permission. Actions stay Admin /
+			// CorporateAdmin only, EXCEPT the Front Office (check-in / payment / check-out) and
+			// Generate Bill actions, which a Receptionist whose Designation grants that page may
+			// perform - always limited to their own state's guest house by the controller
+			// (GuestHouseReceptionistScope). Cancellation approve/reject stay Admin / CorporateAdmin only.
+			var isGet = string.Equals(context.HttpContext.Request.Method, "GET", StringComparison.OrdinalIgnoreCase);
+			var path = context.HttpContext.Request.Path.Value ?? string.Empty;
+			var requiredPermission = isGet ? RequiredReadPermission(path) : RequiredReceptionistWritePermission(path);
 			if (requiredPermission is null)
 			{
 				context.Result = Forbidden();
@@ -1817,31 +1869,24 @@ namespace SpicAPI.Controllers
 			}
 
 			// Designation rule: does THIS user's Designation.RoleAccess grant that PagePermission?
-			var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
-			if (!string.IsNullOrWhiteSpace(userId))
-			{
-				var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-				var designationId = await db.Users
-					.AsNoTracking()
-					.Where(u => u.Id == userId)
-					.Select(u => u.DesignationId)
-					.FirstOrDefaultAsync();
-
-				if (designationId is > 0)
-				{
-					var roleAccess = await db.Designations
-						.AsNoTracking()
-						.Where(d => d.Id == designationId && d.IsActive)
-						.Select(d => d.RoleAccess)
-						.FirstOrDefaultAsync();
-
-					if (RoleAccessPermissions.HasPage(roleAccess, requiredPermission.Value))
-						return;
-				}
-			}
+			var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(db, user);
+			if (designation != null
+				&& (isGet || GuestHouseReceptionistScope.IsReceptionist(designation.Name))
+				&& RoleAccessPermissions.HasPage(designation.RoleAccess, requiredPermission.Value))
+				return;
 
 			context.Result = Forbidden();
 		}
+
+		// Action route -> the PagePermission a Receptionist needs to perform it. Every other
+		// action (cancellation approve / reject) maps to null and stays Admin / CorporateAdmin only.
+		private static PagePermission? RequiredReceptionistWritePermission(string path) =>
+			path.EndsWith("/checkin", StringComparison.OrdinalIgnoreCase)
+				|| path.EndsWith("/pay", StringComparison.OrdinalIgnoreCase)
+				|| path.EndsWith("/checkout", StringComparison.OrdinalIgnoreCase) ? PagePermission.FrontOffice
+			: path.EndsWith("/generate-bill", StringComparison.OrdinalIgnoreCase) ? PagePermission.GenerateBill
+			: null;
 
 		// Route -> the PagePermission of the SDWA page that reads it. Unmapped GETs stay closed.
 		private static PagePermission? RequiredReadPermission(string path) =>
@@ -1857,5 +1902,80 @@ namespace SpicAPI.Controllers
 			{
 				StatusCode = StatusCodes.Status403Forbidden
 			};
+	}
+
+	/// <summary>
+	/// State scope for Receptionists on the Front Office cluster (Front Office / Generate Bill /
+	/// Bill List / Cancellations / Report Dashboard reads).
+	///
+	/// A user whose Designation is "Receptionist" only sees and operates on the guest house(s)
+	/// whose GuestHouse.StateId equals their own state - the existing spic:state_id claim
+	/// (Employeelogin.StateId, written at login). The client never supplies the state.
+	/// Everyone else (Admin, CorporateAdmin, GM and any other designation) is unrestricted,
+	/// exactly as before. Admin / SuperAdmin are never restricted, whatever their designation, and
+	/// neither is any Designation granting the GHAdmin or SDWAAdmin page permission.
+	/// A Receptionist with no state (or whose state has no guest house) sees nothing.
+	/// </summary>
+	internal static class GuestHouseReceptionistScope
+	{
+		public const string ReceptionistDesignation = "Receptionist";
+
+		public sealed record UserDesignation(string Name, string? RoleAccess);
+
+		// The signed-in user's active Designation (name + RoleAccess), or null when none.
+		public static async Task<UserDesignation?> GetDesignationAsync(AppDbContext db, ClaimsPrincipal user)
+		{
+			var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+			if (string.IsNullOrWhiteSpace(userId))
+				return null;
+
+			var designationId = await db.Users
+				.AsNoTracking()
+				.Where(u => u.Id == userId)
+				.Select(u => u.DesignationId)
+				.FirstOrDefaultAsync();
+			if (designationId is not > 0)
+				return null;
+
+			return await db.Designations
+				.AsNoTracking()
+				.Where(d => d.Id == designationId && d.IsActive)
+				.Select(d => new UserDesignation(d.Name, d.RoleAccess))
+				.FirstOrDefaultAsync();
+		}
+
+		public static bool IsReceptionist(string? designationName) =>
+			string.Equals(designationName?.Trim(), ReceptionistDesignation, StringComparison.OrdinalIgnoreCase);
+
+		// Guest house ids the user may see/operate on, or null when unrestricted.
+		public static async Task<List<int>?> GetAllowedGuestHouseIdsAsync(AppDbContext db, ClaimsPrincipal user)
+		{
+			if (user.IsInRole(nameof(AppRole.Admin)) || user.IsInRole(nameof(AppRole.SuperAdmin)))
+				return null;
+
+			var designation = await GetDesignationAsync(db, user);
+			if (designation == null)
+				return null;
+
+			// Full Guest House visibility (all states) when the Designation grants the GHAdmin or
+			// SDWAAdmin page permission - the same RoleAccessPermissions.HasPage check the SDWA
+			// approval flow uses (WelfareSchemeApprovalController.UserHasDesignationPermissionAsync).
+			if (RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.GHAdmin)
+				|| RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SDWAAdmin))
+				return null;
+
+			if (!IsReceptionist(designation.Name))
+				return null;
+
+			var stateId = int.TryParse(user.FindFirst("spic:state_id")?.Value, out var parsed) ? parsed : 0;
+			if (stateId <= 0)
+				return new List<int>();
+
+			return await db.GuestHouses
+				.AsNoTracking()
+				.Where(h => h.StateId == stateId)
+				.Select(h => h.Id)
+				.ToListAsync();
+		}
 	}
 }

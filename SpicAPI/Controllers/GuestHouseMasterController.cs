@@ -229,6 +229,8 @@ namespace SpicAPI.Controllers
 					Address = h.Address,
 					PhoneNumber = h.PhoneNumber,
 					Description = h.Description,
+					StateId = h.StateId,
+					StateName = _db.States.Where(s => s.Id == h.StateId).Select(s => s.StateName).FirstOrDefault(),
 					ImagePath = h.Images
 						.Where(i => i.IsActive)
 						.OrderBy(i => i.IsPrimary ? 0 : 1)
@@ -285,6 +287,9 @@ namespace SpicAPI.Controllers
 			if (await _db.GuestHouses.AnyAsync(h => h.Name.ToLower() == name.ToLower()))
 				return Conflict(new { Success = false, Message = $"Guest House '{name}' already exists." });
 
+			if (payload.StateId > 0 && !await _db.States.AnyAsync(s => s.Id == payload.StateId))
+				return BadRequest(new { Success = false, Message = "Selected State was not found." });
+
 			var now = DateTime.UtcNow;
 			var house = new GuestHouse
 			{
@@ -292,6 +297,7 @@ namespace SpicAPI.Controllers
 				Address = NullIfEmpty(payload.Address),
 				PhoneNumber = NullIfEmpty(payload.PhoneNumber),
 				Description = NullIfEmpty(payload.Description),
+				StateId = payload.StateId > 0 ? payload.StateId : null,
 				IsActive = payload.IsActive,
 				CreatedBy = "current-user",
 				CreatedAt = now,
@@ -320,10 +326,14 @@ namespace SpicAPI.Controllers
 			if (dupe)
 				return Conflict(new { Success = false, Message = $"Guest House '{name}' already exists." });
 
+			if (payload.StateId > 0 && !await _db.States.AnyAsync(s => s.Id == payload.StateId))
+				return BadRequest(new { Success = false, Message = "Selected State was not found." });
+
 			house.Name = name;
 			house.Address = NullIfEmpty(payload.Address);
 			house.PhoneNumber = NullIfEmpty(payload.PhoneNumber);
 			house.Description = NullIfEmpty(payload.Description);
+			house.StateId = payload.StateId > 0 ? payload.StateId : null;
 			house.IsActive = payload.IsActive;
 			house.UpdatedBy = "current-user";
 			house.UpdatedAt = DateTime.UtcNow;
@@ -782,6 +792,8 @@ namespace SpicAPI.Controllers
 		public string? Address { get; set; }
 		public string? PhoneNumber { get; set; }
 		public string? Description { get; set; }
+		public int? StateId { get; set; }
+		public string? StateName { get; set; }
 		public string? ImagePath { get; set; }
 		public bool IsActive { get; set; }
 		public int RoomCount { get; set; }
@@ -808,6 +820,7 @@ namespace SpicAPI.Controllers
 		public string? Address { get; set; }
 		public string? PhoneNumber { get; set; }
 		public string? Description { get; set; }
+		public int? StateId { get; set; }
 		public bool IsActive { get; set; } = true;
 	}
 
