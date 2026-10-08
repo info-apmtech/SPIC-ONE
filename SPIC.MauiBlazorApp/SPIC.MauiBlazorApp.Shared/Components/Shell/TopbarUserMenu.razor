@@ -73,7 +73,9 @@
                             }
                         </div>
 
-                        @if (LoginState.CanAccess(PagePermission.Profile))
+                        @* Menu visibility, same decision as the MoreSheet Profile action:
+                           LoginState.CanSeeMenu (CanAccess stays with PageGuard for the route). *@
+                        @if (LoginState.CanSeeMenu(PagePermission.Profile))
                         {
                             <button type="button"
                                     class="reference-edit-button"
@@ -114,26 +116,10 @@
             @* ===== Reference-style action area ===== *@
             <div class="reference-profile-body">
 
-                @if (LoginState.CanAccess(PagePermission.Notifications))
-                {
-                    <button type="button"
-                            class="reference-menu-action reference-notification"
-                            @onclick="GoToNotifications">
-
-                        <span class="reference-action-icon">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                            </svg>
-                        </span>
-
-                        <span class="reference-action-label">
-                            Notification
-                        </span>
-
-                    </button>
-                }
-
+                @* "Notification" removed: it pointed at /Notifications, which is only a
+                   PagePermission enum value - no @page, service or menu entry exists for it, so
+                   the button was a dead destination (the phone bell's real hub is /Alerts).
+                   The .reference-notification CSS stays untouched. *@
 
                 <button type="button"
                         class="reference-menu-action reference-logout"
@@ -756,13 +742,6 @@ pointer-events: none;
         {
             // ignore JS errors
         }
-    }
-
-
-    private void GoToNotifications()
-    {
-        _showUserMenu = false;
-        Navigation.NavigateTo("/Notifications");
     }
 
 

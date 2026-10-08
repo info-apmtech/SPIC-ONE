@@ -11,16 +11,17 @@ namespace SPIC.MauiBlazorApp.Shared.Services;
 /// <param name="Label">Full label as shown in the sidebar / More sheet.</param>
 /// <param name="Icon">bootstrap-icons class, e.g. <c>bi-speedometer2</c>.</param>
 /// <param name="Href">Absolute app path, e.g. <c>/Dashboard</c>.</param>
-/// <param name="PermissionKey">Key passed to <see cref="LoginState.CanAccess(string)"/>. PageGuard gates a
-/// route by its first URL segment, so this is normally the same as <paramref name="Key"/>; it differs
-/// only where NavMenu.razor historically uses another key (e.g. StockReport → SalesReport).</param>
-public sealed record ShellTab(string Key, string Label, string Icon, string Href, string PermissionKey)
+    /// <param name="PermissionKey">Key passed to <see cref="LoginState.CanSeeMenu(string)"/>. PageGuard gates a
+    /// route by its first URL segment, so this is normally the same as <paramref name="Key"/>; it differs
+    /// only where NavMenu.razor historically uses another key (e.g. StockReport → SalesReport).</param>
+    public sealed record ShellTab(string Key, string Label, string Icon, string Href, string PermissionKey)
 {
     /// <summary>
-    /// Optional extra visibility rule that REPLACES the plain <c>CanAccess(PermissionKey)</c> check.
-    /// Mirrors the non-trivial conditions in NavMenu.razor (role-only items, Dealer / Director
-    /// special cases). Admin and CorporateAdmin already bypass <c>CanAccess</c> inside LoginState,
-    /// except for the designation-only SAS Lab / payment keys (those use <c>HasPageStrict</c>).
+    /// Optional extra visibility rule that REPLACES the plain <c>CanSeeMenu(PermissionKey)</c> check.
+    /// Only use it to RESTRICT (a role that must never see the page - e.g. a Dealer on SchemeApproval,
+    /// which PageGuard hard-blocks on the route too) or for pages that are not Designation-controlled
+    /// at all (Admin / SuperAdmin-only features such as Data Explorer). Everything else must stay a
+    /// plain entry with no Rule so menu visibility comes from the Designation alone.
     /// </summary>
     public Func<LoginState, bool>? Rule { get; init; }
 
@@ -67,12 +68,10 @@ public static class ShellNavigation
     public const string GroupGuestHouse = "Guest House";
     public const string GroupApprovals = "Approvals & Reports";
     public const string GroupSchemes = "Schemes";
+    public const string GroupDemoDocumentation = "Demo Documentation";
 
-    // Convenience so the rules read like NavMenu.razor.
-    private static bool IsAdminOrCorporate(LoginState s) => s.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
-
-    // Field staff: their phone bar is built around activities, dealer work and farmer work (product owner, 2026-09-20).
-    private static bool IsFieldStaff(LoginState s) => s.UserRole is AppRole.MO or AppRole.MDO or AppRole.JMDO;
+    // Admin-only helper for the entries that are deliberately not Designation-controlled.
+    private static bool IsAdmin(LoginState s) => s.UserRole is AppRole.Admin;
 
     // ---------------------------------------------------------------------------------------------
     // CANDIDATE LIST (ordered). Order matters twice:
@@ -85,7 +84,12 @@ public static class ShellNavigation
         // ---- top level (mirrors NavMenu.razor) ----
         new("Dashboard", "Dashboard", "bi-speedometer2", "/Dashboard", nameof(PagePermission.Dashboard))
         {
-            Rule = s => s.UserRole != AppRole.Dealer && s.CanAccess(nameof(PagePermission.Dashboard))
+            // Designation-controlled like every other menu. The old `UserRole != AppRole.Dealer`
+            // term was a MENU-only restriction: PageGuard has no Dealer rule for /Dashboard, so a
+            // Dealer holding PagePermission.Dashboard has always been able to open the route.
+            // Dropping it makes the entry obey business rule 3 (Designation decides) with no
+            // change to route authorization.
+            Rule = s => s.CanSeeMenu(PagePermission.Dashboard)
         },
         new("SubDealerList", "Sub Dealer Master", "bi-people-fill", "/SubDealerList", nameof(PagePermission.SubDealerList))
         {
@@ -94,18 +98,20 @@ public static class ShellNavigation
         new("DigitalLibrary", "Digital Library", "bi-collection-play", "/DigitalLibrary", "DigitalLibrary")
         {
             ShortLabel = "Library",
-            // No Rule: resolved by CanAccess(PagePermission.DigitalLibrary), the same call NavMenu and PageGuard use.
-            // Read-only content is open to every signed-in user (PageAuthorization.OpenAccessPages);
-            // adding/editing content needs the DigitalLibrary page (checked in the pages). A
-            // designation-driven role such as CommonRole needs the DigitalLibrary page grant.
+            // Menu visibility goes through CanSeeMenu: the route stays open to every signed-in
+            // user (PageAuthorization.OpenAccessPages) but the entry follows the Designation, so an
+            // administrator can switch it off. Same decision NavMenu / MobileSidebar use; PageGuard
+            // keeps using CanAccess for the route itself.
+            Rule = s => s.CanSeeMenu(PagePermission.DigitalLibrary)
         },
 
         new("Community", "Knowledge Community", "bi-people-fill", "/Community", "Community")
         {
             ShortLabel = "Community",
-            // Live module: the PagePermission key exists, so the designation decides (mirrors NavMenu).
-            // Open to every signed-in user (product decision 2026-09-20); a designation-driven role
-            // such as CommonRole reaches it only through its designation.
+            // Live module: the PagePermission key exists, so the designation decides the MENU entry
+            // (CanSeeMenu, mirroring NavMenu). The route stays open to every signed-in user
+            // (product decision 2026-09-20).
+            Rule = s => s.CanSeeMenu(PagePermission.Community)
         },
 
         // ---- SAS portal (page-permission gated; write actions are checked inside the pages) ----
@@ -165,61 +171,79 @@ public static class ShellNavigation
             ShortLabel = "History", Group = "SAS Portal",
             Rule = s => s.HasPageStrict(PagePermission.SasPaymentVerification)
         },
-        // Farmer pages (v1 SampleCollection key; the API scopes to the farmer's own samples)
+        // Farmer pages (v1 SampleCollection key; the API scopes to the farmer's own samples).
+        // The `UserRole == AppRole.Farmer` term is KEPT deliberately: it is a true business
+        // authorization, not a menu restriction - SasController rejects a non-Farmer outright
+        // (account.Role != AppRole.Farmer), so these three destinations only exist for a Farmer.
+        // The permission half of the condition already goes through CanSeeMenu.
         new("SasMySamples", "My Samples", "bi-droplet-half", "/Sas/MySamples", nameof(PagePermission.SampleCollection))
         {
-            ShortLabel = "Samples", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+            ShortLabel = "Samples", Group = "SAS Portal",
+            Rule = s => s.UserRole == AppRole.Farmer && s.CanSeeMenu(PagePermission.SampleCollection)
         },
         new("SasMyReports", "My Reports", "bi-file-earmark-text", "/Sas/MyReports", nameof(PagePermission.SampleCollection))
         {
-            ShortLabel = "Reports", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+            ShortLabel = "Reports", Group = "SAS Portal",
+            Rule = s => s.UserRole == AppRole.Farmer && s.CanSeeMenu(PagePermission.SampleCollection)
         },
         new("SasMyPayments", "Payments", "bi-wallet2", "/Sas/Payments", nameof(PagePermission.SampleCollection))
         {
-            ShortLabel = "Payments", Group = "SAS Portal", Rule = s => s.UserRole == AppRole.Farmer
+            ShortLabel = "Payments", Group = "SAS Portal",
+            Rule = s => s.UserRole == AppRole.Farmer && s.CanSeeMenu(PagePermission.SampleCollection)
         },
 
-        // ---- shell hubs (phone destinations; PageGuard opens them to every signed-in user with a
-        //      designation because each hub only LINKS to pages the user can already open) ----
-        new("Activities", "My Activities", "bi-clipboard2-pulse-fill", "/Activities", "Activities")
+        // ---- shell hubs (phone destinations). Each hub only LINKS to pages the user can already
+        //      open, so PageGuard keeps the ROUTE open for every signed-in user with a designation.
+        //      The MENU entries are Designation-controlled through their own PagePermission
+        //      members (added for the menu-authorization standard), so an administrator can now
+        //      grant or revoke them like any other menu. ----
+        new("Activities", "My Activities", "bi-clipboard2-pulse-fill", "/Activities", nameof(PagePermission.Activities))
         {
-            ShortLabel = "Activities", Rule = IsFieldStaff
+            ShortLabel = "Activities", Rule = s => s.CanSeeMenu(PagePermission.Activities)
         },
-        new("Farmers", "Farmers", "bi-flower2", "/Farmers", "Farmers")
+        new("Farmers", "Farmers", "bi-flower2", "/Farmers", nameof(PagePermission.Farmers))
         {
-            Rule = IsFieldStaff
+            Rule = s => s.CanSeeMenu(PagePermission.Farmers)
         },
-        new("Alerts", "Alerts", "bi-bell-fill", "/Alerts", "Alerts")
+        new("Alerts", "Alerts", "bi-bell-fill", "/Alerts", nameof(PagePermission.Alerts))
         {
-            // Also reachable from the bell in the phone/tablet top bar.
-            // No Rule: resolved by CanAccess(PagePermission.Alerts); open to every signed-in user for the
-            // default employee roles (PageAuthorization.OpenAccessPages).
+            // Also reachable from the bell in the phone/tablet top bar. The route stays open to
+            // every signed-in user (PageAuthorization.OpenAccessRoutes); the MENU entry follows
+            // PagePermission.Alerts so the bell can actually be switched on or off per Designation.
+            Rule = s => s.CanSeeMenu(PagePermission.Alerts)
         },
         new("AskAI", "Ask SPIC AI", "bi-stars", "/DigitalLibrary/chat", "DigitalLibrary")
         {
-            // Also reachable from the sparkle icon in the phone/tablet top bar. The chat is part of the
-            // DigitalLibrary page, so it follows the same CanAccess decision.
-            ShortLabel = "Ask AI"
+            // Also reachable from the sparkle icon in the phone/tablet top bar. The chat is part of
+            // the DigitalLibrary page, so it follows the same CanSeeMenu decision as that page.
+            ShortLabel = "Ask AI",
+            Rule = s => s.CanSeeMenu(PagePermission.DigitalLibrary)
         },
         // Category master behind the content forms (admin page; PageGuard treats
         // /DigitalLibrary/categories like /DigitalLibrary/add). Own key so it is never confused
         // with the Library tab in Find / ActiveKey; the permission is the DigitalLibrary page.
         new("LibraryCategories", "Library Categories", "bi-tags", "/DigitalLibrary/categories", "DigitalLibrary")
         {
-            ShortLabel = "Categories", Group = "Digital Library"
+            ShortLabel = "Categories", Group = "Digital Library",
+            Rule = s => s.CanSeeMenu(PagePermission.DigitalLibrary)
         },
 
         // ---- role-specific quick destinations (pages reachable today but not listed in NavMenu) ----
         new("SDWADashboard", "Dealer Dashboard", "bi-house-door-fill", "/SDWADashboard", nameof(PagePermission.SDWADashboard))
         {
             ShortLabel = "Home", Group = GroupSdwa,
-            // PageGuard always lets a Dealer reach SDWADashboard, even with no designation.
-            Rule = s => s.UserRole == AppRole.Dealer || s.CanAccess(nameof(PagePermission.SDWADashboard))
+            // Was `UserRole == AppRole.Dealer || CanAccess(...)`. The Dealer role bypass is
+            // replaced by the PagePermission grant (see the Dealer designation backfill script):
+            // every existing Dealer designation receives SDWADashboard before this rule ships.
+            // PageGuard is untouched and still lets a Dealer reach the ROUTE (see its own Dealer
+            // block), so the route stays open even for a designation that has not been backfilled.
+            Rule = s => s.CanSeeMenu(PagePermission.SDWADashboard)
         },
         new("WelfareSchemes", "Welfare Schemes", "bi-gift-fill", "/WelfareSchemes", nameof(PagePermission.WelfareSchemes))
         {
             ShortLabel = "Schemes", Group = GroupSdwa,
-            Rule = s => s.UserRole == AppRole.Dealer || s.CanAccess(nameof(PagePermission.WelfareSchemes))
+            // Same conversion as SDWADashboard: Dealer role bypass -> PagePermission grant.
+            Rule = s => s.CanSeeMenu(PagePermission.WelfareSchemes)
         },
         new("GuestHouse", "Guest House", "bi-building", "/GuestHouse", nameof(PagePermission.GuestHouse))
         {
@@ -232,8 +256,16 @@ public static class ShellNavigation
         new("SchemeApproval", "Scheme Approval", "bi-check2-square", "/SchemeApproval", nameof(PagePermission.SchemeApproval))
         {
             ShortLabel = "Approvals", Group = GroupSdwa,
+            // The Designation decides the entry (no Director term - that was a menu restriction
+            // and PageGuard still lets a Director open the approval ROUTES as its own documented
+            // server-side capability).
+            //
+            // The `UserRole != AppRole.Dealer` term is KEPT deliberately: it is a true business
+            // authorization, not a menu restriction. PageGuard itself hard-redirects every Dealer
+            // away from /SchemeApproval to /SDWADashboard ("must NEVER reach the SchemeApproval
+            // page"), so a menu shown here would be a link the route guard rejects.
             Rule = s => s.UserRole != AppRole.Dealer
-                        && (s.CanAccess(nameof(PagePermission.SchemeApproval)) || s.UserRole == AppRole.Director)
+                        && s.CanSeeMenu(PagePermission.SchemeApproval)
         },
         new("SMMApprovals", "SMM Approvals", "bi-clipboard2-check-fill", "/SMMApprovals", nameof(PagePermission.SMMApprovals))
         {
@@ -275,11 +307,16 @@ public static class ShellNavigation
         // ---- admin tools (mirrors NavMenu.razor) ----
         new("IfmsAutoImport", "IFMS Auto Import", "bi-cloud-upload-fill", "/IfmsAutoImport", "IfmsAutoImport")
         {
-            Group = GroupAdminTools, Rule = s => s.UserRole == AppRole.Admin
+            // No Rule: Admin / SuperAdmin reach it through the role bypass, every other role
+            // through its Designation (PagePermission.IfmsAutoImport).
+            Group = GroupAdminTools
         },
         new("DataExplorer", "Data Explorer", "bi-database-fill", "/DataExplorer", "DataExplorer")
         {
-            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.SuperAdmin
+            // Mirrors NavMenu.razor / MobileSidebar.razor: BOTH list Data Explorer for Admin or
+            // SuperAdmin, and PageGuard lets those two roles through the role bypass - so the shell
+            // rule must not be narrower than the sidebar or Admin loses the entry here.
+            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.Admin or AppRole.SuperAdmin
         },
         new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", nameof(PagePermission.IfmsRelaySetup))
         {
@@ -299,9 +336,10 @@ public static class ShellNavigation
         new("TopRankingRetailers", "Top Ranking Retailers", "bi-shop", "/TopRankingRetailers", nameof(PagePermission.TopRankingRetailers)) { Group = GroupSubsidy },
         new("ProductWiseStockAvailability", "Productwise Stock Availability", "bi-columns-gap", "/ProductWiseStockAvailability", nameof(PagePermission.ProductWiseStockAvailability)) { Group = GroupSubsidy },
         new("StockDetails", "Stock Details", "bi-inboxes-fill", "/StockDetails", nameof(PagePermission.StockDetails)) { Group = GroupSubsidy },
+        // Admin-only tool: no PagePermission exists for it on purpose (it is not a Designation page).
         new("ExcelFormatFileUpload", "File Upload", "bi-file-earmark-arrow-up-fill", "/ExcelFormatFileUpload", "ExcelFormatFileUpload")
         {
-            Group = GroupSubsidy, Rule = s => s.UserRole == AppRole.Admin
+            Group = GroupSubsidy, Rule = IsAdmin
         },
 
         // ---- MD Portal accordion ----
@@ -309,6 +347,7 @@ public static class ShellNavigation
         new("BudgetingManagements", "Budgeting Management", "bi-cash-stack", "/BudgetingManagements", nameof(PagePermission.BudgetingManagements)) { Group = GroupMdPortal },
         new("BudgetSubmissions", "Budget Submissions", "bi-journal-text", "/BudgetSubmissions", nameof(PagePermission.BudgetSubmissions)) { Group = GroupMdPortal },
         new("AnnualBudgeting", "Annual Budgeting", "bi-wallet-fill", "/AnnualBudgeting", nameof(PagePermission.AnnualBudgeting)) { Group = GroupMdPortal },
+        new("ProgramMaster", "Program Master", "bi-diagram-3", "/ProgramMaster", nameof(PagePermission.ProgramMaster)) { Group = GroupMdPortal },
         new("CREATE-CSR-1Management", "CSR-1 Create", "bi-file-earmark-text", "/CREATE-CSR-1Management", nameof(PagePermission.CSR1Create)) { Group = GroupMdPortal },
         new("CSR-1List", "CSR-1 Management", "bi-kanban-fill", "/CSR-1List", nameof(PagePermission.CSR1Management)) { Group = GroupMdPortal },
         new("CSR2", "CSR-2", "bi-layout-text-window-reverse", "/CSR2", nameof(PagePermission.CSR2)) { Group = GroupMdPortal },
@@ -338,17 +377,22 @@ public static class ShellNavigation
         // ---- SDWA accordion (remaining items) ----
         new("ReportDashboard", "Admin Dashboard", "bi-grid-fill", "/ReportDashboard", nameof(PagePermission.ReportDashboard)) { Group = GroupSdwa },
         new("SubDealerEmployeeMaster", "Sub Dealer & Employee", "bi-people-fill", "/SubDealerEmployeeMaster", nameof(PagePermission.SubDealerEmployeeMaster)) { Group = GroupSdwa },
-        new("GuestHouseMaster", "Guest House Master", "bi-building-fill", "/GuestHouseMaster", "GuestHouseMaster")
+        // The three SDWA master pages are Designation-controlled, exactly like the desktop
+        // sidebar entries for them (NavMenu / MobileSidebar use CanSeeMenu too), so no Rule.
+        // Admin still reaches them through the role bypass; CorporateAdmin needs the grant.
+        // Guest House Master shares the GuestHouse permission with its sidebar entry and
+        // /GuestHouse, so its PermissionKey is the GuestHouse key rather than the URL segment.
+        new("GuestHouseMaster", "Guest House Master", "bi-building-fill", "/GuestHouseMaster", nameof(PagePermission.GuestHouse))
         {
-            Group = GroupSdwa, Rule = IsAdminOrCorporate
+            Group = GroupSdwa
         },
-        new("SdwaCompanyMaster", "Company Details", "bi-briefcase-fill", "/SdwaCompanyMaster", "SdwaCompanyMaster")
+        new("SdwaCompanyMaster", "Company Details", "bi-briefcase-fill", "/SdwaCompanyMaster", nameof(PagePermission.SdwaCompanyMaster))
         {
-            Group = GroupSdwa, Rule = IsAdminOrCorporate
+            Group = GroupSdwa
         },
-        new("GuestHouseCancellations", "Cancellation Requests", "bi-x-octagon-fill", "/GuestHouseCancellations", "GuestHouseCancellations")
+        new("GuestHouseCancellations", "Cancellation Requests", "bi-x-octagon-fill", "/GuestHouseCancellations", nameof(PagePermission.GuestHouseCancellations))
         {
-            Group = GroupSdwa, Rule = IsAdminOrCorporate
+            Group = GroupSdwa
         },
         new("FrontOffice", "Front Office", "bi-door-open-fill", "/FrontOffice", nameof(PagePermission.FrontOffice)) { Group = GroupSdwa },
         new("GenerateBill", "Generate Bill", "bi-receipt", "/GenerateBill", nameof(PagePermission.GenerateBill)) { Group = GroupSdwa },
@@ -360,6 +404,36 @@ public static class ShellNavigation
         new("Relationship", "Relationship Master", "bi-link-45deg", "/Relationship", nameof(PagePermission.Relationship)) { Group = GroupSettings },
         // ---- Contact ----
         new("ContactUs", "Contact Us", "bi-headset", "/ContactUs", nameof(PagePermission.ContactUs)),
+
+        // ---- Demo documentation subtree (mirrors the NavMenu / MobileSidebar accordion).
+        //      Appended at the END on purpose: every existing candidate keeps its position, so
+        //      More-sheet order and the role tab/rail fill are unchanged.
+        //      PermissionKey stays the route-only name for the six children: PageGuard resolves a
+        //      route's permission identity from ShellNavigation.PermissionKey, so changing it would
+        //      change ROUTE authorization (forbidden). They are Designation-controlled through the
+        //      menu Rule only, using the PagePermission members added for the menu standard.
+        //      MoreOnly: grouped menu entries only, never a tab or rail slot. ----
+        new("DemoDocumentation", "Demo Documentation", "bi-journal-richtext", "/DemoDocumentation", nameof(PagePermission.DemoDocumentation)) { Group = GroupDemoDocumentation, MoreOnly = true },
+        new("StartDocumentation", "Start Documentation", "bi-pencil-square", "/StartDocumentation", "StartDocumentation") { Group = GroupDemoDocumentation, MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.StartDocumentation) },
+        new("DemoDetails", "Demo Details", "bi-clipboard2-data", "/DemoDetails", "DemoDetails") { Group = GroupDemoDocumentation, MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.DemoDetails) },
+        new("TreatmentDetails", "Treatment Details", "bi-list-check", "/TreatmentDetails", "TreatmentDetails") { Group = GroupDemoDocumentation, MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.TreatmentDetails) },
+        new("Treatment01", "Treatment 01", "bi-1-circle", "/Treatment01", "Treatment01") { Group = GroupDemoDocumentation, MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.Treatment01) },
+        new("TreatmentDemoDetails", "Treatment Demo Details", "bi-easel", "/TreatmentDemoDetails", "TreatmentDemoDetails") { Group = GroupDemoDocumentation, MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.TreatmentDemoDetails) },
+        new("Treatment02", "Treatment 02", "bi-2-circle", "/Treatment02", "Treatment02") { Group = GroupDemoDocumentation, MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.Treatment02) },
+
+        // ---- sidebar entries that had no shell destination (desktop/mobile menu parity).
+        //      Same PermissionKey / condition as NavMenu.razor, MoreOnly so the phone tab bar and
+        //      tablet rail keep exactly the items they show today. ----
+        // Menu visibility goes through LoginState.CanSeeMenu: these three keys are in
+        // PageAuthorization.OpenAccessRoutes (so CanAccess lets the route open for every signed-in
+        // user) but are ALSO assignable PagePermission members, so the menu must still follow the
+        // designation. Admin / SuperAdmin are unaffected inside CanSeeMenu.
+        new("SalesAudit", "Sales Audit", "bi-clipboard-data", "/SalesAudit", nameof(PagePermission.SalesAudit))
+        { MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.SalesAudit) },
+        new("ExtensionRequests", "Extension Requests", "bi-hourglass-split", "/ExtensionRequests", nameof(PagePermission.ExtensionRequests))
+        { MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.ExtensionRequests) },
+        new("FarmDashboard", "Farm Operations", "bi-speedometer2", "/FarmDashboard", nameof(PagePermission.FarmDashboard))
+        { MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.FarmDashboard) },
     };
 
     // ---------------------------------------------------------------------------------------------
@@ -394,11 +468,16 @@ public static class ShellNavigation
 
     // ---------------------------------------------------------------------------------------------
     // Accessibility of a single destination for the signed-in user.
+    //
+    // Menu visibility only: CanSeeMenu answers "should this entry render?", never "may the user
+    // open the route?" - PageGuard keeps using CanAccess for that. Admin / SuperAdmin return true
+    // inside CanSeeMenu (except the designation-only SAS Lab / payment keys, which keep their
+    // explicit HasPageStrict Rule below), and every other role is decided by its Designation alone.
     // ---------------------------------------------------------------------------------------------
     public static bool IsAccessible(LoginState state, ShellTab tab)
     {
         if (state is null || !state.IsLoggedIn) return false;
-        return tab.Rule is not null ? tab.Rule(state) : state.CanAccess(tab.PermissionKey);
+        return tab.Rule is not null ? tab.Rule(state) : state.CanSeeMenu(tab.PermissionKey);
     }
 
     public static ShellTab? Find(string key) =>

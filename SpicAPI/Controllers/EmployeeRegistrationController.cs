@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -120,6 +120,9 @@ namespace SpicAPI.Controllers
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
+
+            if (!IsValidUserName(request.UserName))
+                return BadRequest("Username must not contain spaces or invisible characters.");
 
             var employee = await _employeeInfoRepo
                 .GetWhere(x => x.Id == request.EmployeeInformationID)
@@ -265,6 +268,9 @@ namespace SpicAPI.Controllers
             var user = await _userManager.FindByIdAsync(login.UserId);
             if (user == null)
                 return NotFound("UserInfo not found");
+
+            if (user.UserName != request.UserName && !IsValidUserName(request.UserName))
+                return BadRequest("Username must not contain spaces or invisible characters.");
 
             var existingUserWithSameName = await _userManager.FindByNameAsync(request.UserName);
             if (existingUserWithSameName != null && existingUserWithSameName.Id != user.Id)
@@ -437,6 +443,9 @@ namespace SpicAPI.Controllers
             var employee = await _employeeInfoRepo.GetByIdAsync(login.EmployeeInformationID);
             var user = await _userManager.FindByIdAsync(login.UserId);
 
+            if (user != null && user.UserName != request.UserName && !IsValidUserName(request.UserName))
+                return BadRequest("Username must not contain spaces or invisible characters.");
+
             var existingUserWithSameName = await _userManager.FindByNameAsync(request.UserName);
             if (existingUserWithSameName != null && existingUserWithSameName.Id != user.Id)
                 return BadRequest("Username already exists");
@@ -479,6 +488,12 @@ namespace SpicAPI.Controllers
             }
 
             return Ok(new { message = "Employee role details updated successfully" });
+        }
+
+        private bool IsValidUserName(string userName)
+        {
+            if (string.IsNullOrWhiteSpace(userName)) return false;
+            return System.Text.RegularExpressions.Regex.IsMatch(userName, @"\A[\x21-\x7E]+\z");
         }
 
         private async Task<List<SpecialAdminLocationItem>?> LoadSpecialAdminLocationsAsync(int employeeInfoId, AppRole role)

@@ -2,6 +2,7 @@
 @implements IDisposable
 
 @using System.Net.Http.Headers
+@using System.Net.Http.Json
 @using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Components.Shell
 
@@ -72,25 +73,38 @@
                    stays pixel-identical. *@
                 @if (LoginState.IsLoggedIn)
                 {
-                    <a class="icon-btn shell-topbar-quick shell-topbar-ai"
-                       href="/DigitalLibrary/chat"
-                       aria-label="Ask SPIC AI"
-                       title="Ask SPIC AI">
+                    @* Each quick action uses the SAME decision as the menu entry for that
+                       destination: LoginState.CanSeeMenu, which lets the Designation switch the
+                       entry off even though PageAuthorization opens the route for every signed-in
+                       user (Ask AI / Library -> DigitalLibrary, bell -> PagePermission.Alerts).
+                       Admin / SuperAdmin pass both through the role bypass exactly as before; a
+                       user who may not open the page no longer sees a link that would only bounce
+                       them off it. Pages, routes and APIs are untouched. *@
+                    @if (LoginState.CanSeeMenu(PagePermission.DigitalLibrary))
+                    {
+                        <a class="icon-btn shell-topbar-quick shell-topbar-ai"
+                           href="/DigitalLibrary/chat"
+                           aria-label="Ask SPIC AI"
+                           title="Ask SPIC AI">
 
-                        <i class="bi bi-stars"></i>
+                            <i class="bi bi-stars"></i>
 
-                    </a>
+                        </a>
+                    }
 
-                    <a class="icon-btn shell-topbar-quick shell-topbar-alerts"
-                       href="/Alerts"
-                       aria-label="Alerts"
-                       title="Alerts">
+                    @if (LoginState.CanSeeMenu(PagePermission.Alerts))
+                    {
+                        <a class="icon-btn shell-topbar-quick shell-topbar-alerts"
+                           href="/Alerts"
+                           aria-label="Alerts"
+                           title="Alerts">
 
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/NotificationBell.svg"
-                             alt=""
-                             class="iconimg" />
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/NotificationBell.svg"
+                                 alt=""
+                                 class="iconimg" />
 
-                    </a>
+                        </a>
+                    }
                 }
 
                 @* Notification - existing topbar flow unchanged (desktop >= 1200px) *@
@@ -316,6 +330,35 @@ else
                         "Bearer",
                         token
                     );
+
+
+                /*
+                 * RE-READ PAGE PERMISSIONS FROM THE SERVER
+                 *
+                 * The RoleAccess snapshot taken at login is otherwise authoritative for the
+                 * whole session, so a Designation edited by an administrator would never reach
+                 * a user who is already signed in. One call per app load - no polling, no
+                 * refresh loop - and it runs BEFORE LoginState.Token is restored, so
+                 * PageGuard's first successful check already sees the fresh set. The result is
+                 * written back to the session store so PageGuard / Login.razor restore the same
+                 * value. Any failure (offline, 401, server error) keeps the session snapshot
+                 * exactly as it was, so login and session behaviour are unchanged.
+                 */
+
+                try
+                {
+                    var freshRoleAccess = await Http.GetFromJsonAsync<string>(
+                        "api/Authentication/permissions");
+
+                    if (freshRoleAccess is not null)
+                    {
+                        await SessionStore.SetAsync(
+                            SessionKeys.RoleAccess,
+                            freshRoleAccess
+                        );
+                    }
+                }
+                catch { /* keep the session snapshot */ }
 
 
                 /*

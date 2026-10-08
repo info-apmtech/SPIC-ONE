@@ -105,7 +105,16 @@ namespace SPIC.Core.Entities
     /// </summary>
     public static class PageAuthorization
     {
-        /// <summary>Routes with no PagePermission member that every signed-in user may reach.</summary>
+        /// <summary>
+        /// Routes with no Designation-controlled <see cref="PagePermission"/> that every signed-in
+        /// user may reach. ONLY two kinds of entry belong here: the shell hubs, and the
+        /// documentation / treatment subtree that was never designation-configurable.
+        /// <para>
+        /// Anything that HAS a <see cref="PagePermission"/> member must NOT be listed: the Designation
+        /// grid offers it as a checkbox, so an open-to-all grant here would silently override the
+        /// administrator's decision for every non-CommonRole user.
+        /// </para>
+        /// </summary>
         public static IReadOnlySet<string> OpenAccessRoutes { get; } =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -117,7 +126,6 @@ namespace SPIC.Core.Entities
                 // Demo/documentation subtree. These were never designation-configurable (they have
                 // no PagePermission member); give them one if they should become assignable and
                 // they can leave this list.
-                "DemoDocumentation",
                 "StartDocumentation",
                 "DemoDetails",
                 "TreatmentDetails",
@@ -181,10 +189,17 @@ namespace SPIC.Core.Entities
                 // permission set is EXACTLY the pages on its designation - not a union with any
                 // default, role-wide or open-to-all pages.
                 [AppRole.CommonRole] = PageAccessModel.DesignationOnly,
-                // Admin-family roles keep their existing bypass over page permissions.
+                // Admin and SuperAdmin keep the role bypass they have always had. Every other
+                // role not listed below - CorporateAdmin, Director, AVP, the field roles, Dealer
+                // and Farmer - resolves its pages from its Designation only (plus OpenAccessPages).
                 [AppRole.Admin] = PageAccessModel.RoleBypass,
-                [AppRole.CorporateAdmin] = PageAccessModel.RoleBypass,
                 [AppRole.SuperAdmin] = PageAccessModel.RoleBypass,
+                // SpecialAdmin: its Designation's RoleAccess is the ONLY source of page access -
+                // no union with OpenAccessPages (Digital Library, Community, Profile, the shell
+                // hubs, ...), because those are pages it has to be granted explicitly. Deliberately
+                // NOT RoleBypass (that stays Admin / SuperAdmin only) and not part of
+                // ActionBypassRoles, so Admin and SuperAdmin behaviour is untouched.
+                [AppRole.SpecialAdmin] = PageAccessModel.DesignationOnly,
             };
 
         /// <summary>
@@ -195,9 +210,13 @@ namespace SPIC.Core.Entities
         /// behaviour and is preserved exactly. Listing it as its own table is what keeps the two
         /// decisions from drifting apart when a role is added.
         /// </para>
+        /// <para>
+        /// Admin only. CorporateAdmin action access comes from its Designation's
+        /// "Page.Action" tokens, like every other Designation-controlled role.
+        /// </para>
         /// </summary>
         public static IReadOnlySet<AppRole> ActionBypassRoles { get; } =
-            new HashSet<AppRole> { AppRole.Admin, AppRole.CorporateAdmin };
+            new HashSet<AppRole> { AppRole.Admin };
 
         /// <summary>The authorization model that applies to a role (default when not listed).</summary>
         public static PageAccessModel ModelFor(AppRole? role) =>
@@ -247,7 +266,7 @@ namespace SPIC.Core.Entities
             if (OpenAccessPages.Contains(pageKey) && permissions.Model != PageAccessModel.DesignationOnly)
                 return true;
 
-            // 3. Role bypass (Admin / CorporateAdmin / SuperAdmin) over remaining pages.
+            // 3. Role bypass (Admin / SuperAdmin) over remaining pages.
             if (permissions.Model == PageAccessModel.RoleBypass)
                 return true;
 
@@ -269,7 +288,7 @@ namespace SPIC.Core.Entities
         {
             if (permissions is null) return false;
 
-            // Admin / CorporateAdmin bypass actions, except on the designation-only pages.
+            // Admin bypasses actions, except on the designation-only pages.
             // SuperAdmin is intentionally absent from ActionBypassRoles: it bypasses page
             // reachability but has never bypassed actions.
             if (HasActionBypass(role) && !DesignationOnlyPages.Contains(pageKey))

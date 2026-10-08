@@ -2,6 +2,7 @@
 @inject HttpClient Http
 @inject ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject NavigationManager Navigation
 @using System.Linq
 @using System.Globalization
 @using System.Net.Http.Json
@@ -561,14 +562,14 @@
 
             <!-- Right Action Buttons; native: ActionBar = inline row on tablet/desktop, fixed 44px bar on phone -->
             <ActionBar CssClass="bm-actionbar" AriaLabel="Budget plan actions">
-                <button type="button" class="bm-btn-secondary" @onclick="HandleSaveDraft">
+                @* <button type="button" class="bm-btn-secondary" @onclick="HandleSaveDraft">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                         <polyline points="17 21 17 13 7 13 7 21"></polyline>
                         <polyline points="7 3 7 8 15 8"></polyline>
                     </svg>
                     Save Draft
-                </button>
+                </button> *@
                 <button type="button"
                         class="bm-btn-primary"
                         @onclick="HandleSubmitValidation"
@@ -660,8 +661,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                                       watermarks (::before/::after) that leak onto these tiles and sit on top
-                                       of the label text. Neutralise them for this page only. */
+                                           watermarks (::before/::after) that leak onto these tiles and sit on top
+                                           of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -1115,7 +1116,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                                           on screen (it used to sit off the right edge of a 720px table). */
+                                               on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1395,7 +1396,12 @@
                     SMMAllocatedBudget = result.BudgetAmount;
                     StateTotalBudget = result.BudgetAmount;
                     break;
-
+                case "MO":
+                    // MO budget comes from HeadquarterBudgetAllocation.Amount
+                    // Keep using SMMAllocatedBudget as the common validation/save variable
+                    SMMAllocatedBudget = result.BudgetAmount;
+                    StateTotalBudget = result.BudgetAmount;
+                    break;
                 default:
                     Console.WriteLine($"Unsupported Budget Role: {role}");
                     break;
@@ -1419,7 +1425,7 @@
     }
 
 
-    private async Task LoadProgramBudget()
+    private async Task LoadProgramBudgetold()
     {
         try
         {
@@ -1446,6 +1452,77 @@
         }
     }
 
+    private async Task LoadProgramBudget()
+    {
+        try
+        {
+            programPlans =
+                await Http.GetFromJsonAsync<List<ProgramWiseBudgetDto>>(
+                    "api/Budget/program-master-list"
+                )
+                ?? new();
+
+            // Do NOT load previously saved draft values on page open.
+            // await LoadDraftBudget();
+
+            // Ensure monthly values start fresh.
+            foreach (var item in programPlans)
+            {
+                item.AprilCount = 0;
+                item.AprilBudget = 0;
+
+                item.MayCount = 0;
+                item.MayBudget = 0;
+
+                item.JuneCount = 0;
+                item.JuneBudget = 0;
+
+                item.JulyCount = 0;
+                item.JulyBudget = 0;
+
+                item.AugustCount = 0;
+                item.AugustBudget = 0;
+
+                item.SeptemberCount = 0;
+                item.SeptemberBudget = 0;
+
+                item.OctoberCount = 0;
+                item.OctoberBudget = 0;
+
+                item.NovemberCount = 0;
+                item.NovemberBudget = 0;
+
+                item.DecemberCount = 0;
+                item.DecemberBudget = 0;
+
+                item.JanuaryCount = 0;
+                item.JanuaryBudget = 0;
+
+                item.FebruaryCount = 0;
+                item.FebruaryBudget = 0;
+
+                item.MarchCount = 0;
+                item.MarchBudget = 0;
+
+                // Keep state-wise Program BudgetAmount.
+                item.TotalBudget =
+                    item.IsChangeAmount
+                        ? 0
+                        : item.BudgetAmount;
+            }
+
+            FilteredProgramPlans =
+                programPlans.ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(
+                $"Program Budget Load Error: {ex.Message}");
+
+            programPlans = new();
+            FilteredProgramPlans = new();
+        }
+    }
     private decimal TotalAllocated =>
         TotalAllocatedProgramBudget;
 
@@ -1610,89 +1687,175 @@
                 return;
             }
 
-            // Keep the current filtered-list behavior.
-            var selectedPrograms = FilteredProgramPlans.ToList();
+            var selectedPrograms =
+                FilteredProgramPlans.ToList();
 
-            // Refresh monthly calculations using your existing method.
+            // Refresh monthly calculations
             foreach (var item in selectedPrograms)
             {
                 CalculateBudget(item);
             }
 
-            // Keep your existing validation.
+            // Existing validation
             if (!ValidateBudgetData())
             {
                 return;
             }
 
-            // Create ONE request containing all selected programs.
+            // =====================================================
+            // TOTAL ALLOCATION MUST MATCH AVAILABLE BUDGET EXACTLY
+            // =====================================================
+
+            decimal totalAllocatedBudget =
+                TotalAllocatedProgramBudget;
+
+            decimal availableBudget =
+                SMMAllocatedBudget;
+
+            if (totalAllocatedBudget != availableBudget)
+            {
+                decimal difference =
+                    availableBudget - totalAllocatedBudget;
+
+                if (difference > 0)
+                {
+                    Toast.Error(
+                        $"Total allocated budget ₹{totalAllocatedBudget:N0} " +
+                        $"must equal allotted budget ₹{availableBudget:N0}. " +
+                        $"Remaining to allocate: ₹{difference:N0}."
+                    );
+                }
+                else
+                {
+                    Toast.Error(
+                        $"Total allocated budget ₹{totalAllocatedBudget:N0} " +
+                        $"exceeds allotted budget ₹{availableBudget:N0} " +
+                        $"by ₹{Math.Abs(difference):N0}."
+                    );
+                }
+
+                return;
+            }
+
+            // =====================================================
+            // BUILD REQUEST
+            // =====================================================
+
             var request = new SaveBudgetBatchRequest
             {
-                FinancialYear = _selectedFY,
+                FinancialYear =
+                    _selectedFY,
 
-                ApprovedAmount = SMMAllocatedBudget,
+                ApprovedAmount =
+                    availableBudget,
 
+                // Since totalAllocatedBudget must equal availableBudget,
+                // this will normally be 0.
                 RemainingAmount =
-          SMMAllocatedBudget -
-          TotalAllocatedProgramBudget,
+                    availableBudget -
+                    totalAllocatedBudget,
 
-                Programs = selectedPrograms
-          .Select(item => new BudgetProgram
-          {
-              ProgramId = item.ProgramId,
+                Programs =
+                    selectedPrograms
+                        .Select(item => new BudgetProgram
+                        {
+                            ProgramId =
+                                item.ProgramId,
 
-              TotalBudget = item.IsChangeAmount
-                  ? item.TotalBudget
-                  : item.BudgetAmount,
+                            TotalBudget =
+                                item.IsChangeAmount
+                                    ? item.TotalBudget
+                                    : item.BudgetAmount,
 
-              AprilCount = item.AprilCount,
-              April = item.AprilBudget,
+                            AprilCount =
+                                item.AprilCount,
 
-              MayCount = item.MayCount,
-              May = item.MayBudget,
+                            April =
+                                item.AprilBudget,
 
-              JuneCount = item.JuneCount,
-              June = item.JuneBudget,
+                            MayCount =
+                                item.MayCount,
 
-              JulyCount = item.JulyCount,
-              July = item.JulyBudget,
+                            May =
+                                item.MayBudget,
 
-              AugustCount = item.AugustCount,
-              August = item.AugustBudget,
+                            JuneCount =
+                                item.JuneCount,
 
-              SeptemberCount = item.SeptemberCount,
-              September = item.SeptemberBudget,
+                            June =
+                                item.JuneBudget,
 
-              OctoberCount = item.OctoberCount,
-              October = item.OctoberBudget,
+                            JulyCount =
+                                item.JulyCount,
 
-              NovemberCount = item.NovemberCount,
-              November = item.NovemberBudget,
+                            July =
+                                item.JulyBudget,
 
-              DecemberCount = item.DecemberCount,
-              December = item.DecemberBudget,
+                            AugustCount =
+                                item.AugustCount,
 
-              JanuaryCount = item.JanuaryCount,
-              January = item.JanuaryBudget,
+                            August =
+                                item.AugustBudget,
 
-              FebruaryCount = item.FebruaryCount,
-              February = item.FebruaryBudget,
+                            SeptemberCount =
+                                item.SeptemberCount,
 
-              MarchCount = item.MarchCount,
-              March = item.MarchBudget
-          })
-          .ToList()
+                            September =
+                                item.SeptemberBudget,
+
+                            OctoberCount =
+                                item.OctoberCount,
+
+                            October =
+                                item.OctoberBudget,
+
+                            NovemberCount =
+                                item.NovemberCount,
+
+                            November =
+                                item.NovemberBudget,
+
+                            DecemberCount =
+                                item.DecemberCount,
+
+                            December =
+                                item.DecemberBudget,
+
+                            JanuaryCount =
+                                item.JanuaryCount,
+
+                            January =
+                                item.JanuaryBudget,
+
+                            FebruaryCount =
+                                item.FebruaryCount,
+
+                            February =
+                                item.FebruaryBudget,
+
+                            MarchCount =
+                                item.MarchCount,
+
+                            March =
+                                item.MarchBudget
+                        })
+                        .ToList()
             };
 
-            // IMPORTANT: only ONE API call, outside any foreach loop.
-            using var response = await Http.PostAsJsonAsync(
-                "api/Budget",
-                request
-            );
+            // =====================================================
+            // SAVE
+            // =====================================================
 
+            using var response =
+                await Http.PostAsJsonAsync(
+                    "api/Budget",
+                    request
+                );
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = await response.Content.ReadAsStringAsync();
+                var errorBody =
+                    await response.Content
+                        .ReadAsStringAsync();
 
                 Console.WriteLine(
                     $"Budget save error ({(int)response.StatusCode}): " +
@@ -1707,8 +1870,18 @@
                 return;
             }
 
-            // Show success only after a successful API response.
-            Toast.Success("Budget created successfully.");
+            Toast.Success(
+                "Budget created successfully."
+            );
+
+            // Small delay so success toast is visible
+            await Task.Delay(800);
+
+            // Refresh current page
+            Navigation.NavigateTo(
+                Navigation.Uri,
+                forceLoad: true
+            );
         }
         catch (Exception ex)
         {

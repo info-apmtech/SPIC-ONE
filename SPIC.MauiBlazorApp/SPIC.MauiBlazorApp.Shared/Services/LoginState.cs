@@ -25,10 +25,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             // access with an empty RoleAccess.
             AppRole.Admin => DefaultLandingPath,
             AppRole.Dealer => "/SDWADashboard",
-            AppRole.SpecialAdmin => CanAccess(PagePermission.Logistics) ? "/Logistics" : "/Welcome",
-            // No designation assigned at all => /Welcome, the existing screen that tells the user to
-            // contact an administrator. Same signal PageGuard uses for its own no-designation branch,
-            // and keyed off the designation data rather than a role name.
+            // SpecialAdmin used to be hard-routed to /Logistics here. That both skipped the common
+            // landing screen and left the Settings (Logistics) submenu auto-expanded for the whole
+            // session, because NavMenu / MobileSidebar expand the section that owns the current URL
+            // on load. SpecialAdmin is designation-controlled like every other non-admin role, so it
+            // now falls through to the two data-driven arms below: no designation => /Welcome,
+            // designation => DefaultWelcome.
             _ when AllowedPages.Count == 0 => "/Welcome",
             // Has a designation => the default landing page. It is NOT a PagePermission and is not in
             // anyone's RoleAccess: it is a common landing screen, so it must not depend on which pages
@@ -90,23 +92,24 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool IsAdmin => UserRole is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
 
         // Single source of truth for the whole application: SPIC.Core's PageAuthorization.
-        // NavMenu, MobileSidebar, PageGuard and ShellNavigation all funnel through CanAccess /
-        // Can below, so they cannot drift apart. Re-resolving per call is cheap and correct even
-        // though AllowedPages and UserRole both change over the session.
+        // PageGuard, the shell's CanSeeMenu and the page-level Can checks all funnel through this
+        // one resolution, so they cannot drift apart. Re-resolving per call is cheap and correct
+        // even though AllowedPages and UserRole both change over the session.
         private EffectivePagePermissions EffectivePermissions =>
             PageAuthorization.GetEffectivePagePermissions(UserRole, AllowedPages);
 
         // True when this user's role uses PageAccessModel.DesignationOnly - i.e. its effective page
         // permissions are EXACTLY the pages configured on its Designation.RoleAccess, with no
-        // union with any default, role-wide or open-to-all page. Today that is AppRole.CommonRole.
-        // Derived from the MODEL rather than hardcoding a role name, so a role added to
-        // PageAuthorization.RoleModels as DesignationOnly is picked up here automatically, and
-        // used wherever a designation-driven role needs different handling (LandingPage, and the
-        // shell-hub / read-only-library short-circuits in PageGuard).
+        // union with any default, role-wide or open-to-all page. Today that is AppRole.CommonRole
+        // and AppRole.SpecialAdmin. Derived from the MODEL rather than hardcoding a role name, so a
+        // role added to PageAuthorization.RoleModels as DesignationOnly is picked up here
+        // automatically, and used wherever a designation-driven role needs different handling
+        // (the shell-hub / read-only-library short-circuits in PageGuard).
         public bool IsDesignationDrivenRole =>
             PageAuthorization.ModelFor(UserRole) == PageAccessModel.DesignationOnly;
 
-        // Convenience alias for the one role that currently uses the designation-driven model.
+        // Legacy name for the same concept; kept because the phrase reads better in existing call
+        // sites. It means "designation-driven role", not "AppRole.CommonRole".
         public bool IsCommonRole => IsDesignationDrivenRole;
 
         // SAS Lab / payment pages resolved through the DESIGNATION only (product decision 2026-09-27):
@@ -185,11 +188,44 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool HasPageStrict(string pageKey) =>
             PageAuthorization.HasPageStrict(EffectivePermissions, pageKey);
 
-        // Page-level: can the user REACH this page at all? Used by the route guard, menu
-        // visibility and tab visibility.
+        // Page-level: can the user REACH this page at all? Used by the route guard (PageGuard),
+        // page-internal feature checks and the API. Menu / tab visibility uses CanSeeMenu below.
         public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
 
         public bool CanAccess(string pageKey) => EffectivePermissions.CanReach(pageKey);
+
+        // MENU VISIBILITY ONLY. Never used by PageGuard, the API, or action checks - those keep
+        // using CanAccess / HasPageStrict exactly as before.
+        //
+        // CanAccess answers "may this user REACH this page?". PageAuthorization.OpenAccessRoutes
+        // and the enum's [OpenToAll] grant deliberately open a few keys for every signed-in user,
+        // which is correct for the route but wrong for a menu entry: a route-open key is ALSO an
+        // assignable PagePermission member in the Designation grid, so the open grant would light
+        // up a menu an administrator can uncheck. CanSeeMenu asks only "should this menu render?",
+        // so the designation decides instead of the open grant or the role.
+        //
+        // The key MUST be normalized first: HasPageStrict compares the RAW token page part
+        // against the key, and Designation.RoleAccess stores QRScanner as "qr-scanner". Passing
+        // the raw enum name would hide the QR Scanner menu from every designation that grants it.
+        //
+        // The SAS Lab / SAS payment keys are checked BEFORE the Admin / SuperAdmin arm because
+        // they are designation-only for every role (product decision 2026-09-27) and PageGuard
+        // enforces the same rule on the route - returning true here would render a menu the guard
+        // then bounces away from.
+        public bool CanSeeMenu(PagePermission page) => CanSeeMenu(RoleAccessPermissions.KeyFor(page));
+
+        public bool CanSeeMenu(string pageKey)
+        {
+            var key = RoleAccessPermissions.NormalizePageKey(pageKey);
+
+            if (PageAuthorization.DesignationOnlyPages.Contains(key))
+                return HasPageStrict(key);
+
+            if (UserRole is AppRole.Admin or AppRole.SuperAdmin)
+                return true;
+
+            return HasPageStrict(key);
+        }
 
         // Action-level: can the user perform a specific action on a page?
         // Use inside pages to show/hide Add / Edit / Delete buttons.

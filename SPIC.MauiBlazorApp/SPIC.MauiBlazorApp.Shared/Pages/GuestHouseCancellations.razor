@@ -9,9 +9,11 @@
 @using System.Linq
 @using SPIC.Core.Entities
 
-@* Admin review of dealer Guest House cancellation requests. Styling follows BillList.razor.
-   Access is enforced server-side (GuestHouseFrontOfficeController is Admin/CorporateAdmin only);
-   the role check here only avoids showing an unusable screen. *@
+@* Review of dealer Guest House cancellation requests. Styling follows BillList.razor.
+   Page VIEW is granted by PagePermission.GuestHouseCancellations (Designation) exactly like the
+   menu, ShellNavigation.PermissionKey and PageGuard; the check here only avoids showing an
+   unusable screen. Approve / Reject stay Admin / CorporateAdmin only - enforced server-side by
+   GuestHouseFrontOfficeAccessAttribute, which opens READS only. *@
 
 <style>
     .gc-container { max-width: 1400px; margin: auto; }
@@ -54,9 +56,9 @@
         </PageHeader>
     </div>
 
-    @if (!IsAdmin)
+    @if (!CanViewPage)
     {
-        <EmptyState Icon="bi-shield-lock" Title="Access denied" Message="Only Admin users can review cancellation requests." />
+        <EmptyState Icon="bi-shield-lock" Title="Access denied" Message="You do not have permission to review cancellation requests." />
     }
     else
     {
@@ -320,9 +322,15 @@
 
     private bool IsAdmin => LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
 
+    // Page VIEW: Admin / CorporateAdmin as before, plus the Designation grant for this page -
+    // the same PagePermission.GuestHouseCancellations the menu, ShellNavigation.PermissionKey and
+    // PageGuard resolve. HasPageStrict is the raw Designation.RoleAccess check (no role bypass), so
+    // SuperAdmin keeps its previous behaviour here, exactly as before.
+    private bool CanViewPage => IsAdmin || LoginState.HasPageStrict(PagePermission.GuestHouseCancellations);
+
     protected override async Task OnInitializedAsync()
     {
-        if (IsAdmin)
+        if (CanViewPage)
             await LoadAsync();
         else
             _isLoading = false;

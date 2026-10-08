@@ -70,6 +70,8 @@ namespace SPIC.Core.Entities
         // Add this
         public int? RegionId { get; set; }
 
+        public int? HeadQuartersId { get; set; }
+
         public string FinancialYear { get; set; } = string.Empty;
 
         public string Status { get; set; } = "Draft";

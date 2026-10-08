@@ -732,6 +732,21 @@ namespace Spic.Infrastructure.Data
             entity.HasIndex(x => x.HeadquarterBudgetSummaryId);
             entity.HasIndex(x => new { x.RegionId, x.FY });
         });
+
+        // Budget - state-wise applicability of a ProgramMaster: one row per (Program, State).
+        builder.Entity<ProgramStateMapping>(entity =>
+        {
+            entity.HasIndex(x => new { x.ProgramId, x.StateId }).IsUnique();
+            entity.HasIndex(x => x.StateId);
+            entity.HasOne(x => x.Program)
+                .WithMany()
+                .HasForeignKey(x => x.ProgramId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.State)
+                .WithMany()
+                .HasForeignKey(x => x.StateId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
         }
 
         // Same prettification the existing Designation UI uses (Designation.razor
@@ -940,6 +955,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<CSR1Products2> CSR1Products2 { get; set; }
         public DbSet<CSR1Products3> CSR1Products3 { get; set; }
         public DbSet<ProgramStateBudget> ProgramStateBudgets { get; set; }
+        public DbSet<ProgramStateMapping> ProgramStateMappings { get; set; }
         public DbSet<ProgramRegionBudget> ProgramRegionBudgets { get; set; }
         public DbSet<ProgramHQBudget> ProgramHQBudgets { get; set; }
 
