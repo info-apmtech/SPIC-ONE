@@ -191,19 +191,48 @@ internal static class PageAuthorizationTests
 			Check.That($"{route} is no longer an open-to-all route",
 				!PageAuthorization.OpenAccessRoutes.Contains(route));
 
-		// THE invariant of the fix: a route that has a PagePermission member is configurable on a
-		// Designation, so it must never be listed here - the open grant would override the
-		// administrator's checkbox for every non-CommonRole user.
-		foreach (var page in Enum.GetValues<PagePermission>())
+		// THE invariant: a route that has a PagePermission member is configurable on a Designation,
+		// so it must not be listed in OpenAccessRoutes - the open grant used to override the
+		// administrator's checkbox for every non-CommonRole user, because menus were gated with
+		// CanAccess and CanAccess honours the open grant.
+		//
+		// SANCTIONED EXCEPTION (menu-authorization standard, decisions B + M): the three shell hubs
+		// and the six never-configurable Demo Documentation children are deliberately BOTH - the
+		// ROUTE stays open to every signed-in user (PageGuard, untouched) while the MENU entry is
+		// Designation-controlled through its own PagePermission member via LoginState.CanSeeMenu,
+		// which never consults OpenAccessRoutes. That is the standard's "menu != route" split, so
+		// these nine keys are the only INTENDED overlap. Three further keys (SalesAudit,
+		// ExtensionRequests, FarmDashboard) also overlap for pre-existing reasons and keep
+		// failing individually below; they are named separately rather than sanctioned.
+		string[] routeOpenMenuControlled =
 		{
-			var key = RoleAccessPermissions.KeyFor(page);
-			if (PageAuthorization.OpenAccessRoutes.Contains(key))
-				Check.That($"{key} must not appear in OpenAccessRoutes", false);
-		}
+			"Activities", "Farmers", "Alerts",
+			"StartDocumentation", "DemoDetails", "TreatmentDetails",
+			"Treatment01", "Treatment02", "TreatmentDemoDetails"
+		};
+
+		// Pre-existing overlap, failing before this standard and unchanged by it: closing these
+		// three means editing PageAuthorization.OpenAccessRoutes, which decision M puts out of
+		// scope. They keep failing individually below so the defect stays visible.
+		string[] knownPreExistingOverlap = { "SalesAudit", "ExtensionRequests", "FarmDashboard" };
+
+		var openRoutePermissionKeys = Enum.GetValues<PagePermission>()
+			.Select(RoleAccessPermissions.KeyFor)
+			.Where(PageAuthorization.OpenAccessRoutes.Contains)
+			.ToArray();
+
+		foreach (var key in openRoutePermissionKeys.Where(k => !routeOpenMenuControlled.Contains(k)))
+			Check.That($"{key} must not appear in OpenAccessRoutes", false);
+
 		Check.That(
-			"no PagePermission key is present in OpenAccessRoutes",
-			Enum.GetValues<PagePermission>()
-				.All(p => !PageAuthorization.OpenAccessRoutes.Contains(RoleAccessPermissions.KeyFor(p))));
+			"the sanctioned exception list is complete (all nine are route-open)",
+			routeOpenMenuControlled.All(openRoutePermissionKeys.Contains));
+
+		Check.That(
+			"no PagePermission key overlaps OpenAccessRoutes beyond the nine sanctioned keys "
+			+ "and the three known pre-existing offenders",
+			openRoutePermissionKeys.All(k =>
+				routeOpenMenuControlled.Contains(k) || knownPreExistingOverlap.Contains(k)));
 
 		// DemoDocumentation is a normal Designation page now.
 		var withoutGrant = PageAuthorization.GetEffectivePagePermissions(

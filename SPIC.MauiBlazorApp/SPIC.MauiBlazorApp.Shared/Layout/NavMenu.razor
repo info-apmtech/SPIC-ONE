@@ -9,7 +9,10 @@
 
 <nav class="nav nav-pills flex-column nav-section">
 
-    @if (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.Dashboard))
+    @* Designation decides the entry. The old `UserRole != Dealer` term was MENU-only: PageGuard
+       has no Dealer rule for /Dashboard, so a Dealer granted PagePermission.Dashboard could always
+       open the route. Dropping it makes the entry obey business rule 3 with no route change. *@
+    @if (loginState.CanSeeMenu(PagePermission.Dashboard))
     {
         <NavLink class="@NavLinkClass("Dashboard")" href="/Dashboard" Match="NavLinkMatch.All">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
@@ -17,7 +20,7 @@
         </NavLink>
     }
 
-     @if (loginState.CanAccess(PagePermission.SubDealerList))
+     @if (loginState.CanSeeMenu(PagePermission.SubDealerList))
     {
         <NavLink class="@NavLinkClass("Sub Dealer Master")" href="/SubDealerList" Match="NavLinkMatch.All">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DashboardIcon.svg" class="SideBariconimg" />
@@ -25,12 +28,12 @@
         </NavLink>
     }
 
-    @* Digital Library: content is viewable by every signed-in user whose authorization model
-       includes the open-to-all pages (PageAuthorization.OpenAccessPages); a designation-driven
-       role (DesignationOnly: CommonRole, SpecialAdmin) sees it only when its designation grants
-       DigitalLibrary. Adding/editing content and the category master need that same page.
-       Resolved by the SAME CanAccess call the route guard uses. *@
-    @if (loginState.CanAccess(PagePermission.DigitalLibrary))
+    @* Digital Library: the route is open to every signed-in user (PageAuthorization.OpenAccessPages),
+       but the MENU entry follows the designation, so an administrator can switch it off. A
+       designation-driven role (DesignationOnly: CommonRole, SpecialAdmin) sees it only when its
+       designation grants DigitalLibrary. Adding/editing content and the category master need that
+       same page. Resolved by LoginState.CanSeeMenu; PageGuard still uses CanAccess for the route. *@
+    @if (loginState.CanSeeMenu(PagePermission.DigitalLibrary))
     {
         <NavLink class="@NavLinkClass("Digital Library")" href="/DigitalLibrary">
             <i class="bi bi-collection-play SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
@@ -38,7 +41,7 @@
         </NavLink>
     }
     @* Library Categories: the category master behind the content forms (DigitalLibrary page). *@
-    @if (loginState.CanAccess(PagePermission.DigitalLibrary))
+    @if (loginState.CanSeeMenu(PagePermission.DigitalLibrary))
     {
         <NavLink class="@NavLinkClass("Library Categories")" href="/DigitalLibrary/categories">
             <i class="bi bi-tags SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
@@ -46,11 +49,10 @@
         </NavLink>
     }
 
-    @* Knowledge Community: open to every signed-in user for the default employee roles
-       (product decision 2026-09-20); a designation-driven role such as CommonRole sees it only
-       through its designation. The older entry further down this file sits inside a
-       commented-out farmer-portal block. *@
-    @if (loginState.CanAccess(PagePermission.Community))
+    @* Knowledge Community: the route is open to every signed-in user (product decision 2026-09-20),
+       but the MENU entry follows the Community designation so it can be switched off. The older
+       entry further down this file sits inside a commented-out farmer-portal block. *@
+    @if (loginState.CanSeeMenu(PagePermission.Community))
     {
         <NavLink class="@NavLinkClass("Community")" href="/Community">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/Community.svg" class="SideBariconimg" />
@@ -59,14 +61,14 @@
     }
 
     @* SAS Portal: sample collection and consignments (page-permission gated). *@
-    @if (loginState.CanAccess(nameof(PagePermission.SampleCollection)))
+    @if (loginState.CanSeeMenu(nameof(PagePermission.SampleCollection)))
     {
         <NavLink class="@NavLinkClass("Sample Collection")" href="/SampleCollection">
             <i class="bi bi-droplet-half SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
             Sample Collection
         </NavLink>
     }
-    @if (loginState.CanAccess(nameof(PagePermission.ConsignmentHistory)))
+    @if (loginState.CanSeeMenu(nameof(PagePermission.ConsignmentHistory)))
     {
         <NavLink class="@NavLinkClass("Consignment History")" href="/ConsignmentHistory">
             <i class="bi bi-box-seam SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
@@ -131,7 +133,7 @@
             Payment History
         </NavLink>
     }
-    @if (loginState.UserRole == AppRole.Farmer && loginState.CanAccess(nameof(PagePermission.SampleCollection)))
+    @if (loginState.UserRole == AppRole.Farmer && loginState.CanSeeMenu(nameof(PagePermission.SampleCollection)))
     {
         <NavLink class="@NavLinkClass("My Samples")" href="/Sas/MySamples">
             <i class="bi bi-droplet-half SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
@@ -150,7 +152,7 @@
 
     @* Designation-controlled: Admin / SuperAdmin reach it through the role bypass, every other
        role (Director, AVP, CorporateAdmin, ...) only when its Designation grants IfmsAutoImport. *@
-    @if (loginState.CanAccess(PagePermission.IfmsAutoImport))
+    @if (loginState.CanSeeMenu(PagePermission.IfmsAutoImport))
     {
         <NavLink class="@NavLinkClass("IFMS Auto Import")" href="/IfmsAutoImport">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
@@ -166,7 +168,7 @@
         </NavLink>
     }
 
-    @if (loginState.CanAccess(PagePermission.IfmsRelaySetup))
+    @if (loginState.CanSeeMenu(PagePermission.IfmsRelaySetup))
     {
         <NavLink class="@NavLinkClass("IFMS Logins")" href="/IfmsLogins">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/FileUploade.svg" class="SideBariconimg" />
@@ -188,61 +190,61 @@
             @if (ShowSchemesExpanded)
             {
                 <ul class="submenu-list">
-                    @if (loginState.CanAccess(PagePermission.SchemeOverview))
+                    @if (loginState.CanSeeMenu(PagePermission.SchemeOverview))
                     {
                         <li class="submenu-item">
                             <NavLink href="/SchemeOverview" class="@SubmenuLinkClass("Scheme Overview")" Match="NavLinkMatch.All">Scheme Overview</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.AddScheme))
+                    @if (loginState.CanSeeMenu(PagePermission.AddScheme))
                     {
                         <li class="submenu-item">
                             <NavLink href="/AddScheme" class="@SubmenuLinkClass("Add Scheme")" Match="NavLinkMatch.All">Add Scheme</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Schemes))
+                    @if (loginState.CanSeeMenu(PagePermission.Schemes))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Schemes" class="@SubmenuLinkClass("Scheme List")" Match="NavLinkMatch.All">Scheme List</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.WinnerPopUp))
+                    @if (loginState.CanSeeMenu(PagePermission.WinnerPopUp))
                     {
                         <li class="submenu-item">
                             <NavLink href="/WinnerPopUp" class="@SubmenuLinkClass("Winner PopUp")" Match="NavLinkMatch.All">Winner PopUp</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.WinnerDetails))
+                    @if (loginState.CanSeeMenu(PagePermission.WinnerDetails))
                     {
                         <li class="submenu-item">
                             <NavLink href="/WinnerDetails" class="@SubmenuLinkClass("Winner Details")" Match="NavLinkMatch.All">Winner Details</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Luckydraw))
+                    @if (loginState.CanSeeMenu(PagePermission.Luckydraw))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Luckydraw" class="@SubmenuLinkClass("Lucky Draw")" Match="NavLinkMatch.All">Lucky Draw</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.LuckyDrawList))
+                    @if (loginState.CanSeeMenu(PagePermission.LuckyDrawList))
                     {
                         <li class="submenu-item">
                             <NavLink href="/LuckyDrawList" class="@SubmenuLinkClass("Lucky Draw List")" Match="NavLinkMatch.All">Lucky Draw List</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.SelectPurchasedProducts))
+                    @if (loginState.CanSeeMenu(PagePermission.SelectPurchasedProducts))
                     {
                         <li class="submenu-item">
                             <NavLink href="/SelectPurchasedProducts" class="@SubmenuLinkClass("Select Purchased Products")" Match="NavLinkMatch.All">Select Purchased Products</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Scanproduct))
+                    @if (loginState.CanSeeMenu(PagePermission.Scanproduct))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Scanproduct" class="@SubmenuLinkClass("Scan Product")" Match="NavLinkMatch.All">Scan Product</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.QRScanner))
+                    @if (loginState.CanSeeMenu(PagePermission.QRScanner))
                     {
                         <li class="submenu-item">
                             <NavLink href="/qr-scanner" class="@SubmenuLinkClass("QR Scanner")" Match="NavLinkMatch.All">QR Scanner</NavLink>
@@ -266,61 +268,61 @@
             @if (ShowSubsidyExpanded)
             {
                 <ul class="submenu-list">
-                    @if (loginState.CanAccess(PagePermission.SalesReport))
+                    @if (loginState.CanSeeMenu(PagePermission.SalesReport))
                     {
                         <li class="submenu-item">
                             <NavLink href="/StockReport" class="@SubmenuLinkClass("Stock Report")" Match="NavLinkMatch.All">Stock Report</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.CompanySales))
+                    @if (loginState.CanSeeMenu(PagePermission.CompanySales))
                     {
                         <li class="submenu-item">
                             <NavLink href="/CompanySales" class="@SubmenuLinkClass("Pending Acknowledgement")" Match="NavLinkMatch.All">Pending Acknowledgement</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.AgeingReport))
+                    @if (loginState.CanSeeMenu(PagePermission.AgeingReport))
                     {
                         <li class="submenu-item">
                             <NavLink href="/AgeingReport" class="@SubmenuLinkClass("Ageing Report")" Match="NavLinkMatch.All">Ageing Report</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Acknowledgement))
+                    @if (loginState.CanSeeMenu(PagePermission.Acknowledgement))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Acknowledgement" class="@SubmenuLinkClass("Acknowledgement")" Match="NavLinkMatch.All">Acknowledgement</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.LiquidationCycle))
+                    @if (loginState.CanSeeMenu(PagePermission.LiquidationCycle))
                     {
                         <li class="submenu-item">
                             <NavLink href="/LiquidationCycle" class="@SubmenuLinkClass("Liquidation Cycle")" Match="NavLinkMatch.All">Liquidation Cycle</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.TopRankingDistrict))
+                    @if (loginState.CanSeeMenu(PagePermission.TopRankingDistrict))
                     {
                         <li class="submenu-item">
                             <NavLink href="/TopRankingDistrict" class="@SubmenuLinkClass("Top Ranking District")" Match="NavLinkMatch.All">Top Ranking District</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.TopRankingWholesalers))
+                    @if (loginState.CanSeeMenu(PagePermission.TopRankingWholesalers))
                     {
                         <li class="submenu-item">
                             <NavLink href="/TopRankingWholesalers" class="@SubmenuLinkClass("Top Ranking Wholesaler")" Match="NavLinkMatch.All">Top Ranking Wholesaler</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.TopRankingRetailers))
+                    @if (loginState.CanSeeMenu(PagePermission.TopRankingRetailers))
                     {
                         <li class="submenu-item">
                             <NavLink href="/TopRankingRetailers" class="@SubmenuLinkClass("Top Ranking Retailers")" Match="NavLinkMatch.All">Top Ranking Retailers</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.ProductWiseStockAvailability))
+                    @if (loginState.CanSeeMenu(PagePermission.ProductWiseStockAvailability))
                     {
                         <li class="submenu-item">
                             <NavLink href="/ProductWiseStockAvailability" class="@SubmenuLinkClass("Productwise Stock Availability")" Match="NavLinkMatch.All">Productwise Stock Availability</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.StockDetails))
+                    @if (loginState.CanSeeMenu(PagePermission.StockDetails))
                     {
                         <li class="submenu-item">
                             <NavLink href="/StockDetails" class="@SubmenuLinkClass("Stock Details")" Match="NavLinkMatch.All">Stock Details</NavLink>
@@ -350,73 +352,73 @@
             @if (ShowMdPortalExpanded)
             {
                 <ul class="submenu-list">
-                    @if (loginState.CanAccess(PagePermission.BudgetOverview))
+                    @if (loginState.CanSeeMenu(PagePermission.BudgetOverview))
                     {
                         <li class="submenu-item">
                             <NavLink href="/BudgetOverview" class="@SubmenuLinkClass("Budget Overview")" Match="NavLinkMatch.All">Budget Overview</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.BudgetingManagements))
+                    @if (loginState.CanSeeMenu(PagePermission.BudgetingManagements))
                     {
                         <li class="submenu-item">
                             <NavLink href="/BudgetingManagements" class="@SubmenuLinkClass("Budgeting Management")" Match="NavLinkMatch.All">Budgeting Management</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.BudgetSubmissions))
+                    @if (loginState.CanSeeMenu(PagePermission.BudgetSubmissions))
                     {
                         <li class="submenu-item">
                             <NavLink href="/BudgetSubmissions" class="@SubmenuLinkClass("Budget Submissions")" Match="NavLinkMatch.All">Budget Submissions</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.AnnualBudgeting))
+                    @if (loginState.CanSeeMenu(PagePermission.AnnualBudgeting))
                     {
                         <li class="submenu-item">
                             <NavLink href="/AnnualBudgeting" class="@SubmenuLinkClass("Annual Budgeting")" Match="NavLinkMatch.All">Annual Budgeting</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.ProgramMaster))
+                    @if (loginState.CanSeeMenu(PagePermission.ProgramMaster))
                     {
                         <li class="submenu-item">
                             <NavLink href="/ProgramMaster" class="@SubmenuLinkClass("Program Master")" Match="NavLinkMatch.All">Program Master</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.CSR1Create))
+                    @if (loginState.CanSeeMenu(PagePermission.CSR1Create))
                     {
                         <li class="submenu-item">
                             <NavLink href="/CREATE-CSR-1Management" class="@SubmenuLinkClass("CSR-1 Create")" Match="NavLinkMatch.All">CSR-1 Create</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.CSR1Management))
+                    @if (loginState.CanSeeMenu(PagePermission.CSR1Management))
                     {
                         <li class="submenu-item">
                             <NavLink href="/CSR-1List" class="@SubmenuLinkClass("CSR-1 Management")" Match="NavLinkMatch.All">CSR-1 Management</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.CSR2))
+                    @if (loginState.CanSeeMenu(PagePermission.CSR2))
                     {
                         <li class="submenu-item">
                             <NavLink href="/CSR2" class="@SubmenuLinkClass("CSR-2")" Match="NavLinkMatch.All">CSR-2</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.FinalReportCSRView))
+                    @if (loginState.CanSeeMenu(PagePermission.FinalReportCSRView))
                     {
                         <li class="submenu-item">
                             <NavLink href="/FinalReportCSRView" class="@SubmenuLinkClass("Final Report CSR")" Match="NavLinkMatch.All">Final Report CSR</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.RMDValidationQueue))
+                    @if (loginState.CanSeeMenu(PagePermission.RMDValidationQueue))
                     {
                         <li class="submenu-item">
                             <NavLink href="/RMDValidationQueue" class="@SubmenuLinkClass("RMD Validation Queue")" Match="NavLinkMatch.All">RMD Validation Queue</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.MOSubmissionValidation))
+                    @if (loginState.CanSeeMenu(PagePermission.MOSubmissionValidation))
                     {
                         <li class="submenu-item">
                             <NavLink href="/MOSubmissionValidation" class="@SubmenuLinkClass("MO Submission Validation")" Match="NavLinkMatch.All">MO Submission Validation</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.RMApprovalStatus))
+                    @if (loginState.CanSeeMenu(PagePermission.RMApprovalStatus))
                     {
                         <li class="submenu-item">
                             <NavLink href="/RMApprovalStatus" class="@SubmenuLinkClass("RM Approval Status")" Match="NavLinkMatch.All">RM Approval Status</NavLink>
@@ -441,7 +443,7 @@
             @if (ShowJmdoExpanded)
             {
                 <ul class="submenu-list">
-                    @if (loginState.CanAccess(PagePermission.FieldDashboard))
+                    @if (loginState.CanSeeMenu(PagePermission.FieldDashboard))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("My Dashboard")" href="/FieldDashboard" Match="NavLinkMatch.All">
@@ -450,7 +452,7 @@
                             </NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.FieldReports))
+                    @if (loginState.CanSeeMenu(PagePermission.FieldReports))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("My Reports")" href="/FieldReports" Match="NavLinkMatch.All">
@@ -459,7 +461,7 @@
                             </NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.MdoDashboard))
+                    @if (loginState.CanSeeMenu(PagePermission.MdoDashboard))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("Team Dashboard")" href="/MdoDashboard" Match="NavLinkMatch.All">
@@ -468,7 +470,7 @@
                             </NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.AllocationRequests))
+                    @if (loginState.CanSeeMenu(PagePermission.AllocationRequests))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("Allocation Requests")" href="/AllocationRequests" Match="NavLinkMatch.All">
@@ -477,7 +479,7 @@
                             </NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.TaskMonitoring))
+                    @if (loginState.CanSeeMenu(PagePermission.TaskMonitoring))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("Task Monitoring")" href="/TaskMonitoring" Match="NavLinkMatch.All">
@@ -486,7 +488,7 @@
                             </NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.PerformanceTracker))
+                    @if (loginState.CanSeeMenu(PagePermission.PerformanceTracker))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("Performance Tracker")" href="/PerformanceTracker" Match="NavLinkMatch.All">
@@ -495,7 +497,7 @@
                             </NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.TargetAchievement))
+                    @if (loginState.CanSeeMenu(PagePermission.TargetAchievement))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("Target / Achievement")" href="/TargetAchievement" Match="NavLinkMatch.All">
@@ -504,7 +506,7 @@
                             </NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.FarmerData))
+                    @if (loginState.CanSeeMenu(PagePermission.FarmerData))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("Farmer Data")" href="/FarmerData" Match="NavLinkMatch.All">
@@ -513,7 +515,7 @@
                             </NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.MdoReports))
+                    @if (loginState.CanSeeMenu(PagePermission.MdoReports))
                     {
                         <li class="submenu-item">
                             <NavLink class="@SubmenuLinkClass("Reports")" href="/MdoReports" Match="NavLinkMatch.All">
@@ -597,7 +599,7 @@
         </NavLink>
     }
      *@
-    @if (loginState.CanAccess(PagePermission.Profile))
+    @if (loginState.CanSeeMenu(PagePermission.Profile))
     {
         <NavLink class="@NavLinkClass("Profile")" href="/Profile">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
@@ -605,7 +607,7 @@
         </NavLink>
     }
 
-    @if (loginState.CanAccess(PagePermission.EmployeeManagement))
+    @if (loginState.CanSeeMenu(PagePermission.EmployeeManagement))
     {
         <NavLink class="@NavLinkClass("Employee")" href="/EmployeeManagement">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/employee.svg" class="SideBariconimg" />
@@ -613,7 +615,7 @@
         </NavLink>
     }
 
-    @if (loginState.CanAccess(PagePermission.dealerreviewlist))
+    @if (loginState.CanSeeMenu(PagePermission.dealerreviewlist))
     {
         <NavLink class="@NavLinkClass("Dealer Application Review")" href="/dealerreviewlist">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/dealerapplication.svg" class="SideBariconimg" />
@@ -621,7 +623,7 @@
         </NavLink>
     }
 
-    @if (loginState.CanAccess(PagePermission.CreditLimitSales))
+    @if (loginState.CanSeeMenu(PagePermission.CreditLimitSales))
     {
         <NavLink class="@NavLinkClass("Financial Year Sales Data")" href="/CreditLimitSales">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/yearsalesdata.svg" class="SideBariconimg" />
@@ -642,62 +644,64 @@
             @if (ShowSdwaExpanded)
             {
                 <ul class="submenu-list">
-                    @if (loginState.CanAccess(PagePermission.ReportDashboard))
+                    @if (loginState.CanSeeMenu(PagePermission.ReportDashboard))
     {
                         <li class="submenu-item">
                             <NavLink href="/ReportDashboard" class="@SubmenuLinkClass("Admin Dashboard")" Match="NavLinkMatch.All">Admin Dashboard</NavLink>
                         </li>
                     }
-                    @if (loginState.UserRole == AppRole.Dealer || loginState.CanAccess(PagePermission.SDWADashboard))
+                    @* Dealer role bypass replaced by the PagePermission grant (Dealer designation
+                       backfill ships first). PageGuard still lets a Dealer reach the ROUTE. *@
+                    @if (loginState.CanSeeMenu(PagePermission.SDWADashboard))
                     {
                         <li class="submenu-item">
                             <NavLink href="/SDWADashboard" class="@SubmenuLinkClass("Dealer Dashboard")" Match="NavLinkMatch.All">Dealer Dashboard</NavLink>
                         </li>
                     }
-                      @if (loginState.UserRole == AppRole.Dealer || loginState.CanAccess(PagePermission.WelfareSchemes))
+                      @if (loginState.CanSeeMenu(PagePermission.WelfareSchemes))
                     {
                         <li class="submenu-item">
                             <NavLink href="/WelfareSchemes" class="@SubmenuLinkClass("Welfare Schemes")" Match="NavLinkMatch.All">Welfare Schemes</NavLink>
                         </li>
                     }
-                    @if (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.SchemeApproval))
+                    @if (loginState.UserRole != AppRole.Dealer && loginState.CanSeeMenu(PagePermission.SchemeApproval))
                     {
                         <li class="submenu-item">
                             <NavLink href="/SchemeApproval" class="@SubmenuLinkClass("Scheme Approval")" Match="NavLinkMatch.All">Scheme Approval</NavLink>
                         </li>
                     }
                   
-                    @if (loginState.CanAccess(PagePermission.SubDealerEmployeeMaster))
+                    @if (loginState.CanSeeMenu(PagePermission.SubDealerEmployeeMaster))
                     {
                         <li class="submenu-item">
                             <NavLink href="/SubDealerEmployeeMaster" class="@SubmenuLinkClass("Sub Dealer & Employee")" Match="NavLinkMatch.All">Sub Dealer &amp; Employee</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.GuestHouse))
+                    @if (loginState.CanSeeMenu(PagePermission.GuestHouse))
                     {
                         <li class="submenu-item">
                             <NavLink href="/GuestHouseMaster" class="@SubmenuLinkClass("Guest House")" Match="NavLinkMatch.All">Guest House</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.SdwaCompanyMaster))
+                    @if (loginState.CanSeeMenu(PagePermission.SdwaCompanyMaster))
                     {
                         <li class="submenu-item">
                             <NavLink href="/SdwaCompanyMaster" class="@SubmenuLinkClass("Company Details")" Match="NavLinkMatch.All">Company Details</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.GuestHouseCancellations))
+                    @if (loginState.CanSeeMenu(PagePermission.GuestHouseCancellations))
                     {
                         <li class="submenu-item">
                             <NavLink href="/GuestHouseCancellations" class="@SubmenuLinkClass("Cancellation Requests")" Match="NavLinkMatch.All">Cancellation Requests</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.FrontOffice))
+                    @if (loginState.CanSeeMenu(PagePermission.FrontOffice))
                     {
                         <li class="submenu-item">
                             <NavLink href="/FrontOffice" class="@SubmenuLinkClass("Front Office")" Match="NavLinkMatch.All">Front Office</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.GenerateBill))
+                    @if (loginState.CanSeeMenu(PagePermission.GenerateBill))
                     {
                         <li class="submenu-item">
                             <NavLink href="/GenerateBill" class="@SubmenuLinkClass("Generate Bill")" Match="NavLinkMatch.All">Generate Bill</NavLink>
@@ -721,43 +725,43 @@
             @if (ShowSettingsExpanded)
             {
                 <ul class="submenu-list">
-                    @if (loginState.CanAccess(PagePermission.LocationMaster))
+                    @if (loginState.CanSeeMenu(PagePermission.LocationMaster))
                     {
                         <li class="submenu-item">
                             <NavLink href="/LocationMaster" class="@SubmenuLinkClass("Location Master")" Match="NavLinkMatch.All">Location Master</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Agriculture))
+                    @if (loginState.CanSeeMenu(PagePermission.Agriculture))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Agriculture" class="@SubmenuLinkClass("Agriculture")" Match="NavLinkMatch.All">Agriculture & Prod...</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Logistics))
+                    @if (loginState.CanSeeMenu(PagePermission.Logistics))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Logistics" class="@SubmenuLinkClass("Logistics Master")" Match="NavLinkMatch.All">Logistics Master</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Financial))
+                    @if (loginState.CanSeeMenu(PagePermission.Financial))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Financial" class="@SubmenuLinkClass("Financial Master")" Match="NavLinkMatch.All">Financial Master</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Relationship))
+                    @if (loginState.CanSeeMenu(PagePermission.Relationship))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Relationship" class="@SubmenuLinkClass("Relationship Master")" Match="NavLinkMatch.All">Relationship Master</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Designation))
+                    @if (loginState.CanSeeMenu(PagePermission.Designation))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Designation" class="@SubmenuLinkClass("Designation")" Match="NavLinkMatch.All">Designation</NavLink>
                         </li>
                     }
-                    @if (loginState.CanAccess(PagePermission.Metrics))
+                    @if (loginState.CanSeeMenu(PagePermission.Metrics))
                     {
                         <li class="submenu-item">
                             <NavLink href="/Metrics" class="@SubmenuLinkClass("Metrics")" Match="NavLinkMatch.Prefix">Metrics</NavLink>
@@ -769,15 +773,13 @@
         </div>
     }
 
-    @* Demo documentation subtree. The group opens when at least one of its children is actually
-       reachable for the current user, so a default employee role (designation-driven, open-to-all
-       pages included) sees the six documentation pages even when the designation does not grant
-       DemoDocumentation - previously the group was gated on that one permission alone and hid
-       pages PageGuard allows. The Demo Documentation child itself stays exactly as controlled as
-       before (CanAccess(DemoDocumentation)); the other six are route-only pages from
-       PageAuthorization.OpenAccessRoutes, gated below with the same rule PageGuard applies to
-       them, so a DesignationOnly role (CommonRole / SpecialAdmin) granted DemoDocumentation
-       never sees a dead link. *@
+    @* Demo documentation subtree. The group is a PURE UNION of its children: it opens when at
+       least one child's own CanSeeMenu is true, with no extra role or open-route term of its own.
+       Each of the seven entries is Designation-controlled through its own PagePermission member
+       (the six children got their own members for the menu-authorization standard), so an
+       administrator can grant and revoke them individually. Route visibility is unchanged:
+       PageGuard still answers for the routes itself (route-only / open-to-all pages, Admin /
+       SuperAdmin bypass). *@
     @if (AnyDemoDocumentationAccessible)
     {
     <div class="settings-menu-wrapper">
@@ -800,7 +802,7 @@
         {
             <ul class="submenu-list">
 
-                @if (loginState.CanAccess(PagePermission.DemoDocumentation))
+                @if (loginState.CanSeeMenu(PagePermission.DemoDocumentation))
                 {
                     <li class="submenu-item">
                         <NavLink href="/DemoDocumentation"
@@ -811,7 +813,7 @@
                     </li>
                 }
 
-                @if (OpenDocumentationChildReachable)
+                @if (loginState.CanSeeMenu(PagePermission.StartDocumentation))
                 {
                     <li class="submenu-item">
                         <NavLink href="/StartDocumentation"
@@ -823,7 +825,7 @@
                 }
 
 
-                @if (OpenDocumentationChildReachable)
+                @if (loginState.CanSeeMenu(PagePermission.DemoDetails))
                 {
                     <li class="submenu-item">
                         <NavLink href="/DemoDetails"
@@ -835,7 +837,7 @@
                 }
 
 
-                @if (OpenDocumentationChildReachable)
+                @if (loginState.CanSeeMenu(PagePermission.TreatmentDetails))
                 {
                     <li class="submenu-item">
                         <NavLink href="/TreatmentDetails"
@@ -847,7 +849,7 @@
                 }
 
 
-                @if (OpenDocumentationChildReachable)
+                @if (loginState.CanSeeMenu(PagePermission.Treatment01))
                 {
                     <li class="submenu-item">
                         <NavLink href="/Treatment01"
@@ -859,7 +861,7 @@
                 }
 
 
-                @if (OpenDocumentationChildReachable)
+                @if (loginState.CanSeeMenu(PagePermission.TreatmentDemoDetails))
                 {
                     <li class="submenu-item">
                         <NavLink href="/TreatmentDemoDetails"
@@ -871,7 +873,7 @@
                 }
 
 
-                @if (OpenDocumentationChildReachable)
+                @if (loginState.CanSeeMenu(PagePermission.Treatment02))
                 {
                     <li class="submenu-item">
                         <NavLink href="/Treatment02"
@@ -889,7 +891,7 @@
     </div>
     }
 
-    @if (loginState.CanAccess(PagePermission.SalesAudit))
+    @if (loginState.CanSeeMenu(PagePermission.SalesAudit))
     {
         <NavLink class="@NavLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
@@ -897,7 +899,7 @@
         </NavLink>
     }
 
-    @if (loginState.CanAccess(PagePermission.ExtensionRequests))
+    @if (loginState.CanSeeMenu(PagePermission.ExtensionRequests))
     {
         <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
@@ -908,7 +910,7 @@
     @* The stray comment block below used to leave the guard disabled (the @if line was commented
        out while the braces stayed live), so Farm Operations rendered for every signed-in user.
        It is a normal Designation-controlled page now (PagePermission.FarmDashboard). *@
-    @if (loginState.CanAccess(PagePermission.FarmDashboard))
+    @if (loginState.CanSeeMenu(PagePermission.FarmDashboard))
     {
         <NavLink class="@NavLinkClass("Farm Operations")" href="/FarmDashboard" Match="NavLinkMatch.Prefix">
             <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
@@ -925,7 +927,7 @@
         </NavLink>
     } *@
 
-     @if (loginState.CanAccess(PagePermission.ContactUs))
+     @if (loginState.CanSeeMenu(PagePermission.ContactUs))
     {
         <NavLink class="@NavLinkClass("ContactUs")" href="/ContactUs">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
@@ -1012,15 +1014,15 @@
     }
 
     private bool AnyJmdoAccessible =>
-        loginState.CanAccess(PagePermission.FieldDashboard)
-        || loginState.CanAccess(PagePermission.FieldReports)
-        || loginState.CanAccess(PagePermission.MdoDashboard)
-        || loginState.CanAccess(PagePermission.AllocationRequests)
-        || loginState.CanAccess(PagePermission.TaskMonitoring)
-        || loginState.CanAccess(PagePermission.PerformanceTracker)
-        || loginState.CanAccess(PagePermission.TargetAchievement)
-        || loginState.CanAccess(PagePermission.FarmerData)
-        || loginState.CanAccess(PagePermission.MdoReports);
+        loginState.CanSeeMenu(PagePermission.FieldDashboard)
+        || loginState.CanSeeMenu(PagePermission.FieldReports)
+        || loginState.CanSeeMenu(PagePermission.MdoDashboard)
+        || loginState.CanSeeMenu(PagePermission.AllocationRequests)
+        || loginState.CanSeeMenu(PagePermission.TaskMonitoring)
+        || loginState.CanSeeMenu(PagePermission.PerformanceTracker)
+        || loginState.CanSeeMenu(PagePermission.TargetAchievement)
+        || loginState.CanSeeMenu(PagePermission.FarmerData)
+        || loginState.CanSeeMenu(PagePermission.MdoReports);
 
     private bool AnyJmdoItemMatches =>
         SearchState.Matches("My Dashboard")
@@ -1051,13 +1053,13 @@
     }
 
     private bool AnySettingsAccessible =>
-        loginState.CanAccess(PagePermission.LocationMaster)
-        || loginState.CanAccess(PagePermission.Agriculture)
-        || loginState.CanAccess(PagePermission.Logistics)
-        || loginState.CanAccess(PagePermission.Financial)
-        || loginState.CanAccess(PagePermission.Relationship)
-        || loginState.CanAccess(PagePermission.Designation)
-        || loginState.CanAccess(PagePermission.Metrics);
+        loginState.CanSeeMenu(PagePermission.LocationMaster)
+        || loginState.CanSeeMenu(PagePermission.Agriculture)
+        || loginState.CanSeeMenu(PagePermission.Logistics)
+        || loginState.CanSeeMenu(PagePermission.Financial)
+        || loginState.CanSeeMenu(PagePermission.Relationship)
+        || loginState.CanSeeMenu(PagePermission.Designation)
+        || loginState.CanSeeMenu(PagePermission.Metrics);
 
 
     private bool AnySettingsItemMatches =>
@@ -1086,16 +1088,16 @@
     }
 
     private bool AnySubsidyAccessible =>
-        loginState.CanAccess(PagePermission.SalesReport)
-        || loginState.CanAccess(PagePermission.CompanySales)
-        || loginState.CanAccess(PagePermission.AgeingReport)
-        || loginState.CanAccess(PagePermission.Acknowledgement)
-        || loginState.CanAccess(PagePermission.LiquidationCycle)
-        || loginState.CanAccess(PagePermission.TopRankingDistrict)
-        || loginState.CanAccess(PagePermission.TopRankingWholesalers)
-        || loginState.CanAccess(PagePermission.TopRankingRetailers)
-        || loginState.CanAccess(PagePermission.ProductWiseStockAvailability)
-        || loginState.CanAccess(PagePermission.StockDetails);
+        loginState.CanSeeMenu(PagePermission.SalesReport)
+        || loginState.CanSeeMenu(PagePermission.CompanySales)
+        || loginState.CanSeeMenu(PagePermission.AgeingReport)
+        || loginState.CanSeeMenu(PagePermission.Acknowledgement)
+        || loginState.CanSeeMenu(PagePermission.LiquidationCycle)
+        || loginState.CanSeeMenu(PagePermission.TopRankingDistrict)
+        || loginState.CanSeeMenu(PagePermission.TopRankingWholesalers)
+        || loginState.CanSeeMenu(PagePermission.TopRankingRetailers)
+        || loginState.CanSeeMenu(PagePermission.ProductWiseStockAvailability)
+        || loginState.CanSeeMenu(PagePermission.StockDetails);
 
     private bool AnySubsidyItemMatches =>
         SearchState.Matches("Stock Report")
@@ -1131,22 +1133,21 @@
             || uri == "stockdetails" || uri == "excelformatfileupload";
     }
 
+    // SDWA group: pure union of its children's CanSeeMenu. The former `|| UserRole == AppRole.Dealer`
+    // fallback is gone - it existed only because SDWADashboard / WelfareSchemes used a Dealer role
+    // bypass; those two now go through the PagePermission grant (Dealer designation backfill ships
+    // first), so the group opens exactly when its children do.
     private bool AnySdwaAccessible =>
-        loginState.CanAccess(PagePermission.ReportDashboard)
-        || loginState.CanAccess(PagePermission.SDWADashboard)
-        || (loginState.UserRole != AppRole.Dealer && loginState.CanAccess(PagePermission.SchemeApproval))
-        || loginState.CanAccess(PagePermission.WelfareSchemes)
-        // Dealer fallback: PageGuard always lets a Dealer open /SDWADashboard and /WelfareSchemes
-        // (and ShellNavigation's entries for those two use "UserRole == Dealer OR CanAccess"), so
-        // the two children above use that same rule - the group must open with them, otherwise a
-        // designation-less Dealer gets both pages on the phone shell but no SDWA group here.
-        || loginState.UserRole == AppRole.Dealer
-        || loginState.CanAccess(PagePermission.SubDealerEmployeeMaster)
-        || loginState.CanAccess(PagePermission.GuestHouse)
-        || loginState.CanAccess(PagePermission.SdwaCompanyMaster)
-        || loginState.CanAccess(PagePermission.GuestHouseCancellations)
-        || loginState.CanAccess(PagePermission.FrontOffice)
-        || loginState.CanAccess(PagePermission.GenerateBill);
+        loginState.CanSeeMenu(PagePermission.ReportDashboard)
+        || loginState.CanSeeMenu(PagePermission.SDWADashboard)
+        || (loginState.UserRole != AppRole.Dealer && loginState.CanSeeMenu(PagePermission.SchemeApproval))
+        || loginState.CanSeeMenu(PagePermission.WelfareSchemes)
+        || loginState.CanSeeMenu(PagePermission.SubDealerEmployeeMaster)
+        || loginState.CanSeeMenu(PagePermission.GuestHouse)
+        || loginState.CanSeeMenu(PagePermission.SdwaCompanyMaster)
+        || loginState.CanSeeMenu(PagePermission.GuestHouseCancellations)
+        || loginState.CanSeeMenu(PagePermission.FrontOffice)
+        || loginState.CanSeeMenu(PagePermission.GenerateBill);
 
     private bool AnySdwaItemMatches =>
         // Search keys are the DISPLAYED labels (Admin Dashboard / Dealer Dashboard); the old
@@ -1185,18 +1186,18 @@
     }
 
     private bool AnyMdPortalAccessible =>
-        loginState.CanAccess(PagePermission.BudgetOverview)
-        || loginState.CanAccess(PagePermission.BudgetingManagements)
-        || loginState.CanAccess(PagePermission.BudgetSubmissions)
-        || loginState.CanAccess(PagePermission.AnnualBudgeting)
-        || loginState.CanAccess(PagePermission.ProgramMaster)
-        || loginState.CanAccess(PagePermission.CSR1Create)
-        || loginState.CanAccess(PagePermission.CSR1Management)
-        || loginState.CanAccess(PagePermission.CSR2)
-        || loginState.CanAccess(PagePermission.FinalReportCSRView)
-        || loginState.CanAccess(PagePermission.RMDValidationQueue)
-        || loginState.CanAccess(PagePermission.MOSubmissionValidation)
-        || loginState.CanAccess(PagePermission.RMApprovalStatus);
+        loginState.CanSeeMenu(PagePermission.BudgetOverview)
+        || loginState.CanSeeMenu(PagePermission.BudgetingManagements)
+        || loginState.CanSeeMenu(PagePermission.BudgetSubmissions)
+        || loginState.CanSeeMenu(PagePermission.AnnualBudgeting)
+        || loginState.CanSeeMenu(PagePermission.ProgramMaster)
+        || loginState.CanSeeMenu(PagePermission.CSR1Create)
+        || loginState.CanSeeMenu(PagePermission.CSR1Management)
+        || loginState.CanSeeMenu(PagePermission.CSR2)
+        || loginState.CanSeeMenu(PagePermission.FinalReportCSRView)
+        || loginState.CanSeeMenu(PagePermission.RMDValidationQueue)
+        || loginState.CanSeeMenu(PagePermission.MOSubmissionValidation)
+        || loginState.CanSeeMenu(PagePermission.RMApprovalStatus);
 
     private bool AnyMdPortalItemMatches =>
         SearchState.Matches("Budget Overview")
@@ -1233,16 +1234,16 @@
     }
 
     private bool AnySchemesAccessible =>
-        loginState.CanAccess(PagePermission.SchemeOverview)
-        || loginState.CanAccess(PagePermission.AddScheme)
-        || loginState.CanAccess(PagePermission.Schemes)
-        || loginState.CanAccess(PagePermission.WinnerPopUp)
-        || loginState.CanAccess(PagePermission.WinnerDetails)
-        || loginState.CanAccess(PagePermission.Luckydraw)
-        || loginState.CanAccess(PagePermission.LuckyDrawList)
-        || loginState.CanAccess(PagePermission.SelectPurchasedProducts)
-        || loginState.CanAccess(PagePermission.Scanproduct)
-        || loginState.CanAccess(PagePermission.QRScanner);
+        loginState.CanSeeMenu(PagePermission.SchemeOverview)
+        || loginState.CanSeeMenu(PagePermission.AddScheme)
+        || loginState.CanSeeMenu(PagePermission.Schemes)
+        || loginState.CanSeeMenu(PagePermission.WinnerPopUp)
+        || loginState.CanSeeMenu(PagePermission.WinnerDetails)
+        || loginState.CanSeeMenu(PagePermission.Luckydraw)
+        || loginState.CanSeeMenu(PagePermission.LuckyDrawList)
+        || loginState.CanSeeMenu(PagePermission.SelectPurchasedProducts)
+        || loginState.CanSeeMenu(PagePermission.Scanproduct)
+        || loginState.CanSeeMenu(PagePermission.QRScanner);
 
     private bool AnySchemesItemMatches =>
         SearchState.Matches("Scheme Overview")
@@ -1273,18 +1274,17 @@
             || uri == "luckydraw" || uri == "luckydrawlist"
             || uri == "selectpurchasedproducts" || uri == "scanproduct" || uri == "qr-scanner";
     }
-    // The six route-only documentation children (PageAuthorization.OpenAccessRoutes). PageGuard
-    // answers for them exactly like this: Admin / SuperAdmin bypass the guard, every other role
-    // must have a designation (a user with none is sent to /Welcome before the open-pages check)
-    // and a DesignationOnly model never receives the open-to-all grant, so its designation would
-    // have to hold the route key itself - which no Designation can offer (they are not enum members).
-    private bool OpenDocumentationChildReachable =>
-        loginState.UserRole is AppRole.Admin or AppRole.SuperAdmin
-        || (loginState.AllowedPages.Count > 0 && !loginState.IsDesignationDrivenRole);
-
+    // Demo documentation group: pure union of its seven children's CanSeeMenu - no role term, no
+    // open-route term, nothing that can disagree with the entries rendered below. Route-level
+    // access for these destinations stays PageGuard's decision and is not modelled here.
     private bool AnyDemoDocumentationAccessible =>
-        loginState.CanAccess(PagePermission.DemoDocumentation)
-        || OpenDocumentationChildReachable;
+        loginState.CanSeeMenu(PagePermission.DemoDocumentation)
+        || loginState.CanSeeMenu(PagePermission.StartDocumentation)
+        || loginState.CanSeeMenu(PagePermission.DemoDetails)
+        || loginState.CanSeeMenu(PagePermission.TreatmentDetails)
+        || loginState.CanSeeMenu(PagePermission.Treatment01)
+        || loginState.CanSeeMenu(PagePermission.TreatmentDemoDetails)
+        || loginState.CanSeeMenu(PagePermission.Treatment02);
 
     private void ToggleDemoDocumentationMenu()
     {

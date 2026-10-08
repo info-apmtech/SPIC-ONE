@@ -92,9 +92,9 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool IsAdmin => UserRole is AppRole.Admin or AppRole.SuperAdmin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP;
 
         // Single source of truth for the whole application: SPIC.Core's PageAuthorization.
-        // NavMenu, MobileSidebar, PageGuard and ShellNavigation all funnel through CanAccess /
-        // Can below, so they cannot drift apart. Re-resolving per call is cheap and correct even
-        // though AllowedPages and UserRole both change over the session.
+        // PageGuard, the shell's CanSeeMenu and the page-level Can checks all funnel through this
+        // one resolution, so they cannot drift apart. Re-resolving per call is cheap and correct
+        // even though AllowedPages and UserRole both change over the session.
         private EffectivePagePermissions EffectivePermissions =>
             PageAuthorization.GetEffectivePagePermissions(UserRole, AllowedPages);
 
@@ -188,11 +188,44 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool HasPageStrict(string pageKey) =>
             PageAuthorization.HasPageStrict(EffectivePermissions, pageKey);
 
-        // Page-level: can the user REACH this page at all? Used by the route guard, menu
-        // visibility and tab visibility.
+        // Page-level: can the user REACH this page at all? Used by the route guard (PageGuard),
+        // page-internal feature checks and the API. Menu / tab visibility uses CanSeeMenu below.
         public bool CanAccess(PagePermission page) => CanAccess(page.ToString());
 
         public bool CanAccess(string pageKey) => EffectivePermissions.CanReach(pageKey);
+
+        // MENU VISIBILITY ONLY. Never used by PageGuard, the API, or action checks - those keep
+        // using CanAccess / HasPageStrict exactly as before.
+        //
+        // CanAccess answers "may this user REACH this page?". PageAuthorization.OpenAccessRoutes
+        // and the enum's [OpenToAll] grant deliberately open a few keys for every signed-in user,
+        // which is correct for the route but wrong for a menu entry: a route-open key is ALSO an
+        // assignable PagePermission member in the Designation grid, so the open grant would light
+        // up a menu an administrator can uncheck. CanSeeMenu asks only "should this menu render?",
+        // so the designation decides instead of the open grant or the role.
+        //
+        // The key MUST be normalized first: HasPageStrict compares the RAW token page part
+        // against the key, and Designation.RoleAccess stores QRScanner as "qr-scanner". Passing
+        // the raw enum name would hide the QR Scanner menu from every designation that grants it.
+        //
+        // The SAS Lab / SAS payment keys are checked BEFORE the Admin / SuperAdmin arm because
+        // they are designation-only for every role (product decision 2026-09-27) and PageGuard
+        // enforces the same rule on the route - returning true here would render a menu the guard
+        // then bounces away from.
+        public bool CanSeeMenu(PagePermission page) => CanSeeMenu(RoleAccessPermissions.KeyFor(page));
+
+        public bool CanSeeMenu(string pageKey)
+        {
+            var key = RoleAccessPermissions.NormalizePageKey(pageKey);
+
+            if (PageAuthorization.DesignationOnlyPages.Contains(key))
+                return HasPageStrict(key);
+
+            if (UserRole is AppRole.Admin or AppRole.SuperAdmin)
+                return true;
+
+            return HasPageStrict(key);
+        }
 
         // Action-level: can the user perform a specific action on a page?
         // Use inside pages to show/hide Add / Edit / Delete buttons.
