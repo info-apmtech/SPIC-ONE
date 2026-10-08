@@ -19,6 +19,14 @@
         </Actions>
     </PageHeader>
 
+    @if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i> @ErrorMessage
+            <button type="button" class="btn-close" @onclick="() => ErrorMessage = string.Empty" aria-label="Close"></button>
+        </div>
+    }
+
     <div class="main-card">
         <div class="section-header">
             <h3 class="section-title"><i class="bi bi-person-gear"></i> Role & Authority</h3>
@@ -387,7 +395,14 @@
         <div class="row g-4 align-items-end">
             <div class="col-md-4">
                 <label class="form-lbl">User Name</label>
-                <input type="text" class="form-inp" @bind="vm.Account.UserName" placeholder="Enter User Name">
+                <input type="text" class="form-inp @(!string.IsNullOrEmpty(UserNameError) ? "border-danger" : "")" 
+                       value="@vm.Account.UserName"
+                       @oninput="OnUserNameInput"
+                       placeholder="Enter User Name">
+                @if (!string.IsNullOrEmpty(UserNameError))
+                {
+                    <div class="text-danger small mt-1">@UserNameError</div>
+                }
             </div>
             <div class="col-md-4">
                 <label class="form-lbl">Password</label>
@@ -460,6 +475,7 @@
 </div>
 
 @code {
+    private string ErrorMessage { get; set; } = string.Empty;
     private string SelectedRole => vm.Login.Role.ToString();
 
     private EmployeeRegistrationVM vm = new();
@@ -472,6 +488,30 @@
     private bool IsEditMode = false;
     private int EditingEmployeeId = 0;
     private int EditingLoginId = 0;
+    private string OriginalUserName = string.Empty;
+    private string UserNameError = string.Empty;
+
+    private void OnUserNameInput(ChangeEventArgs e)
+    {
+        vm.Account.UserName = e.Value?.ToString() ?? string.Empty;
+        ValidateUserName();
+    }
+
+    private bool ValidateUserName()
+    {
+        UserNameError = string.Empty;
+        
+        // Skip validation if editing and username is unchanged
+        if (IsEditMode && vm.Account.UserName == OriginalUserName)
+            return true;
+
+        if (string.IsNullOrWhiteSpace(vm.Account.UserName) || !System.Text.RegularExpressions.Regex.IsMatch(vm.Account.UserName, @"\A[\x21-\x7E]+\z"))
+        {
+            UserNameError = "Username must not contain spaces or invisible characters.";
+            return false;
+        }
+        return true;
+    }
 
     // SpecialAdmin multi-location selection state
     private HashSet<int> SelectedSpecialStates = new();
@@ -543,6 +583,14 @@
 
     private async Task SaveEmployee()
     {
+        ErrorMessage = string.Empty;
+        
+        if (!ValidateUserName())
+        {
+            ErrorMessage = UserNameError;
+            return;
+        }
+        
         try
         {
             Loading.Show();
@@ -661,7 +709,31 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex.Message);
+            Console.WriteLine($"Error in SaveEmployee: {ex.ToString()}");
+            
+            string msg = ex.Message.ToLower();
+            
+            if (msg.Contains("duplicate") || msg.Contains("already exist") || msg.Contains("unique"))
+            {
+                ErrorMessage = "A user or employee with these details already exists. Please check User Name, Employee ID, or Email.";
+            }
+            else if (ex.Message.Contains("At least one State is required for SpecialAdmin") ||
+                     ex.Message.Contains("select at least one Region + one Headquarters"))
+            {
+                ErrorMessage = ex.Message;
+            }
+            else if (msg.Contains("validation") || msg.Contains("invalid") || msg.Contains("required"))
+            {
+                ErrorMessage = "Validation failed. Please ensure all required fields are correctly filled.";
+                if (ex.Message.Length < 150 && !msg.Contains("sql") && !msg.Contains("database") && !msg.Contains("exception"))
+                {
+                    ErrorMessage = ex.Message;
+                }
+            }
+            else
+            {
+                ErrorMessage = "An unexpected error occurred while saving. Please try again later or contact support.";
+            }
         }
         finally
         {
@@ -702,6 +774,7 @@
                 UserName = loginData.UserName,
                 Password = loginData.Password
             };
+            OriginalUserName = loginData.UserName;
 
             vm.SelectedDesignationId = loginData.DesignationId ?? 0;
 
@@ -730,6 +803,8 @@
         EditingEmployeeId = 0;
         EditingLoginId = 0;
         IsEditMode = false;
+        OriginalUserName = string.Empty;
+        UserNameError = string.Empty;
         SelectedSpecialStates.Clear();
         SelectedSpecialRegions.Clear();
         SelectedSpecialHQs.Clear();
