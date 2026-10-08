@@ -6,6 +6,7 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 @inject ToastService Toast
 
 <style>
@@ -96,9 +97,9 @@
         }
     </div>
 
-    @if (LoginState.UserRole is not (AppRole.Admin or AppRole.SuperAdmin))
+    @if (!(LoginState.UserRole == AppRole.SuperAdmin || (LoginState.UserRole == AppRole.CorporateAdmin && LoginState.UserId == Config["DataExplorer:AuthorizedEmployeeId"])))
     {
-        <div class="dx-banner err">Data Explorer is available to Admin and SuperAdmin users only.</div>
+        <div class="dx-banner err">Data Explorer is available to SuperAdmin or the authorized CorporateAdmin only.</div>
     }
     else if (!_unlocked)
     {

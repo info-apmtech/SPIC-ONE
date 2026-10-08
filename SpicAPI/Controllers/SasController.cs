@@ -805,7 +805,7 @@ namespace SpicAPI.Controllers
 		// POST /api/Sas/collections/{id}/payment/proof   (multipart, field name "file")
 		[HttpPost("collections/{id:int}/payment/proof")]
 		[RequestSizeLimit(16 * 1024 * 1024)]
-		public async Task<IActionResult> UploadPaymentProof(int id, [FromForm] IFormFile? file)
+		public async Task<IActionResult> UploadPaymentProof(int id, IFormFile? file)
 		{
 			if (!IsWriter())
 				return Forbid403("You are not allowed to upload payment proof.");

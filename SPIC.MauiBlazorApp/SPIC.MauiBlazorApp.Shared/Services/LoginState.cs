@@ -24,6 +24,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
             // role - listed first so the no-designation arm below can never claim it: Admin has full
             // access with an empty RoleAccess.
             AppRole.Admin => DefaultLandingPath,
+            AppRole.SuperAdmin => DefaultLandingPath,
             AppRole.Dealer => "/SDWADashboard",
             // SpecialAdmin used to be hard-routed to /Logistics here. That both skipped the common
             // landing screen and left the Settings (Logistics) submenu auto-expanded for the whole
@@ -62,6 +63,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public int StateId { get; private set; }
         public int RegionId { get; private set; }
         public int HQId { get; private set; }
+        public int EmployeeId { get; private set; }
 
         // SpecialAdmin-only multi-location scope. Populated from the
         // spic:assigned_* claims (database-backed at login). For every other role
