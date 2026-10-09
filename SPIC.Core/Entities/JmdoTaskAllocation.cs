@@ -60,6 +60,10 @@ public class JmdoTaskAllocationDealer
     /// <summary>Weekday this dealer visit is planned for (Sun-Sat tabs in the wizard). Nullable so
     /// rows created before this field existed don't need a backfilled value.</summary>
     public DayOfWeek? PlannedDay { get; set; }
+
+    /// <summary>Exact calendar date the MDO pins this task to during review/approval - the JMDO only
+    /// picks a weekday (PlannedDay) at submission time; this is set later and separately.</summary>
+    public DateTime? PlannedDate { get; set; }
 }
 
 /// <summary>One picked MD/training program. Name/Budget are a snapshot at submission time, same
