@@ -12,8 +12,8 @@
     <span class="td-category-badge">@CategoryLabel</span>
     @if (kind == TaskKind.Dealer)
     {
-        <h2 class="td-title">Hanumesh Trading Co</h2>
-        <p class="td-subtitle">Pending Ack. 10 mT &middot; Dues 99 Lakhs &middot; Coimbatore</p>
+        <h2 class="td-title">@dynamicTitle</h2>
+        <p class="td-subtitle">Pending Ack. 10 mT &middot; Dues 99 Lakhs &middot; @dynamicLocation</p>
     }
 
     <div class="td-timeline-card">
@@ -47,7 +47,7 @@
                     <div class="td-details-grid">
                         <div class="td-detail">
                             <span class="td-detail-label">Dealer / Farmer</span>
-                            <span class="td-detail-val">HANUMESH TRADING CO</span>
+                            <span class="td-detail-val">@(dynamicTitle.ToUpperInvariant())</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Task Type</span>
@@ -80,7 +80,7 @@
                     <div class="td-details-grid">
                         <div class="td-detail">
                             <span class="td-detail-label">Program</span>
-                            <span class="td-detail-val">Crop Protection Workshop</span>
+                            <span class="td-detail-val">@dynamicTitle</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Task Type</span>
@@ -148,6 +148,37 @@
                 <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
                 <input id="td-outcome" type="text" class="td-input" @bind="outcome" @bind:event="oninput" disabled="@isClosed" />
 
+                @if (kind == TaskKind.Dealer)
+                {
+                    <div class="d-flex justify-content-end mb-2 mt-3">
+                        <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none" disabled="@isClosed" @onclick="AddDealerProduct">
+                            <i class="bi bi-plus-lg"></i> Add another Product
+                        </button>
+                    </div>
+
+                    @foreach (var prod in dealerProducts)
+                    {
+                        <div class="card mb-3 border border-success rounded-3">
+                            <div class="card-body py-2">
+                                <div class="row gx-3">
+                                    <div class="col">
+                                        <div class="text-success small fw-bold mb-1">Product Group</div>
+                                        <input type="text" class="form-control form-control-sm border-0 px-0 bg-transparent" placeholder="e.g. Fertilizers" @bind="prod.Group" disabled="@isClosed" />
+                                    </div>
+                                    <div class="col border-start">
+                                        <div class="text-success small fw-bold mb-1">Product Name</div>
+                                        <input type="text" class="form-control form-control-sm border-0 px-0 bg-transparent" placeholder="e.g. Urea 46%" @bind="prod.Name" disabled="@isClosed" />
+                                    </div>
+                                    <div class="col border-start">
+                                        <div class="text-success small fw-bold mb-1">Stock</div>
+                                        <input type="text" class="form-control form-control-sm border-0 px-0 bg-transparent" placeholder="e.g. 250 Bags" @bind="prod.Stock" disabled="@isClosed" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+
                 @if (kind == TaskKind.Spcm)
                 {
                     <label class="td-field-label" for="td-achieved">Achieved Target</label>
@@ -197,9 +228,36 @@
     [SupplyParameterFromQuery(Name = "type")]
     public string? TypeQuery { get; set; }
 
-    private TaskKind kind;
+    [SupplyParameterFromQuery(Name = "id")]
+    public string? IdQuery { get; set; }
 
-    protected override void OnInitialized()
+    [Inject]
+    private HttpClient Http { get; set; } = default!;
+
+    private TaskKind kind;
+    private string dynamicTitle = "Hanumesh Trading Co";
+    private string dynamicCode = "";
+    private string dynamicLocation = "Coimbatore";
+
+    private class DealerProductRow
+    {
+        public string Group { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Stock { get; set; } = "";
+    }
+    
+    private List<DealerProductRow> dealerProducts = new()
+    {
+        new DealerProductRow { Group = "Fertilizers", Name = "Urea 46%", Stock = "250 Bags" },
+        new DealerProductRow { Group = "Seeds", Name = "Paddy Seed - CO 51", Stock = "120 Kg" }
+    };
+    
+    private void AddDealerProduct()
+    {
+        dealerProducts.Add(new DealerProductRow());
+    }
+
+    protected override async Task OnInitializedAsync()
     {
         kind = TypeQuery?.ToLowerInvariant() switch
         {
@@ -208,6 +266,45 @@
             "posliquidation" => TaskKind.PosLiquidation,
             _ => TaskKind.Dealer
         };
+
+        if (kind == TaskKind.Dealer || kind == TaskKind.MdProgram)
+        {
+            try
+            {
+                var response = await Http.GetAsync("api/JmdoTaskAllocation/mine/today");
+                if (response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NoContent)
+                {
+                    var allocation = await response.Content.ReadFromJsonAsync<SPIC.Core.DTOs.JmdoTaskAllocationResponseDto>();
+                    if (allocation != null)
+                    {
+                        if (kind == TaskKind.Dealer && IdQuery?.StartsWith("dealer_") == true)
+                        {
+                            if (int.TryParse(IdQuery.Substring("dealer_".Length), out var dId))
+                            {
+                                var dealer = allocation.DealerAssignments.FirstOrDefault(x => x.DealerId == dId);
+                                if (dealer != null)
+                                {
+                                    dynamicTitle = dealer.DealerName;
+                                    dynamicCode = dealer.DealerCode;
+                                }
+                            }
+                        }
+                        else if (kind == TaskKind.MdProgram && IdQuery?.StartsWith("prog_") == true)
+                        {
+                            if (int.TryParse(IdQuery.Substring("prog_".Length), out var pId))
+                            {
+                                var prog = allocation.Programs.FirstOrDefault(x => x.Csr1Id == pId);
+                                if (prog != null)
+                                {
+                                    dynamicTitle = prog.ProgramName;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
     }
 
     // Each Figma frame used its own casing for this badge (DEALER, SPCM,

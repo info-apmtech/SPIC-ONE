@@ -1036,6 +1036,11 @@ namespace SpicAPI.Controllers
 
                 var employeeLogins = await _db.Employeelogins.AsNoTracking().ToListAsync();
 
+                var currentUserId = CurrentUserId;
+                var myLogin = employeeLogins.FirstOrDefault(x => x.UserId == currentUserId);
+                var userRoles = User?.FindAll(ClaimTypes.Role).Select(r => r.Value).ToList() ?? new List<string>();
+                bool isAdmin = userRoles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase) || r.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase));
+
                 var result = csr1Records
                     .Select(csr =>
                     {
@@ -1044,6 +1049,9 @@ namespace SpicAPI.Controllers
 
                         var programType = programTypes
                             .FirstOrDefault(x => x.Id == csr.ProgramTypeId);
+
+                        var empLogin = employeeLogins.FirstOrDefault(x => x.EmployeeInformationID == csr.ResponsiblePersonId);
+                        var resolvedHqId = (csr.HeadquarterId ?? 0) > 0 ? csr.HeadquarterId : empLogin?.HeadquartersId;
 
                         return new CSR1ListDto
                         {
@@ -1058,7 +1066,7 @@ namespace SpicAPI.Controllers
                             NumberOfPrograms = csr.NumberOfPrograms,
                             Budget = csr.Budget,
 
-                            HeadquarterId = csr.HeadquarterId,
+                            HeadquarterId = resolvedHqId,
                             LocationId = csr.LocationId,
                             ResponsiblePersonId = csr.ResponsiblePersonId,
 
@@ -1099,6 +1107,13 @@ namespace SpicAPI.Controllers
                         };
                     })
                     .ToList();
+
+                if (!isAdmin && myLogin != null)
+                {
+                    result = result.Where(r => 
+                        r.ResponsiblePersonId == myLogin.EmployeeInformationID || 
+                        r.HeadquarterId == myLogin.HeadquartersId).ToList();
+                }
 
                 return Ok(result);
             }
