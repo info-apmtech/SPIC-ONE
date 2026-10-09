@@ -182,16 +182,19 @@
                     <td><strong>Total Allocated to State</strong></td>
                     <td><strong>₹ @TotalAllocated.ToString("N0")</strong></td>
                 </tr>
-                <tr>
-                    <td><strong>Remaining Amount</strong></td>
-                    <td>
-                        <input type="number"
-                               class="budget-input"
-                               min="0"
-                               @bind="_stateSummaryRemaining"
-                               @bind:event="oninput" />
-                    </td>
-                </tr>
+                @if (!LoginState.IsAdmin)
+                {
+                    <tr>
+                        <td><strong>Remaining Amount</strong></td>
+                        <td>
+                            <input type="number"
+                                   class="budget-input"
+                                   min="0"
+                                   @bind="_stateSummaryRemaining"
+                                   @bind:event="oninput" />
+                        </td>
+                    </tr>
+                }
             </tfoot>
 
         </table>
@@ -661,9 +664,12 @@
             </div>
 
 
-            <div class="alert-box">
-                ⚠ Infrastructure Over - budget
-            </div>
+            @if (_hasValidationError)
+            {
+                <div class="alert-box">
+                    ⚠ Total allocated exceeds annual budget
+                </div>
+            }
 
         </div>
 
@@ -864,10 +870,10 @@
 
     // Role-gated tab visibility, reusing the existing LoginState role-group helpers (no new
     // permission architecture): Admin -> State, SM (SMD/SMM) -> Region, RM (RM/RMD) -> Headquarters.
-    // Admin can also see Region/Headquarters, same bypass convention as LoginState.Can/CanAccess.
+    // For admin role: Region Allocation and Headquarters Allocation tabs are hidden.
     private bool CanSeeStateTab => LoginState.IsAdmin;
-    private bool CanSeeRegionTab => LoginState.IsAdmin || LoginState.IsStateRole;
-    private bool CanSeeHeadquartersTab => LoginState.IsAdmin || LoginState.IsRegionRole;
+    private bool CanSeeRegionTab => !LoginState.IsAdmin && LoginState.IsStateRole;
+    private bool CanSeeHeadquartersTab => !LoginState.IsAdmin && LoginState.IsRegionRole;
 
     private List<StateBudgetDto> States = new();
 
@@ -915,14 +921,13 @@
     // ---- Level 1 (Admin) Budget Summary (StateBudgetSummary): Total Budget and Allocated to
     // State are never entered here - they're the existing Annual Budget (TotalStateBudget) and
     // the existing State-wise allocation total (TotalAllocated), saved automatically whenever the
-    // allocation table below is saved/submitted. Remaining Amount is the one value still entered
-    // by hand, in the table's own "Remaining Amount" row - never computed from Total - Allocated,
-    // client or server side. ----
+    // allocation table below is saved/submitted. For Admin role, no Remaining Amount is allowed;
+    // all budget must be allocated. ----
     private decimal _stateSummaryRemaining;
 
     private async Task LoadStateBudgetSummaryAsync()
     {
-        if (_selectedFY.Length == 0)
+        if (LoginState.IsAdmin || _selectedFY.Length == 0)
         {
             _stateSummaryRemaining = 0;
             return;
@@ -932,9 +937,6 @@
         {
             var dto = await Http.GetFromJsonAsync<StateBudgetSummaryDto>(
                 $"api/Budget/state-budget-summary?fy={Uri.EscapeDataString(_selectedFY)}");
-            // Only the previously-saved Remaining Amount is loaded into the editable row - Total
-            // Budget/Allocated are re-derived fresh from TotalStateBudget/TotalAllocated every
-            // time they're saved, so there's nothing stale to load for them here.
             _stateSummaryRemaining = dto?.RemainingAmount ?? 0;
         }
         catch
@@ -956,7 +958,7 @@
                 FY = _selectedFY,
                 TotalBudget = TotalStateBudget,
                 AllocatedAmount = TotalAllocated,
-                RemainingAmount = _stateSummaryRemaining
+                RemainingAmount = LoginState.IsAdmin ? 0m : _stateSummaryRemaining
             };
 
             var response = await Http.PutAsJsonAsync("api/Budget/state-budget-summary", request);
@@ -992,6 +994,15 @@
         if (TotalAllocated <= 0)
         {
             _validationMessage = "Allocated Amount must be greater than 0.";
+            return false;
+        }
+
+        if (LoginState.IsAdmin && TotalAllocated != TotalStateBudget)
+        {
+            var diff = TotalStateBudget - TotalAllocated;
+            _validationMessage = diff > 0
+                ? $"All budget must be allocated to states. ₹{diff:N0} remaining to be allocated."
+                : $"Allocated Amount (₹{TotalAllocated:N0}) cannot exceed Total Budget (₹{TotalStateBudget:N0}).";
             return false;
         }
 
@@ -1419,10 +1430,38 @@
     // SubmitStateBudgetSummary and remains the sole authority.
     private async Task<bool> TrySaveAllocationsAsync()
     {
-        if (!TryValidateSummaryAmounts(TotalStateBudget, TotalAllocated, _stateSummaryRemaining, out var preCheckError))
+        if (LoginState.IsAdmin)
         {
-            _validationMessage = preCheckError;
-            return false;
+            if (TotalStateBudget <= 0)
+            {
+                _validationMessage = "Total Budget must be greater than 0.";
+                return false;
+            }
+
+            if (TotalAllocated <= 0)
+            {
+                _validationMessage = "Allocated Amount must be greater than 0.";
+                return false;
+            }
+
+            if (TotalAllocated != TotalStateBudget)
+            {
+                var diff = TotalStateBudget - TotalAllocated;
+                _validationMessage = diff > 0
+                    ? $"All budget must be allocated to states. ₹{diff:N0} remaining to be allocated."
+                    : $"Allocated Amount (₹{TotalAllocated:N0}) cannot exceed Total Budget (₹{TotalStateBudget:N0}).";
+                return false;
+            }
+
+            _stateSummaryRemaining = 0;
+        }
+        else
+        {
+            if (!TryValidateSummaryAmounts(TotalStateBudget, TotalAllocated, _stateSummaryRemaining, out var preCheckError))
+            {
+                _validationMessage = preCheckError;
+                return false;
+            }
         }
 
         try

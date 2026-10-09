@@ -18,14 +18,17 @@
             <h1>Budgeting Management</h1>
 
             <!-- Layout preview toggle (DESIGN ONLY — will be driven by user role later) -->
-            <div class="bm-view-toggle" role="tablist" aria-label="Budget planning layout preview">
-                <button type="button" class="bm-view-toggle-btn @(currentView == BudgetPlanningView.HqWise ? "active" : "")" @onclick="() => SetView(BudgetPlanningView.HqWise)">
-                    HQ-wise
-                </button>
-                <button type="button" class="bm-view-toggle-btn @(currentView == BudgetPlanningView.ProgramWise ? "active" : "")" @onclick="() => SetView(BudgetPlanningView.ProgramWise)">
-                    Program-wise
-                </button>
-            </div>
+            @if (!CanApproveBudget)
+            {
+                <div class="bm-view-toggle" role="tablist" aria-label="Budget planning layout preview">
+                    <button type="button" class="bm-view-toggle-btn @(currentView == BudgetPlanningView.HqWise ? "active" : "")" @onclick="() => SetView(BudgetPlanningView.HqWise)">
+                        HQ-wise
+                    </button>
+                    <button type="button" class="bm-view-toggle-btn @(currentView == BudgetPlanningView.ProgramWise ? "active" : "")" @onclick="() => SetView(BudgetPlanningView.ProgramWise)">
+                        Program-wise
+                    </button>
+                </div>
+            }
         </div>
 
         <!-- Stats Grid (4 Cards) -->
@@ -35,8 +38,8 @@
                 <!-- Approved Budget Card -->
                 <div class="bm-stat-card theme-green">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value"> ₹ @SMMAllocatedBudget.ToString("N0") </span>
-                        <span class="bm-stat-label">@RoleBudgetLabel</span>
+                        <span class="bm-stat-value">  ₹ @((CanApproveBudget ? SelectedSubmissionTotal : SMMAllocatedBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
+                        <span class="bm-stat-label">@(CanApproveBudget ? "Submitted Program Budget" : RoleBudgetLabel)</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -52,11 +55,11 @@
                 <div class="bm-stat-card theme-blue">
                     <div class="bm-stat-content">
                         <span class="bm-stat-value">
-                            ₹ @TotalAllocatedProgramBudget.ToString("N0")
+                            ₹ @(TotalAllocatedProgramBudget.ToString("N0", CultureInfo.GetCultureInfo("en-IN")))
                         </span>
 
                         <span class="bm-stat-label">
-                            Allocated Budget
+                            @(CanApproveBudget ? "Loaded Program Total" : "Allocated Budget")
                         </span>
                     </div>
                     <div class="bm-stat-icon">
@@ -71,8 +74,8 @@
                 <!-- Remaining Budget Card -->
                 <div class="bm-stat-card theme-purple">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value">  ₹ @RemainingBudget.ToString("N0")</span>
-                        <span class="bm-stat-label">SMM Balance</span>
+                        <span class="bm-stat-value"> ₹ @((CanApproveBudget ? SMMAllocatedBudget : RemainingBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
+                        <span class="bm-stat-label">@(CanApproveBudget ? "Approver Own Allocation (Reference)" : "Remaining Budget")</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -85,8 +88,8 @@
                 <!-- SMDO Budget Card -->
                 <div class="bm-stat-card theme-orange">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value">₹ @SMDOAllocatedBudget.ToString("N0")</span>
-                        <span class="bm-stat-label">SMDO Budget</span>
+                        <span class="bm-stat-value"> ₹ @((CanApproveBudget ? SelectedSubmissionTotal : SMDOAllocatedBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
+                        <span class="bm-stat-label">@(CanApproveBudget ? "Awaiting Approval" : "SMDO Budget")</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -170,7 +173,7 @@
 
         <!-- Section Header -->
         <div class="bm-section-header">
-            <h2>Program-wise Budget Planning</h2>
+            <h2>@(CanApproveBudget ? "Program-wise Budget Approval" : "Program-wise Budget Planning")</h2>
             @if (_availableFYs.Count > 0)
             {
                 <select class="bm-year-select"
@@ -193,6 +196,29 @@
                 </span>
             }
         </div>
+
+        @if (CanApproveBudget)
+        {
+            <div class="bm-approval-selector" style="background:white;border:1px solid #e2e8f0;padding:16px;border-radius:10px;margin-bottom:18px">
+                <label for="budgetSubmissionSelect"><strong>Saved program budgets awaiting approval</strong></label>
+                <select id="budgetSubmissionSelect" class="bm-year-select" style="display:block;margin-top:8px;max-width:100%;width:100%"
+                        value="@_selectedSubmissionId" @onchange="OnApprovalSelectionChanged">
+                    <option value="0">-- Select a saved budget --</option>
+                    @foreach (var item in _pendingApprovals)
+                    {
+                        <option value="@item.Id">@item.SubmittedRole | @item.SubmittedBy | FY @item.FinancialYear | ₹@item.TotalBudget.ToString("N0")</option>
+                    }
+                </select>
+                @if (_pendingApprovals.Count == 0)
+                {
+                    <p style="margin:10px 0 0">No submitted budgets found for your assigned scope and selected FY.</p>
+                }
+                @if (_selectedSubmissionId > 0)
+                {
+                    <p style="margin:10px 0 0">Status: Pending approval. The values below are read-only.</p>
+                }
+            </div>
+        }
 
         <!-- Input Table -->
         @if (currentView == BudgetPlanningView.ProgramWise)
@@ -281,7 +307,7 @@
                     <!-- Base Budget Amount -->
                     <td>
 
-                        @if (program.IsChangeAmount)
+                        @if (program.IsChangeAmount && !CanApproveBudget)
                         {
                             <input type="number"
                                    class="bm-budget-input-sm bm-budget-input-editable"
@@ -305,6 +331,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.AprilCount"
+                              
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -321,6 +348,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.MayCount"
+                           
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -337,6 +365,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.JuneCount"
+                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -353,6 +382,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.JulyCount"
+                            
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -369,6 +399,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.AugustCount"
+                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -385,6 +416,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.SeptemberCount"
+                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -401,6 +433,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.OctoberCount"
+                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -417,6 +450,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.NovemberCount"
+                              
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -433,6 +467,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.DecemberCount"
+                           
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -449,6 +484,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.JanuaryCount"
+                           
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -465,6 +501,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.FebruaryCount"
+                              
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -481,6 +518,7 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.MarchCount"
+                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -525,7 +563,7 @@
                     <td>
                         <input type="number"
                                class="bm-budget-input"
-                               @bind="program.TotalBudget" />
+                               @bind="program.TotalBudget" disabled="@CanApproveBudget" />
                     </td>
 
                 </TableRow>
@@ -562,25 +600,20 @@
 
             <!-- Right Action Buttons; native: ActionBar = inline row on tablet/desktop, fixed 44px bar on phone -->
             <ActionBar CssClass="bm-actionbar" AriaLabel="Budget plan actions">
-                @* <button type="button" class="bm-btn-secondary" @onclick="HandleSaveDraft">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-                        <polyline points="17 21 17 13 7 13 7 21"></polyline>
-                        <polyline points="7 3 7 8 15 8"></polyline>
-                    </svg>
-                    Save Draft
-                </button> *@
-                <button type="button"
-                        class="bm-btn-primary"
-                        @onclick="HandleSubmitValidation"
-                        disabled="@_isSavingBudget">
-                    @(_isSavingBudget ? "Saving..." : "Save")
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="22" y1="2" x2="11" y2="13"></line>
-                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                    </svg>
-                    Save
-                </button>
+                @if (CanCreateBudget)
+                {
+                    <button type="button" class="bm-btn-primary" @onclick="HandleSubmitValidation"
+                            disabled="@_isSavingBudget">
+                        @(_isSavingBudget ? "Saving..." : "Save")
+                    </button>
+                }
+                else if (CanApproveBudget)
+                {
+                    <button type="button" class="bm-btn-primary" @onclick="HandleApproveBudget"
+                            disabled="@(_isApproving || !HasSelectedPendingSubmission)">
+                        @(_isApproving ? "Approving..." : "Approve")
+                    </button>
+                }
             </ActionBar>
         </div>
 
@@ -661,8 +694,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                                           watermarks (::before/::after) that leak onto these tiles and sit on top
-                                           of the label text. Neutralise them for this page only. */
+                                                       watermarks (::before/::after) that leak onto these tiles and sit on top
+                                                       of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -1116,7 +1149,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                                               on screen (it used to sit off the right edge of a 720px table). */
+                                                           on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1200,6 +1233,110 @@
         ProgramWise
     }
 
+    // LoginState roles (legacy aliases): RMD=RMDO, SMD=SMDO, RM=RMM.
+    private string BudgetRole => (LoginState.UserRole?.ToString() ?? "").Trim().ToUpperInvariant();
+    private bool CanCreateBudget => BudgetRole is "MO" or "RMDO" or "RMD" or "SMDO" or "SMD";
+    private bool CanApproveBudget => BudgetRole is "SMM" or "RMM" or "RM";
+    private decimal SelectedSubmissionTotal =>
+        _pendingApprovals.FirstOrDefault(x => x.Id == _selectedSubmissionId)?.TotalBudget ?? 0m;
+    private bool HasSelectedPendingSubmission =>
+        _pendingApprovals.Any(x => x.Id == _selectedSubmissionId &&
+            string.Equals(x.Status, "Submitted", StringComparison.OrdinalIgnoreCase));
+
+    private sealed class PendingBudgetApprovalDto
+    {
+        public int Id { get; set; }
+        public string FinancialYear { get; set; } = "";
+        public string SubmittedBy { get; set; } = "";
+        public string SubmittedRole { get; set; } = "";
+        public decimal TotalBudget { get; set; }
+        public string Status { get; set; } = "";
+        public List<ProgramWiseBudgetDto> Programs { get; set; } = new();
+    }
+
+    private List<PendingBudgetApprovalDto> _pendingApprovals = new();
+    private int _selectedSubmissionId;
+    private bool _isApproving;
+
+    private async Task LoadPendingApprovalsAsync()
+    {
+        _pendingApprovals.Clear();
+        _selectedSubmissionId = 0;
+        programPlans.Clear();
+        FilteredProgramPlans.Clear();
+        if (!CanApproveBudget || string.IsNullOrWhiteSpace(_selectedFY)) return;
+        try
+        {
+            // Must return only server-authorized state/region + FY + Submitted records.
+            var url = $"api/Budget/pending-program-approvals?fy={Uri.EscapeDataString(_selectedFY)}";
+            using var response = await Http.GetAsync(url);
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Pending approvals failed: URL={url}, Status={(int)response.StatusCode}, Body={errorBody}");
+                Toast.Error($"Could not load budgets for approval (HTTP {(int)response.StatusCode}). Check console for API details.");
+                return;
+            }
+            _pendingApprovals = await response.Content.ReadFromJsonAsync<List<PendingBudgetApprovalDto>>() ?? new();
+            _pendingApprovals = _pendingApprovals
+                .Where(x => x.FinancialYear == _selectedFY &&
+                            string.Equals(x.Status, "Submitted", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (_pendingApprovals.Count == 1)
+            {
+                _selectedSubmissionId = _pendingApprovals[0].Id;
+                SelectSubmittedBudget();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Budget approval loading error: {ex}");
+            Toast.Error("Unable to load submitted budgets.");
+        }
+    }
+
+    private void OnApprovalSelectionChanged(ChangeEventArgs e)
+    {
+        _selectedSubmissionId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        SelectSubmittedBudget();
+    }
+
+    private void SelectSubmittedBudget()
+    {
+        var selected = _pendingApprovals.FirstOrDefault(x => x.Id == _selectedSubmissionId);
+        // No recalculation: show the exact saved monthly values for approval.
+        programPlans = selected?.Programs?.ToList() ?? new();
+        ApplyBudgetFilter();
+    }
+
+    private async Task HandleApproveBudget()
+    {
+        if (!CanApproveBudget || _isApproving || _selectedSubmissionId <= 0) return;
+        if (!HasSelectedPendingSubmission) return;
+        _isApproving = true;
+        try
+        {
+            // Server checks caller's role, scope, Submitted status and approved amount.
+            using var response = await Http.PostAsJsonAsync(
+                $"api/Budget/{_selectedSubmissionId}/approve-program", new { });
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Budget approval rejected: {message}");
+                Toast.Error($"Budget approval failed (HTTP {(int)response.StatusCode}).");
+                return;
+            }
+            Toast.Success("Budget approved successfully.");
+            await LoadPendingApprovalsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            Toast.Error("Budget approval could not be confirmed.");
+        }
+        finally { _isApproving = false; }
+    }
+
     private List<string> _availableFYs = new();
     private string _selectedFY = string.Empty;
 
@@ -1234,14 +1371,16 @@
     {
         await LoadFinancialYearsAsync();
         await LoadBudgetDashboard();
-        await LoadProgramBudget();
+        if (CanApproveBudget) await LoadPendingApprovalsAsync();
+        else if (CanCreateBudget) await LoadProgramBudget();
     }
 
     private async Task OnFYChangedAsync()
     {
         await LoadBudgetDashboard();
 
-        await LoadProgramBudget();
+        if (CanApproveBudget) await LoadPendingApprovalsAsync();
+        else if (CanCreateBudget) await LoadProgramBudget();
 
         StateHasChanged();
     }
@@ -1541,6 +1680,7 @@
 
     private async Task HandleSaveDraft()
     {
+        if (!CanCreateBudget) return;
         try
         {
             // Total program budget entered by user
@@ -1670,6 +1810,11 @@
 
     private async Task HandleSubmitValidation()
     {
+        if (!CanCreateBudget)
+        {
+            Toast.Error("Only MO, RMDO and SMDO can save program budgets.");
+            return;
+        }
         // Prevent overlapping save requests from repeated clicks.
         if (_isSavingBudget)
         {
@@ -1680,15 +1825,15 @@
 
         try
         {
-            if (FilteredProgramPlans == null ||
-                FilteredProgramPlans.Count == 0)
+            if (programPlans == null ||
+                programPlans.Count == 0)
             {
                 Toast.Error("No programs available to save.");
                 return;
             }
 
             var selectedPrograms =
-                FilteredProgramPlans.ToList();
+                programPlans.ToList();
 
             // Refresh monthly calculations
             foreach (var item in selectedPrograms)
@@ -1990,7 +2135,7 @@
     }
     private bool ValidateBudgetData()
     {
-        foreach (var item in FilteredProgramPlans)
+        foreach (var item in programPlans)
         {
             CalculateBudget(item);
         }
@@ -2174,7 +2319,7 @@
     }
 
     private decimal TotalAllocatedProgramBudget =>
-    FilteredProgramPlans.Sum(x =>
+    programPlans.Sum(x =>
         x.AprilBudget +
         x.MayBudget +
         x.JuneBudget +

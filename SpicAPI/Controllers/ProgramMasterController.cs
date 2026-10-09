@@ -39,6 +39,7 @@ namespace SpicAPI.Controllers
                     Name = x.Name,
                     ProgramTypeId = x.ProgramTypeId,
                     ProgramType = x.ProgramType != null ? x.ProgramType.Name : "",
+                    IsChangeAmount = x.ProgramType != null && x.ProgramType.IsChangeAmount,
                     IsMO = x.IsMO,
                     IsRMDO = x.IsRMDO,
                     IsSMDO = x.IsSMDO,
