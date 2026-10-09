@@ -59,6 +59,10 @@ namespace SPIC.Core.DTOs
         public int? SpcmTarget { get; set; }
         public int? SoilSampleTarget { get; set; }
         public int ProgramCount { get; set; }
+        public int? UreaTarget { get; set; }
+        public int? DapTarget { get; set; }
+        public int? NpsTarget { get; set; }
+        public int? OthersTarget { get; set; }
         // How many of the 4 PoS liquidation target fields (Urea/DAP/NPS/Others)
         // were filled in - there's no single "liquidation quantity" field to sum.
         public int PosLiquidationFieldCount { get; set; }
