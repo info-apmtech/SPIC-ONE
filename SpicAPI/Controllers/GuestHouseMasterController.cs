@@ -247,6 +247,27 @@ namespace SpicAPI.Controllers
 			return Ok(items);
 		}
 
+		// GET /api/GuestHouseMaster/room-types
+		[HttpGet("room-types")]
+		public async Task<ActionResult<List<GuestHouseRoomTypeDto>>> GetAllRoomTypes()
+		{
+			var items = await _db.GuestHouseRoomTypes
+				.AsNoTracking()
+				.OrderBy(rt => rt.Name)
+				.Select(rt => new GuestHouseRoomTypeDto
+				{
+					Id = rt.Id,
+					Name = rt.Name,
+					IsActive = rt.IsActive,
+					RoomCount = rt.Rooms.Count,
+					CreatedAt = rt.CreatedAt,
+					UpdatedAt = rt.UpdatedAt
+				})
+				.ToListAsync();
+
+			return Ok(items);
+		}
+
 		// GET /api/GuestHouseMaster/rooms
 		[HttpGet("rooms")]
 		public async Task<ActionResult<List<GuestHouseRoomDto>>> GetAllRooms()
@@ -254,6 +275,7 @@ namespace SpicAPI.Controllers
 			var items = await _db.GuestHouseRooms
 				.AsNoTracking()
 				.Include(r => r.GuestHouse)
+				.Include(r => r.RoomTypeMaster)
 				.OrderBy(r => r.GuestHouse!.Name)
 				.ThenBy(r => r.RoomNumber)
 				.Select(r => new GuestHouseRoomDto
@@ -261,6 +283,8 @@ namespace SpicAPI.Controllers
 					Id = r.Id,
 					GuestHouseId = r.GuestHouseId,
 					GuestHouseName = r.GuestHouse != null ? r.GuestHouse.Name : "",
+					RoomTypeId = r.RoomTypeId,
+					RoomTypeName = r.RoomTypeMaster != null ? r.RoomTypeMaster.Name : null,
 					RoomType = r.RoomType,
 					RoomNumber = r.RoomNumber,
 					PricePerNight = r.PricePerNight,
@@ -434,6 +458,89 @@ namespace SpicAPI.Controllers
 		}
 
 		// =====================================================================
+		// ROOM TYPE CRUD (admin page form)
+		// =====================================================================
+
+		[HttpPost("room-types")]
+		public async Task<IActionResult> CreateRoomType([FromBody] GuestHouseRoomTypePayload? payload)
+		{
+			if (payload is null || string.IsNullOrWhiteSpace(payload.Name))
+				return BadRequest(new { Success = false, Message = "Room Type Name is required." });
+
+			var name = payload.Name.Trim();
+			if (await _db.GuestHouseRoomTypes.AnyAsync(rt => rt.Name.ToLower() == name.ToLower()))
+				return Conflict(new { Success = false, Message = $"Room Type '{name}' already exists." });
+
+			var now = DateTime.UtcNow;
+			var roomType = new GuestHouseRoomType
+			{
+				Name = name,
+				IsActive = payload.IsActive,
+				CreatedBy = "current-user",
+				CreatedAt = now,
+				UpdatedBy = "current-user",
+				UpdatedAt = now
+			};
+			_db.GuestHouseRoomTypes.Add(roomType);
+			await _db.SaveChangesAsync();
+
+			return Ok(new { Success = true, Message = "Room Type created successfully.", Id = roomType.Id });
+		}
+
+		[HttpPut("room-types/{id:int}")]
+		public async Task<IActionResult> UpdateRoomType(int id, [FromBody] GuestHouseRoomTypePayload? payload)
+		{
+			if (payload is null || string.IsNullOrWhiteSpace(payload.Name))
+				return BadRequest(new { Success = false, Message = "Room Type Name is required." });
+
+			var roomType = await _db.GuestHouseRoomTypes.FindAsync(id);
+			if (roomType == null)
+				return NotFound(new { Success = false, Message = "Room Type not found." });
+
+			var name = payload.Name.Trim();
+			var dupe = await _db.GuestHouseRoomTypes
+				.AnyAsync(rt => rt.Id != id && rt.Name.ToLower() == name.ToLower());
+			if (dupe)
+				return Conflict(new { Success = false, Message = $"Room Type '{name}' already exists." });
+
+			roomType.Name = name;
+			roomType.IsActive = payload.IsActive;
+			roomType.UpdatedBy = "current-user";
+			roomType.UpdatedAt = DateTime.UtcNow;
+
+			await _db.SaveChangesAsync();
+			return Ok(new { Success = true, Message = "Room Type updated successfully." });
+		}
+
+		[HttpDelete("room-types/{id:int}")]
+		public async Task<IActionResult> DeleteRoomType(int id)
+		{
+			var roomType = await _db.GuestHouseRoomTypes.FindAsync(id);
+			if (roomType == null)
+				return NotFound(new { Success = false, Message = "Room Type not found." });
+
+			if (await _db.GuestHouseRooms.AnyAsync(r => r.RoomTypeId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Room Type because it has rooms mapped to it. Unlink or delete those rooms first." });
+
+			_db.GuestHouseRoomTypes.Remove(roomType);
+			await _db.SaveChangesAsync();
+			return Ok(new { Success = true, Message = "Room Type deleted successfully." });
+		}
+
+		[HttpPatch("room-types/{id:int}/status")]
+		public async Task<IActionResult> ToggleRoomTypeStatus(int id, [FromQuery] bool isActive)
+		{
+			var roomType = await _db.GuestHouseRoomTypes.FindAsync(id);
+			if (roomType == null)
+				return NotFound(new { Success = false, Message = "Room Type not found." });
+
+			roomType.IsActive = isActive;
+			roomType.UpdatedAt = DateTime.UtcNow;
+			await _db.SaveChangesAsync();
+			return Ok(new { Success = true, Message = "Room Type status updated." });
+		}
+
+		// =====================================================================
 		// ROOM CRUD (admin page form)
 		// =====================================================================
 
@@ -442,6 +549,16 @@ namespace SpicAPI.Controllers
 		{
 			if (payload is null)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
+
+			if (payload.RoomTypeId.HasValue && payload.RoomTypeId.Value > 0)
+			{
+				var masterType = await _db.GuestHouseRoomTypes.FindAsync(payload.RoomTypeId.Value);
+				if (masterType == null)
+					return BadRequest(new { Success = false, Message = "Selected Room Type Master does not exist." });
+
+				if (string.IsNullOrWhiteSpace(payload.RoomType))
+					payload.RoomType = masterType.Name;
+			}
 
 			var validation = ValidateRoomPayload(payload);
 			if (validation != null) return validation;
@@ -453,6 +570,7 @@ namespace SpicAPI.Controllers
 			var room = new GuestHouseRoom
 			{
 				GuestHouseId = payload.GuestHouseId,
+				RoomTypeId = payload.RoomTypeId > 0 ? payload.RoomTypeId : null,
 				RoomType = payload.RoomType.Trim(),
 				RoomNumber = NullIfEmpty(payload.RoomNumber),
 				PricePerNight = payload.PricePerNight,
@@ -475,6 +593,16 @@ namespace SpicAPI.Controllers
 			if (payload is null)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
 
+			if (payload.RoomTypeId.HasValue && payload.RoomTypeId.Value > 0)
+			{
+				var masterType = await _db.GuestHouseRoomTypes.FindAsync(payload.RoomTypeId.Value);
+				if (masterType == null)
+					return BadRequest(new { Success = false, Message = "Selected Room Type Master does not exist." });
+
+				if (string.IsNullOrWhiteSpace(payload.RoomType))
+					payload.RoomType = masterType.Name;
+			}
+
 			var validation = ValidateRoomPayload(payload);
 			if (validation != null) return validation;
 
@@ -486,6 +614,7 @@ namespace SpicAPI.Controllers
 				return BadRequest(new { Success = false, Message = "Selected Guest House does not exist." });
 
 			room.GuestHouseId = payload.GuestHouseId;
+			room.RoomTypeId = payload.RoomTypeId > 0 ? payload.RoomTypeId : null;
 			room.RoomType = payload.RoomType.Trim();
 			room.RoomNumber = NullIfEmpty(payload.RoomNumber);
 			room.PricePerNight = payload.PricePerNight;
@@ -801,11 +930,29 @@ namespace SpicAPI.Controllers
 		public DateTime UpdatedAt { get; set; }
 	}
 
+	public class GuestHouseRoomTypeDto
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; }
+		public int RoomCount { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+	}
+
+	public class GuestHouseRoomTypePayload
+	{
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; } = true;
+	}
+
 	public class GuestHouseRoomDto
 	{
 		public int Id { get; set; }
 		public int GuestHouseId { get; set; }
 		public string GuestHouseName { get; set; } = "";
+		public int? RoomTypeId { get; set; }
+		public string? RoomTypeName { get; set; }
 		public string? RoomType { get; set; }
 		public string? RoomNumber { get; set; }
 		public decimal PricePerNight { get; set; }
@@ -827,6 +974,7 @@ namespace SpicAPI.Controllers
 	public class GuestHouseRoomPayload
 	{
 		public int GuestHouseId { get; set; }
+		public int? RoomTypeId { get; set; }
 		public string RoomType { get; set; } = "";
 		public string? RoomNumber { get; set; }
 		public decimal PricePerNight { get; set; }

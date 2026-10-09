@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -73,6 +73,21 @@ namespace Spic.Infrastructure.Data
                 entity.Property(a => a.RoomNumber).IsRequired().HasMaxLength(50);
                 entity.HasIndex(a => a.GuestHouseBookingId);
                 entity.HasIndex(a => new { a.GuestHouseRoomId, a.RoomNumber });
+            });
+
+            builder.Entity<GuestHouseRoomType>(entity =>
+            {
+                entity.HasKey(rt => rt.Id);
+                entity.Property(rt => rt.Name).IsRequired().HasMaxLength(150);
+                entity.HasIndex(rt => rt.Name);
+            });
+
+            builder.Entity<GuestHouseRoom>(entity =>
+            {
+                entity.HasOne(r => r.RoomTypeMaster)
+                    .WithMany(rt => rt.Rooms)
+                    .HasForeignKey(r => r.RoomTypeId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
         // =====================================================================
@@ -868,6 +883,7 @@ namespace Spic.Infrastructure.Data
 
 		//// Guest House Master Data
 		public DbSet<GuestHouse> GuestHouses { get; set; }
+		public DbSet<GuestHouseRoomType> GuestHouseRoomTypes { get; set; }
 		public DbSet<GuestHouseRoom> GuestHouseRooms { get; set; }
 		public DbSet<GuestHouseImage> GuestHouseImages { get; set; }
 		//public DbSet<GuestHouseRoomImage> GuestHouseRoomImages { get; set; }
