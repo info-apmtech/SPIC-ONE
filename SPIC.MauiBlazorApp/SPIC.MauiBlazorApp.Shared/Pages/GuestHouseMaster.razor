@@ -122,7 +122,7 @@
 				</div>
 			}
 		</div>
-		<div class="tab-hint">@(ActiveTab == TabHouse ? "Create / update the Guest House records first, then map Rooms to them." : "Map rooms to an existing Guest House. Guest Houses are created on the Guest House tab.")</div>
+		<div class="tab-hint">@(ActiveTab == TabHouse ? "Create / update the Guest House records first, then manage Room Types and map Rooms to them." : ActiveTab == TabRoomType ? "Manage standard Room Types (e.g. AC Deluxe Room, Non AC Standard Room) for mapping to rooms." : "Map rooms to an existing Guest House. Guest Houses are created on the Guest House tab.")</div>
 	</div>
 
 	@* The WHOLE content block (form + metric cards + both tables) used to be gated on IsAdmin only,
@@ -135,14 +135,17 @@
 	{
 		<div class="main-card">
 			<div class="section-header">
-				<h3 class="section-title">@(_isEditing ? $"Edit {(ActiveTab == TabHouse ? "Guest House" : "Room")}" : $"Add New {(ActiveTab == TabHouse ? "Guest House" : "Room")}")</h3>
+				<h3 class="section-title">@(_isEditing ? $"Edit {(ActiveTab == TabHouse ? "Guest House" : ActiveTab == TabRoomType ? "Room Type" : "Room")}" : $"Add New {(ActiveTab == TabHouse ? "Guest House" : ActiveTab == TabRoomType ? "Room Type" : "Room")}")</h3>
 				<div class="d-flex gap-2">
-					<button class="btn-outline-green" @onclick="DownloadSampleTemplate">
-						<i class="bi bi-file-earmark-excel"></i> Download Template
-					</button>
-					<button class="btn-outline-green" @onclick="() => _showUploadModal = true">
-						<i class="bi bi-cloud-arrow-up"></i> Upload File
-					</button>
+					@if (ActiveTab != TabRoomType)
+					{
+						<button class="btn-outline-green" @onclick="DownloadSampleTemplate">
+							<i class="bi bi-file-earmark-excel"></i> Download Template
+						</button>
+						<button class="btn-outline-green" @onclick="() => _showUploadModal = true">
+							<i class="bi bi-cloud-arrow-up"></i> Upload File
+						</button>
+					}
 				</div>
 			</div>
 
@@ -208,6 +211,14 @@
 					}
 				</div>
 				}
+				else if (ActiveTab == TabRoomType)
+				{
+					<div class="col-md-6 col-lg-4">
+						<label class="form-label-custom">Room Type Name *</label>
+						<input type="text" class="form-control-custom w-100" placeholder="e.g. AC Deluxe Room"
+							   @bind="_roomTypeForm.Name" @ref="_firstInputRef" />
+					</div>
+				}
 				else
 				{
 					<div class="col-md-6 col-lg-3">
@@ -221,6 +232,16 @@
 						</select>
 					</div>
 					<div class="col-md-6 col-lg-3">
+						<label class="form-label-custom">Room Type (Master)</label>
+						<select class="form-control-custom w-100" value="@_roomForm.RoomTypeId" @onchange="OnMasterRoomTypeSelected">
+							<option value="0">-- Select from Master (Optional) --</option>
+							@foreach (var rt in _roomTypesAll.Where(x => x.IsActive || x.Id == _roomForm.RoomTypeId))
+							{
+								<option value="@rt.Id">@rt.Name</option>
+							}
+						</select>
+					</div>
+					<div class="col-md-6 col-lg-2">
 						<label class="form-label-custom">Room Type *</label>
 						<input type="text" class="form-control-custom w-100" placeholder="e.g. Non AC"
 							   @bind="_roomForm.RoomType" @ref="_firstInputRef" />
@@ -230,12 +251,12 @@
 						<input type="text" class="form-control-custom w-100" placeholder="e.g. 101"
 							   @bind="_roomForm.RoomNumber" />
 					</div>
-					<div class="col-md-4 col-lg-2">
+					<div class="col-md-4 col-lg-1">
 						<label class="form-label-custom">No. of Rooms *</label>
 						<input type="number" min="1" class="form-control-custom w-100" placeholder="1"
 							   @bind="_roomForm.NoOfRooms" />
 					</div>
-					<div class="col-md-4 col-lg-2">
+					<div class="col-md-4 col-lg-1">
 						<label class="form-label-custom">Rate (₹) *</label>
 						<input type="number" min="0" step="0.01" class="form-control-custom w-100" placeholder="0"
 							   @bind="_roomForm.Rate" />
@@ -251,6 +272,10 @@
 							{
 								<input type="checkbox" @bind="_houseForm.IsActive">
 							}
+							else if (ActiveTab == TabRoomType)
+							{
+								<input type="checkbox" @bind="_roomTypeForm.IsActive">
+							}
 							else
 							{
 								<input type="checkbox" @bind="_roomForm.IsActive">
@@ -262,7 +287,7 @@
 			</div>
 
 			<div class="d-flex justify-content-end pt-2 mt-4 ghm-form-actions">
-				<ActionBar AriaLabel="@(ActiveTab == TabHouse ? "Guest house form actions" : "Room form actions")">
+				<ActionBar AriaLabel="@(ActiveTab == TabHouse ? "Guest house form actions" : ActiveTab == TabRoomType ? "Room type form actions" : "Room form actions")">
 					<Secondary>
 						<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
 					</Secondary>
@@ -279,9 +304,9 @@
 			<div class="col-md-4">
 				<div class="metric-card bg-blue-light">
 					<div class="metric-header">
-						<h4 class="metric-title">Total @(ActiveTab == TabHouse ? "Guest Houses" : "Rooms")</h4>
+						<h4 class="metric-title">Total @(ActiveTab == TabHouse ? "Guest Houses" : ActiveTab == TabRoomType ? "Room Types" : "Rooms")</h4>
 					</div>
-					<div class="metric-val">@(ActiveTab == TabHouse ? _housesAll.Count : _roomsAll.Count)</div>
+					<div class="metric-val">@(ActiveTab == TabHouse ? _housesAll.Count : ActiveTab == TabRoomType ? _roomTypesAll.Count : _roomsAll.Count)</div>
 				</div>
 			</div>
 			<div class="col-md-4">
@@ -289,7 +314,7 @@
 					<div class="metric-header">
 						<h4 class="metric-title">Active</h4>
 					</div>
-					<div class="metric-val">@(ActiveTab == TabHouse ? _housesAll.Count(x => x.IsActive) : _roomsAll.Count(x => x.IsActive))</div>
+					<div class="metric-val">@(ActiveTab == TabHouse ? _housesAll.Count(x => x.IsActive) : ActiveTab == TabRoomType ? _roomTypesAll.Count(x => x.IsActive) : _roomsAll.Count(x => x.IsActive))</div>
 				</div>
 			</div>
 			<div class="col-md-4">
@@ -297,7 +322,7 @@
 					<div class="metric-header">
 						<h4 class="metric-title">Inactive</h4>
 					</div>
-					<div class="metric-val">@(ActiveTab == TabHouse ? _housesAll.Count(x => !x.IsActive) : _roomsAll.Count(x => !x.IsActive))</div>
+					<div class="metric-val">@(ActiveTab == TabHouse ? _housesAll.Count(x => !x.IsActive) : ActiveTab == TabRoomType ? _roomTypesAll.Count(x => !x.IsActive) : _roomsAll.Count(x => !x.IsActive))</div>
 				</div>
 			</div>
 		</div>
@@ -350,6 +375,66 @@
 					<td>@(item.StateName ?? "-")</td>
 					<td>@(item.PhoneNumber ?? "-")</td>
 					<td>@(item.Description ?? "-")</td>
+					<td>@item.RoomCount</td>
+					<td>
+						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+							  style="cursor:pointer" title="Click to toggle"
+							  @onclick="() => ToggleStatus(item)">
+							@(item.IsActive ? "Active" : "Inactive")
+						</span>
+					</td>
+					<td>@item.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+					<td>
+						<div class="action-icons">
+							<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+							<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+						</div>
+					</td>
+				</TableRow>
+
+				<CardActions Context="item">
+					<div class="ghm-card-actions d-flex gap-2 w-100 flex-wrap">
+						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
+							@(item.IsActive ? "Active" : "Inactive")
+						</span>
+						<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+						<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+					</div>
+				</CardActions>
+			</SpicDataTable>
+		}
+		else if (ActiveTab == TabRoomType)
+		{
+			<SpicDataTable Items="_filteredRoomTypes"
+						   IsLoading="_isLoading"
+						   Title="Existing Room Types"
+						   FileName="GuestHouseMaster_RoomTypes"
+						   ExportColumns="GetRoomTypeExportColumns()"
+						   SearchText="@_searchText">
+
+				<FilterControls>
+					<div class="search-box">
+						<i class="bi bi-search"></i>
+						<input type="text" placeholder="Search room types..."
+							   @bind="_searchText" @bind:event="oninput" @bind:after="ApplyFilter" />
+					</div>
+					<select class="filter-select" @bind="_statusFilter" @bind:after="ApplyFilter">
+						<option value="All">All Status</option>
+						<option value="Active">Active</option>
+						<option value="Inactive">Inactive</option>
+					</select>
+				</FilterControls>
+
+				<TableHeader>
+					<th>Room Type Name</th>
+					<th>Rooms Mapped</th>
+					<th>Status</th>
+					<th>Updated</th>
+					<th>Action</th>
+				</TableHeader>
+
+				<TableRow Context="item">
+					<td>@item.Name</td>
 					<td>@item.RoomCount</td>
 					<td>
 						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
@@ -459,7 +544,7 @@
 					<button type="button" class="btn-close" @onclick="CancelDelete"></button>
 				</div>
 				<div class="modal-body">
-					<p>Are you sure you want to delete <strong>@(_deleteTarget is GuestHouseGridDto delH ? delH.DisplayName : _deleteTarget is GuestHouseRoomGridDto delR ? delR.DisplayName : "")</strong>?</p>
+					<p>Are you sure you want to delete <strong>@(_deleteTarget is GuestHouseGridDto delH ? delH.DisplayName : _deleteTarget is GuestHouseRoomTypeGridDto delRT ? delRT.DisplayName : _deleteTarget is GuestHouseRoomGridDto delR ? delR.DisplayName : "")</strong>?</p>
 					<p class="text-muted mb-0">This action cannot be undone.</p>
 				</div>
 				<div class="modal-footer">
@@ -555,9 +640,10 @@
 
 @code {
 	private const string TabHouse = "Guest House";
+	private const string TabRoomType = "Room Type";
 	private const string TabRooms = "Rooms";
 
-	private readonly List<string> TabOptions = [TabHouse, TabRooms];
+	private readonly List<string> TabOptions = [TabHouse, TabRoomType, TabRooms];
 
 	// Element reference for focusing
 	private ElementReference _firstInputRef;
@@ -565,7 +651,7 @@
 	// Tab state
 	private string ActiveTab { get; set; } = TabHouse;
 
-	private string CurrentApiBase => ActiveTab == TabHouse ? "api/GuestHouseMaster/houses" : "api/GuestHouseMaster/rooms";
+	private string CurrentApiBase => ActiveTab == TabHouse ? "api/GuestHouseMaster/houses" : ActiveTab == TabRoomType ? "api/GuestHouseMaster/room-types" : "api/GuestHouseMaster/rooms";
 
 	private string CurrentUploadType => ActiveTab == TabHouse ? "house" : "rooms";
 
@@ -586,20 +672,23 @@
 
 	// Data
 	private List<GuestHouseGridDto> _housesAll = new();
+	private List<GuestHouseRoomTypeGridDto> _roomTypesAll = new();
 	private List<GuestHouseRoomGridDto> _roomsAll = new();
 
 	// Filtered grid items (one filtered list per tab)
 	private List<GuestHouseGridDto> _filteredHouses = new();
+	private List<GuestHouseRoomTypeGridDto> _filteredRoomTypes = new();
 	private List<GuestHouseRoomGridDto> _filteredRooms = new();
 
 	// Forms
 	private GuestHouseFormModel _houseForm = new();
+	private GuestHouseRoomTypeFormModel _roomTypeForm = new();
 	private GuestHouseRoomFormModel _roomForm = new();
 
 	private bool _isEditing;
 	private int? _editingId;
 
-	private bool CurrentFormIsActive => ActiveTab == TabHouse ? _houseForm.IsActive : _roomForm.IsActive;
+	private bool CurrentFormIsActive => ActiveTab == TabHouse ? _houseForm.IsActive : ActiveTab == TabRoomType ? _roomTypeForm.IsActive : _roomForm.IsActive;
 
 	// UI state
 	private bool _isLoading = true;
@@ -692,6 +781,14 @@
 			housesResponse.EnsureSuccessStatusCode();
 			_housesAll = await housesResponse.Content.ReadFromJsonAsync<List<GuestHouseGridDto>>() ?? new();
 
+			var roomTypesResponse = await Http.GetAsync("api/GuestHouseMaster/room-types");
+			if (!roomTypesResponse.IsSuccessStatusCode)
+			{
+				ShowMessage($"Failed to load room types: {await roomTypesResponse.Content.ReadAsStringAsync()}", true);
+				return;
+			}
+			_roomTypesAll = await roomTypesResponse.Content.ReadFromJsonAsync<List<GuestHouseRoomTypeGridDto>>() ?? new();
+
 			var roomsResponse = await Http.GetAsync("api/GuestHouseMaster/rooms");
 			if (!roomsResponse.IsSuccessStatusCode)
 			{
@@ -737,6 +834,22 @@
 			}
 			_filteredHouses = source.OrderBy(x => x.Name).ToList();
 		}
+		else if (ActiveTab == TabRoomType)
+		{
+			IEnumerable<GuestHouseRoomTypeGridDto> source = _roomTypesAll;
+			source = _statusFilter switch
+			{
+				"Active" => source.Where(x => x.IsActive),
+				"Inactive" => source.Where(x => !x.IsActive),
+				_ => source
+			};
+			if (!string.IsNullOrWhiteSpace(_searchText))
+			{
+				var term = _searchText.Trim();
+				source = source.Where(x => x.Name?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false);
+			}
+			_filteredRoomTypes = source.OrderBy(x => x.Name).ToList();
+		}
 		else
 		{
 			IEnumerable<GuestHouseRoomGridDto> source = _roomsAll;
@@ -756,6 +869,33 @@
 			}
 			_filteredRooms = source.OrderBy(x => x.GuestHouseName).ThenBy(x => x.RoomNumber).ToList();
 		}
+	}
+
+	private void OnMasterRoomTypeSelected(ChangeEventArgs e)
+	{
+		if (int.TryParse(e.Value?.ToString(), out var selectedId) && selectedId > 0)
+		{
+			_roomForm.RoomTypeId = selectedId;
+			var matched = _roomTypesAll.FirstOrDefault(rt => rt.Id == selectedId);
+			if (matched != null)
+			{
+				_roomForm.RoomType = matched.Name;
+			}
+		}
+		else
+		{
+			_roomForm.RoomTypeId = 0;
+		}
+	}
+
+	private List<ExportColumn<GuestHouseRoomTypeGridDto>> GetRoomTypeExportColumns()
+	{
+		return
+		[
+			new ExportColumn<GuestHouseRoomTypeGridDto> { Header = "Room Type Name", ValueSelector = item => item.Name },
+			new ExportColumn<GuestHouseRoomTypeGridDto> { Header = "Rooms Mapped", ValueSelector = item => item.RoomCount.ToString() },
+			new ExportColumn<GuestHouseRoomTypeGridDto> { Header = "Status", ValueSelector = item => item.IsActive ? "Active" : "Inactive" }
+		];
 	}
 
 	private List<ExportColumn<GuestHouseGridDto>> GetHouseExportColumns()
@@ -822,6 +962,18 @@
 				_houseForm.IsActive
 			};
 		}
+		else if (ActiveTab == TabRoomType)
+		{
+			emptyFieldError =
+				string.IsNullOrWhiteSpace(_roomTypeForm.Name) ? "Room Type Name is required." :
+				string.Empty;
+
+			payload = new
+			{
+				_roomTypeForm.Name,
+				_roomTypeForm.IsActive
+			};
+		}
 		else
 		{
 			if (!int.TryParse(_roomForm.NoOfRooms, out var noOfRooms) || noOfRooms < 1)
@@ -843,6 +995,7 @@
 			payload = new
 			{
 				GuestHouseId = _roomForm.GuestHouseId,
+				RoomTypeId = _roomForm.RoomTypeId > 0 ? _roomForm.RoomTypeId : (int?)null,
 				_roomForm.RoomType,
 				_roomForm.RoomNumber,
 				PricePerNight = rate,
@@ -857,7 +1010,7 @@
 			return;
 		}
 
-		var singularName = ActiveTab == TabHouse ? "Guest House" : "Room";
+		var singularName = ActiveTab == TabHouse ? "Guest House" : ActiveTab == TabRoomType ? "Room Type" : "Room";
 
 		try
 		{
@@ -933,12 +1086,22 @@
 			_pendingHouseImageContentType = null;
 			_houseImagePreview = null;
 		}
+		else if (ActiveTab == TabRoomType && item is GuestHouseRoomTypeGridDto roomType)
+		{
+			_editingId = roomType.Id;
+			_roomTypeForm = new GuestHouseRoomTypeFormModel
+			{
+				Name = roomType.Name,
+				IsActive = roomType.IsActive
+			};
+		}
 		else if (ActiveTab == TabRooms && item is GuestHouseRoomGridDto room)
 		{
 			_editingId = room.Id;
 			_roomForm = new GuestHouseRoomFormModel
 			{
 				GuestHouseId = room.GuestHouseId,
+				RoomTypeId = room.RoomTypeId ?? 0,
 				RoomType = room.RoomType ?? "",
 				RoomNumber = room.RoomNumber,
 				NoOfRooms = room.AvailableQuantity.ToString(),
@@ -969,9 +1132,11 @@
 			_isDeleting = true;
 			var id = ActiveTab == TabHouse && _deleteTarget is GuestHouseGridDto house
 				? house.Id
+				: ActiveTab == TabRoomType && _deleteTarget is GuestHouseRoomTypeGridDto rt ? rt.Id
 				: _deleteTarget is GuestHouseRoomGridDto room ? room.Id : 0;
 			var label = ActiveTab == TabHouse && _deleteTarget is GuestHouseGridDto h
 				? h.DisplayName
+				: ActiveTab == TabRoomType && _deleteTarget is GuestHouseRoomTypeGridDto rtItem ? rtItem.DisplayName
 				: _deleteTarget is GuestHouseRoomGridDto r ? r.DisplayName : "item";
 
 			var response = await Http.DeleteAsync($"{CurrentApiBase}/{id}");
@@ -1014,6 +1179,11 @@
 				id = house.Id;
 				newStatus = !house.IsActive;
 			}
+			else if (item is GuestHouseRoomTypeGridDto rt)
+			{
+				id = rt.Id;
+				newStatus = !rt.IsActive;
+			}
 			else if (item is GuestHouseRoomGridDto room)
 			{
 				id = room.Id;
@@ -1041,6 +1211,7 @@
 	private void ResetForm()
 	{
 		_houseForm = new GuestHouseFormModel();
+		_roomTypeForm = new GuestHouseRoomTypeFormModel();
 		_roomForm = new GuestHouseRoomFormModel();
 		_isEditing = false;
 		_editingId = null;
@@ -1349,11 +1520,25 @@
 		public string DisplayName => Name;
 	}
 
+	public class GuestHouseRoomTypeGridDto
+	{
+		public int Id { get; set; }
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; }
+		public int RoomCount { get; set; }
+		public DateTime CreatedAt { get; set; }
+		public DateTime UpdatedAt { get; set; }
+
+		public string DisplayName => Name;
+	}
+
 	public class GuestHouseRoomGridDto
 	{
 		public int Id { get; set; }
 		public int GuestHouseId { get; set; }
 		public string GuestHouseName { get; set; } = "";
+		public int? RoomTypeId { get; set; }
+		public string? RoomTypeName { get; set; }
 		public string? RoomType { get; set; }
 		public string? RoomNumber { get; set; }
 		public decimal PricePerNight { get; set; }
@@ -1383,9 +1568,16 @@
 		public bool IsActive { get; set; } = true;
 	}
 
+	public class GuestHouseRoomTypeFormModel
+	{
+		public string Name { get; set; } = "";
+		public bool IsActive { get; set; } = true;
+	}
+
 	public class GuestHouseRoomFormModel
 	{
 		public int GuestHouseId { get; set; }
+		public int RoomTypeId { get; set; }
 		public string RoomType { get; set; } = "";
 		public string? RoomNumber { get; set; }
 		public string NoOfRooms { get; set; } = "1";

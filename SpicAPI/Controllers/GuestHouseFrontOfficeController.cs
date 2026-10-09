@@ -1828,15 +1828,15 @@ namespace SpicAPI.Controllers
 	/// <summary>
 	/// Read/write gate for the Front Office cluster (Front Office / Generate Bill / Cancellation Requests).
 	///
-	/// Admin + CorporateAdmin keep every endpoint exactly as they did under
-	/// [Authorize(Roles = "Admin,CorporateAdmin")].
+	/// Admin, CorporateAdmin, and SuperAdmin keep every endpoint unrestricted.
 	///
-	/// Everything else must be an authenticated GET whose route maps to a PagePermission that this
-	/// user's Designation (Designation.RoleAccess) actually grants - the same PagePermission the
-	/// sidebar, ShellNavigation.PermissionKey and PageGuard already use for that page. Non-GET
-	/// actions keep the original Admin / CorporateAdmin-only restriction, except check-in, payment,
-	/// check-out (FrontOffice) and generate bill (GenerateBill), which a "Receptionist" designation
-	/// granting that page may also perform for its own state's guest house only.
+	/// Everything else must be an authenticated request whose route maps to a PagePermission that this
+	/// user's Designation (Designation.RoleAccess) actually grants.
+	///
+	/// Reads: Allowed for designations granting GHAdmin, SDWAAdmin, or the endpoint's specific PagePermission.
+	/// Writes (check-in, payment, check-out, generate-bill): Allowed for designations granting GHAdmin, SDWAAdmin,
+	/// or a Receptionist designation granting the endpoint's specific PagePermission (scoped to their own state).
+	/// Cancellation approve/reject stay Admin / CorporateAdmin / SuperAdmin only.
 	/// </summary>
 	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
 	internal sealed class GuestHouseFrontOfficeAccessAttribute : Attribute, IAsyncAuthorizationFilter
@@ -1851,17 +1851,19 @@ namespace SpicAPI.Controllers
 			}
 
 			// Existing role rule, verbatim from [Authorize(Roles = "Admin,CorporateAdmin")].
-			if (user.IsInRole(nameof(AppRole.Admin)) || user.IsInRole(nameof(AppRole.CorporateAdmin)))
+			// SuperAdmin is preserved alongside Admin/CorporateAdmin.
+			if (user.IsInRole(nameof(AppRole.Admin))
+				|| user.IsInRole(nameof(AppRole.CorporateAdmin))
+				|| user.IsInRole(nameof(AppRole.SuperAdmin)))
 				return;
 
 			// Reads are opened by the Designation's page permission. Actions stay Admin /
-			// CorporateAdmin only, EXCEPT the Front Office (check-in / payment / check-out) and
-			// Generate Bill actions, which a Receptionist whose Designation grants that page may
-			// perform - always limited to their own state's guest house by the controller
-			// (GuestHouseReceptionistScope). Cancellation approve/reject stay Admin / CorporateAdmin only.
+			// CorporateAdmin / SuperAdmin only, EXCEPT the Front Office (check-in / payment / check-out) and
+			// Generate Bill actions, which users with GHAdmin or SDWAAdmin page permission, or a Receptionist
+			// whose Designation grants that page, may perform.
 			var isGet = string.Equals(context.HttpContext.Request.Method, "GET", StringComparison.OrdinalIgnoreCase);
 			var path = context.HttpContext.Request.Path.Value ?? string.Empty;
-			var requiredPermission = isGet ? RequiredReadPermission(path) : RequiredReceptionistWritePermission(path);
+			var requiredPermission = isGet ? RequiredReadPermission(path) : RequiredActionPermission(path);
 			if (requiredPermission is null)
 			{
 				context.Result = Forbidden();
@@ -1871,17 +1873,27 @@ namespace SpicAPI.Controllers
 			// Designation rule: does THIS user's Designation.RoleAccess grant that PagePermission?
 			var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
 			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(db, user);
-			if (designation != null
-				&& (isGet || GuestHouseReceptionistScope.IsReceptionist(designation.Name))
-				&& RoleAccessPermissions.HasPage(designation.RoleAccess, requiredPermission.Value))
-				return;
+			if (designation != null)
+			{
+				var hasAdminPermission = RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.GHAdmin)
+					|| RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SDWAAdmin);
+
+				var hasEndpointPermission = RoleAccessPermissions.HasPage(designation.RoleAccess, requiredPermission.Value);
+
+				var isAllowed = isGet
+					? (hasAdminPermission || hasEndpointPermission)
+					: (hasAdminPermission || (GuestHouseReceptionistScope.IsReceptionist(designation.Name) && hasEndpointPermission));
+
+				if (isAllowed)
+					return;
+			}
 
 			context.Result = Forbidden();
 		}
 
-		// Action route -> the PagePermission a Receptionist needs to perform it. Every other
-		// action (cancellation approve / reject) maps to null and stays Admin / CorporateAdmin only.
-		private static PagePermission? RequiredReceptionistWritePermission(string path) =>
+		// Action route -> the PagePermission needed to perform it. Every other
+		// action (cancellation approve / reject) maps to null and stays Admin / CorporateAdmin / SuperAdmin only.
+		private static PagePermission? RequiredActionPermission(string path) =>
 			path.EndsWith("/checkin", StringComparison.OrdinalIgnoreCase)
 				|| path.EndsWith("/pay", StringComparison.OrdinalIgnoreCase)
 				|| path.EndsWith("/checkout", StringComparison.OrdinalIgnoreCase) ? PagePermission.FrontOffice
