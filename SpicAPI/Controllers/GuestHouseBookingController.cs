@@ -333,6 +333,7 @@ namespace SpicAPI.Controllers
 				{
 					RoomId = room.Id,
 					RoomTypeId = room.Id,
+					MasterRoomTypeId = room.RoomTypeId,
 					RoomType = room.RoomType ?? "Room",
 					RoomNumber = room.RoomNumber,
 					Description = room.Description,
@@ -1758,6 +1759,7 @@ namespace SpicAPI.Controllers
 	{
 		public int RoomId { get; set; }
 		public int RoomTypeId { get; set; }
+		public int? MasterRoomTypeId { get; set; }
 		public string RoomType { get; set; } = "";
 		public string? RoomNumber { get; set; }
 		public string? Description { get; set; }

@@ -1,4 +1,4 @@
-﻿@page "/Rooms"
+@page "/Rooms"
 @using System.Globalization
 @inject HttpClient Http
 @inject NavigationManager Navigation
@@ -77,10 +77,17 @@
                         <div class="rm-selection-section">
                             <div class="rm-selection-row">
                                 <label class="rm-selection-label">Number of Rooms</label>
-                                <select class="rm-select" value="@room.SelectedQuantity" @onchange="e => OnQuantityChanged(room, e)">
-                                    @for (int i = 1; i <= room.AvailableQuantity; i++)
+                                <select class="rm-select" value="@room.SelectedQuantity" @onchange="e => OnQuantityChanged(room, e)" disabled="@(room.MaxSelectableQuantity <= 0)">
+                                    @if (room.MaxSelectableQuantity > 0)
                                     {
-                                        <option value="@i">@i</option>
+                                        @for (int i = 1; i <= room.MaxSelectableQuantity; i++)
+                                        {
+                                            <option value="@i">@i</option>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <option value="0">0</option>
                                     }
                                 </select>
                             </div>
@@ -111,7 +118,7 @@
 
                         <div class="rm-card-actions">
                             <button class="rm-btn rm-btn-outline" disabled>View Details</button>
-                            <button class="rm-btn rm-btn-solid" @onclick="() => GoToGuestDetails(room)">Book Now</button>
+                            <button class="rm-btn rm-btn-solid" disabled="@(room.MaxSelectableQuantity <= 0 || room.SelectedQuantity <= 0)" @onclick="() => GoToGuestDetails(room)">Book Now</button>
                         </div>
                     </div>
                 </div>
@@ -195,7 +202,8 @@
     {
         if (int.TryParse(e.Value?.ToString(), out var qty))
         {
-            room.SelectedQuantity = Math.Clamp(qty, 1, room.AvailableQuantity);
+            var max = room.MaxSelectableQuantity;
+            room.SelectedQuantity = max > 0 ? Math.Clamp(qty, 1, max) : 0;
             if (room.ExtraBedSelected)
             {
                 room.SelectedExtraBeds = Math.Min(room.SelectedExtraBeds, room.SelectedQuantity);
@@ -226,9 +234,15 @@
 
     private void GoToGuestDetails(RoomCardModel room)
     {
+        var targetRoomId = room.GetSelectedRoomId();
+        if (!targetRoomId.HasValue)
+        {
+            return;
+        }
+
         var extraBeds = room.ExtraBedSelected ? room.SelectedExtraBeds : 0;
         var url = $"/GuestDetails?guestHouseId={_guestHouseId}" +
-                  $"&roomTypeId={room.RoomTypeId}" +
+                  $"&roomTypeId={targetRoomId.Value}" +
                   $"&numberOfRooms={room.SelectedQuantity}" +
                   $"&extraBeds={extraBeds}" +
                   $"&checkIn={Uri.EscapeDataString(_checkIn.ToString("yyyy-MM-ddTHH:mm:ss"))}" +
@@ -248,9 +262,24 @@
                 var term = _searchText.Trim();
                 query = query.Where(r =>
                     r.RoomType.Contains(term, StringComparison.OrdinalIgnoreCase) ||
-                    (r.RoomNumber ?? "").Contains(term, StringComparison.OrdinalIgnoreCase));
+                    (r.RoomNumber ?? "").Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                    r.UnderlyingRooms.Any(u => (u.RoomNumber ?? "").Contains(term, StringComparison.OrdinalIgnoreCase)));
             }
             return query.ToList();
+        }
+    }
+
+    private static string GetGroupKey(int guestHouseId, AvailableRoomDto room)
+    {
+        var priceKey = room.PricePerNight.ToString("F2", CultureInfo.InvariantCulture);
+        if (room.MasterRoomTypeId.HasValue && room.MasterRoomTypeId.Value > 0)
+        {
+            return $"gh_{guestHouseId}:master_{room.MasterRoomTypeId.Value}:price_{priceKey}";
+        }
+        else
+        {
+            var normalizedType = (room.RoomType ?? "Room").Trim().ToLowerInvariant();
+            return $"gh_{guestHouseId}:legacy_{normalizedType}:price_{priceKey}";
         }
     }
 
@@ -270,24 +299,34 @@
                 return;
             }
 
+            var groups = result.Rooms
+                .GroupBy(r => GetGroupKey(_guestHouseId, r))
+                .ToList();
+
             var mapped = new List<RoomCardModel>();
             var index = 0;
-            foreach (var room in result.Rooms)
+            foreach (var g in groups)
             {
+                var underlying = g.ToList();
+                var first = underlying[0];
+                var totalAvailable = underlying.Sum(r => r.AvailableQuantity);
+                var maxSelectable = underlying.Max(r => r.AvailableQuantity);
+
                 mapped.Add(new RoomCardModel
                 {
-                    RoomId = room.RoomId,
-                    RoomTypeId = room.RoomTypeId,
-                    RoomType = room.RoomType,
-                    RoomNumber = room.RoomNumber,
+                    GroupKey = g.Key,
+                    MasterRoomTypeId = first.MasterRoomTypeId,
+                    RoomType = first.RoomType,
+                    RoomNumber = first.RoomNumber,
                     ImageUrl = RoomImages[index % RoomImages.Length],
-                    PricePerNight = room.PricePerNight,
-                    ExtraCotPrice = room.ExtraCotPrice,
-                    AvailableQuantity = room.AvailableQuantity,
-                    NumberOfAdults = room.NumberOfAdults ?? room.Capacity ?? 2,
-                    SelectedQuantity = 1,
+                    PricePerNight = first.PricePerNight,
+                    ExtraCotPrice = underlying.FirstOrDefault(r => r.ExtraCotPrice.HasValue)?.ExtraCotPrice ?? first.ExtraCotPrice,
+                    AvailableQuantity = totalAvailable,
+                    NumberOfAdults = underlying.Max(r => r.NumberOfAdults ?? r.Capacity ?? 2),
+                    SelectedQuantity = maxSelectable > 0 ? 1 : 0,
                     ExtraBedSelected = false,
-                    SelectedExtraBeds = 0
+                    SelectedExtraBeds = 0,
+                    UnderlyingRooms = underlying
                 });
                 index++;
             }
@@ -344,8 +383,8 @@
 
     public class RoomCardModel
     {
-        public int RoomId { get; set; }
-        public int RoomTypeId { get; set; }
+        public string GroupKey { get; set; } = "";
+        public int? MasterRoomTypeId { get; set; }
         public string RoomType { get; set; } = "";
         public string? RoomNumber { get; set; }
         public string ImageUrl { get; set; } = "";
@@ -356,6 +395,21 @@
         public int SelectedQuantity { get; set; } = 1;
         public bool ExtraBedSelected { get; set; }
         public int SelectedExtraBeds { get; set; }
+        public List<AvailableRoomDto> UnderlyingRooms { get; set; } = new();
+
+        public int MaxSelectableQuantity => UnderlyingRooms.Count == 0 ? 0 : UnderlyingRooms.Max(r => r.AvailableQuantity);
+
+        public int RoomId => GetSelectedRoomId() ?? UnderlyingRooms.FirstOrDefault()?.RoomId ?? 0;
+        public int RoomTypeId => RoomId;
+
+        public int? GetSelectedRoomId()
+        {
+            return UnderlyingRooms
+                .Where(r => r.AvailableQuantity >= SelectedQuantity && r.AvailableQuantity > 0)
+                .OrderByDescending(r => r.AvailableQuantity)
+                .FirstOrDefault()?.RoomId;
+        }
+
         public List<string> Amenities => SelectAmenities(RoomType);
         public string PriceDisplay => PricePerNight.ToString("N0");
         public string GuestLabel => NumberOfAdults == 1 ? "1 Guest were allowed" : $"{NumberOfAdults} Guests were allowed";
@@ -376,6 +430,7 @@
     {
         public int RoomId { get; set; }
         public int RoomTypeId { get; set; }
+        public int? MasterRoomTypeId { get; set; }
         public string RoomType { get; set; } = "";
         public string? RoomNumber { get; set; }
         public string? Description { get; set; }
