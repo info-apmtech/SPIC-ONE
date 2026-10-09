@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -9,6 +9,8 @@ namespace SPIC.Core.DTOs
         public int Id { get; set; }
 
         public string Name { get; set; } = "";
+
+        public bool IsChangeAmount { get; set; }
 
         public string? CreatedBy { get; set; }
 

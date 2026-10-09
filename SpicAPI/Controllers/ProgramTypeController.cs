@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +33,7 @@ public class ProgramTypeController : ControllerBase
             {
                 Id = x.Id,
                 Name = x.Name,
+                IsChangeAmount = x.IsChangeAmount,
                 CreatedBy = x.CreatedBy,
                 UpdatedBy = x.UpdatedBy,
                 CreatedAt = x.CreatedAt,
@@ -56,6 +57,7 @@ public class ProgramTypeController : ControllerBase
         var entity = new ProgramType
         {
             Name = name,
+            IsChangeAmount = request?.IsChangeAmount ?? false,
             CreatedBy = CurrentUser,
             UpdatedBy = CurrentUser,
             CreatedAt = DateTime.Now,
@@ -65,7 +67,7 @@ public class ProgramTypeController : ControllerBase
         _db.ProgramTypes.Add(entity);
         await _db.SaveChangesAsync();
 
-        return Ok(new { message = "Program Type created successfully", data = new { entity.Id, entity.Name } });
+        return Ok(new { message = "Program Type created successfully", data = new { entity.Id, entity.Name, entity.IsChangeAmount } });
     }
 
     [HttpPut("{id}")]
@@ -81,13 +83,13 @@ public class ProgramTypeController : ControllerBase
         if (await NameExists(name, id))
             return Conflict(new { message = $"Program Type \"{name}\" already exists." });
 
-        // Only the name is editable; IsChangeAmount and CreatedAt/CreatedBy are preserved.
         entity.Name = name;
+        entity.IsChangeAmount = request?.IsChangeAmount ?? false;
         entity.UpdatedBy = CurrentUser;
         entity.UpdatedAt = DateTime.Now;
         await _db.SaveChangesAsync();
 
-        return Ok(new { message = "Program Type updated successfully", data = new { entity.Id, entity.Name } });
+        return Ok(new { message = "Program Type updated successfully", data = new { entity.Id, entity.Name, entity.IsChangeAmount } });
     }
 
     private Task<bool> NameExists(string name, int? excludeId)
