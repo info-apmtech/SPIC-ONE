@@ -76,6 +76,11 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         // Current authenticated user id (from token claims)
         public string? UserId { get; private set; }
+        
+        // Current authenticated user name (from token claims)
+        public string? UserName { get; private set; }
+       
+
 
         // ---------------- Designation (separate from AppRole) ----------------
         // Resolved server-side from UserInfo.DesignationId -> Designation.Name at
@@ -296,6 +301,11 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                 if (string.IsNullOrEmpty(uid) && root.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier", out var nid)) uid = nid.GetString();
                 if (string.IsNullOrEmpty(uid) && root.TryGetProperty("spic:user_id", out var sup)) uid = sup.GetString();
                 UserId = uid;
+
+                string? uname = null;
+                if (root.TryGetProperty("name", out var n)) uname = n.GetString();
+                if (string.IsNullOrEmpty(uname) && root.TryGetProperty("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", out var ucn)) uname = ucn.GetString();
+                UserName = uname;
             }
             catch { }
         }
