@@ -215,7 +215,7 @@
                 }
                 @if (_selectedSubmissionId > 0)
                 {
-                    <p style="margin:10px 0 0">Status: Pending approval. The values below are read-only.</p>
+                    <p style="margin:10px 0 0">Status: Pending approval. You can revise monthly counts and editable budget amounts before approval.</p>
                 }
             </div>
         }
@@ -307,7 +307,7 @@
                     <!-- Base Budget Amount -->
                     <td>
 
-                        @if (program.IsChangeAmount && !CanApproveBudget)
+                        @if (program.IsChangeAmount)
                         {
                             <input type="number"
                                    class="bm-budget-input-sm bm-budget-input-editable"
@@ -331,7 +331,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.AprilCount"
-                              
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -348,7 +347,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.MayCount"
-                           
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -365,7 +363,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.JuneCount"
-                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -382,7 +379,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.JulyCount"
-                            
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -399,7 +395,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.AugustCount"
-                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -416,7 +411,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.SeptemberCount"
-                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -433,7 +427,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.OctoberCount"
-                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -450,7 +443,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.NovemberCount"
-                              
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -467,7 +459,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.DecemberCount"
-                           
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -484,7 +475,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.JanuaryCount"
-                           
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -501,7 +491,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.FebruaryCount"
-                              
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -518,7 +507,6 @@
                         <input type="number"
                                class="bm-budget-input-sm"
                                @bind="program.MarchCount"
-                             
                                @bind:after="() => CalculateBudget(program)" />
                     </td>
 
@@ -694,8 +682,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                                                       watermarks (::before/::after) that leak onto these tiles and sit on top
-                                                       of the label text. Neutralise them for this page only. */
+                                                           watermarks (::before/::after) that leak onto these tiles and sit on top
+                                                           of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -1149,7 +1137,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                                                           on screen (it used to sit off the right edge of a 720px table). */
+                                                               on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1311,22 +1299,109 @@
 
     private async Task HandleApproveBudget()
     {
-        if (!CanApproveBudget || _isApproving || _selectedSubmissionId <= 0) return;
-        if (!HasSelectedPendingSubmission) return;
+        if (!CanApproveBudget ||
+            _isApproving ||
+            _selectedSubmissionId <= 0 ||
+            !HasSelectedPendingSubmission)
+            return;
+
         _isApproving = true;
+
         try
         {
-            // Server checks caller's role, scope, Submitted status and approved amount.
-            using var response = await Http.PostAsJsonAsync(
-                $"api/Budget/{_selectedSubmissionId}/approve-program", new { });
-            if (!response.IsSuccessStatusCode)
+            var selectedSubmission = _pendingApprovals
+                .FirstOrDefault(x => x.Id == _selectedSubmissionId);
+
+            if (selectedSubmission == null)
             {
-                var message = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"Budget approval rejected: {message}");
-                Toast.Error($"Budget approval failed (HTTP {(int)response.StatusCode}).");
+                Toast.Error("Please select a submitted budget.");
                 return;
             }
-            Toast.Success("Budget approved successfully.");
+
+            if (programPlans.Count == 0)
+            {
+                Toast.Error("No programs available for approval.");
+                return;
+            }
+
+            if (programPlans.Any(x =>
+                x.TotalBudget < 0 ||
+                x.AprilCount < 0 ||
+                x.MayCount < 0 ||
+                x.JuneCount < 0 ||
+                x.JulyCount < 0 ||
+                x.AugustCount < 0 ||
+                x.SeptemberCount < 0 ||
+                x.OctoberCount < 0 ||
+                x.NovemberCount < 0 ||
+                x.DecemberCount < 0 ||
+                x.JanuaryCount < 0 ||
+                x.FebruaryCount < 0 ||
+                x.MarchCount < 0))
+            {
+                Toast.Error("Budget amount and counts cannot be negative.");
+                return;
+            }
+
+            foreach (var item in programPlans)
+            {
+                CalculateBudget(item);
+            }
+
+            var request = new ApproveProgramBudgetRequest
+            {
+                Programs = programPlans.Select(p =>
+                    new ApproveProgramAmountDto
+                    {
+                        ProgramId = p.ProgramId,
+                        TotalBudget = p.TotalBudget,
+
+                        AprilCount = Convert.ToInt32(p.AprilCount),
+                        MayCount = Convert.ToInt32(p.MayCount),
+                        JuneCount = Convert.ToInt32(p.JuneCount),
+                        JulyCount = Convert.ToInt32(p.JulyCount),
+                        AugustCount = Convert.ToInt32(p.AugustCount),
+                        SeptemberCount = Convert.ToInt32(p.SeptemberCount),
+                        OctoberCount = Convert.ToInt32(p.OctoberCount),
+                        NovemberCount = Convert.ToInt32(p.NovemberCount),
+                        DecemberCount = Convert.ToInt32(p.DecemberCount),
+                        JanuaryCount = Convert.ToInt32(p.JanuaryCount),
+                        FebruaryCount = Convert.ToInt32(p.FebruaryCount),
+                        MarchCount = Convert.ToInt32(p.MarchCount)
+                    }).ToList()
+            };
+
+            using var response = await Http.PostAsJsonAsync(
+                $"api/Budget/{_selectedSubmissionId}/approve-program",
+                request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+
+                Console.WriteLine($"Budget approval failed ({(int)response.StatusCode}): {error}");
+
+                string errorMessage = error;
+                try
+                {
+                    using var json = System.Text.Json.JsonDocument.Parse(error);
+                    if (json.RootElement.TryGetProperty("message", out var msg))
+                    {
+                        errorMessage = msg.GetString() ?? error;
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // Keep the original response when it is not JSON.
+                }
+
+                Toast.Error(errorMessage);
+
+                return;
+            }
+
+            Toast.Success("Budget approved and updated successfully.");
+
             await LoadPendingApprovalsAsync();
         }
         catch (Exception ex)
@@ -1334,7 +1409,10 @@
             Console.WriteLine(ex);
             Toast.Error("Budget approval could not be confirmed.");
         }
-        finally { _isApproving = false; }
+        finally
+        {
+            _isApproving = false;
+        }
     }
 
     private List<string> _availableFYs = new();
