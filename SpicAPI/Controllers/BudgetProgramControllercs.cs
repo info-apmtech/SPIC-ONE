@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MimeKit.Cryptography;
@@ -3470,6 +3471,235 @@ namespace SpicAPI.Controllers
             return Ok(result);
         }
 
+        
+        private sealed class CreatorRoleLookup
+        {
+            public string UserId { get; set; } = "";
+            public string RoleName { get; set; } = "";
+        }
+
+
+
+        private async Task<AppRole?> GetBudgetCreatorRoleAsync(string? createdBy)
+        {
+            if (string.IsNullOrWhiteSpace(createdBy))
+                return null;
+
+            // Validate the creator UserId before querying.
+            if (!Guid.TryParse(createdBy, out Guid creatorUserId))
+                return null;
+
+            var connection = _db.Database.GetDbConnection();
+
+            bool openedHere =
+                connection.State != System.Data.ConnectionState.Open;
+
+            try
+            {
+                if (openedHere)
+                    await _db.Database.OpenConnectionAsync();
+
+                await using var command = connection.CreateCommand();
+
+                command.CommandText = @"
+            SELECT ""Role""::text
+            FROM public.""Employeelogins""
+            WHERE ""UserId""::text = @creatorUserId
+            LIMIT 1";
+
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = "@creatorUserId";
+                parameter.Value = creatorUserId.ToString();
+                command.Parameters.Add(parameter);
+
+                var raw = await command.ExecuteScalarAsync();
+
+                if (raw == null || raw == DBNull.Value)
+                    return null;
+
+                string? roleValue = raw.ToString()?.Trim();
+
+                if (string.IsNullOrWhiteSpace(roleValue))
+                    return null;
+
+                // Supports enum names: SMD, SMM, RM, RMD, MO.
+                // Also supports numeric enum values: 4, 5, 6, 7, etc.
+                if (Enum.TryParse<AppRole>(
+                        roleValue,
+                        ignoreCase: true,
+                        out var creatorRole)
+                    && Enum.IsDefined(typeof(AppRole), creatorRole))
+                {
+                    return creatorRole;
+                }
+
+                return null;
+            }
+            finally
+            {
+                if (openedHere)
+                    await _db.Database.CloseConnectionAsync();
+            }
+        }
+
+        [Authorize]
+        [HttpGet("pending-program-approvals")]
+        public async Task<IActionResult> GetPendingProgramApprovals([FromQuery] string fy)
+        {
+            if (string.IsNullOrWhiteSpace(fy))
+                return BadRequest(new { message = "Financial year is required." });
+
+            string role = (User.FindFirst(ClaimTypes.Role)?.Value
+                ?? User.FindFirst("role")?.Value ?? "").Trim().ToUpperInvariant();
+
+            bool isSmm = role == AppRole.SMM.ToString().ToUpperInvariant();
+            bool isRmm = role == AppRole.RM.ToString().ToUpperInvariant() || role == "RMM";
+            if (!isSmm && !isRmm) return Forbid();
+
+            if (!int.TryParse(User.FindFirst("spic:state_id")?.Value, out int stateId)
+                || stateId <= 0)
+                return BadRequest(new { message = "Logged-in approver has no valid state claim." });
+
+            int regionId = 0;
+            if (isRmm && (!int.TryParse(User.FindFirst("spic:region_id")?.Value, out regionId)
+                || regionId <= 0))
+                return BadRequest(new { message = "Logged-in RMM has no valid region claim." });
+
+            var query = _db.Set<BudgetProgramMains>()
+                .AsNoTracking()
+                .AsSplitQuery()
+                .Include(m => m.Programs)!
+                    .ThenInclude(p => p.Program)
+                    .ThenInclude(p => p.ProgramType)
+                .Where(m => m.FinancialYear == fy.Trim()
+                    && m.Status == "Submitted"
+                    && m.StateId == stateId);
+
+            if (isRmm)
+                query = query.Where(m => m.RegionId == regionId);
+
+            var candidates = await query.OrderByDescending(m => m.CreatedAt).ToListAsync();
+            var roleCache = new Dictionary<string, AppRole?>(StringComparer.Ordinal);
+            var result = new List<object>();
+
+            foreach (var main in candidates)
+            {
+                var creatorId = main.CreatedBy?.Trim();
+                if (string.IsNullOrWhiteSpace(creatorId)) continue;
+                if (!roleCache.TryGetValue(creatorId, out var creatorRole))
+                {
+                    creatorRole = await GetBudgetCreatorRoleAsync(creatorId);
+                    roleCache[creatorId] = creatorRole;
+                }
+
+                if (isSmm && creatorRole != AppRole.SMD) continue;
+                if (isRmm && creatorRole != AppRole.RMD) continue;
+
+                result.Add(new
+                {
+                    main.Id,
+                    main.FinancialYear,
+                    SubmittedBy = creatorId,
+                    SubmittedRole = creatorRole.ToString(),
+                    main.Status,
+                    TotalBudget = main.AllocatedAmount,
+                    Programs = (main.Programs ?? new List<BudgetProgram>())
+                        .OrderBy(p => p.ProgramId)
+                        .Select(p => new
+                        {
+                            p.ProgramId,
+                            ProgramTypeId = p.Program?.ProgramTypeId ?? 0,
+                            ProgramType = p.Program?.ProgramType?.Name ?? "",
+                            ProgramName = p.Program?.Name ?? "",
+                            // Replace with actual ProgramMaster -> ProgramType relationship once known.                            
+                            BudgetAmount = p.TotalBudget,
+                            p.TotalBudget,
+                            IsChangeAmount = false, // approver UI is read-only
+                            p.AprilCount,
+                            AprilBudget = p.April,
+                            p.MayCount,
+                            MayBudget = p.May,
+                            p.JuneCount,
+                            JuneBudget = p.June,
+                            p.JulyCount,
+                            JulyBudget = p.July,
+                            p.AugustCount,
+                            AugustBudget = p.August,
+                            p.SeptemberCount,
+                            SeptemberBudget = p.September,
+                            p.OctoberCount,
+                            OctoberBudget = p.October,
+                            p.NovemberCount,
+                            NovemberBudget = p.November,
+                            p.DecemberCount,
+                            DecemberBudget = p.December,
+                            p.JanuaryCount,
+                            JanuaryBudget = p.January,
+                            p.FebruaryCount,
+                            FebruaryBudget = p.February,
+                            p.MarchCount,
+                            MarchBudget = p.March
+                        }).ToList()
+                });
+            }
+
+            return Ok(result);
+        }
+
+        [Authorize]
+        [HttpPost("{id:int}/approve-program")]
+        public async Task<IActionResult> ApproveProgram(int id)
+        {
+            string role = (User.FindFirst(ClaimTypes.Role)?.Value
+                ?? User.FindFirst("role")?.Value ?? "").Trim().ToUpperInvariant();
+            bool isSmm = role == AppRole.SMM.ToString().ToUpperInvariant();
+            bool isRmm = role == AppRole.RM.ToString().ToUpperInvariant() || role == "RMM";
+            if (!isSmm && !isRmm) return Forbid();
+
+            if (!int.TryParse(User.FindFirst("spic:state_id")?.Value, out int stateId)
+                || stateId <= 0)
+                return BadRequest(new { message = "Logged-in approver has no valid state claim." });
+
+            int regionId = 0;
+            if (isRmm && (!int.TryParse(User.FindFirst("spic:region_id")?.Value, out regionId)
+                || regionId <= 0))
+                return BadRequest(new { message = "Logged-in RMM has no valid region claim." });
+
+            if (string.IsNullOrWhiteSpace(CurrentUserId)) return Unauthorized();
+
+            var query = _db.Set<BudgetProgramMains>()
+                .AsNoTracking()
+                .Where(m => m.Id == id && m.StateId == stateId && m.Status == "Submitted");
+            if (isRmm) query = query.Where(m => m.RegionId == regionId);
+
+            var main = await query.FirstOrDefaultAsync();
+            if (main is null) return Conflict(new { message = "No eligible pending submission." });
+            if (string.Equals(main.CreatedBy, CurrentUserId, StringComparison.OrdinalIgnoreCase))
+                return Forbid();
+
+            var creatorRole = await GetBudgetCreatorRoleAsync(main.CreatedBy);
+            if (isSmm && creatorRole != AppRole.SMD) return Forbid();
+            if (isRmm && creatorRole != AppRole.RMD) return Forbid();
+
+            var approvedAt = DateTime.UtcNow;
+            int affected = await _db.Set<BudgetProgramMains>()
+                .Where(m => m.Id == id && m.Status == "Submitted"
+                    && m.StateId == stateId && (isSmm || m.RegionId == regionId))
+                .ExecuteUpdateAsync(updates => updates
+                    .SetProperty(m => m.Status, "Approved")
+                    .SetProperty(m => m.ApprovedBy, CurrentUserId)
+                    .SetProperty(m => m.ApprovedAt, approvedAt));
+
+            if (affected != 1)
+                return Conflict(new { message = "Submission was already processed or is outside your scope." });
+
+            return Ok(new
+            {
+                message = "Program budget approved successfully.",
+                BudgetProgramMainId = id,
+                Status = "Approved"
+            });
+        }
 
     }
 
