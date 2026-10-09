@@ -92,6 +92,7 @@ public class GuestHouse
 	public string? PhoneNumber { get; set; }                             // Contact phone number displayed on the card
 	public string? Description { get; set; }                             // Short description / overview of the guest house
 	public bool IsActive { get; set; } = true;                           // Whether the guest house is available for booking
+	public int? StateId { get; set; }                                    // Id of the State (States table) the guest house belongs to (scopes Receptionists to their state's guest house)
 
 	// Audit
 	public string? CreatedBy { get; set; }                               // User who created the record
@@ -127,6 +128,24 @@ public class GuestHouseImage
 }
 
 /// <summary>
+/// Master record for a room type (e.g. AC Deluxe Room, Non AC Standard Room, Dormitory Bed).
+/// Managed via Settings > Guest House & Room Master > Room Type tab.
+/// </summary>
+public class GuestHouseRoomType
+{
+	public int Id { get; set; }                                          // Primary key
+	public string Name { get; set; } = string.Empty;                     // Name of the room type (e.g. "AC Deluxe Room")
+	public bool IsActive { get; set; } = true;                           // Whether the room type is active
+	public string? CreatedBy { get; set; }                               // User who created the record
+	public DateTime CreatedAt { get; set; } = DateTime.Now;              // When the record was created
+	public string? UpdatedBy { get; set; }                               // User who last updated the record
+	public DateTime UpdatedAt { get; set; } = DateTime.Now;              // When the record was last updated
+
+	// Relationships
+	public ICollection<GuestHouseRoom> Rooms { get; set; } = new List<GuestHouseRoom>(); // Rooms mapped to this room type
+}
+
+/// <summary>
 /// A room type belonging to a guest house, maintained as an inventory quantity
 /// (per the availability design). E.g. AC Deluxe Room, Non AC Standard Room, Family Suite, Dormitory Bed.
 /// </summary>
@@ -135,6 +154,9 @@ public class GuestHouseRoom
 	public int Id { get; set; }                                          // Primary key
 	public int GuestHouseId { get; set; }                                // FK to the parent guest house
 	public GuestHouse? GuestHouse { get; set; }                          // Navigation to the parent guest house
+
+	public int? RoomTypeId { get; set; }                                 // Optional FK to Room Type Master (GuestHouseRoomType)
+	public GuestHouseRoomType? RoomTypeMaster { get; set; }              // Navigation to Room Type Master
 
 	public string? RoomType { get; set; }                                // Name of the room type (e.g. "AC Deluxe Room")
 	public string? RoomNumber { get; set; }                              // Physical room identifier (e.g. "101"), preserved from the master data file

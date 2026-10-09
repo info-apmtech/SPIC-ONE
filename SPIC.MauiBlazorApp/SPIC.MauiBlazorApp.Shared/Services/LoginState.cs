@@ -2,6 +2,7 @@ using SPIC.Core.Entities;
 using System;
 using System.Collections.Generic;
 using System.Security.Claims;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 
@@ -17,30 +18,28 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool IsTokenExpired => Expiration != default && DateTime.UtcNow >= Expiration.ToUniversalTime();
 
         /// <summary>Where a signed-in user lands: used after login and when a stored session is restored.</summary>
-        public string LandingPage => UserRole switch
+        public string LandingPage
         {
-            // Admin bypasses page permissions entirely (PageAuthorization.RoleModels), so it needs no
-            // designation. Lands on the same plain welcome screen as every other designation-driven
-            // role - listed first so the no-designation arm below can never claim it: Admin has full
-            // access with an empty RoleAccess.
-            AppRole.Admin => DefaultLandingPath,
-            AppRole.Dealer => "/SDWADashboard",
-            // SpecialAdmin used to be hard-routed to /Logistics here. That both skipped the common
-            // landing screen and left the Settings (Logistics) submenu auto-expanded for the whole
-            // session, because NavMenu / MobileSidebar expand the section that owns the current URL
-            // on load. SpecialAdmin is designation-controlled like every other non-admin role, so it
-            // now falls through to the two data-driven arms below: no designation => /Welcome,
-            // designation => DefaultWelcome.
-            _ when AllowedPages.Count == 0 => "/Welcome",
-            // Has a designation => the default landing page. It is NOT a PagePermission and is not in
-            // anyone's RoleAccess: it is a common landing screen, so it must not depend on which pages
-            // the designation happens to grant. A designation that omits Dashboard still lands here.
-            _ => DefaultLandingPath
-        };
+            get
+            {
+                // Admin and SuperAdmin do NOT use Designation-based landing-page logic: they
+                // always land on DefaultWelcome and keep their existing authorized pages.
+                if (UserRole is AppRole.Admin or AppRole.SuperAdmin)
+                    return DefaultLandingPath;
 
-        // Default landing page for every non-Admin role that has a designation: a plain
-        // "Welcome to SPIC ONE" screen with no dashboard content. Shared with PageGuard's always-open
-        // set so the route and the route that is permitted cannot drift apart.
+                // Every other role lands on DefaultWelcome ONLY when it actually holds a
+                // Designation. "Has a designation" is the same signal PageGuard uses to decide
+                // that a user has no designation (AllowedPages == the Designation.RoleAccess
+                // snapshot), so the landing route and the route authorization can never disagree.
+                // Without a designation the user keeps the existing Welcome page, and
+                // DefaultWelcome is never shown.
+                return AllowedPages.Count > 0 ? DefaultLandingPath : "/Welcome";
+            }
+        }
+
+        // Default landing page for Admin / SuperAdmin and for every non-Admin role that has a
+        // designation: a plain "Welcome to SPIC ONE" screen with no dashboard content. Shared with
+        // PageGuard's always-open set so the route and the route that is permitted cannot drift apart.
         public const string DefaultLandingPath = "/DefaultWelcome";
 
         public event Action? OnChange;
@@ -62,6 +61,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public int StateId { get; private set; }
         public int RegionId { get; private set; }
         public int HQId { get; private set; }
+        public int EmployeeId { get; private set; }
 
         // SpecialAdmin-only multi-location scope. Populated from the
         // spic:assigned_* claims (database-backed at login). For every other role

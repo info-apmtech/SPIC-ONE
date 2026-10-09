@@ -1,5 +1,6 @@
 ﻿@page "/Welcome"
 @layout SPIC.MauiBlazorApp.Shared.Layout.EmptyLayout
+@using System.Globalization
 @inject NavigationManager Nav
 @inject ISessionStore SessionStore
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
@@ -174,17 +175,62 @@
 </style>
 
 @code {
-    private async Task SignOut()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        LoginState.Logout();
+        if (!firstRender)
+        {
+            return;
+        }
 
-        // Clear persisted role access so the next login doesn't restore stale pages
+        // This page uses EmptyLayout, so MainLayout's session restore (and PageGuard) never run
+        // here. A signed-in user who refreshes /Welcome keeps their session; a user who has signed
+        // out must not be able to remain on /Welcome (including via browser back/refresh), so send
+        // them to Login. The store is read before deciding, so a valid refresh is not redirected.
+        if (LoginState.IsLoggedIn)
+        {
+            return;
+        }
+
         try
         {
-            await SessionStore.RemoveAsync(SessionKeys.RoleAccess);
-        }
-        catch { /* JS interop may be unavailable — token is already cleared */ }
+            var token = await SessionStore.GetAsync(SessionKeys.Token);
+            var expirationText = await SessionStore.GetAsync(SessionKeys.Expiration);
 
-        Nav.NavigateTo("/login");
+            if (!string.IsNullOrWhiteSpace(token)
+                && DateTime.TryParse(expirationText, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var expiration)
+                && expiration.ToUniversalTime() > DateTime.UtcNow.AddMinutes(1))
+            {
+                LoginState.Token = token;
+                LoginState.Expiration = expiration;
+                LoginState.SetAllowedPages(await SessionStore.GetAsync(SessionKeys.RoleAccess));
+                LoginState.SetDesignationName(await SessionStore.GetAsync(SessionKeys.DesignationName));
+                StateHasChanged();
+                return;
+            }
+        }
+        catch { /* store unavailable: treat as signed out */ }
+
+        Nav.NavigateTo("/login", replace: true);
+    }
+
+    private async Task SignOut()
+    {
+        // Full logout: purge EVERY persisted session key (token, expiration, role access
+        // and designation name - session and persistent copies) BEFORE navigating. The old
+        // handler removed only RoleAccess, so the token survived and Login.razor restored it
+        // on the next render and bounced the user straight back to an authenticated page.
+        try
+        {
+            await SessionStore.ClearAsync();
+        }
+        catch { /* JS interop may be unavailable — in-memory state is cleared below */ }
+
+        LoginState.Expiration = default;
+        LoginState.Logout();
+
+        // forceLoad starts a fresh app shell so no stale in-memory/header state can keep the
+        // user on the authenticated Welcome page, and back/refresh cannot restore the session
+        // (the store is already empty). Same mechanism Profile.razor's logout uses.
+        Nav.NavigateTo("/login", forceLoad: true);
     }
 }

@@ -295,6 +295,16 @@
 					<input type="text" class="form-control-custom w-100" placeholder="Enter Program Type Name"
 						   @bind="_typeForm.Name" @ref="_typeNameRef" />
 				</div>
+				<div class="col-md-4 col-lg-3">
+					<label class="form-label-custom">Is Amount Change</label>
+					<div class="status-toggle-box @(_typeForm.IsChangeAmount ? "" : "status-toggle-inactive")">
+						<span>@(_typeForm.IsChangeAmount ? "Allowed" : "Not Allowed")</span>
+						<label class="switch">
+							<input type="checkbox" @bind="_typeForm.IsChangeAmount">
+							<span class="slider"></span>
+						</label>
+					</div>
+				</div>
 			</div>
 
 			<ActionBar Sticky="false" CssClass="pm-form-actions mf-form-actions pt-2 mt-4">
@@ -353,6 +363,7 @@
 			<TableHeader>
 				<th>Program Type</th>
 				<th>Programs</th>
+				<th>Is Amount Change</th>
 				<th>Created At</th>
 				@if (CanUpdate)
 				{
@@ -363,6 +374,7 @@
 			<TableRow Context="item">
 				<td>@item.Name</td>
 				<td>@item.ProgramCount</td>
+				<td><span class="status-pill @(item.IsChangeAmount ? "status-active" : "status-inactive")">@YesNo(item.IsChangeAmount)</span></td>
 				<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
 				@if (CanUpdate)
 				{
@@ -516,6 +528,7 @@
 			<TableHeader>
 				<th>Program Type</th>
 				<th>Program Name</th>
+				<th>Is Amount Change</th>
 				<th>MO</th>
 				<th>RMDO</th>
 				<th>SMDO</th>
@@ -526,6 +539,7 @@
 			<TableRow Context="item">
 				<td>@item.ProgramType</td>
 				<td>@item.Name</td>
+				<td><span class="status-pill @(item.IsChangeAmount ? "status-active" : "status-inactive")">@YesNo(item.IsChangeAmount)</span></td>
 				<td><span class="status-pill @(item.IsMO ? "status-active" : "status-inactive")">@YesNo(item.IsMO)</span></td>
 				<td><span class="status-pill @(item.IsRMDO ? "status-active" : "status-inactive")">@YesNo(item.IsRMDO)</span></td>
 				<td><span class="status-pill @(item.IsSMDO ? "status-active" : "status-inactive")">@YesNo(item.IsSMDO)</span></td>
@@ -843,6 +857,7 @@
 		new ExportColumn<ProgramTypeItem> { Header = "S:No", ValueSelector = item => (_types.IndexOf(item) + 1).ToString() },
 		new ExportColumn<ProgramTypeItem> { Header = "Program Type", ValueSelector = item => item.Name },
 		new ExportColumn<ProgramTypeItem> { Header = "Programs", ValueSelector = item => item.ProgramCount.ToString() },
+		new ExportColumn<ProgramTypeItem> { Header = "Is Amount Change", ValueSelector = item => YesNo(item.IsChangeAmount) },
 		new ExportColumn<ProgramTypeItem> { Header = "Created At", ValueSelector = item => item.CreatedAt.ToString("yyyy-MM-dd") }
 	};
 
@@ -864,7 +879,7 @@
 		try
 		{
 			_isSaving = true;
-			var payload = new { Name = name };
+			var payload = new { Name = name, IsChangeAmount = _typeForm.IsChangeAmount };
 			var response = _typeEditingId.HasValue
 				? await Http.PutAsJsonAsync($"api/ProgramType/{_typeEditingId.Value}", payload)
 				: await Http.PostAsJsonAsync("api/ProgramType", payload);
@@ -893,7 +908,7 @@
 	private async Task EditProgramType(ProgramTypeItem item)
 	{
 		_typeEditingId = item.Id;
-		_typeForm = new ProgramTypeFormModel { Name = item.Name };
+		_typeForm = new ProgramTypeFormModel { Name = item.Name, IsChangeAmount = item.IsChangeAmount };
 		try { await _typeNameRef.FocusAsync(); } catch { }
 	}
 
@@ -910,6 +925,7 @@
 		new ExportColumn<ProgramItem> { Header = "S:No", ValueSelector = item => (_filteredPrograms.IndexOf(item) + 1).ToString() },
 		new ExportColumn<ProgramItem> { Header = "Program Type", ValueSelector = item => item.ProgramType },
 		new ExportColumn<ProgramItem> { Header = "Program Name", ValueSelector = item => item.Name },
+		new ExportColumn<ProgramItem> { Header = "Is Amount Change", ValueSelector = item => YesNo(item.IsChangeAmount) },
 		new ExportColumn<ProgramItem> { Header = "MO", ValueSelector = item => YesNo(item.IsMO) },
 		new ExportColumn<ProgramItem> { Header = "RMDO", ValueSelector = item => YesNo(item.IsRMDO) },
 		new ExportColumn<ProgramItem> { Header = "SMDO", ValueSelector = item => YesNo(item.IsSMDO) },
@@ -1221,6 +1237,7 @@
 		public int Id { get; set; }
 		public string Name { get; set; } = "";
 		public int ProgramCount { get; set; }
+		public bool IsChangeAmount { get; set; }
 		public DateTime CreatedAt { get; set; }
 	}
 
@@ -1230,6 +1247,7 @@
 		public string Name { get; set; } = "";
 		public int ProgramTypeId { get; set; }
 		public string ProgramType { get; set; } = "";
+		public bool IsChangeAmount { get; set; }
 		public bool IsMO { get; set; }
 		public bool IsRMDO { get; set; }
 		public bool IsSMDO { get; set; }
@@ -1252,6 +1270,7 @@
 	private class ProgramTypeFormModel
 	{
 		public string Name { get; set; } = "";
+		public bool IsChangeAmount { get; set; }
 	}
 
 	private class ProgramFormModel

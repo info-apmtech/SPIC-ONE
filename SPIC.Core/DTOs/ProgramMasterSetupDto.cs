@@ -7,6 +7,7 @@ namespace SPIC.Core.DTOs
     public class ProgramTypeSaveRequest
     {
         public string Name { get; set; } = "";
+        public bool IsChangeAmount { get; set; }
     }
 
     public class ProgramMasterListDto
@@ -15,6 +16,7 @@ namespace SPIC.Core.DTOs
         public string Name { get; set; } = "";
         public int ProgramTypeId { get; set; }
         public string ProgramType { get; set; } = "";
+        public bool IsChangeAmount { get; set; }
         public bool IsMO { get; set; }
         public bool IsRMDO { get; set; }
         public bool IsSMDO { get; set; }

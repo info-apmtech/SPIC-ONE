@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Spic.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Spic.Infrastructure.Data;
 namespace Spic.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261008125503_v21a_sdwaupdates")]
+    partial class v21a_sdwaupdates
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2081,8 +2084,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "AllocationRequestReview",
-                            Name = "Allocation Request Review",
+                            Key = "TaskMonitoring",
+                            Name = "Task Monitoring",
                             SortOrder = 111,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2094,8 +2097,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "TaskMonitoring",
-                            Name = "Task Monitoring",
+                            Key = "PerformanceTracker",
+                            Name = "Performance Tracker",
                             SortOrder = 112,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2107,8 +2110,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "PerformanceTracker",
-                            Name = "Performance Tracker",
+                            Key = "TargetAchievement",
+                            Name = "Target Achievement",
                             SortOrder = 113,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2120,8 +2123,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "TargetAchievement",
-                            Name = "Target Achievement",
+                            Key = "FarmerData",
+                            Name = "Farmer Data",
                             SortOrder = 114,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2133,8 +2136,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "FarmerData",
-                            Name = "Farmer Data",
+                            Key = "MdoReports",
+                            Name = "Mdo Reports",
                             SortOrder = 115,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2146,8 +2149,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "MdoReports",
-                            Name = "Mdo Reports",
+                            Key = "SdwaCompanyMaster",
+                            Name = "Sdwa Company Master",
                             SortOrder = 116,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2159,8 +2162,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "SdwaCompanyMaster",
-                            Name = "Sdwa Company Master",
+                            Key = "GuestHouseCancellations",
+                            Name = "Guest House Cancellations",
                             SortOrder = 117,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2172,8 +2175,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "GuestHouseCancellations",
-                            Name = "Guest House Cancellations",
+                            Key = "DemoDocumentation",
+                            Name = "Demo Documentation",
                             SortOrder = 118,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2185,8 +2188,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "DemoDocumentation",
-                            Name = "Demo Documentation",
+                            Key = "SalesAudit",
+                            Name = "Sales Audit",
                             SortOrder = 119,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2198,8 +2201,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "SalesAudit",
-                            Name = "Sales Audit",
+                            Key = "ExtensionRequests",
+                            Name = "Extension Requests",
                             SortOrder = 120,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2211,8 +2214,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "ExtensionRequests",
-                            Name = "Extension Requests",
+                            Key = "FarmDashboard",
+                            Name = "Farm Dashboard",
                             SortOrder = 121,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2224,8 +2227,8 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "FarmDashboard",
-                            Name = "Farm Dashboard",
+                            Key = "IfmsAutoImport",
+                            Name = "Ifms Auto Import",
                             SortOrder = 122,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
@@ -2237,139 +2240,9 @@ namespace Spic.Infrastructure.Migrations
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
-                            Key = "IfmsAutoImport",
-                            Name = "Ifms Auto Import",
-                            SortOrder = 123,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 125,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
                             Key = "ProgramMaster",
                             Name = "Program Master",
-                            SortOrder = 124,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 126,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Activities",
-                            Name = "Activities",
-                            SortOrder = 125,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 127,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Farmers",
-                            Name = "Farmers",
-                            SortOrder = 126,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 128,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Alerts",
-                            Name = "Alerts",
-                            SortOrder = 127,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 129,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "StartDocumentation",
-                            Name = "Start Documentation",
-                            SortOrder = 128,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 130,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "DemoDetails",
-                            Name = "Demo Details",
-                            SortOrder = 129,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 131,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "TreatmentDetails",
-                            Name = "Treatment Details",
-                            SortOrder = 130,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 132,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Treatment01",
-                            Name = "Treatment01",
-                            SortOrder = 131,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 133,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Treatment02",
-                            Name = "Treatment02",
-                            SortOrder = 132,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 134,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "TreatmentDemoDetails",
-                            Name = "Treatment Demo Details",
-                            SortOrder = 133,
+                            SortOrder = 123,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
                         },
@@ -6430,9 +6303,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("DealerName")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<DateTime?>("PlannedDate")
-                        .HasColumnType("timestamp without time zone");
 
                     b.Property<int?>("PlannedDay")
                         .HasColumnType("integer");
