@@ -17,12 +17,13 @@
         "notfound",
         "forbidden",
         "Welcome",
-        // Default landing page (LoginState). It is the destination of LandingPage for every role
-        // without its own special-cased landing route (including Admin), so it must be open to every
-        // signed-in user; otherwise the redirect at the bottom of Check() sends the user back to
+        // Default landing page (LoginState). It is the destination of LandingPage for Admin /
+        // SuperAdmin and for every non-Admin role that HAS a designation, so it must be open to
+        // those users; otherwise the redirect at the bottom of Check() sends the user back to
         // LandingPage - the very route - and loops. This is a common landing screen, NOT a
         // designation permission: it is not a PagePermission member and appears in no RoleAccess.
-        // Listed without the leading slash, matching above.
+        // A user with no designation is redirected to /Welcome by the no-designation branch below.
+        // Listed without the leading slash.
         LoginState.DefaultLandingPath.TrimStart('/')
     };
 
@@ -258,10 +259,9 @@
             : LoginState.CanAccess(permissionKey);
         if (!allowed && !isDirectorSchemeApproval)
         {
-            // Redirect to the SAME landing page the login flow uses. That keeps the existing
-            // per-role destinations exactly as they were (Dealer -> /SDWADashboard, Admin ->
-            // /DefaultWelcome, a role with no designation -> /Welcome, everyone else ->
-            // /DefaultWelcome) and, because LandingPage is the
+            // Redirect to the SAME landing page the login flow uses (Admin / SuperAdmin ->
+            // /DefaultWelcome, any other role holding a designation -> /DefaultWelcome, a role
+            // with no designation -> /Welcome). Because LandingPage is the
             // one place that knows which pages a role actually has, it also gives a
             // designation-driven role such as CommonRole a destination it is allowed to open. The
             // previous hardcoded "/Dashboard" fallback would have bounced a CommonRole user whose
