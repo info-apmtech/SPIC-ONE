@@ -110,6 +110,44 @@ namespace SpicAPI.Controllers
             return true;
         }
 
+        /// <summary>
+        /// Validation rule for State Budget Summary (Admin-only).
+        /// All budget must be allocated to states: RemainingAmount must be 0, and TotalBudget must equal AllocatedAmount.
+        /// </summary>
+        private static bool TryValidateStateSummaryAmounts(
+            decimal totalBudget, decimal allocatedAmount, decimal remainingAmount, out string error)
+        {
+            if (remainingAmount != 0)
+            {
+                error = "Remaining Amount is not allowed for state budget allocation. All budget must be allocated to states.";
+                return false;
+            }
+
+            if (totalBudget <= 0)
+            {
+                error = "Total Budget must be greater than 0.";
+                return false;
+            }
+
+            if (allocatedAmount <= 0)
+            {
+                error = "Allocated Amount must be greater than 0.";
+                return false;
+            }
+
+            if (totalBudget != allocatedAmount)
+            {
+                var diff = totalBudget - allocatedAmount;
+                error = diff > 0
+                    ? $"All budget must be allocated to states. ₹{diff:N0} remaining to be allocated."
+                    : $"Allocated Amount (₹{allocatedAmount:N0}) cannot exceed Total Budget (₹{totalBudget:N0}).";
+                return false;
+            }
+
+            error = "";
+            return true;
+        }
+
         public BudgetController(
     IGenericRepository<BudgetProgram> budgetRepo,
     IGenericRepository<ProgramMaster> programRepo,
@@ -1324,11 +1362,14 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { message = "Total Budget must be greater than 0." });
 
             var totalRequested = request.Allocations.Sum(a => a.Amount);
-            if (totalRequested > annualBudget.Amount)
-                return BadRequest(new
-                {
-                    message = $"Allocation amount cannot exceed the remaining budget of ₹{annualBudget.Amount:N0}."
-                });
+            if (totalRequested != annualBudget.Amount)
+            {
+                var diff = annualBudget.Amount - totalRequested;
+                var msg = diff > 0
+                    ? $"All budget must be allocated to states. ₹{diff:N0} remaining to be allocated."
+                    : $"Allocated Amount (₹{totalRequested:N0}) cannot exceed Total Budget (₹{annualBudget.Amount:N0}).";
+                return BadRequest(new { message = msg });
+            }
 
             var stateIds = request.Allocations.Select(a => a.StateId).ToList();
             var validStateIds = await _stateRepo.GetAll()
@@ -2159,8 +2200,8 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { message = "Financial Year is required." });
 
             // Save is just as authoritative as Submit: a row that doesn't reconcile is never
-            // written to the database at all, Draft or otherwise.
-            if (!TryValidateSummaryAmounts(request.TotalBudget, request.AllocatedAmount, request.RemainingAmount, out var validationError))
+            // written to the database at all, Draft or otherwise. For state allocation, all budget must be allocated to states.
+            if (!TryValidateStateSummaryAmounts(request.TotalBudget, request.AllocatedAmount, request.RemainingAmount, out var validationError))
                 return BadRequest(new { message = validationError });
 
             var summary = await _db.Set<StateBudgetSummary>().FirstOrDefaultAsync(s => s.FY == fy);
@@ -2217,7 +2258,7 @@ namespace SpicAPI.Controllers
 
             // Same rule set as Save - re-validated independently here since Submit is the
             // authoritative gate for progressing Status, regardless of what Save already enforced.
-            if (!TryValidateSummaryAmounts(summary.TotalBudget, summary.AllocatedAmount, summary.RemainingAmount, out var validationError))
+            if (!TryValidateStateSummaryAmounts(summary.TotalBudget, summary.AllocatedAmount, summary.RemainingAmount, out var validationError))
                 return BadRequest(new { message = validationError });
 
             summary.Status = "Submitted";
@@ -2575,8 +2616,8 @@ namespace SpicAPI.Controllers
         public async Task<IActionResult> GetBudgetSummaryAudit()
         {
             var badState = await _db.Set<StateBudgetSummary>()
-                .Where(s => s.TotalBudget <= 0 || s.AllocatedAmount <= 0 || s.RemainingAmount < 0
-                    || s.TotalBudget != s.AllocatedAmount + s.RemainingAmount)
+                .Where(s => s.TotalBudget <= 0 || s.AllocatedAmount <= 0 || s.RemainingAmount != 0
+                    || s.TotalBudget != s.AllocatedAmount)
                 .Select(s => new { Level = "State", s.Id, s.FY, s.TotalBudget, s.AllocatedAmount, s.RemainingAmount, s.Status })
                 .ToListAsync();
 
