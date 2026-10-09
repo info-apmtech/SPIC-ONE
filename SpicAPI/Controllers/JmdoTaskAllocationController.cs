@@ -223,6 +223,10 @@ public class JmdoTaskAllocationController : ControllerBase
                 SpcmTarget = a.SpcmTarget,
                 SoilSampleTarget = a.SoilSampleTarget,
                 ProgramCount = a.Programs.Count,
+                UreaTarget = a.UreaTarget,
+                DapTarget = a.DapTarget,
+                NpsTarget = a.NpsTarget,
+                OthersTarget = a.OthersTarget,
                 PosLiquidationFieldCount = posFieldsFilled
             };
         }).ToList();
@@ -294,10 +298,6 @@ public class JmdoTaskAllocationController : ControllerBase
         var dealer = await _db.SubDealerRegistrations.FindAsync(dto.DealerId);
         if (dealer == null)
             return BadRequest(new { Success = false, Message = "Dealer not found." });
-
-        var already = await _db.JmdoTaskAllocationDealers.AnyAsync(d => d.AllocationId == id && d.SubDealerId == dto.DealerId);
-        if (already)
-            return BadRequest(new { Success = false, Message = "This dealer is already on the allocation." });
 
         var row = new JmdoTaskAllocationDealer
         {

@@ -23,4 +23,28 @@ namespace SPIC.Core.DTOs
         public int Rejected { get; set; }
         public int Draft { get; set; }
     }
+
+    public class ApproveProgramBudgetRequest
+    {
+        public List<ApproveProgramAmountDto> Programs { get; set; } = new();
+    }
+
+    public class ApproveProgramAmountDto
+    {
+        public int ProgramId { get; set; }
+        public decimal TotalBudget { get; set; }
+
+        public decimal AprilCount { get; set; }
+        public decimal MayCount { get; set; }
+        public decimal JuneCount { get; set; }
+        public decimal JulyCount { get; set; }
+        public decimal AugustCount { get; set; }
+        public decimal SeptemberCount { get; set; }
+        public decimal OctoberCount { get; set; }
+        public decimal NovemberCount { get; set; }
+        public decimal DecemberCount { get; set; }
+        public decimal JanuaryCount { get; set; }
+        public decimal FebruaryCount { get; set; }
+        public decimal MarchCount { get; set; }
+    }
 }

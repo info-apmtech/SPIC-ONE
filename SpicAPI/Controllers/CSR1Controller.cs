@@ -1001,6 +1001,7 @@ namespace SpicAPI.Controllers
             }
         }
 
+
         [HttpGet("list")]
         public async Task<IActionResult> GetCSR1List()
         {
@@ -1032,6 +1033,8 @@ namespace SpicAPI.Controllers
                 var products3 = await _csr1Products3Repo
                     .GetAll()
                     .ToListAsync();
+
+                var employeeLogins = await _db.Employeelogins.AsNoTracking().ToListAsync();
 
                 var result = csr1Records
                     .Select(csr =>

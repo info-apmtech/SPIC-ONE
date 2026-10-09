@@ -228,6 +228,21 @@
             npsTarget = detail.NpsTarget?.ToString() ?? "";
             otherTarget = detail.OthersTarget?.ToString() ?? "";
 
+            // Calculate PlannedDate from Day if it's null
+            foreach (var task in _detail.Dealers)
+            {
+                if (task.PlannedDate == null && task.Day.HasValue)
+                {
+                    DateTime weekStart = _detail.SubmittedAt.Date;
+                    int diff = (int)weekStart.DayOfWeek;
+                    weekStart = weekStart.AddDays(-diff);
+                    task.PlannedDate = weekStart.AddDays((int)task.Day.Value);
+                    
+                    // Fire update to backend silently so it's persisted
+                    _ = UpdateDealerPlannedDate(task, task.PlannedDate.Value.ToString("yyyy-MM-dd"));
+                }
+            }
+
             await LoadAvailableDealersAsync();
             await LoadAvailableProgramsAsync();
         }
@@ -269,10 +284,8 @@
 
             var url = "api/SubDealerRegistration/list?" + string.Join("&", query);
             var result = await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
-            var existingIds = _detail.Dealers.Select(d => d.SubDealerId).ToHashSet();
 
             AvailableDealers = (result?.Items ?? new())
-                .Where(d => !existingIds.Contains(d.Id))
                 .Select(d => new SubDealerOptionDto { Id = d.Id, FirmName = d.FirmName, SubDealerCode = d.SubDealerCode })
                 .ToList();
         }
