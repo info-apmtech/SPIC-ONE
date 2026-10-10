@@ -40,6 +40,9 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 
 		private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
 
+		/// <summary>Tick while an SMS is waiting to be re-sent; the code it carries is short-lived.</summary>
+		private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(10);
+
 		/// <summary>Three long buzzes: unmistakable through a bedside table.</summary>
 		private static readonly long[] VibrationPattern = { 0, 600, 300, 600, 300, 600 };
 
@@ -52,6 +55,7 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 		private int _notifiedChallengeId;
 
 		private int _consecutiveFailures;
+		private DateTime _lastPollUtc = DateTime.MinValue;
 		private DateTime? _unreachableSinceUtc;
 		private string _ongoingText = string.Empty;
 
@@ -115,10 +119,23 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 		{
 			while (!cancellationToken.IsCancellationRequested)
 			{
+				var retrying = false;
 				try
 				{
 					if (RelaySettings.IsConfigured)
-						await PollOnceAsync(cancellationToken);
+					{
+						if (PendingSmsQueue.Count > 0)
+						{
+							await PendingSmsQueue.DrainAsync(cancellationToken);
+							retrying = PendingSmsQueue.Count > 0;
+						}
+
+						if (!retrying || DateTime.UtcNow - _lastPollUtc >= PollInterval)
+						{
+							await PollOnceAsync(cancellationToken);
+							_lastPollUtc = DateTime.UtcNow;
+						}
+					}
 				}
 				catch (System.OperationCanceledException)
 				{
@@ -132,7 +149,7 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 
 				try
 				{
-					await Task.Delay(PollInterval, cancellationToken);
+					await Task.Delay(retrying ? RetryInterval : PollInterval, cancellationToken);
 				}
 				catch (System.OperationCanceledException)
 				{

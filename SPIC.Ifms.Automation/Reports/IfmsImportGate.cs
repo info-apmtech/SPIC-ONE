@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using SPIC.Ifms.Automation.Options;
 
 namespace SPIC.Ifms.Automation.Reports;
@@ -34,8 +35,9 @@ public sealed class IfmsImportGate
 
 	public IfmsImportGate(
 		ILogger<IfmsImportGate> logger,
-		IfmsOptions ifmsOptions)
+		IOptions<IfmsOptions> options)
 	{
+		var ifmsOptions = options.Value;
 		_logger = logger;
 		_lockFilePath = Path.Combine(
 			Path.GetFullPath(string.IsNullOrWhiteSpace(ifmsOptions.DownloadRoot)

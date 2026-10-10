@@ -154,6 +154,7 @@ namespace SPIC.Ifms.Relay.Services
 	[JsonSerializable(typeof(ServerMessage))]
 	[JsonSerializable(typeof(AlertSettings))]
 	[JsonSerializable(typeof(AlertSettingsUpdate))]
+	[JsonSerializable(typeof(List<PendingSms>))]
 	internal sealed partial class RelayJson : JsonSerializerContext
 	{
 	}

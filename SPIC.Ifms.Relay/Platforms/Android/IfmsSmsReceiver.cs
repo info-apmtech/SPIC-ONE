@@ -82,12 +82,18 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 						}
 						else
 						{
-							RelayLog.Fail($"SMS from {senderLabel} not forwarded: {result.Message}");
+							// Keep it: the watcher retries every ten seconds for five
+							// minutes, which covers a server that is briefly erroring.
+							PendingSmsQueue.Enqueue(sender, body, receivedAt);
+							RelayLog.Warn($"SMS from {senderLabel} queued for retry: {result.Message}");
+							if (context is not null)
+								RelayForegroundService.EnsureRunning(context);
 						}
 					}
 					catch (Exception ex)
 					{
-						RelayLog.Fail($"SMS from {senderLabel} not forwarded: {ex.Message}");
+						PendingSmsQueue.Enqueue(sender, body, receivedAt);
+						RelayLog.Warn($"SMS from {senderLabel} queued for retry: {ex.Message}");
 					}
 					finally
 					{
