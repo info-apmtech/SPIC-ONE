@@ -37,8 +37,8 @@ namespace SpicAPI.Controllers
 	/// <see cref="GuestHouseFrontOfficeAccessAttribute"/> below. The old class-level
 	/// [Authorize(Roles = "Admin,CorporateAdmin")] could only read the JWT role claim and therefore
 	/// never saw a Designation. Writes are decided by the same attribute (GHAdmin / SDWAAdmin
-	/// designations and Receptionists for the Front Office / Generate Bill actions; cancellation
-	/// approve / reject stay Admin / CorporateAdmin / SuperAdmin only).
+	/// designations and Receptionists for Front Office / Generate Bill actions; GHAdmin, SDWAAdmin,
+	/// and GuestHouseCancellations designations for cancellation approve / reject).
 	/// </remarks>
 	[ApiController]
 	[Route("api/[controller]")]
@@ -1831,9 +1831,9 @@ namespace SpicAPI.Controllers
 	/// user's Designation (Designation.RoleAccess) actually grants.
 	///
 	/// Reads: Allowed for designations granting GHAdmin, SDWAAdmin, or the endpoint's specific PagePermission.
-	/// Writes (check-in, payment, check-out, generate-bill): Allowed for designations granting GHAdmin, SDWAAdmin,
-	/// or a Receptionist designation granting the endpoint's specific PagePermission (scoped to their own state).
-	/// Cancellation approve/reject stay Admin / CorporateAdmin / SuperAdmin only.
+	/// Writes: Allowed for designations granting GHAdmin, SDWAAdmin, or the endpoint's specific PagePermission
+	/// (Front Office / Generate Bill actions for Receptionists; cancellation approve / reject for GHAdmin, SDWAAdmin,
+	/// and GuestHouseCancellations).
 	/// </summary>
 	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
 	internal sealed class GuestHouseFrontOfficeAccessAttribute : Attribute, IAsyncAuthorizationFilter
@@ -1878,7 +1878,9 @@ namespace SpicAPI.Controllers
 
 				var isAllowed = isGet
 					? (hasAdminPermission || hasEndpointPermission)
-					: (hasAdminPermission || (GuestHouseReceptionistScope.IsReceptionist(designation.Name) && hasEndpointPermission));
+					: (hasAdminPermission
+						|| (GuestHouseReceptionistScope.IsReceptionist(designation.Name) && hasEndpointPermission)
+						|| (requiredPermission == PagePermission.GuestHouseCancellations && hasEndpointPermission));
 
 				if (isAllowed)
 					return;
@@ -1887,13 +1889,15 @@ namespace SpicAPI.Controllers
 			context.Result = Forbidden();
 		}
 
-		// Action route -> the PagePermission needed to perform it. Every other
-		// action (cancellation approve / reject) maps to null and stays Admin / CorporateAdmin / SuperAdmin only.
+		// Action route -> the PagePermission needed to perform it. Unmapped actions stay closed.
 		private static PagePermission? RequiredActionPermission(string path) =>
 			path.EndsWith("/checkin", StringComparison.OrdinalIgnoreCase)
 				|| path.EndsWith("/pay", StringComparison.OrdinalIgnoreCase)
 				|| path.EndsWith("/checkout", StringComparison.OrdinalIgnoreCase) ? PagePermission.FrontOffice
 			: path.EndsWith("/generate-bill", StringComparison.OrdinalIgnoreCase) ? PagePermission.GenerateBill
+			: (path.Contains("/cancellations/", StringComparison.OrdinalIgnoreCase)
+				&& (path.EndsWith("/approve", StringComparison.OrdinalIgnoreCase) || path.EndsWith("/reject", StringComparison.OrdinalIgnoreCase)))
+				? PagePermission.GuestHouseCancellations
 			: null;
 
 		// Route -> the PagePermission of the SDWA page that reads it. Unmapped GETs stay closed.
