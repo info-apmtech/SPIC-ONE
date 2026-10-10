@@ -19,6 +19,11 @@ internal static class Program
 		// Role -> authorization model, the bypass sets and the OpenAccess list: pure
 		// data, so the Designation-based access rules can be asserted without a server.
 		PageAuthorizationTests.Run();
+		Console.WriteLine();
+
+		// Guest House single and multi-record inventory availability, holding windows,
+		// serialization detection, cancellations, check-in, check-out and allocations.
+		GuestHouseInventoryTests.Run();
 
 		return Check.Report("Total");
 	}

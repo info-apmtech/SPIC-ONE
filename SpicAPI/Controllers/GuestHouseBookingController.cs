@@ -508,12 +508,20 @@ namespace SpicAPI.Controllers
             // (the second commit fails with SqlState 40001) instead of silently double-booking.
             await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
-            int available;
+            // Rooms to reserve per inventory record. When the selected record covers the whole
+            // quantity this is that record alone - the single-record booking, unchanged. Otherwise
+            // the rest comes from compatible sibling records (Rooms page grouping) and the booking
+            // becomes a multi-record booking holding one GuestHouseRoomAllocation row per room.
+            List<(GuestHouseRoom Record, int Quantity)> plan;
+            List<GuestHouseRoomAllocation> reservedRows;
             try
             {
-                available = await GetAvailableQuantityForPeriodAsync(room.Id, checkIn.Date, checkOut.Date);
+                plan = await PlanRoomReservationAsync(room, numberOfRooms, checkIn.Date, checkOut.Date);
+                reservedRows = plan.Count > 1
+                    ? await PickReservedRoomNumbersAsync(plan, house.Id, checkIn.Date, checkOut.Date, userId)
+                    : new List<GuestHouseRoomAllocation>();
             }
-            catch (PostgresException ex) when (ex.SqlState == "40001")
+            catch (Exception ex) when (GuestHouseRoomInventory.IsSerializationFailure(ex))
             {
                 await transaction.RollbackAsync();
                 return Conflict(new
@@ -523,6 +531,7 @@ namespace SpicAPI.Controllers
                 });
             }
 
+            var available = plan.Sum(p => p.Quantity);
             if (available < numberOfRooms)
             {
                 await transaction.RollbackAsync();
@@ -533,11 +542,22 @@ namespace SpicAPI.Controllers
                 });
             }
 
+            if (plan.Count > 1 && reservedRows.Count != numberOfRooms)
+            {
+                await transaction.RollbackAsync();
+                return Conflict(new
+                {
+                    Success = false,
+                    Message = "This room was just booked by someone else for the selected dates. Please try again."
+                });
+            }
+
             var booking = new GuestHouseBooking
             {
                 BookingReference = GenerateBookingReference(),
                 GuestHouseId = house.Id,
-                GuestHouseRoomId = room.Id,
+                // The first record holding rooms (the selected record whenever it has any).
+                GuestHouseRoomId = plan[0].Record.Id,
                 CheckInDate = checkIn.Date,
                 CheckInTime = request.CheckInTime,
                 CheckOutDate = checkOut.Date,
@@ -598,6 +618,10 @@ namespace SpicAPI.Controllers
                 }
             };
 
+            // Multi-record booking: its reservation rows, saved with the booking in this transaction.
+            foreach (var row in reservedRows)
+                booking.RoomAllocations.Add(row);
+
             _db.GuestHouseBookings.Add(booking);
 
             try
@@ -605,16 +629,7 @@ namespace SpicAPI.Controllers
                 await _db.SaveChangesAsync();
                 await transaction.CommitAsync();
             }
-            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "40001" })
-            {
-                await transaction.RollbackAsync();
-                return Conflict(new
-                {
-                    Success = false,
-                    Message = "This room was just booked by someone else for the selected dates. Please try again."
-                });
-            }
-            catch (PostgresException ex) when (ex.SqlState == "40001")
+            catch (Exception ex) when (GuestHouseRoomInventory.IsSerializationFailure(ex))
             {
                 await transaction.RollbackAsync();
                 return Conflict(new
@@ -791,22 +806,18 @@ namespace SpicAPI.Controllers
             // once someone else has already taken the room, would double-book it.
             await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
-            int available;
+            bool stillAvailable;
             try
             {
-                available = booking.CheckInDate.HasValue && booking.CheckOutDate.HasValue
-                    ? await GetAvailableQuantityForPeriodAsync(
-                        booking.GuestHouseRoomId, booking.CheckInDate.Value.Date, booking.CheckOutDate.Value.Date,
-                        excludeBookingId: booking.Id)
-                    : 0;
+                stillAvailable = await IsStillAvailableForBookingAsync(booking);
             }
-            catch (PostgresException ex) when (ex.SqlState == "40001")
+            catch (Exception ex) when (GuestHouseRoomInventory.IsSerializationFailure(ex))
             {
                 await transaction.RollbackAsync();
                 return Conflict(new { Success = false, Message = "Could not confirm this booking right now. Please try again." });
             }
 
-            if (available < (booking.NumberOfRooms ?? 1))
+            if (!stillAvailable)
             {
                 await transaction.RollbackAsync();
                 _logger.LogWarning("Razorpay verify rejected for booking {BookingId}: the room hold expired and the room is no longer available.", booking.Id);
@@ -875,12 +886,7 @@ namespace SpicAPI.Controllers
                 await _db.SaveChangesAsync();
                 await transaction.CommitAsync();
             }
-            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "40001" })
-            {
-                await transaction.RollbackAsync();
-                return Conflict(new { Success = false, Message = "Could not confirm this booking right now. Please try again." });
-            }
-            catch (PostgresException ex) when (ex.SqlState == "40001")
+            catch (Exception ex) when (GuestHouseRoomInventory.IsSerializationFailure(ex))
             {
                 await transaction.RollbackAsync();
                 return Conflict(new { Success = false, Message = "Could not confirm this booking right now. Please try again." });
@@ -1038,6 +1044,7 @@ namespace SpicAPI.Controllers
 				.Where(b => b.CreatedBy == userName)
 				.Include(b => b.GuestHouse)
 				.Include(b => b.GuestHouseRoom)
+				.Include(b => b.RoomAllocations)
 				.Include(b => b.Guests)
 				.OrderByDescending(b => b.CreatedAt)
 				.ToListAsync();
@@ -1085,7 +1092,7 @@ namespace SpicAPI.Controllers
 					GuestHouseName = b.GuestHouse?.Name ?? "",
 					RoomImagePath = cover,
 					RoomType = b.GuestHouseRoom?.RoomType ?? "Room",
-					RoomNumber = b.GuestHouseRoom?.RoomNumber,
+					RoomNumber = CustomerRoomNumber(b),
 					BookingStatus = BookingStatusName(b.BookingStatus),
 					PaymentStatus = PaymentStatusName(b.PaymentStatus),
 					CheckInDate = b.CheckInDate,
@@ -1123,6 +1130,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.GuestHouse)
 				.ThenInclude(h => h.Images.Where(i => i.IsActive))
 				.Include(b => b.GuestHouseRoom)
+				.Include(b => b.RoomAllocations)
 				.Include(b => b.Guests)
 				.Include(b => b.Payments)
 				.Include(b => b.Documents)
@@ -1153,7 +1161,7 @@ namespace SpicAPI.Controllers
 				GuestHouseName = booking.GuestHouse?.Name ?? "",
 				RoomImagePath = cover,
 				RoomType = booking.GuestHouseRoom?.RoomType ?? "Room",
-				RoomNumber = booking.GuestHouseRoom?.RoomNumber,
+				RoomNumber = CustomerRoomNumber(booking),
 				HasInvoice = hasInvoice,
 				CheckInDate = booking.CheckInDate,
 				CheckInTime = booking.CheckInTime,
@@ -1511,6 +1519,32 @@ namespace SpicAPI.Controllers
 			return $"CAN-{DateTime.Now:yyyy}-{Random.Shared.Next(1000, 9999)}";
 		}
 
+		// Room No shown to the customer (My Bookings / Booking Details). A single-record booking
+		// shows its record's RoomNumber, exactly as before. A multi-record booking shows every room
+		// it holds: its reservation / allocation rows while active, the Check-Out snapshot after.
+		private static string? CustomerRoomNumber(GuestHouseBooking booking)
+		{
+			if (GuestHouseRoomInventory.IsMultiRecordBooking(booking.GuestHouseRoomId, booking.RoomAllocations))
+			{
+				return string.Join(", ", booking.RoomAllocations
+					.Select(a => a.RoomNumber)
+					.Distinct(StringComparer.OrdinalIgnoreCase)
+					.OrderBy(n => n));
+			}
+
+			// After Check-Out the rows are gone; a snapshot holding a number the primary record does
+			// not own can only come from a multi-record booking.
+			if (!string.IsNullOrWhiteSpace(booking.AllocatedRoomNumber) && booking.GuestHouseRoom != null)
+			{
+				var own = GuestHouseRoomInventory.EnumeratePhysicalRoomNumbers(booking.GuestHouseRoom, booking.GuestHouseRoom.AvailableQuantity);
+				var snapshot = booking.AllocatedRoomNumber.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+				if (snapshot.Any(n => !GuestHouseRoomInventory.ContainsNumber(own, n)))
+					return booking.AllocatedRoomNumber;
+			}
+
+			return booking.GuestHouseRoom?.RoomNumber;
+		}
+
 		private static string BookingStatusName(GuestHouseBookingStatus status)
 		{
 			return status switch
@@ -1557,6 +1591,144 @@ namespace SpicAPI.Controllers
         //
         // excludeBookingId: pass the booking's own id when re-checking availability FOR that
         // same booking (e.g. at payment verification time) so it never counts against itself.
+        // Payment verification re-check, excluding the booking's own hold: every inventory record the
+        // booking holds must still have the rooms it holds there. A single-record booking checks its
+        // GuestHouseRoomId for NumberOfRooms, exactly as before. For a multi-record booking, a
+        // reserved room number that was taken while an expired hold was not counting is moved to
+        // another free number of the same record (tracked rows, saved with the confirmation);
+        // with no free number left the booking is not available.
+        private async Task<bool> IsStillAvailableForBookingAsync(GuestHouseBooking booking)
+        {
+            if (!booking.CheckInDate.HasValue || !booking.CheckOutDate.HasValue)
+                return false;
+
+            var checkInDate = booking.CheckInDate.Value.Date;
+            var checkOutDate = booking.CheckOutDate.Value.Date;
+
+            var rows = await _db.GuestHouseRoomAllocations
+                .Where(a => a.GuestHouseBookingId == booking.Id)
+                .ToListAsync();
+
+            if (!GuestHouseRoomInventory.IsMultiRecordBooking(booking.GuestHouseRoomId, rows))
+            {
+                var available = await GetAvailableQuantityForPeriodAsync(
+                    booking.GuestHouseRoomId, checkInDate, checkOutDate, excludeBookingId: booking.Id);
+                return available >= (booking.NumberOfRooms ?? 1);
+            }
+
+            foreach (var recordRows in rows.GroupBy(r => r.GuestHouseRoomId))
+            {
+                var available = await GetAvailableQuantityForPeriodAsync(
+                    recordRows.Key, checkInDate, checkOutDate, excludeBookingId: booking.Id);
+                if (available < recordRows.Count())
+                    return false;
+
+                var free = await GuestHouseRoomInventory.GetFreePhysicalRoomsAsync(
+                    _db, recordRows.Key, checkInDate, checkOutDate, PendingPaymentHoldCutoff, booking.Id);
+                var spare = free.Free
+                    .Where(n => !rows.Any(r => string.Equals(r.RoomNumber, n, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+
+                foreach (var row in recordRows)
+                {
+                    if (GuestHouseRoomInventory.ContainsNumber(free.Free, row.RoomNumber))
+                        continue;
+                    if (spare.Count == 0)
+                        return false;
+                    row.RoomNumber = spare[0];
+                    spare.RemoveAt(0);
+                }
+            }
+            return true;
+        }
+
+        // How many rooms to reserve on which inventory record. The selected record first: when it
+        // covers the whole quantity it is the only entry (single-record booking, exactly as before).
+        // Otherwise compatible sibling records (GuestHouseRoomInventory.AreCompatible - the Rooms
+        // page grouping) fill the rest, most available first. The sum is less than the quantity
+        // when the group cannot cover it. Runs inside the caller's serializable transaction.
+        private async Task<List<(GuestHouseRoom Record, int Quantity)>> PlanRoomReservationAsync(
+            GuestHouseRoom selected, int numberOfRooms, DateTime checkInDate, DateTime checkOutDate)
+        {
+            var plan = new List<(GuestHouseRoom Record, int Quantity)>();
+
+            var selectedAvailable = await GetAvailableQuantityForPeriodAsync(selected.Id, checkInDate, checkOutDate);
+            if (selectedAvailable >= numberOfRooms)
+            {
+                plan.Add((selected, numberOfRooms));
+                return plan;
+            }
+            if (selectedAvailable > 0)
+                plan.Add((selected, selectedAvailable));
+
+            var remaining = numberOfRooms - Math.Max(0, selectedAvailable);
+
+            var siblings = (await _db.GuestHouseRooms
+                    .AsNoTracking()
+                    .Where(r => r.GuestHouseId == selected.GuestHouseId && r.IsActive && r.Id != selected.Id)
+                    .ToListAsync())
+                .Where(r => GuestHouseRoomInventory.AreCompatible(selected, r))
+                .ToList();
+
+            var siblingAvailability = new List<(GuestHouseRoom Record, int Available)>();
+            foreach (var sibling in siblings)
+            {
+                var siblingAvailable = await GetAvailableQuantityForPeriodAsync(sibling.Id, checkInDate, checkOutDate);
+                if (siblingAvailable > 0)
+                    siblingAvailability.Add((sibling, siblingAvailable));
+            }
+
+            foreach (var (record, siblingAvailable) in siblingAvailability
+                         .OrderByDescending(s => s.Available)
+                         .ThenBy(s => s.Record.Id))
+            {
+                if (remaining <= 0) break;
+                var take = Math.Min(siblingAvailable, remaining);
+                plan.Add((record, take));
+                remaining -= take;
+            }
+
+            return plan;
+        }
+
+        // Multi-record booking: one reservation row per room, each on its own record, using that
+        // record's currently free physical room numbers (the same numbers check-in offers). A number
+        // that another record of the booking also derives is skipped, so every row maps to exactly
+        // one record at check-in. Returns fewer rows than planned when numbers ran out.
+        private async Task<List<GuestHouseRoomAllocation>> PickReservedRoomNumbersAsync(
+            List<(GuestHouseRoom Record, int Quantity)> plan, int guestHouseId,
+            DateTime checkInDate, DateTime checkOutDate, string? reservedBy)
+        {
+            var numbersByRecord = plan.ToDictionary(
+                p => p.Record.Id,
+                p => GuestHouseRoomInventory.EnumeratePhysicalRoomNumbers(p.Record, p.Record.AvailableQuantity));
+
+            var rows = new List<GuestHouseRoomAllocation>();
+            var now = DateTime.Now;
+            foreach (var (record, quantity) in plan)
+            {
+                var free = await GuestHouseRoomInventory.GetFreePhysicalRoomsAsync(
+                    _db, record.Id, checkInDate, checkOutDate, PendingPaymentHoldCutoff);
+
+                var picked = free.Free
+                    .Where(n => !numbersByRecord.Any(kv => kv.Key != record.Id && GuestHouseRoomInventory.ContainsNumber(kv.Value, n)))
+                    .Take(quantity)
+                    .ToList();
+
+                rows.AddRange(picked.Select(number => new GuestHouseRoomAllocation
+                {
+                    GuestHouseId = guestHouseId,
+                    GuestHouseRoomId = record.Id,
+                    RoomNumber = number,
+                    CheckInDate = checkInDate,
+                    CheckOutDate = checkOutDate,
+                    AssignedBy = reservedBy,
+                    AssignedAt = now
+                }));
+            }
+            return rows;
+        }
+
         private async Task<int> GetAvailableQuantityForPeriodAsync(int roomId, DateTime checkInDate, DateTime checkOutDate, int? excludeBookingId = null)
         {
             var room = await _db.GuestHouseRooms.AsNoTracking().FirstOrDefaultAsync(r => r.Id == roomId);
@@ -1601,7 +1773,7 @@ namespace SpicAPI.Controllers
             return remaining > 0 ? remaining : 0;
         }
 
-        // Sum of NumberOfRooms already held by bookings of the given room(s) whose stay window
+        // Rooms already held by bookings of the given room(s) whose stay window
         // overlaps [checkInDate, checkOutDate):
         //   - Cancelled/Completed never hold inventory.
         //   - Confirmed/CheckedIn (and any legacy Draft row) always hold inventory unconditionally.
@@ -1617,34 +1789,15 @@ namespace SpicAPI.Controllers
         //
         // excludeBookingId: excludes that one booking's own row so it never counts against itself
         // (used when re-validating availability FOR that same booking at payment verification time).
-        private async Task<Dictionary<int, int>> GetCommittedRoomsByRoomAsync(IReadOnlyCollection<int> roomIds, DateTime checkInDate, DateTime checkOutDate, int? excludeBookingId = null)
-        {
-            if (roomIds.Count == 0)
-                return new Dictionary<int, int>();
+        //
+        // A multi-record booking holds its rooms through GuestHouseRoomAllocation rows (one per
+        // reserved room, on the record that owns it) instead of NumberOfRooms on GuestHouseRoomId;
+        // GuestHouseRoomInventory applies both rules and counts every booking once.
+        private Task<Dictionary<int, int>> GetCommittedRoomsByRoomAsync(IReadOnlyCollection<int> roomIds, DateTime checkInDate, DateTime checkOutDate, int? excludeBookingId = null) =>
+            GuestHouseRoomInventory.GetCommittedRoomsByRoomAsync(
+                _db, roomIds, checkInDate, checkOutDate, PendingPaymentHoldCutoff, excludeBookingId);
 
-            var pendingPaymentHoldCutoff = DateTime.Now.AddMinutes(-_bookingOptions.PendingPaymentHoldMinutes);
-
-            var query = _db.GuestHouseBookings
-                .AsNoTracking()
-                .Where(b => roomIds.Contains(b.GuestHouseRoomId)
-                    && b.BookingStatus != GuestHouseBookingStatus.Cancelled
-                    && b.BookingStatus != GuestHouseBookingStatus.Completed
-                    && (b.BookingStatus != GuestHouseBookingStatus.PendingPayment || b.CreatedAt >= pendingPaymentHoldCutoff)
-                    && b.CheckInDate.HasValue && b.CheckOutDate.HasValue
-                    && b.CheckInDate.Value.Date < checkOutDate.Date
-                    && b.CheckOutDate.Value.Date > checkInDate.Date);
-
-            if (excludeBookingId.HasValue)
-                query = query.Where(b => b.Id != excludeBookingId.Value);
-
-            var rows = await query
-                .Select(b => new { b.GuestHouseRoomId, b.NumberOfRooms })
-                .ToListAsync();
-
-            return rows
-                .GroupBy(r => r.GuestHouseRoomId)
-                .ToDictionary(g => g.Key, g => g.Sum(r => r.NumberOfRooms ?? 1));
-        }
+        private DateTime PendingPaymentHoldCutoff => DateTime.Now.AddMinutes(-_bookingOptions.PendingPaymentHoldMinutes);
 
         private static string GenerateBookingReference()
         {

@@ -632,5 +632,26 @@ public static class ShellNavigation
 
     public static bool IsActive(ShellTab tab, string uri, string? baseUri = null) =>
         string.Equals(ActiveKey(uri, baseUri), tab.Key, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolves the PagePermission key for a route's first URL segment.
+    /// Checks Candidates directly first; if absent, resolves any child route alias
+    /// (e.g. CancelBooking -> MyBookings, RefundStatus -> MyBookings) and returns that
+    /// parent destination's PermissionKey, falling back to the segment itself.
+    /// </summary>
+    public static string ResolvePermissionKey(string segment)
+    {
+        if (string.IsNullOrWhiteSpace(segment)) return string.Empty;
+
+        var direct = Find(segment);
+        if (direct != null) return direct.PermissionKey;
+
+        if (RouteAliases.TryGetValue(segment, out var alias))
+        {
+            return Find(alias)?.PermissionKey ?? alias;
+        }
+
+        return segment;
+    }
 }
 

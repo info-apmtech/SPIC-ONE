@@ -132,6 +132,15 @@ namespace SpicAPI.Controllers
 					.ToListAsync()
 				: new List<GuestHouseRoomAllocation>();
 
+			var rowsByBooking = allocations
+				.GroupBy(a => a.GuestHouseBookingId)
+				.ToDictionary(g => g.Key, g => g.ToList());
+
+			// Rooms a booking holds on one record: NumberOfRooms on its GuestHouseRoomId for a
+			// single-record booking; its rows on that record for a multi-record booking.
+			int ReservedOn(GuestHouseBooking b, int roomId) =>
+				GuestHouseRoomInventory.ReservedOnRecord(b.GuestHouseRoomId, b.NumberOfRooms, rowsByBooking.GetValueOrDefault(b.Id), roomId);
+
 			var housesById = houses.ToDictionary(h => h.GuestHouseId);
 			foreach (var house in houses)
 			{
@@ -147,9 +156,9 @@ namespace SpicAPI.Controllers
 				var roomAllocations = allocations.Where(a => a.GuestHouseRoomId == room.Id).ToList();
 
 				// Build per-booking unallocated room counts for this room type.
-				// Each booking's remaining = max(0, NumberOfRooms - already-allocated rows).
+				// Each booking's remaining = max(0, rooms held on this record - already-allocated rows).
 				var activeForType = activeBookings
-					.Where(b => b.GuestHouseRoomId == room.Id)
+					.Where(b => ReservedOn(b, room.Id) > 0)
 					.OrderBy(b => b.CheckInDate)
 					.ThenBy(b => b.Id)
 					.ToList();
@@ -159,7 +168,7 @@ namespace SpicAPI.Controllers
 				{
 					var allocated = roomAllocations
 						.Count(a => a.GuestHouseBookingId == b.Id && ContainsNumber(numbers, a.RoomNumber));
-					var remaining = Math.Max(0, (b.NumberOfRooms ?? 1) - allocated);
+					var remaining = Math.Max(0, ReservedOn(b, room.Id) - allocated);
 					if (remaining > 0)
 						unallocatedRemaining[b.Id] = remaining;
 				}
@@ -268,8 +277,8 @@ namespace SpicAPI.Controllers
 				&& booking.GuestHouseRoomId > 0
 				&& booking.CheckInDate.HasValue && booking.CheckOutDate.HasValue;
 			var freeRooms = eligible
-				? await GetFreePhysicalRoomsAsync(booking.GuestHouseRoomId, booking.CheckInDate!.Value.Date, booking.CheckOutDate!.Value.Date, booking.Id)
-				: new FreeRoomsResult(new List<string>(), new List<string>());
+				? await GetFreeRoomsForBookingAsync(booking)
+				: new GuestHouseRoomInventory.FreeRoomsResult(new List<string>(), new List<string>());
 
 			return Ok(new FrontOfficeBookingDto
 			{
@@ -361,12 +370,73 @@ namespace SpicAPI.Controllers
 			// race into SqlState 40001 at commit time, which we surface as a friendly message.
 			await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
 
-			FreeRoomsResult freeRooms;
+			// Inventory record each selected room is assigned on. A single-record booking: every room
+			// on its GuestHouseRoomId, exactly as before. A multi-record booking: the record that owns
+			// the number, keeping the number of rooms it holds on each record.
+			var recordByNumber = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+			GuestHouseRoomInventory.FreeRoomsResult freeRooms;
 			try
 			{
-				freeRooms = await GetFreePhysicalRoomsAsync(booking.GuestHouseRoomId, booking.CheckInDate.Value.Date, booking.CheckOutDate.Value.Date, booking.Id);
+				if (!GuestHouseRoomInventory.IsMultiRecordBooking(booking.GuestHouseRoomId, booking.RoomAllocations))
+				{
+					freeRooms = await GetFreePhysicalRoomsAsync(booking.GuestHouseRoomId, booking.CheckInDate.Value.Date, booking.CheckOutDate.Value.Date, booking.Id);
+					foreach (var number in selected)
+						recordByNumber[number] = booking.GuestHouseRoomId;
+				}
+				else
+				{
+					var reservedByRecord = booking.RoomAllocations
+						.GroupBy(a => a.GuestHouseRoomId)
+						.ToDictionary(g => g.Key, g => g.Count());
+					var recordIds = reservedByRecord.Keys.ToList();
+					var records = await _db.GuestHouseRooms
+						.AsNoTracking()
+						.Where(r => recordIds.Contains(r.Id))
+						.ToListAsync();
+					var numbersByRecord = records.ToDictionary(
+						r => r.Id,
+						r => EnumeratePhysicalRoomNumbers(r, r.AvailableQuantity));
+
+					foreach (var number in selected)
+					{
+						var owners = numbersByRecord.Where(kv => ContainsNumber(kv.Value, number)).Select(kv => kv.Key).ToList();
+						if (owners.Count != 1)
+						{
+							await transaction.RollbackAsync();
+							return BadRequest(new
+							{
+								Success = false,
+								Message = owners.Count == 0
+									? $"Room {number} is not one of the rooms reserved for this booking."
+									: $"Room {number} matches more than one room record of this booking. Please contact the administrator."
+							});
+						}
+						recordByNumber[number] = owners[0];
+					}
+
+					foreach (var (recordId, reserved) in reservedByRecord)
+					{
+						var chosen = recordByNumber.Values.Count(id => id == recordId);
+						if (chosen != reserved)
+						{
+							var record = records.FirstOrDefault(r => r.Id == recordId);
+							var label = record?.RoomNumber is { Length: > 0 } baseNumber ? $"room {baseNumber}" : $"room record {recordId}";
+							await transaction.RollbackAsync();
+							return BadRequest(new
+							{
+								Success = false,
+								Message = $"This booking reserves {reserved} room(s) of {label}. Please select exactly {reserved} room(s) from it."
+							});
+						}
+					}
+
+					var free = new List<string>();
+					foreach (var recordId in recordIds)
+						free.AddRange((await GetFreePhysicalRoomsAsync(recordId, booking.CheckInDate.Value.Date, booking.CheckOutDate.Value.Date, booking.Id)).Free);
+					freeRooms = new GuestHouseRoomInventory.FreeRoomsResult(free, new List<string>());
+				}
 			}
-			catch (PostgresException ex) when (ex.SqlState == "40001")
+			catch (Exception ex) when (GuestHouseRoomInventory.IsSerializationFailure(ex))
 			{
 				await transaction.RollbackAsync();
 				return Conflict(new { Success = false, Message = "The room list changed. Please refresh and try again." });
@@ -419,7 +489,7 @@ namespace SpicAPI.Controllers
 				{
 					GuestHouseBookingId = booking.Id,
 					GuestHouseId = booking.GuestHouseId,
-					GuestHouseRoomId = booking.GuestHouseRoomId,
+					GuestHouseRoomId = recordByNumber[number],
 					RoomNumber = number,
 					CheckInDate = checkInDate,
 					CheckOutDate = checkOutDate,
@@ -433,12 +503,7 @@ namespace SpicAPI.Controllers
 				await _db.SaveChangesAsync();
 				await transaction.CommitAsync();
 			}
-			catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: "40001" })
-			{
-				await transaction.RollbackAsync();
-				return Conflict(new { Success = false, Message = "These rooms were just assigned to another overlapping stay. Please refresh and try again." });
-			}
-			catch (PostgresException ex) when (ex.SqlState == "40001")
+			catch (Exception ex) when (GuestHouseRoomInventory.IsSerializationFailure(ex))
 			{
 				await transaction.RollbackAsync();
 				return Conflict(new { Success = false, Message = "These rooms were just assigned to another overlapping stay. Please refresh and try again." });
@@ -1361,42 +1426,19 @@ namespace SpicAPI.Controllers
 
 		// ---- Physical room helpers ----
 		//
-		// GuestHouseRoom.RoomNumber is the FIRST physical room number of the type and
-		// GuestHouseRoom.AvailableQuantity is how many such rooms exist. Physical rooms are
-		// derived, never stored or hardcoded: a numeric base (e.g. "111" qty 4) yields 111,
-		// 112, 113, 114; a non numeric base (e.g. "D1") yields D1-1, D1-2, ...; a missing
-		// base yields "Room 1", "Room 2", ...
+		// Shared with GuestHouseBookingController through GuestHouseRoomInventory, so booking
+		// and the Front Office always derive the same physical room numbers.
 
-		private static string DeriveRoomNumber(string? baseNumber, int offset)
-		{
-			var baseText = (baseNumber ?? string.Empty).Trim();
-			if (int.TryParse(baseText, out var baseValue))
-			{
-				var raw = baseText.TrimStart('-');
-				var width = raw.Length > 1 ? raw.Length : 0;
-				var number = (baseValue + offset).ToString(CultureInfo.InvariantCulture);
-				return width > number.Length ? number.PadLeft(width, '0') : number;
-			}
-			return string.IsNullOrWhiteSpace(baseText) ? $"Room {offset + 1}" : $"{baseText}-{offset + 1}";
-		}
+		private static List<string> EnumeratePhysicalRoomNumbers(GuestHouseRoom room, int quantity) =>
+			GuestHouseRoomInventory.EnumeratePhysicalRoomNumbers(room, quantity);
 
-		private static List<string> EnumeratePhysicalRoomNumbers(GuestHouseRoom room, int quantity)
-		{
-			var count = Math.Max(1, quantity);
-			var numbers = new List<string>(count);
-			for (var i = 0; i < count; i++)
-				numbers.Add(DeriveRoomNumber(room.RoomNumber, i));
-			return numbers;
-		}
-
-		private static bool ContainsNumber(IReadOnlyCollection<string> numbers, string roomNumber)
-		{
-			return numbers.Contains(roomNumber, StringComparer.OrdinalIgnoreCase);
-		}
+		private static bool ContainsNumber(IReadOnlyCollection<string> numbers, string roomNumber) =>
+			GuestHouseRoomInventory.ContainsNumber(numbers, roomNumber);
 
 		// The exact physical room number(s) actually allocated to a checked-in booking.
 		// Returns null when the stay is not yet allocated (the authoritative room number
-		// only exists after the Front Office assigns it at check-in).
+		// only exists after the Front Office assigns it at check-in) - except for a
+		// multi-record booking, whose reserved room numbers are its rows from booking time.
 		private static string? AllocatedRoomNumber(GuestHouseBooking booking)
 		{
 			var allocated = booking.RoomAllocations?
@@ -1418,83 +1460,36 @@ namespace SpicAPI.Controllers
 				? booking.AllocatedRoomNumber
 				: booking.GuestHouseRoom?.RoomNumber;
 
-		// Computes the exact physical room numbers currently free for a room type over
-		// [checkInDate, checkOutDate) - the authoritative set shown at check-in.
-		//
-		// A room is NOT free when:
-		//   1. an active overlapping booking (Draft/PendingPayment/Confirmed/CheckedIn)
-		//      has an EXACT allocation for that number (GuestHouseRoomAllocation), or
-		//   2. it falls inside the deterministic lowest-number block still owed by
-		//      overlapping bookings that have (for now) no exact allocation yet
-		//      (Σ NumberOfRooms − allocated rows). This matches the "reserved by booker"
-		//      assumption used by the availability engine, so two check-ins can never pick
-		//      the same silently-unassigned room.
-		private async Task<FreeRoomsResult> GetFreePhysicalRoomsAsync(
-			int roomId, DateTime checkInDate, DateTime checkOutDate, int excludeBookingId = 0)
+		// The exact physical room numbers currently free for one inventory record over
+		// [checkInDate, checkOutDate) - the authoritative set shown at check-in. See
+		// GuestHouseRoomInventory.GetFreePhysicalRoomsAsync (it also counts multi-record bookings
+		// that hold this record through reservation rows).
+		private Task<GuestHouseRoomInventory.FreeRoomsResult> GetFreePhysicalRoomsAsync(
+			int roomId, DateTime checkInDate, DateTime checkOutDate, int excludeBookingId = 0) =>
+			GuestHouseRoomInventory.GetFreePhysicalRoomsAsync(_db, roomId, checkInDate, checkOutDate, PendingPaymentHoldCutoff, excludeBookingId);
+
+		// Free physical rooms the Front Office may assign to this booking (its own holds count as
+		// free). A single-record booking: its GuestHouseRoomId, exactly as before. A multi-record
+		// booking: every record it holds rooms on, combined.
+		private async Task<GuestHouseRoomInventory.FreeRoomsResult> GetFreeRoomsForBookingAsync(GuestHouseBooking booking)
 		{
-			var room = await _db.GuestHouseRooms
-				.AsNoTracking()
-				.FirstOrDefaultAsync(r => r.Id == roomId && r.IsActive);
-			if (room == null || room.AvailableQuantity <= 0)
-				return new FreeRoomsResult(new List<string>(), new List<string>());
+			var checkInDate = booking.CheckInDate!.Value.Date;
+			var checkOutDate = booking.CheckOutDate!.Value.Date;
 
-			var numbers = EnumeratePhysicalRoomNumbers(room, room.AvailableQuantity);
+			if (!GuestHouseRoomInventory.IsMultiRecordBooking(booking.GuestHouseRoomId, booking.RoomAllocations))
+				return await GetFreePhysicalRoomsAsync(booking.GuestHouseRoomId, checkInDate, checkOutDate, booking.Id);
 
-			var pendingPaymentHoldCutoff = PendingPaymentHoldCutoff;
-			var overlapQuery = _db.GuestHouseBookings
-				.AsNoTracking()
-				.Where(b => b.GuestHouseRoomId == roomId
-					&& b.BookingStatus != GuestHouseBookingStatus.Cancelled
-					&& b.BookingStatus != GuestHouseBookingStatus.Completed
-					// Same PendingPayment hold-window rule as the customer-facing availability
-					// check (GuestHouseBookingController.GetCommittedRoomsByRoomAsync) - an
-					// expired, unpaid hold stops reserving a physical room number here too.
-					&& (b.BookingStatus != GuestHouseBookingStatus.PendingPayment || b.CreatedAt >= pendingPaymentHoldCutoff)
-					&& b.CheckInDate.HasValue && b.CheckOutDate.HasValue
-					&& b.CheckInDate.Value.Date < checkOutDate.Date
-					&& b.CheckOutDate.Value.Date > checkInDate.Date);
-			if (excludeBookingId > 0)
-				overlapQuery = overlapQuery.Where(b => b.Id != excludeBookingId);
-
-			var bookings = await overlapQuery
-				.Select(b => new { b.Id, b.NumberOfRooms })
-				.ToListAsync();
-			var bookingIds = bookings.Select(b => b.Id).ToList();
-
-			// Exact allocations of those overlapping bookings for this room type.
-			var allocationRows = bookingIds.Count > 0
-				? await _db.GuestHouseRoomAllocations
-					.AsNoTracking()
-					.Where(a => bookingIds.Contains(a.GuestHouseBookingId) && a.GuestHouseRoomId == roomId)
-					.ToListAsync()
-				: new List<GuestHouseRoomAllocation>();
-
-			var allocatedCountByBooking = allocationRows
-				.Where(a => ContainsNumber(numbers, a.RoomNumber))
-				.GroupBy(a => a.GuestHouseBookingId)
-				.ToDictionary(g => g.Key, g => g.Count());
-
-			// Rooms still owed (not yet exactly allocated) by the overlapping bookings.
-			var unallocatedCommitted = bookings.Sum(b =>
-				Math.Max(0, (b.NumberOfRooms ?? 1) - allocatedCountByBooking.GetValueOrDefault(b.Id)));
-
-			var occupiedExact = allocationRows
-				.Where(a => ContainsNumber(numbers, a.RoomNumber))
-				.Select(a => a.RoomNumber)
-				.Distinct(StringComparer.OrdinalIgnoreCase)
-				.ToList();
-
-			var remaining = numbers
-				.Where(n => !ContainsNumber(occupiedExact, n))
-				.ToList();
-			var countBlocked = Math.Min(Math.Max(0, unallocatedCommitted), remaining.Count);
-
-			var occupied = occupiedExact
-				.Union(remaining.Take(countBlocked), StringComparer.OrdinalIgnoreCase)
-				.ToList();
-			var free = remaining.Skip(countBlocked).ToList();
-
-			return new FreeRoomsResult(free, occupied);
+			var free = new List<string>();
+			var occupied = new List<string>();
+			foreach (var roomId in booking.RoomAllocations.Select(a => a.GuestHouseRoomId).Distinct().OrderBy(id => id))
+			{
+				var result = await GetFreePhysicalRoomsAsync(roomId, checkInDate, checkOutDate, booking.Id);
+				free.AddRange(result.Free);
+				occupied.AddRange(result.Occupied);
+			}
+			return new GuestHouseRoomInventory.FreeRoomsResult(
+				free.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+				occupied.Distinct(StringComparer.OrdinalIgnoreCase).ToList());
 		}
 
 		private static CheckInEligibilityResult CheckInEligibility(GuestHouseBooking booking)
@@ -1534,7 +1529,6 @@ namespace SpicAPI.Controllers
 
 		private sealed record CheckInEligibilityResult(bool CanCheckIn, string Message);
 
-		private sealed record FreeRoomsResult(List<string> Free, List<string> Occupied);
 	}
 
 	public enum FrontOfficeRoomStatus

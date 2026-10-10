@@ -262,10 +262,10 @@
             return;
         }
 
-        var permissionKey = ShellNavigation.Find(firstSegment)?.PermissionKey ?? firstSegment;
+        var permissionKey = ShellNavigation.ResolvePermissionKey(firstSegment);
         bool allowed = SPIC.MauiBlazorApp.Shared.Services.LoginState.DesignationOnlyPages.Contains(permissionKey)
             ? LoginState.HasPageStrict(permissionKey)
-            : LoginState.CanAccess(permissionKey);
+            : (LoginState.CanAccess(permissionKey) || (permissionKey != firstSegment && LoginState.CanAccess(firstSegment)));
         if (!allowed && !isDirectorSchemeApproval)
         {
             // Redirect to the SAME landing page the login flow uses (Admin / SuperAdmin ->
