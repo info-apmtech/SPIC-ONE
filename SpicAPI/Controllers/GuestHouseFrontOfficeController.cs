@@ -36,7 +36,9 @@ namespace SpicAPI.Controllers
 	/// (FrontOffice / GenerateBill / GuestHouseCancellations); see
 	/// <see cref="GuestHouseFrontOfficeAccessAttribute"/> below. The old class-level
 	/// [Authorize(Roles = "Admin,CorporateAdmin")] could only read the JWT role claim and therefore
-	/// never saw a Designation. Every write stays Admin / CorporateAdmin only.
+	/// never saw a Designation. Writes are decided by the same attribute (GHAdmin / SDWAAdmin
+	/// designations and Receptionists for the Front Office / Generate Bill actions; cancellation
+	/// approve / reject stay Admin / CorporateAdmin / SuperAdmin only).
 	/// </remarks>
 	[ApiController]
 	[Route("api/[controller]")]
@@ -599,7 +601,8 @@ namespace SpicAPI.Controllers
 		//  records a PendingApproval GuestHouseBookingCancellation. These endpoints are the
 		//  only place that ever cancels the booking or releases the room. Refunds are NOT
 		//  automatic: they are processed manually outside the application (no Razorpay refund).
-		//  Admin / CorporateAdmin only - enforced by the class-level [Authorize(Roles)].
+		//  Approve / reject: Admin / CorporateAdmin / SuperAdmin only - enforced by
+		//  GuestHouseFrontOfficeAccessAttribute.
 		// =====================================================================
 
 		// GET /api/GuestHouseFrontOffice/cancellations?status=PendingApproval|Approved|Rejected|All
@@ -1875,8 +1878,7 @@ namespace SpicAPI.Controllers
 			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(db, user);
 			if (designation != null)
 			{
-				var hasAdminPermission = RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.GHAdmin)
-					|| RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SDWAAdmin);
+				var hasAdminPermission = GuestHouseReceptionistScope.HasGuestHouseAdminPermission(designation);
 
 				var hasEndpointPermission = RoleAccessPermissions.HasPage(designation.RoleAccess, requiredPermission.Value);
 
@@ -1924,8 +1926,8 @@ namespace SpicAPI.Controllers
 	/// whose GuestHouse.StateId equals their own state - the existing spic:state_id claim
 	/// (Employeelogin.StateId, written at login). The client never supplies the state.
 	/// Everyone else (Admin, CorporateAdmin, GM and any other designation) is unrestricted,
-	/// exactly as before. Admin / SuperAdmin are never restricted, whatever their designation, and
-	/// neither is any Designation granting the GHAdmin or SDWAAdmin page permission.
+	/// exactly as before. Admin / SuperAdmin are never restricted, whatever their designation. A
+	/// GHAdmin / SDWAAdmin grant does not lift a Receptionist's state restriction.
 	/// A Receptionist with no state (or whose state has no guest house) sees nothing.
 	/// </summary>
 	internal static class GuestHouseReceptionistScope
@@ -1959,6 +1961,27 @@ namespace SpicAPI.Controllers
 		public static bool IsReceptionist(string? designationName) =>
 			string.Equals(designationName?.Trim(), ReceptionistDesignation, StringComparison.OrdinalIgnoreCase);
 
+		// Guest House administrator: the Designation's RoleAccess grants the GHAdmin or SDWAAdmin
+		// page permission (RoleAccessPermissions.HasPage - never the Designation name).
+		public static bool HasGuestHouseAdminPermission(UserDesignation? designation) =>
+			designation != null
+			&& (RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.GHAdmin)
+				|| RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SDWAAdmin));
+
+		// Action-level: does the Designation grant this action ("View" / "Entry" / "Update" / "Delete",
+		// the Designation grid's actions) on the page? Same PageAuthorization.CanPerformAction the client's
+		// LoginState.Can uses; a bare legacy page token grants every action. Role bypasses are handled by
+		// the callers, so no role is passed here.
+		public static bool HasAction(UserDesignation? designation, PagePermission page, string action) =>
+			designation != null
+			&& PageAuthorization.GetEffectivePagePermissions((AppRole?)null, designation.RoleAccess)
+				.CanPerformAction(null, page, action);
+
+		// The action on GHAdmin or SDWAAdmin.
+		public static bool HasGuestHouseAdminAction(UserDesignation? designation, string action) =>
+			HasAction(designation, PagePermission.GHAdmin, action)
+			|| HasAction(designation, PagePermission.SDWAAdmin, action);
+
 		// Guest house ids the user may see/operate on, or null when unrestricted.
 		public static async Task<List<int>?> GetAllowedGuestHouseIdsAsync(AppDbContext db, ClaimsPrincipal user)
 		{
@@ -1969,13 +1992,9 @@ namespace SpicAPI.Controllers
 			if (designation == null)
 				return null;
 
-			// Full Guest House visibility (all states) when the Designation grants the GHAdmin or
-			// SDWAAdmin page permission - the same RoleAccessPermissions.HasPage check the SDWA
-			// approval flow uses (WelfareSchemeApprovalController.UserHasDesignationPermissionAsync).
-			if (RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.GHAdmin)
-				|| RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SDWAAdmin))
-				return null;
-
+			// Every non-Receptionist designation - including any granting GHAdmin / SDWAAdmin - sees
+			// all states. A Receptionist stays scoped to their own state even when their designation
+			// also grants GHAdmin / SDWAAdmin: a page grant never lifts the state restriction.
 			if (!IsReceptionist(designation.Name))
 				return null;
 

@@ -382,9 +382,11 @@ public static class ShellNavigation
         // Admin still reaches them through the role bypass; CorporateAdmin needs the grant.
         // Guest House Master shares the GuestHouse permission with its sidebar entry and
         // /GuestHouse, so its PermissionKey is the GuestHouse key rather than the URL segment.
+        // Also shown to a GHAdmin / SDWAAdmin designation (PageGuard and the API allow the same).
         new("GuestHouseMaster", "Guest House Master", "bi-building-fill", "/GuestHouseMaster", nameof(PagePermission.GuestHouse))
         {
-            Group = GroupSdwa
+            Group = GroupSdwa,
+            Rule = s => s.CanSeeMenu(PagePermission.GuestHouse) || s.HasGuestHouseAdminPermission
         },
         new("SdwaCompanyMaster", "Company Details", "bi-briefcase-fill", "/SdwaCompanyMaster", nameof(PagePermission.SdwaCompanyMaster))
         {
@@ -392,7 +394,8 @@ public static class ShellNavigation
         },
         new("GuestHouseCancellations", "Cancellation Requests", "bi-x-octagon-fill", "/GuestHouseCancellations", nameof(PagePermission.GuestHouseCancellations))
         {
-            Group = GroupSdwa
+            Group = GroupSdwa,
+            Rule = s => s.CanSeeMenu(PagePermission.GuestHouseCancellations) || s.HasGuestHouseAdminPermission
         },
         new("FrontOffice", "Front Office", "bi-door-open-fill", "/FrontOffice", nameof(PagePermission.FrontOffice)) { Group = GroupSdwa },
         new("GenerateBill", "Generate Bill", "bi-receipt", "/GenerateBill", nameof(PagePermission.GenerateBill)) { Group = GroupSdwa },

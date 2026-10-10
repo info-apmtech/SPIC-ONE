@@ -188,6 +188,11 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public bool HasPageStrict(string pageKey) =>
             PageAuthorization.HasPageStrict(EffectivePermissions, pageKey);
 
+        // Guest House administrator: the designation grants GHAdmin or SDWAAdmin. Client mirror of
+        // GuestHouseReceptionistScope.HasGuestHouseAdminPermission (API), which enforces it server-side.
+        public bool HasGuestHouseAdminPermission =>
+            HasPageStrict(PagePermission.GHAdmin) || HasPageStrict(PagePermission.SDWAAdmin);
+
         // Page-level: can the user REACH this page at all? Used by the route guard (PageGuard),
         // page-internal feature checks and the API. Menu / tab visibility uses CanSeeMenu below.
         public bool CanAccess(PagePermission page) => CanAccess(page.ToString());

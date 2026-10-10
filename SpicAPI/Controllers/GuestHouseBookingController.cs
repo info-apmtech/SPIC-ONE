@@ -213,8 +213,35 @@ namespace SpicAPI.Controllers
 		[HttpGet("documents/{documentId:int}/download")]
 		public async Task<IActionResult> DownloadDocument(int documentId) => await ServeDocumentAsync(documentId, download: true);
 
+		// Front Office staff who may open a guest's documents:
+		//  - Admin / CorporateAdmin (as before) and SuperAdmin (matching the Front Office role bypass);
+		//  - a designation granting the View action on GHAdmin / SDWAAdmin;
+		//  - a designation granting the View action on FrontOffice, ONLY inside a state scope (a
+		//    Receptionist, own state's guest houses). A FrontOffice grant alone does not open documents
+		//    across states.
+		// A state-scoped user is always held to their scope, whatever else the designation grants.
+		private async Task<bool> CanFrontOfficeReadBookingAsync(int guestHouseId)
+		{
+			if (User.IsInRole(nameof(AppRole.Admin))
+				|| User.IsInRole(nameof(AppRole.CorporateAdmin))
+				|| User.IsInRole(nameof(AppRole.SuperAdmin)))
+				return true;
+
+			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(_db, User);
+			var isGuestHouseAdmin = GuestHouseReceptionistScope.HasGuestHouseAdminAction(designation, "View");
+			var isFrontOffice = GuestHouseReceptionistScope.HasAction(designation, PagePermission.FrontOffice, "View");
+			if (!isGuestHouseAdmin && !isFrontOffice)
+				return false;
+
+			var allowedGuestHouseIds = await GuestHouseReceptionistScope.GetAllowedGuestHouseIdsAsync(_db, User);
+			if (allowedGuestHouseIds != null)
+				return allowedGuestHouseIds.Contains(guestHouseId);
+
+			return isGuestHouseAdmin;
+		}
+
 		// Shared authorization + file-serving for both View and Download.
-		// Authorization: the booking's owner (CreatedBy) OR Admin/CorporateAdmin (Front Office).
+		// Authorization: the booking's owner (CreatedBy) OR Front Office staff (CanFrontOfficeReadBookingAsync).
 		// A mismatch returns 404 (not 403) so a guessed BookingId/DocumentId cannot even
 		// reveal that the document exists - the same anti-enumeration pattern already used
 		// by GetBookingDetails/DownloadInvoice.
@@ -233,8 +260,7 @@ namespace SpicAPI.Controllers
 				return NotFound(new { Success = false, Message = "Document not found." });
 
 			var isOwner = string.Equals(doc.GuestHouseBooking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase);
-			var isFrontOffice = User.IsInRole("Admin") || User.IsInRole("CorporateAdmin");
-			if (!isOwner && !isFrontOffice)
+			if (!isOwner && !await CanFrontOfficeReadBookingAsync(doc.GuestHouseBooking.GuestHouseId))
 				return NotFound(new { Success = false, Message = "Document not found." });
 
 			var root = GetUploadsRoot();
