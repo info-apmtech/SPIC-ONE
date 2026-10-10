@@ -173,7 +173,7 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 				if (_consecutiveFailures == UnreachableAfterFailures)
 				{
 					_unreachableSinceUtc = DateTime.UtcNow;
-					RelayLog.Warn($"Server unreachable: {result.Message}");
+					RelayLog.Warn($"Server unreachable ({NetworkState.Describe(this)}): {result.Message}");
 				}
 
 				UpdateOngoing();

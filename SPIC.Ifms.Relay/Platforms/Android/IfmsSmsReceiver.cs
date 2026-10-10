@@ -85,7 +85,7 @@ namespace SPIC.Ifms.Relay.Platforms.Android
 							// Keep it: the watcher retries every ten seconds for five
 							// minutes, which covers a server that is briefly erroring.
 							PendingSmsQueue.Enqueue(sender, body, receivedAt);
-							RelayLog.Warn($"SMS from {senderLabel} queued for retry: {result.Message}");
+							RelayLog.Warn($"SMS from {senderLabel} queued for retry ({(context is null ? "network unknown" : NetworkState.Describe(context))}): {result.Message}");
 							if (context is not null)
 								RelayForegroundService.EnsureRunning(context);
 						}
