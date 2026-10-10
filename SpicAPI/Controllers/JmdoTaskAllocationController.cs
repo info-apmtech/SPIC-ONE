@@ -127,7 +127,8 @@ public class JmdoTaskAllocationController : ControllerBase
                 SubDealerId = dealer.Id,
                 DealerName = dealer.FirmName,
                 DealerCode = dealer.SubDealerCode ?? "",
-                PlannedDay = assignment.Day
+                PlannedDay = assignment.Day,
+                PlannedDate = allocation.AllocationDate.AddDays(-(int)allocation.AllocationDate.DayOfWeek).AddDays((int)assignment.Day)
             });
         }
 
@@ -149,7 +150,11 @@ public class JmdoTaskAllocationController : ControllerBase
             .Where(d => d.AllocationId == allocation.Id)
             .ToListAsync();
 
-        return StatusCode(201, ToResponseDto(allocation, allocationDealers, programs.Count));
+        var allocationPrograms = await _db.JmdoTaskAllocationPrograms
+            .Where(p => p.AllocationId == allocation.Id)
+            .ToListAsync();
+
+        return StatusCode(201, ToResponseDto(allocation, allocationDealers, allocationPrograms));
     }
 
     // GET api/JmdoTaskAllocation/mine/today
@@ -162,16 +167,18 @@ public class JmdoTaskAllocationController : ControllerBase
             return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
 
         var today = DateTime.Today;
+        var weekStart = today.AddDays(-(int)today.DayOfWeek);
+        var weekEnd = weekStart.AddDays(7);
         var allocation = await _db.JmdoTaskAllocations
             .Include(a => a.Dealers)
             .Include(a => a.Programs)
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId && a.AllocationDate == today);
+            .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId && a.AllocationDate >= weekStart && a.AllocationDate < weekEnd);
 
         if (allocation == null)
             return NoContent();
 
-        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.Count));
+        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList()));
     }
 
     // GET api/JmdoTaskAllocation/pending
@@ -305,7 +312,8 @@ public class JmdoTaskAllocationController : ControllerBase
             SubDealerId = dealer.Id,
             DealerName = dealer.FirmName,
             DealerCode = dealer.SubDealerCode ?? "",
-            PlannedDate = dto.PlannedDate
+            PlannedDate = dto.PlannedDate,
+            PlannedDay = dto.PlannedDate?.DayOfWeek
         };
         _db.JmdoTaskAllocationDealers.Add(row);
         await _db.SaveChangesAsync();
@@ -351,6 +359,7 @@ public class JmdoTaskAllocationController : ControllerBase
             return NotFound();
 
         row.PlannedDate = dto.PlannedDate;
+        row.PlannedDay = dto.PlannedDate?.DayOfWeek;
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -492,20 +501,28 @@ public class JmdoTaskAllocationController : ControllerBase
     private static JmdoTaskAllocationResponseDto ToResponseDto(
         JmdoTaskAllocation allocation,
         List<JmdoTaskAllocationDealer> dealers,
-        int programCount) => new()
+        List<JmdoTaskAllocationProgram> programs) => new()
     {
         Id = allocation.Id,
         AllocationDate = allocation.AllocationDate,
         Status = allocation.Status.ToString(),
         SubmittedAt = allocation.SubmittedAt,
         DealerCount = dealers.Count,
-        ProgramCount = programCount,
+        ProgramCount = programs.Count,
         DealerAssignments = dealers.Select(d => new JmdoDealerAssignmentResponseDto
         {
             DealerId = d.SubDealerId,
             DealerName = d.DealerName,
             DealerCode = d.DealerCode,
-            Day = d.PlannedDay
+            Day = d.PlannedDay,
+            PlannedDate = d.PlannedDate
+        }).ToList(),
+        Programs = programs.Select(p => new JmdoAllocationProgramRowDto
+        {
+            RowId = p.Id,
+            Csr1Id = p.Csr1Id,
+            ProgramName = p.ProgramName,
+            Budget = p.Budget
         }).ToList(),
         SpcmTarget = allocation.SpcmTarget,
         SoilSampleTarget = allocation.SoilSampleTarget,

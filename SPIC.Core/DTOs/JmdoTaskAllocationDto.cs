@@ -27,6 +27,7 @@ namespace SPIC.Core.DTOs
         public string DealerName { get; set; } = "";
         public string DealerCode { get; set; } = "";
         public DayOfWeek? Day { get; set; }
+        public DateTime? PlannedDate { get; set; }
     }
 
     public class JmdoTaskAllocationResponseDto
@@ -39,6 +40,7 @@ namespace SPIC.Core.DTOs
         public int DealerCount { get; set; }
         public int ProgramCount { get; set; }
         public List<JmdoDealerAssignmentResponseDto> DealerAssignments { get; set; } = new();
+        public List<JmdoAllocationProgramRowDto> Programs { get; set; } = new();
         public int? SpcmTarget { get; set; }
         public int? SoilSampleTarget { get; set; }
         public int? UreaTarget { get; set; }

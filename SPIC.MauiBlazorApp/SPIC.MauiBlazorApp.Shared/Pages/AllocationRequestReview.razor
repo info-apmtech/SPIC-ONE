@@ -279,12 +279,13 @@
         try
         {
             var hqId = _detail.HeadquarterId ?? (LoginState.HQId > 0 ? LoginState.HQId : (int?)null);
-            var query = new List<string> { "page=1", "pageSize=200", $"status={(int)SubDealerStatus.Active}" };
+            var query = new List<string> { "page=1", "pageSize=1000", $"status={(int)SubDealerStatus.Active}" };
             if (hqId is > 0) query.Add($"hqId={hqId}");
 
             var url = "api/SubDealerRegistration/list?" + string.Join("&", query);
             var result = await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
 
+            var existingIds = _detail.Dealers.Select(d => d.SubDealerId).ToHashSet();
             AvailableDealers = (result?.Items ?? new())
                 .Select(d => new SubDealerOptionDto { Id = d.Id, FirmName = d.FirmName, SubDealerCode = d.SubDealerCode })
                 .ToList();

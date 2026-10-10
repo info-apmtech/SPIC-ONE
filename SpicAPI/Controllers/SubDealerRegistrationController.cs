@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using System.Security.Claims;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
@@ -194,7 +194,7 @@ public class SubDealerRegistrationController : ControllerBase
 		CancellationToken cancellationToken = default)
 	{
 		page = page < 1 ? 1 : page;
-		pageSize = pageSize < 10 ? 10 : pageSize > 100 ? 100 : pageSize;
+		pageSize = pageSize < 10 ? 10 : pageSize > 1000 ? 1000 : pageSize;
 
 		var query = _db.SubDealerRegistrations
 			.AsNoTracking()

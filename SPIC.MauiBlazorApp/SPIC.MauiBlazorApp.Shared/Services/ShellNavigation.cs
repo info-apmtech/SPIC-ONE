@@ -572,6 +572,8 @@ public static class ShellNavigation
         ["CancelBooking"] = "MyBookings",
         ["CancelledBookingDetails"] = "MyBookings",
         ["RefundStatus"] = "MyBookings",
+        // task allocation
+        ["TaskDetail"] = "TasksAllocation",
         // dealer registration wizard lives under Dashboard
         ["Register"] = "Dashboard",
         ["Experience"] = "Dashboard",

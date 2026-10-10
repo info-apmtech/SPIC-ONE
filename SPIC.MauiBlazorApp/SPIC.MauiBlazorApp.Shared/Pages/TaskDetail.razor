@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <div class="container-fluid py-4 px-0 td-page">
 
@@ -12,8 +13,8 @@
     <span class="td-category-badge">@CategoryLabel</span>
     @if (kind == TaskKind.Dealer)
     {
-        <h2 class="td-title">Hanumesh Trading Co</h2>
-        <p class="td-subtitle">Pending Ack. 10 mT &middot; Dues 99 Lakhs &middot; Coimbatore</p>
+        <h2 class="td-title">@dynamicTitle</h2>
+        <p class="td-subtitle">Pending Ack. 10 mT &middot; Dues 99 Lakhs &middot; @dynamicLocation</p>
     }
 
     <div class="td-timeline-card">
@@ -47,7 +48,7 @@
                     <div class="td-details-grid">
                         <div class="td-detail">
                             <span class="td-detail-label">Dealer / Farmer</span>
-                            <span class="td-detail-val">HANUMESH TRADING CO</span>
+                            <span class="td-detail-val">@(dynamicTitle.ToUpperInvariant())</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Task Type</span>
@@ -67,7 +68,7 @@
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Assigned To</span>
-                            <span class="td-detail-val">Karthik Raja</span>
+                            <span class="td-detail-val">@(LoginState.UserName ?? "Me")</span>
                         </div>
                     </div>
                 </div>
@@ -80,7 +81,7 @@
                     <div class="td-details-grid">
                         <div class="td-detail">
                             <span class="td-detail-label">Program</span>
-                            <span class="td-detail-val">Crop Protection Workshop</span>
+                            <span class="td-detail-val">@dynamicTitle</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Task Type</span>
@@ -105,6 +106,12 @@
                     </div>
                 </div>
             }
+
+            <style>
+                .td-main-grid {
+                    grid-auto-flow: dense;
+                }
+            </style>
 
             <div class="td-card td-col-right">
                 <h3 class="td-card-title">Quick actions</h3>
@@ -148,6 +155,33 @@
                 <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
                 <input id="td-outcome" type="text" class="td-input" @bind="outcome" @bind:event="oninput" disabled="@isClosed" />
 
+                @if (kind == TaskKind.Dealer)
+                {
+                    <div class="d-flex justify-content-end mb-2 mt-3">
+                        <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none" disabled="@isClosed" @onclick="OpenAddProductPopup">
+                            + Add another Product
+                        </button>
+                    </div>
+
+                    @foreach (var prod in dealerProducts)
+                    {
+                        <div class="td-product-card">
+                            <div class="td-product-col">
+                                <span class="td-product-label">Product Group</span>
+                                <span class="td-product-val">@prod.Group</span>
+                            </div>
+                            <div class="td-product-col td-border-left">
+                                <span class="td-product-label">Product Name</span>
+                                <span class="td-product-val">@prod.Name</span>
+                            </div>
+                            <div class="td-product-col td-border-left">
+                                <span class="td-product-label">Stock</span>
+                                <span class="td-product-val">@prod.Stock</span>
+                            </div>
+                        </div>
+                    }
+                }
+
                 @if (kind == TaskKind.Spcm)
                 {
                     <label class="td-field-label" for="td-achieved">Achieved Target</label>
@@ -184,6 +218,142 @@
             </div>
     </div>
 
+@if (showAddProductPopup)
+{
+    <div class="td-modal-overlay">
+        <div class="td-modal-card">
+            <div class="td-modal-header">
+                <h4>Add Product</h4>
+                <button type="button" class="td-modal-close" @onclick="CloseAddProductPopup">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="td-modal-body">
+                <select class="td-input mb-3" @bind="selectedProductGroupId">
+                    <option value="">Select Product Group</option>
+                    @foreach (var g in _productGroups)
+                    {
+                        <option value="@g.Id">@g.Name</option>
+                    }
+                </select>
+
+                <div class="td-modal-row">
+                    <div>
+                        <label class="td-field-label" style="margin-top:0;">Product Name</label>
+                        <select class="td-input" @bind="selectedProductId">
+                            <option value="">Select Product</option>
+                            @foreach (var p in _products.Where(x => x.ProductGroupId == selectedProductGroupId))
+                            {
+                                <option value="@p.Id">@p.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div>
+                        <label class="td-field-label" style="margin-top:0;">Stock</label>
+                        <div style="position:relative;">
+                           <input type="number" step="any" class="td-input" @bind="stockQty" placeholder="@GetUnitForSelectedProduct()" />
+                           <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); color:#6b7280; font-size:0.85rem; pointer-events:none;">@GetUnitForSelectedProduct()</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="td-modal-footer">
+                <button type="button" class="td-btn td-btn-outline" @onclick="CloseAddProductPopup">Cancel</button>
+                <button type="button" class="td-btn td-btn-primary" @onclick="ConfirmAddProduct" disabled="@(selectedProductId == null || stockQty <= 0)">Add Product</button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+.td-product-card {
+    background: #f8fafc;
+    border: 1px solid #86efac;
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+.td-product-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.td-product-col.td-border-left {
+    border-left: 1px solid #d1d5db;
+    padding-left: 16px;
+}
+.td-product-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #15803d;
+}
+.td-product-val {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.td-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+}
+.td-modal-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 480px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+}
+.td-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.td-modal-header h4 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #111827;
+}
+.td-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #9ca3af;
+    cursor: pointer;
+    line-height: 1;
+}
+.td-modal-row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 16px;
+}
+.td-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+}
+.td-btn-outline {
+    background: #fff;
+    border: 1px solid #15803d;
+    color: #15803d;
+}
+.td-btn-outline:hover {
+    background: #f0fdf4;
+}
+</style>
+
 </div>
 
 @code {
@@ -197,10 +367,85 @@
     [SupplyParameterFromQuery(Name = "type")]
     public string? TypeQuery { get; set; }
 
-    private TaskKind kind;
+    [SupplyParameterFromQuery(Name = "id")]
+    public string? IdQuery { get; set; }
 
-    protected override void OnInitialized()
+    [Inject]
+    private HttpClient Http { get; set; } = default!;
+
+    private TaskKind kind;
+    private string dynamicTitle = "Hanumesh Trading Co";
+    private string dynamicCode = "";
+    private string dynamicLocation = "Coimbatore";
+
+    private class DealerProductRow
     {
+        public string Group { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Stock { get; set; } = "";
+    }
+    
+    private List<DealerProductRow> dealerProducts = new()
+    {
+        new DealerProductRow { Group = "Fertilizers", Name = "Urea 46%", Stock = "250 Bags" },
+        new DealerProductRow { Group = "Seeds", Name = "Paddy Seed - CO 51", Stock = "120 Kg" }
+    };
+    
+    private bool showAddProductPopup;
+    private int? selectedProductGroupId;
+    private int? selectedProductId;
+    private decimal stockQty;
+
+    private List<SPIC.Core.Entities.ProductGroup> _productGroups = new();
+    private List<SPIC.Core.Entities.Product> _products = new();
+    private List<SPIC.Core.Entities.Category> _categories = new();
+    private List<SPIC.Core.Entities.Unit> _units = new();
+
+    private void OpenAddProductPopup()
+    {
+        selectedProductGroupId = null;
+        selectedProductId = null;
+        stockQty = 0;
+        showAddProductPopup = true;
+    }
+
+    private void CloseAddProductPopup()
+    {
+        showAddProductPopup = false;
+    }
+
+    private string GetUnitForSelectedProduct()
+    {
+        if (selectedProductId == null) return "Unit";
+        var p = _products.FirstOrDefault(x => x.Id == selectedProductId);
+        if (p == null) return "Unit";
+        var c = _categories.FirstOrDefault(x => x.Id == p.CategoryId);
+        if (c == null) return "Unit";
+        var u = _units.FirstOrDefault(x => x.Id == c.UnitId);
+        return u?.Name ?? "Unit";
+    }
+
+    private void ConfirmAddProduct()
+    {
+        var p = _products.FirstOrDefault(x => x.Id == selectedProductId);
+        var g = _productGroups.FirstOrDefault(x => x.Id == selectedProductGroupId);
+        if (p != null)
+        {
+            dealerProducts.Add(new DealerProductRow
+            {
+                Group = g?.Name ?? "",
+                Name = p.Name,
+                Stock = $"{stockQty} {GetUnitForSelectedProduct()}"
+            });
+        }
+        CloseAddProductPopup();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var assigneeName = LoginState.UserName ?? "Me";
+        TimelineSteps[0] = TimelineSteps[0] with { SubLabel = assigneeName };
+
         kind = TypeQuery?.ToLowerInvariant() switch
         {
             "spcm" => TaskKind.Spcm,
@@ -208,6 +453,64 @@
             "posliquidation" => TaskKind.PosLiquidation,
             _ => TaskKind.Dealer
         };
+
+        if (kind == TaskKind.Dealer)
+        {
+            try
+            {
+                var pgTask = Http.GetFromJsonAsync<List<SPIC.Core.Entities.ProductGroup>>("api/ProductGroup");
+                var pTask = Http.GetFromJsonAsync<List<SPIC.Core.Entities.Product>>("api/Product");
+                var cTask = Http.GetFromJsonAsync<List<SPIC.Core.Entities.Category>>("api/Category");
+                var uTask = Http.GetFromJsonAsync<List<SPIC.Core.Entities.Unit>>("api/Unit");
+
+                await Task.WhenAll(pgTask, pTask, cTask, uTask);
+
+                _productGroups = pgTask.Result ?? new();
+                _products = pTask.Result ?? new();
+                _categories = cTask.Result ?? new();
+                _units = uTask.Result ?? new();
+            }
+            catch { }
+        }
+
+        if (kind == TaskKind.Dealer || kind == TaskKind.MdProgram)
+        {
+            try
+            {
+                var response = await Http.GetAsync("api/JmdoTaskAllocation/mine/today");
+                if (response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NoContent)
+                {
+                    var allocation = await response.Content.ReadFromJsonAsync<SPIC.Core.DTOs.JmdoTaskAllocationResponseDto>();
+                    if (allocation != null)
+                    {
+                        if (kind == TaskKind.Dealer && IdQuery?.StartsWith("dealer_") == true)
+                        {
+                            if (int.TryParse(IdQuery.Substring("dealer_".Length), out var dId))
+                            {
+                                var dealer = allocation.DealerAssignments.FirstOrDefault(x => x.DealerId == dId);
+                                if (dealer != null)
+                                {
+                                    dynamicTitle = dealer.DealerName;
+                                    dynamicCode = dealer.DealerCode;
+                                }
+                            }
+                        }
+                        else if (kind == TaskKind.MdProgram && IdQuery?.StartsWith("prog_") == true)
+                        {
+                            if (int.TryParse(IdQuery.Substring("prog_".Length), out var pId))
+                            {
+                                var prog = allocation.Programs.FirstOrDefault(x => x.Csr1Id == pId);
+                                if (prog != null)
+                                {
+                                    dynamicTitle = prog.ProgramName;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
     }
 
     // Each Figma frame used its own casing for this badge (DEALER, SPCM,
@@ -238,10 +541,10 @@
     // consistent with the rest of the app's example data instead.
     private List<TimelineStep> TimelineSteps = new()
     {
-        new("Assigned", "Karthik Raja", true),
+        new("Assigned", "", true),
         new("Requested", "By JMDO", true),
         new("Approved", "By RM", true),
-        new("Started", "Time & GPS logged", true),
+        new("Started", "Pending", false),
         new("Closed", "Pending", false)
     };
 
@@ -259,6 +562,9 @@
     {
         if (isStarted) return;
         isStarted = true;
+
+        var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
+        if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
 
         timer = new System.Timers.Timer(1000) { AutoReset = true };
         timer.Elapsed += (_, _) =>
