@@ -92,6 +92,15 @@
                                 </select>
                             </div>
 
+                            @* A booking reserves ONE inventory row (POST api/GuestHouseBooking/book takes a single
+                               room id and checks that row's availability), so the dropdown stops at the largest
+                               single row while the badge above shows the group total. Say so instead of offering
+                               a quantity the booking would reject. *@
+                            @if (room.MaxSelectableQuantity > 0 && room.MaxSelectableQuantity < room.AvailableQuantity)
+                            {
+                                <div class="rm-selection-hint">Up to @room.MaxSelectableQuantity @(room.MaxSelectableQuantity == 1 ? "room" : "rooms") can be booked at a time for this room type.</div>
+                            }
+
                             @if (room.ExtraCotPrice.HasValue && room.ExtraCotPrice.Value > 0)
                             {
                                 <div class="rm-selection-row">
@@ -269,17 +278,21 @@
         }
     }
 
+    // Records in one group can be booked together in a single booking (the API combines them
+    // with the same rule - GuestHouseRoomInventory.AreCompatible), so the extra-bed price is part
+    // of the key: records with different extra-bed prices are never combined.
     private static string GetGroupKey(int guestHouseId, AvailableRoomDto room)
     {
         var priceKey = room.PricePerNight.ToString("F2", CultureInfo.InvariantCulture);
+        var cotKey = room.ExtraCotPrice.HasValue ? room.ExtraCotPrice.Value.ToString("F2", CultureInfo.InvariantCulture) : "none";
         if (room.MasterRoomTypeId.HasValue && room.MasterRoomTypeId.Value > 0)
         {
-            return $"gh_{guestHouseId}:master_{room.MasterRoomTypeId.Value}:price_{priceKey}";
+            return $"gh_{guestHouseId}:master_{room.MasterRoomTypeId.Value}:price_{priceKey}:cot_{cotKey}";
         }
         else
         {
             var normalizedType = (room.RoomType ?? "Room").Trim().ToLowerInvariant();
-            return $"gh_{guestHouseId}:legacy_{normalizedType}:price_{priceKey}";
+            return $"gh_{guestHouseId}:legacy_{normalizedType}:price_{priceKey}:cot_{cotKey}";
         }
     }
 
@@ -310,7 +323,6 @@
                 var underlying = g.ToList();
                 var first = underlying[0];
                 var totalAvailable = underlying.Sum(r => r.AvailableQuantity);
-                var maxSelectable = underlying.Max(r => r.AvailableQuantity);
 
                 mapped.Add(new RoomCardModel
                 {
@@ -323,7 +335,7 @@
                     ExtraCotPrice = underlying.FirstOrDefault(r => r.ExtraCotPrice.HasValue)?.ExtraCotPrice ?? first.ExtraCotPrice,
                     AvailableQuantity = totalAvailable,
                     NumberOfAdults = underlying.Max(r => r.NumberOfAdults ?? r.Capacity ?? 2),
-                    SelectedQuantity = maxSelectable > 0 ? 1 : 0,
+                    SelectedQuantity = totalAvailable > 0 ? 1 : 0,
                     ExtraBedSelected = false,
                     SelectedExtraBeds = 0,
                     UnderlyingRooms = underlying
@@ -397,15 +409,23 @@
         public int SelectedExtraBeds { get; set; }
         public List<AvailableRoomDto> UnderlyingRooms { get; set; } = new();
 
-        public int MaxSelectableQuantity => UnderlyingRooms.Count == 0 ? 0 : UnderlyingRooms.Max(r => r.AvailableQuantity);
+        // One booking can take the whole group: the API reserves the selected record first and
+        // the rest from the group's other records (POST api/GuestHouseBooking/book), re-checking
+        // availability for every record inside its transaction.
+        public int MaxSelectableQuantity => UnderlyingRooms.Sum(r => Math.Max(0, r.AvailableQuantity));
 
         public int RoomId => GetSelectedRoomId() ?? UnderlyingRooms.FirstOrDefault()?.RoomId ?? 0;
         public int RoomTypeId => RoomId;
 
+        // The record with the most free rooms (the same record as before whenever one record covers
+        // the selected quantity); the API takes any remainder from the other records of the group.
         public int? GetSelectedRoomId()
         {
+            if (SelectedQuantity <= 0 || SelectedQuantity > MaxSelectableQuantity)
+                return null;
+
             return UnderlyingRooms
-                .Where(r => r.AvailableQuantity >= SelectedQuantity && r.AvailableQuantity > 0)
+                .Where(r => r.AvailableQuantity > 0)
                 .OrderByDescending(r => r.AvailableQuantity)
                 .FirstOrDefault()?.RoomId;
         }

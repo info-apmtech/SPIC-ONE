@@ -1003,7 +1003,10 @@ namespace SpicAPI.Controllers
 	/// RULES:
 	/// <list type="bullet">
 	/// <item>Admin / CorporateAdmin - unchanged: they keep every action, exactly as the previous
-	/// <c>[Authorize(Roles = ...)]</c> granted them.</item>
+	/// <c>[Authorize(Roles = ...)]</c> granted them. SuperAdmin likewise, matching the Front Office.</item>
+	/// <item>A Designation whose RoleAccess grants <c>PagePermission.GHAdmin</c> or
+	/// <c>PagePermission.SDWAAdmin</c> - every read; writes only with the matching Designation action
+	/// (Entry / Update / Delete, see <c>WriteActionsFor</c>). A View-only grant is read-only.</item>
 	/// <item>Any other signed-in user - READS only, and only when their Designation's RoleAccess
 	/// grants <c>PagePermission.GuestHouse</c>. No SDWA / FrontOffice / GenerateBill token, and no
 	/// AppRole, substitutes for it.</item>
@@ -1012,7 +1015,8 @@ namespace SpicAPI.Controllers
 	/// so no caller gets a new answer).</item>
 	/// </list>
 	/// The WRITE actions (POST / PUT / DELETE / PATCH, incl. bulk-upload and image upload) keep their
-	/// original Admin/CorporateAdmin-only restriction - they are the CRUD rules of this master page.
+	/// Admin/CorporateAdmin/SuperAdmin and GHAdmin/SDWAAdmin restriction - they are the CRUD rules of
+	/// this master page.
 	/// </summary>
 	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
 	internal sealed class GuestHouseMasterAccessAttribute : Attribute, IAsyncAuthorizationFilter
@@ -1027,42 +1031,43 @@ namespace SpicAPI.Controllers
 			}
 
 			// Existing role rule, verbatim from [Authorize(Roles = "Admin,CorporateAdmin")].
-			if (user.IsInRole(nameof(AppRole.Admin)) || user.IsInRole(nameof(AppRole.CorporateAdmin)))
+			// SuperAdmin is preserved alongside them, matching GuestHouseFrontOfficeAccessAttribute.
+			if (user.IsInRole(nameof(AppRole.Admin))
+				|| user.IsInRole(nameof(AppRole.CorporateAdmin))
+				|| user.IsInRole(nameof(AppRole.SuperAdmin)))
 				return;
 
-			// Writes keep the original Admin/CorporateAdmin-only restriction.
+			var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(db, user);
+
 			if (!string.Equals(context.HttpContext.Request.Method, "GET", StringComparison.OrdinalIgnoreCase))
 			{
+				// Writes: the Designation must grant EVERY action the route needs on GHAdmin or
+				// SDWAAdmin (Entry / Update / Delete - a View-only grant never writes). Nobody else writes.
+				// The master data is not state-scoped, so a state-restricted user (Receptionist) never
+				// writes it, whatever their designation grants.
+				var requiredActions = WriteActionsFor(context.HttpContext.Request);
+				if (requiredActions.Length > 0
+					&& requiredActions.All(a => GuestHouseReceptionistScope.HasGuestHouseAdminAction(designation, a))
+					&& await GuestHouseReceptionistScope.GetAllowedGuestHouseIdsAsync(db, user) == null)
+					return;
+
 				context.Result = Forbidden();
 				return;
 			}
 
+			// Reads: a GHAdmin / SDWAAdmin grant (any action) reads the whole master.
+			if (GuestHouseReceptionistScope.HasGuestHouseAdminPermission(designation))
+				return;
+
 			// Designation rule: does THIS user's Designation.RoleAccess grant one of the
 			// PagePermissions this route is allowed to read?
-			var allowedPermissions = ReadPermissionsFor(context.HttpContext.Request);
-			var userId = user.FindFirstValue(ClaimTypes.NameIdentifier);
-			if (allowedPermissions.Length > 0 && !string.IsNullOrWhiteSpace(userId))
+			if (designation != null)
 			{
-				var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
-				var designationId = await db.Users
-					.AsNoTracking()
-					.Where(u => u.Id == userId)
-					.Select(u => u.DesignationId)
-					.FirstOrDefaultAsync();
-
-				if (designationId is > 0)
+				foreach (var allowed in ReadPermissionsFor(context.HttpContext.Request))
 				{
-					var roleAccess = await db.Designations
-						.AsNoTracking()
-						.Where(d => d.Id == designationId && d.IsActive)
-						.Select(d => d.RoleAccess)
-						.FirstOrDefaultAsync();
-
-					foreach (var allowed in allowedPermissions)
-					{
-						if (RoleAccessPermissions.HasPage(roleAccess, allowed))
-							return;
-					}
+					if (RoleAccessPermissions.HasPage(designation.RoleAccess, allowed))
+						return;
 				}
 			}
 
@@ -1084,6 +1089,32 @@ namespace SpicAPI.Controllers
 				return new[] { PagePermission.GuestHouse, PagePermission.SdwaCompanyMaster };
 
 			return new[] { PagePermission.GuestHouse };
+		}
+
+		/// <summary>
+		/// Designation grid actions a write route needs:
+		/// POST create -> Entry; PUT / PATCH status / POST houses/{id}/image -> Update; DELETE -> Delete;
+		/// POST bulk-upload inserts AND updates rows -> Entry + Update. Unknown routes need an
+		/// unmappable action set (empty) and stay closed.
+		/// </summary>
+		private static string[] WriteActionsFor(HttpRequest request)
+		{
+			var method = request.Method.ToUpperInvariant();
+			var path = request.Path.Value ?? string.Empty;
+
+			if (method == "DELETE")
+				return new[] { "Delete" };
+			if (method is "PUT" or "PATCH")
+				return new[] { "Update" };
+			if (method == "POST")
+			{
+				if (path.EndsWith("/bulk-upload", StringComparison.OrdinalIgnoreCase))
+					return new[] { "Entry", "Update" };
+				if (path.EndsWith("/image", StringComparison.OrdinalIgnoreCase))
+					return new[] { "Update" };
+				return new[] { "Entry" };
+			}
+			return Array.Empty<string>();
 		}
 
 		private static ObjectResult Forbidden() =>

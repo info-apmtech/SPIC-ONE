@@ -382,9 +382,11 @@ public static class ShellNavigation
         // Admin still reaches them through the role bypass; CorporateAdmin needs the grant.
         // Guest House Master shares the GuestHouse permission with its sidebar entry and
         // /GuestHouse, so its PermissionKey is the GuestHouse key rather than the URL segment.
+        // Also shown to a GHAdmin / SDWAAdmin designation (PageGuard and the API allow the same).
         new("GuestHouseMaster", "Guest House Master", "bi-building-fill", "/GuestHouseMaster", nameof(PagePermission.GuestHouse))
         {
-            Group = GroupSdwa
+            Group = GroupSdwa,
+            Rule = s => s.CanSeeMenu(PagePermission.GuestHouse) || s.HasGuestHouseAdminPermission
         },
         new("SdwaCompanyMaster", "Company Details", "bi-briefcase-fill", "/SdwaCompanyMaster", nameof(PagePermission.SdwaCompanyMaster))
         {
@@ -392,7 +394,8 @@ public static class ShellNavigation
         },
         new("GuestHouseCancellations", "Cancellation Requests", "bi-x-octagon-fill", "/GuestHouseCancellations", nameof(PagePermission.GuestHouseCancellations))
         {
-            Group = GroupSdwa
+            Group = GroupSdwa,
+            Rule = s => s.CanSeeMenu(PagePermission.GuestHouseCancellations) || s.HasGuestHouseAdminPermission
         },
         new("FrontOffice", "Front Office", "bi-door-open-fill", "/FrontOffice", nameof(PagePermission.FrontOffice)) { Group = GroupSdwa },
         new("GenerateBill", "Generate Bill", "bi-receipt", "/GenerateBill", nameof(PagePermission.GenerateBill)) { Group = GroupSdwa },
@@ -631,5 +634,26 @@ public static class ShellNavigation
 
     public static bool IsActive(ShellTab tab, string uri, string? baseUri = null) =>
         string.Equals(ActiveKey(uri, baseUri), tab.Key, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Resolves the PagePermission key for a route's first URL segment.
+    /// Checks Candidates directly first; if absent, resolves any child route alias
+    /// (e.g. CancelBooking -> MyBookings, RefundStatus -> MyBookings) and returns that
+    /// parent destination's PermissionKey, falling back to the segment itself.
+    /// </summary>
+    public static string ResolvePermissionKey(string segment)
+    {
+        if (string.IsNullOrWhiteSpace(segment)) return string.Empty;
+
+        var direct = Find(segment);
+        if (direct != null) return direct.PermissionKey;
+
+        if (RouteAliases.TryGetValue(segment, out var alias))
+        {
+            return Find(alias)?.PermissionKey ?? alias;
+        }
+
+        return segment;
+    }
 }
 
