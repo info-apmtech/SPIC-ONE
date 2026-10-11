@@ -2375,131 +2375,14 @@ namespace Spic.Infrastructure.Migrations
                         },
                         new
                         {
-                            Id = 125,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Activities",
-                            Name = "Activities",
-                            SortOrder = 124,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 126,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Farmers",
-                            Name = "Farmers",
-                            SortOrder = 125,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 127,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Alerts",
-                            Name = "Alerts",
-                            SortOrder = 126,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 128,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "StartDocumentation",
-                            Name = "Start Documentation",
-                            SortOrder = 127,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 129,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "DemoDetails",
-                            Name = "Demo Details",
-                            SortOrder = 128,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 130,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "TreatmentDetails",
-                            Name = "Treatment Details",
-                            SortOrder = 129,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 131,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Treatment01",
-                            Name = "Treatment01",
-                            SortOrder = 130,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 132,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "Treatment02",
-                            Name = "Treatment02",
-                            SortOrder = 131,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 133,
-                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            CreatedBy = "System",
-                            HasActions = true,
-                            IsActive = true,
-                            Key = "TreatmentDemoDetails",
-                            Name = "Treatment Demo Details",
-                            SortOrder = 132,
-                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            UpdatedBy = "System"
-                        },
-                        new
-                        {
-                            Id = 134,
+                            Id = 135,
                             CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             CreatedBy = "System",
                             HasActions = true,
                             IsActive = true,
                             Key = "GHAdmin",
                             Name = "GHAdmin",
-                            SortOrder = 133,
+                            SortOrder = 134,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
                         });
@@ -5665,6 +5548,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("RoomType")
                         .HasColumnType("text");
 
+                    b.Property<int?>("RoomTypeId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -5674,6 +5560,8 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("GuestHouseId");
+
+                    b.HasIndex("RoomTypeId");
 
                     b.ToTable("GuestHouseRooms");
                 });
@@ -5829,6 +5717,41 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("GuestHouseRoomId");
 
                     b.ToTable("GuestHouseRoomImage");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("GuestHouseRoomTypes");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Headquarter", b =>
@@ -6364,6 +6287,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("OthersTarget")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("PosLiquidationStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("PosLiquidationStatus")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("RegionId")
                         .HasColumnType("integer");
 
@@ -6376,7 +6305,19 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("ReviewedByUserId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("SoilSampleStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("SoilSampleStatus")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("SoilSampleTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SpcmStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("SpcmStatus")
                         .HasColumnType("integer");
 
                     b.Property<int?>("SpcmTarget")
@@ -6437,6 +6378,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("PlannedDay")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
                     b.Property<int>("SubDealerId")
                         .HasColumnType("integer");
 
@@ -6468,11 +6415,109 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AllocationId");
 
                     b.ToTable("JmdoTaskAllocationPrograms");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseout", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AchievedTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Csr1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Dap")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Nps")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Other")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SubDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Urea")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationId");
+
+                    b.ToTable("JmdoTaskCloseouts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseoutProduct", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CloseoutId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProductGroupName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StockText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CloseoutId");
+
+                    b.ToTable("JmdoTaskCloseoutProducts");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
@@ -12188,7 +12233,14 @@ namespace Spic.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("SPIC.Core.Entities.GuestHouseRoomType", "RoomTypeMaster")
+                        .WithMany("Rooms")
+                        .HasForeignKey("RoomTypeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("GuestHouse");
+
+                    b.Navigation("RoomTypeMaster");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomAllocation", b =>
@@ -12363,6 +12415,28 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Allocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseout", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskAllocation", "Allocation")
+                        .WithMany("Closeouts")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseoutProduct", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskCloseout", "Closeout")
+                        .WithMany("Products")
+                        .HasForeignKey("CloseoutId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Closeout");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
@@ -12885,6 +12959,11 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Images");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.GuestHouseRoomType", b =>
+                {
+                    b.Navigation("Rooms");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.HeadquarterBudgetSummary", b =>
                 {
                     b.Navigation("HeadquarterBudgetAllocations");
@@ -12902,9 +12981,16 @@ namespace Spic.Infrastructure.Migrations
 
             modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocation", b =>
                 {
+                    b.Navigation("Closeouts");
+
                     b.Navigation("Dealers");
 
                     b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseout", b =>
+                {
+                    b.Navigation("Products");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LibraryConversation", b =>

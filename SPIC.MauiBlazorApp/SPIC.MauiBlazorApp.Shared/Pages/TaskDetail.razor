@@ -1,5 +1,8 @@
 @page "/TaskDetail"
 @implements IDisposable
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
@@ -40,8 +43,17 @@
         </div>
     </div>
 
-    <div class="td-main-grid">
-            @if (kind == TaskKind.Dealer)
+
+<style>
+                .td-main-grid {
+                    grid-auto-flow: dense;
+                    align-items: start;
+                }
+            </style>
+
+<div class="td-main-grid">
+    <div class="td-col-left-wrap d-flex flex-column" style="gap: 1.5rem;">
+        @if (kind == TaskKind.Dealer)
             {
                 <div class="td-card td-col-left">
                     <h3 class="td-card-title">Task Details</h3>
@@ -58,14 +70,13 @@
                             <span class="td-detail-label">Location</span>
                             <span class="td-detail-val">@dynamicLocation</span>
                         </div>
-                        <div class="td-detail">
-                            <span class="td-detail-label">Due Date</span>
-                            <span class="td-detail-val">@dynamicDueDate</span>
-                        </div>
-                        <div class="td-detail">
-                            <span class="td-detail-label">Priority</span>
-                            <span class="td-detail-val">@dynamicPriority</span>
-                        </div>
+                        @if (!string.IsNullOrWhiteSpace(dynamicPriority) && dynamicPriority != "-" && dynamicPriority != "—")
+                        {
+                            <div class="td-detail">
+                                <span class="td-detail-label">Priority</span>
+                                <span class="td-detail-val">@dynamicPriority</span>
+                            </div>
+                        }
                         <div class="td-detail">
                             <span class="td-detail-label">Assigned To</span>
                             <span class="td-detail-val">@(LoginState.UserName ?? "Me")</span>
@@ -73,8 +84,7 @@
                     </div>
                 </div>
             }
-
-            @if (kind == TaskKind.MdProgram)
+        @if (kind == TaskKind.MdProgram)
             {
                 <div class="td-card td-col-left">
                     <h3 class="td-card-title">Program Details</h3>
@@ -106,59 +116,45 @@
                     </div>
                 </div>
             }
-
-            <style>
-                .td-main-grid {
-                    grid-auto-flow: dense;
-                }
-            </style>
-
-            <div class="td-card td-col-right">
-                <h3 class="td-card-title">Quick actions</h3>
-                <p class="td-card-subtitle">Open these if this visit needs them</p>
-
-                <button type="button" class="td-quick-action" @onclick="OpenSoilSampleCollection">
-                    <i class="bi bi-eyedropper"></i> Soil Sample Collection
-                </button>
-                <button type="button" class="td-quick-action" @onclick="OpenAddFarmerData">
-                    <i class="bi bi-leaf"></i> Add Farmer Data
-                </button>
-            </div>
-
-            <div class="td-time-bar td-col-left">
+        <div class="td-time-bar td-col-left">
                 <div class="td-time-left">
                     <span class="td-time-label">Time on task</span>
                     <span class="td-time-val">@ElapsedDisplay</span>
                 </div>
                 <div class="td-time-location"><i class="bi bi-geo-alt-fill"></i> Location captured (&plusmn;20m)</div>
 
-                @if (!isStarted)
+                @if (!isStarted && !isClosed)
                 {
                     <button type="button" class="td-btn td-btn-primary" @onclick="StartTask">
-                        <i class="bi bi-check-circle"></i> Start Task
+                        <i class="bi bi-play-circle"></i> Start Task
+                    </button>
+                }
+                else if (isStarted && !isClosed)
+                {
+                    <button type="button" class="td-btn td-btn-danger" @onclick="ConfirmStopTask">
+                        <i class="bi bi-stop-circle"></i> Stop Task
                     </button>
                 }
                 else
                 {
-                    <!-- Sole close action: the close-out form below (Outcome/Remarks/
-                         Photo Proof) has no submit button of its own - this is it. -->
-                    <button type="button" class="td-btn td-btn-danger" disabled="@isClosed" @onclick="CloseTask">
-                        <i class="bi @(isClosed ? "bi-check-circle" : "bi-x-circle")"></i> @(isClosed ? "Task Closed" : "Close Task")
-                    </button>
+                    <div class="text-success fw-bold mt-2"><i class="bi bi-check-circle-fill"></i> Task Closed</div>
                 }
             </div>
-
-            <div class="td-card td-col-left">
+        <div class="td-card td-col-left">
                 <h3 class="td-card-title">Close-out form</h3>
                 <p class="td-card-subtitle">Fill this once work is done, then close the task.</p>
 
                 <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
-                <input id="td-outcome" type="text" class="td-input" @bind="outcome" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
+                <select id="td-outcome" class="td-input" @bind="outcome">
+                    <option value="Fully Completed">Fully Completed</option>
+                    <option value="Partially Completed">Partially Completed</option>
+                    <option value="Not Completed">Not Completed</option>
+                </select>
 
                 @if (kind == TaskKind.Dealer)
                 {
                     <div class="d-flex justify-content-end mb-2 mt-3">
-                        <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none" disabled="@(!isStarted || isClosed)" @onclick="OpenAddProductPopup">
+                        <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none"  @onclick="OpenAddProductPopup">
                             + Add another Product
                         </button>
                     </div>
@@ -185,7 +181,7 @@
                 @if (kind == TaskKind.Spcm)
                 {
                     <label class="td-field-label" for="td-achieved">Achieved Target</label>
-                    <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
+                    <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput"  />
                 }
 
                 @if (kind == TaskKind.PosLiquidation)
@@ -193,34 +189,94 @@
                     <div class="td-pos-grid">
                         <div>
                             <label class="td-field-label" for="td-pos-urea">Urea</label>
-                            <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
+                            <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput"  />
                         </div>
                         <div>
                             <label class="td-field-label" for="td-pos-nps">NPS</label>
-                            <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
+                            <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput"  />
                         </div>
                         <div>
                             <label class="td-field-label" for="td-pos-dap">DAP</label>
-                            <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
+                            <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput"  />
                         </div>
                         <div>
                             <label class="td-field-label" for="td-pos-other">Other</label>
-                            <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
+                            <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput"  />
                         </div>
                     </div>
                 }
 
                 <label class="td-field-label" for="td-remarks">Remarks</label>
-                <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" disabled="@(!isStarted || isClosed)"></textarea>
+                <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" ></textarea>
 
                 <label class="td-field-label">@FileFieldLabel</label>
-                <input type="file" class="td-file-input" disabled="@(!isStarted || isClosed)" />
+                <InputFile @key="fileInputKey" OnChange="OnFileSelected" class="td-file-input" />
+                @if (selectedFile != null)
+                {
+                    <div class="td-selected-file"><i class="bi bi-paperclip"></i> @selectedFile.Name</div>
+                }
+
                 <div class="d-flex justify-content-end mt-4">
-                    <button type="button" class="td-btn td-btn-primary" style="background-color: #8fbf9f; border-color: #8fbf9f;" disabled="@(!isStarted || isClosed)" @onclick="CloseTask">Saved</button>
+                    <button type="button" class="td-btn td-btn-primary" disabled="@isSavingRecord" @onclick="SaveRecordAsync">
+                        @(isSavingRecord ? "Saving..." : "Save Record")
+                    </button>
                 </div>
             </div>
+    </div>
+    <div class="td-col-right-wrap d-flex flex-column" style="gap: 1.5rem;">
+        <div class="td-card td-col-right">
+                <h3 class="td-card-title">Quick actions</h3>
+                <p class="td-card-subtitle">Open these if this visit needs them</p>
 
-            @if (kind == TaskKind.Spcm)
+                <button type="button" class="td-quick-action" @onclick="OpenSoilSampleCollection">
+                    <i class="bi bi-eyedropper"></i> Soil Sample Collection
+                </button>
+                <button type="button" class="td-quick-action" @onclick="OpenAddFarmerData">
+                    <i class="bi bi-person-plus"></i> Add Farmer Data
+                </button>
+            </div>
+        @if (kind == TaskKind.Dealer && dealerRecords.Any())
+            {
+                <div class="td-card td-col-right" style="padding: 0; overflow: hidden; margin-top: 1rem;">
+                    <div class="table-responsive">
+                        <table class="table mb-0 td-spcm-table">
+                            <thead>
+                                <tr>
+                                    <th>Outcome</th>
+                                    <th>Products</th>
+                                    <th>Remarks</th>
+                                    <th>Support Documents</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var record in dealerRecords)
+                                {
+                                    <tr>
+                                        <td><span class="td-spcm-badge">@record.Outcome</span></td>
+                                        <td>@ProductsSummary(record)</td>
+                                        <td>@record.Remarks</td>
+                                        <td>
+                                            <div class="td-spcm-doc d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
+                                                <div><i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@(record.FileName ?? "No file")</span></div>
+                                                <div class="d-flex align-items-center gap-3 fs-5">
+                                                    @if (!string.IsNullOrWhiteSpace(record.FilePath))
+                                                    {
+                                                        <a href="@ResolveFileUrl(record.FilePath)" target="_blank" title="View"><i class="bi bi-eye text-primary"></i></a>
+                                                        <a href="@ResolveDownloadUrl(record.FilePath, record.FileName)" title="Download"><i class="bi bi-download text-success"></i></a>
+                                                    }
+                                                    <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditDealerRecord(record)"></i>
+                                                    <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, dealerRecords)"></i>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        @if (kind == TaskKind.Spcm)
             {
                 <div class="td-card td-col-right" style="padding: 0; overflow: hidden;">
                     <div class="table-responsive">
@@ -240,12 +296,20 @@
                                         <td>
                                             <span class="td-spcm-badge">@record.Outcome</span>
                                         </td>
-                                        <td>@record.Target</td>
+                                        <td>@(record.AchievedTarget?.ToString() ?? "—")</td>
                                         <td>@record.Remarks</td>
                                         <td>
-                                            <div class="td-spcm-doc">
-                                                <i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@record.DocName</span>
-                                                <a href="#" class="td-spcm-link ms-2">View / Download</a>
+                                            <div class="td-spcm-doc d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
+                                                <div><i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@(record.FileName ?? "No file")</span></div>
+                                                <div class="d-flex align-items-center gap-3 fs-5">
+                                                    @if (!string.IsNullOrWhiteSpace(record.FilePath))
+                                                    {
+                                                        <a href="@ResolveFileUrl(record.FilePath)" target="_blank" title="View"><i class="bi bi-eye text-primary"></i></a>
+                                                        <a href="@ResolveDownloadUrl(record.FilePath, record.FileName)" title="Download"><i class="bi bi-download text-success"></i></a>
+                                                    }
+                                                    <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditSpcmRecord(record)"></i>
+                                                    <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, spcmRecords)"></i>
+                                                </div>
                                             </div>
                                         </td>
                                     </tr>
@@ -255,8 +319,46 @@
                     </div>
                 </div>
             }
-
-            @if (kind == TaskKind.PosLiquidation)
+        @if (kind == TaskKind.MdProgram)
+            {
+                <div class="td-card td-col-right" style="padding: 0; overflow: hidden;">
+                    <div class="table-responsive">
+                        <table class="table mb-0 td-spcm-table">
+                            <thead>
+                                <tr>
+                                    <th>Outcome</th>
+                                    <th>Remarks</th>
+                                    <th>Support Documents</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var record in mdProgramRecords)
+                                {
+                                    <tr>
+                                        <td><span class="td-spcm-badge">@record.Outcome</span></td>
+                                        <td>@record.Remarks</td>
+                                        <td>
+                                            <div class="td-spcm-doc d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
+                                                <div><i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@(record.FileName ?? "No file")</span></div>
+                                                <div class="d-flex align-items-center gap-3 fs-5">
+                                                    @if (!string.IsNullOrWhiteSpace(record.FilePath))
+                                                    {
+                                                        <a href="@ResolveFileUrl(record.FilePath)" target="_blank" title="View"><i class="bi bi-eye text-primary"></i></a>
+                                                        <a href="@ResolveDownloadUrl(record.FilePath, record.FileName)" title="Download"><i class="bi bi-download text-success"></i></a>
+                                                    }
+                                                    <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditMdProgramRecord(record)"></i>
+                                                    <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, mdProgramRecords)"></i>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        @if (kind == TaskKind.PosLiquidation)
             {
                 <div class="td-card td-col-right" style="padding: 0; overflow: hidden;">
                     <div class="table-responsive">
@@ -279,18 +381,28 @@
                                 {
                                     <tr>
                                         <td><span class="td-spcm-badge">@record.Outcome</span></td>
-                                        <td class="text-center fw-bold">@record.Urea</td>
-                                        <td class="text-center fw-bold">@record.Nps</td>
-                                        <td class="text-center fw-bold">@record.Dap</td>
-                                        <td class="text-center fw-bold">@record.Other</td>
+                                        <td class="text-center fw-bold">@(record.Urea?.ToString() ?? "—")</td>
+                                        <td class="text-center fw-bold">@(record.Nps?.ToString() ?? "—")</td>
+                                        <td class="text-center fw-bold">@(record.Dap?.ToString() ?? "—")</td>
+                                        <td class="text-center fw-bold">@(record.Other?.ToString() ?? "—")</td>
                                         <td>@record.Remarks</td>
                                         <td>
                                             <div class="td-spcm-doc">
-                                                <i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@record.DocName</span>
+                                                <i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@(record.FileName ?? "No file")</span>
                                             </div>
                                         </td>
-                                        <td class="small fw-semibold">@record.Date</td>
-                                        <td><a href="#" class="td-spcm-link">Download</a></td>
+                                        <td class="small fw-semibold">@record.CreatedAt.ToString("dd MMM yyyy")</td>
+                                        <td>
+                                            <div class="d-flex align-items-center gap-3 fs-5 flex-wrap">
+                                                @if (!string.IsNullOrWhiteSpace(record.FilePath))
+                                                {
+                                                    <a href="@ResolveFileUrl(record.FilePath)" target="_blank" title="View"><i class="bi bi-eye text-primary"></i></a>
+                                                    <a href="@ResolveDownloadUrl(record.FilePath, record.FileName)" title="Download"><i class="bi bi-download text-success"></i></a>
+                                                }
+                                                <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditPosRecord(record)"></i>
+                                                <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, posRecords)"></i>
+                                            </div>
+                                        </td>
                                     </tr>
                                 }
                             </tbody>
@@ -299,37 +411,7 @@
                 </div>
             }
     </div>
-
-@if (showAddFarmerPopup)
-{
-    <div class="td-modal-overlay">
-        <div class="td-modal-card">
-            <div class="td-modal-header">
-                <h4>Add Farmer Data</h4>
-                <button type="button" class="td-modal-close" @onclick="CloseAddFarmerData">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-            <div class="td-modal-body">
-                <label class="td-field-label">Farmer Name</label>
-                <input type="text" class="td-input mb-3" placeholder="Enter farmer name" />
-
-                <label class="td-field-label">Mobile Number</label>
-                <input type="tel" class="td-input mb-3" placeholder="Enter mobile number" />
-
-                <label class="td-field-label">Crop Name</label>
-                <input type="text" class="td-input mb-3" placeholder="Enter crop name" />
-
-                <label class="td-field-label">Acreage</label>
-                <input type="number" class="td-input mb-3" placeholder="Enter acreage" />
-            </div>
-            <div class="td-modal-footer">
-                <button type="button" class="td-btn td-btn-outline" @onclick="CloseAddFarmerData">Cancel</button>
-                <button type="button" class="td-btn td-btn-primary" @onclick="CloseAddFarmerData">Save</button>
-            </div>
-        </div>
-    </div>
-}
+</div>
 
 @if (showAddProductPopup)
 {
@@ -378,6 +460,27 @@
     </div>
 }
 
+@if (showStopConfirm)
+{
+    <div class="td-modal-overlay">
+        <div class="td-modal-card">
+            <div class="td-modal-header">
+                <h4>Close Task</h4>
+                <button type="button" class="td-modal-close" @onclick="CancelStopTask">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="td-modal-body">
+                <p>Are you sure you want to stop and close this task? You will not be able to restart it.</p>
+            </div>
+            <div class="td-modal-footer">
+                <button type="button" class="td-btn td-btn-outline" @onclick="CancelStopTask">Cancel</button>
+                <button type="button" class="td-btn td-btn-danger" @onclick="StopTask">Close Task</button>
+            </div>
+        </div>
+    </div>
+}
+
 <style>
 .td-spcm-table th {
     font-size: 0.8rem;
@@ -402,12 +505,20 @@
     border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 600;
+    white-space: nowrap;
 }
 .td-spcm-link {
     color: #15803d;
     text-decoration: underline;
     font-weight: 600;
     font-size: 0.8rem;
+}
+
+.td-selected-file {
+    font-size: 0.8rem;
+    color: #374151;
+    margin-top: 6px;
+    margin-bottom: 4px;
 }
 
 .td-product-card {
@@ -521,34 +632,37 @@
     private string dynamicTitle = "Loading...";
     private string dynamicCode = "";
 
+    // The dealer/program this page is scoped to, parsed once from IdQuery -
+    // reused by status lookups, close-out record filtering, and saving.
+    private int? currentDealerId;
+    private int? currentProgramId;
+    private JmdoTaskAllocationResponseDto? currentAllocation;
+
     private class DealerProductRow
     {
         public string Group { get; set; } = "";
         public string Name { get; set; } = "";
         public string Stock { get; set; } = "";
     }
-    
+
     private List<DealerProductRow> dealerProducts = new();
-    
-    private record SpcmRecord(string Outcome, string Target, string Remarks, string DocName);
-    
-    private List<SpcmRecord> spcmRecords = new();
-    
-    private record PosRecord(string Outcome, string Urea, string Nps, string Dap, string Other, string Remarks, string DocName, string Date);
-    
-    private List<PosRecord> posRecords = new();
-    
+
+    private List<JmdoTaskCloseoutDto> dealerRecords = new();
+    private List<JmdoTaskCloseoutDto> spcmRecords = new();
+    private List<JmdoTaskCloseoutDto> mdProgramRecords = new();
+    private List<JmdoTaskCloseoutDto> posRecords = new();
+
     private string dynamicLocation = "—";
     private string dynamicDueDate = "—";
     private string dynamicPriority = "—";
     private string dynamicPendingAck = "—";
     private string dynamicDues = "—";
-    
+
     private string dynamicSanctionDate = "—";
     private string dynamicSanctionNo = "—";
     private string dynamicProgramType = "—";
     private string dynamicBudget = "—";
-    
+
     private bool showAddProductPopup;
     private int? selectedProductGroupId;
     private int? selectedProductId;
@@ -603,26 +717,6 @@
     {
         var assigneeName = LoginState.UserName ?? "Me";
         TimelineSteps[0] = TimelineSteps[0] with { SubLabel = assigneeName };
-        
-        var key = IdQuery ?? TypeQuery ?? "";
-        if (TasksAllocation.GlobalTaskStatuses.TryGetValue(key, out var status))
-        {
-            if (status == TasksAllocation.AllocTaskStatus.InProgress)
-            {
-                isStarted = true;
-                var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
-                if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
-            }
-            else if (status == TasksAllocation.AllocTaskStatus.Completed)
-            {
-                isStarted = true;
-                isClosed = true;
-                var idx1 = TimelineSteps.FindIndex(s => s.Label == "Started");
-                if (idx1 >= 0) TimelineSteps[idx1] = TimelineSteps[idx1] with { SubLabel = "Time & GPS logged", Done = true };
-                var idx2 = TimelineSteps.FindIndex(s => s.Label == "Closed");
-                if (idx2 >= 0) TimelineSteps[idx2] = TimelineSteps[idx2] with { SubLabel = "Just now", Done = true };
-            }
-        }
 
         kind = TypeQuery?.ToLowerInvariant() switch
         {
@@ -631,6 +725,17 @@
             "posliquidation" => TaskKind.PosLiquidation,
             _ => TaskKind.Dealer
         };
+
+        if (IdQuery?.StartsWith("dealer_", StringComparison.Ordinal) == true
+            && int.TryParse(IdQuery.AsSpan("dealer_".Length), out var dId))
+        {
+            currentDealerId = dId;
+        }
+        else if (IdQuery?.StartsWith("prog_", StringComparison.Ordinal) == true
+            && int.TryParse(IdQuery.AsSpan("prog_".Length), out var pId))
+        {
+            currentProgramId = pId;
+        }
 
         if (kind == TaskKind.Dealer)
         {
@@ -651,69 +756,178 @@
             catch { }
         }
 
-        if (kind == TaskKind.Dealer || kind == TaskKind.MdProgram)
+        try
         {
-            try
+            var response = await Http.GetAsync("api/JmdoTaskAllocation/mine/today");
+            if (response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NoContent)
             {
-                var response = await Http.GetAsync("api/JmdoTaskAllocation/mine/today");
-                if (response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NoContent)
-                {
-                    var allocation = await response.Content.ReadFromJsonAsync<SPIC.Core.DTOs.JmdoTaskAllocationResponseDto>();
-                    if (allocation != null)
-                    {
-                        if (kind == TaskKind.Dealer && IdQuery?.StartsWith("dealer_") == true)
-                        {
-                            if (int.TryParse(IdQuery.Substring("dealer_".Length), out var dId))
-                            {
-                                var dealer = allocation.DealerAssignments.FirstOrDefault(x => x.DealerId == dId);
-                                if (dealer != null)
-                                {
-                                    dynamicTitle = dealer.DealerName;
-                                    dynamicCode = dealer.DealerCode;
-                                    dynamicDueDate = allocation.AllocationDate.ToString("dd MMM yyyy");
-                                
-                                try
-                                {
-                                    var dInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.SubDealerFormModel>($"api/SubDealerRegistration/{dId}");
-                                    if (dInfo != null)
-                                    {
-                                        dynamicLocation = !string.IsNullOrWhiteSpace(dInfo.Village) ? dInfo.Village :
-                                                          !string.IsNullOrWhiteSpace(dInfo.Taluk) ? dInfo.Taluk :
-                                                          !string.IsNullOrWhiteSpace(dInfo.FirmName) ? dInfo.FirmName : "Unknown Location";
-                                    }
-                                }
-                                catch { }
-                            }
-                        }
-                        else if (kind == TaskKind.MdProgram && IdQuery?.StartsWith("prog_") == true)
-                        {
-                            if (int.TryParse(IdQuery.Substring("prog_".Length), out var pId))
-                            {
-                                var prog = allocation.Programs.FirstOrDefault(x => x.Csr1Id == pId);
-                                if (prog != null)
-                                {
-                                    dynamicTitle = prog.ProgramName;
-                                }
+                currentAllocation = await response.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Allocation load failed: {ex.Message}");
+        }
 
-                                try
-                                {
-                                    var pInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.CSR1DetailsDto>($"api/CSR1/details/{pId}");
-                                    if (pInfo != null)
-                                    {
-                                        dynamicSanctionDate = pInfo.CreatedAt.ToString("dd MMM yyyy");
-                                        dynamicSanctionNo = $"MD-{pInfo.Id}";
-                                        dynamicProgramType = pInfo.ProgramType;
-                                        dynamicBudget = pInfo.Budget.ToString("C");
-                                    }
-                                }
-                                catch { }
-                            }
-                        }
+        if (currentAllocation != null)
+        {
+            await ApplyStatusFromAllocationAsync(currentAllocation);
+            PopulateCloseoutRecords(currentAllocation);
+
+            if (kind == TaskKind.Dealer && currentDealerId is { } dIdVal)
+            {
+                var dealer = currentAllocation.DealerAssignments.FirstOrDefault(x => x.DealerId == dIdVal);
+                if (dealer != null)
+                {
+                    dynamicTitle = dealer.DealerName;
+                    dynamicCode = dealer.DealerCode;
+                    dynamicDueDate = currentAllocation.AllocationDate.ToString("dd MMM yyyy");
+                }
+
+                try
+                {
+                    var dInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.SubDealerFormModel>($"api/SubDealerRegistration/{dIdVal}");
+                    if (dInfo != null)
+                    {
+                        dynamicLocation = !string.IsNullOrWhiteSpace(dInfo.Village) ? dInfo.Village :
+                                          !string.IsNullOrWhiteSpace(dInfo.Taluk) ? dInfo.Taluk :
+                                          !string.IsNullOrWhiteSpace(dInfo.FirmName) ? dInfo.FirmName : "Unknown Location";
                     }
                 }
+                catch { }
             }
-            catch { }
+            else if (kind == TaskKind.MdProgram && currentProgramId is { } pIdVal)
+            {
+                var prog = currentAllocation.Programs.FirstOrDefault(x => x.Csr1Id == pIdVal);
+                if (prog != null)
+                {
+                    dynamicTitle = prog.ProgramName;
+                }
+
+                try
+                {
+                    var pInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.CSR1DetailsDto>($"api/CSR1/details/{pIdVal}");
+                    if (pInfo != null)
+                    {
+                        dynamicSanctionDate = pInfo.CreatedAt.ToString("dd MMM yyyy");
+                        dynamicSanctionNo = $"MD-{pInfo.Id}";
+                        dynamicProgramType = pInfo.ProgramType;
+                        dynamicBudget = pInfo.Budget.ToString("C");
+                    }
+                }
+                catch { }
+            }
         }
+    }
+
+    // Derives isStarted/isClosed/timeline completion from the real Status on the
+    // matching dealer/program row or header field, instead of a shared in-memory
+    // dictionary - this is what actually survives navigation, refresh, and re-login.
+    private async Task ApplyStatusFromAllocationAsync(JmdoTaskAllocationResponseDto allocation)
+    {
+        var dealerAssignment = kind == TaskKind.Dealer && currentDealerId is { } d
+            ? allocation.DealerAssignments.FirstOrDefault(x => x.DealerId == d)
+            : null;
+        var programAssignment = kind == TaskKind.MdProgram && currentProgramId is { } p
+            ? allocation.Programs.FirstOrDefault(x => x.Csr1Id == p)
+            : null;
+
+        var status = kind switch
+        {
+            TaskKind.Dealer => dealerAssignment?.Status ?? AllocTaskStatus.YetToStart,
+            TaskKind.MdProgram => programAssignment?.Status ?? AllocTaskStatus.YetToStart,
+            TaskKind.Spcm => allocation.SpcmStatus,
+            TaskKind.PosLiquidation => allocation.PosLiquidationStatus,
+            _ => AllocTaskStatus.YetToStart
+        };
+
+        var startedAt = kind switch
+        {
+            TaskKind.Dealer => dealerAssignment?.StartedAt,
+            TaskKind.MdProgram => programAssignment?.StartedAt,
+            TaskKind.Spcm => allocation.SpcmStartedAt,
+            TaskKind.PosLiquidation => allocation.PosLiquidationStartedAt,
+            _ => null
+        };
+
+        if (status == AllocTaskStatus.InProgress)
+        {
+            isStarted = true;
+            var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
+            if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
+
+            // Resume the real elapsed time since the task was actually started, instead of
+            // counting from 0 on every page load/re-login.
+            if (startedAt is { } started)
+            {
+                elapsedSeconds = Math.Max(0, (int)(DateTime.Now - started).TotalSeconds);
+            }
+            else
+            {
+                // This task was marked InProgress before StartedAt existed (or some other
+                // gap), so there's no real history to resume from - back-fill it now so
+                // every load from this point on resumes correctly.
+                var key = IdQuery ?? TypeQuery ?? "";
+                try
+                {
+                    await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
+                        new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.InProgress });
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Backfilling StartedAt failed: {ex.Message}");
+                }
+            }
+
+            StartTimer();
+        }
+        else if (status == AllocTaskStatus.Completed)
+        {
+            isStarted = true;
+            isClosed = true;
+            var idx1 = TimelineSteps.FindIndex(s => s.Label == "Started");
+            if (idx1 >= 0) TimelineSteps[idx1] = TimelineSteps[idx1] with { SubLabel = "Time & GPS logged", Done = true };
+            var idx2 = TimelineSteps.FindIndex(s => s.Label == "Closed");
+            if (idx2 >= 0) TimelineSteps[idx2] = TimelineSteps[idx2] with { SubLabel = "Just now", Done = true };
+        }
+    }
+
+    private void PopulateCloseoutRecords(JmdoTaskAllocationResponseDto allocation)
+    {
+        dealerRecords = allocation.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Dealer && c.SubDealerId == currentDealerId).ToList();
+        spcmRecords = allocation.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).ToList();
+        mdProgramRecords = allocation.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.MdProgram && c.Csr1Id == currentProgramId).ToList();
+        posRecords = allocation.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+    }
+
+    private static string ProductsSummary(JmdoTaskCloseoutDto record) =>
+        record.Products.Any() ? $"{record.Products.Count} product(s)" : "None";
+
+    // record.FilePath is a relative path served from SpicAPI's own wwwroot (e.g.
+    // "/uploads/jmdo-closeouts/..."). The Blazor app runs on a different origin, so a
+    // bare relative href resolves against the WRONG server (this app's own address,
+    // which has no matching route - that's what was showing a blank/login page instead
+    // of the file). Same fix used throughout this codebase: prefix with Http.BaseAddress.
+    private string ResolveFileUrl(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "";
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        return $"{baseUrl}{path}";
+    }
+
+    // The HTML5 `download` attribute on a plain <a> is silently ignored by browsers
+    // for cross-origin URLs (view and download pointed at the same static file URl
+    // both just opened it, identically, instead of actually downloading) - this routes
+    // through a controller action that sets Content-Disposition: attachment instead,
+    // which forces a real download regardless of origin.
+    private string ResolveDownloadUrl(string? path, string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return "";
+        var baseUrl = Http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+        var query = $"path={Uri.EscapeDataString(path)}";
+        if (!string.IsNullOrWhiteSpace(fileName))
+            query += $"&fileName={Uri.EscapeDataString(fileName)}";
+        return $"{baseUrl}/api/JmdoTaskAllocation/closeout-files/download?{query}";
     }
 
     // Each Figma frame used its own casing for this badge (DEALER, SPCM,
@@ -737,11 +951,6 @@
 
     private sealed record TimelineStep(string Label, string SubLabel, bool Done);
 
-    // Static placeholder: mirrors the Hanumesh Trading Co dealer task from
-    // Today's Allocation. The Figma frame's own title said "Malar
-    // Fertilizers" while its Task Details panel said "Hanumesh Trading Co" -
-    // an internal inconsistency in the mockup - so this uses the name that's
-    // consistent with the rest of the app's example data instead.
     private List<TimelineStep> TimelineSteps = new()
     {
         new("Assigned", "", true),
@@ -761,16 +970,47 @@
     private string outcome = "Fully Completed";
     private string remarks = "";
 
-    private void StartTask()
+    private async Task StartTask()
     {
         if (isStarted) return;
-        isStarted = true;
 
         var key = IdQuery ?? TypeQuery ?? "";
-        TasksAllocation.GlobalTaskStatuses[key] = TasksAllocation.AllocTaskStatus.InProgress;
+        try
+        {
+            var response = await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
+                new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.InProgress });
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Could not start the task. Please try again.");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Start task failed: {ex.Message}");
+            Toast.Error("Could not start the task. Please try again.");
+            return;
+        }
+
+        isStarted = true;
 
         var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
         if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
+
+        StartTimer();
+
+        Toast.Success("Task started - time and location are now being logged.");
+    }
+
+    // Shared by StartTask() (fresh start) and ApplyStatusFromAllocation (resuming a task
+    // that was already InProgress in the DB from an earlier session) - without this, a
+    // page reload/re-login on an in-progress task left isStarted=true but no timer ever
+    // running, so "Time on task" stayed frozen at 00:00 even though it was still active.
+    // There's no persisted start timestamp, so this counts from 0 on resume rather than
+    // recovering the true original elapsed time.
+    private void StartTimer()
+    {
+        if (timer != null) return;
 
         timer = new System.Timers.Timer(1000) { AutoReset = true };
         timer.Elapsed += (_, _) =>
@@ -779,31 +1019,237 @@
             InvokeAsync(StateHasChanged);
         };
         timer.Start();
-
-        Toast.Success("Task started - time and location are now being logged.");
     }
 
-    private void CloseTask()
-    {
-        if (string.IsNullOrWhiteSpace(outcome) || isClosed) return;
+    private bool showStopConfirm;
 
-        isClosed = true;
-        timer?.Stop();
+    private void ConfirmStopTask()
+    {
+        showStopConfirm = true;
+    }
+
+    private void CancelStopTask()
+    {
+        showStopConfirm = false;
+    }
+
+    private async Task StopTask()
+    {
+        showStopConfirm = false;
 
         var key = IdQuery ?? TypeQuery ?? "";
-        TasksAllocation.GlobalTaskStatuses[key] = TasksAllocation.AllocTaskStatus.Completed;
+        try
+        {
+            var response = await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
+                new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.Completed });
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Could not close the task. Please try again.");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Stop task failed: {ex.Message}");
+            Toast.Error("Could not close the task. Please try again.");
+            return;
+        }
+
+        isStarted = false;
+        isClosed = true;
+        timer?.Stop();
+        Toast.Success("Task stopped and closed.");
 
         var idx = TimelineSteps.FindIndex(s => s.Label == "Closed");
         if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Just now", Done = true };
+    }
 
-        Toast.Success("Task closed.");
+    private void EditDealerRecord(JmdoTaskCloseoutDto record)
+    {
+        outcome = record.Outcome;
+        remarks = record.Remarks ?? "";
+        dealerRecords.Remove(record);
+        Toast.Info("Record loaded for editing - save again to persist your changes.");
+    }
+
+    private void EditSpcmRecord(JmdoTaskCloseoutDto record)
+    {
+        outcome = record.Outcome;
+        remarks = record.Remarks ?? "";
+        achievedTarget = record.AchievedTarget?.ToString() ?? "";
+        spcmRecords.Remove(record);
+        Toast.Info("Record loaded for editing - save again to persist your changes.");
+    }
+
+    private void EditMdProgramRecord(JmdoTaskCloseoutDto record)
+    {
+        outcome = record.Outcome;
+        remarks = record.Remarks ?? "";
+        mdProgramRecords.Remove(record);
+        Toast.Info("Record loaded for editing - save again to persist your changes.");
+    }
+
+    private void EditPosRecord(JmdoTaskCloseoutDto record)
+    {
+        outcome = record.Outcome;
+        remarks = record.Remarks ?? "";
+        posUrea = record.Urea?.ToString() ?? "";
+        posNps = record.Nps?.ToString() ?? "";
+        posDap = record.Dap?.ToString() ?? "";
+        posOther = record.Other?.ToString() ?? "";
+        posRecords.Remove(record);
+        Toast.Info("Record loaded for editing - save again to persist your changes.");
+    }
+
+    // Shared by every "Edit" button above (which removes-then-expects-a-resave) and
+    // the trash icon - the removal is now real, not just an in-memory list splice.
+    private async Task DeleteRecordAsync(JmdoTaskCloseoutDto record, List<JmdoTaskCloseoutDto> list)
+    {
+        try
+        {
+            var response = await Http.DeleteAsync($"api/JmdoTaskAllocation/closeouts/{record.Id}");
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Could not delete that record.");
+                return;
+            }
+
+            list.Remove(record);
+            ResetFileSelection();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Delete closeout failed: {ex.Message}");
+            Toast.Error("Could not delete that record.");
+        }
+    }
+
+    private IBrowserFile? selectedFile;
+
+    // InputFile wraps a native <input type="file">, and clearing selectedFile in C#
+    // does NOT clear what the browser's native file picker still shows - the DOM node
+    // has to be torn down and recreated. Bumping this @key on the element does that.
+    private int fileInputKey;
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+    }
+
+    private void ResetFileSelection()
+    {
+        selectedFile = null;
+        fileInputKey++;
+    }
+
+    private const long MaxCloseoutFileSize = 5 * 1024 * 1024;
+    private bool isSavingRecord;
+
+    private async Task SaveRecordAsync()
+    {
+        if (isSavingRecord) return;
+        isSavingRecord = true;
+
+        try
+        {
+            string? filePath = null;
+            string? fileName = null;
+
+            if (selectedFile != null)
+            {
+                using var content = new MultipartFormDataContent();
+                await using var stream = selectedFile.OpenReadStream(MaxCloseoutFileSize);
+                content.Add(new StreamContent(stream), "file", selectedFile.Name);
+
+                var uploadResponse = await Http.PostAsync("api/JmdoTaskAllocation/closeout-files/upload", content);
+                if (!uploadResponse.IsSuccessStatusCode)
+                {
+                    Toast.Error("Could not upload the attached file.");
+                    return;
+                }
+
+                var uploadResult = await uploadResponse.Content.ReadFromJsonAsync<CloseoutFileUploadResponse>();
+                filePath = uploadResult?.FilePath;
+                fileName = selectedFile.Name;
+            }
+
+            var dto = new CreateJmdoTaskCloseoutDto
+            {
+                Outcome = outcome,
+                Remarks = remarks,
+                FilePath = filePath,
+                FileName = fileName
+            };
+
+            if (kind == TaskKind.Dealer)
+            {
+                dto.Kind = JmdoCloseoutKind.Dealer;
+                dto.SubDealerId = currentDealerId;
+                dto.Products = dealerProducts.Select(p => new ProductLineDto
+                {
+                    ProductGroupName = p.Group,
+                    ProductName = p.Name,
+                    StockText = p.Stock
+                }).ToList();
+            }
+            else if (kind == TaskKind.Spcm)
+            {
+                dto.Kind = JmdoCloseoutKind.Spcm;
+                dto.AchievedTarget = int.TryParse(achievedTarget, out var at) ? at : null;
+            }
+            else if (kind == TaskKind.MdProgram)
+            {
+                dto.Kind = JmdoCloseoutKind.MdProgram;
+                dto.Csr1Id = currentProgramId;
+            }
+            else if (kind == TaskKind.PosLiquidation)
+            {
+                dto.Kind = JmdoCloseoutKind.PosLiquidation;
+                dto.Urea = int.TryParse(posUrea, out var u) ? u : null;
+                dto.Nps = int.TryParse(posNps, out var n) ? n : null;
+                dto.Dap = int.TryParse(posDap, out var d) ? d : null;
+                dto.Other = int.TryParse(posOther, out var o) ? o : null;
+            }
+
+            var response = await Http.PostAsJsonAsync("api/JmdoTaskAllocation/closeouts", dto);
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Could not save the record. Please try again.");
+                return;
+            }
+
+            var saved = await response.Content.ReadFromJsonAsync<JmdoTaskCloseoutDto>();
+            if (saved != null)
+            {
+                if (kind == TaskKind.Dealer) dealerRecords.Add(saved);
+                else if (kind == TaskKind.Spcm) spcmRecords.Add(saved);
+                else if (kind == TaskKind.MdProgram) mdProgramRecords.Add(saved);
+                else if (kind == TaskKind.PosLiquidation) posRecords.Add(saved);
+            }
+
+            dealerProducts.Clear();
+            achievedTarget = "";
+            posUrea = posNps = posDap = posOther = "";
+            outcome = "Fully Completed";
+            remarks = "";
+            ResetFileSelection();
+
+            Toast.Success("Record saved.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Save closeout failed: {ex.Message}");
+            Toast.Error("Could not save the record. Please try again.");
+        }
+        finally
+        {
+            isSavingRecord = false;
+        }
     }
 
     private void OpenSoilSampleCollection() => Navigation.NavigateTo("/SampleCollection/new");
 
-    private bool showAddFarmerPopup;
-    private void OpenAddFarmerData() => showAddFarmerPopup = true;
-    private void CloseAddFarmerData() => showAddFarmerPopup = false;
+    private void OpenAddFarmerData() => Navigation.NavigateTo("/SampleCollection/new?action=addFarmer");
 
     public void Dispose()
     {

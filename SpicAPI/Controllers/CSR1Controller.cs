@@ -1036,11 +1036,6 @@ namespace SpicAPI.Controllers
 
                 var employeeLogins = await _db.Employeelogins.AsNoTracking().ToListAsync();
 
-                var currentUserId = CurrentUserId;
-                var myLogin = employeeLogins.FirstOrDefault(x => x.UserId == currentUserId);
-                var userRoles = User?.FindAll(ClaimTypes.Role).Select(r => r.Value).ToList() ?? new List<string>();
-                bool isAdmin = userRoles.Any(r => r.Equals("Admin", StringComparison.OrdinalIgnoreCase) || r.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase));
-
                 var result = csr1Records
                     .Select(csr =>
                     {
@@ -1107,13 +1102,6 @@ namespace SpicAPI.Controllers
                         };
                     })
                     .ToList();
-
-                if (!isAdmin && myLogin != null)
-                {
-                    result = result.Where(r => 
-                        r.ResponsiblePersonId == myLogin.EmployeeInformationID || 
-                        r.HeadquarterId == myLogin.HeadquartersId).ToList();
-                }
 
                 return Ok(result);
             }

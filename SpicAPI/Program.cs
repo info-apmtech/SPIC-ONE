@@ -281,6 +281,14 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
+
+// Serves everything under wwwroot (e.g. uploads/subdealers/..., uploads/jmdo-closeouts/...)
+// as plain anonymous static files - this was never actually registered, so every
+// controller that stores a file under wwwroot and links to it directly (SubDealerFileController,
+// JmdoTaskAllocationController's closeout uploads) was 404'ing regardless of whether the
+// file existed on disk.
+app.UseStaticFiles();
+
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();

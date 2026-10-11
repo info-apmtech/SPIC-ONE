@@ -117,11 +117,13 @@ public static class ShellNavigation
         // ---- SAS portal (page-permission gated; write actions are checked inside the pages) ----
         new("SampleCollection", "Sample Collection", "bi-droplet-half", "/SampleCollection", nameof(PagePermission.SampleCollection))
         {
-            ShortLabel = "Samples", Group = "SAS Portal"
+            ShortLabel = "Samples", Group = "SAS Portal",
+            Rule = s => s.CanSeeMenu(PagePermission.SampleCollection)
         },
         new("ConsignmentHistory", "Consignment History", "bi-box-seam", "/ConsignmentHistory", nameof(PagePermission.ConsignmentHistory))
         {
-            ShortLabel = "Consignments", Group = "SAS Portal"
+            ShortLabel = "Consignments", Group = "SAS Portal",
+            Rule = s => s.CanSeeMenu(PagePermission.ConsignmentHistory)
         },
 
         // ---- SAS Lab portal (version 2, 2026-09-27) and payments: DESIGNATION only ----
@@ -572,8 +574,6 @@ public static class ShellNavigation
         ["CancelBooking"] = "MyBookings",
         ["CancelledBookingDetails"] = "MyBookings",
         ["RefundStatus"] = "MyBookings",
-        // task allocation
-        ["TaskDetail"] = "TasksAllocation",
         // dealer registration wizard lives under Dashboard
         ["Register"] = "Dashboard",
         ["Experience"] = "Dashboard",
@@ -598,6 +598,8 @@ public static class ShellNavigation
         // MD portal
         ["csrplandetails2"] = "CSR2",
         ["EntryInfo"] = "CSR2",
+        // JMDO Portal
+        ["TaskDetail"] = "TasksAllocation",
     };
 
     /// <summary>First path segment of an absolute or base-relative URI, without query/fragment.</summary>

@@ -941,6 +941,8 @@ namespace Spic.Infrastructure.Data
 		public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }
 		public DbSet<JmdoTaskAllocationDealer> JmdoTaskAllocationDealers { get; set; }
 		public DbSet<JmdoTaskAllocationProgram> JmdoTaskAllocationPrograms { get; set; }
+		public DbSet<JmdoTaskCloseout> JmdoTaskCloseouts { get; set; }
+		public DbSet<JmdoTaskCloseoutProduct> JmdoTaskCloseoutProducts { get; set; }
 
 		//// Knowledge Community
 		public DbSet<CommunityPost> CommunityPosts { get; set; }
