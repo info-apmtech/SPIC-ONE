@@ -339,7 +339,7 @@
             }
         </div>
     }
-    @if (AnyMdPortalAccessible)
+    @if (AnyMdPortalAccessible && loginState.UserRole != AppRole.JMDO)
     {
         <div class="settings-menu-wrapper">
             <a href="javascript:void(0);"
@@ -383,13 +383,13 @@
                             <NavLink href="/ProgramMaster" class="@SubmenuLinkClass("Program Master")" Match="NavLinkMatch.All">Program Master</NavLink>
                         </li>
                     }
-                    @if (loginState.CanSeeMenu(PagePermission.CSR1Create) && loginState.UserRole != AppRole.JMDO)
+                    @if (loginState.CanSeeMenu(PagePermission.CSR1Create))
                     {
                         <li class="submenu-item">
                             <NavLink href="/CREATE-CSR-1Management" class="@SubmenuLinkClass("CSR-1 Create")" Match="NavLinkMatch.All">CSR-1 Create</NavLink>
                         </li>
                     }
-                    @if (loginState.CanSeeMenu(PagePermission.CSR1Management) && loginState.UserRole != AppRole.JMDO)
+                    @if (loginState.CanSeeMenu(PagePermission.CSR1Management))
                     {
                         <li class="submenu-item">
                             <NavLink href="/CSR-1List" class="@SubmenuLinkClass("CSR-1 Management")" Match="NavLinkMatch.All">CSR-1 Management</NavLink>
@@ -525,6 +525,42 @@
                             </NavLink>
                         </li>
                     }
+                    @if (loginState.CanSeeMenu(PagePermission.TasksAllocation))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Tasks Allocation")" href="/TasksAllocation" Match="NavLinkMatch.All">
+                                <i class="bi bi-list-task SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Tasks Allocation
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanSeeMenu(PagePermission.MarkAttendance))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Mark Attendance")" href="/MarkAttendance" Match="NavLinkMatch.All">
+                                <i class="bi bi-calendar-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Mark Attendance
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanSeeMenu(PagePermission.ExtensionRequests))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.All">
+                                <i class="bi bi-calendar-plus SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Extension Requests
+                            </NavLink>
+                        </li>
+                    }
+                    @if (loginState.CanSeeMenu(PagePermission.SalesAudit))
+                    {
+                        <li class="submenu-item">
+                            <NavLink class="@SubmenuLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
+                                <i class="bi bi-clipboard-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                                Sales Audit
+                            </NavLink>
+                        </li>
+                    }
                 </ul>
             }
         </div>
@@ -536,14 +572,14 @@
             Budget Submissions
         </NavLink>
     }
-    @if (loginState.CanAccess(PagePermission.CSR1Create) && loginState.UserRole != AppRole.JMDO)
+    @if (loginState.CanAccess(PagePermission.CSR1Create))
     {
         <NavLink class="@NavLinkClass("CSR-1 Create")" href="/CREATE-CSR-1Management">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
             CSR-1 Create
         </NavLink>
     }
-    @if (loginState.CanAccess(PagePermission.CSR1Management) && loginState.UserRole != AppRole.JMDO)
+    @if (loginState.CanAccess(PagePermission.CSR1Management))
     {
         <NavLink class="@NavLinkClass("CSR-1 Management")" href="/CSR-1List">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
@@ -1023,6 +1059,10 @@
         || loginState.CanSeeMenu(PagePermission.PerformanceTracker)
         || loginState.CanSeeMenu(PagePermission.TargetAchievement)
         || loginState.CanSeeMenu(PagePermission.FarmerData)
+        || loginState.CanSeeMenu(PagePermission.TasksAllocation)
+        || loginState.CanSeeMenu(PagePermission.MarkAttendance)
+        || loginState.CanSeeMenu(PagePermission.ExtensionRequests)
+        || loginState.CanSeeMenu(PagePermission.SalesAudit)
         || loginState.CanSeeMenu(PagePermission.MdoReports);
 
     private bool AnyJmdoItemMatches =>
@@ -1035,6 +1075,10 @@
         || SearchState.Matches("Target / Achievement")
         || SearchState.Matches("Farmer Data")
         || SearchState.Matches("Reports")
+        || SearchState.Matches("Tasks Allocation")
+        || SearchState.Matches("Mark Attendance")
+        || SearchState.Matches("Extension Requests")
+        || SearchState.Matches("Sales Audit")
         || SearchState.Matches("JMDO");
 
     private bool ShowJmdoExpanded => isJmdoOpen || AnyJmdoItemMatches;
@@ -1050,7 +1094,7 @@
         var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
         return uri == "fielddashboard" || uri == "fieldreports" || uri == "mdodashboard" || uri == "allocationrequests"
             || uri == "taskmonitoring" || uri == "performancetracker" || uri == "targetachievement"
-            || uri == "farmerdata" || uri == "mdoreports";
+            || uri == "farmerdata" || uri == "mdoreports" || uri == "tasksallocation" || uri == "markattendance" || uri == "extensionrequests" || uri == "salesaudit";
     }
 
     private bool AnySettingsAccessible =>
@@ -1193,8 +1237,8 @@
         || loginState.CanSeeMenu(PagePermission.BudgetSubmissions)
         || loginState.CanSeeMenu(PagePermission.AnnualBudgeting)
         || loginState.CanSeeMenu(PagePermission.ProgramMaster)
-        || (loginState.CanSeeMenu(PagePermission.CSR1Create) && loginState.UserRole != AppRole.JMDO)
-        || (loginState.CanSeeMenu(PagePermission.CSR1Management) && loginState.UserRole != AppRole.JMDO)
+        || loginState.CanSeeMenu(PagePermission.CSR1Create)
+        || loginState.CanSeeMenu(PagePermission.CSR1Management)
         || loginState.CanSeeMenu(PagePermission.CSR2)
         || loginState.CanSeeMenu(PagePermission.FinalReportCSRView)
         || loginState.CanSeeMenu(PagePermission.RMDValidationQueue)
