@@ -421,10 +421,6 @@
                         {
                             <EmptyState Icon="bi-inbox" Title="No allocation for today" Compact="true" />
                         }
-                        else if (todayAllocation.Status != "Approved")
-                        {
-                            <EmptyState Icon="bi-clock-history" Title="Awaiting Approval" Message="Your weekly allocation is waiting for MDO approval." Compact="true" />
-                        }
                         else
                         {
                             @if (CountByStatus(todayFilter) == 0)
@@ -433,11 +429,12 @@
                             }
                             else
                             {
-                                @foreach (var assignment in todayAllocation.DealerAssignments.Where(d => (d.PlannedDate?.Date == DateTime.Today) || (d.PlannedDate == null && d.Day == DateTime.Today.DayOfWeek)))
+                                @foreach (var assignment in todayAllocation.DealerAssignments.Where(d => d.Day == DateTime.Today.DayOfWeek))
                                 {
-                                    @if (GetStatus($"dealer_{assignment.DealerId}") == todayFilter)
+                                    var dStatus = GetStatus($"dealer_{assignment.DealerId}");
+                                    @if (dStatus == todayFilter)
                                     {
-                                        <div class="ta-today-card @StatusCardClass(GetStatus($"dealer_{assignment.DealerId}"))">
+                                        <div class="ta-today-card @StatusCardClass(dStatus)">
                                             <div class="ta-dealer-top">
                                                 <span class="ta-type-pill ta-type-pill-blue"><i class="bi bi-person"></i> Dealer</span>
                                                 <span class="ta-type-pill ta-type-pill-today"><i class="bi bi-shop"></i> Retailer</span>
@@ -454,11 +451,11 @@
 
                                             <div class="ta-dealer-info-row">
                                                 <span>iFMS ID</span>
-                                                <strong>—</strong>
+                                                <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.IfmsId ?? "—")</strong>
                                             </div>
                                             <div class="ta-dealer-info-row">
                                                 <span>PoS Liquidation</span>
-                                                <strong>—</strong>
+                                                <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
                                             </div>
 
                                             <div class="ta-dealer-stats-row">
@@ -468,12 +465,12 @@
                                                 </div>
                                                 <div class="ta-mini-stat ta-mini-stat-pending">
                                                     <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
-                                                    <div class="ta-mini-stat-val">—</div>
+                                                    <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
                                                 </div>
                                             </div>
 
-                                            <button type="button" class="ta-start-btn" @onclick='() => StartAndNavigate($"dealer_{assignment.DealerId}", "dealer")'>
-                                                @ActionLabel(GetStatus($"dealer_{assignment.DealerId}")) <i class="bi bi-arrow-right"></i>
+                                            <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
+                                                @ActionLabel(dStatus) <i class="bi bi-arrow-right"></i>
                                             </button>
                                         </div>
                                     }
@@ -481,9 +478,10 @@
 
                                 @foreach (var program in todayAllocation.Programs)
                                 {
-                                    @if (GetStatus($"prog_{program.Csr1Id}") == todayFilter)
+                                    var pStatus = GetStatus($"prog_{program.Csr1Id}");
+                                    @if (pStatus == todayFilter)
                                     {
-                                        <div class="ta-today-card @StatusCardClass(GetStatus($"prog_{program.Csr1Id}"))">
+                                        <div class="ta-today-card @StatusCardClass(pStatus)">
                                             <div class="ta-dealer-top">
                                                 <span class="ta-type-pill ta-type-pill-purple"><i class="bi bi-easel"></i> MD Program</span>
                                                 <span class="ta-type-pill ta-type-pill-outline"><i class="bi bi-people"></i> Training</span>
@@ -511,16 +509,17 @@
                                                 </div>
                                             </div>
 
-                                            <button type="button" class="ta-start-btn" @onclick='() => StartAndNavigate($"prog_{program.Csr1Id}", "mdprogram")'>
-                                                @ActionLabel(GetStatus($"prog_{program.Csr1Id}")) <i class="bi bi-arrow-right"></i>
+                                            <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=mdprogram&id=prog_{program.Csr1Id}")'>
+                                                @ActionLabel(pStatus) <i class="bi bi-arrow-right"></i>
                                             </button>
                                         </div>
                                     }
                                 }
 
-                                @if (todayAllocation.SpcmTarget is > 0 && GetStatus("spcm") == todayFilter)
+                                var spcmStatus = GetStatus("spcm");
+                                @if (todayAllocation.SpcmTarget is > 0 && spcmStatus == todayFilter)
                                 {
-                                    <div class="ta-today-card ta-today-card-narrow @StatusCardClass(GetStatus("spcm"))">
+                                    <div class="ta-today-card ta-today-card-narrow @StatusCardClass(spcmStatus)">
                                         <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
 
                                         <div class="ta-today-target-box">
@@ -531,15 +530,16 @@
                                             </div>
                                         </div>
 
-                                        <button type="button" class="ta-start-btn" @onclick='() => StartAndNavigate("spcm", "spcm")'>
-                                            @ActionLabel(GetStatus("spcm")) <i class="bi bi-arrow-right"></i>
+                                        <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/TaskDetail?type=spcm")'>
+                                            @ActionLabel(spcmStatus) <i class="bi bi-arrow-right"></i>
                                         </button>
                                     </div>
                                 }
 
-                                @if (todayAllocation.SoilSampleTarget is > 0 && GetStatus("soil") == todayFilter)
+                                var soilStatus = GetStatus("soil");
+                                @if (todayAllocation.SoilSampleTarget is > 0 && soilStatus == todayFilter)
                                 {
-                                    <div class="ta-today-card ta-today-card-narrow @StatusCardClass(GetStatus("soil"))">
+                                    <div class="ta-today-card ta-today-card-narrow @StatusCardClass(soilStatus)">
                                         <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
 
                                         <div class="ta-today-target-box">
@@ -550,15 +550,16 @@
                                             </div>
                                         </div>
 
-                                        <button type="button" class="ta-start-btn" @onclick='() => StartAndNavigate("soil", "soil")'>
-                                            @ActionLabel(GetStatus("soil")) <i class="bi bi-arrow-right"></i>
+                                        <button type="button" class="ta-start-btn" @onclick='() => AdvanceTask(soilStatus, s => GlobalTaskStatuses["soil"] = s)'>
+                                            @ActionLabel(soilStatus) <i class="bi bi-arrow-right"></i>
                                         </button>
                                     </div>
                                 }
 
-                                @if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && GetStatus("pos") == todayFilter)
+                                var posStatus = GetStatus("pos");
+                                @if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && posStatus == todayFilter)
                                 {
-                                    <div class="ta-today-card ta-today-card-wide @StatusCardClass(GetStatus("pos"))">
+                                    <div class="ta-today-card ta-today-card-wide @StatusCardClass(posStatus)">
                                         <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
 
                                         <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate</div>
@@ -593,8 +594,8 @@
                                             }
                                         </div>
 
-                                        <button type="button" class="ta-start-btn" @onclick='() => StartAndNavigate("pos", "posliquidation")'>
-                                            @ActionLabel(GetStatus("pos")) <i class="bi bi-arrow-right"></i>
+                                        <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/TaskDetail?type=posliquidation")'>
+                                            @ActionLabel(posStatus) <i class="bi bi-arrow-right"></i>
                                         </button>
                                     </div>
                                 }
@@ -810,7 +811,7 @@
     // targets, PoS liquidation products) - static placeholder mirroring
     // that example data, since there's no Allocation API yet to actually
     // link "submitted" to "today's tasks".
-    private enum AllocTaskStatus { YetToStart, InProgress, Completed }
+    public enum AllocTaskStatus { YetToStart, InProgress, Completed }
 
     private static AllocTaskStatus todayFilter = AllocTaskStatus.YetToStart;
     private bool todayStepperCollapsed;
@@ -829,27 +830,23 @@
     // otherwise "In Progress"/"Completed" always rendered the empty state
     // until a user manually clicked Start/Continue on something first, which
     // hid the green/purple themes entirely on a fresh page load.
-    private static Dictionary<string, AllocTaskStatus> _taskStatuses = new();
+    public static Dictionary<string, AllocTaskStatus> GlobalTaskStatuses = new();
 
     private AllocTaskStatus GetStatus(string taskId) =>
-        _taskStatuses.TryGetValue(taskId, out var s) ? s : AllocTaskStatus.YetToStart;
+        GlobalTaskStatuses.TryGetValue(taskId, out var s) ? s : AllocTaskStatus.YetToStart;
 
     private void StartAndNavigate(string taskId, string taskType)
     {
-        var current = GetStatus(taskId);
-        if (current == AllocTaskStatus.YetToStart)
-        {
-            _taskStatuses[taskId] = AllocTaskStatus.InProgress;
-            todayFilter = AllocTaskStatus.InProgress;
-        }
+        GlobalTaskStatuses[taskId] = AllocTaskStatus.InProgress;
+        todayFilter = AllocTaskStatus.InProgress;
         Navigation.NavigateTo($"/TaskDetail?type={taskType}");
     }
 
     private int CountByStatus(AllocTaskStatus status)
     {
-        if (todayAllocation is null || todayAllocation.Status != "Approved") return 0;
+        if (todayAllocation is null) return 0;
         int count = 0;
-        foreach (var d in todayAllocation.DealerAssignments.Where(x => (x.PlannedDate?.Date == DateTime.Today) || (x.PlannedDate == null && x.Day == DateTime.Today.DayOfWeek)))
+        foreach (var d in todayAllocation.DealerAssignments.Where(x => x.Day == DateTime.Today.DayOfWeek))
             if (GetStatus($"dealer_{d.DealerId}") == status) count++;
         foreach (var p in todayAllocation.Programs)
             if (GetStatus($"prog_{p.Csr1Id}") == status) count++;
@@ -905,7 +902,19 @@
     // pattern as TaskDetail's own "not built yet" quick actions.
     private void ViewDetailsNotAvailable() => Toast.Info("Detailed view for this task type isn't built yet.");
 
+    private void AdvanceTask(AllocTaskStatus current, Action<AllocTaskStatus> setStatus)
+    {
+        var next = current switch
+        {
+            AllocTaskStatus.YetToStart => AllocTaskStatus.InProgress,
+            AllocTaskStatus.InProgress => AllocTaskStatus.Completed,
+            _ => current // "View" on an already-completed task: nothing to advance
+        };
+        if (next == current) return;
 
+        setStatus(next);
+        Toast.Success(next == AllocTaskStatus.InProgress ? "Task moved to In Progress." : "Task marked as Completed.");
+    }
 
     private int currentStep = 1;
     private bool stepperCollapsed;
@@ -1104,7 +1113,7 @@
         {
             // GetList's `status` query param binds to SubDealerRegistrationController's own
             // int? SubDealerStatus, not the string "Active" - see SubDealerRegistrationController.cs.
-            var query = new List<string> { "page=1", "pageSize=1000", $"status={(int)SubDealerStatus.Active}" };
+            var query = new List<string> { "page=1", "pageSize=100", $"status={(int)SubDealerStatus.Active}" };
 
             if (LoginState.HQId > 0) query.Add($"hqId={LoginState.HQId}");
             else if (LoginState.RegionId > 0) query.Add($"regionId={LoginState.RegionId}");
@@ -1204,7 +1213,7 @@
 
             Programs.Clear();
             Programs.AddRange((result ?? new())
-                .Where(p => p.IsActive)
+                .Where(p => p.IsActive && (LoginState.HQId <= 0 || (p.HeadquarterId ?? 0) <= 0 || p.HeadquarterId == LoginState.HQId))
                 .Select(p => new ProgramOption
                 {
                     Id = p.Id,

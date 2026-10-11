@@ -14,7 +14,7 @@
     @if (kind == TaskKind.Dealer)
     {
         <h2 class="td-title">@dynamicTitle</h2>
-        <p class="td-subtitle">Pending Ack. 10 mT &middot; Dues 99 Lakhs &middot; @dynamicLocation</p>
+        <p class="td-subtitle">Pending Ack. @dynamicPendingAck &middot; Dues @dynamicDues &middot; @dynamicLocation</p>
     }
 
     <div class="td-timeline-card">
@@ -56,15 +56,15 @@
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Location</span>
-                            <span class="td-detail-val">Coimbatore</span>
+                            <span class="td-detail-val">@dynamicLocation</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Due Date</span>
-                            <span class="td-detail-val">23 Sep 2026</span>
+                            <span class="td-detail-val">@dynamicDueDate</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Priority</span>
-                            <span class="td-detail-val">High</span>
+                            <span class="td-detail-val">@dynamicPriority</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Assigned To</span>
@@ -89,19 +89,19 @@
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Sanction Date</span>
-                            <span class="td-detail-val">01 May 2026</span>
+                            <span class="td-detail-val">@dynamicSanctionDate</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Sanction No</span>
-                            <span class="td-detail-val">CSR1-2026-045</span>
+                            <span class="td-detail-val">@dynamicSanctionNo</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Program Type</span>
-                            <span class="td-detail-val">Training</span>
+                            <span class="td-detail-val">@dynamicProgramType</span>
                         </div>
                         <div class="td-detail">
                             <span class="td-detail-label">Total Budget</span>
-                            <span class="td-detail-val">&#8377;50,000</span>
+                            <span class="td-detail-val">@dynamicBudget</span>
                         </div>
                     </div>
                 </div>
@@ -153,12 +153,12 @@
                 <p class="td-card-subtitle">Fill this once work is done, then close the task.</p>
 
                 <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
-                <input id="td-outcome" type="text" class="td-input" @bind="outcome" @bind:event="oninput" disabled="@isClosed" />
+                <input id="td-outcome" type="text" class="td-input" @bind="outcome" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
 
                 @if (kind == TaskKind.Dealer)
                 {
                     <div class="d-flex justify-content-end mb-2 mt-3">
-                        <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none" disabled="@isClosed" @onclick="OpenAddProductPopup">
+                        <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none" disabled="@(!isStarted || isClosed)" @onclick="OpenAddProductPopup">
                             + Add another Product
                         </button>
                     </div>
@@ -185,7 +185,7 @@
                 @if (kind == TaskKind.Spcm)
                 {
                     <label class="td-field-label" for="td-achieved">Achieved Target</label>
-                    <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@isClosed" />
+                    <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
                 }
 
                 @if (kind == TaskKind.PosLiquidation)
@@ -193,30 +193,143 @@
                     <div class="td-pos-grid">
                         <div>
                             <label class="td-field-label" for="td-pos-urea">Urea</label>
-                            <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@isClosed" />
+                            <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
                         </div>
                         <div>
                             <label class="td-field-label" for="td-pos-nps">NPS</label>
-                            <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@isClosed" />
+                            <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
                         </div>
                         <div>
                             <label class="td-field-label" for="td-pos-dap">DAP</label>
-                            <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@isClosed" />
+                            <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
                         </div>
                         <div>
                             <label class="td-field-label" for="td-pos-other">Other</label>
-                            <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@isClosed" />
+                            <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@(!isStarted || isClosed)" />
                         </div>
                     </div>
                 }
 
                 <label class="td-field-label" for="td-remarks">Remarks</label>
-                <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" disabled="@isClosed"></textarea>
+                <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" disabled="@(!isStarted || isClosed)"></textarea>
 
                 <label class="td-field-label">@FileFieldLabel</label>
-                <input type="file" class="td-file-input" disabled="@isClosed" />
+                <input type="file" class="td-file-input" disabled="@(!isStarted || isClosed)" />
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="button" class="td-btn td-btn-primary" style="background-color: #8fbf9f; border-color: #8fbf9f;" disabled="@(!isStarted || isClosed)" @onclick="CloseTask">Saved</button>
+                </div>
             </div>
+
+            @if (kind == TaskKind.Spcm)
+            {
+                <div class="td-card td-col-right" style="padding: 0; overflow: hidden;">
+                    <div class="table-responsive">
+                        <table class="table mb-0 td-spcm-table">
+                            <thead>
+                                <tr>
+                                    <th>Outcome</th>
+                                    <th>Achieved Target</th>
+                                    <th>Remarks</th>
+                                    <th>Support Documents</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var record in spcmRecords)
+                                {
+                                    <tr>
+                                        <td>
+                                            <span class="td-spcm-badge">@record.Outcome</span>
+                                        </td>
+                                        <td>@record.Target</td>
+                                        <td>@record.Remarks</td>
+                                        <td>
+                                            <div class="td-spcm-doc">
+                                                <i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@record.DocName</span>
+                                                <a href="#" class="td-spcm-link ms-2">View / Download</a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+
+            @if (kind == TaskKind.PosLiquidation)
+            {
+                <div class="td-card td-col-right" style="padding: 0; overflow: hidden;">
+                    <div class="table-responsive">
+                        <table class="table mb-0 td-spcm-table" style="min-width: 900px;">
+                            <thead>
+                                <tr>
+                                    <th>Outcome</th>
+                                    <th>Urea</th>
+                                    <th>NPS</th>
+                                    <th>DAP</th>
+                                    <th>Other</th>
+                                    <th>Remarks</th>
+                                    <th>Support Documents</th>
+                                    <th>Date</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var record in posRecords)
+                                {
+                                    <tr>
+                                        <td><span class="td-spcm-badge">@record.Outcome</span></td>
+                                        <td class="text-center fw-bold">@record.Urea</td>
+                                        <td class="text-center fw-bold">@record.Nps</td>
+                                        <td class="text-center fw-bold">@record.Dap</td>
+                                        <td class="text-center fw-bold">@record.Other</td>
+                                        <td>@record.Remarks</td>
+                                        <td>
+                                            <div class="td-spcm-doc">
+                                                <i class="bi bi-paperclip text-muted"></i> <span class="text-dark small">@record.DocName</span>
+                                            </div>
+                                        </td>
+                                        <td class="small fw-semibold">@record.Date</td>
+                                        <td><a href="#" class="td-spcm-link">Download</a></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
     </div>
+
+@if (showAddFarmerPopup)
+{
+    <div class="td-modal-overlay">
+        <div class="td-modal-card">
+            <div class="td-modal-header">
+                <h4>Add Farmer Data</h4>
+                <button type="button" class="td-modal-close" @onclick="CloseAddFarmerData">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="td-modal-body">
+                <label class="td-field-label">Farmer Name</label>
+                <input type="text" class="td-input mb-3" placeholder="Enter farmer name" />
+
+                <label class="td-field-label">Mobile Number</label>
+                <input type="tel" class="td-input mb-3" placeholder="Enter mobile number" />
+
+                <label class="td-field-label">Crop Name</label>
+                <input type="text" class="td-input mb-3" placeholder="Enter crop name" />
+
+                <label class="td-field-label">Acreage</label>
+                <input type="number" class="td-input mb-3" placeholder="Enter acreage" />
+            </div>
+            <div class="td-modal-footer">
+                <button type="button" class="td-btn td-btn-outline" @onclick="CloseAddFarmerData">Cancel</button>
+                <button type="button" class="td-btn td-btn-primary" @onclick="CloseAddFarmerData">Save</button>
+            </div>
+        </div>
+    </div>
+}
 
 @if (showAddProductPopup)
 {
@@ -266,6 +379,37 @@
 }
 
 <style>
+.td-spcm-table th {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #374151;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 12px 16px;
+}
+.td-spcm-table td {
+    font-size: 0.85rem;
+    color: #111827;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 16px;
+    vertical-align: middle;
+}
+.td-spcm-badge {
+    color: #15803d;
+    border: 1px solid #86efac;
+    background: #f0fdf4;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.td-spcm-link {
+    color: #15803d;
+    text-decoration: underline;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
 .td-product-card {
     background: #f8fafc;
     border: 1px solid #86efac;
@@ -374,9 +518,8 @@
     private HttpClient Http { get; set; } = default!;
 
     private TaskKind kind;
-    private string dynamicTitle = "Hanumesh Trading Co";
+    private string dynamicTitle = "Loading...";
     private string dynamicCode = "";
-    private string dynamicLocation = "Coimbatore";
 
     private class DealerProductRow
     {
@@ -385,11 +528,26 @@
         public string Stock { get; set; } = "";
     }
     
-    private List<DealerProductRow> dealerProducts = new()
-    {
-        new DealerProductRow { Group = "Fertilizers", Name = "Urea 46%", Stock = "250 Bags" },
-        new DealerProductRow { Group = "Seeds", Name = "Paddy Seed - CO 51", Stock = "120 Kg" }
-    };
+    private List<DealerProductRow> dealerProducts = new();
+    
+    private record SpcmRecord(string Outcome, string Target, string Remarks, string DocName);
+    
+    private List<SpcmRecord> spcmRecords = new();
+    
+    private record PosRecord(string Outcome, string Urea, string Nps, string Dap, string Other, string Remarks, string DocName, string Date);
+    
+    private List<PosRecord> posRecords = new();
+    
+    private string dynamicLocation = "—";
+    private string dynamicDueDate = "—";
+    private string dynamicPriority = "—";
+    private string dynamicPendingAck = "—";
+    private string dynamicDues = "—";
+    
+    private string dynamicSanctionDate = "—";
+    private string dynamicSanctionNo = "—";
+    private string dynamicProgramType = "—";
+    private string dynamicBudget = "—";
     
     private bool showAddProductPopup;
     private int? selectedProductGroupId;
@@ -445,6 +603,26 @@
     {
         var assigneeName = LoginState.UserName ?? "Me";
         TimelineSteps[0] = TimelineSteps[0] with { SubLabel = assigneeName };
+        
+        var key = IdQuery ?? TypeQuery ?? "";
+        if (TasksAllocation.GlobalTaskStatuses.TryGetValue(key, out var status))
+        {
+            if (status == TasksAllocation.AllocTaskStatus.InProgress)
+            {
+                isStarted = true;
+                var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
+                if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
+            }
+            else if (status == TasksAllocation.AllocTaskStatus.Completed)
+            {
+                isStarted = true;
+                isClosed = true;
+                var idx1 = TimelineSteps.FindIndex(s => s.Label == "Started");
+                if (idx1 >= 0) TimelineSteps[idx1] = TimelineSteps[idx1] with { SubLabel = "Time & GPS logged", Done = true };
+                var idx2 = TimelineSteps.FindIndex(s => s.Label == "Closed");
+                if (idx2 >= 0) TimelineSteps[idx2] = TimelineSteps[idx2] with { SubLabel = "Just now", Done = true };
+            }
+        }
 
         kind = TypeQuery?.ToLowerInvariant() switch
         {
@@ -492,7 +670,19 @@
                                 {
                                     dynamicTitle = dealer.DealerName;
                                     dynamicCode = dealer.DealerCode;
+                                    dynamicDueDate = allocation.AllocationDate.ToString("dd MMM yyyy");
+                                
+                                try
+                                {
+                                    var dInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.SubDealerFormModel>($"api/SubDealerRegistration/{dId}");
+                                    if (dInfo != null)
+                                    {
+                                        dynamicLocation = !string.IsNullOrWhiteSpace(dInfo.Village) ? dInfo.Village :
+                                                          !string.IsNullOrWhiteSpace(dInfo.Taluk) ? dInfo.Taluk :
+                                                          !string.IsNullOrWhiteSpace(dInfo.FirmName) ? dInfo.FirmName : "Unknown Location";
+                                    }
                                 }
+                                catch { }
                             }
                         }
                         else if (kind == TaskKind.MdProgram && IdQuery?.StartsWith("prog_") == true)
@@ -504,6 +694,19 @@
                                 {
                                     dynamicTitle = prog.ProgramName;
                                 }
+
+                                try
+                                {
+                                    var pInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.CSR1DetailsDto>($"api/CSR1/details/{pId}");
+                                    if (pInfo != null)
+                                    {
+                                        dynamicSanctionDate = pInfo.CreatedAt.ToString("dd MMM yyyy");
+                                        dynamicSanctionNo = $"MD-{pInfo.Id}";
+                                        dynamicProgramType = pInfo.ProgramType;
+                                        dynamicBudget = pInfo.Budget.ToString("C");
+                                    }
+                                }
+                                catch { }
                             }
                         }
                     }
@@ -563,6 +766,9 @@
         if (isStarted) return;
         isStarted = true;
 
+        var key = IdQuery ?? TypeQuery ?? "";
+        TasksAllocation.GlobalTaskStatuses[key] = TasksAllocation.AllocTaskStatus.InProgress;
+
         var idx = TimelineSteps.FindIndex(s => s.Label == "Started");
         if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Time & GPS logged", Done = true };
 
@@ -584,15 +790,20 @@
         isClosed = true;
         timer?.Stop();
 
+        var key = IdQuery ?? TypeQuery ?? "";
+        TasksAllocation.GlobalTaskStatuses[key] = TasksAllocation.AllocTaskStatus.Completed;
+
         var idx = TimelineSteps.FindIndex(s => s.Label == "Closed");
         if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Just now", Done = true };
 
         Toast.Success("Task closed.");
     }
 
-    private void OpenSoilSampleCollection() => Toast.Info("Soil Sample Collection form is not built yet.");
+    private void OpenSoilSampleCollection() => Navigation.NavigateTo("/SampleCollection/new");
 
-    private void OpenAddFarmerData() => Toast.Info("Add Farmer Data form is not built yet.");
+    private bool showAddFarmerPopup;
+    private void OpenAddFarmerData() => showAddFarmerPopup = true;
+    private void CloseAddFarmerData() => showAddFarmerPopup = false;
 
     public void Dispose()
     {
