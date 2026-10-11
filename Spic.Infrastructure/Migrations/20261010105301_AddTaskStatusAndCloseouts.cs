@@ -14,6 +14,10 @@ namespace Spic.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // 2026-10-11 (pre-deploy dry run): the scaffolded InsertData / DeleteData of "Pages" rows by
+            // enum-index id were removed - those ids are already taken on the live site (v19 / v20 insert
+            // by Key with generated ids) and would fail with a duplicate key. The page rows are inserted
+            // by Key in v22PageCatalogueNoSeedAndMenuKeys.
             migrationBuilder.AddColumn<int>(
                 name: "PosLiquidationStatus",
                 table: "JmdoTaskAllocations",
@@ -111,23 +115,6 @@ namespace Spic.Infrastructure.Migrations
             // not pre-existing drift. GuestHouseRoomTypes/RoomTypeId (also part of the
             // current model) is NOT in this migration - it's already shipped by the
             // separate, already-applied 20261009124126_AddGuestHouseRoomTypes migration.
-            migrationBuilder.InsertData(
-                table: "Pages",
-                columns: new[] { "Id", "CreatedAt", "CreatedBy", "HasActions", "IsActive", "Key", "Module", "Name", "SortOrder", "UpdatedAt", "UpdatedBy" },
-                values: new object[,]
-                {
-                    { 125, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "ProgramMaster", null, "Program Master", 124, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 126, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "Activities", null, "Activities", 125, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 127, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "Farmers", null, "Farmers", 126, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 128, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "Alerts", null, "Alerts", 127, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 129, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "StartDocumentation", null, "Start Documentation", 128, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 130, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "DemoDetails", null, "Demo Details", 129, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 131, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "TreatmentDetails", null, "Treatment Details", 130, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 132, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "Treatment01", null, "Treatment01", 131, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 133, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "Treatment02", null, "Treatment02", 132, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 134, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "TreatmentDemoDetails", null, "Treatment Demo Details", 133, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" },
-                    { 135, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System", true, true, "GHAdmin", null, "GHAdmin", 134, new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "System" }
-                });
 
             migrationBuilder.CreateIndex(
                 name: "IX_JmdoTaskCloseoutProducts_CloseoutId",
@@ -148,61 +135,6 @@ namespace Spic.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "JmdoTaskCloseouts");
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 125);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 126);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 127);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 128);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 129);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 130);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 131);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 132);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 133);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 134);
-
-            migrationBuilder.DeleteData(
-                table: "Pages",
-                keyColumn: "Id",
-                keyValue: 135);
 
             migrationBuilder.DropColumn(
                 name: "PosLiquidationStatus",
