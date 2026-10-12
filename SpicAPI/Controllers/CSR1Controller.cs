@@ -1117,7 +1117,7 @@ namespace SpicAPI.Controllers
                         return new CSR1ListDto
                         {
                             Id = csr.Id,
-
+                            SanctionNo = csr.SanctionNo,
                             ProgramTypeId = csr.ProgramTypeId,
                             ProgramType = programType?.Name ?? "",
 
@@ -1139,7 +1139,7 @@ namespace SpicAPI.Controllers
                             Remarks = csr.Remarks,
                             CreatedAt = csr.CreatedAt,
                             IsActive = csr.IsActive,
-
+                            CSR1Date = csr.CSR1Date,
                             Products1 = products1
                                 .Where(x => x.CSR1Id == csr.Id)
                                 .Select(x => new CSR1ProductDto
@@ -1434,6 +1434,7 @@ namespace SpicAPI.Controllers
 
                         UpdatedAt =
                             csr1.UpdatedAt,
+                        CSR1Date = csr1.CSR1Date,
 
 
                         Focus1 =
@@ -1669,7 +1670,10 @@ namespace SpicAPI.Controllers
                         }
                     }
                 }
-
+                if (string.IsNullOrWhiteSpace(csr1.SanctionNo))
+                {
+                    csr1.SanctionNo = await GenerateCSR1SanctionNoAsync();
+                }
                 csr1.Status = "Approved";
                 csr1.UpdatedBy = CurrentUserId;
                 csr1.UpdatedAt = DateTime.Now;
@@ -1679,6 +1683,7 @@ namespace SpicAPI.Controllers
                 return Ok(new
                 {
                     message = "CSR-1 approved successfully.",
+                    sanctionNo = csr1.SanctionNo,
                     data = csr1
                 });
             }
@@ -1692,6 +1697,41 @@ namespace SpicAPI.Controllers
             }
         }
 
+        private async Task<string> GenerateCSR1SanctionNoAsync()
+        {
+            int year = DateTime.Now.Year;
+            string prefix = $"CSR1-{year}-";
+
+            // Get existing sanction numbers for current year
+            var existingNumbers = await _csr1Repo.GetAll()
+                .AsNoTracking()
+                .Where(x => x.SanctionNo != null &&
+                            x.SanctionNo.StartsWith(prefix))
+                .Select(x => x.SanctionNo!)
+                .ToListAsync();
+
+            int maxNumber = 0;
+
+            foreach (var sanctionNo in existingNumbers)
+            {
+                // Extract numeric part after CSR1-2026-
+                string numberPart = sanctionNo.Substring(prefix.Length);
+
+                if (int.TryParse(numberPart, out int number))
+                {
+                    if (number > maxNumber)
+                    {
+                        maxNumber = number;
+                    }
+                }
+            }
+
+            // Increment last sanction number
+            int nextNumber = maxNumber + 1;
+
+            // Generate sequential sanction number
+            return $"{prefix}{nextNumber:D3}";
+        }
         // ============================================================
         // REJECT CSR1
         // POST / PUT: api/CSR1/{id}/reject

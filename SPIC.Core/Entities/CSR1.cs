@@ -107,6 +107,9 @@ namespace SPIC.Core.Entities
         public DateTime? UpdatedAt { get; set; }
 
         public bool IsActive { get; set; } = true;
+
+        public DateTime CSR1Date { get; set; }
+        public string? SanctionNo { get; set; }
     }
 
 

@@ -804,6 +804,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("Budget")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTime>("CSR1Date")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<decimal>("Compliments")
                         .HasColumnType("decimal(18,2)");
 
@@ -857,6 +860,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int?>("ResponsiblePersonId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SanctionNo")
+                        .HasColumnType("text");
 
                     b.Property<decimal>("ServiceChargesLCA")
                         .HasColumnType("decimal(18,2)");
