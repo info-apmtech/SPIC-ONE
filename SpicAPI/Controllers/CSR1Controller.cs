@@ -125,6 +125,41 @@ namespace SpicAPI.Controllers
             }
         }
 
+        private async Task<(string Scope, string? CreatorRole)> ResolveCSR1ScopeAsync(CSR1 csr1)
+        {
+            string? creatorRole = null;
+            if (!string.IsNullOrEmpty(csr1.CreatedBy))
+            {
+                var creator = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == csr1.CreatedBy);
+                if (creator != null)
+                {
+                    creatorRole = creator.Role.ToString();
+                }
+            }
+
+            if (!string.IsNullOrEmpty(creatorRole))
+            {
+                if (string.Equals(creatorRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.SMM.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return ("State", creatorRole);
+                }
+
+                if (string.Equals(creatorRole, AppRole.MDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.JMDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.MO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.RM.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.RMD.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return ("HQ", creatorRole);
+                }
+            }
+
+            // Fallback: If HeadquarterId is present and > 0, it's HQ scope; otherwise State scope.
+            var scope = (csr1.HeadquarterId.HasValue && csr1.HeadquarterId.Value > 0) ? "HQ" : "State";
+            return (scope, creatorRole);
+        }
+
 
         // ============================================================
         // CREATE CSR1
@@ -241,6 +276,23 @@ namespace SpicAPI.Controllers
 
 
                 // =====================================================
+                // VALIDATE EXPENSES AGAINST BUDGET
+                // =====================================================
+
+                var totalExpenses = model.PrintingAndStationery + model.PublicityMaterial +
+                    model.StageArrangements + model.ServiceChargesLCA + model.TransportRent +
+                    model.JeepRunningExpenses + model.Refreshments + model.Inputs +
+                    model.Photography + model.Compliments + model.Others;
+
+                if (model.Budget > 0 && totalExpenses > model.Budget)
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Total Expense Breakdown (₹{totalExpenses:N2}) exceeds the allocated Budget (₹{model.Budget:N2}). Expenses must be within the allocated budget."
+                    });
+                }
+
+                // =====================================================
                 // AUDIT
                 // =====================================================
 
@@ -254,7 +306,9 @@ namespace SpicAPI.Controllers
 
 
                 model.CreatedAt =
-                    currentDate;
+                    (model.CreatedAt != default(DateTime))
+                        ? model.CreatedAt
+                        : currentDate;
 
                 model.UpdatedAt =
                     currentDate;
@@ -1033,6 +1087,8 @@ namespace SpicAPI.Controllers
                     .GetAll()
                     .ToListAsync();
 
+                var users = await _db.Users.AsNoTracking().ToListAsync();
+
                 var result = csr1Records
                     .Select(csr =>
                     {
@@ -1041,6 +1097,38 @@ namespace SpicAPI.Controllers
 
                         var programType = programTypes
                             .FirstOrDefault(x => x.Id == csr.ProgramTypeId);
+
+                        var createdByUser = !string.IsNullOrEmpty(csr.CreatedBy)
+                            ? users.FirstOrDefault(u => u.Id == csr.CreatedBy)
+                            : null;
+                        var createdByName = createdByUser?.Name ?? createdByUser?.UserName ?? csr.CreatedBy ?? "";
+                        var creatorRole = createdByUser?.Role.ToString();
+
+                        string scope = "HQ";
+                        if (!string.IsNullOrEmpty(creatorRole))
+                        {
+                            if (string.Equals(creatorRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(creatorRole, AppRole.SMM.ToString(), StringComparison.OrdinalIgnoreCase))
+                            {
+                                scope = "State";
+                            }
+                            else if (string.Equals(creatorRole, AppRole.MDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(creatorRole, AppRole.JMDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(creatorRole, AppRole.MO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(creatorRole, AppRole.RM.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                                     string.Equals(creatorRole, AppRole.RMD.ToString(), StringComparison.OrdinalIgnoreCase))
+                            {
+                                scope = "HQ";
+                            }
+                            else
+                            {
+                                scope = (csr.HeadquarterId.HasValue && csr.HeadquarterId.Value > 0) ? "HQ" : "State";
+                            }
+                        }
+                        else
+                        {
+                            scope = (csr.HeadquarterId.HasValue && csr.HeadquarterId.Value > 0) ? "HQ" : "State";
+                        }
 
                         return new CSR1ListDto
                         {
@@ -1060,6 +1148,10 @@ namespace SpicAPI.Controllers
                             ResponsiblePersonId = csr.ResponsiblePersonId,
 
                             Status = csr.Status,
+                            Scope = scope,
+                            CreatorRole = creatorRole,
+                            CreatedBy = createdByName,
+                            CreatedById = csr.CreatedBy,
                             Remarks = csr.Remarks,
                             CreatedAt = csr.CreatedAt,
                             IsActive = csr.IsActive,
@@ -1247,6 +1339,8 @@ namespace SpicAPI.Controllers
                     : null;
                 var updatedByName = updatedByUser?.Name ?? updatedByUser?.UserName ?? csr1.UpdatedBy;
 
+                var (scope, creatorRole) = await ResolveCSR1ScopeAsync(csr1);
+
                 var result =
                     new CSR1DetailsDto
                     {
@@ -1329,6 +1423,12 @@ namespace SpicAPI.Controllers
 
                         Status =
                             csr1.Status,
+
+                        Scope =
+                            scope,
+
+                        CreatorRole =
+                            creatorRole,
 
                         Remarks =
                             csr1.Remarks,
@@ -1433,6 +1533,269 @@ namespace SpicAPI.Controllers
                         error =
                             ex.Message
                     });
+            }
+        }
+
+        // ============================================================
+        // VALIDATE CSR1
+        // POST / PUT: api/CSR1/{id}/validate
+        // HQ Scope: MO validates (MDO applies, MO validates, RM approves)
+        // State Scope: SMDO (SMD) validates (SMDO applies, SMDO validates, SMM approves)
+        // ============================================================
+
+        [HttpPost("{id:int}/validate")]
+        [HttpPut("{id:int}/validate")]
+        public async Task<IActionResult> ValidateCSR1(int id)
+        {
+            try
+            {
+                var csr1 = await _csr1Repo.GetByIdAsync(id);
+                if (csr1 == null)
+                {
+                    return NotFound(new { message = $"CSR-1 #{id} not found." });
+                }
+
+                if (string.Equals(csr1.Status, "Validated", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new { message = "CSR-1 is already validated." });
+                }
+
+                if (string.Equals(csr1.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new { message = "CSR-1 is already approved." });
+                }
+
+                var currentRole = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
+                bool isAdmin = currentRole == AppRole.Admin.ToString() ||
+                               currentRole == AppRole.CorporateAdmin.ToString() ||
+                               currentRole == AppRole.Director.ToString() ||
+                               currentRole == AppRole.AVP.ToString();
+
+                var (scope, creatorRole) = await ResolveCSR1ScopeAsync(csr1);
+
+                if (!isAdmin)
+                {
+                    if (scope == "HQ")
+                    {
+                        // HQ scope: only MO can validate (MDO applies, MO validates, RM approves)
+                        if (!string.Equals(currentRole, AppRole.MO.ToString(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new
+                            {
+                                message = "Only Marketing Officers (MO) can validate Headquarters-level CSR-1."
+                            });
+                        }
+                    }
+                    else // State scope
+                    {
+                        // State scope: only SMDO (SMD) can validate (SMDO applies, SMDO validates, SMM approves)
+                        if (!string.Equals(currentRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new
+                            {
+                                message = "Only State Marketing Development Officers (SMDO) can validate State-level CSR-1."
+                            });
+                        }
+                    }
+                }
+
+                csr1.Status = "Validated";
+                csr1.UpdatedBy = CurrentUserId;
+                csr1.UpdatedAt = DateTime.Now;
+
+                await _csr1Repo.PatchAsync(id, csr1);
+
+                return Ok(new
+                {
+                    message = "CSR-1 validated successfully.",
+                    data = csr1
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    message = "Error while validating CSR-1",
+                    error = ex.Message
+                });
+            }
+        }
+
+        // ============================================================
+        // APPROVE CSR1
+        // POST / PUT: api/CSR1/{id}/approve
+        // HQ Scope: RM / RMD approves
+        // State Scope: SMM approves
+        // ============================================================
+
+        [HttpPost("{id:int}/approve")]
+        [HttpPut("{id:int}/approve")]
+        public async Task<IActionResult> ApproveCSR1(int id)
+        {
+            try
+            {
+                var csr1 = await _csr1Repo.GetByIdAsync(id);
+                if (csr1 == null)
+                {
+                    return NotFound(new { message = $"CSR-1 #{id} not found." });
+                }
+
+                if (string.Equals(csr1.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new { message = "CSR-1 is already approved." });
+                }
+
+                var currentRole = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
+                bool isAdmin = currentRole == AppRole.Admin.ToString() ||
+                               currentRole == AppRole.CorporateAdmin.ToString() ||
+                               currentRole == AppRole.Director.ToString() ||
+                               currentRole == AppRole.AVP.ToString();
+
+                // Must be validated first, unless Admin bypasses
+                if (!isAdmin && !string.Equals(csr1.Status, "Validated", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new { message = "CSR-1 must be validated before it can be approved." });
+                }
+
+                var (scope, creatorRole) = await ResolveCSR1ScopeAsync(csr1);
+
+                if (!isAdmin)
+                {
+                    if (scope == "HQ")
+                    {
+                        // HQ scope: RM / RMD approves
+                        if (!string.Equals(currentRole, AppRole.RM.ToString(), StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(currentRole, AppRole.RMD.ToString(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new
+                            {
+                                message = "Only Regional Managers (RM) can approve Headquarters-level CSR-1."
+                            });
+                        }
+                    }
+                    else // State scope
+                    {
+                        // State scope: SMM approves
+                        if (!string.Equals(currentRole, AppRole.SMM.ToString(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new
+                            {
+                                message = "Only State Marketing Managers (SMM) can approve State-level CSR-1."
+                            });
+                        }
+                    }
+                }
+
+                csr1.Status = "Approved";
+                csr1.UpdatedBy = CurrentUserId;
+                csr1.UpdatedAt = DateTime.Now;
+
+                await _csr1Repo.PatchAsync(id, csr1);
+
+                return Ok(new
+                {
+                    message = "CSR-1 approved successfully.",
+                    data = csr1
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    message = "Error while approving CSR-1",
+                    error = ex.Message
+                });
+            }
+        }
+
+        // ============================================================
+        // REJECT CSR1
+        // POST / PUT: api/CSR1/{id}/reject
+        // HQ Scope: MO or RM/RMD can reject with remarks
+        // State Scope: SMD or SMM can reject with remarks
+        // ============================================================
+
+        [HttpPost("{id:int}/reject")]
+        [HttpPut("{id:int}/reject")]
+        public async Task<IActionResult> RejectCSR1(int id, [FromBody] CSR1RejectRequest request)
+        {
+            try
+            {
+                if (request == null || string.IsNullOrWhiteSpace(request.Remarks))
+                {
+                    return BadRequest(new { message = "Rejection reason / remarks is required." });
+                }
+
+                var csr1 = await _csr1Repo.GetByIdAsync(id);
+                if (csr1 == null)
+                {
+                    return NotFound(new { message = $"CSR-1 #{id} not found." });
+                }
+
+                if (string.Equals(csr1.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new { message = "Approved CSR-1 cannot be rejected." });
+                }
+
+                var currentRole = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
+                bool isAdmin = currentRole == AppRole.Admin.ToString() ||
+                               currentRole == AppRole.CorporateAdmin.ToString() ||
+                               currentRole == AppRole.Director.ToString() ||
+                               currentRole == AppRole.AVP.ToString();
+
+                var (scope, creatorRole) = await ResolveCSR1ScopeAsync(csr1);
+
+                if (!isAdmin)
+                {
+                    if (scope == "HQ")
+                    {
+                        bool canRejectHQ = string.Equals(currentRole, AppRole.MO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                                           string.Equals(currentRole, AppRole.RM.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                                           string.Equals(currentRole, AppRole.RMD.ToString(), StringComparison.OrdinalIgnoreCase);
+
+                        if (!canRejectHQ)
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new
+                            {
+                                message = "You are not authorized to reject this Headquarters-level CSR-1."
+                            });
+                        }
+                    }
+                    else // State scope
+                    {
+                        bool canRejectState = string.Equals(currentRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                                              string.Equals(currentRole, AppRole.SMM.ToString(), StringComparison.OrdinalIgnoreCase);
+
+                        if (!canRejectState)
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new
+                            {
+                                message = "You are not authorized to reject this State-level CSR-1."
+                            });
+                        }
+                    }
+                }
+
+                csr1.Status = "Rejected";
+                csr1.Remarks = request.Remarks.Trim();
+                csr1.UpdatedBy = CurrentUserId;
+                csr1.UpdatedAt = DateTime.Now;
+
+                await _csr1Repo.PatchAsync(id, csr1);
+
+                return Ok(new
+                {
+                    message = "CSR-1 rejected successfully.",
+                    data = csr1
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    message = "Error while rejecting CSR-1",
+                    error = ex.Message
+                });
             }
         }
     }

@@ -1,4 +1,4 @@
-﻿@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
+@namespace SPIC.MauiBlazorApp.Shared.Components.Shell
 @implements IDisposable
 
 @using SPIC.Core.Entities
@@ -820,7 +820,7 @@
                             }
 
 
-                            @if (LoginState.CanAccess(PagePermission.CSR1Create))
+                            @if (!LoginState.IsAdmin && LoginState.CanAccess(PagePermission.CSR1Create))
                             {
                                 <li class="submenu-item">
 
@@ -1575,7 +1575,7 @@
         isSettingsOpen = IsSettingsSectionActive();
         isSdwaOpen = IsSdwaSectionActive();
         isSubsidyOpen = IsSubsidySectionActive();
-        isMdPortalOpen = IsMdPortalSectionActive();
+        isMdPortalOpen = IsMdPortalSectionActive() || LoginState.UserRole is AppRole.RM or AppRole.RMD or AppRole.SMM or AppRole.SMD or AppRole.MO or AppRole.MDO or AppRole.JMDO;
         isSchemesOpen = IsSchemesSectionActive();
 
         // The only outside state this menu reads is LoginState (role + allowed pages).
@@ -1585,7 +1585,14 @@
     }
 
 
-    private void OnLoginStateChanged() => InvokeAsync(StateHasChanged);
+    private void OnLoginStateChanged()
+    {
+        if (LoginState.UserRole is AppRole.RM or AppRole.RMD or AppRole.SMM or AppRole.SMD or AppRole.MO or AppRole.MDO or AppRole.JMDO)
+        {
+            isMdPortalOpen = true;
+        }
+        InvokeAsync(StateHasChanged);
+    }
 
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

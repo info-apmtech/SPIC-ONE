@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -22,6 +22,10 @@ namespace SPIC.Core.DTOs
         public int? ResponsiblePersonId { get; set; }
 
         public string Status { get; set; } = "";
+        public string Scope { get; set; } = "HQ";
+        public string? CreatorRole { get; set; }
+        public string? CreatedBy { get; set; }
+        public string? CreatedById { get; set; }
         public string? Remarks { get; set; }
         public DateTime CreatedAt { get; set; }
         public bool IsActive { get; set; }

@@ -48,6 +48,10 @@ namespace SPIC.Core.DTOs
         // Workflow
         public string Status { get; set; } = "";
 
+        public string Scope { get; set; } = "HQ";
+
+        public string? CreatorRole { get; set; }
+
         public string? Remarks { get; set; }
 
         public string? CreatedBy { get; set; }

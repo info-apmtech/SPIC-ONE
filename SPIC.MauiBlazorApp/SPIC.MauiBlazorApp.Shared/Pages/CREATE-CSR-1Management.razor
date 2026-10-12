@@ -9,7 +9,21 @@
 @inject HttpClient Http
 @inject ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
-
+@if (loginState.IsAdmin)
+{
+    <div class="p-4">
+        <div class="alert alert-info d-flex align-items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+            </svg>
+            <div>
+                CSR-1 creation is not available for Admin role. Redirecting to <a href="/CSR-1List" class="alert-link">CSR-1 Management</a>...
+            </div>
+        </div>
+    </div>
+}
+else
+{
 <div class="container-fluid py-4 px-0 csr1c-page">
 
     <!-- Header Section -->
@@ -554,6 +568,14 @@
                     </select>
                 </div>
 
+                <!-- Date -->
+                <div class="csr-form-group">
+                    <label class="csr-form-label">Date</label>
+                    <input type="date"
+                           class="csr-form-control"
+                           @bind="selectedDate" />
+                </div>
+
             </div>
         </div>
 
@@ -797,50 +819,86 @@
         </div>
 
         <!-- Expense Breakdown Section -->
+        <!-- Expense Breakdown Section -->
         <div class="csr-section-card">
-            <h2 class="csr-section-title">Expense Breakdown</h2>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h2 class="csr-section-title mb-0">Expense Breakdown</h2>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="badge @(selectedBudget.HasValue && TotalExpense > selectedBudget.Value ? "bg-danger" : "bg-primary") px-3 py-2" style="font-size: 13px;">
+                        Total Expenses: ₹@TotalExpense.ToString("N2", CultureInfo.CreateSpecificCulture("en-IN"))
+                    </span>
+                    @if (selectedBudget.HasValue && selectedBudget.Value > 0)
+                    {
+                        var remaining = selectedBudget.Value - TotalExpense;
+                        @if (remaining >= 0)
+                        {
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2" style="font-size: 13px;">
+                                Remaining: ₹@remaining.ToString("N2", CultureInfo.CreateSpecificCulture("en-IN"))
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-danger text-white px-3 py-2" style="font-size: 13px;">
+                                Exceeded by: ₹@Math.Abs(remaining).ToString("N2", CultureInfo.CreateSpecificCulture("en-IN"))
+                            </span>
+                        }
+                    }
+                </div>
+            </div>
+
+            @if (selectedBudget.HasValue && selectedBudget.Value > 0 && TotalExpense > selectedBudget.Value)
+            {
+                <div class="alert alert-danger py-2 mb-3 d-flex align-items-center gap-2" role="alert">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" class="bi bi-exclamation-triangle-fill flex-shrink-0" viewBox="0 0 16 16">
+                        <path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
+                    </svg>
+                    <div>
+                        <strong>Budget Exceeded:</strong> Total expense breakdown (₹@TotalExpense.ToString("N2", CultureInfo.CreateSpecificCulture("en-IN"))) cannot exceed the allocated budget of ₹@selectedBudget.Value.ToString("N2", CultureInfo.CreateSpecificCulture("en-IN")). Please adjust expenses to be within budget before saving.
+                    </div>
+                </div>
+            }
 
             <!-- First two rows (4 Columns) -->
             <div class="csr-grid-4">
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Printing & Stationary</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="printStationary">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="printStationary" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Publicity Material</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="publicityMaterial">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="publicityMaterial" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Stage Arrangements</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="stageArrangements">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="stageArrangements" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Service Charges - LCA</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="serviceCharges">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="serviceCharges" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Transport / Rent</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="transportRent">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="transportRent" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Jeep Running Expenses</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="jeepExpenses">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="jeepExpenses" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Refreshments</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="refreshments">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="refreshments" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Inputs</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="inputs">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="inputs" @bind:event="oninput">
                 </div>
 
             </div>
@@ -850,17 +908,17 @@
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Photography</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="photography">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="photography" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Compliments</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="compliments">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="compliments" @bind:event="oninput">
                 </div>
 
                 <div class="csr-form-group">
                     <label class="csr-form-label">Others</label>
-                    <input type="number" class="csr-form-control" placeholder="0" min="0" @bind="othersExpense">
+                    <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="othersExpense" @bind:event="oninput">
                 </div>
 
             </div>
@@ -933,6 +991,7 @@
     }
 
 </div>
+}
 
 <style>
     /* Scoped layout additions */
@@ -2112,6 +2171,7 @@
     private string selectedHq = "";
     private string selectedLocation = "";
     private int selectedEmployeeId = 0;
+    private DateTime? selectedDate = DateTime.Today;
 
     private int selectedFocusProduct1Id = 0;
     private int selectedFocusProduct2Id = 0;
@@ -2172,17 +2232,30 @@
     // =========================================================
     // Expense Breakdown
     // =========================================================
-    private int printStationary = 0;
-    private int publicityMaterial = 0;
-    private int stageArrangements = 0;
-    private int serviceCharges = 0;
-    private int transportRent = 0;
-    private int jeepExpenses = 0;
-    private int refreshments = 0;
-    private int inputs = 0;
-    private int photography = 0;
-    private int compliments = 0;
-    private int othersExpense = 0;
+    private decimal printStationary = 0;
+    private decimal publicityMaterial = 0;
+    private decimal stageArrangements = 0;
+    private decimal serviceCharges = 0;
+    private decimal transportRent = 0;
+    private decimal jeepExpenses = 0;
+    private decimal refreshments = 0;
+    private decimal inputs = 0;
+    private decimal photography = 0;
+    private decimal compliments = 0;
+    private decimal othersExpense = 0;
+
+    private decimal TotalExpense =>
+        printStationary +
+        publicityMaterial +
+        stageArrangements +
+        serviceCharges +
+        transportRent +
+        jeepExpenses +
+        refreshments +
+        inputs +
+        photography +
+        compliments +
+        othersExpense;
 
     // =========================================================
     // Existing Budget Plan List UI Model
@@ -2351,6 +2424,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (loginState.IsAdmin)
+        {
+            Navigation.NavigateTo("/CSR-1List");
+            return;
+        }
+
         await LoadBudgetPrograms();
         await LoadHeadquarters();
         await LoadZones();
@@ -2708,21 +2787,70 @@
                 return;
             }
 
-            if (selectedHQId <= 0)
+            // =========================================================
+            // FIND SELECTED PROGRAM
+            // =========================================================
+
+            var selectedProgram =
+                budgetPrograms.FirstOrDefault(x =>
+                    !string.IsNullOrWhiteSpace(x.ProgramType) &&
+                    !string.IsNullOrWhiteSpace(x.ProgramName) &&
+                    x.ProgramType.Equals(
+                        selectedProgramType,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    x.ProgramName.Equals(
+                        selectedProgramName,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (selectedProgram == null)
+            {
+                Toast.Error(
+                    "Unable to find the selected program details.");
+                return;
+            }
+
+            if (selectedProgram.ProgramId <= 0)
+            {
+                Toast.Error(
+                    "Invalid Program Id received from Budget data.");
+                return;
+            }
+
+            // Check if State scope (SMDO/SMD or State-level budget program without HQ)
+            bool isStateScope = loginState.IsStateRole ||
+                                (!selectedProgram.HeadQuartersId.HasValue || selectedProgram.HeadQuartersId.Value <= 0);
+
+            if (!isStateScope && selectedHQId <= 0)
             {
                 Toast.Error("Please select HQ.");
                 return;
             }
 
-            if (selectedZoneId <= 0)
+            if (!isStateScope && selectedZoneId <= 0)
             {
                 Toast.Error("Please select Location.");
                 return;
             }
 
-            if (selectedEmployeeId <= 0)
+            if (!isStateScope && selectedEmployeeId <= 0)
             {
                 Toast.Error("Please select Responsible Person.");
+                return;
+            }
+
+            if (!selectedDate.HasValue || selectedDate.Value == default)
+            {
+                Toast.Error("Please select Date.");
+                return;
+            }
+
+            // =========================================================
+            // EXPENSE BREAKDOWN VALIDATION
+            // Must be within selected budget
+            // =========================================================
+            if (TotalExpense > selectedBudget.Value)
+            {
+                Toast.Error($"Total Expense Breakdown (₹{TotalExpense:N2}) exceeds the allocated Budget (₹{selectedBudget.Value:N2}). Total expenses must be within ₹{selectedBudget.Value:N2}.");
                 return;
             }
 
@@ -2784,44 +2912,6 @@
 
 
             // =========================================================
-            // FIND SELECTED PROGRAM
-            // =========================================================
-
-            var selectedProgram =
-                budgetPrograms.FirstOrDefault(x =>
-                    !string.IsNullOrWhiteSpace(x.ProgramType) &&
-                    !string.IsNullOrWhiteSpace(x.ProgramName) &&
-                    x.ProgramType.Equals(
-                        selectedProgramType,
-                        StringComparison.OrdinalIgnoreCase) &&
-                    x.ProgramName.Equals(
-                        selectedProgramName,
-                        StringComparison.OrdinalIgnoreCase));
-
-
-            if (selectedProgram == null)
-            {
-                Toast.Error(
-                    "Unable to find the selected program details.");
-
-                return;
-            }
-
-
-            // =========================================================
-            // VALIDATE PROGRAM ID
-            // =========================================================
-
-            if (selectedProgram.ProgramId <= 0)
-            {
-                Toast.Error(
-                    "Invalid Program Id received from Budget data.");
-
-                return;
-            }
-
-
-            // =========================================================
             // BUILD CSR1 MODEL
             // =========================================================
 
@@ -2841,13 +2931,16 @@
                 selectedBudget.Value;
 
             csr1Model.HeadquarterId =
-                selectedHQId;
+                selectedHQId > 0 ? selectedHQId : null;
 
             csr1Model.LocationId =
-                selectedZoneId;
+                selectedZoneId > 0 ? selectedZoneId : null;
 
             csr1Model.ResponsiblePersonId =
-                selectedEmployeeId;
+                selectedEmployeeId > 0 ? selectedEmployeeId : null;
+
+            csr1Model.CreatedAt =
+                selectedDate.Value;
 
 
             // =========================================================
@@ -3277,6 +3370,7 @@
         selectedHQId = 0;
         selectedZoneId = 0;
         selectedEmployeeId = 0;
+        selectedDate = DateTime.Today;
 
         focusCrop1Id = 0;
         focusCrop2Id = 0;
