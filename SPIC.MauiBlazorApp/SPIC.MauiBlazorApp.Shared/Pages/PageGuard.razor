@@ -257,19 +257,19 @@
         // -> CSR1Create, /StockReport -> SalesReport, /qr-scanner -> QRScanner). Fall back
         // to the segment, which is the convention new pages follow (route prefix == enum
         // member name), so a new page / menu / enum member needs no wiring here.
-        var permissionKey = ShellNavigation.Find(firstSegment)?.PermissionKey ?? firstSegment;
-        bool allowed = SPIC.MauiBlazorApp.Shared.Services.LoginState.DesignationOnlyPages.Contains(permissionKey)
-            ? LoginState.HasPageStrict(permissionKey)
-            : LoginState.CanAccess(permissionKey);
-
-        if (!allowed && LoginState.UserRole == AppRole.JMDO)
+        // Guest House Master and Cancellation Requests also open to a GHAdmin / SDWAAdmin designation
+        // (the API's GuestHouseMasterAccess / GuestHouseFrontOfficeAccess filters grant the same).
+        if ((firstSegment.Equals("GuestHouseMaster", StringComparison.OrdinalIgnoreCase)
+                || firstSegment.Equals("GuestHouseCancellations", StringComparison.OrdinalIgnoreCase))
+            && LoginState.HasGuestHouseAdminPermission)
         {
-            if (permissionKey.Equals("SampleCollection", StringComparison.OrdinalIgnoreCase))
-            {
-                allowed = true;
-            }
+            return;
         }
 
+        var permissionKey = ShellNavigation.ResolvePermissionKey(firstSegment);
+        bool allowed = SPIC.MauiBlazorApp.Shared.Services.LoginState.DesignationOnlyPages.Contains(permissionKey)
+            ? LoginState.HasPageStrict(permissionKey)
+            : (LoginState.CanAccess(permissionKey) || (permissionKey != firstSegment && LoginState.CanAccess(firstSegment)));
         if (!allowed && !isDirectorSchemeApproval)
         {
             // Redirect to the SAME landing page the login flow uses (Admin / SuperAdmin ->

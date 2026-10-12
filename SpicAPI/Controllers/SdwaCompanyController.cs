@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
@@ -104,6 +105,7 @@ namespace SpicAPI.Controllers
 		// POST /api/SdwaCompany
 		// Create a new company with guest house mapping.
 		[HttpPost]
+		[SdwaCompanyWriteAccess("Entry")]
 		public async Task<IActionResult> Create([FromBody] SdwaCompanyCreateRequest request)
 		{
 			if (string.IsNullOrWhiteSpace(request.CompanyName))
@@ -153,6 +155,7 @@ namespace SpicAPI.Controllers
 		// PUT /api/SdwaCompany/{id}
 		// Update an existing company with guest house mapping.
 		[HttpPut("{id:int}")]
+		[SdwaCompanyWriteAccess("Update")]
 		public async Task<IActionResult> Update(int id, [FromBody] SdwaCompanyCreateRequest request)
 		{
 			if (string.IsNullOrWhiteSpace(request.CompanyName))
@@ -203,6 +206,7 @@ namespace SpicAPI.Controllers
 
 		// DELETE /api/SdwaCompany/{id}
 		[HttpDelete("{id:int}")]
+		[SdwaCompanyWriteAccess("Delete")]
 		public async Task<IActionResult> Delete(int id)
 		{
 			var company = await _db.SdwaCompanies
@@ -226,6 +230,7 @@ namespace SpicAPI.Controllers
 
 		// PATCH /api/SdwaCompany/{id}/status
 		[HttpPatch("{id:int}/status")]
+		[SdwaCompanyWriteAccess("Update")]
 		public async Task<IActionResult> ChangeStatus(int id, [FromQuery] bool isActive)
 		{
 			var company = await _db.SdwaCompanies.FindAsync(id);
@@ -271,5 +276,49 @@ namespace SpicAPI.Controllers
 		public string CompanyName { get; set; } = "";
 		public string? ShortCode { get; set; }
 		public string? GSTIN { get; set; }
+	}
+
+	/// <summary>
+	/// Write gate for the SDWA Company Details master (POST / PUT / DELETE / PATCH).
+	/// Reads stay open to every signed-in user: the booking form (GuestDetails.razor) loads
+	/// <c>by-guest-house/{id}</c>.
+	///
+	/// Allowed: Admin / CorporateAdmin / SuperAdmin, or a Designation granting this route's action
+	/// (Entry / Update / Delete) on <c>PagePermission.SdwaCompanyMaster</c> (the page's own permission)
+	/// or <c>PagePermission.SDWAAdmin</c>. A View-only grant never writes. Resolved from
+	/// Designation.RoleAccess, never the Designation name.
+	/// </summary>
+	[AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+	internal sealed class SdwaCompanyWriteAccessAttribute : Attribute, IAsyncAuthorizationFilter
+	{
+		private readonly string _action;
+
+		public SdwaCompanyWriteAccessAttribute(string action) => _action = action;
+
+		public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+		{
+			var user = context.HttpContext.User;
+			if (user?.Identity?.IsAuthenticated != true)
+			{
+				context.Result = new UnauthorizedObjectResult(new { Success = false, Message = "Authentication required." });
+				return;
+			}
+
+			if (user.IsInRole(nameof(AppRole.Admin))
+				|| user.IsInRole(nameof(AppRole.CorporateAdmin))
+				|| user.IsInRole(nameof(AppRole.SuperAdmin)))
+				return;
+
+			var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(db, user);
+			if (GuestHouseReceptionistScope.HasAction(designation, PagePermission.SdwaCompanyMaster, _action)
+				|| GuestHouseReceptionistScope.HasAction(designation, PagePermission.SDWAAdmin, _action))
+				return;
+
+			context.Result = new ObjectResult(new { Success = false, Message = "You do not have permission to modify company details." })
+			{
+				StatusCode = StatusCodes.Status403Forbidden
+			};
+		}
 	}
 }

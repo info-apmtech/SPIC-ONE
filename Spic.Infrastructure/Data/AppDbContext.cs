@@ -125,38 +125,14 @@ namespace Spic.Infrastructure.Data
             entity.HasIndex(dp => dp.PageId);
         });
 
-        // Seed the catalog from the existing PagePermission enum + its
-        // PageModuleAttribute metadata, preserving every exact existing key and
-        // the existing display/grouping behavior. Future enum changes surface
-        // as model diffs in later EF migrations.
-        //
-        // FieldDashboard/MarkAttendance/TasksAllocation are filtered out of this
-        // seed for now: their position-based ids (computed from each entry's
-        // index in the enum) collide with already-applied rows for Metrics/
-        // AnnualBudgeting in the real database, for reasons that predate this
-        // change and need their own fix. Nothing reads these three via
-        // PagePermission today (their pages are gated by LoginState.UserRole
-        // instead), so excluding them from the seed has no effect on anything
-        // working right now. Remove this filter once the id collision is sorted.
-        var unseededPages = new[] { PagePermission.FieldDashboard, PagePermission.MarkAttendance, PagePermission.TasksAllocation };
-            builder.Entity<ApplicationPage>().HasData(
-                Enum.GetValues<PagePermission>()
-                    .Where(page => !unseededPages.Contains(page))
-                    .Select((page, index) => new ApplicationPage
-                    {
-                        Id = index + 1,
-                        Key = RoleAccessPermissions.KeyFor(page),
-                        Name = PageDisplayName(page.ToString()),
-                        Module = PageModuleName(page.ToString()),
-                        SortOrder = index,
-                        HasActions = true,
-                        IsActive = true,
-                        CreatedBy = "System",
-                        CreatedAt = staticDate,
-                        UpdatedBy = "System",
-                        UpdatedAt = staticDate
-                    })
-                    .ToArray());
+        // Page catalogue seeding was intentionally removed. ApplicationPage
+        // ("Pages") is owned by the live database (created in
+        // V5j_PagePermissionCatalog and maintained through the Page Management
+        // UI). Keeping HasData here turned every PagePermission enum change into
+        // a model diff that would INSERT/UPDATE/DELETE Pages rows in future
+        // migrations, and its enum-index ids collided with ids already in use on
+        // the live site. The Pages table, DbSet, mapping and Designation
+        // permissions are unchanged.
 
 
         // ---------------------------------------------------------------- Digital Library

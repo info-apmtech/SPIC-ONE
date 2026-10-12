@@ -31,6 +31,14 @@
             }
         </div>
 
+        @if (CanValidateBudget)
+        {
+            <div style="display:flex;gap:8px;margin-bottom:16px">
+                <button type="button" class="bm-btn-primary" @onclick="() => SwitchValidationModeAsync(false)" disabled="@(!_validationMode)">Create Budget</button>
+                <button type="button" class="bm-btn-primary" @onclick="() => SwitchValidationModeAsync(true)" disabled="@_validationMode">Validate Budget</button>
+            </div>
+        }
+
         <!-- Stats Grid (4 Cards) -->
         @if (currentView == BudgetPlanningView.ProgramWise)
         {
@@ -38,8 +46,8 @@
                 <!-- Approved Budget Card -->
                 <div class="bm-stat-card theme-green">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value">  ₹ @((CanApproveBudget ? SelectedSubmissionTotal : SMMAllocatedBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
-                        <span class="bm-stat-label">@(CanApproveBudget ? "Submitted Program Budget" : RoleBudgetLabel)</span>
+                        <span class="bm-stat-value">  ₹ @((IsReviewMode ? SelectedSubmissionTotal : SMMAllocatedBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
+                        <span class="bm-stat-label">@(IsReviewMode ? "Submitted Program Budget" : RoleBudgetLabel)</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -59,7 +67,7 @@
                         </span>
 
                         <span class="bm-stat-label">
-                            @(CanApproveBudget ? "Loaded Program Total" : "Allocated Budget")
+                            @(IsReviewMode ? "Loaded Program Total" : "Allocated Budget")
                         </span>
                     </div>
                     <div class="bm-stat-icon">
@@ -74,8 +82,8 @@
                 <!-- Remaining Budget Card -->
                 <div class="bm-stat-card theme-purple">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value"> ₹ @((CanApproveBudget ? SMMAllocatedBudget : RemainingBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
-                        <span class="bm-stat-label">@(CanApproveBudget ? "Approver Own Allocation (Reference)" : "Remaining Budget")</span>
+                        <span class="bm-stat-value"> ₹ @((IsReviewMode ? SMMAllocatedBudget : RemainingBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
+                        <span class="bm-stat-label">@(IsReviewMode ? "Reviewer Own Allocation (Reference)" : "Remaining Budget")</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -88,8 +96,8 @@
                 <!-- SMDO Budget Card -->
                 <div class="bm-stat-card theme-orange">
                     <div class="bm-stat-content">
-                        <span class="bm-stat-value"> ₹ @((CanApproveBudget ? SelectedSubmissionTotal : SMDOAllocatedBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
-                        <span class="bm-stat-label">@(CanApproveBudget ? "Awaiting Approval" : "SMDO Budget")</span>
+                        <span class="bm-stat-value"> ₹ @((IsReviewMode ? SelectedSubmissionTotal : SMDOAllocatedBudget).ToString("N0", CultureInfo.GetCultureInfo("en-IN")))</span>
+                        <span class="bm-stat-label">@(IsReviewMode ? (_validationMode ? "Awaiting Validation" : "Awaiting Approval") : "SMDO Budget")</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -173,7 +181,7 @@
 
         <!-- Section Header -->
         <div class="bm-section-header">
-            <h2>@(CanApproveBudget ? "Program-wise Budget Approval" : "Program-wise Budget Planning")</h2>
+            <h2>@(IsReviewMode ? (_validationMode ? "Program-wise Budget Validation" : "Program-wise Budget Approval") : "Program-wise Budget Planning")</h2>
             @if (_availableFYs.Count > 0)
             {
                 <select class="bm-year-select"
@@ -197,10 +205,10 @@
             }
         </div>
 
-        @if (CanApproveBudget)
+        @if (IsReviewMode)
         {
             <div class="bm-approval-selector" style="background:white;border:1px solid #e2e8f0;padding:16px;border-radius:10px;margin-bottom:18px">
-                <label for="budgetSubmissionSelect"><strong>Saved program budgets awaiting approval</strong></label>
+                <label for="budgetSubmissionSelect"><strong>@(_validationMode ? "Saved program budgets awaiting validation" : "Validated program budgets awaiting approval")</strong></label>
                 <select id="budgetSubmissionSelect" class="bm-year-select" style="display:block;margin-top:8px;max-width:100%;width:100%"
                         value="@_selectedSubmissionId" @onchange="OnApprovalSelectionChanged">
                     <option value="0">-- Select a saved budget --</option>
@@ -211,11 +219,11 @@
                 </select>
                 @if (_pendingApprovals.Count == 0)
                 {
-                    <p style="margin:10px 0 0">No submitted budgets found for your assigned scope and selected FY.</p>
+                    <p style="margin:10px 0 0">No eligible budgets found for your assigned scope and selected FY.</p>
                 }
                 @if (_selectedSubmissionId > 0)
                 {
-                    <p style="margin:10px 0 0">Status: Pending approval. You can revise monthly counts and editable budget amounts before approval.</p>
+                    <p style="margin:10px 0 0">Status: Pending @(_validationMode ? "validation" : "approval"). You can revise monthly counts and editable amounts.</p>
                 }
             </div>
         }
@@ -551,7 +559,7 @@
                     <td>
                         <input type="number"
                                class="bm-budget-input"
-                               @bind="program.TotalBudget" disabled="@CanApproveBudget" />
+                               @bind="program.TotalBudget" disabled="@IsReviewMode" />
                     </td>
 
                 </TableRow>
@@ -588,11 +596,18 @@
 
             <!-- Right Action Buttons; native: ActionBar = inline row on tablet/desktop, fixed 44px bar on phone -->
             <ActionBar CssClass="bm-actionbar" AriaLabel="Budget plan actions">
-                @if (CanCreateBudget)
+                @if (CanCreateBudget && !_validationMode)
                 {
                     <button type="button" class="bm-btn-primary" @onclick="HandleSubmitValidation"
                             disabled="@_isSavingBudget">
                         @(_isSavingBudget ? "Saving..." : "Save")
+                    </button>
+                }
+                else if (CanValidateBudget && _validationMode)
+                {
+                    <button type="button" class="bm-btn-primary" @onclick="HandleValidateBudget"
+                            disabled="@(_isValidating || !HasSelectedPendingSubmission)">
+                        @(_isValidating ? "Validating..." : "Validate")
                     </button>
                 }
                 else if (CanApproveBudget)
@@ -682,8 +697,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                                                           watermarks (::before/::after) that leak onto these tiles and sit on top
-                                                           of the label text. Neutralise them for this page only. */
+                                                               watermarks (::before/::after) that leak onto these tiles and sit on top
+                                                               of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -1137,7 +1152,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                                                               on screen (it used to sit off the right edge of a 720px table). */
+                                                                   on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1225,11 +1240,15 @@
     private string BudgetRole => (LoginState.UserRole?.ToString() ?? "").Trim().ToUpperInvariant();
     private bool CanCreateBudget => BudgetRole is "MO" or "RMDO" or "RMD" or "SMDO" or "SMD";
     private bool CanApproveBudget => BudgetRole is "SMM" or "RMM" or "RM";
+    private bool CanValidateBudget => BudgetRole is "SMD" or "SMDO" or "RMD" or "RMDO";
+    private bool _validationMode;
+    private bool IsReviewMode => CanApproveBudget || (CanValidateBudget && _validationMode);
+    private bool _isValidating;
     private decimal SelectedSubmissionTotal =>
         _pendingApprovals.FirstOrDefault(x => x.Id == _selectedSubmissionId)?.TotalBudget ?? 0m;
     private bool HasSelectedPendingSubmission =>
         _pendingApprovals.Any(x => x.Id == _selectedSubmissionId &&
-            string.Equals(x.Status, "Submitted", StringComparison.OrdinalIgnoreCase));
+            string.Equals(x.Status, _validationMode ? "Submitted" : "Valid", StringComparison.OrdinalIgnoreCase));
 
     private sealed class PendingBudgetApprovalDto
     {
@@ -1252,34 +1271,93 @@
         _selectedSubmissionId = 0;
         programPlans.Clear();
         FilteredProgramPlans.Clear();
-        if (!CanApproveBudget || string.IsNullOrWhiteSpace(_selectedFY)) return;
+
+        if (!IsReviewMode || string.IsNullOrWhiteSpace(_selectedFY))
+            return;
+
         try
         {
-            // Must return only server-authorized state/region + FY + Submitted records.
-            var url = $"api/Budget/pending-program-approvals?fy={Uri.EscapeDataString(_selectedFY)}";
+            // Validation loads Submitted records.
+            // Approval loads Valid records.
+            string requiredStatus = _validationMode
+                ? "Submitted"
+                : "Valid";
+
+            string endpoint = _validationMode
+                ? "pending-program-validations"
+                : "pending-program-approvals";
+
+            string actionName = _validationMode
+                ? "validation"
+                : "approval";
+
+            string url =
+                $"api/Budget/{endpoint}?fy={Uri.EscapeDataString(_selectedFY)}";
+
             using var response = await Http.GetAsync(url);
+
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"Pending approvals failed: URL={url}, Status={(int)response.StatusCode}, Body={errorBody}");
-                Toast.Error($"Could not load budgets for approval (HTTP {(int)response.StatusCode}). Check console for API details.");
+
+                Console.WriteLine(
+                    $"Pending {actionName} load failed. " +
+                    $"URL={url}, " +
+                    $"HTTP={(int)response.StatusCode}, " +
+                    $"Body={errorBody}");
+
+                Toast.Error(
+                    $"Could not load budgets for {actionName} " +
+                    $"(HTTP {(int)response.StatusCode}).");
+
                 return;
             }
-            _pendingApprovals = await response.Content.ReadFromJsonAsync<List<PendingBudgetApprovalDto>>() ?? new();
-            _pendingApprovals = _pendingApprovals
-                .Where(x => x.FinancialYear == _selectedFY &&
-                            string.Equals(x.Status, "Submitted", StringComparison.OrdinalIgnoreCase))
+
+            var records = await response.Content
+                .ReadFromJsonAsync<List<PendingBudgetApprovalDto>>()
+                ?? new List<PendingBudgetApprovalDto>();
+
+            // Filter by selected FY and expected status.
+            _pendingApprovals = records
+                .Where(x =>
+                    string.Equals(
+                        x.FinancialYear,
+                        _selectedFY,
+                        StringComparison.OrdinalIgnoreCase)
+                    &&
+                    string.Equals(
+                        x.Status,
+                        requiredStatus,
+                        StringComparison.OrdinalIgnoreCase))
                 .ToList();
+
+            Console.WriteLine(
+                $"Budget {actionName} loaded. " +
+                $"FY={_selectedFY}, " +
+                $"RequiredStatus={requiredStatus}, " +
+                $"Count={_pendingApprovals.Count}");
+
+            // Automatically select when only one record exists.
             if (_pendingApprovals.Count == 1)
             {
                 _selectedSubmissionId = _pendingApprovals[0].Id;
+
                 SelectSubmittedBudget();
+            }
+            else
+            {
+                ApplyBudgetFilter();
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Budget approval loading error: {ex}");
-            Toast.Error("Unable to load submitted budgets.");
+            Console.WriteLine(
+                $"Budget review loading error: {ex}");
+
+            Toast.Error(
+                _validationMode
+                    ? "Unable to load budgets awaiting validation."
+                    : "Unable to load budgets awaiting approval.");
         }
     }
 
@@ -1415,6 +1493,95 @@
         }
     }
 
+
+    private async Task SwitchValidationModeAsync(bool enabled)
+    {
+        if (!CanValidateBudget) return;
+        _validationMode = enabled;
+        if (enabled) await LoadPendingApprovalsAsync();
+        else
+        {
+            _pendingApprovals.Clear();
+            _selectedSubmissionId = 0;
+            await LoadProgramBudget();
+        }
+    }
+
+    private async Task HandleValidateBudget()
+    {
+        if (!CanValidateBudget || !_validationMode || _isValidating ||
+            _selectedSubmissionId <= 0 || !HasSelectedPendingSubmission) return;
+
+        _isValidating = true;
+        try
+        {
+            if (programPlans.Count == 0)
+            {
+                Toast.Error("No programs available for validation.");
+                return;
+            }
+            if (programPlans.Any(p => p.TotalBudget < 0 ||
+                new[] { p.AprilCount, p.MayCount, p.JuneCount, p.JulyCount,
+                        p.AugustCount, p.SeptemberCount, p.OctoberCount,
+                        p.NovemberCount, p.DecemberCount, p.JanuaryCount,
+                        p.FebruaryCount, p.MarchCount }
+                    .Any(c => c < 0 || c != decimal.Truncate(c) || c > int.MaxValue)))
+            {
+                Toast.Error("Counts must be nonnegative whole numbers within range.");
+                return;
+            }
+
+            foreach (var item in programPlans) CalculateBudget(item);
+
+            var request = new ApproveProgramBudgetRequest
+            {
+                Programs = programPlans.Select(p => new ApproveProgramAmountDto
+                {
+                    ProgramId = p.ProgramId,
+                    TotalBudget = p.TotalBudget,
+                    AprilCount = Convert.ToInt32(p.AprilCount),
+                    MayCount = Convert.ToInt32(p.MayCount),
+                    JuneCount = Convert.ToInt32(p.JuneCount),
+                    JulyCount = Convert.ToInt32(p.JulyCount),
+                    AugustCount = Convert.ToInt32(p.AugustCount),
+                    SeptemberCount = Convert.ToInt32(p.SeptemberCount),
+                    OctoberCount = Convert.ToInt32(p.OctoberCount),
+                    NovemberCount = Convert.ToInt32(p.NovemberCount),
+                    DecemberCount = Convert.ToInt32(p.DecemberCount),
+                    JanuaryCount = Convert.ToInt32(p.JanuaryCount),
+                    FebruaryCount = Convert.ToInt32(p.FebruaryCount),
+                    MarchCount = Convert.ToInt32(p.MarchCount)
+                }).ToList()
+            };
+
+            using var response = await Http.PostAsJsonAsync(
+                $"api/Budget/{_selectedSubmissionId}/validate-program", request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                string message = body;
+                try
+                {
+                    using var json = System.Text.Json.JsonDocument.Parse(body);
+                    if (json.RootElement.TryGetProperty("message", out var prop))
+                        message = prop.GetString() ?? body;
+                }
+                catch (System.Text.Json.JsonException) { }
+                Console.WriteLine($"Budget validation rejected: {body}");
+                Toast.Error(message);
+                return;
+            }
+            Toast.Success("Budget validated successfully.");
+            await LoadPendingApprovalsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex);
+            Toast.Error("Budget validation could not be confirmed.");
+        }
+        finally { _isValidating = false; }
+    }
+
     private List<string> _availableFYs = new();
     private string _selectedFY = string.Empty;
 
@@ -1449,7 +1616,7 @@
     {
         await LoadFinancialYearsAsync();
         await LoadBudgetDashboard();
-        if (CanApproveBudget) await LoadPendingApprovalsAsync();
+        if (CanApproveBudget || _validationMode) await LoadPendingApprovalsAsync();
         else if (CanCreateBudget) await LoadProgramBudget();
     }
 
@@ -1457,7 +1624,7 @@
     {
         await LoadBudgetDashboard();
 
-        if (CanApproveBudget) await LoadPendingApprovalsAsync();
+        if (CanApproveBudget || _validationMode) await LoadPendingApprovalsAsync();
         else if (CanCreateBudget) await LoadProgramBudget();
 
         StateHasChanged();
