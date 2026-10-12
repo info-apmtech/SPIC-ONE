@@ -51,14 +51,26 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // IFMS automation uses a separate database. The API reads the IFMS data but
 // the portal and automation retain separate ownership of their own tables.
+//
+// The IFMS database sits on another host across the internet. Pooled
+// connections to it go stale (the first command after a quiet spell failed
+// with "Exception while writing to stream" on 8 Oct 2026, which the relay
+// phone saw as a dead server), so keep them alive, drop idle ones early,
+// and retry the transient failures that remain.
+var ifmsConnection = new Npgsql.NpgsqlConnectionStringBuilder(
+    builder.Configuration.GetConnectionString("IfmsConnection")
+        ?? builder.Configuration.GetConnectionString("DefaultConnection"));
+if (ifmsConnection.KeepAlive == 0) ifmsConnection.KeepAlive = 30;
+if (ifmsConnection.ConnectionIdleLifetime == 300) ifmsConnection.ConnectionIdleLifetime = 60;
+
 builder.Services.AddDbContext<IfmsDbContext>(options =>
     options.UseNpgsql(
-        builder.Configuration.GetConnectionString("IfmsConnection")
-            ?? builder.Configuration.GetConnectionString("DefaultConnection"),
+        ifmsConnection.ConnectionString,
         b =>
         {
             b.MigrationsAssembly("Spic.Infrastructure");
             b.CommandTimeout(600);
+            b.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
         }));
 
 builder.Services.AddIdentity<UserInfo, IdentityRole>(options =>
