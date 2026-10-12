@@ -304,6 +304,19 @@ namespace SpicAPI.Controllers
 
             if (!string.IsNullOrWhiteSpace(request.Password))
             {
+                // Setting PasswordHash directly bypasses UserManager entirely, so the configured
+                // password policy (Program.cs's options.Password.RequiredLength, etc.) was never
+                // being enforced here - only on initial creation via CreateAsync. Running it
+                // through the same validators CreateAsync uses internally keeps this in sync with
+                // whatever the policy is configured to, instead of duplicating a hardcoded length
+                // check that would drift from Program.cs over time.
+                foreach (var validator in _userManager.PasswordValidators)
+                {
+                    var validationResult = await validator.ValidateAsync(_userManager, user, request.Password);
+                    if (!validationResult.Succeeded)
+                        return BadRequest(validationResult.Errors.Select(x => x.Description));
+                }
+
                 user.PasswordHash = _userManager.PasswordHasher.HashPassword(user, request.Password);
             }
 
@@ -465,6 +478,15 @@ namespace SpicAPI.Controllers
 
             if (!string.IsNullOrWhiteSpace(request.Password))
             {
+                // See the identical comment in UpdateEmployeeLogin above - setting PasswordHash
+                // directly bypasses UserManager's password policy validators entirely.
+                foreach (var validator in _userManager.PasswordValidators)
+                {
+                    var validationResult = await validator.ValidateAsync(_userManager, user, request.Password);
+                    if (!validationResult.Succeeded)
+                        return BadRequest(validationResult.Errors.Select(x => x.Description));
+                }
+
                 user.PasswordHash = _userManager.PasswordHasher.HashPassword(user, request.Password);
             }
 
