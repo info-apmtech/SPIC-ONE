@@ -30,6 +30,7 @@ namespace SPIC.Core.DTOs
         public DayOfWeek? Day { get; set; }
         public AllocTaskStatus Status { get; set; }
         public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
     }
 
     public class JmdoTaskAllocationResponseDto
@@ -58,6 +59,9 @@ namespace SPIC.Core.DTOs
         public DateTime? SpcmStartedAt { get; set; }
         public DateTime? SoilSampleStartedAt { get; set; }
         public DateTime? PosLiquidationStartedAt { get; set; }
+        public DateTime? SpcmCompletedAt { get; set; }
+        public DateTime? SoilSampleCompletedAt { get; set; }
+        public DateTime? PosLiquidationCompletedAt { get; set; }
 
         public List<JmdoTaskCloseoutDto> Closeouts { get; set; } = new();
     }
@@ -124,6 +128,7 @@ namespace SPIC.Core.DTOs
         public decimal Budget { get; set; }
         public AllocTaskStatus Status { get; set; }
         public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
     }
 
     public class AddDealerToAllocationDto

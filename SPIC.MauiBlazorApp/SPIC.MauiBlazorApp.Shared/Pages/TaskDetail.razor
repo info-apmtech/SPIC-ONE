@@ -850,6 +850,15 @@
             _ => null
         };
 
+        var completedAt = kind switch
+        {
+            TaskKind.Dealer => dealerAssignment?.CompletedAt,
+            TaskKind.MdProgram => programAssignment?.CompletedAt,
+            TaskKind.Spcm => allocation.SpcmCompletedAt,
+            TaskKind.PosLiquidation => allocation.PosLiquidationCompletedAt,
+            _ => null
+        };
+
         if (status == AllocTaskStatus.InProgress)
         {
             isStarted = true;
@@ -867,7 +876,7 @@
                 // This task was marked InProgress before StartedAt existed (or some other
                 // gap), so there's no real history to resume from - back-fill it now so
                 // every load from this point on resumes correctly.
-                var key = IdQuery ?? TypeQuery ?? "";
+                var key = TaskKey;
                 try
                 {
                     await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
@@ -889,6 +898,28 @@
             if (idx1 >= 0) TimelineSteps[idx1] = TimelineSteps[idx1] with { SubLabel = "Time & GPS logged", Done = true };
             var idx2 = TimelineSteps.FindIndex(s => s.Label == "Closed");
             if (idx2 >= 0) TimelineSteps[idx2] = TimelineSteps[idx2] with { SubLabel = "Just now", Done = true };
+
+            // "Time on task" for a closed task is the fixed CompletedAt - StartedAt duration,
+            // not a running timer. Older records closed before CompletedAt existed have no
+            // history to compute from, so back-fill it now (same gap-handling as StartedAt
+            // above) - every load from this point on will show the real duration.
+            if (startedAt is { } started && completedAt is { } completed)
+            {
+                elapsedSeconds = Math.Max(0, (int)(completed - started).TotalSeconds);
+            }
+            else if (completedAt is null)
+            {
+                var key = TaskKey;
+                try
+                {
+                    await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
+                        new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.Completed });
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Backfilling CompletedAt failed: {ex.Message}");
+                }
+            }
         }
     }
 
@@ -970,18 +1001,38 @@
     private string outcome = "Fully Completed";
     private string remarks = "";
 
+    private string TaskKey => kind switch
+    {
+        TaskKind.Dealer => !string.IsNullOrWhiteSpace(IdQuery) ? IdQuery : (currentDealerId.HasValue ? $"dealer_{currentDealerId}" : "dealer"),
+        TaskKind.MdProgram => !string.IsNullOrWhiteSpace(IdQuery) ? IdQuery : (currentProgramId.HasValue ? $"prog_{currentProgramId}" : "mdprogram"),
+        TaskKind.Spcm => "spcm",
+        TaskKind.PosLiquidation => "pos",
+        _ => IdQuery ?? TypeQuery ?? ""
+    };
+
     private async Task StartTask()
     {
         if (isStarted) return;
 
-        var key = IdQuery ?? TypeQuery ?? "";
+        var key = TaskKey;
         try
         {
             var response = await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
                 new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.InProgress });
             if (!response.IsSuccessStatusCode)
             {
-                Toast.Error("Could not start the task. Please try again.");
+                var errorMsg = "Could not start the task. Please try again.";
+                try
+                {
+                    var errObj = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (errObj.TryGetProperty("message", out var m) || errObj.TryGetProperty("Message", out m))
+                    {
+                        var text = m.GetString();
+                        if (!string.IsNullOrWhiteSpace(text)) errorMsg = text;
+                    }
+                }
+                catch { }
+                Toast.Error(errorMsg);
                 return;
             }
         }
@@ -1037,14 +1088,25 @@
     {
         showStopConfirm = false;
 
-        var key = IdQuery ?? TypeQuery ?? "";
+        var key = TaskKey;
         try
         {
             var response = await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
                 new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.Completed });
             if (!response.IsSuccessStatusCode)
             {
-                Toast.Error("Could not close the task. Please try again.");
+                var errorMsg = "Could not close the task. Please try again.";
+                try
+                {
+                    var errObj = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (errObj.TryGetProperty("message", out var m) || errObj.TryGetProperty("Message", out m))
+                    {
+                        var text = m.GetString();
+                        if (!string.IsNullOrWhiteSpace(text)) errorMsg = text;
+                    }
+                }
+                catch { }
+                Toast.Error(errorMsg);
                 return;
             }
         }

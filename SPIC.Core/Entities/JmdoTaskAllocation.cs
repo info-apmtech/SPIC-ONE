@@ -49,6 +49,12 @@ public class JmdoTaskAllocation
     public DateTime? SoilSampleStartedAt { get; set; }
     public DateTime? PosLiquidationStartedAt { get; set; }
 
+    // Stamped when the matching Status above is set to Completed, so the closed task's "Time on
+    // task" can be computed once as CompletedAt - StartedAt instead of showing 00:00 forever.
+    public DateTime? SpcmCompletedAt { get; set; }
+    public DateTime? SoilSampleCompletedAt { get; set; }
+    public DateTime? PosLiquidationCompletedAt { get; set; }
+
     public JmdoTaskAllocationStatus Status { get; set; } = JmdoTaskAllocationStatus.Pending;
 
     public string? ReviewedByUserId { get; set; }
@@ -89,6 +95,10 @@ public class JmdoTaskAllocationDealer
     /// <summary>Stamped when Status is set to InProgress - lets "Time on task" resume from the
     /// real elapsed time instead of 0 on every page load.</summary>
     public DateTime? StartedAt { get; set; }
+
+    /// <summary>Stamped when Status is set to Completed - lets "Time on task" be computed once as
+    /// CompletedAt - StartedAt instead of showing 00:00 after the task is closed.</summary>
+    public DateTime? CompletedAt { get; set; }
 }
 
 /// <summary>One picked MD/training program. Name/Budget are a snapshot at submission time, same
@@ -109,6 +119,10 @@ public class JmdoTaskAllocationProgram
     /// <summary>Stamped when Status is set to InProgress - lets "Time on task" resume from the
     /// real elapsed time instead of 0 on every page load.</summary>
     public DateTime? StartedAt { get; set; }
+
+    /// <summary>Stamped when Status is set to Completed - lets "Time on task" be computed once as
+    /// CompletedAt - StartedAt instead of showing 00:00 after the task is closed.</summary>
+    public DateTime? CompletedAt { get; set; }
 }
 
 /// <summary>Which kind of task a JmdoTaskCloseout record closes out - mirrors TaskDetail.razor's

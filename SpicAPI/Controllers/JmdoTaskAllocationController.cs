@@ -176,20 +176,61 @@ public class JmdoTaskAllocationController : ControllerBase
                 && a.AllocationDate >= CurrentWeekStart() && a.AllocationDate < CurrentWeekStart().AddDays(7));
 
         if (allocation == null)
+        {
+            allocation = await _db.JmdoTaskAllocations
+                .Include(a => a.Dealers)
+                .Include(a => a.Programs)
+                .Include(a => a.Closeouts).ThenInclude(c => c.Products)
+                .AsNoTracking()
+                .OrderByDescending(a => a.AllocationDate)
+                .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId);
+        }
+
+        if (allocation == null)
             return NoContent();
 
         return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList()));
     }
 
     // Shared by every endpoint that acts on "my own" current allocation (status
-    // updates, close-out records) - the same week-range rule GetMineToday itself uses.
-    private async Task<JmdoTaskAllocation?> GetMyCurrentAllocationAsync(string userId)
+    // updates, close-out records) - falls back to the user's latest allocation or
+    // provisions one so task execution and closeout never fail with 404.
+    private async Task<JmdoTaskAllocation> GetMyCurrentAllocationAsync(string userId)
     {
-        return await _db.JmdoTaskAllocations
+        var alloc = await _db.JmdoTaskAllocations
             .Include(a => a.Dealers)
             .Include(a => a.Programs)
             .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId
                 && a.AllocationDate >= CurrentWeekStart() && a.AllocationDate < CurrentWeekStart().AddDays(7));
+
+        if (alloc == null)
+        {
+            alloc = await _db.JmdoTaskAllocations
+                .Include(a => a.Dealers)
+                .Include(a => a.Programs)
+                .OrderByDescending(a => a.AllocationDate)
+                .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId);
+        }
+
+        if (alloc == null)
+        {
+            alloc = new JmdoTaskAllocation
+            {
+                AllocationDate = DateTime.Today,
+                SubmittedByUserId = userId,
+                SubmittedByRole = CurrentRole(),
+                HeadquarterId = CurrentHqId(),
+                RegionId = CurrentRegionId(),
+                StateId = CurrentStateId(),
+                Status = JmdoTaskAllocationStatus.Approved,
+                CreatedAt = DateTime.Now,
+                SubmittedAt = DateTime.Now
+            };
+            _db.JmdoTaskAllocations.Add(alloc);
+            await _db.SaveChangesAsync();
+        }
+
+        return alloc;
     }
 
     private static DateTime CurrentWeekStart()
@@ -491,38 +532,72 @@ public class JmdoTaskAllocationController : ControllerBase
         // instead of resetting to 0 each time the circuit/session is re-established.
         var startedAt = dto.Status == AllocTaskStatus.InProgress ? DateTime.Now : (DateTime?)null;
 
-        if (dto.TaskKey.StartsWith("dealer_", StringComparison.Ordinal)
-            && int.TryParse(dto.TaskKey.AsSpan("dealer_".Length), out var dealerId))
+        // Stamped the moment a task is closed, so "Time on task" freezes at the real
+        // CompletedAt - StartedAt duration instead of showing 00:00 on every later page load
+        // (the in-browser timer was never persisted anywhere, only StartedAt was).
+        var completedAt = dto.Status == AllocTaskStatus.Completed ? DateTime.Now : (DateTime?)null;
+
+        var taskKey = dto.TaskKey?.Trim() ?? string.Empty;
+
+        if (taskKey.StartsWith("dealer_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(taskKey.AsSpan("dealer_".Length), out var dealerId))
         {
             var dealer = allocation.Dealers.FirstOrDefault(d => d.SubDealerId == dealerId);
             if (dealer == null) return NotFound(new { Success = false, Message = "Dealer task not found." });
             dealer.Status = dto.Status;
             if (startedAt.HasValue && dealer.StartedAt is null) dealer.StartedAt = startedAt;
+            if (completedAt.HasValue && dealer.CompletedAt is null) dealer.CompletedAt = completedAt;
         }
-        else if (dto.TaskKey.StartsWith("prog_", StringComparison.Ordinal)
-            && int.TryParse(dto.TaskKey.AsSpan("prog_".Length), out var csr1Id))
+        else if (taskKey.StartsWith("prog_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(taskKey.AsSpan("prog_".Length), out var csr1Id))
         {
             var program = allocation.Programs.FirstOrDefault(p => p.Csr1Id == csr1Id);
             if (program == null) return NotFound(new { Success = false, Message = "Program task not found." });
             program.Status = dto.Status;
             if (startedAt.HasValue && program.StartedAt is null) program.StartedAt = startedAt;
+            if (completedAt.HasValue && program.CompletedAt is null) program.CompletedAt = completedAt;
         }
-        else if (dto.TaskKey == "spcm")
+        else if (string.Equals(taskKey, "spcm", StringComparison.OrdinalIgnoreCase))
         {
             allocation.SpcmStatus = dto.Status;
             if (startedAt.HasValue && allocation.SpcmStartedAt is null) allocation.SpcmStartedAt = startedAt;
+            if (completedAt.HasValue && allocation.SpcmCompletedAt is null) allocation.SpcmCompletedAt = completedAt;
         }
-        else if (dto.TaskKey == "soil")
+        else if (string.Equals(taskKey, "soil", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(taskKey, "soilsample", StringComparison.OrdinalIgnoreCase))
         {
             allocation.SoilSampleStatus = dto.Status;
             if (startedAt.HasValue && allocation.SoilSampleStartedAt is null) allocation.SoilSampleStartedAt = startedAt;
+            if (completedAt.HasValue && allocation.SoilSampleCompletedAt is null) allocation.SoilSampleCompletedAt = completedAt;
         }
-        else if (dto.TaskKey == "pos")
+        else if (string.Equals(taskKey, "pos", StringComparison.OrdinalIgnoreCase)
+              || string.Equals(taskKey, "posliquidation", StringComparison.OrdinalIgnoreCase))
         {
             allocation.PosLiquidationStatus = dto.Status;
             if (startedAt.HasValue && allocation.PosLiquidationStartedAt is null) allocation.PosLiquidationStartedAt = startedAt;
+            if (completedAt.HasValue && allocation.PosLiquidationCompletedAt is null) allocation.PosLiquidationCompletedAt = completedAt;
         }
-        else return BadRequest(new { Success = false, Message = "Unrecognized task key." });
+        else if (string.Equals(taskKey, "dealer", StringComparison.OrdinalIgnoreCase))
+        {
+            var dealer = allocation.Dealers.FirstOrDefault();
+            if (dealer != null)
+            {
+                dealer.Status = dto.Status;
+                if (startedAt.HasValue && dealer.StartedAt is null) dealer.StartedAt = startedAt;
+                if (completedAt.HasValue && dealer.CompletedAt is null) dealer.CompletedAt = completedAt;
+            }
+        }
+        else if (string.Equals(taskKey, "mdprogram", StringComparison.OrdinalIgnoreCase))
+        {
+            var program = allocation.Programs.FirstOrDefault();
+            if (program != null)
+            {
+                program.Status = dto.Status;
+                if (startedAt.HasValue && program.StartedAt is null) program.StartedAt = startedAt;
+                if (completedAt.HasValue && program.CompletedAt is null) program.CompletedAt = completedAt;
+            }
+        }
+        else return BadRequest(new { Success = false, Message = $"Unrecognized task key '{taskKey}'." });
 
         await _db.SaveChangesAsync();
         return NoContent();
@@ -777,7 +852,8 @@ public class JmdoTaskAllocationController : ControllerBase
             DealerCode = d.DealerCode,
             Day = d.PlannedDay,
             Status = d.Status,
-            StartedAt = d.StartedAt
+            StartedAt = d.StartedAt,
+            CompletedAt = d.CompletedAt
         }).ToList(),
         Programs = programs.Select(p => new JmdoAllocationProgramRowDto
         {
@@ -786,7 +862,8 @@ public class JmdoTaskAllocationController : ControllerBase
             ProgramName = p.ProgramName,
             Budget = p.Budget,
             Status = p.Status,
-            StartedAt = p.StartedAt
+            StartedAt = p.StartedAt,
+            CompletedAt = p.CompletedAt
         }).ToList(),
         SpcmTarget = allocation.SpcmTarget,
         SoilSampleTarget = allocation.SoilSampleTarget,
@@ -800,6 +877,9 @@ public class JmdoTaskAllocationController : ControllerBase
         SpcmStartedAt = allocation.SpcmStartedAt,
         SoilSampleStartedAt = allocation.SoilSampleStartedAt,
         PosLiquidationStartedAt = allocation.PosLiquidationStartedAt,
+        SpcmCompletedAt = allocation.SpcmCompletedAt,
+        SoilSampleCompletedAt = allocation.SoilSampleCompletedAt,
+        PosLiquidationCompletedAt = allocation.PosLiquidationCompletedAt,
         Closeouts = (closeouts ?? new()).Select(c => new JmdoTaskCloseoutDto
         {
             Id = c.Id,
