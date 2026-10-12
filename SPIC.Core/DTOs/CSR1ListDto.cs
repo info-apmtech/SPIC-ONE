@@ -7,7 +7,7 @@ namespace SPIC.Core.DTOs
     public class CSR1ListDto
     {
         public int Id { get; set; }
-
+        public string SanctionNo { get; set; } = "";
         public int ProgramTypeId { get; set; }
         public string ProgramType { get; set; } = "";
 
@@ -29,6 +29,7 @@ namespace SPIC.Core.DTOs
         public string? Remarks { get; set; }
         public DateTime CreatedAt { get; set; }
         public bool IsActive { get; set; }
+        public DateTime CSR1Date { get; set; }
 
         public List<CSR1ProductDto> Products1 { get; set; } = new();
         public List<CSR1ProductDto> Products2 { get; set; } = new();

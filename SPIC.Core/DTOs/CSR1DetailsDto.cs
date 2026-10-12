@@ -66,6 +66,8 @@ namespace SPIC.Core.DTOs
 
         public DateTime? UpdatedAt { get; set; }
 
+        public DateTime CSR1Date { get; set; }
+
 
         // Focus Groups
         public List<CSR1FocusDetailsDto> Focus1 { get; set; } = new();
