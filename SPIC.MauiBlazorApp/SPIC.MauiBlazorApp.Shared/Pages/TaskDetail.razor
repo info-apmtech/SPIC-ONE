@@ -19,6 +19,11 @@
         <h2 class="td-title">@dynamicTitle</h2>
         <p class="td-subtitle">Pending Ack. @dynamicPendingAck &middot; Dues @dynamicDues &middot; @dynamicLocation</p>
     }
+    else if (kind == TaskKind.MdProgram)
+    {
+        <h2 class="td-title">@dynamicTitle</h2>
+        <p class="td-subtitle">Sanction No: @dynamicSanctionNo &middot; Sanction Date: @dynamicSanctionDate &middot; Budget: @dynamicBudget</p>
+    }
 
     <div class="td-timeline-card">
         <h3 class="td-timeline-title">Task Timeline</h3>
@@ -783,18 +788,6 @@
                     dynamicCode = dealer.DealerCode;
                     dynamicDueDate = currentAllocation.AllocationDate.ToString("dd MMM yyyy");
                 }
-
-                try
-                {
-                    var dInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.SubDealerFormModel>($"api/SubDealerRegistration/{dIdVal}");
-                    if (dInfo != null)
-                    {
-                        dynamicLocation = !string.IsNullOrWhiteSpace(dInfo.Village) ? dInfo.Village :
-                                          !string.IsNullOrWhiteSpace(dInfo.Taluk) ? dInfo.Taluk :
-                                          !string.IsNullOrWhiteSpace(dInfo.FirmName) ? dInfo.FirmName : "Unknown Location";
-                    }
-                }
-                catch { }
             }
             else if (kind == TaskKind.MdProgram && currentProgramId is { } pIdVal)
             {
@@ -803,19 +796,55 @@
                 {
                     dynamicTitle = prog.ProgramName;
                 }
+            }
+        }
 
-                try
+        if (kind == TaskKind.Dealer && currentDealerId is { } dealerId)
+        {
+            try
+            {
+                var dInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.SubDealerFormModel>($"api/SubDealerRegistration/{dealerId}");
+                if (dInfo != null)
                 {
-                    var pInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.CSR1DetailsDto>($"api/CSR1/details/{pIdVal}");
-                    if (pInfo != null)
-                    {
-                        dynamicSanctionDate = pInfo.CreatedAt.ToString("dd MMM yyyy");
-                        dynamicSanctionNo = $"MD-{pInfo.Id}";
-                        dynamicProgramType = pInfo.ProgramType;
-                        dynamicBudget = pInfo.Budget.ToString("C");
-                    }
+                    dynamicLocation = !string.IsNullOrWhiteSpace(dInfo.Village) ? dInfo.Village :
+                                      !string.IsNullOrWhiteSpace(dInfo.Taluk) ? dInfo.Taluk :
+                                      !string.IsNullOrWhiteSpace(dInfo.FirmName) ? dInfo.FirmName : "Unknown Location";
+                    if (string.IsNullOrWhiteSpace(dynamicTitle) || dynamicTitle == "Loading...")
+                        dynamicTitle = dInfo.FirmName ?? dynamicTitle;
                 }
-                catch { }
+            }
+            catch { }
+        }
+        else if (kind == TaskKind.MdProgram && currentProgramId is { } programId)
+        {
+            try
+            {
+                var pInfo = await Http.GetFromJsonAsync<SPIC.Core.DTOs.CSR1DetailsDto>($"api/CSR1/details/{programId}");
+                if (pInfo != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(pInfo.ProgramName))
+                        dynamicTitle = pInfo.ProgramName;
+
+                    dynamicSanctionDate = pInfo.CSR1Date != default && pInfo.CSR1Date != DateTime.MinValue
+                        ? pInfo.CSR1Date.ToString("dd MMM yyyy")
+                        : (pInfo.CreatedAt != default ? pInfo.CreatedAt.ToString("dd MMM yyyy") : "—");
+
+                    dynamicSanctionNo = !string.IsNullOrWhiteSpace(pInfo.SanctionNo)
+                        ? pInfo.SanctionNo
+                        : $"MD-{pInfo.Id}";
+
+                    dynamicProgramType = !string.IsNullOrWhiteSpace(pInfo.ProgramType)
+                        ? pInfo.ProgramType
+                        : "—";
+
+                    dynamicBudget = pInfo.Budget > 0
+                        ? (pInfo.Budget % 1 == 0 ? $"₹{pInfo.Budget:N0}" : $"₹{pInfo.Budget:N2}")
+                        : "—";
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"CSR1 details load failed: {ex.Message}");
             }
         }
     }

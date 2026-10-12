@@ -1435,6 +1435,7 @@ namespace SpicAPI.Controllers
                         UpdatedAt =
                             csr1.UpdatedAt,
                         CSR1Date = csr1.CSR1Date,
+                        SanctionNo = csr1.SanctionNo,
 
 
                         Focus1 =

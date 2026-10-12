@@ -486,12 +486,12 @@
                                             <h4 class="ta-dealer-name ta-program-name">@program.ProgramName</h4>
 
                                             <div class="ta-dealer-code-row">
-                                                <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>—</strong>
+                                                <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>@FormatProgramSanctionNo(program)</strong>
                                             </div>
 
                                             <div class="ta-dealer-info-row">
                                                 <span><i class="bi bi-calendar3"></i> Sanction Date</span>
-                                                <strong>—</strong>
+                                                <strong>@FormatProgramSanctionDate(program)</strong>
                                             </div>
 
                                             <div class="ta-dealer-stats-row">
@@ -501,7 +501,7 @@
                                                 </div>
                                                 <div class="ta-mini-stat ta-mini-stat-budget">
                                                     <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
-                                                    <div class="ta-mini-stat-val">—</div>
+                                                    <div class="ta-mini-stat-val">@(program.Budget > 0 ? (program.Budget % 1 == 0 ? $"₹{program.Budget:N0}" : $"₹{program.Budget:N2}") : "—")</div>
                                                 </div>
                                             </div>
 
@@ -679,12 +679,12 @@
                                 <h4 class="ta-dealer-name ta-program-name">@program.ProgramName</h4>
 
                                 <div class="ta-dealer-code-row">
-                                    <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>—</strong>
+                                    <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>@FormatProgramSanctionNo(program)</strong>
                                 </div>
 
                                 <div class="ta-dealer-info-row">
                                     <span><i class="bi bi-calendar3"></i> Sanction Date</span>
-                                    <strong>—</strong>
+                                    <strong>@FormatProgramSanctionDate(program)</strong>
                                 </div>
 
                                 <div class="ta-dealer-stats-row">
@@ -694,7 +694,7 @@
                                     </div>
                                     <div class="ta-mini-stat ta-mini-stat-budget">
                                         <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
-                                        <div class="ta-mini-stat-val">—</div>
+                                        <div class="ta-mini-stat-val">@(program.Budget > 0 ? (program.Budget % 1 == 0 ? $"₹{program.Budget:N0}" : $"₹{program.Budget:N2}") : "—")</div>
                                     </div>
                                 </div>
 
@@ -1268,8 +1268,12 @@
                 {
                     Id = p.Id,
                     Title = p.ProgramName,
+                    SanctionNo = !string.IsNullOrWhiteSpace(p.SanctionNo) ? p.SanctionNo : $"MD-{p.Id}",
+                    SanctionDate = p.CSR1Date != default && p.CSR1Date != DateTime.MinValue
+                        ? p.CSR1Date.ToString("dd MMM yyyy")
+                        : (p.CreatedAt != default ? p.CreatedAt.ToString("dd MMM yyyy") : "—"),
                     ProgramCount = p.NumberOfPrograms,
-                    TotalBudget = $"₹{p.Budget:N0}",
+                    TotalBudget = p.Budget > 0 ? (p.Budget % 1 == 0 ? $"₹{p.Budget:N0}" : $"₹{p.Budget:N2}") : "—",
                     TypeLabel = string.IsNullOrWhiteSpace(p.ProgramType) ? "Training" : p.ProgramType,
                     CreatedAt = p.CreatedAt
                 }));
@@ -1289,4 +1293,28 @@
     private IEnumerable<ProgramOption> SelectedPrograms => Programs.Where(p => p.IsSelected);
 
     private void ToggleProgram(ProgramOption program) => program.IsSelected = !program.IsSelected;
+
+    private string FormatProgramSanctionNo(JmdoAllocationProgramRowDto program)
+    {
+        if (!string.IsNullOrWhiteSpace(program.SanctionNo))
+            return program.SanctionNo;
+
+        var opt = Programs.FirstOrDefault(p => p.Id == program.Csr1Id);
+        if (!string.IsNullOrWhiteSpace(opt?.SanctionNo))
+            return opt.SanctionNo;
+
+        return $"MD-{program.Csr1Id}";
+    }
+
+    private string FormatProgramSanctionDate(JmdoAllocationProgramRowDto program)
+    {
+        if (program.SanctionDate.HasValue && program.SanctionDate.Value != default && program.SanctionDate.Value != DateTime.MinValue)
+            return program.SanctionDate.Value.ToString("dd MMM yyyy");
+
+        var opt = Programs.FirstOrDefault(p => p.Id == program.Csr1Id);
+        if (!string.IsNullOrWhiteSpace(opt?.SanctionDate) && opt.SanctionDate != "—")
+            return opt.SanctionDate;
+
+        return "—";
+    }
 }

@@ -155,7 +155,10 @@ public class JmdoTaskAllocationController : ControllerBase
             .Where(p => p.AllocationId == allocation.Id)
             .ToListAsync();
 
-        return StatusCode(201, ToResponseDto(allocation, allocationDealers, allocationPrograms));
+        var csr1Lookup = programs
+            .ToDictionary(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
+
+        return StatusCode(201, ToResponseDto(allocation, allocationDealers, allocationPrograms, null, csr1Lookup));
     }
 
     // GET api/JmdoTaskAllocation/mine/today
@@ -189,7 +192,13 @@ public class JmdoTaskAllocationController : ControllerBase
         if (allocation == null)
             return NoContent();
 
-        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList()));
+        var csr1Ids = allocation.Programs.Select(p => p.Csr1Id).Distinct().ToList();
+        var csr1Lookup = await _db.CSR1
+            .Where(c => csr1Ids.Contains(c.Id))
+            .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
+            .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
+
+        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList(), csr1Lookup));
     }
 
     // Shared by every endpoint that acts on "my own" current allocation (status
@@ -318,6 +327,12 @@ public class JmdoTaskAllocationController : ControllerBase
 
         var info = await GetJmdoInfoAsync(allocation.SubmittedByUserId);
 
+        var csr1Ids = allocation.Programs.Select(p => p.Csr1Id).Distinct().ToList();
+        var csr1Lookup = await _db.CSR1
+            .Where(c => csr1Ids.Contains(c.Id))
+            .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
+            .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
+
         return Ok(new JmdoAllocationDetailDto
         {
             Id = allocation.Id,
@@ -336,13 +351,19 @@ public class JmdoTaskAllocationController : ControllerBase
                 Day = d.PlannedDay,
                 PlannedDate = d.PlannedDate
             }).ToList(),
-            Programs = allocation.Programs.Select(p => new JmdoAllocationProgramRowDto
+            Programs = allocation.Programs.Select(p =>
             {
-                RowId = p.Id,
-                Csr1Id = p.Csr1Id,
-                ProgramName = p.ProgramName,
-                Budget = p.Budget,
-                Status = p.Status
+                var meta = csr1Lookup.TryGetValue(p.Csr1Id, out var m) ? m : default;
+                return new JmdoAllocationProgramRowDto
+                {
+                    RowId = p.Id,
+                    Csr1Id = p.Csr1Id,
+                    ProgramName = p.ProgramName,
+                    Budget = p.Budget,
+                    Status = p.Status,
+                    SanctionNo = meta.SanctionNo,
+                    SanctionDate = meta.CSR1Date
+                };
             }).ToList(),
             SpcmTarget = allocation.SpcmTarget,
             SoilSampleTarget = allocation.SoilSampleTarget,
@@ -457,7 +478,9 @@ public class JmdoTaskAllocationController : ControllerBase
             RowId = row.Id,
             Csr1Id = row.Csr1Id,
             ProgramName = row.ProgramName,
-            Budget = row.Budget
+            Budget = row.Budget,
+            SanctionNo = program.SanctionNo,
+            SanctionDate = program.CSR1Date
         });
     }
 
@@ -837,7 +860,8 @@ public class JmdoTaskAllocationController : ControllerBase
         JmdoTaskAllocation allocation,
         List<JmdoTaskAllocationDealer> dealers,
         List<JmdoTaskAllocationProgram> programs,
-        List<JmdoTaskCloseout>? closeouts = null) => new()
+        List<JmdoTaskCloseout>? closeouts = null,
+        Dictionary<int, (string? SanctionNo, DateTime? CSR1Date)>? csr1Lookup = null) => new()
     {
         Id = allocation.Id,
         AllocationDate = allocation.AllocationDate,
@@ -855,15 +879,21 @@ public class JmdoTaskAllocationController : ControllerBase
             StartedAt = d.StartedAt,
             CompletedAt = d.CompletedAt
         }).ToList(),
-        Programs = programs.Select(p => new JmdoAllocationProgramRowDto
+        Programs = programs.Select(p =>
         {
-            RowId = p.Id,
-            Csr1Id = p.Csr1Id,
-            ProgramName = p.ProgramName,
-            Budget = p.Budget,
-            Status = p.Status,
-            StartedAt = p.StartedAt,
-            CompletedAt = p.CompletedAt
+            var meta = csr1Lookup != null && csr1Lookup.TryGetValue(p.Csr1Id, out var m) ? m : default;
+            return new JmdoAllocationProgramRowDto
+            {
+                RowId = p.Id,
+                Csr1Id = p.Csr1Id,
+                ProgramName = p.ProgramName,
+                Budget = p.Budget,
+                Status = p.Status,
+                StartedAt = p.StartedAt,
+                CompletedAt = p.CompletedAt,
+                SanctionNo = meta.SanctionNo,
+                SanctionDate = meta.CSR1Date
+            };
         }).ToList(),
         SpcmTarget = allocation.SpcmTarget,
         SoilSampleTarget = allocation.SoilSampleTarget,

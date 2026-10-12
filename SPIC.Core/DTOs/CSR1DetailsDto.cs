@@ -67,6 +67,7 @@ namespace SPIC.Core.DTOs
         public DateTime? UpdatedAt { get; set; }
 
         public DateTime CSR1Date { get; set; }
+        public string? SanctionNo { get; set; }
 
 
         // Focus Groups

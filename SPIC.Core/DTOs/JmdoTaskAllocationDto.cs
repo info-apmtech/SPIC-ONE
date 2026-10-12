@@ -129,6 +129,8 @@ namespace SPIC.Core.DTOs
         public AllocTaskStatus Status { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
+        public string? SanctionNo { get; set; }
+        public DateTime? SanctionDate { get; set; }
     }
 
     public class AddDealerToAllocationDto
