@@ -1,9 +1,12 @@
-﻿@using System.Net.Http.Json
+@using System.Net.Http.Json
 @using System.Globalization
 @using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
+@inject ToastService Toast
 
 
 @if (IsOpen)
@@ -45,6 +48,10 @@
                     </div>
 
                     <div class="csr-pd-header-right">
+
+                        <span class="csr-pd-scope-pill @(IsStateScope ? "csr-pd-scope-pill-state" : "")">
+                            @(IsHQScope ? "Headquarters" : "State")
+                        </span>
 
                         <span class="@GetHeaderStatusClass(details.Status)">
                             @GetStatusDisplay(details.Status)
@@ -416,6 +423,42 @@
                                 </div>
                             }
 
+                            @if (string.Equals(
+                                details.Status,
+                                "Rejected",
+                                StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="csr-pd-timeline-item csr-pd-timeline-last">
+
+                                    <div class="csr-pd-timeline-marker csr-pd-marker-rejected">
+                                        <i class="bi bi-x"></i>
+                                    </div>
+
+                                    <div class="csr-pd-timeline-content">
+
+                                        <strong style="color: #dc2626;">Rejected</strong>
+
+                                        <div class="csr-pd-timeline-meta">
+
+                                            <span>
+                                                @ShowValue(details.UpdatedBy)
+                                            </span>
+
+                                            <span class="csr-pd-date-pill" style="background: #dc2626;">
+
+                                                @(details.UpdatedAt.HasValue
+                                                    ? details.UpdatedAt.Value.ToString("dd MMM yyyy")
+                                                    : "-")
+
+                                            </span>
+
+                                        </div>
+
+                                    </div>
+
+                                </div>
+                            }
+
                         </div>
 
                     </section>
@@ -425,7 +468,7 @@
                     {
                         <section class="csr-pd-section">
 
-                            <h3>Remarks</h3>
+                            <h3 style="color: #dc2626;">Remarks</h3>
 
                             <div class="csr-pd-panel csr-pd-remarks">
                                 @details.Remarks
@@ -460,20 +503,109 @@
 
                     </button>
 
+                    @if (CanReject)
+                    {
+                        <button type="button"
+                                class="csr-pd-footer-btn csr-pd-footer-danger"
+                                disabled="@isActionInProgress"
+                                @onclick="OpenRejectModal">
+                            <i class="bi bi-x-circle"></i>
+                            Reject
+                        </button>
+                    }
 
-                    <button type="button"
-                            class="csr-pd-footer-btn csr-pd-footer-primary"
-                            @onclick="OpenCsr2">
+                    @if (CanValidate)
+                    {
+                        <button type="button"
+                                class="csr-pd-footer-btn csr-pd-footer-validate"
+                                disabled="@isActionInProgress"
+                                @onclick="ValidateCSR1">
+                            @if (isActionInProgress)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check-circle"></i>
+                            }
+                            Validate
+                        </button>
+                    }
 
-                        <i class="bi bi-box-arrow-up-right"></i>
-                        Open CSR-2
+                    @if (CanApprove)
+                    {
+                        <button type="button"
+                                class="csr-pd-footer-btn csr-pd-footer-approve"
+                                disabled="@isActionInProgress"
+                                @onclick="ApproveCSR1">
+                            @if (isActionInProgress)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-check2-all"></i>
+                            }
+                            Approve
+                        </button>
+                    }
+                    else if (IsAwaitingValidation)
+                    {
+                        <div class="csr-pd-awaiting-badge">
+                            <i class="bi bi-hourglass-split"></i>
+                            <span>Awaiting @(IsHQScope ? "MO" : "SMD") Validation</span>
+                        </div>
+                    }
 
-                    </button>
+                    @if (string.Equals(details.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <button type="button"
+                                class="csr-pd-footer-btn csr-pd-footer-primary"
+                                @onclick="OpenCsr2">
+
+                            <i class="bi bi-box-arrow-up-right"></i>
+                            Open CSR-2
+
+                        </button>
+                    }
 
                 </div>
             }
 
         </div>
+
+        @if (showRejectModal)
+        {
+            <div class="csr-pd-reject-modal-backdrop" @onclick="CloseRejectModal">
+                <div class="csr-pd-reject-modal" @onclick:stopPropagation="true">
+                    <div class="csr-pd-reject-modal-header">
+                        <h4>Reject CSR-1</h4>
+                        <button type="button" class="btn-close" @onclick="CloseRejectModal"></button>
+                    </div>
+                    <div class="csr-pd-reject-modal-body">
+                        <p>Please enter the reason / remarks for rejecting this CSR-1:</p>
+                        <textarea class="form-control"
+                                  rows="3"
+                                  placeholder="Enter remarks..."
+                                  @bind="rejectionRemarks" />
+                        @if (!string.IsNullOrWhiteSpace(rejectErrorMessage))
+                        {
+                            <div class="text-danger mt-2 small">@rejectErrorMessage</div>
+                        }
+                    </div>
+                    <div class="csr-pd-reject-modal-footer">
+                        <button type="button" class="btn btn-sm btn-secondary" @onclick="CloseRejectModal">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-danger" disabled="@isActionInProgress" @onclick="SubmitRejection">
+                            @if (isActionInProgress)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            Confirm Reject
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
 
     </div>
 }
@@ -564,6 +696,12 @@
         color: #c2410c;
     }
 
+    .csr-pd-status-validated {
+        background: #fef3c7;
+        border: 1px solid #fde68a;
+        color: #d97706;
+    }
+
     .csr-pd-status-rejected {
         background: #fef2f2;
         border: 1px solid #fecaca;
@@ -574,6 +712,26 @@
         background: #f1f5f9;
         border: 1px solid #e2e8f0;
         color: #475569;
+    }
+
+    .csr-pd-scope-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 24px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 10px;
+        font-weight: 600;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #166534;
+    }
+
+    .csr-pd-scope-pill-state {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1d4ed8;
     }
 
     .csr-pd-close {
@@ -908,6 +1066,94 @@
             background: #14532d;
         }
 
+    .csr-pd-footer-validate {
+        border: 1px solid #0284c7;
+        background: #0284c7;
+        color: #ffffff;
+    }
+
+        .csr-pd-footer-validate:hover {
+            background: #0369a1;
+        }
+
+    .csr-pd-footer-approve {
+        border: 1px solid #16a34a;
+        background: #16a34a;
+        color: #ffffff;
+    }
+
+        .csr-pd-footer-approve:hover {
+            background: #15803d;
+        }
+
+    .csr-pd-footer-danger {
+        border: 1px solid #ef4444;
+        background: #ffffff;
+        color: #dc2626;
+    }
+
+        .csr-pd-footer-danger:hover {
+            background: #fef2f2;
+        }
+
+    .csr-pd-marker-rejected {
+        border-color: #ef4444 !important;
+        background: #fee2e2 !important;
+        color: #dc2626 !important;
+    }
+
+    .csr-pd-reject-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        z-index: 1100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .csr-pd-reject-modal {
+        background: #ffffff;
+        border-radius: 10px;
+        width: min(440px, 90vw);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        overflow: hidden;
+    }
+
+    .csr-pd-reject-modal-header {
+        padding: 14px 18px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .csr-pd-reject-modal-header h4 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .csr-pd-reject-modal-body {
+        padding: 16px 18px;
+    }
+
+    .csr-pd-reject-modal-body p {
+        margin: 0 0 10px;
+        font-size: 12px;
+        color: #475569;
+    }
+
+    .csr-pd-reject-modal-footer {
+        padding: 12px 18px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        background: #f8fafc;
+    }
+
 
     /* =========================================================
            LOADING
@@ -954,6 +1200,20 @@
         }
     }
 
+    .csr-pd-awaiting-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #b45309;
+        background: #fef3c7;
+        border: 1px solid #fde68a;
+        padding: 8px 14px;
+        border-radius: 6px;
+        white-space: nowrap;
+    }
+
 </style>
 
 
@@ -972,6 +1232,9 @@
     [Parameter]
     public EventCallback<bool> IsOpenChanged { get; set; }
 
+    [Parameter]
+    public EventCallback OnStatusChanged { get; set; }
+
 
     // =========================================================
     // STATE
@@ -982,6 +1245,11 @@
     private bool isLoading = false;
 
     private int lastLoadedId = 0;
+
+    private bool isActionInProgress = false;
+    private bool showRejectModal = false;
+    private string rejectionRemarks = "";
+    private string rejectErrorMessage = "";
 
 
     // =========================================================
@@ -1079,7 +1347,7 @@
 
 
     // =========================================================
-    // STATUS FLOW
+    // STATUS FLOW & WORKFLOW ELIGIBILITY
     // =========================================================
 
     private bool IsSubmittedOrLater =>
@@ -1089,6 +1357,157 @@
             "Draft",
             StringComparison.OrdinalIgnoreCase);
 
+    private bool IsHQScope =>
+        string.Equals(details?.Scope, "HQ", StringComparison.OrdinalIgnoreCase) ||
+        (details?.HeadquarterId.HasValue == true && details.HeadquarterId.Value > 0);
+
+    private bool IsStateScope => !IsHQScope;
+
+    private bool CanValidate =>
+        details != null &&
+        (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(details.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(details.Status, "Pending", StringComparison.OrdinalIgnoreCase)) &&
+        (loginState.IsAdmin ||
+         (IsHQScope && loginState.UserRole == AppRole.MO) ||
+         (IsStateScope && loginState.UserRole == AppRole.SMD));
+
+    private bool CanApprove =>
+        details != null &&
+        (string.Equals(details.Status, "Validated", StringComparison.OrdinalIgnoreCase) ||
+         (loginState.IsAdmin && (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(details.Status, "Validated", StringComparison.OrdinalIgnoreCase)))) &&
+        (loginState.IsAdmin ||
+         (IsHQScope && (loginState.UserRole == AppRole.RM || loginState.UserRole == AppRole.RMD)) ||
+         (IsStateScope && loginState.UserRole == AppRole.SMM));
+
+    private bool IsAwaitingValidation =>
+        details != null &&
+        (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(details.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(details.Status, "Pending", StringComparison.OrdinalIgnoreCase)) &&
+        ((IsHQScope && (loginState.UserRole == AppRole.RM || loginState.UserRole == AppRole.RMD)) ||
+         (IsStateScope && loginState.UserRole == AppRole.SMM));
+
+    private bool CanReject =>
+        details != null &&
+        !string.Equals(details.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(details.Status, "Rejected", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(details.Status, "Draft", StringComparison.OrdinalIgnoreCase) &&
+        (loginState.IsAdmin ||
+         (IsHQScope && (loginState.UserRole == AppRole.MO || loginState.UserRole == AppRole.RM || loginState.UserRole == AppRole.RMD)) ||
+         (IsStateScope && (loginState.UserRole == AppRole.SMD || loginState.UserRole == AppRole.SMM)));
+
+    private async Task ValidateCSR1()
+    {
+        if (details == null || isActionInProgress) return;
+        try
+        {
+            isActionInProgress = true;
+            var response = await Http.PostAsync($"api/CSR1/{details.Id}/validate", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Toast.Success("CSR-1 validated successfully.");
+                await LoadCSR1Details();
+                await OnStatusChanged.InvokeAsync();
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                Toast.Error(string.IsNullOrWhiteSpace(err) ? "Failed to validate CSR-1." : err);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Error validating CSR-1: {ex.Message}");
+        }
+        finally
+        {
+            isActionInProgress = false;
+        }
+    }
+
+    private async Task ApproveCSR1()
+    {
+        if (details == null || isActionInProgress) return;
+        try
+        {
+            isActionInProgress = true;
+            var response = await Http.PostAsync($"api/CSR1/{details.Id}/approve", null);
+            if (response.IsSuccessStatusCode)
+            {
+                Toast.Success("CSR-1 approved successfully.");
+                await LoadCSR1Details();
+                await OnStatusChanged.InvokeAsync();
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                Toast.Error(string.IsNullOrWhiteSpace(err) ? "Failed to approve CSR-1." : err);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.Error($"Error approving CSR-1: {ex.Message}");
+        }
+        finally
+        {
+            isActionInProgress = false;
+        }
+    }
+
+    private void OpenRejectModal()
+    {
+        rejectionRemarks = "";
+        rejectErrorMessage = "";
+        showRejectModal = true;
+    }
+
+    private void CloseRejectModal()
+    {
+        showRejectModal = false;
+        rejectionRemarks = "";
+        rejectErrorMessage = "";
+    }
+
+    private async Task SubmitRejection()
+    {
+        if (details == null || isActionInProgress) return;
+        if (string.IsNullOrWhiteSpace(rejectionRemarks))
+        {
+            rejectErrorMessage = "Please enter rejection remarks.";
+            return;
+        }
+
+        try
+        {
+            isActionInProgress = true;
+            var request = new CSR1RejectRequest { Remarks = rejectionRemarks.Trim() };
+            var response = await Http.PostAsJsonAsync($"api/CSR1/{details.Id}/reject", request);
+            if (response.IsSuccessStatusCode)
+            {
+                Toast.Success("CSR-1 rejected successfully.");
+                showRejectModal = false;
+                await LoadCSR1Details();
+                await OnStatusChanged.InvokeAsync();
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                rejectErrorMessage = string.IsNullOrWhiteSpace(err) ? "Failed to reject CSR-1." : err;
+                Toast.Error(rejectErrorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            rejectErrorMessage = ex.Message;
+            Toast.Error($"Error rejecting CSR-1: {ex.Message}");
+        }
+        finally
+        {
+            isActionInProgress = false;
+        }
+    }
 
     private string GetHeaderStatusClass(
         string? status)
@@ -1098,6 +1517,9 @@
             {
                 "approved" =>
                     "csr-pd-status-approved",
+
+                "validated" =>
+                    "csr-pd-status-validated",
 
                 "rejected" =>
                     "csr-pd-status-rejected",
