@@ -1,7 +1,9 @@
 @page "/SampleCollection/submitted/{ConsignmentId:int}"
 @using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
 @inject SasApi Api
+@inject HttpClient Http
 @inject NavigationManager Nav
 @inject ToastService Toast
 @inject IJSRuntime JS
@@ -121,6 +123,25 @@
         _c = item;
         _notFound = notFound;
         _loading = false;
+
+        // This is the first and only point in the SAS Sample Collection wizard that confirms a
+        // real, server-persisted submission, so it's the right place to close out today's Soil
+        // Sample task - mirrors the Completed stamping other task types get from TaskDetail's
+        // Stop Task button, which Soil Sample has no equivalent page for. Best-effort: a JMDO
+        // submitting a consignment with no current task allocation (or none at all) shouldn't
+        // block this success screen, so failures are swallowed.
+        if (_c != null && LoginState.UserRole == AppRole.JMDO)
+        {
+            try
+            {
+                await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
+                    new UpdateTaskStatusDto { TaskKey = "soil", Status = AllocTaskStatus.Completed });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Could not mark Soil Sample task completed: {ex.Message}");
+            }
+        }
     }
 
     private async Task CopyAsync()

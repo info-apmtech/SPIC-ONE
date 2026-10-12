@@ -458,11 +458,7 @@
                                                 <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
                                             </div>
 
-                                            <div class="ta-dealer-stats-row">
-                                                <div class="ta-mini-stat ta-mini-stat-dues">
-                                                    <div class="ta-mini-stat-label"><i class="bi bi-clock"></i> Dues</div>
-                                                    <div class="ta-mini-stat-val">—</div>
-                                                </div>
+                                            <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                                 <div class="ta-mini-stat ta-mini-stat-pending">
                                                     <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
                                                     <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
@@ -550,7 +546,7 @@
                                             </div>
                                         </div>
 
-                                        <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/SampleCollection/new")'>
+                                        <button type="button" class="ta-start-btn" @onclick="StartSoilSampleTask">
                                             @ActionLabel(soilStatus) <i class="bi bi-arrow-right"></i>
                                         </button>
                                     </div>
@@ -655,11 +651,7 @@
                                     <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
                                 </div>
 
-                                <div class="ta-dealer-stats-row">
-                                    <div class="ta-mini-stat ta-mini-stat-dues">
-                                        <div class="ta-mini-stat-label"><i class="bi bi-clock"></i> Dues</div>
-                                        <div class="ta-mini-stat-val">—</div>
-                                    </div>
+                                <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                     <div class="ta-mini-stat ta-mini-stat-pending">
                                         <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
                                         <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
@@ -891,6 +883,27 @@
             "pos" or "posliquidation" => todayAllocation.PosLiquidationStatus,
             _ => AllocTaskStatus.YetToStart
         };
+    }
+
+    // Soil Sample has no TaskDetail-style page of its own - its Start button goes straight to
+    // the SAS Sample Collection wizard - so unlike Dealer/SPCM/MD Program/PoS (which only flip
+    // to InProgress once the user presses "Start Task" inside TaskDetail), this is the only place
+    // that can mark it InProgress at all. Safe to call every time the button is pressed: the
+    // server only stamps SoilSampleStartedAt the first time (never overwritten), and this card
+    // only renders for YetToStart/InProgress status, never Completed.
+    private async Task StartSoilSampleTask()
+    {
+        try
+        {
+            await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
+                new UpdateTaskStatusDto { TaskKey = "soil", Status = AllocTaskStatus.InProgress });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Could not mark Soil Sample task in-progress: {ex.Message}");
+        }
+
+        Navigation.NavigateTo("/SampleCollection/new");
     }
 
     private int CountByStatus(AllocTaskStatus status)
