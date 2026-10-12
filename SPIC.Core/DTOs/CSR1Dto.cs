@@ -1,4 +1,4 @@
-﻿using SPIC.Core.Entities;
+using SPIC.Core.Entities;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -76,5 +76,10 @@ namespace SPIC.Core.DTOs
 
         public int Crop3Id { get; set; }
         public List<int> Product3Ids { get; set; } = new();
+    }
+
+    public class CSR1RejectRequest
+    {
+        public string Remarks { get; set; } = string.Empty;
     }
 }

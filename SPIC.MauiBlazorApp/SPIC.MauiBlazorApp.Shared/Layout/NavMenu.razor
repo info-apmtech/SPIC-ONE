@@ -572,7 +572,7 @@
             Budget Submissions
         </NavLink>
     }
-    @if (loginState.CanAccess(PagePermission.CSR1Create))
+    @if (!loginState.IsAdmin && loginState.CanAccess(PagePermission.CSR1Create))
     {
         <NavLink class="@NavLinkClass("CSR-1 Create")" href="/CREATE-CSR-1Management">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PurchaseIcon.svg" class="SideBariconimg" />
@@ -1015,13 +1015,20 @@
         isSettingsOpen = IsSettingsSectionActive();
         isSubsidyOpen = IsSubsidySectionActive();
         isSdwaOpen = IsSdwaSectionActive();
-        isMdPortalOpen = IsMdPortalSectionActive();
+        isMdPortalOpen = IsMdPortalSectionActive() || loginState.UserRole is AppRole.RM or AppRole.RMD or AppRole.SMM or AppRole.SMD or AppRole.MO or AppRole.MDO or AppRole.JMDO;
         isSchemesOpen = IsSchemesSectionActive();
         loginState.OnChange += HandleLoginStateChanged;
         SearchState.OnChange += HandleSearchChanged;
     }
 
-    private void HandleLoginStateChanged() => InvokeAsync(StateHasChanged);
+    private void HandleLoginStateChanged()
+    {
+        if (loginState.UserRole is AppRole.RM or AppRole.RMD or AppRole.SMM or AppRole.SMD or AppRole.MO or AppRole.MDO or AppRole.JMDO)
+        {
+            isMdPortalOpen = true;
+        }
+        InvokeAsync(StateHasChanged);
+    }
 
     private async void HandleSearchChanged()
     {

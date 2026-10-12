@@ -308,7 +308,19 @@
                                     <input type="checkbox" class="csrm-checkbox" />
                                 </td>
                                 <td data-label="Program Type">@item.ProgramType</td>
-                                <td data-label="Program Name">@item.ProgramName</td>
+                                <td data-label="Program Name">
+                                    <div style="display: inline-flex; align-items: center; gap: 8px;">
+                                        <span>@item.ProgramName</span>
+                                        @if (string.Equals(item.Scope, "State", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span style="font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;">State</span>
+                                        }
+                                        else if (string.Equals(item.Scope, "HQ", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span style="font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 12px; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;">HQ</span>
+                                        }
+                                    </div>
+                                </td>
                                 <td data-label="Submitted Date">@item.CreatedAt.ToString("dd MMM yyyy")</td>
                                 <td data-label="Total Budget">
                                     ₹@item.Budget.ToString("N2", CultureInfo.CreateSpecificCulture("en-IN"))
@@ -403,7 +415,8 @@
 </div>
 
 <CSR1ProgramDetailsDrawer @bind-IsOpen="isCSR1ProgramDetailsDrawerOpen"
-                          CSR1Id="@selectedCSR1Id" />
+                          CSR1Id="@selectedCSR1Id"
+                          OnStatusChanged="LoadCSR1" />
 @code {
     private bool isCSR1ProgramDetailsDrawerOpen = false;
     private int selectedCSR1Id = 0;
@@ -434,7 +447,8 @@
     private int PendingCount => csr1List.Count(x =>
         string.Equals(x.Status, "Pending", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(x.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(x.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase));
+        string.Equals(x.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(x.Status, "Validated", StringComparison.OrdinalIgnoreCase));
 
     private int RejectedCount => csr1List.Count(x =>
         string.Equals(x.Status, "Rejected", StringComparison.OrdinalIgnoreCase));
@@ -603,7 +617,9 @@
     private static string GetStatusDisplay(string? status)
     {
         if (string.Equals(status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase))
-            return "Pending";
+            return "Submitted";
+        if (string.Equals(status, "Validated", StringComparison.OrdinalIgnoreCase))
+            return "Validated";
 
         return string.IsNullOrWhiteSpace(status) ? "--" : status;
     }
