@@ -1,5 +1,6 @@
 @page "/AllocationRequestReview"
 @using System.Net.Http.Json
+@using System.Text.Json
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 @inject NavigationManager Navigation
@@ -142,18 +143,9 @@
                     }
                     @if (!_detail.Programs.Any())
                     {
-                        <span class="alreq-chip-empty">No programs added.</span>
+                        <span class="alreq-chip-empty">No programs assigned.</span>
                     }
                 </div>
-
-                <label class="alreq-add-label">Add a program</label>
-                <select class="alreq-select" @bind="selectedProgramToAdd" @bind:after="AddProgramRow">
-                    <option value="0">&mdash; Select to add &mdash;</option>
-                    @foreach (var option in AvailablePrograms)
-                    {
-                        <option value="@option.Id">@option.ProgramName</option>
-                    }
-                </select>
             </div>
         </div>
 
@@ -244,7 +236,6 @@
             }
 
             await LoadAvailableDealersAsync();
-            await LoadAvailableProgramsAsync();
         }
         catch (Exception ex)
         {
@@ -299,13 +290,21 @@
     {
         if (selectedDealerToAdd <= 0 || _detail is null) return;
 
+        // Same (dealer, date) check the server enforces in AddDealer - checked here first so a
+        // duplicate pick is rejected instantly instead of waiting on a round trip.
+        if (_detail.Dealers.Any(d => d.SubDealerId == selectedDealerToAdd && d.PlannedDate?.Date == selectedDateToAdd.Date))
+        {
+            Toast.Error("This dealer is already assigned on that date.");
+            return;
+        }
+
         try
         {
             var dto = new AddDealerToAllocationDto { DealerId = selectedDealerToAdd, PlannedDate = selectedDateToAdd };
             var response = await Http.PostAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers", dto);
             if (!response.IsSuccessStatusCode)
             {
-                Toast.Error("Could not add that dealer task.");
+                Toast.Error(await ExtractApiErrorAsync(response, "Could not add that dealer task."));
                 return;
             }
 
@@ -319,6 +318,29 @@
             Console.WriteLine($"Add dealer task failed: {ex.Message}");
             Toast.Error("Could not add that dealer task.");
         }
+    }
+
+    // The server's BadRequest bodies here are a plain { success, message } object (not the
+    // ModelState/Identity-errors shapes other controllers return), so this just needs to pull
+    // "message" back out instead of showing a generic toast for an already-specific server reason
+    // (e.g. the duplicate-dealer-on-date check in AddDealer/UpdateDealerPlannedDate).
+    private static async Task<string> ExtractApiErrorAsync(HttpResponseMessage response, string fallback)
+    {
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            if (body.ValueKind == JsonValueKind.Object && body.TryGetProperty("message", out var msg)
+                && msg.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(msg.GetString()))
+            {
+                return msg.GetString()!;
+            }
+        }
+        catch (Exception)
+        {
+            // Not JSON, or no "message" property - fall back below.
+        }
+
+        return fallback;
     }
 
     private async Task RemoveDealerTask(JmdoAllocationDealerRowDto task)
@@ -353,7 +375,7 @@
             var response = await Http.PutAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers/{task.RowId}/date", new UpdateDealerPlannedDateDto { PlannedDate = date });
             if (!response.IsSuccessStatusCode)
             {
-                Toast.Error("Could not update the planned date.");
+                Toast.Error(await ExtractApiErrorAsync(response, "Could not update the planned date."));
                 return;
             }
 
@@ -367,61 +389,10 @@
     }
 
     // ---------- MD Programs ----------
-    private sealed class ProgramOptionDto
-    {
-        public int Id { get; set; }
-        public string ProgramName { get; set; } = "";
-    }
-
-    private List<ProgramOptionDto> AvailablePrograms = new();
-    private int selectedProgramToAdd;
-
-    private async Task LoadAvailableProgramsAsync()
-    {
-        if (_detail is null) return;
-
-        try
-        {
-            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list");
-            var existingIds = _detail.Programs.Select(p => p.Csr1Id).ToHashSet();
-            var hqId = _detail.HeadquarterId ?? (LoginState.HQId > 0 ? LoginState.HQId : (int?)null);
-
-            AvailablePrograms = (result ?? new())
-                .Where(p => p.IsActive && !existingIds.Contains(p.Id) && (hqId is not > 0 || p.HeadquarterId == hqId))
-                .Select(p => new ProgramOptionDto { Id = p.Id, ProgramName = p.ProgramName })
-                .ToList();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Available program list load failed: {ex.Message}");
-        }
-    }
-
-    private async Task AddProgramRow()
-    {
-        if (selectedProgramToAdd <= 0 || _detail is null) return;
-
-        try
-        {
-            var response = await Http.PostAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/programs", new AddProgramToAllocationDto { Csr1Id = selectedProgramToAdd });
-            if (!response.IsSuccessStatusCode)
-            {
-                Toast.Error("Could not add that program.");
-                return;
-            }
-
-            var row = await response.Content.ReadFromJsonAsync<JmdoAllocationProgramRowDto>();
-            if (row != null) _detail.Programs.Add(row);
-            selectedProgramToAdd = 0;
-            await LoadAvailableProgramsAsync();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Add program failed: {ex.Message}");
-            Toast.Error("Could not add that program.");
-        }
-    }
-
+    // No "available programs to add" list anymore - MD programs come from CSR1's own
+    // ResponsiblePersonId assignment (set when the CSR1 record is created/approved), not from a
+    // picker on this review page. Removal stays available for the MDO to exclude a program from
+    // this week's work order without touching the underlying CSR1 assignment.
     private async Task RemoveProgramRow(JmdoAllocationProgramRowDto program)
     {
         if (_detail is null) return;
@@ -435,7 +406,6 @@
             }
 
             _detail.Programs.Remove(program);
-            await LoadAvailableProgramsAsync();
         }
         catch (Exception ex)
         {

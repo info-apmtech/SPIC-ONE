@@ -4509,6 +4509,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime?>("PosLiquidationCompletedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("PosLiquidationStartPlaceName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("PosLiquidationStartedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -4530,6 +4533,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime?>("SoilSampleCompletedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("SoilSampleStartPlaceName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("SoilSampleStartedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -4541,6 +4547,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<DateTime?>("SpcmCompletedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SpcmStartPlaceName")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("SpcmStartedAt")
                         .HasColumnType("timestamp without time zone");
@@ -4609,6 +4618,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("PlannedDay")
                         .HasColumnType("integer");
 
+                    b.Property<string>("StartPlaceName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -4647,6 +4659,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<string>("ProgramName")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StartPlaceName")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("StartedAt")

@@ -261,7 +261,7 @@
                         else if (currentStep == 4)
                         {
                             <div class="ta-step-panel">
-                                <p class="ta-step-instruction">Step 4 of 5 &mdash; select the MD programs you'll cover this week, then submit for MDO approval.</p>
+                                <p class="ta-step-instruction">Step 4 of 5 &mdash; MD programs assigned to you in CSR1 are included automatically; submit for MDO approval when ready.</p>
 
                                 <div class="ta-dealer-grid">
                                     @if (isLoadingPrograms)
@@ -274,13 +274,13 @@
                                     }
                                     else if (!Programs.Any())
                                     {
-                                        <EmptyState Icon="bi-easel" Title="No MD programs found for your HQ" Compact="true" />
+                                        <EmptyState Icon="bi-easel" Title="No MD programs are assigned to you" Compact="true" />
                                     }
                                     else
                                     {
                                         @foreach (var program in Programs)
                                         {
-                                            <div class="ta-dealer-card @(program.IsSelected ? "selected" : "")" @onclick="() => ToggleProgram(program)">
+                                            <div class="ta-dealer-card selected">
                                                 <div class="ta-dealer-top">
                                                     <span class="ta-program-day-badge">@DayLabel(program.CreatedAt.DayOfWeek)</span>
                                                     <span class="ta-type-pill ta-type-pill-purple"><i class="bi bi-people"></i> @program.TypeLabel</span>
@@ -320,13 +320,13 @@
 
                                 <div class="ta-step-footer">
                                     <div class="ta-selected-summary">
-                                        @if (SelectedPrograms.Any())
+                                        @if (Programs.Any())
                                         {
-                                            @string.Join("  ·  ", SelectedPrograms.Select(p => $"{p.ProgramCount} Program - {p.Title}"))
+                                            @string.Join("  ·  ", Programs.Select(p => $"{p.ProgramCount} Program - {p.Title}"))
                                         }
                                         else
                                         {
-                                            <span>Select at least one MD program to continue.</span>
+                                            <span>No MD programs assigned to you this week.</span>
                                         }
                                     </div>
                                     <div class="ta-step-footer-actions">
@@ -709,8 +709,8 @@
                         }
                     }
 
-                    var spcmStatus = GetStatus("spcm");
-                    if (todayAllocation.SpcmTarget is > 0 && spcmStatus == AllocTaskStatus.Completed)
+                    @{ var spcmStatus = GetStatus("spcm"); }
+                    @if (todayAllocation.SpcmTarget is > 0 && spcmStatus == AllocTaskStatus.Completed)
                     {
                         <div class="ta-today-card ta-today-card-narrow ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
@@ -729,8 +729,8 @@
                         </div>
                     }
 
-                    var soilStatus = GetStatus("soil");
-                    if (todayAllocation.SoilSampleTarget is > 0 && soilStatus == AllocTaskStatus.Completed)
+                    @{ var soilStatus = GetStatus("soil"); }
+                    @if (todayAllocation.SoilSampleTarget is > 0 && soilStatus == AllocTaskStatus.Completed)
                     {
                         <div class="ta-today-card ta-today-card-narrow ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
@@ -749,8 +749,8 @@
                         </div>
                     }
 
-                    var posStatus = GetStatus("pos");
-                    if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && posStatus == AllocTaskStatus.Completed)
+                    @{ var posStatus = GetStatus("pos"); }
+                    @if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && posStatus == AllocTaskStatus.Completed)
                     {
                         <div class="ta-today-card ta-today-card-wide ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
@@ -1252,10 +1252,6 @@
     {
         public int Id { get; init; }
         public string Title { get; init; } = "";
-        // CSR1 (the real backend entity) has no Sanction No/Date columns at
-        // all yet - confirmed via CSR-1Management.razor itself already
-        // rendering "--" for Sanction Number against this same API. Null
-        // here renders as "—" in the card, same as the dealer grid's fallbacks.
         public string? SanctionNo { get; init; }
         public string? SanctionDate { get; init; }
         public int ProgramCount { get; init; }
@@ -1265,7 +1261,6 @@
         // program record was entered) is the only date available, so the
         // weekday badge is derived from that.
         public DateTime CreatedAt { get; init; }
-        public bool IsSelected { get; set; }
     }
 
     private bool isLoadingPrograms = true;
@@ -1273,9 +1268,10 @@
 
     private readonly List<ProgramOption> Programs = new();
 
-    // Real MD program list from CSR1 (api/CSR1/list has no query params or
-    // server-side scoping at all - unlike SubDealerRegistration - so the
-    // HQ filter happens client-side here).
+    // MD programs are assigned directly on the CSR1 record (ResponsiblePersonId), not something
+    // the JMDO picks for themselves - api/CSR1/list?mine=true scopes the result server-side to
+    // only the CSR1 rows where the signed-in JMDO IS the responsible person, so every program
+    // returned here is automatically part of this week's submission.
     private async Task LoadProgramsAsync()
     {
         isLoadingPrograms = true;
@@ -1283,11 +1279,11 @@
 
         try
         {
-            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list");
+            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list?mine=true");
 
             Programs.Clear();
             Programs.AddRange((result ?? new())
-                .Where(p => p.IsActive && (LoginState.HQId <= 0 || (p.HeadquarterId ?? 0) <= 0 || p.HeadquarterId == LoginState.HQId))
+                .Where(p => p.IsActive)
                 .Select(p => new ProgramOption
                 {
                     Id = p.Id,
@@ -1314,9 +1310,10 @@
         }
     }
 
-    private IEnumerable<ProgramOption> SelectedPrograms => Programs.Where(p => p.IsSelected);
-
-    private void ToggleProgram(ProgramOption program) => program.IsSelected = !program.IsSelected;
+    // Every loaded program is already assigned to this JMDO (see LoadProgramsAsync) - there is no
+    // separate "selected" subset anymore, this just names the full list for the submit/summary code
+    // below so that logic didn't need to change.
+    private IEnumerable<ProgramOption> SelectedPrograms => Programs;
 
     private string FormatProgramSanctionNo(JmdoAllocationProgramRowDto program)
     {

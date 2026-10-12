@@ -386,13 +386,26 @@ public class JmdoTaskAllocationController : ControllerBase
         if (dealer == null)
             return BadRequest(new { Success = false, Message = "Dealer not found." });
 
+        if (dto.PlannedDate.HasValue)
+        {
+            var alreadyOnThatDate = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
+                d.AllocationId == id && d.SubDealerId == dto.DealerId
+                && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == dto.PlannedDate.Value.Date);
+            if (alreadyOnThatDate)
+                return BadRequest(new { Success = false, Message = "This dealer is already assigned on that date." });
+        }
+
         var row = new JmdoTaskAllocationDealer
         {
             AllocationId = id,
             SubDealerId = dealer.Id,
             DealerName = dealer.FirmName,
             DealerCode = dealer.SubDealerCode ?? "",
-            PlannedDate = dto.PlannedDate
+            PlannedDate = dto.PlannedDate,
+            // The JMDO's own Today's/Completed Allocation views filter strictly by
+            // Day == DateTime.Today.DayOfWeek - without this, a dealer the MDO adds here never
+            // shows up for the JMDO at all, no matter what PlannedDate says.
+            PlannedDay = dto.PlannedDate?.DayOfWeek
         };
         _db.JmdoTaskAllocationDealers.Add(row);
         await _db.SaveChangesAsync();
@@ -437,7 +450,20 @@ public class JmdoTaskAllocationController : ControllerBase
         if (row == null)
             return NotFound();
 
+        if (dto.PlannedDate.HasValue)
+        {
+            var alreadyOnThatDate = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
+                d.AllocationId == id && d.Id != rowId && d.SubDealerId == row.SubDealerId
+                && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == dto.PlannedDate.Value.Date);
+            if (alreadyOnThatDate)
+                return BadRequest(new { Success = false, Message = "This dealer is already assigned on that date." });
+        }
+
         row.PlannedDate = dto.PlannedDate;
+        // Keep Day in sync with the new date - see the identical comment in AddDealer above;
+        // the JMDO's weekday-filtered views would otherwise keep showing/hiding this task based
+        // on whatever day it was originally planned for, ignoring the MDO's edit entirely.
+        row.PlannedDay = dto.PlannedDate?.DayOfWeek;
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -560,6 +586,10 @@ public class JmdoTaskAllocationController : ControllerBase
         // (the in-browser timer was never persisted anywhere, only StartedAt was).
         var completedAt = dto.Status == AllocTaskStatus.Completed ? DateTime.Now : (DateTime?)null;
 
+        // Only meaningful alongside startedAt - cached once so TaskDetail doesn't need to
+        // re-resolve it from the geocoding service every time the page is reopened.
+        var placeName = dto.Status == AllocTaskStatus.InProgress ? dto.PlaceName : null;
+
         var taskKey = dto.TaskKey?.Trim() ?? string.Empty;
 
         if (taskKey.StartsWith("dealer_", StringComparison.OrdinalIgnoreCase)
@@ -570,6 +600,7 @@ public class JmdoTaskAllocationController : ControllerBase
             dealer.Status = dto.Status;
             if (startedAt.HasValue && dealer.StartedAt is null) dealer.StartedAt = startedAt;
             if (completedAt.HasValue && dealer.CompletedAt is null) dealer.CompletedAt = completedAt;
+            if (placeName != null && dealer.StartPlaceName is null) dealer.StartPlaceName = placeName;
         }
         else if (taskKey.StartsWith("prog_", StringComparison.OrdinalIgnoreCase)
             && int.TryParse(taskKey.AsSpan("prog_".Length), out var csr1Id))
@@ -579,12 +610,14 @@ public class JmdoTaskAllocationController : ControllerBase
             program.Status = dto.Status;
             if (startedAt.HasValue && program.StartedAt is null) program.StartedAt = startedAt;
             if (completedAt.HasValue && program.CompletedAt is null) program.CompletedAt = completedAt;
+            if (placeName != null && program.StartPlaceName is null) program.StartPlaceName = placeName;
         }
         else if (string.Equals(taskKey, "spcm", StringComparison.OrdinalIgnoreCase))
         {
             allocation.SpcmStatus = dto.Status;
             if (startedAt.HasValue && allocation.SpcmStartedAt is null) allocation.SpcmStartedAt = startedAt;
             if (completedAt.HasValue && allocation.SpcmCompletedAt is null) allocation.SpcmCompletedAt = completedAt;
+            if (placeName != null && allocation.SpcmStartPlaceName is null) allocation.SpcmStartPlaceName = placeName;
         }
         else if (string.Equals(taskKey, "soil", StringComparison.OrdinalIgnoreCase)
               || string.Equals(taskKey, "soilsample", StringComparison.OrdinalIgnoreCase))
@@ -592,6 +625,7 @@ public class JmdoTaskAllocationController : ControllerBase
             allocation.SoilSampleStatus = dto.Status;
             if (startedAt.HasValue && allocation.SoilSampleStartedAt is null) allocation.SoilSampleStartedAt = startedAt;
             if (completedAt.HasValue && allocation.SoilSampleCompletedAt is null) allocation.SoilSampleCompletedAt = completedAt;
+            if (placeName != null && allocation.SoilSampleStartPlaceName is null) allocation.SoilSampleStartPlaceName = placeName;
         }
         else if (string.Equals(taskKey, "pos", StringComparison.OrdinalIgnoreCase)
               || string.Equals(taskKey, "posliquidation", StringComparison.OrdinalIgnoreCase))
@@ -599,6 +633,7 @@ public class JmdoTaskAllocationController : ControllerBase
             allocation.PosLiquidationStatus = dto.Status;
             if (startedAt.HasValue && allocation.PosLiquidationStartedAt is null) allocation.PosLiquidationStartedAt = startedAt;
             if (completedAt.HasValue && allocation.PosLiquidationCompletedAt is null) allocation.PosLiquidationCompletedAt = completedAt;
+            if (placeName != null && allocation.PosLiquidationStartPlaceName is null) allocation.PosLiquidationStartPlaceName = placeName;
         }
         else if (string.Equals(taskKey, "dealer", StringComparison.OrdinalIgnoreCase))
         {
@@ -608,6 +643,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 dealer.Status = dto.Status;
                 if (startedAt.HasValue && dealer.StartedAt is null) dealer.StartedAt = startedAt;
                 if (completedAt.HasValue && dealer.CompletedAt is null) dealer.CompletedAt = completedAt;
+                if (placeName != null && dealer.StartPlaceName is null) dealer.StartPlaceName = placeName;
             }
         }
         else if (string.Equals(taskKey, "mdprogram", StringComparison.OrdinalIgnoreCase))
@@ -618,6 +654,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 program.Status = dto.Status;
                 if (startedAt.HasValue && program.StartedAt is null) program.StartedAt = startedAt;
                 if (completedAt.HasValue && program.CompletedAt is null) program.CompletedAt = completedAt;
+                if (placeName != null && program.StartPlaceName is null) program.StartPlaceName = placeName;
             }
         }
         else return BadRequest(new { Success = false, Message = $"Unrecognized task key '{taskKey}'." });
@@ -877,7 +914,8 @@ public class JmdoTaskAllocationController : ControllerBase
             Day = d.PlannedDay,
             Status = d.Status,
             StartedAt = d.StartedAt,
-            CompletedAt = d.CompletedAt
+            CompletedAt = d.CompletedAt,
+            StartPlaceName = d.StartPlaceName
         }).ToList(),
         Programs = programs.Select(p =>
         {
@@ -891,6 +929,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 Status = p.Status,
                 StartedAt = p.StartedAt,
                 CompletedAt = p.CompletedAt,
+                StartPlaceName = p.StartPlaceName,
                 SanctionNo = meta.SanctionNo,
                 SanctionDate = meta.CSR1Date
             };
@@ -910,6 +949,9 @@ public class JmdoTaskAllocationController : ControllerBase
         SpcmCompletedAt = allocation.SpcmCompletedAt,
         SoilSampleCompletedAt = allocation.SoilSampleCompletedAt,
         PosLiquidationCompletedAt = allocation.PosLiquidationCompletedAt,
+        SpcmStartPlaceName = allocation.SpcmStartPlaceName,
+        SoilSampleStartPlaceName = allocation.SoilSampleStartPlaceName,
+        PosLiquidationStartPlaceName = allocation.PosLiquidationStartPlaceName,
         Closeouts = (closeouts ?? new()).Select(c => new JmdoTaskCloseoutDto
         {
             Id = c.Id,

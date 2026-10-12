@@ -138,6 +138,11 @@
                         <i class="bi bi-geo-alt me-1"></i>
                         <span>Location not captured</span>
                     }
+                    else if (!string.IsNullOrWhiteSpace(capturedPlaceName))
+                    {
+                        <i class="bi bi-geo-alt-fill me-1"></i>
+                        <span class="td-time-location-text" title="@(capturedLatitude.HasValue ? $"Lat: {capturedLatitude}, Lng: {capturedLongitude} (±{capturedAccuracy ?? 20}m)" : capturedPlaceName)">@capturedPlaceName</span>
+                    }
                     else if (capturedLatitude.HasValue && capturedLongitude.HasValue)
                     {
                         <i class="bi bi-geo-alt-fill me-1"></i>
@@ -956,6 +961,23 @@
             _ => null
         };
 
+        var startPlaceName = kind switch
+        {
+            TaskKind.Dealer => dealerAssignment?.StartPlaceName,
+            TaskKind.MdProgram => programAssignment?.StartPlaceName,
+            TaskKind.Spcm => allocation.SpcmStartPlaceName,
+            TaskKind.PosLiquidation => allocation.PosLiquidationStartPlaceName,
+            _ => null
+        };
+
+        if (status is AllocTaskStatus.InProgress or AllocTaskStatus.Completed)
+        {
+            // Cached at Start, so a page reload/re-login shows the real address again instead of
+            // falling back to the generic "Location captured (+-20m)" text - no live GPS or a
+            // second geocoding call needed for this.
+            capturedPlaceName = startPlaceName;
+        }
+
         if (status == AllocTaskStatus.InProgress)
         {
             isStarted = true;
@@ -1094,6 +1116,7 @@
     private double? capturedLatitude;
     private double? capturedLongitude;
     private int? capturedAccuracy;
+    private string? capturedPlaceName;
     private int elapsedSeconds;
     private System.Timers.Timer? timer;
 
@@ -1103,6 +1126,41 @@
         public double Longitude { get; set; }
         public int Accuracy { get; set; }
         public string? Error { get; set; }
+    }
+
+    private sealed class NominatimReverseResult
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("display_name")]
+        public string? DisplayName { get; set; }
+    }
+
+    // Converts a raw GPS fix into the full current address instead of just an accuracy radius -
+    // "Location captured (+-108m)" told the reviewer nothing about WHERE the visit happened.
+    // Uses OpenStreetMap's free Nominatim reverse-geocoding endpoint (no API key needed, same
+    // open-data stack this app already uses for maps via Leaflet) and returns its full
+    // "display_name" (house/road through state and postcode), not just a condensed locality -
+    // that's the actual full-address string the reviewer asked for. Best-effort: any failure
+    // (offline, rate-limited, no address component at all, etc.) falls back to the old
+    // accuracy-radius text at the call site.
+    private async Task<string?> ResolvePlaceNameAsync(double latitude, double longitude)
+    {
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get,
+                $"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom=18");
+            request.Headers.UserAgent.ParseAdd("SPICOne/1.0 (+https://apmtechnologies.in)");
+
+            var response = await Http.SendAsync(request);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var result = await response.Content.ReadFromJsonAsync<NominatimReverseResult>();
+            return !string.IsNullOrWhiteSpace(result?.DisplayName) ? result!.DisplayName : null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Reverse geocoding failed: {ex.Message}");
+            return null;
+        }
     }
 
     private string ElapsedDisplay => TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss");
@@ -1134,6 +1192,7 @@
                 capturedLatitude = geo.Latitude;
                 capturedLongitude = geo.Longitude;
                 capturedAccuracy = geo.Accuracy > 0 ? geo.Accuracy : 20;
+                capturedPlaceName = await ResolvePlaceNameAsync(geo.Latitude, geo.Longitude);
             }
         }
         catch (Exception ex)
@@ -1149,7 +1208,7 @@
         try
         {
             var response = await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
-                new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.InProgress });
+                new UpdateTaskStatusDto { TaskKey = key, Status = AllocTaskStatus.InProgress, PlaceName = capturedPlaceName });
             if (!response.IsSuccessStatusCode)
             {
                 var errorMsg = "Could not start the task. Please try again.";

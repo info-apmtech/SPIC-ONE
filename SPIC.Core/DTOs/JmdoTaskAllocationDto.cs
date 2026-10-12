@@ -31,6 +31,7 @@ namespace SPIC.Core.DTOs
         public AllocTaskStatus Status { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
+        public string? StartPlaceName { get; set; }
     }
 
     public class JmdoTaskAllocationResponseDto
@@ -62,6 +63,9 @@ namespace SPIC.Core.DTOs
         public DateTime? SpcmCompletedAt { get; set; }
         public DateTime? SoilSampleCompletedAt { get; set; }
         public DateTime? PosLiquidationCompletedAt { get; set; }
+        public string? SpcmStartPlaceName { get; set; }
+        public string? SoilSampleStartPlaceName { get; set; }
+        public string? PosLiquidationStartPlaceName { get; set; }
 
         public List<JmdoTaskCloseoutDto> Closeouts { get; set; } = new();
     }
@@ -129,6 +133,7 @@ namespace SPIC.Core.DTOs
         public AllocTaskStatus Status { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
+        public string? StartPlaceName { get; set; }
         public string? SanctionNo { get; set; }
         public DateTime? SanctionDate { get; set; }
     }
@@ -167,6 +172,10 @@ namespace SPIC.Core.DTOs
     {
         public string TaskKey { get; set; } = "";
         public AllocTaskStatus Status { get; set; }
+        // Reverse-geocoded on the client at the moment of capture (Start) and sent up alongside
+        // the status change, so the server can cache it next to StartedAt - only meaningful when
+        // Status is InProgress.
+        public string? PlaceName { get; set; }
     }
 
     public class ProductLineDto

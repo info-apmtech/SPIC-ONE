@@ -49,6 +49,13 @@ public class JmdoTaskAllocation
     public DateTime? SoilSampleStartedAt { get; set; }
     public DateTime? PosLiquidationStartedAt { get; set; }
 
+    // Reverse-geocoded from the GPS fix taken at the same moment as StartedAt, and cached here
+    // (rather than re-resolved from lat/lng on every page load) so it survives navigating away
+    // and back without hitting the geocoding service again.
+    public string? SpcmStartPlaceName { get; set; }
+    public string? SoilSampleStartPlaceName { get; set; }
+    public string? PosLiquidationStartPlaceName { get; set; }
+
     // Stamped when the matching Status above is set to Completed, so the closed task's "Time on
     // task" can be computed once as CompletedAt - StartedAt instead of showing 00:00 forever.
     public DateTime? SpcmCompletedAt { get; set; }
@@ -99,6 +106,10 @@ public class JmdoTaskAllocationDealer
     /// <summary>Stamped when Status is set to Completed - lets "Time on task" be computed once as
     /// CompletedAt - StartedAt instead of showing 00:00 after the task is closed.</summary>
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>Reverse-geocoded from the GPS fix taken at StartedAt - cached here so it survives
+    /// navigating away and back without a repeat geocoding call.</summary>
+    public string? StartPlaceName { get; set; }
 }
 
 /// <summary>One picked MD/training program. Name/Budget are a snapshot at submission time, same
@@ -123,6 +134,10 @@ public class JmdoTaskAllocationProgram
     /// <summary>Stamped when Status is set to Completed - lets "Time on task" be computed once as
     /// CompletedAt - StartedAt instead of showing 00:00 after the task is closed.</summary>
     public DateTime? CompletedAt { get; set; }
+
+    /// <summary>Reverse-geocoded from the GPS fix taken at StartedAt - cached here so it survives
+    /// navigating away and back without a repeat geocoding call.</summary>
+    public string? StartPlaceName { get; set; }
 }
 
 /// <summary>Which kind of task a JmdoTaskCloseout record closes out - mirrors TaskDetail.razor's

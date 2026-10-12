@@ -1061,7 +1061,7 @@ namespace SpicAPI.Controllers
 
 
         [HttpGet("list")]
-        public async Task<IActionResult> GetCSR1List()
+        public async Task<IActionResult> GetCSR1List([FromQuery] bool mine = false)
         {
             try
             {
@@ -1071,6 +1071,24 @@ namespace SpicAPI.Controllers
                     .GetAll()
                     .OrderByDescending(x => x.Id)
                     .ToListAsync();
+
+                // mine=true: a JMDO only sees the CSR1 programs they're personally the
+                // ResponsiblePersonId on (Tasks Allocation Step 4 / its MDO review counterpart) -
+                // these are assigned directly on the CSR1 record itself, so there is nothing for
+                // the JMDO or the reviewing MDO to separately "pick"; every other caller (CSR-1
+                // Management, etc.) keeps seeing the full list via the default mine=false.
+                if (mine)
+                {
+                    var myEmployeeId = await _db.Employeelogins
+                        .AsNoTracking()
+                        .Where(e => e.UserId == CurrentUserId)
+                        .Select(e => (int?)e.EmployeeInformationID)
+                        .FirstOrDefaultAsync();
+
+                    csr1Records = myEmployeeId is > 0
+                        ? csr1Records.Where(c => c.ResponsiblePersonId == myEmployeeId).ToList()
+                        : new List<CSR1>();
+                }
 
                 var programMasters = await _programMasterRepo
                     .GetAll()
