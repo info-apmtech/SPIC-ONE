@@ -110,6 +110,13 @@ namespace SPIC.Core.Entities
 
         public DateTime CSR1Date { get; set; }
         public string? SanctionNo { get; set; }
+        public string? ValidateBy { get; set; }
+
+        public DateTime? ValidateAt { get; set; }
+
+        public string? ApprovedBy { get; set; }
+
+        public DateTime? ApprovedAt { get; set; }
     }
 
 

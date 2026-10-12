@@ -6,6 +6,7 @@ using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 using System.Security.Claims;
+using System.Xml;
 using static SPIC.Core.Entities.EmployeeRegistration;
 
 namespace SpicAPI.Controllers
@@ -1603,6 +1604,8 @@ namespace SpicAPI.Controllers
                 csr1.Status = "Validated";
                 csr1.UpdatedBy = CurrentUserId;
                 csr1.UpdatedAt = DateTime.Now;
+                csr1.ValidateBy = CurrentUserId;
+                csr1.ValidateAt = DateTime.Now;
 
                 await _csr1Repo.PatchAsync(id, csr1);
 
@@ -1693,6 +1696,8 @@ namespace SpicAPI.Controllers
                 csr1.Status = "Approved";
                 csr1.UpdatedBy = CurrentUserId;
                 csr1.UpdatedAt = DateTime.Now;
+                csr1.ApprovedBy = CurrentUserId;
+                csr1.ApprovedAt = DateTime.Now;
 
                 await _csr1Repo.PatchAsync(id, csr1);
 
