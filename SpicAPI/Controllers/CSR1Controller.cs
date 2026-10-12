@@ -125,6 +125,30 @@ namespace SpicAPI.Controllers
             }
         }
 
+        private static string ResolveCSR1Scope(string? creatorRole, int? headquarterId)
+        {
+            if (!string.IsNullOrEmpty(creatorRole))
+            {
+                if (string.Equals(creatorRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.SMM.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return "State";
+                }
+
+                if (string.Equals(creatorRole, AppRole.MDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.JMDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.MO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.RM.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.RMD.ToString(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return "HQ";
+                }
+            }
+
+            // Fallback: If HeadquarterId is present and > 0, it's HQ scope; otherwise State scope.
+            return (headquarterId.HasValue && headquarterId.Value > 0) ? "HQ" : "State";
+        }
+
         private async Task<(string Scope, string? CreatorRole)> ResolveCSR1ScopeAsync(CSR1 csr1)
         {
             string? creatorRole = null;
@@ -137,27 +161,7 @@ namespace SpicAPI.Controllers
                 }
             }
 
-            if (!string.IsNullOrEmpty(creatorRole))
-            {
-                if (string.Equals(creatorRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, AppRole.SMM.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    return ("State", creatorRole);
-                }
-
-                if (string.Equals(creatorRole, AppRole.MDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, AppRole.JMDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, AppRole.MO.ToString(), StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, AppRole.RM.ToString(), StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, AppRole.RMD.ToString(), StringComparison.OrdinalIgnoreCase))
-                {
-                    return ("HQ", creatorRole);
-                }
-            }
-
-            // Fallback: If HeadquarterId is present and > 0, it's HQ scope; otherwise State scope.
-            var scope = (csr1.HeadquarterId.HasValue && csr1.HeadquarterId.Value > 0) ? "HQ" : "State";
-            return (scope, creatorRole);
+            return (ResolveCSR1Scope(creatorRole, csr1.HeadquarterId), creatorRole);
         }
 
 
@@ -1089,6 +1093,7 @@ namespace SpicAPI.Controllers
                     .ToListAsync();
 
                 var employeeLogins = await _db.Employeelogins.AsNoTracking().ToListAsync();
+                var users = await _db.Users.AsNoTracking().ToListAsync();
 
                 var result = csr1Records
                     .Select(csr =>
@@ -1101,6 +1106,13 @@ namespace SpicAPI.Controllers
 
                         var empLogin = employeeLogins.FirstOrDefault(x => x.EmployeeInformationID == csr.ResponsiblePersonId);
                         var resolvedHqId = (csr.HeadquarterId ?? 0) > 0 ? csr.HeadquarterId : empLogin?.HeadquartersId;
+
+                        var creator = !string.IsNullOrEmpty(csr.CreatedBy)
+                            ? users.FirstOrDefault(u => u.Id == csr.CreatedBy)
+                            : null;
+                        var creatorRole = creator?.Role.ToString();
+                        var scope = ResolveCSR1Scope(creatorRole, csr.HeadquarterId);
+                        var createdByName = creator?.Name ?? creator?.UserName ?? creator?.Email ?? csr.CreatedBy;
 
                         return new CSR1ListDto
                         {
