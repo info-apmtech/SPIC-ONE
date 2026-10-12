@@ -619,9 +619,13 @@
             <!-- Static reference list of every finished task (no filter sidebar
                  here, unlike Today's Allocation - this tab is just a flat
                  record of what's done), always in the purple "completed" theme. -->
-            <div class="ta-today-grid">
-                @if (todayAllocation != null)
-                {
+            @if (todayAllocation == null || CountByStatus(AllocTaskStatus.Completed) == 0)
+            {
+                <EmptyState Icon="bi-check2-circle" Title="No completed tasks yet" Compact="true" />
+            }
+            else
+            {
+                <div class="ta-today-grid">
                     @foreach (var assignment in todayAllocation.DealerAssignments.Where(d => d.Day == DateTime.Today.DayOfWeek))
                     {
                         var dStatus = GetStatus($"dealer_{assignment.DealerId}");
@@ -788,8 +792,8 @@
                             </button>
                         </div>
                     }
-                }
-            </div>
+                </div>
+            }
         }
     </div>
 
@@ -815,6 +819,26 @@
             "completed" => TaTab.Completed,
             _ => TaTab.All
         };
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var targetTab = TabQuery?.ToLowerInvariant() switch
+        {
+            "today" => TaTab.Today,
+            "completed" => TaTab.Completed,
+            _ => (TaTab?)null
+        };
+
+        if (targetTab.HasValue && targetTab.Value != currentTab)
+        {
+            currentTab = targetTab.Value;
+        }
+
+        if (todayAllocation != null)
+        {
+            await CheckExistingAllocationAsync();
+        }
     }
 
     protected override async Task OnInitializedAsync()

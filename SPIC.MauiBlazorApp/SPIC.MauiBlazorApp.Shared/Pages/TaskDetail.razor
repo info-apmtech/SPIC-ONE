@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 td-page">
 
@@ -126,12 +127,42 @@
                     <span class="td-time-label">Time on task</span>
                     <span class="td-time-val">@ElapsedDisplay</span>
                 </div>
-                <div class="td-time-location"><i class="bi bi-geo-alt-fill"></i> Location captured (&plusmn;20m)</div>
+                <div class="td-time-location @(!isStarted && !isClosed ? "text-muted" : "text-success")">
+                    @if (isLocationCapturing)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                        <span>Capturing location...</span>
+                    }
+                    else if (!isStarted && !isClosed)
+                    {
+                        <i class="bi bi-geo-alt me-1"></i>
+                        <span>Location not captured</span>
+                    }
+                    else if (capturedLatitude.HasValue && capturedLongitude.HasValue)
+                    {
+                        <i class="bi bi-geo-alt-fill me-1"></i>
+                        <span title="Lat: @capturedLatitude, Lng: @capturedLongitude">Location captured (&plusmn;@(capturedAccuracy ?? 20)m)</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-geo-alt-fill me-1"></i>
+                        <span>Location captured (&plusmn;20m)</span>
+                    }
+                </div>
 
                 @if (!isStarted && !isClosed)
                 {
-                    <button type="button" class="td-btn td-btn-primary" @onclick="StartTask">
-                        <i class="bi bi-play-circle"></i> Start Task
+                    <button type="button" class="td-btn td-btn-primary" disabled="@isLocationCapturing" @onclick="StartTask">
+                        @if (isLocationCapturing)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                            <span>Starting...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-play-circle"></i>
+                            <span>Start Task</span>
+                        }
                     </button>
                 }
                 else if (isStarted && !isClosed)
@@ -149,83 +180,107 @@
                 <h3 class="td-card-title">Close-out form</h3>
                 <p class="td-card-subtitle">Fill this once work is done, then close the task.</p>
 
-                <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
-                <select id="td-outcome" class="td-input" @bind="outcome">
-                    <option value="Fully Completed">Fully Completed</option>
-                    <option value="Partially Completed">Partially Completed</option>
-                    <option value="Not Completed">Not Completed</option>
-                </select>
-
-                @if (kind == TaskKind.Dealer)
+                @if (!isStarted && !isClosed)
                 {
-                    <div class="d-flex justify-content-end mb-2 mt-3">
-                        <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none"  @onclick="OpenAddProductPopup">
-                            + Add another Product
-                        </button>
+                    <div class="alert alert-light border d-flex align-items-center gap-2 py-2 px-3 mb-3 text-muted small">
+                        <i class="bi bi-lock-fill text-secondary"></i>
+                        <span>Close-out form is readable only. Click <strong>Start Task</strong> above to enable editing.</span>
                     </div>
+                }
+                else if (isClosed)
+                {
+                    <div class="alert alert-success border d-flex align-items-center gap-2 py-2 px-3 mb-3 text-success small">
+                        <i class="bi bi-check-circle-fill"></i>
+                        <span>This task is closed. Close-out form is now read-only.</span>
+                    </div>
+                }
 
-                    @foreach (var prod in dealerProducts)
+                <fieldset disabled="@(!isStarted || isClosed)" style="border: none; margin: 0; padding: 0;">
+                    <label class="td-field-label" for="td-outcome">Outcome<span class="td-required">*</span></label>
+                    <select id="td-outcome" class="td-input" @bind="outcome" disabled="@(!isStarted || isClosed)">
+                        <option value="Fully Completed">Fully Completed</option>
+                        <option value="Partially Completed">Partially Completed</option>
+                        <option value="Not Completed">Not Completed</option>
+                    </select>
+
+                    @if (kind == TaskKind.Dealer)
                     {
-                        <div class="td-product-card">
-                            <div class="td-product-col">
-                                <span class="td-product-label">Product Group</span>
-                                <span class="td-product-val">@prod.Group</span>
+                        <div class="d-flex justify-content-end mb-2 mt-3">
+                            <button type="button" class="btn btn-link text-success fw-bold p-0 text-decoration-none" disabled="@(!isStarted || isClosed)" @onclick="OpenAddProductPopup">
+                                + Add another Product
+                            </button>
+                        </div>
+
+                        @foreach (var prod in dealerProducts)
+                        {
+                            <div class="td-product-card">
+                                <div class="td-product-col">
+                                    <span class="td-product-label">Product Group</span>
+                                    <span class="td-product-val">@prod.Group</span>
+                                </div>
+                                <div class="td-product-col td-border-left">
+                                    <span class="td-product-label">Product Name</span>
+                                    <span class="td-product-val">@prod.Name</span>
+                                </div>
+                                <div class="td-product-col td-border-left">
+                                    <span class="td-product-label">Stock</span>
+                                    <span class="td-product-val">@prod.Stock</span>
+                                </div>
                             </div>
-                            <div class="td-product-col td-border-left">
-                                <span class="td-product-label">Product Name</span>
-                                <span class="td-product-val">@prod.Name</span>
+                        }
+                    }
+
+                    @if (kind == TaskKind.Spcm)
+                    {
+                        <label class="td-field-label" for="td-achieved">Achieved Target</label>
+                        <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                    }
+
+                    @if (kind == TaskKind.PosLiquidation)
+                    {
+                        <div class="td-pos-grid">
+                            <div>
+                                <label class="td-field-label" for="td-pos-urea">Urea</label>
+                                <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
                             </div>
-                            <div class="td-product-col td-border-left">
-                                <span class="td-product-label">Stock</span>
-                                <span class="td-product-val">@prod.Stock</span>
+                            <div>
+                                <label class="td-field-label" for="td-pos-nps">NPS</label>
+                                <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                            </div>
+                            <div>
+                                <label class="td-field-label" for="td-pos-dap">DAP</label>
+                                <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                            </div>
+                            <div>
+                                <label class="td-field-label" for="td-pos-other">Other</label>
+                                <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
                             </div>
                         </div>
                     }
-                }
 
-                @if (kind == TaskKind.Spcm)
-                {
-                    <label class="td-field-label" for="td-achieved">Achieved Target</label>
-                    <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput"  />
-                }
+                    <label class="td-field-label" for="td-remarks">Remarks</label>
+                    <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)"></textarea>
 
-                @if (kind == TaskKind.PosLiquidation)
-                {
-                    <div class="td-pos-grid">
-                        <div>
-                            <label class="td-field-label" for="td-pos-urea">Urea</label>
-                            <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput"  />
-                        </div>
-                        <div>
-                            <label class="td-field-label" for="td-pos-nps">NPS</label>
-                            <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput"  />
-                        </div>
-                        <div>
-                            <label class="td-field-label" for="td-pos-dap">DAP</label>
-                            <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput"  />
-                        </div>
-                        <div>
-                            <label class="td-field-label" for="td-pos-other">Other</label>
-                            <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput"  />
-                        </div>
+                    <label class="td-field-label">@FileFieldLabel</label>
+                    @if (!isStarted || isClosed)
+                    {
+                        <input type="file" class="td-file-input" disabled />
+                    }
+                    else
+                    {
+                        <InputFile @key="fileInputKey" OnChange="OnFileSelected" class="td-file-input" />
+                    }
+                    @if (selectedFile != null)
+                    {
+                        <div class="td-selected-file"><i class="bi bi-paperclip"></i> @selectedFile.Name</div>
+                    }
+
+                    <div class="d-flex justify-content-end mt-4">
+                        <button type="button" class="td-btn td-btn-primary" disabled="@(!isStarted || isClosed || isSavingRecord)" @onclick="SaveRecordAsync">
+                            @(isSavingRecord ? "Saving..." : "Save Record")
+                        </button>
                     </div>
-                }
-
-                <label class="td-field-label" for="td-remarks">Remarks</label>
-                <textarea id="td-remarks" class="td-textarea" placeholder="What happened on this visit..." @bind="remarks" ></textarea>
-
-                <label class="td-field-label">@FileFieldLabel</label>
-                <InputFile @key="fileInputKey" OnChange="OnFileSelected" class="td-file-input" />
-                @if (selectedFile != null)
-                {
-                    <div class="td-selected-file"><i class="bi bi-paperclip"></i> @selectedFile.Name</div>
-                }
-
-                <div class="d-flex justify-content-end mt-4">
-                    <button type="button" class="td-btn td-btn-primary" disabled="@isSavingRecord" @onclick="SaveRecordAsync">
-                        @(isSavingRecord ? "Saving..." : "Save Record")
-                    </button>
-                </div>
+                </fieldset>
             </div>
     </div>
     <div class="td-col-right-wrap d-flex flex-column" style="gap: 1.5rem;">
@@ -269,8 +324,11 @@
                                                         <a href="@ResolveFileUrl(record.FilePath)" target="_blank" title="View"><i class="bi bi-eye text-primary"></i></a>
                                                         <a href="@ResolveDownloadUrl(record.FilePath, record.FileName)" title="Download"><i class="bi bi-download text-success"></i></a>
                                                     }
-                                                    <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditDealerRecord(record)"></i>
-                                                    <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, dealerRecords)"></i>
+                                                    @if (isStarted && !isClosed)
+                                                    {
+                                                        <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditDealerRecord(record)"></i>
+                                                        <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, dealerRecords)"></i>
+                                                    }
                                                 </div>
                                             </div>
                                         </td>
@@ -312,8 +370,11 @@
                                                         <a href="@ResolveFileUrl(record.FilePath)" target="_blank" title="View"><i class="bi bi-eye text-primary"></i></a>
                                                         <a href="@ResolveDownloadUrl(record.FilePath, record.FileName)" title="Download"><i class="bi bi-download text-success"></i></a>
                                                     }
-                                                    <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditSpcmRecord(record)"></i>
-                                                    <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, spcmRecords)"></i>
+                                                    @if (isStarted && !isClosed)
+                                                    {
+                                                        <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditSpcmRecord(record)"></i>
+                                                        <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, spcmRecords)"></i>
+                                                    }
                                                 </div>
                                             </div>
                                         </td>
@@ -351,8 +412,11 @@
                                                         <a href="@ResolveFileUrl(record.FilePath)" target="_blank" title="View"><i class="bi bi-eye text-primary"></i></a>
                                                         <a href="@ResolveDownloadUrl(record.FilePath, record.FileName)" title="Download"><i class="bi bi-download text-success"></i></a>
                                                     }
-                                                    <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditMdProgramRecord(record)"></i>
-                                                    <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, mdProgramRecords)"></i>
+                                                    @if (isStarted && !isClosed)
+                                                    {
+                                                        <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditMdProgramRecord(record)"></i>
+                                                        <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, mdProgramRecords)"></i>
+                                                    }
                                                 </div>
                                             </div>
                                         </td>
@@ -404,8 +468,11 @@
                                                     <a href="@ResolveFileUrl(record.FilePath)" target="_blank" title="View"><i class="bi bi-eye text-primary"></i></a>
                                                     <a href="@ResolveDownloadUrl(record.FilePath, record.FileName)" title="Download"><i class="bi bi-download text-success"></i></a>
                                                 }
-                                                <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditPosRecord(record)"></i>
-                                                <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, posRecords)"></i>
+                                                @if (isStarted && !isClosed)
+                                                {
+                                                    <i class="bi bi-pencil text-warning" style="cursor:pointer;" title="Edit" @onclick="() => EditPosRecord(record)"></i>
+                                                    <i class="bi bi-trash text-danger" style="cursor:pointer;" title="Delete" @onclick="() => DeleteRecordAsync(record, posRecords)"></i>
+                                                }
                                             </div>
                                         </td>
                                     </tr>
@@ -680,6 +747,7 @@
 
     private void OpenAddProductPopup()
     {
+        if (!isStarted || isClosed) return;
         selectedProductGroupId = null;
         selectedProductId = null;
         stockQty = 0;
@@ -1022,8 +1090,20 @@
 
     private bool isStarted;
     private bool isClosed;
+    private bool isLocationCapturing;
+    private double? capturedLatitude;
+    private double? capturedLongitude;
+    private int? capturedAccuracy;
     private int elapsedSeconds;
     private System.Timers.Timer? timer;
+
+    private sealed class GeoResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public int Accuracy { get; set; }
+        public string? Error { get; set; }
+    }
 
     private string ElapsedDisplay => TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss");
 
@@ -1041,7 +1121,29 @@
 
     private async Task StartTask()
     {
-        if (isStarted) return;
+        if (isStarted || isLocationCapturing) return;
+
+        isLocationCapturing = true;
+        StateHasChanged();
+
+        try
+        {
+            var geo = await JS.InvokeAsync<GeoResult>("getCurrentPosition");
+            if (geo != null && string.IsNullOrEmpty(geo.Error) && (geo.Latitude != 0 || geo.Longitude != 0))
+            {
+                capturedLatitude = geo.Latitude;
+                capturedLongitude = geo.Longitude;
+                capturedAccuracy = geo.Accuracy > 0 ? geo.Accuracy : 20;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Location capture failed: {ex.Message}");
+        }
+        finally
+        {
+            isLocationCapturing = false;
+        }
 
         var key = TaskKey;
         try
@@ -1153,10 +1255,13 @@
 
         var idx = TimelineSteps.FindIndex(s => s.Label == "Closed");
         if (idx >= 0) TimelineSteps[idx] = TimelineSteps[idx] with { SubLabel = "Just now", Done = true };
+
+        Navigation.NavigateTo("/TasksAllocation?tab=completed");
     }
 
     private void EditDealerRecord(JmdoTaskCloseoutDto record)
     {
+        if (!isStarted || isClosed) return;
         outcome = record.Outcome;
         remarks = record.Remarks ?? "";
         dealerRecords.Remove(record);
@@ -1165,6 +1270,7 @@
 
     private void EditSpcmRecord(JmdoTaskCloseoutDto record)
     {
+        if (!isStarted || isClosed) return;
         outcome = record.Outcome;
         remarks = record.Remarks ?? "";
         achievedTarget = record.AchievedTarget?.ToString() ?? "";
@@ -1174,6 +1280,7 @@
 
     private void EditMdProgramRecord(JmdoTaskCloseoutDto record)
     {
+        if (!isStarted || isClosed) return;
         outcome = record.Outcome;
         remarks = record.Remarks ?? "";
         mdProgramRecords.Remove(record);
@@ -1182,6 +1289,7 @@
 
     private void EditPosRecord(JmdoTaskCloseoutDto record)
     {
+        if (!isStarted || isClosed) return;
         outcome = record.Outcome;
         remarks = record.Remarks ?? "";
         posUrea = record.Urea?.ToString() ?? "";
@@ -1196,6 +1304,7 @@
     // the trash icon - the removal is now real, not just an in-memory list splice.
     private async Task DeleteRecordAsync(JmdoTaskCloseoutDto record, List<JmdoTaskCloseoutDto> list)
     {
+        if (!isStarted || isClosed) return;
         try
         {
             var response = await Http.DeleteAsync($"api/JmdoTaskAllocation/closeouts/{record.Id}");
@@ -1238,6 +1347,12 @@
 
     private async Task SaveRecordAsync()
     {
+        if (!isStarted || isClosed)
+        {
+            Toast.Warning("Please start the task before saving records.");
+            return;
+        }
+
         if (isSavingRecord) return;
         isSavingRecord = true;
 
