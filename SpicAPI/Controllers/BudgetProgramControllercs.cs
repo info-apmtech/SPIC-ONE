@@ -623,7 +623,7 @@ namespace SpicAPI.Controllers
                 var main =
                     new BudgetProgramMains
                     {
-                        Status = "Draft",
+                        Status = "Submitted",
 
                         StateId =
                             stateId,
@@ -968,11 +968,7 @@ namespace SpicAPI.Controllers
                         ? x.StateBudget.BudgetAmount
                         : 0,
 
-                    IsChangeAmount =
-                        x.StateBudget != null &&
-                        x.StateBudget.BudgetAmount > 0
-                            ? false
-                            : true,
+                    IsChangeAmount = x.Program.ProgramType.IsChangeAmount,
 
                     // Existing total budget logic.
                     TotalBudget = x.Budget != null
@@ -1164,7 +1160,7 @@ namespace SpicAPI.Controllers
                     Status =
                         x.BudgetProgramMain != null && !string.IsNullOrEmpty(x.BudgetProgramMain.Status)
                         ? x.BudgetProgramMain.Status
-                        : "Draft",
+                        : "Submitted",
 
                     ValidationDue =
                         x.BudgetProgramMain != null
@@ -3511,15 +3507,12 @@ namespace SpicAPI.Controllers
 
             return Ok(result);
         }
-
-        
+                
         private sealed class CreatorRoleLookup
         {
             public string UserId { get; set; } = "";
             public string RoleName { get; set; } = "";
         }
-
-
 
         private async Task<AppRole?> GetBudgetCreatorRoleAsync(string? createdBy)
         {
@@ -3613,7 +3606,7 @@ namespace SpicAPI.Controllers
                     .ThenInclude(p => p.Program)
                     .ThenInclude(p => p.ProgramType)
                 .Where(m => m.FinancialYear == fy.Trim()
-                    && m.Status == "Submitted"
+                    && m.Status == "Valid"
                     && m.StateId == stateId);
 
             if (isRmm)
@@ -3633,8 +3626,15 @@ namespace SpicAPI.Controllers
                     roleCache[creatorId] = creatorRole;
                 }
 
-                if (isSmm && creatorRole != AppRole.SMD) continue;
-                if (isRmm && creatorRole != AppRole.RMD) continue;
+                // SMM approves only SMDO submissions
+                if (isSmm && creatorRole != AppRole.SMD)
+                    continue;
+
+                // RM approves both RMDO and MO submissions
+                if (isRmm &&
+                    creatorRole != AppRole.RMD &&
+                    creatorRole != AppRole.MO)
+                    continue;
 
                 result.Add(new
                 {
@@ -3655,7 +3655,7 @@ namespace SpicAPI.Controllers
                             // Replace with actual ProgramMaster -> ProgramType relationship once known.                            
                             BudgetAmount = p.TotalBudget,
                             p.TotalBudget,
-                            IsChangeAmount = false, // approver UI is read-only
+                            IsChangeAmount = p.Program?.ProgramType?.IsChangeAmount ?? false,
                             p.AprilCount,
                             AprilBudget = p.April,
                             p.MayCount,
@@ -3687,61 +3687,723 @@ namespace SpicAPI.Controllers
             return Ok(result);
         }
 
+
         [Authorize]
         [HttpPost("{id:int}/approve-program")]
-        public async Task<IActionResult> ApproveProgram(int id)
+        public async Task<IActionResult> ApproveProgram(
+      int id,
+      [FromBody] ApproveProgramBudgetRequest request)
         {
             string role = (User.FindFirst(ClaimTypes.Role)?.Value
-                ?? User.FindFirst("role")?.Value ?? "").Trim().ToUpperInvariant();
-            bool isSmm = role == AppRole.SMM.ToString().ToUpperInvariant();
-            bool isRmm = role == AppRole.RM.ToString().ToUpperInvariant() || role == "RMM";
-            if (!isSmm && !isRmm) return Forbid();
+                ?? User.FindFirst("role")?.Value ?? "")
+                .Trim().ToUpperInvariant();
 
-            if (!int.TryParse(User.FindFirst("spic:state_id")?.Value, out int stateId)
-                || stateId <= 0)
-                return BadRequest(new { message = "Logged-in approver has no valid state claim." });
+            bool isSmm = role == AppRole.SMM.ToString().ToUpperInvariant();
+            bool isRmm = role == AppRole.RM.ToString().ToUpperInvariant()
+                         || role == "RMM";
+
+            if (!isSmm && !isRmm)
+                return Forbid();
+
+            if (!int.TryParse(
+                    User.FindFirst("spic:state_id")?.Value,
+                    out int stateId) || stateId <= 0)
+                return BadRequest(new { message = "Invalid state claim." });
 
             int regionId = 0;
-            if (isRmm && (!int.TryParse(User.FindFirst("spic:region_id")?.Value, out regionId)
-                || regionId <= 0))
-                return BadRequest(new { message = "Logged-in RMM has no valid region claim." });
 
-            if (string.IsNullOrWhiteSpace(CurrentUserId)) return Unauthorized();
+            if (isRmm && (!int.TryParse(
+                    User.FindFirst("spic:region_id")?.Value,
+                    out regionId) || regionId <= 0))
+                return BadRequest(new { message = "Invalid region claim." });
+
+            if (string.IsNullOrWhiteSpace(CurrentUserId))
+                return Unauthorized();
+
+            if (request?.Programs == null || request.Programs.Count == 0)
+                return BadRequest(new { message = "No programs received." });
+
+            if (request.Programs.Any(x => x.ProgramId <= 0) ||
+                request.Programs.GroupBy(x => x.ProgramId).Any(g => g.Count() > 1))
+                return BadRequest(new { message = "Invalid or duplicate ProgramId." });
 
             var query = _db.Set<BudgetProgramMains>()
                 .AsNoTracking()
-                .Where(m => m.Id == id && m.StateId == stateId && m.Status == "Submitted");
-            if (isRmm) query = query.Where(m => m.RegionId == regionId);
+                .Where(x => x.Id == id &&
+                            x.StateId == stateId &&
+                            x.Status == "Valid");
 
-            var main = await query.FirstOrDefaultAsync();
-            if (main is null) return Conflict(new { message = "No eligible pending submission." });
-            if (string.Equals(main.CreatedBy, CurrentUserId, StringComparison.OrdinalIgnoreCase))
+            if (isRmm)
+                query = query.Where(x => x.RegionId == regionId);
+
+            var submission = await query.FirstOrDefaultAsync();
+
+            if (submission == null)
+                return Conflict(new { message = "No pending submission found." });
+
+            if (string.Equals(
+                submission.CreatedBy,
+                CurrentUserId,
+                StringComparison.OrdinalIgnoreCase))
                 return Forbid();
 
-            var creatorRole = await GetBudgetCreatorRoleAsync(main.CreatedBy);
-            if (isSmm && creatorRole != AppRole.SMD) return Forbid();
-            if (isRmm && creatorRole != AppRole.RMD) return Forbid();
+            var creatorRole =
+                await GetBudgetCreatorRoleAsync(submission.CreatedBy);
 
-            var approvedAt = DateTime.UtcNow;
-            int affected = await _db.Set<BudgetProgramMains>()
-                .Where(m => m.Id == id && m.Status == "Submitted"
-                    && m.StateId == stateId && (isSmm || m.RegionId == regionId))
-                .ExecuteUpdateAsync(updates => updates
-                    .SetProperty(m => m.Status, "Approved")
-                    .SetProperty(m => m.ApprovedBy, CurrentUserId)
-                    .SetProperty(m => m.ApprovedAt, approvedAt));
+            if (isSmm && creatorRole != AppRole.SMD)
+                return Forbid();
 
-            if (affected != 1)
-                return Conflict(new { message = "Submission was already processed or is outside your scope." });
+            if (isRmm &&
+                creatorRole != AppRole.RMD &&
+                creatorRole != AppRole.MO)
+                return Forbid();
 
-            return Ok(new
+            await using var transaction =
+                await _db.Database.BeginTransactionAsync();
+
+            try
             {
-                message = "Program budget approved successfully.",
-                BudgetProgramMainId = id,
-                Status = "Approved"
-            });
+                // Prevent another approver from processing the same submission.
+                var now = DateTime.UtcNow;
+
+                int claimed = await _db.Set<BudgetProgramMains>()
+                    .Where(x => x.Id == id &&
+                                x.StateId == stateId &&
+                                (isSmm || x.RegionId == regionId) &&
+                                x.Status == "Valid")
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.Status, "Approved")
+                        .SetProperty(x => x.ApprovedBy, CurrentUserId)
+                        .SetProperty(x => x.ApprovedAt, now));
+
+                if (claimed != 1)
+                {
+                    await transaction.RollbackAsync();
+                    return Conflict(new { message = "Already approved or processed." });
+                }
+
+                // Load the tracked parent and its existing children.
+                var main = await _db.Set<BudgetProgramMains>()
+                    .Include(x => x.Programs)
+                    .FirstAsync(x => x.Id == id);
+
+                var oldPrograms = main.Programs.ToList();
+
+                var oldIds = oldPrograms
+                    .Select(x => x.ProgramId)
+                    .OrderBy(x => x)
+                    .ToArray();
+
+                var newIds = request.Programs
+                    .Select(x => x.ProgramId)
+                    .OrderBy(x => x)
+                    .ToArray();
+
+                // Do not allow an approver to add/remove programs.
+                if (!oldIds.SequenceEqual(newIds))
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        message = "Submitted program list does not match saved programs."
+                    });
+                }
+
+                // Obtain editable flags from database, not the browser.
+                var programMasters = await _db.Set<ProgramMaster>()
+                    .AsNoTracking()
+                    .Include(x => x.ProgramType)
+                    .Where(x => newIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id);
+
+                var oldByProgramId =
+                    oldPrograms.ToDictionary(x => x.ProgramId);
+
+                var revisedPrograms = new List<BudgetProgram>();
+                decimal totalAllocated = 0m;
+
+                foreach (var item in request.Programs)
+                {
+                    if (!programMasters.TryGetValue(item.ProgramId, out var master)
+                        || master.ProgramType == null)
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new
+                        {
+                            message = $"Program Type missing for {item.ProgramId}."
+                        });
+                    }
+
+                    var counts = new[]
+                    {
+                item.AprilCount, item.MayCount, item.JuneCount,
+                item.JulyCount, item.AugustCount, item.SeptemberCount,
+                item.OctoberCount, item.NovemberCount, item.DecemberCount,
+                item.JanuaryCount, item.FebruaryCount, item.MarchCount
+            };
+
+                    if (item.TotalBudget < 0 ||
+                        counts.Any(c => c < 0 || c != decimal.Truncate(c)))
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new
+                        {
+                            message = "Budget amounts and monthly counts must be valid."
+                        });
+                    }
+
+                    var old = oldByProgramId[item.ProgramId];
+
+                    decimal baseAmount = master.ProgramType.IsChangeAmount
+                        ? item.TotalBudget
+                        : old.TotalBudget;
+
+                    var revised = new BudgetProgram
+                    {
+                        ProgramId = item.ProgramId,
+                        TotalBudget = baseAmount,
+
+                        AprilCount = item.AprilCount,
+                        April = baseAmount * item.AprilCount,
+
+                        MayCount = item.MayCount,
+                        May = baseAmount * item.MayCount,
+
+                        JuneCount = item.JuneCount,
+                        June = baseAmount * item.JuneCount,
+
+                        JulyCount = item.JulyCount,
+                        July = baseAmount * item.JulyCount,
+
+                        AugustCount = item.AugustCount,
+                        August = baseAmount * item.AugustCount,
+
+                        SeptemberCount = item.SeptemberCount,
+                        September = baseAmount * item.SeptemberCount,
+
+                        OctoberCount = item.OctoberCount,
+                        October = baseAmount * item.OctoberCount,
+
+                        NovemberCount = item.NovemberCount,
+                        November = baseAmount * item.NovemberCount,
+
+                        DecemberCount = item.DecemberCount,
+                        December = baseAmount * item.DecemberCount,
+
+                        JanuaryCount = item.JanuaryCount,
+                        January = baseAmount * item.JanuaryCount,
+
+                        FebruaryCount = item.FebruaryCount,
+                        February = baseAmount * item.FebruaryCount,
+
+                        MarchCount = item.MarchCount,
+                        March = baseAmount * item.MarchCount
+                    };
+
+                    decimal rowTotal =
+                        revised.April + revised.May + revised.June +
+                        revised.July + revised.August + revised.September +
+                        revised.October + revised.November + revised.December +
+                        revised.January + revised.February + revised.March;
+
+                    totalAllocated += rowTotal;
+                    revisedPrograms.Add(revised);
+                }
+
+                // ApprovedAmount is the ceiling stored at submission time.
+                // Never compare against AllocatedAmount or a hardcoded zero.
+                decimal approvedAmount = main.ApprovedAmount;
+
+                if (approvedAmount <= 0m)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        message = "The submission has no valid approved budget ceiling."
+                    });
+                }
+
+                if (totalAllocated <= 0m)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        message = "Allocate a positive budget to at least one program."
+                    });
+                }
+
+                if (totalAllocated > approvedAmount)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        message = $"Total allocated budget {totalAllocated:N0} cannot exceed approved budget {approvedAmount:N0}.",
+                        TotalAllocated = totalAllocated,
+                        ApprovedAmount = approvedAmount,
+                        ExceededAmount = totalAllocated - approvedAmount
+                    });
+                }
+
+                decimal remainingAmount = approvedAmount - totalAllocated;
+
+                // Delete children for THIS submission only.
+                _db.Set<BudgetProgram>().RemoveRange(oldPrograms);
+
+                // Flush deletes before inserting replacements.
+                // The transaction will roll back these deletes if insertion fails.
+                await _db.SaveChangesAsync();
+
+                // Insert fresh children linked to the same parent.
+                foreach (var revised in revisedPrograms)
+                {
+                    main.Programs.Add(revised);
+                }
+
+                // Existing parent is retained, including its ApprovedAmount.
+                main.AllocatedAmount = totalAllocated;
+                main.SIDAmount = remainingAmount;
+                // Status, ApprovedBy, ApprovedAt were set by ExecuteUpdateAsync.
+
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new
+                {
+                    message = "Budget updated and approved successfully.",
+                    BudgetProgramMainId = id,
+                    Status = "Approved",
+                    ApprovedBy = CurrentUserId,
+                    ApprovedAt = now,
+                    ApprovedAmount = approvedAmount,
+                    AllocatedAmount = totalAllocated,
+                    RemainingAmount = remainingAmount
+                });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+
+                Console.WriteLine($"Approval failed: {ex}");
+
+                return StatusCode(500, new
+                {
+                    message = "Budget approval failed. Changes were rolled back."
+                });
+            }
         }
 
+        [Authorize]
+        [HttpGet("pending-program-validations")]
+        public async Task<IActionResult> GetPendingProgramValidations([FromQuery] string fy)
+        {
+            if (string.IsNullOrWhiteSpace(fy))
+                return BadRequest(new { message = "Financial year is required." });
+
+            string role = (User.FindFirst(ClaimTypes.Role)?.Value
+                ?? User.FindFirst("role")?.Value ?? "").Trim().ToUpperInvariant();
+
+            bool isSmd = role == AppRole.SMD.ToString().ToUpperInvariant();
+            bool isRmd = role == AppRole.RMD.ToString().ToUpperInvariant();
+            if (!isSmd && !isRmd) return Forbid();
+
+            if (!int.TryParse(User.FindFirst("spic:state_id")?.Value, out int stateId)
+                || stateId <= 0)
+                return BadRequest(new { message = "Logged-in validator has no valid state claim." });
+
+            int regionId = 0;
+            if (isRmd && (!int.TryParse(User.FindFirst("spic:region_id")?.Value, out regionId)
+                || regionId <= 0))
+                return BadRequest(new { message = "Logged-in RMDO has no valid region claim." });
+
+            var query = _db.Set<BudgetProgramMains>()
+                .AsNoTracking()
+                .AsSplitQuery()
+                .Include(m => m.Programs)!
+                    .ThenInclude(p => p.Program)
+                    .ThenInclude(p => p.ProgramType)
+                .Where(m => m.FinancialYear == fy.Trim()
+                    && m.Status == "Submitted"
+                    && m.StateId == stateId);
+
+            if (isRmd)
+                query = query.Where(m => m.RegionId == regionId);
+
+            var candidates = await query.OrderByDescending(m => m.CreatedAt).ToListAsync();
+            var roleCache = new Dictionary<string, AppRole?>(StringComparer.Ordinal);
+            var result = new List<object>();
+
+            foreach (var main in candidates)
+            {
+                var creatorId = main.CreatedBy?.Trim();
+                if (string.IsNullOrWhiteSpace(creatorId)) continue;
+                if (!roleCache.TryGetValue(creatorId, out var creatorRole))
+                {
+                    creatorRole = await GetBudgetCreatorRoleAsync(creatorId);
+                    roleCache[creatorId] = creatorRole;
+                }
+
+                bool isOwnSubmission = string.Equals(
+                    creatorId, CurrentUserId?.Trim(),
+                    StringComparison.OrdinalIgnoreCase);
+
+                // SMD: own submissions only. RMD: own RMD submissions
+                // or MO submissions assigned to the same region.
+                if (isSmd && !(creatorRole == AppRole.SMD && isOwnSubmission))
+                    continue;
+                if (isRmd && !(
+                    (creatorRole == AppRole.RMD && isOwnSubmission) ||
+                    (creatorRole == AppRole.MO && !isOwnSubmission)))
+                    continue;
+
+                result.Add(new
+                {
+                    main.Id,
+                    main.FinancialYear,
+                    SubmittedBy = creatorId,
+                    SubmittedRole = creatorRole.ToString(),
+                    main.Status,
+                    TotalBudget = main.AllocatedAmount,
+                    Programs = (main.Programs ?? new List<BudgetProgram>())
+                        .OrderBy(p => p.ProgramId)
+                        .Select(p => new
+                        {
+                            p.ProgramId,
+                            ProgramTypeId = p.Program?.ProgramTypeId ?? 0,
+                            ProgramType = p.Program?.ProgramType?.Name ?? "",
+                            ProgramName = p.Program?.Name ?? "",
+                            // Replace with actual ProgramMaster -> ProgramType relationship once known.                            
+                            BudgetAmount = p.TotalBudget,
+                            p.TotalBudget,
+                            IsChangeAmount = p.Program?.ProgramType?.IsChangeAmount ?? false,
+                            p.AprilCount,
+                            AprilBudget = p.April,
+                            p.MayCount,
+                            MayBudget = p.May,
+                            p.JuneCount,
+                            JuneBudget = p.June,
+                            p.JulyCount,
+                            JulyBudget = p.July,
+                            p.AugustCount,
+                            AugustBudget = p.August,
+                            p.SeptemberCount,
+                            SeptemberBudget = p.September,
+                            p.OctoberCount,
+                            OctoberBudget = p.October,
+                            p.NovemberCount,
+                            NovemberBudget = p.November,
+                            p.DecemberCount,
+                            DecemberBudget = p.December,
+                            p.JanuaryCount,
+                            JanuaryBudget = p.January,
+                            p.FebruaryCount,
+                            FebruaryBudget = p.February,
+                            p.MarchCount,
+                            MarchBudget = p.March
+                        }).ToList()
+                });
+            }
+
+            return Ok(result);
+        }
+
+
+        [Authorize]
+        [HttpPost("{id:int}/validate-program")]
+        public async Task<IActionResult> ValidateProgram(
+      int id,
+      [FromBody] ApproveProgramBudgetRequest request)
+        {
+            string role = (User.FindFirst(ClaimTypes.Role)?.Value
+                ?? User.FindFirst("role")?.Value ?? "")
+                .Trim().ToUpperInvariant();
+
+            bool isSmd = role == AppRole.SMD.ToString().ToUpperInvariant();
+            bool isRmd = role == AppRole.RMD.ToString().ToUpperInvariant();
+
+            if (!isSmd && !isRmd)
+                return Forbid();
+
+            if (!int.TryParse(
+                    User.FindFirst("spic:state_id")?.Value,
+                    out int stateId) || stateId <= 0)
+                return BadRequest(new { message = "Invalid state claim." });
+
+            int regionId = 0;
+
+            if (isRmd && (!int.TryParse(
+                    User.FindFirst("spic:region_id")?.Value,
+                    out regionId) || regionId <= 0))
+                return BadRequest(new { message = "Invalid region claim." });
+
+            if (string.IsNullOrWhiteSpace(CurrentUserId))
+                return Unauthorized();
+
+            if (request?.Programs == null || request.Programs.Count == 0)
+                return BadRequest(new { message = "No programs received." });
+
+            if (request.Programs.Any(x => x.ProgramId <= 0) ||
+                request.Programs.GroupBy(x => x.ProgramId).Any(g => g.Count() > 1))
+                return BadRequest(new { message = "Invalid or duplicate ProgramId." });
+
+            var query = _db.Set<BudgetProgramMains>()
+                .AsNoTracking()
+                .Where(x => x.Id == id &&
+                            x.StateId == stateId &&
+                            x.Status == "Submitted");
+
+            if (isRmd)
+                query = query.Where(x => x.RegionId == regionId);
+
+            var submission = await query.FirstOrDefaultAsync();
+
+            if (submission == null)
+                return Conflict(new { message = "No pending submission found." });
+
+            var creatorRole = await GetBudgetCreatorRoleAsync(submission.CreatedBy);
+            bool ownSubmission = string.Equals(
+                submission.CreatedBy?.Trim(), CurrentUserId?.Trim(),
+                StringComparison.OrdinalIgnoreCase);
+
+            if (isSmd && !(creatorRole == AppRole.SMD && ownSubmission))
+                return Forbid();
+            if (isRmd && !(
+                (creatorRole == AppRole.RMD && ownSubmission) ||
+                (creatorRole == AppRole.MO && !ownSubmission)))
+                return Forbid();
+
+            await using var transaction =
+                await _db.Database.BeginTransactionAsync();
+
+            try
+            {
+                // Prevent another approver from processing the same submission.
+                var now = DateTime.UtcNow;
+
+                int claimed = await _db.Set<BudgetProgramMains>()
+                    .Where(x => x.Id == id &&
+                                x.StateId == stateId &&
+                                (isSmd || x.RegionId == regionId) &&
+                                x.Status == "Submitted")
+                    .ExecuteUpdateAsync(update => update
+                        .SetProperty(x => x.Status, "Valid")
+                        .SetProperty(x => x.ValidateBy, CurrentUserId)
+                        .SetProperty(x => x.ValidateAt, now));
+
+                if (claimed != 1)
+                {
+                    await transaction.RollbackAsync();
+                    return Conflict(new { message = "Already validated or processed." });
+                }
+
+                // Load the tracked parent and its existing children.
+                var main = await _db.Set<BudgetProgramMains>()
+                    .Include(x => x.Programs)
+                    .FirstAsync(x => x.Id == id);
+
+                var oldPrograms = main.Programs.ToList();
+
+                var oldIds = oldPrograms
+                    .Select(x => x.ProgramId)
+                    .OrderBy(x => x)
+                    .ToArray();
+
+                var newIds = request.Programs
+                    .Select(x => x.ProgramId)
+                    .OrderBy(x => x)
+                    .ToArray();
+
+                // Do not allow an approver to add/remove programs.
+                if (!oldIds.SequenceEqual(newIds))
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        message = "Submitted program list does not match saved programs."
+                    });
+                }
+
+                // Obtain editable flags from database, not the browser.
+                var programMasters = await _db.Set<ProgramMaster>()
+                    .AsNoTracking()
+                    .Include(x => x.ProgramType)
+                    .Where(x => newIds.Contains(x.Id))
+                    .ToDictionaryAsync(x => x.Id);
+
+                var oldByProgramId =
+                    oldPrograms.ToDictionary(x => x.ProgramId);
+
+                var revisedPrograms = new List<BudgetProgram>();
+                decimal totalAllocated = 0m;
+
+                foreach (var item in request.Programs)
+                {
+                    if (!programMasters.TryGetValue(item.ProgramId, out var master)
+                        || master.ProgramType == null)
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new
+                        {
+                            message = $"Program Type missing for {item.ProgramId}."
+                        });
+                    }
+
+                    var counts = new[]
+                    {
+                item.AprilCount, item.MayCount, item.JuneCount,
+                item.JulyCount, item.AugustCount, item.SeptemberCount,
+                item.OctoberCount, item.NovemberCount, item.DecemberCount,
+                item.JanuaryCount, item.FebruaryCount, item.MarchCount
+            };
+
+                    if (item.TotalBudget < 0 ||
+                        counts.Any(c => c < 0 || c != decimal.Truncate(c)))
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new
+                        {
+                            message = "Budget amounts and monthly counts must be valid."
+                        });
+                    }
+
+                    var old = oldByProgramId[item.ProgramId];
+
+                    decimal baseAmount = master.ProgramType.IsChangeAmount
+                        ? item.TotalBudget
+                        : old.TotalBudget;
+
+                    var revised = new BudgetProgram
+                    {
+                        ProgramId = item.ProgramId,
+                        TotalBudget = baseAmount,
+
+                        AprilCount = item.AprilCount,
+                        April = baseAmount * item.AprilCount,
+
+                        MayCount = item.MayCount,
+                        May = baseAmount * item.MayCount,
+
+                        JuneCount = item.JuneCount,
+                        June = baseAmount * item.JuneCount,
+
+                        JulyCount = item.JulyCount,
+                        July = baseAmount * item.JulyCount,
+
+                        AugustCount = item.AugustCount,
+                        August = baseAmount * item.AugustCount,
+
+                        SeptemberCount = item.SeptemberCount,
+                        September = baseAmount * item.SeptemberCount,
+
+                        OctoberCount = item.OctoberCount,
+                        October = baseAmount * item.OctoberCount,
+
+                        NovemberCount = item.NovemberCount,
+                        November = baseAmount * item.NovemberCount,
+
+                        DecemberCount = item.DecemberCount,
+                        December = baseAmount * item.DecemberCount,
+
+                        JanuaryCount = item.JanuaryCount,
+                        January = baseAmount * item.JanuaryCount,
+
+                        FebruaryCount = item.FebruaryCount,
+                        February = baseAmount * item.FebruaryCount,
+
+                        MarchCount = item.MarchCount,
+                        March = baseAmount * item.MarchCount
+                    };
+
+                    decimal rowTotal =
+                        revised.April + revised.May + revised.June +
+                        revised.July + revised.August + revised.September +
+                        revised.October + revised.November + revised.December +
+                        revised.January + revised.February + revised.March;
+
+                    totalAllocated += rowTotal;
+                    revisedPrograms.Add(revised);
+                }
+
+                // ApprovedAmount is the ceiling stored at submission time.
+                // Never compare against AllocatedAmount or a hardcoded zero.
+                decimal approvedAmount = main.ApprovedAmount;
+
+                if (approvedAmount <= 0m)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        message = "The submission has no valid approved budget ceiling."
+                    });
+                }
+
+                if (totalAllocated <= 0m)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        message = "Allocate a positive budget to at least one program."
+                    });
+                }
+
+                if (totalAllocated > approvedAmount)
+                {
+                    await transaction.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        message = $"Total allocated budget {totalAllocated:N0} cannot exceed approved budget {approvedAmount:N0}.",
+                        TotalAllocated = totalAllocated,
+                        ApprovedAmount = approvedAmount,
+                        ExceededAmount = totalAllocated - approvedAmount
+                    });
+                }
+
+                decimal remainingAmount = approvedAmount - totalAllocated;
+
+                // Delete children for THIS submission only.
+                _db.Set<BudgetProgram>().RemoveRange(oldPrograms);
+
+                // Flush deletes before inserting replacements.
+                // The transaction will roll back these deletes if insertion fails.
+                await _db.SaveChangesAsync();
+
+                // Insert fresh children linked to the same parent.
+                foreach (var revised in revisedPrograms)
+                {
+                    main.Programs.Add(revised);
+                }
+
+                // Existing parent is retained, including its ApprovedAmount.
+                main.AllocatedAmount = totalAllocated;
+                main.SIDAmount = remainingAmount;
+                // Status, ValidateBy, ValidateAt were set by ExecuteUpdateAsync.
+
+                await _db.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return Ok(new
+                {
+                    message = "Budget updated and validated successfully.",
+                    BudgetProgramMainId = id,
+                    Status = "Valid",
+                    ValidateBy = CurrentUserId,
+                    ValidateAt = now,
+                    ApprovedAmount = approvedAmount,
+                    AllocatedAmount = totalAllocated,
+                    RemainingAmount = remainingAmount
+                });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+
+                Console.WriteLine($"Validation failed: {ex}");
+
+                return StatusCode(500, new
+                {
+                    message = "Budget validation failed. Changes were rolled back."
+                });
+            }
+        }
     }
 
 
