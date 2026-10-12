@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SPIC.Core.Entities;
 
 namespace SPIC.Core.DTOs
 {
@@ -27,7 +28,8 @@ namespace SPIC.Core.DTOs
         public string DealerName { get; set; } = "";
         public string DealerCode { get; set; } = "";
         public DayOfWeek? Day { get; set; }
-        public DateTime? PlannedDate { get; set; }
+        public AllocTaskStatus Status { get; set; }
+        public DateTime? StartedAt { get; set; }
     }
 
     public class JmdoTaskAllocationResponseDto
@@ -47,6 +49,17 @@ namespace SPIC.Core.DTOs
         public int? DapTarget { get; set; }
         public int? NpsTarget { get; set; }
         public int? OthersTarget { get; set; }
+
+        // Field-work progress - distinct from the "Status" above, which is the MDO's
+        // approval status of the whole week's submission.
+        public AllocTaskStatus SpcmStatus { get; set; }
+        public AllocTaskStatus SoilSampleStatus { get; set; }
+        public AllocTaskStatus PosLiquidationStatus { get; set; }
+        public DateTime? SpcmStartedAt { get; set; }
+        public DateTime? SoilSampleStartedAt { get; set; }
+        public DateTime? PosLiquidationStartedAt { get; set; }
+
+        public List<JmdoTaskCloseoutDto> Closeouts { get; set; } = new();
     }
 
     // One row on the MDO's "Allocation Requests" list (pending-approval queue).
@@ -109,6 +122,8 @@ namespace SPIC.Core.DTOs
         public int Csr1Id { get; set; }
         public string ProgramName { get; set; } = "";
         public decimal Budget { get; set; }
+        public AllocTaskStatus Status { get; set; }
+        public DateTime? StartedAt { get; set; }
     }
 
     public class AddDealerToAllocationDto
@@ -135,5 +150,64 @@ namespace SPIC.Core.DTOs
         public int? DapTarget { get; set; }
         public int? NpsTarget { get; set; }
         public int? OthersTarget { get; set; }
+    }
+
+    // Sent from TaskDetail's Start/Stop buttons. TaskKey reuses the exact same string
+    // convention the client already builds for itself ("dealer_{subDealerId}",
+    // "prog_{csr1Id}", "spcm", "soil", "pos") so the server and client never need two
+    // separate ideas of "which task is this".
+    public class UpdateTaskStatusDto
+    {
+        public string TaskKey { get; set; } = "";
+        public AllocTaskStatus Status { get; set; }
+    }
+
+    public class ProductLineDto
+    {
+        public string ProductGroupName { get; set; } = "";
+        public string ProductName { get; set; } = "";
+        public string StockText { get; set; } = "";
+    }
+
+    // One "Save Record" submission from TaskDetail's close-out form.
+    public class JmdoTaskCloseoutDto
+    {
+        public int Id { get; set; }
+        public JmdoCloseoutKind Kind { get; set; }
+        public int? SubDealerId { get; set; }
+        public int? Csr1Id { get; set; }
+        public string Outcome { get; set; } = "";
+        public string? Remarks { get; set; }
+        public int? AchievedTarget { get; set; }
+        public int? Urea { get; set; }
+        public int? Nps { get; set; }
+        public int? Dap { get; set; }
+        public int? Other { get; set; }
+        public string? FilePath { get; set; }
+        public string? FileName { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public List<ProductLineDto> Products { get; set; } = new();
+    }
+
+    public class CreateJmdoTaskCloseoutDto
+    {
+        public JmdoCloseoutKind Kind { get; set; }
+        public int? SubDealerId { get; set; }
+        public int? Csr1Id { get; set; }
+        public string Outcome { get; set; } = "";
+        public string? Remarks { get; set; }
+        public int? AchievedTarget { get; set; }
+        public int? Urea { get; set; }
+        public int? Nps { get; set; }
+        public int? Dap { get; set; }
+        public int? Other { get; set; }
+        public string? FilePath { get; set; }
+        public string? FileName { get; set; }
+        public List<ProductLineDto> Products { get; set; } = new();
+    }
+
+    public class CloseoutFileUploadResponse
+    {
+        public string FilePath { get; set; } = "";
     }
 }

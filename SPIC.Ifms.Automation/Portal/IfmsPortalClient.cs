@@ -823,10 +823,19 @@ namespace SPIC.Ifms.Automation.Portal
 		{
 			try
 			{
+				// Evaluate has no timeout of its own: on a page the portal left
+				// half-loaded it never returns, which cost run 120 forty-six
+				// minutes. Bound it by the navigation timeout.
 				return await Page.EvaluateAsync<string[]>(
 					@"() => Array.from(document.querySelectorAll('#tokenContainer input'))
 						.filter(i => ['struts.token.name','struts.token','token'].includes(i.name))
-						.map(i => i.name + '=' + encodeURIComponent(i.value))");
+						.map(i => i.name + '=' + encodeURIComponent(i.value))")
+					.WaitAsync(TimeSpan.FromMilliseconds(_options.Browser.NavigationTimeoutMs));
+			}
+			catch (TimeoutException)
+			{
+				_logger.LogWarning("Reading the portal token timed out; the page is not responding.");
+				return Array.Empty<string>();
 			}
 			catch (PlaywrightException)
 			{

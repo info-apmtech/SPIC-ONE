@@ -14,10 +14,12 @@ namespace SPIC.Api.Controllers;
 public class JmdoTaskAllocationController : ControllerBase
 {
     private readonly AppDbContext _db;
+    private readonly IWebHostEnvironment _environment;
 
-    public JmdoTaskAllocationController(AppDbContext db)
+    public JmdoTaskAllocationController(AppDbContext db, IWebHostEnvironment environment)
     {
         _db = db;
+        _environment = environment;
     }
 
     // ---- Claim helpers, copied from SubDealerRegistrationController so the two controllers'
@@ -127,8 +129,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 SubDealerId = dealer.Id,
                 DealerName = dealer.FirmName,
                 DealerCode = dealer.SubDealerCode ?? "",
-                PlannedDay = assignment.Day,
-                PlannedDate = allocation.AllocationDate.AddDays(-(int)allocation.AllocationDate.DayOfWeek).AddDays((int)assignment.Day)
+                PlannedDay = assignment.Day
             });
         }
 
@@ -166,19 +167,35 @@ public class JmdoTaskAllocationController : ControllerBase
         if (string.IsNullOrWhiteSpace(userId))
             return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
 
-        var today = DateTime.Today;
-        var weekStart = today.AddDays(-(int)today.DayOfWeek);
-        var weekEnd = weekStart.AddDays(7);
         var allocation = await _db.JmdoTaskAllocations
             .Include(a => a.Dealers)
             .Include(a => a.Programs)
+            .Include(a => a.Closeouts).ThenInclude(c => c.Products)
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId && a.AllocationDate >= weekStart && a.AllocationDate < weekEnd);
+            .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId
+                && a.AllocationDate >= CurrentWeekStart() && a.AllocationDate < CurrentWeekStart().AddDays(7));
 
         if (allocation == null)
             return NoContent();
 
-        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList()));
+        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList()));
+    }
+
+    // Shared by every endpoint that acts on "my own" current allocation (status
+    // updates, close-out records) - the same week-range rule GetMineToday itself uses.
+    private async Task<JmdoTaskAllocation?> GetMyCurrentAllocationAsync(string userId)
+    {
+        return await _db.JmdoTaskAllocations
+            .Include(a => a.Dealers)
+            .Include(a => a.Programs)
+            .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId
+                && a.AllocationDate >= CurrentWeekStart() && a.AllocationDate < CurrentWeekStart().AddDays(7));
+    }
+
+    private static DateTime CurrentWeekStart()
+    {
+        var today = DateTime.Today;
+        return today.AddDays(-(int)today.DayOfWeek);
     }
 
     // GET api/JmdoTaskAllocation/pending
@@ -283,7 +300,8 @@ public class JmdoTaskAllocationController : ControllerBase
                 RowId = p.Id,
                 Csr1Id = p.Csr1Id,
                 ProgramName = p.ProgramName,
-                Budget = p.Budget
+                Budget = p.Budget,
+                Status = p.Status
             }).ToList(),
             SpcmTarget = allocation.SpcmTarget,
             SoilSampleTarget = allocation.SoilSampleTarget,
@@ -312,8 +330,7 @@ public class JmdoTaskAllocationController : ControllerBase
             SubDealerId = dealer.Id,
             DealerName = dealer.FirmName,
             DealerCode = dealer.SubDealerCode ?? "",
-            PlannedDate = dto.PlannedDate,
-            PlannedDay = dto.PlannedDate?.DayOfWeek
+            PlannedDate = dto.PlannedDate
         };
         _db.JmdoTaskAllocationDealers.Add(row);
         await _db.SaveChangesAsync();
@@ -359,7 +376,6 @@ public class JmdoTaskAllocationController : ControllerBase
             return NotFound();
 
         row.PlannedDate = dto.PlannedDate;
-        row.PlannedDay = dto.PlannedDate?.DayOfWeek;
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -454,6 +470,250 @@ public class JmdoTaskAllocationController : ControllerBase
         return NoContent();
     }
 
+    // PUT api/JmdoTaskAllocation/mine/task-status
+    // Called from TaskDetail's Start/Stop buttons. TaskKey reuses the exact string
+    // convention the client already builds for itself, so there's one definition of
+    // "which task is this" shared by both sides instead of two that could drift apart.
+    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [HttpPut("mine/task-status")]
+    public async Task<IActionResult> UpdateMyTaskStatus([FromBody] UpdateTaskStatusDto dto)
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var allocation = await GetMyCurrentAllocationAsync(userId);
+        if (allocation == null)
+            return NotFound(new { Success = false, Message = "No current allocation found." });
+
+        // Stamped the first time a task goes InProgress (never overwritten on later calls)
+        // so "Time on task" can be computed as DateTime.Now - StartedAt on every page load
+        // instead of resetting to 0 each time the circuit/session is re-established.
+        var startedAt = dto.Status == AllocTaskStatus.InProgress ? DateTime.Now : (DateTime?)null;
+
+        if (dto.TaskKey.StartsWith("dealer_", StringComparison.Ordinal)
+            && int.TryParse(dto.TaskKey.AsSpan("dealer_".Length), out var dealerId))
+        {
+            var dealer = allocation.Dealers.FirstOrDefault(d => d.SubDealerId == dealerId);
+            if (dealer == null) return NotFound(new { Success = false, Message = "Dealer task not found." });
+            dealer.Status = dto.Status;
+            if (startedAt.HasValue && dealer.StartedAt is null) dealer.StartedAt = startedAt;
+        }
+        else if (dto.TaskKey.StartsWith("prog_", StringComparison.Ordinal)
+            && int.TryParse(dto.TaskKey.AsSpan("prog_".Length), out var csr1Id))
+        {
+            var program = allocation.Programs.FirstOrDefault(p => p.Csr1Id == csr1Id);
+            if (program == null) return NotFound(new { Success = false, Message = "Program task not found." });
+            program.Status = dto.Status;
+            if (startedAt.HasValue && program.StartedAt is null) program.StartedAt = startedAt;
+        }
+        else if (dto.TaskKey == "spcm")
+        {
+            allocation.SpcmStatus = dto.Status;
+            if (startedAt.HasValue && allocation.SpcmStartedAt is null) allocation.SpcmStartedAt = startedAt;
+        }
+        else if (dto.TaskKey == "soil")
+        {
+            allocation.SoilSampleStatus = dto.Status;
+            if (startedAt.HasValue && allocation.SoilSampleStartedAt is null) allocation.SoilSampleStartedAt = startedAt;
+        }
+        else if (dto.TaskKey == "pos")
+        {
+            allocation.PosLiquidationStatus = dto.Status;
+            if (startedAt.HasValue && allocation.PosLiquidationStartedAt is null) allocation.PosLiquidationStartedAt = startedAt;
+        }
+        else return BadRequest(new { Success = false, Message = "Unrecognized task key." });
+
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // POST api/JmdoTaskAllocation/closeouts
+    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [HttpPost("closeouts")]
+    public async Task<ActionResult<JmdoTaskCloseoutDto>> CreateCloseout([FromBody] CreateJmdoTaskCloseoutDto dto)
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var allocation = await GetMyCurrentAllocationAsync(userId);
+        if (allocation == null)
+            return NotFound(new { Success = false, Message = "No current allocation found." });
+
+        var closeout = new JmdoTaskCloseout
+        {
+            AllocationId = allocation.Id,
+            Kind = dto.Kind,
+            SubDealerId = dto.SubDealerId,
+            Csr1Id = dto.Csr1Id,
+            Outcome = dto.Outcome,
+            Remarks = dto.Remarks,
+            AchievedTarget = dto.AchievedTarget,
+            Urea = dto.Urea,
+            Nps = dto.Nps,
+            Dap = dto.Dap,
+            Other = dto.Other,
+            FilePath = dto.FilePath,
+            FileName = dto.FileName,
+            CreatedByUserId = userId,
+            CreatedAt = DateTime.Now
+        };
+
+        foreach (var product in dto.Products)
+        {
+            closeout.Products.Add(new JmdoTaskCloseoutProduct
+            {
+                ProductGroupName = product.ProductGroupName,
+                ProductName = product.ProductName,
+                StockText = product.StockText
+            });
+        }
+
+        _db.JmdoTaskCloseouts.Add(closeout);
+        await _db.SaveChangesAsync();
+
+        return Ok(new JmdoTaskCloseoutDto
+        {
+            Id = closeout.Id,
+            Kind = closeout.Kind,
+            SubDealerId = closeout.SubDealerId,
+            Csr1Id = closeout.Csr1Id,
+            Outcome = closeout.Outcome,
+            Remarks = closeout.Remarks,
+            AchievedTarget = closeout.AchievedTarget,
+            Urea = closeout.Urea,
+            Nps = closeout.Nps,
+            Dap = closeout.Dap,
+            Other = closeout.Other,
+            FilePath = closeout.FilePath,
+            FileName = closeout.FileName,
+            CreatedAt = closeout.CreatedAt,
+            Products = closeout.Products.Select(p => new ProductLineDto
+            {
+                ProductGroupName = p.ProductGroupName,
+                ProductName = p.ProductName,
+                StockText = p.StockText
+            }).ToList()
+        });
+    }
+
+    // DELETE api/JmdoTaskAllocation/closeouts/{id}
+    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [HttpDelete("closeouts/{id:int}")]
+    public async Task<IActionResult> DeleteCloseout(int id)
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var closeout = await _db.JmdoTaskCloseouts
+            .Include(c => c.Allocation)
+            .FirstOrDefaultAsync(c => c.Id == id);
+        if (closeout == null)
+            return NotFound();
+
+        // Only the JMDO who owns the allocation (or Admin) can delete their own close-out records.
+        if (closeout.Allocation?.SubmittedByUserId != userId && !User.IsInRole("Admin"))
+            return Forbid();
+
+        _db.JmdoTaskCloseouts.Remove(closeout);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // POST api/JmdoTaskAllocation/closeout-files/upload
+    // Same shape as SubDealerFileController.UploadGst: 5 MB limit, allow-listed
+    // extensions, GUID filename under wwwroot so the returned path is directly
+    // usable as an <a href> with no separate streaming endpoint needed.
+    private const long MaxCloseoutFileSize = 5 * 1024 * 1024;
+    private static readonly string[] AllowedCloseoutExtensions = { ".pdf", ".jpg", ".jpeg", ".png" };
+
+    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [HttpPost("closeout-files/upload")]
+    [RequestSizeLimit(MaxCloseoutFileSize)]
+    public async Task<ActionResult<CloseoutFileUploadResponse>> UploadCloseoutFile(IFormFile file, CancellationToken cancellationToken)
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        if (file == null || file.Length == 0)
+            return BadRequest(new { Success = false, Message = "File is required." });
+
+        if (file.Length > MaxCloseoutFileSize)
+            return BadRequest(new { Success = false, Message = "File size must be less than 5 MB." });
+
+        var extension = Path.GetExtension(file.FileName);
+        if (!AllowedCloseoutExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+            return BadRequest(new { Success = false, Message = "Only PDF, JPG, and PNG files are allowed." });
+
+        var webRoot = _environment.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+            webRoot = Path.Combine(_environment.ContentRootPath, "wwwroot");
+
+        var relativeDirectory = Path.Combine("uploads", "jmdo-closeouts", userId);
+        var physicalDirectory = Path.Combine(webRoot, relativeDirectory);
+        Directory.CreateDirectory(physicalDirectory);
+
+        var safeFileName = $"{Guid.NewGuid():N}{extension}";
+        var physicalPath = Path.Combine(physicalDirectory, safeFileName);
+
+        await using (var output = System.IO.File.Create(physicalPath))
+        {
+            await file.CopyToAsync(output, cancellationToken);
+        }
+
+        var relativePath = "/" + Path.Combine(relativeDirectory, safeFileName).Replace("\\", "/");
+
+        return Ok(new CloseoutFileUploadResponse { FilePath = relativePath });
+    }
+
+    // GET api/JmdoTaskAllocation/closeout-files/download?path=...&fileName=...
+    // The static-served FilePath works fine for "View", but the HTML5 `download`
+    // attribute on an <a> is silently ignored by browsers for cross-origin URLs
+    // (the Blazor app and this API run on different origins) - it just opens the
+    // file like View does. Setting Content-Disposition: attachment server-side
+    // forces a real download regardless of origin, so this is a second route onto
+    // the exact same file, not a duplicate store.
+    // Anonymous, like the static file serving "View" already uses for this same folder -
+    // this app authenticates via a Bearer token, which a plain <a href> navigation can't
+    // attach, and the file is already reachable without auth via its static URL anyway.
+    [AllowAnonymous]
+    [HttpGet("closeout-files/download")]
+    public IActionResult DownloadCloseoutFile([FromQuery] string path, [FromQuery] string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return BadRequest(new { Success = false, Message = "path is required." });
+
+        var normalizedRelative = path.Trim().Replace("\\", "/").TrimStart('/');
+        if (!normalizedRelative.StartsWith("uploads/jmdo-closeouts/", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { Success = false, Message = "Invalid file path." });
+
+        var webRoot = _environment.WebRootPath;
+        if (string.IsNullOrWhiteSpace(webRoot))
+            webRoot = Path.Combine(_environment.ContentRootPath, "wwwroot");
+
+        var allowedRoot = Path.GetFullPath(Path.Combine(webRoot, "uploads", "jmdo-closeouts"));
+        var requestedFile = Path.GetFullPath(Path.Combine(webRoot, normalizedRelative));
+        if (!requestedFile.StartsWith(allowedRoot, StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { Success = false, Message = "Invalid file path." });
+
+        if (!System.IO.File.Exists(requestedFile))
+            return NotFound();
+
+        var contentType = Path.GetExtension(requestedFile).ToLowerInvariant() switch
+        {
+            ".pdf" => "application/pdf",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            _ => "application/octet-stream"
+        };
+
+        var downloadName = string.IsNullOrWhiteSpace(fileName) ? Path.GetFileName(requestedFile) : fileName;
+        return PhysicalFile(requestedFile, contentType, downloadName);
+    }
+
     // Shared by every edit/approve endpoint: loads the allocation, enforces HQ
     // scope, and rejects edits once it's no longer Pending (already reviewed).
     private async Task<(JmdoTaskAllocation? Allocation, ActionResult? Forbidden)> LoadEditableAllocation(int id)
@@ -501,7 +761,8 @@ public class JmdoTaskAllocationController : ControllerBase
     private static JmdoTaskAllocationResponseDto ToResponseDto(
         JmdoTaskAllocation allocation,
         List<JmdoTaskAllocationDealer> dealers,
-        List<JmdoTaskAllocationProgram> programs) => new()
+        List<JmdoTaskAllocationProgram> programs,
+        List<JmdoTaskCloseout>? closeouts = null) => new()
     {
         Id = allocation.Id,
         AllocationDate = allocation.AllocationDate,
@@ -515,20 +776,52 @@ public class JmdoTaskAllocationController : ControllerBase
             DealerName = d.DealerName,
             DealerCode = d.DealerCode,
             Day = d.PlannedDay,
-            PlannedDate = d.PlannedDate
+            Status = d.Status,
+            StartedAt = d.StartedAt
         }).ToList(),
         Programs = programs.Select(p => new JmdoAllocationProgramRowDto
         {
             RowId = p.Id,
             Csr1Id = p.Csr1Id,
             ProgramName = p.ProgramName,
-            Budget = p.Budget
+            Budget = p.Budget,
+            Status = p.Status,
+            StartedAt = p.StartedAt
         }).ToList(),
         SpcmTarget = allocation.SpcmTarget,
         SoilSampleTarget = allocation.SoilSampleTarget,
         UreaTarget = allocation.UreaTarget,
         DapTarget = allocation.DapTarget,
         NpsTarget = allocation.NpsTarget,
-        OthersTarget = allocation.OthersTarget
+        OthersTarget = allocation.OthersTarget,
+        SpcmStatus = allocation.SpcmStatus,
+        SoilSampleStatus = allocation.SoilSampleStatus,
+        PosLiquidationStatus = allocation.PosLiquidationStatus,
+        SpcmStartedAt = allocation.SpcmStartedAt,
+        SoilSampleStartedAt = allocation.SoilSampleStartedAt,
+        PosLiquidationStartedAt = allocation.PosLiquidationStartedAt,
+        Closeouts = (closeouts ?? new()).Select(c => new JmdoTaskCloseoutDto
+        {
+            Id = c.Id,
+            Kind = c.Kind,
+            SubDealerId = c.SubDealerId,
+            Csr1Id = c.Csr1Id,
+            Outcome = c.Outcome,
+            Remarks = c.Remarks,
+            AchievedTarget = c.AchievedTarget,
+            Urea = c.Urea,
+            Nps = c.Nps,
+            Dap = c.Dap,
+            Other = c.Other,
+            FilePath = c.FilePath,
+            FileName = c.FileName,
+            CreatedAt = c.CreatedAt,
+            Products = c.Products.Select(p => new ProductLineDto
+            {
+                ProductGroupName = p.ProductGroupName,
+                ProductName = p.ProductName,
+                StockText = p.StockText
+            }).ToList()
+        }).ToList()
     };
 }

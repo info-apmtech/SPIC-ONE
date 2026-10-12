@@ -46,6 +46,9 @@ namespace SPIC.Ifms.Automation.Reports
 		/// </summary>
 		private const int MaxReLoginsPerAccount = 3;
 
+		/// <summary>Longest a single download attempt may run before it is written off.</summary>
+		private static readonly TimeSpan MaxAttemptDuration = TimeSpan.FromMinutes(15);
+
 		private readonly IServiceScopeFactory _scopeFactory;
 		private readonly ISiteProbe _siteProbe;
 		private readonly IReportImporter _importer;
@@ -510,7 +513,22 @@ namespace SPIC.Ifms.Automation.Reports
 					}
 					var folder = ArchiveFolder(reportDate);
 
-					var download = await portal.DownloadReportAsync(job, tokens, folder, cancellationToken);
+					// No single attempt may eat the night. The portal can leave a
+					// page half-loaded for an hour; after this long the attempt is
+					// written off and the next one, or the next report, gets a go.
+					using var attemptLimit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+					attemptLimit.CancelAfter(MaxAttemptDuration);
+
+					DownloadedReport download;
+					try
+					{
+						download = await portal.DownloadReportAsync(job, tokens, folder, attemptLimit.Token);
+					}
+					catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+					{
+						throw new TimeoutException(
+							$"The attempt took longer than {MaxAttemptDuration.TotalMinutes:0} minutes and was abandoned.");
+					}
 
 					var needsDate = RequiresReportDate(job.CategoryId);
 

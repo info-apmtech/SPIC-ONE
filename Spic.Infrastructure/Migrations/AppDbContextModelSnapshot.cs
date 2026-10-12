@@ -4500,6 +4500,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("OthersTarget")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("PosLiquidationStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("PosLiquidationStatus")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("RegionId")
                         .HasColumnType("integer");
 
@@ -4512,7 +4518,19 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("ReviewedByUserId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("SoilSampleStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("SoilSampleStatus")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("SoilSampleTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SpcmStartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("SpcmStatus")
                         .HasColumnType("integer");
 
                     b.Property<int?>("SpcmTarget")
@@ -4573,6 +4591,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("PlannedDay")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
                     b.Property<int>("SubDealerId")
                         .HasColumnType("integer");
 
@@ -4604,11 +4628,109 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("AllocationId");
 
                     b.ToTable("JmdoTaskAllocationPrograms");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseout", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AchievedTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AllocationId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Csr1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Dap")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Nps")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Other")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Remarks")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SubDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Urea")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AllocationId");
+
+                    b.ToTable("JmdoTaskCloseouts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseoutProduct", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CloseoutId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProductGroupName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProductName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StockText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CloseoutId");
+
+                    b.ToTable("JmdoTaskCloseoutProducts");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
@@ -10508,6 +10630,28 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Allocation");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseout", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskAllocation", "Allocation")
+                        .WithMany("Closeouts")
+                        .HasForeignKey("AllocationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Allocation");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseoutProduct", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.JmdoTaskCloseout", "Closeout")
+                        .WithMany("Products")
+                        .HasForeignKey("CloseoutId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Closeout");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.SampleBatch", "Batch")
@@ -11050,9 +11194,16 @@ namespace Spic.Infrastructure.Migrations
 
             modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskAllocation", b =>
                 {
+                    b.Navigation("Closeouts");
+
                     b.Navigation("Dealers");
 
                     b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoTaskCloseout", b =>
+                {
+                    b.Navigation("Products");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LibraryConversation", b =>
