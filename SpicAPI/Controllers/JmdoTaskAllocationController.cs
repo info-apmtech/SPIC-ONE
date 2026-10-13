@@ -293,6 +293,15 @@ public class JmdoTaskAllocationController : ControllerBase
             select new { login.UserId, info.Name, info.EmployeeCode, HeadquarterName = hq != null ? hq.HeadquarterName : null }
             ).ToDictionaryAsync(x => x.UserId);
 
+        // District/Taluk aren't snapshotted on JmdoTaskAllocationDealer (only DealerName/DealerCode
+        // are) - resolved from the live SubDealerRegistration row so the client's filter dropdowns
+        // reflect each dealer's current location.
+        var dealerIds = allocations.SelectMany(a => a.Dealers).Select(d => d.SubDealerId).Distinct().ToList();
+        var dealerLocations = await _db.SubDealerRegistrations
+            .Where(d => dealerIds.Contains(d.Id))
+            .Select(d => new { d.Id, d.DistrictId, d.Taluk })
+            .ToDictionaryAsync(d => d.Id);
+
         var rows = allocations.Select(a =>
         {
             jmdoInfo.TryGetValue(a.SubmittedByUserId, out var info);
@@ -314,7 +323,19 @@ public class JmdoTaskAllocationController : ControllerBase
                 DapTarget = a.DapTarget,
                 NpsTarget = a.NpsTarget,
                 OthersTarget = a.OthersTarget,
-                PosLiquidationFieldCount = posFieldsFilled
+                PosLiquidationFieldCount = posFieldsFilled,
+                Dealers = a.Dealers.Select(d =>
+                {
+                    dealerLocations.TryGetValue(d.SubDealerId, out var loc);
+                    return new PendingAllocationDealerFilterDto
+                    {
+                        SubDealerId = d.SubDealerId,
+                        DealerName = d.DealerName,
+                        DealerCode = d.DealerCode,
+                        DistrictId = loc?.DistrictId,
+                        Taluk = loc?.Taluk
+                    };
+                }).ToList()
             };
         }).ToList();
 
@@ -346,6 +367,14 @@ public class JmdoTaskAllocationController : ControllerBase
             .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
             .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
 
+        // District/Taluk aren't snapshotted on JmdoTaskAllocationDealer - resolved from the live
+        // SubDealerRegistration row so this allocation's own District/Taluk filters stay accurate.
+        var dealerIds = allocation.Dealers.Select(d => d.SubDealerId).Distinct().ToList();
+        var dealerLocations = await _db.SubDealerRegistrations
+            .Where(d => dealerIds.Contains(d.Id))
+            .Select(d => new { d.Id, d.DistrictId, d.Taluk })
+            .ToDictionaryAsync(d => d.Id);
+
         return Ok(new JmdoAllocationDetailDto
         {
             Id = allocation.Id,
@@ -355,15 +384,21 @@ public class JmdoTaskAllocationController : ControllerBase
             Location = info?.HeadquarterName,
             SubmittedAt = allocation.SubmittedAt,
             HeadquarterId = allocation.HeadquarterId,
-            Dealers = allocation.Dealers.Select(d => new JmdoAllocationDealerRowDto
+            Dealers = allocation.Dealers.Select(d =>
             {
-                RowId = d.Id,
-                SubDealerId = d.SubDealerId,
-                DealerName = d.DealerName,
-                DealerCode = d.DealerCode,
-                Day = d.PlannedDay,
-                PlannedDate = d.PlannedDate,
-                Priority = d.Priority
+                dealerLocations.TryGetValue(d.SubDealerId, out var loc);
+                return new JmdoAllocationDealerRowDto
+                {
+                    RowId = d.Id,
+                    SubDealerId = d.SubDealerId,
+                    DealerName = d.DealerName,
+                    DealerCode = d.DealerCode,
+                    Day = d.PlannedDay,
+                    PlannedDate = d.PlannedDate,
+                    Priority = d.Priority,
+                    DistrictId = loc?.DistrictId,
+                    Taluk = loc?.Taluk
+                };
             }).ToList(),
             Programs = allocation.Programs.Select(p =>
             {

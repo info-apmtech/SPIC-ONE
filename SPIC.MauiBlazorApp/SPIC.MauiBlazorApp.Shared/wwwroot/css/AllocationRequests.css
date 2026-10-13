@@ -112,6 +112,79 @@
     margin-bottom: 20px;
 }
 
+/* SpicDataTable's own .main-card/.section-header/.section-title/.table-controls ship with
+   zero desktop styling (SpicDataTable.razor.css only touches them in its phone media query) -
+   every consuming page is expected to scope its own layout for them, same as
+   EmployeeRegistration.css/Enclosures.css/LocationSaveList.css do. Without this, the title and
+   filter toolbar just stack per default block layout, leaving a large empty gap between them. */
+.alreq-page .main-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 20px;
+}
+
+.alreq-page .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 1.1rem;
+}
+
+.alreq-page .section-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #111827;
+}
+
+.alreq-page .table-controls {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 12px;
+}
+
+/* District / Sub District / Dealer filters - same pattern as TasksAllocation.css's own
+   .ta-filter-select, duplicated here (not shared) per this file's own prefixing convention.
+   No margin-bottom here - this div only ever sits nested inside SpicDataTable's own
+   .table-controls now (see .alreq-page .section-header above), which already handles
+   spacing against the row below; a bottom margin here just unbalances that flex row. */
+.alreq-filter-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.alreq-filter-select {
+    flex: 0 1 200px;
+    min-width: 160px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+}
+
+/* The search box takes the lion's share of the toolbar row's width instead of sitting at a
+   fixed size like the dropdowns next to it - this is what fills the empty space to their right. */
+.alreq-filter-search {
+    flex: 1 1 260px;
+    font-weight: 400;
+    cursor: text;
+}
+
 .alreq-card-title {
     margin: 0 0 1.1rem;
     font-size: 1.05rem;
@@ -222,6 +295,31 @@
     margin-top: 2px;
 }
 
+/* SpicDataTable's table has no fixed layout, and the old .alreq-table width rules below
+   don't apply here (this page's table now renders as SpicDataTable's own .spic-table, not
+   .alreq-table) - so every column here was "auto". Giving only the actions column a width
+   just moved the problem: auto layout hands ALL its leftover row width to whichever columns
+   are left unconstrained, splitting it evenly across every other column instead of one big
+   gap before Edit. table-layout: fixed plus an explicit width per column (via the classes
+   added in the .razor's TableHeader) removes that guesswork entirely. */
+.alreq-page .spic-table {
+    table-layout: fixed;
+}
+
+.alreq-page .spic-table th.alreq-th-jmdo {
+    width: 20%;
+}
+
+.alreq-page .spic-table th.alreq-th-sm {
+    width: 9%;
+}
+
+.alreq-page .spic-table th:last-child,
+.alreq-page .spic-table td.alreq-cell-actions {
+    width: 110px;
+    white-space: nowrap;
+}
+
 .alreq-btn-review {
     display: inline-flex;
     align-items: center;
@@ -280,6 +378,68 @@
 
     .alreq-select:focus {
         border-color: #4f46e5;
+    }
+
+/* Select2's default remove ("x") button on a multiselect pill sits on the LEFT, overlapping the
+   first letter of the dealer name - same fix already proven on CompanySales.razor's own
+   multiselects, just rescoped to .alreq-page. Moves the "x" to the right and pads the pill to
+   make room for it instead of covering the text. */
+.alreq-page .select2-container--default .select2-selection--multiple .select2-selection__choice {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    max-width: calc(100% - 4px);
+    min-height: 26px;
+    margin: 1px 4px 1px 0 !important;
+    padding: 3px 27px 3px 8px !important;
+    overflow: hidden;
+    color: #334155 !important;
+    font-size: 0.85rem !important;
+    line-height: 18px !important;
+    background-color: #e8eef7 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 5px !important;
+}
+
+.alreq-page .select2-container--default .select2-selection--multiple .select2-selection__choice__display {
+    display: block;
+    max-width: 100%;
+    padding: 0 !important;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.alreq-page .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    position: absolute !important;
+    top: 50% !important;
+    right: 3px !important;
+    left: auto !important;
+    width: 20px !important;
+    height: 20px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #64748b !important;
+    font-size: 0 !important;
+    line-height: 1 !important;
+    background: transparent !important;
+    border: none !important;
+    transform: translateY(-50%);
+}
+
+    .alreq-page .select2-container--default .select2-selection--multiple .select2-selection__choice__remove::before {
+        content: "\00D7";
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .alreq-page .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+        color: #0f172a !important;
+        background-color: #cbd5e1 !important;
     }
 
 .alreq-assign-select {
@@ -486,6 +646,12 @@
 
     .alreq-card {
         padding: 1.1rem 1.1rem;
+    }
+
+    .alreq-filter-select {
+        flex: 1 1 100%;
+        min-height: 44px;
+        font-size: 16px; /* prevents iOS zoom on focus */
     }
 
     .alreq-two-col {

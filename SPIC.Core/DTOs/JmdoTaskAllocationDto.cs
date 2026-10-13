@@ -94,6 +94,19 @@ namespace SPIC.Core.DTOs
         // How many of the 4 PoS liquidation target fields (Urea/DAP/NPS/Others)
         // were filled in - there's no single "liquidation quantity" field to sum.
         public int PosLiquidationFieldCount { get; set; }
+        // Minimal per-dealer info so the client can filter rows by District/Taluk/Dealer the
+        // same way TasksAllocation.razor's own Dealer tab filters its dealer grid - this list
+        // only needs to be enough to drive those three dropdowns, not full dealer details.
+        public List<PendingAllocationDealerFilterDto> Dealers { get; set; } = new();
+    }
+
+    public class PendingAllocationDealerFilterDto
+    {
+        public int SubDealerId { get; set; }
+        public string DealerName { get; set; } = "";
+        public string DealerCode { get; set; } = "";
+        public int? DistrictId { get; set; }
+        public string? Taluk { get; set; }
     }
 
     // Full detail for the MDO's Review page - one allocation, editable before approval.
@@ -129,6 +142,11 @@ namespace SPIC.Core.DTOs
         public DateTime? PlannedDate { get; set; }
         // Set by the MDO during review, not by the JMDO at submission - optional, defaults to Normal.
         public DealerTaskPriority Priority { get; set; }
+        // Resolved from the live SubDealerRegistration row (not snapshotted at submission like
+        // DealerName/DealerCode) so the District/Taluk filters on this page reflect the dealer's
+        // current location, not whatever it was when the JMDO submitted.
+        public int? DistrictId { get; set; }
+        public string? Taluk { get; set; }
     }
 
     public class JmdoAllocationProgramRowDto
