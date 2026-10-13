@@ -801,6 +801,12 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
                     b.Property<decimal>("Budget")
                         .HasColumnType("decimal(18,2)");
 
@@ -882,6 +888,12 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidateAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ValidateBy")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
