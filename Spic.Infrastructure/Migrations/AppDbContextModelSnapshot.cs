@@ -8501,7 +8501,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Mobile");
+                    b.HasIndex("Mobile")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.HasIndex("Name");
 

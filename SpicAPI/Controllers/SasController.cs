@@ -247,7 +247,27 @@ namespace SpicAPI.Controllers
 			};
 
 			_db.SasFarmers.Add(farmer);
-			await _db.SaveChangesAsync();
+
+			try
+			{
+				await _db.SaveChangesAsync();
+			}
+			catch (DbUpdateException ex) when (SasPaymentCodes.IsUniqueViolation(ex))
+			{
+				// Two requests passed the existence check above before either committed;
+				// the unique index (IX_SasFarmers_Mobile) caught the race.
+				var winner = await _db.SasFarmers.AsNoTracking()
+					.FirstOrDefaultAsync(f => f.Mobile == mobile && !f.IsDeleted);
+
+				return Conflict(new
+				{
+					Success = false,
+					Message = winner == null
+						? $"A farmer with mobile {mobile} already exists."
+						: $"A farmer with mobile {mobile} already exists (id {winner.Id}: {winner.Name}).",
+					FarmerId = winner?.Id
+				});
+			}
 
 			return Ok(MapFarmer(farmer));
 		}
@@ -306,7 +326,26 @@ namespace SpicAPI.Controllers
 			farmer.UpdatedBy = User.Identity?.Name;
 			farmer.UpdatedAt = DateTime.Now;
 
-			await _db.SaveChangesAsync();
+			try
+			{
+				await _db.SaveChangesAsync();
+			}
+			catch (DbUpdateException ex) when (SasPaymentCodes.IsUniqueViolation(ex))
+			{
+				// Two requests passed the clash check above before either committed;
+				// the unique index (IX_SasFarmers_Mobile) caught the race.
+				var winner = await _db.SasFarmers.AsNoTracking()
+					.FirstOrDefaultAsync(f => f.Mobile == mobile && f.Id != id && !f.IsDeleted);
+
+				return Conflict(new
+				{
+					Success = false,
+					Message = winner == null
+						? $"A farmer with mobile {mobile} already exists."
+						: $"A farmer with mobile {mobile} already exists (id {winner.Id}: {winner.Name}).",
+					FarmerId = winner?.Id
+				});
+			}
 
 			return Ok(MapFarmer(farmer));
 		}

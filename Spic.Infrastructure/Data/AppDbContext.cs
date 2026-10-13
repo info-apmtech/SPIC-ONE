@@ -180,7 +180,12 @@ namespace Spic.Infrastructure.Data
         builder.Entity<SasFarmer>(entity =>
         {
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.Mobile);
+            // Mobile must be unique among active farmers - the controller already rejects a
+            // duplicate on create/update, but that check alone can't stop two concurrent
+            // requests from both passing it before either commits. The filtered index is the
+            // actual guarantee; soft-deleted rows (IsDeleted) are excluded so a freed number
+            // can be reused by a new farmer.
+            entity.HasIndex(x => x.Mobile).IsUnique().HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(x => x.Name);
             entity.HasIndex(x => x.UserId);
         });
