@@ -15,6 +15,10 @@ public enum JmdoTaskAllocationStatus { Pending = 0, Approved = 1, Rejected = 2 }
 /// approval status of the whole week's submission, not progress on any individual task within it.</summary>
 public enum AllocTaskStatus { YetToStart = 0, InProgress = 1, Completed = 2 }
 
+/// <summary>Set by the MDO on a dealer task during review, not by the JMDO at submission - defaults
+/// to Normal, only raised to High when the MDO specifically flags that dealer as needing priority.</summary>
+public enum DealerTaskPriority { Normal = 0, High = 1 }
+
 public class JmdoTaskAllocation
 {
     public int Id { get; set; }
@@ -95,6 +99,10 @@ public class JmdoTaskAllocationDealer
     /// <summary>Exact calendar date the MDO pins this task to during review/approval - the JMDO only
     /// picks a weekday (PlannedDay) at submission time; this is set later and separately.</summary>
     public DateTime? PlannedDate { get; set; }
+
+    /// <summary>Set by the MDO during review when this specific dealer needs priority - optional,
+    /// defaults to Normal.</summary>
+    public DealerTaskPriority Priority { get; set; } = DealerTaskPriority.Normal;
 
     /// <summary>The JMDO's field-work progress on this specific dealer visit (Start/Stop on TaskDetail).</summary>
     public AllocTaskStatus Status { get; set; } = AllocTaskStatus.YetToStart;

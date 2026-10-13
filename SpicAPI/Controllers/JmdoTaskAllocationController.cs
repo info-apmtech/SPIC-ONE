@@ -256,14 +256,26 @@ public class JmdoTaskAllocationController : ControllerBase
     [HttpGet("pending")]
     public async Task<ActionResult<List<PendingAllocationRowDto>>> GetPending()
     {
+        var isAdmin = User.IsInRole("Admin");
         var hqId = CurrentHqId();
-        if (hqId is not > 0)
+
+        // Admin is a global role with no HQ claim of its own (same reasoning as CheckHqScope's
+        // own Admin bypass elsewhere in this controller) - requiring hqId > 0 here meant Admin
+        // always got an empty list, regardless of how many allocations actually existed.
+        if (!isAdmin && hqId is not > 0)
             return Ok(new List<PendingAllocationRowDto>());
+
+        // Admin also gets already-approved allocations here - otherwise there would be no way
+        // to even find one to reopen for a post-approval edit (MO/MDO keep seeing Pending only,
+        // matching LoadEditableAllocation's own Admin-only bypass of the "already reviewed" lock).
+        var visibleStatuses = isAdmin
+            ? new[] { JmdoTaskAllocationStatus.Pending, JmdoTaskAllocationStatus.Approved }
+            : new[] { JmdoTaskAllocationStatus.Pending };
 
         var allocations = await _db.JmdoTaskAllocations
             .Include(a => a.Dealers)
             .Include(a => a.Programs)
-            .Where(a => a.Status == JmdoTaskAllocationStatus.Pending && a.HeadquarterId == hqId.Value)
+            .Where(a => visibleStatuses.Contains(a.Status) && (isAdmin || a.HeadquarterId == hqId!.Value))
             .OrderByDescending(a => a.SubmittedAt)
             .AsNoTracking()
             .ToListAsync();
@@ -289,6 +301,7 @@ public class JmdoTaskAllocationController : ControllerBase
             return new PendingAllocationRowDto
             {
                 AllocationId = a.Id,
+                Status = a.Status.ToString(),
                 JmdoName = info?.Name ?? "Unknown JMDO",
                 JmdoCode = info?.EmployeeCode,
                 Location = info?.HeadquarterName,
@@ -349,7 +362,8 @@ public class JmdoTaskAllocationController : ControllerBase
                 DealerName = d.DealerName,
                 DealerCode = d.DealerCode,
                 Day = d.PlannedDay,
-                PlannedDate = d.PlannedDate
+                PlannedDate = d.PlannedDate,
+                Priority = d.Priority
             }).ToList(),
             Programs = allocation.Programs.Select(p =>
             {
@@ -417,7 +431,8 @@ public class JmdoTaskAllocationController : ControllerBase
             DealerName = row.DealerName,
             DealerCode = row.DealerCode,
             Day = row.PlannedDay,
-            PlannedDate = row.PlannedDate
+            PlannedDate = row.PlannedDate,
+            Priority = row.Priority
         });
     }
 
@@ -464,6 +479,25 @@ public class JmdoTaskAllocationController : ControllerBase
         // the JMDO's weekday-filtered views would otherwise keep showing/hiding this task based
         // on whatever day it was originally planned for, ignoring the MDO's edit entirely.
         row.PlannedDay = dto.PlannedDate?.DayOfWeek;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    // PUT api/JmdoTaskAllocation/{id}/dealers/{rowId}/priority
+    // Lets the MDO flag a specific dealer as needing priority during review - optional, off by
+    // default, never set by the JMDO at submission.
+    [Authorize(Roles = "Admin,MO,MDO")]
+    [HttpPut("{id:int}/dealers/{rowId:int}/priority")]
+    public async Task<IActionResult> UpdateDealerPriority(int id, int rowId, [FromBody] UpdateDealerPriorityDto dto)
+    {
+        var (allocation, forbidden) = await LoadEditableAllocation(id);
+        if (allocation == null) return forbidden!;
+
+        var row = await _db.JmdoTaskAllocationDealers.FirstOrDefaultAsync(d => d.Id == rowId && d.AllocationId == id);
+        if (row == null)
+            return NotFound();
+
+        row.Priority = dto.Priority;
         await _db.SaveChangesAsync();
         return NoContent();
     }
@@ -850,7 +884,9 @@ public class JmdoTaskAllocationController : ControllerBase
     }
 
     // Shared by every edit/approve endpoint: loads the allocation, enforces HQ
-    // scope, and rejects edits once it's no longer Pending (already reviewed).
+    // scope, and rejects edits once it's no longer Pending (already reviewed) -
+    // except for Admin, who the business wants to still be able to adjust a
+    // dealer/date/target/etc. on an allocation even after the MDO has approved it.
     private async Task<(JmdoTaskAllocation? Allocation, ActionResult? Forbidden)> LoadEditableAllocation(int id)
     {
         var allocation = await _db.JmdoTaskAllocations.FindAsync(id);
@@ -861,7 +897,7 @@ public class JmdoTaskAllocationController : ControllerBase
         if (forbidden != null)
             return (null, forbidden);
 
-        if (allocation.Status != JmdoTaskAllocationStatus.Pending)
+        if (allocation.Status != JmdoTaskAllocationStatus.Pending && !User.IsInRole("Admin"))
             return (null, BadRequest(new { Success = false, Message = "This allocation has already been reviewed." }));
 
         return (allocation, null);
@@ -915,7 +951,8 @@ public class JmdoTaskAllocationController : ControllerBase
             Status = d.Status,
             StartedAt = d.StartedAt,
             CompletedAt = d.CompletedAt,
-            StartPlaceName = d.StartPlaceName
+            StartPlaceName = d.StartPlaceName,
+            Priority = d.Priority
         }).ToList(),
         Programs = programs.Select(p =>
         {

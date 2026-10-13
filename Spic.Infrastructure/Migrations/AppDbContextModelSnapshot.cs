@@ -4630,6 +4630,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("PlannedDay")
                         .HasColumnType("integer");
 
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
                     b.Property<string>("StartPlaceName")
                         .HasColumnType("text");
 

@@ -1,8 +1,10 @@
 @page "/AllocationRequests"
 @using System.Net.Http.Json
+@using SPIC.Core.Entities
 @inject NavigationManager Navigation
 @inject HttpClient Http
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <div class="container-fluid py-4 px-0 alreq-page">
 
@@ -13,7 +15,14 @@
     {
         <div class="alreq-notice-banner">
             <i class="bi bi-info-circle-fill"></i>
-            <span>@Rows.Count JMDO(s) have submitted their allocation for your approval. Review and approve them one by one.</span>
+            @if (LoginState.UserRole == AppRole.Admin)
+            {
+                <span>@Rows.Count allocation(s) shown &mdash; pending ones need your approval, approved ones can still be edited (dealer, date, targets) if something needs correcting.</span>
+            }
+            else
+            {
+                <span>@Rows.Count JMDO(s) have submitted their allocation for your approval. Review and approve them one by one.</span>
+            }
         </div>
     }
 
@@ -37,6 +46,10 @@
                     <thead>
                         <tr>
                             <th>JMDO</th>
+                            @if (LoginState.UserRole == AppRole.Admin)
+                            {
+                                <th>Status</th>
+                            }
                             <th>Submitted</th>
                             <th>Dealer Tasks</th>
                             <th>SPCM Target</th>
@@ -59,6 +72,12 @@
                                         </div>
                                     </div>
                                 </td>
+                                @if (LoginState.UserRole == AppRole.Admin)
+                                {
+                                    <td data-label="Status">
+                                        <span class="alreq-status-pill alreq-status-@(row.Status.ToLowerInvariant())">@row.Status</span>
+                                    </td>
+                                }
                                 <td data-label="Submitted">@row.SubmittedAt.ToString("dd MMM yyyy")</td>
                                 <td data-label="Dealer Tasks">@row.DealerCount</td>
                                 <td data-label="SPCM Target">@(row.SpcmTarget ?? 0)</td>
@@ -67,7 +86,7 @@
                                 <td data-label="Pos Liquidation">@row.PosLiquidationFieldCount</td>
                                 <td class="alreq-cell-actions">
                                     <button type="button" class="alreq-btn-review" @onclick='() => Navigation.NavigateTo($"/AllocationRequestReview?allocationId={row.AllocationId}")'>
-                                        Review <i class="bi bi-arrow-right"></i>
+                                        @(row.Status == "Approved" ? "Edit" : "Review") <i class="bi bi-arrow-right"></i>
                                     </button>
                                 </td>
                             </tr>
@@ -84,6 +103,7 @@
     private sealed class PendingAllocationRowDto
     {
         public int AllocationId { get; set; }
+        public string Status { get; set; } = "";
         public string JmdoName { get; set; } = "";
         public string? JmdoCode { get; set; }
         public string? Location { get; set; }

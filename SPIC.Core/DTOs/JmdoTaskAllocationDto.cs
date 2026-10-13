@@ -32,6 +32,8 @@ namespace SPIC.Core.DTOs
         public DateTime? StartedAt { get; set; }
         public DateTime? CompletedAt { get; set; }
         public string? StartPlaceName { get; set; }
+        // Set by the MDO during review, not by the JMDO at submission - optional, defaults to Normal.
+        public DealerTaskPriority Priority { get; set; }
     }
 
     public class JmdoTaskAllocationResponseDto
@@ -70,10 +72,13 @@ namespace SPIC.Core.DTOs
         public List<JmdoTaskCloseoutDto> Closeouts { get; set; } = new();
     }
 
-    // One row on the MDO's "Allocation Requests" list (pending-approval queue).
+    // One row on the MDO's "Allocation Requests" list (pending-approval queue). Admin also sees
+    // already-approved rows here (so they have somewhere to reopen one for a post-approval edit),
+    // hence Status is included - MDO/MO only ever see Pending rows, so it's always "Pending" for them.
     public class PendingAllocationRowDto
     {
         public int AllocationId { get; set; }
+        public string Status { get; set; } = "";
         public string JmdoName { get; set; } = "";
         public string? JmdoCode { get; set; }
         public string? Location { get; set; }
@@ -122,6 +127,8 @@ namespace SPIC.Core.DTOs
         // Exact calendar date the MDO pins this task to during review - set
         // separately from Day, which stays whatever the JMDO originally picked.
         public DateTime? PlannedDate { get; set; }
+        // Set by the MDO during review, not by the JMDO at submission - optional, defaults to Normal.
+        public DealerTaskPriority Priority { get; set; }
     }
 
     public class JmdoAllocationProgramRowDto
@@ -147,6 +154,11 @@ namespace SPIC.Core.DTOs
     public class UpdateDealerPlannedDateDto
     {
         public DateTime? PlannedDate { get; set; }
+    }
+
+    public class UpdateDealerPriorityDto
+    {
+        public DealerTaskPriority Priority { get; set; }
     }
 
     public class AddProgramToAllocationDto

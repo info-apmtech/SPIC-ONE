@@ -24,13 +24,26 @@
     }
     else
     {
-        <h2 class="alreq-title">@_detail.JmdoName's Allocation</h2>
+        <div class="alreq-title-row">
+            <h2 class="alreq-title">@_detail.JmdoName's Allocation</h2>
+            <span class="alreq-status-pill alreq-status-@(_detail.Status.ToLowerInvariant())">@_detail.Status</span>
+        </div>
         <p class="alreq-subtitle">Review and approve this JMDO's weekly allocation &mdash; dealer tasks, SPCM &amp; soil sample targets, and MD programs.</p>
 
-        <div class="alreq-notice-banner">
-            <i class="bi bi-info-circle-fill"></i>
-            <span>@_detail.JmdoName submitted this allocation (@_detail.SubmittedAt.ToString("dd MMM yyyy")) for your approval. You can add or remove dealer tasks, pin them to a date, add/remove MD programs, or adjust targets before approving. @OtherPendingCount more JMDO(s) still waiting on your review.</span>
-        </div>
+        @if (_detail.Status == "Approved")
+        {
+            <div class="alreq-notice-banner">
+                <i class="bi bi-info-circle-fill"></i>
+                <span>This allocation was already approved on @(_detail.SubmittedAt.ToString("dd MMM yyyy")). As Admin you can still add/remove dealer tasks, change their date, add/remove MD programs, or adjust targets here if something needs correcting.</span>
+            </div>
+        }
+        else
+        {
+            <div class="alreq-notice-banner">
+                <i class="bi bi-info-circle-fill"></i>
+                <span>@_detail.JmdoName submitted this allocation (@_detail.SubmittedAt.ToString("dd MMM yyyy")) for your approval. You can add or remove dealer tasks, pin them to a date, add/remove MD programs, or adjust targets before approving. @OtherPendingCount more JMDO(s) still waiting on your review.</span>
+            </div>
+        }
 
         <div class="alreq-card">
             <h3 class="alreq-card-title">Dealer Tasks</h3>
@@ -43,6 +56,7 @@
                             <th>Party</th>
                             <th>Assign To</th>
                             <th>Date</th>
+                            <th>Priority</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -63,6 +77,12 @@
                                            value="@(task.PlannedDate?.ToString("yyyy-MM-dd"))"
                                            @onchange="e => UpdateDealerPlannedDate(task, e.Value?.ToString())" />
                                 </td>
+                                <td data-label="Priority">
+                                    <select class="alreq-select alreq-assign-select" @bind="task.Priority" @bind:after="() => UpdateDealerPriority(task)">
+                                        <option value="@DealerTaskPriority.Normal">Normal</option>
+                                        <option value="@DealerTaskPriority.High">High Priority</option>
+                                    </select>
+                                </td>
                                 <td class="alreq-cell-actions">
                                     <button type="button" class="alreq-icon-btn-danger" title="Remove task" @onclick="() => RemoveDealerTask(task)">
                                         <i class="bi bi-trash"></i>
@@ -72,7 +92,7 @@
                         }
                         @if (!_detail.Dealers.Any())
                         {
-                            <tr><td colspan="5" class="text-muted">No dealer tasks on this allocation.</td></tr>
+                            <tr><td colspan="6" class="text-muted">No dealer tasks on this allocation.</td></tr>
                         }
                     </tbody>
                 </table>
@@ -385,6 +405,25 @@
         {
             Console.WriteLine($"Update dealer planned date failed: {ex.Message}");
             Toast.Error("Could not update the planned date.");
+        }
+    }
+
+    // task.Priority is already the new value by the time this runs (@bind applies it before
+    // @bind:after fires) - same "no rollback on failure" behavior as SaveTargets below.
+    private async Task UpdateDealerPriority(JmdoAllocationDealerRowDto task)
+    {
+        if (_detail is null) return;
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers/{task.RowId}/priority", new UpdateDealerPriorityDto { Priority = task.Priority });
+            if (!response.IsSuccessStatusCode)
+                Toast.Error(await ExtractApiErrorAsync(response, "Could not update the dealer's priority."));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Update dealer priority failed: {ex.Message}");
+            Toast.Error("Could not update the dealer's priority.");
         }
     }
 
