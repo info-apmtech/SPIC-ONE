@@ -193,6 +193,7 @@ public class SubDealerListItemDto
 	public string? Village { get; set; }
 	public string? Block { get; set; }
 	public string? Taluk { get; set; }
+	public int? DistrictId { get; set; }
 	public string? PinCode { get; set; }
 	public string? RetailMFMSId { get; set; }
 
