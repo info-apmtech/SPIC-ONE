@@ -747,6 +747,15 @@ namespace Spic.Infrastructure.Data
                 .HasForeignKey(x => x.StateId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+
+            builder.Entity<RMDHQMapping>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.EmployeeId, x.StateId, x.RegionId }).IsUnique();
+                entity.Property(x => x.HeadquartersIds).IsRequired().HasMaxLength(4000);
+                entity.Property(x => x.CreatedAt).IsRequired();
+            });
+
         }
 
         // Same prettification the existing Designation UI uses (Designation.razor
@@ -984,5 +993,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<StateBudgetSummaryHistory> StateBudgetSummaryHistories { get; set; }
         public DbSet<RegionBudgetSummaryHistory> RegionBudgetSummaryHistories { get; set; }
         public DbSet<HeadquarterBudgetSummaryHistory> HeadquarterBudgetSummaryHistories { get; set; }
+        public DbSet<RMDHQMapping> RMDHQMappings { get; set; }
+
+        public DbSet<SanctionNumberSequence> SanctionNumberSequences { get; set; }
     }
 }

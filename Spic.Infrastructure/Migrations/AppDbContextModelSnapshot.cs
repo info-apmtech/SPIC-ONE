@@ -2242,6 +2242,19 @@ namespace Spic.Infrastructure.Migrations
                             SortOrder = 123,
                             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 125,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "RMDHQMapping",
+                            Name = "RMDHQMapping",
+                            SortOrder = 124,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
                         });
                 });
 
@@ -2477,6 +2490,24 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<decimal>("JeepRunningExpenses")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("Level1ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level1ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("Level2ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level2ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("Level3ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level3ApprovedBy")
+                        .HasColumnType("text");
 
                     b.Property<int?>("LocationId")
                         .HasColumnType("integer");
@@ -8340,6 +8371,48 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("ProgramTypes");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.RMDHQMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("HeadquartersIds")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId", "StateId", "RegionId")
+                        .IsUnique();
+
+                    b.ToTable("RMDHQMappings");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
                 {
                     b.Property<int>("Id")
@@ -9811,6 +9884,52 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("SamplePayments");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.SanctionNumberSequence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RegionSAPCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("SanctionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SanctionNumberState")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StateSAPCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SanctionNumberSequences");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.SasCourier", b =>

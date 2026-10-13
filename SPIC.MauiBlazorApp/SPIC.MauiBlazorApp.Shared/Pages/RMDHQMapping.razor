@@ -1,0 +1,661 @@
+﻿@page "/RMDHQMapping"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@inject HttpClient Http
+
+<PageTitle>RMD Headquarters Mapping</PageTitle>
+<div class="container-fluid rmd-page">
+    <header class="rmd-header">
+        <h3>RMD Headquarters Mapping</h3>
+        <p>Assign multiple headquarters to an RMD employee in one record</p>
+    </header>
+
+    @if (!string.IsNullOrWhiteSpace(Message))
+    {
+        <div class="alert @(Success ? "alert-success" : "alert-danger")" role="alert">@Message</div>
+    }
+
+    <section class="rmd-section rmd-panel">
+        <div class="rmd-section-heading">Assign Headquarters</div>
+        <div class="rmd-form-grid">
+            <div class="rmd-form-field">
+                <label>Employee (RMD) <span class="text-danger">*</span></label>
+                <select class="rmd-select" @bind="EmployeeId" disabled="@Busy">
+                    <option value="">Select employee</option>
+                    @foreach (var x in Employees)
+                    {
+                        <option value="@x.Id">@x.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="rmd-form-field">
+                <label>State <span class="text-danger">*</span></label>
+                <select class="rmd-select" value="@StateId" @onchange="OnStateChanged" disabled="@Busy">
+                    <option value="">Select state</option>
+                    @foreach (var x in States)
+                    {
+                        <option value="@x.Id">@x.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="rmd-form-field">
+                <label>Region <span class="text-danger">*</span></label>
+                <select class="rmd-select" value="@RegionId" @onchange="OnRegionChanged" disabled="@(Busy || !StateId.HasValue)">
+                    <option value="">Select region</option>
+                    @foreach (var x in Regions)
+                    {
+                        <option value="@x.Id">@x.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="rmd-form-field">
+                <label>Headquarters <span class="text-danger">*</span> <span class="rmd-muted">(@SelectedHQ.Count selected)</span></label>
+                <div class="rmd-hq-field">
+                    @if (SelectedHQ.Count > 0)
+                    {
+                        <div class="rmd-hq-chips">
+                            @foreach (var h in Headquarters.Where(x => SelectedHQ.Contains(x.Id)))
+                            {
+                                <span class="rmd-hq-chip" @key="h.Id">
+                                    @h.Name
+                                    <button type="button" title="Remove @h.Name" disabled="@Busy" @onclick="() => ToggleHQ(h.Id, false)">×</button>
+                                </span>
+                            }
+                        </div>
+                    }
+                    <button type="button" class="rmd-hq-trigger" disabled="@(Busy || !RegionId.HasValue)" @onclick="() => ShowHQDropdown = !ShowHQDropdown">
+                        <span>Select Headquarters</span><span>@(ShowHQDropdown ? "⌃" : "⌄")</span>
+                    </button>
+                    @if (ShowHQDropdown)
+                    {
+                        <div class="rmd-hq-dropdown">
+                            <input class="rmd-search-input w-100" placeholder="Search headquarters..." @bind="HQSearch" @bind:event="oninput" />
+                            <label class="rmd-hq-option"><input type="checkbox" checked="@AllSelected" @onchange="ToggleAll" disabled="@Busy" /> <strong>Select All</strong></label>
+                            @foreach (var h in FilteredHeadquarters)
+                            {
+                                <label class="rmd-hq-option" @key="h.Id"><input type="checkbox" checked="@SelectedHQ.Contains(h.Id)" @onchange="e => ToggleHQ(h.Id, e.Value is true)" disabled="@Busy" /> @h.Name</label>
+                            }
+                            @if (FilteredHeadquarters.Count == 0)
+                            {
+                                <p class="rmd-muted m-2">No headquarters found.</p>
+                            }
+                            <button type="button" class="rmd-btn rmd-btn-light w-100" @onclick="() => ShowHQDropdown = false">Done</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="rmd-form-actions">
+            <span class="rmd-muted">HQ IDs: @string.Join(",", SelectedHQ.OrderBy(x => x))</span>
+            <div class="rmd-action-group">
+                <button type="button" class="rmd-btn rmd-btn-light" disabled="@Busy" @onclick="Reset">Clear</button>
+                <button type="button" class="rmd-btn rmd-btn-primary" disabled="@Busy" @onclick="Save">@(Busy ? "Saving..." : EditingId.HasValue ? "Update Mapping" : "Save Mapping")</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="rmd-section rmd-list-section rmd-panel">
+        <div class="rmd-list-top">
+            <h4>Existing RMD HQ Mappings</h4>
+            <input type="search" class="rmd-search-input" placeholder="⌕ Search mappings..." aria-label="Search mappings" @bind="SearchText" @bind:event="oninput" />
+        </div>
+        <div class="rmd-table-tools">
+            <span class="rmd-muted">@FilteredMappings.Count record(s)</span>
+        </div>
+        <div class="rmd-table-scroll">
+            <table class="rmd-table">
+                <thead><tr><th>S:No</th><th>Employee</th><th>State</th><th>Region</th><th>Headquarters</th><th>Created At</th><th>Updated At</th><th>Action</th></tr></thead>
+                <tbody>
+                    @if (!VisibleMappings.Any())
+                    {
+                        <tr><td colspan="10" class="rmd-empty">No mappings found.</td></tr>
+                    }
+                    @foreach (var item in VisibleMappings.Select((value, index) => new { value, index }))
+                    {
+                        var row = item.value;
+                        <tr @key="row.Id">
+                            <td>@((Math.Min(CurrentPage, TotalPages) - 1) * PageSize + item.index + 1)</td>
+                            <td>@row.EmployeeName</td>
+                            <td>@row.StateName</td>
+                            <td>@row.RegionName</td>
+                            <td><div class="rmd-grid-hq-list">@foreach (var hqName in GetHeadquartersNames(row)) {
+                                <span class="rmd-grid-hq-chip">@hqName</span>
+                            }
+                        </div></td>
+                        <td>@row.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                       
+                        <td>@(row.UpdatedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "-")</td>
+                      
+                        <td><div class="rmd-action-group"><button type="button" class="rmd-icon-btn" title="Edit" disabled="@Busy" @onclick="() => Edit(row)">✎</button><button type="button" class="rmd-icon-btn rmd-danger" title="Delete" disabled="@Busy" @onclick="() => Delete(row)">✕</button></div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (DeletePendingId.HasValue)
+    {
+        <div class="alert alert-warning mt-3">
+            Delete mapping #@DeletePendingId?
+            <button type="button" class="rmd-btn rmd-btn-danger ms-2" disabled="@Busy" @onclick="ConfirmDelete">Confirm</button>
+            <button type="button" class="rmd-btn rmd-btn-light ms-2" @onclick="() => DeletePendingId = null">Cancel</button>
+        </div>
+    }
+    <div class="rmd-table-footer">
+        <div class="rmd-action-group">
+            <span>Items Per Page</span>
+            <select class="rmd-page-size" value="@PageSize" @onchange="SetPageSize">
+                <option value="10">10</option>
+                <option value="16">16</option>
+                <option value="25">25</option>
+                <option value="50">50</option>
+            </select>
+        </div>
+        <div class="rmd-action-group">
+            <button type="button" class="rmd-page-btn" disabled="@(CurrentPage <= 1)" @onclick="() => CurrentPage--">‹</button>
+            <span class="rmd-page-number">@Math.Min(CurrentPage, TotalPages) / @TotalPages</span>
+            <button type="button" class="rmd-page-btn" disabled="@(CurrentPage >= TotalPages)" @onclick="() => CurrentPage++">›</button>
+        </div>
+    </div>
+</section>
+</div>
+<style>
+    .rmd-page {
+        padding: 20px 14px 32px;
+        font-family: inherit;
+        color: #243047
+    }
+
+    .rmd-header h3 {
+        font-size: 19px;
+        font-weight: 650;
+        margin: 0 0 4px
+    }
+
+    .rmd-header p {
+        color: #748092;
+        font-size: 13px;
+        margin: 0 0 20px
+    }
+
+    .rmd-section {
+        margin-bottom: 24px
+    }
+
+    .rmd-panel {
+        background: #fff;
+        border: 1px solid #dfe4e9;
+        border-radius: 10px;
+        padding: 22px 20px;
+        box-shadow: 0 1px 2px rgba(15,23,42,.03)
+    }
+
+    .rmd-section-heading {
+        font-size: 14px;
+        font-weight: 650;
+        margin-bottom: 16px
+    }
+
+    .rmd-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2,minmax(0,1fr));
+        gap: 16px 22px
+    }
+
+    .rmd-form-field {
+        min-width: 0
+    }
+
+        .rmd-form-field > label {
+            font-size: 12px;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 7px
+        }
+
+    .rmd-select, .rmd-hq-trigger {
+        width: 100%;
+        height: 39px;
+        border: 1px solid #dce2ea;
+        border-radius: 6px;
+        background: #f7f8fa;
+        color: #334155;
+        font-size: 13px;
+        padding: 0 12px
+    }
+
+        .rmd-select:focus, .rmd-hq-trigger:focus, .rmd-search-input:focus {
+            outline: 2px solid #bfdbfe;
+            outline-offset: 1px
+        }
+
+        .rmd-select:disabled, .rmd-hq-trigger:disabled {
+            opacity: .55;
+            cursor: not-allowed
+        }
+
+    .rmd-hq-field {
+        position: relative
+    }
+
+    .rmd-hq-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        margin-bottom: 8px
+    }
+
+    .rmd-hq-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 10px;
+        border: 1px solid #a7f3d0;
+        border-radius: 30px;
+        background: #ecfdf5;
+        color: #047857;
+        font-size: 11px;
+        font-weight: 600
+    }
+
+        .rmd-hq-chip button {
+            border: 0;
+            background: transparent;
+            color: inherit;
+            font-size: 15px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1
+        }
+
+    .rmd-hq-trigger {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        text-align: left
+    }
+
+    .rmd-hq-dropdown {
+        position: absolute;
+        z-index: 20;
+        top: 100%;
+        left: 0;
+        right: 0;
+        padding: 10px;
+        border: 1px solid #dce2ea;
+        border-radius: 8px;
+        background: white;
+        box-shadow: 0 10px 25px #0f172a1b;
+        max-height: 265px;
+        overflow: auto
+    }
+
+    .rmd-hq-option {
+        display: flex;
+        gap: 9px;
+        align-items: center;
+        font-size: 12px;
+        padding: 7px;
+        cursor: pointer
+    }
+
+        .rmd-hq-option:hover {
+            background: #f1f5f9
+        }
+
+        .rmd-hq-option input {
+            accent-color: #10b981
+        }
+
+    .rmd-form-actions {
+        margin-top: 17px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center
+    }
+
+    .rmd-muted {
+        color: #8290a2;
+        font-size: 12px
+    }
+
+    .rmd-btn {
+        border: 1px solid #d7dfe8;
+        background: white;
+        padding: 8px 15px;
+        border-radius: 5px;
+        font-size: 12px;
+        cursor: pointer
+    }
+
+        .rmd-btn:disabled, .rmd-icon-btn:disabled {
+            opacity: .55;
+            cursor: not-allowed
+        }
+
+    .rmd-btn-light {
+        background: #f3f4f6;
+        color: #374151
+    }
+
+    .rmd-btn-primary {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+        color: white
+    }
+
+    .rmd-btn-danger {
+        background: #dc2626;
+        color: #fff;
+        border-color: #dc2626
+    }
+
+    .rmd-action-group {
+        display: flex;
+        align-items: center;
+        gap: 8px
+    }
+
+    .rmd-list-section {
+        margin-top: 24px;
+        padding-top: 22px
+    }
+
+    .rmd-list-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 20px
+    }
+
+        .rmd-list-top h4 {
+            font-size: 14px;
+            font-weight: 650;
+            margin: 0
+        }
+
+    .rmd-search-input {
+        height: 39px;
+        min-width: 220px;
+        border: 1px solid #e4e9f0;
+        border-radius: 7px;
+        background: #f2f5f9;
+        padding: 0 12px;
+        font-size: 12px;
+        color: #374151
+    }
+
+    .rmd-table-tools {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 10px
+    }
+
+    .rmd-table-scroll {
+        overflow-x: auto;
+        border: 1px solid #dce2ea;
+        border-radius: 7px
+    }
+
+    .rmd-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        white-space: nowrap
+    }
+
+        .rmd-table th {
+            background: #f1f3f5;
+            color: #506078;
+            text-align: left;
+            padding: 13px 14px;
+            font-size: 11px;
+            font-weight: 500;
+            border-bottom: 1px solid #dfe5ec
+        }
+
+        .rmd-table td {
+            padding: 12px 14px;
+            border-bottom: 1px solid #e3e8ef
+        }
+
+        .rmd-table tbody tr:last-child td {
+            border-bottom: 0
+        }
+
+        .rmd-table tbody tr:hover {
+            background: #f8fafc
+        }
+
+    .rmd-grid-hq-list {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        min-width: 230px;
+        max-width: 520px;
+        white-space: normal
+    }
+
+    .rmd-grid-hq-chip {
+        display: inline-flex;
+        align-items: center;
+        white-space: nowrap;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+        border-radius: 20px;
+        padding: 4px 9px;
+        color: #047857;
+        font-size: 11px;
+        font-weight: 500
+    }
+
+    .rmd-empty {
+        text-align: center;
+        padding: 24px !important;
+        color: #9aa6b7
+    }
+
+    .rmd-icon-btn {
+        background: transparent;
+        color: #2563eb;
+        border: 0;
+        font-size: 17px;
+        cursor: pointer
+    }
+
+    .rmd-danger {
+        color: #dc2626
+    }
+
+    .rmd-table-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 16px;
+        gap: 12px;
+        font-size: 12px
+    }
+
+    .rmd-page-size, .rmd-page-btn, .rmd-page-number {
+        border: 1px solid #e0e5ec;
+        border-radius: 5px;
+        background: white;
+        padding: 7px 9px;
+        font-size: 12px
+    }
+
+    .rmd-page-btn {
+        cursor: pointer
+    }
+
+    .rmd-page-number {
+        background: #f2f4f6
+    }
+    @@media(max - width:700px) {
+        .rmd-panel {
+            padding: 16px 12px
+        }
+
+        .rmd-form-grid {
+            grid-template-columns: 1fr
+        }
+
+        .rmd-list-top {
+            align-items: stretch;
+            flex-direction: column
+        }
+
+        .rmd-search-input {
+            width: 100%;
+            min-width: 0
+        }
+
+        .rmd-form-actions {
+            align-items: flex-start;
+            flex-direction: column
+        }
+
+        .rmd-table-footer {
+            flex-wrap: wrap
+        }
+    }
+</style>
+
+@code {
+    private List<LookupItem> Employees = new(), States = new(), Regions = new(), Headquarters = new();
+    private List<MappingView> Mappings = new();
+    private int? EmployeeId, StateId, RegionId, EditingId, DeletePendingId;
+    private HashSet<int> SelectedHQ = new();
+    private bool Busy, Success;
+    private string Message = "";
+    private bool AllSelected => Headquarters.Count > 0 && Headquarters.All(h => SelectedHQ.Contains(h.Id));
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private string SearchText = "";
+    private int PageSize = 16;
+    private int CurrentPage = 1;
+    private List<MappingView> FilteredMappings => Mappings.Where(x => string.IsNullOrWhiteSpace(SearchText) ||
+        new[] { x.EmployeeName ?? "", x.StateName ?? "", x.RegionName ?? "", x.HeadquartersIds ?? "", x.CreatedBy ?? "", x.UpdatedBy ?? "", string.Join(" ", GetHeadquartersNames(x)) }
+        .Any(v => v.Contains(SearchText, StringComparison.OrdinalIgnoreCase))).ToList();
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredMappings.Count / (double)PageSize));
+    private IEnumerable<MappingView> VisibleMappings => FilteredMappings.Skip((Math.Min(CurrentPage, TotalPages) - 1) * PageSize).Take(PageSize);
+    private void SetPageSize(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out var n) && n > 0) PageSize = n; CurrentPage = 1; }
+    private bool ShowHQDropdown = false;
+    private string HQSearch = "";
+
+    private List<LookupItem> FilteredHeadquarters =>
+        Headquarters
+            .Where(x => string.IsNullOrWhiteSpace(HQSearch)
+                || x.Name.Contains(
+                    HQSearch,
+                    StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+    private readonly Dictionary<int, List<LookupItem>> HQByRegion = new();
+
+    private IEnumerable<string> GetHeadquartersNames(MappingView row)
+    {
+        var ids = (row.HeadquartersIds ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => int.TryParse(x.Trim(), out var id) ? id : 0)
+            .Where(id => id > 0);
+
+        if (!HQByRegion.TryGetValue(row.RegionId, out var options))
+            return new[] { "Names unavailable" };
+
+        return ids.Select(id => options.FirstOrDefault(x => x.Id == id)?.Name ?? $"Unknown HQ ({id})").ToList();
+    }
+
+    private async Task LoadMappings()
+    {
+        Mappings = await Http.GetFromJsonAsync<List<MappingView>>("api/RMDHQMapping") ?? new();
+        foreach (var regionId in Mappings.Select(x => x.RegionId).Where(x => x > 0).Distinct())
+        {
+            // Reload to reflect renamed HQs after saves and refreshes.
+            HQByRegion[regionId] = await Http.GetFromJsonAsync<List<LookupItem>>(
+                $"api/RMDHQMapping/headquarters/{regionId}") ?? new();
+        }
+        CurrentPage = Math.Min(CurrentPage, TotalPages);
+    }
+
+    private async Task Load()
+    {
+        Busy = true;
+        try
+        {
+            Employees = await Http.GetFromJsonAsync<List<LookupItem>>("api/RMDHQMapping/employees") ?? new();
+            States = await Http.GetFromJsonAsync<List<LookupItem>>("api/RMDHQMapping/states") ?? new();
+            await LoadMappings();
+        }
+        catch (Exception ex) { Error(ex.Message); }
+        finally { Busy = false; }
+    }
+    private async Task OnStateChanged(ChangeEventArgs e)
+    {
+        StateId = ParseId(e.Value); RegionId = null; Regions.Clear(); Headquarters.Clear(); SelectedHQ.Clear(); ShowHQDropdown = false; HQSearch = "";
+        if (!StateId.HasValue) return;
+        try { Regions = await Http.GetFromJsonAsync<List<LookupItem>>($"api/RMDHQMapping/regions/{StateId}") ?? new(); }
+        catch (Exception ex) { Error(ex.Message); }
+    }
+    private async Task OnRegionChanged(ChangeEventArgs e)
+    {
+        RegionId = ParseId(e.Value); Headquarters.Clear(); SelectedHQ.Clear(); ShowHQDropdown = false; HQSearch = "";
+        if (!RegionId.HasValue) return;
+        try { Headquarters = await Http.GetFromJsonAsync<List<LookupItem>>($"api/RMDHQMapping/headquarters/{RegionId}") ?? new(); HQByRegion[RegionId.Value] = Headquarters.ToList(); }
+        catch (Exception ex) { Error(ex.Message); }
+    }
+    private static int? ParseId(object? v) => int.TryParse(v?.ToString(), out var id) && id > 0 ? id : null;
+    private void ToggleHQ(int id, bool yes) { if (yes) SelectedHQ.Add(id); else SelectedHQ.Remove(id); }
+    private void ToggleAll(ChangeEventArgs e) { SelectedHQ = e.Value is true ? Headquarters.Select(x => x.Id).ToHashSet() : new(); }
+    private void Error(string message) { Success = false; Message = message; }
+    private void Reset() { EditingId = EmployeeId = StateId = RegionId = null; Regions.Clear(); Headquarters.Clear(); SelectedHQ.Clear(); Message = ""; ShowHQDropdown = false; HQSearch = ""; }
+    private async Task Save()
+    {
+        if (!EmployeeId.HasValue || !StateId.HasValue || !RegionId.HasValue || SelectedHQ.Count == 0) { Error("Select employee, state, region, and at least one HQ."); return; }
+        Busy = true;
+        try
+        {
+            var request = new SaveMappingRequest { Id = EditingId, EmployeeId = EmployeeId.Value, StateId = StateId.Value, RegionId = RegionId.Value, HeadquartersIds = SelectedHQ.OrderBy(x => x).ToList() };
+            using var response = await Http.PostAsJsonAsync("api/RMDHQMapping/save", request);
+            if (!response.IsSuccessStatusCode) { Error(await response.Content.ReadAsStringAsync()); return; }
+            Reset(); Success = true; Message = "Mapping saved successfully.";
+            await LoadMappings();
+        }
+        catch (Exception ex) { Error(ex.Message); }
+        finally { Busy = false; }
+    }
+    private async Task Edit(MappingView row)
+    {
+        Message = ""; EditingId = row.Id; EmployeeId = row.EmployeeId; StateId = row.StateId;
+        Busy = true;
+        try
+        {
+            Regions = await Http.GetFromJsonAsync<List<LookupItem>>($"api/RMDHQMapping/regions/{row.StateId}") ?? new();
+            RegionId = row.RegionId;
+            Headquarters = await Http.GetFromJsonAsync<List<LookupItem>>($"api/RMDHQMapping/headquarters/{row.RegionId}") ?? new();
+            HQByRegion[row.RegionId] = Headquarters.ToList();
+            SelectedHQ = row.HeadquartersIds.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(ParseId).Where(x => x.HasValue).Select(x => x!.Value).ToHashSet();
+            if (SelectedHQ.Any(x => Headquarters.All(h => h.Id != x))) Error("Stored mapping contains an HQ that is no longer available. Check before saving.");
+        }
+        catch (Exception ex) { Error(ex.Message); }
+        finally { Busy = false; }
+    }
+    private void Delete(MappingView row) { DeletePendingId = row.Id; }
+    private async Task ConfirmDelete()
+    {
+        if (!DeletePendingId.HasValue) return;
+        Busy = true;
+        try
+        {
+            using var resp = await Http.DeleteAsync($"api/RMDHQMapping/{DeletePendingId}");
+            if (!resp.IsSuccessStatusCode) { Error(await resp.Content.ReadAsStringAsync()); return; }
+            DeletePendingId = null; Reset(); Success = true; Message = "Mapping deleted.";
+            await LoadMappings();
+        }
+        catch (Exception ex) { Error(ex.Message); }
+        finally { Busy = false; }
+    }
+}
