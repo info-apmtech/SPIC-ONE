@@ -256,4 +256,23 @@ namespace SPIC.Core.DTOs
     {
         public string FilePath { get; set; } = "";
     }
+
+    // One flattened row per individual task (one dealer visit, one MD program, or one of the
+    // Spcm/SoilSample/PosLiquidation targets) for the Task Monitoring report - GetPending shows
+    // one row per ALLOCATION (a JMDO's whole week submission); this shows one row per task inside
+    // it, which is what "who has this task, where it stands, since when" actually needs.
+    public class TaskMonitoringRowDto
+    {
+        public int AllocationId { get; set; }
+        public string JmdoName { get; set; } = "";
+        public string? JmdoCode { get; set; }
+        public string TaskType { get; set; } = ""; // Dealer / SPCM / Soil Sample / MD Program / PoS Liquidation
+        public string? Location { get; set; } // Headquarter name, same source as PendingAllocationRowDto.Location
+        public int? StateId { get; set; }
+        public int? RegionId { get; set; }
+        public DateTime? Due { get; set; }
+        // Requested (allocation still Pending MDO approval) / Yet to Start / In Progress / Completed -
+        // Rejected allocations are excluded entirely upstream (their tasks are dead, not "requested").
+        public string Status { get; set; } = "";
+    }
 }

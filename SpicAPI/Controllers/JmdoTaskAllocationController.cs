@@ -342,6 +342,93 @@ public class JmdoTaskAllocationController : ControllerBase
         return Ok(rows);
     }
 
+    // GET api/JmdoTaskAllocation/monitoring
+    // Task Monitoring report: one row per individual task (a dealer visit, an MD program, or one
+    // of the Spcm/SoilSample/PosLiquidation targets), flattened across every in-scope allocation -
+    // same HQ scoping as GetPending, but GetPending shows one row per whole-week submission while
+    // this needs one row per task. Rejected allocations are left out entirely: once an MDO rejects
+    // a week's submission, nothing inside it is a live task worth monitoring any more.
+    [Authorize(Roles = "Admin,MO,MDO")]
+    [HttpGet("monitoring")]
+    public async Task<ActionResult<List<TaskMonitoringRowDto>>> GetMonitoring()
+    {
+        var isAdmin = User.IsInRole("Admin");
+        var hqId = CurrentHqId();
+
+        if (!isAdmin && hqId is not > 0)
+            return Ok(new List<TaskMonitoringRowDto>());
+
+        var visibleStatuses = new[] { JmdoTaskAllocationStatus.Pending, JmdoTaskAllocationStatus.Approved };
+
+        var allocations = await _db.JmdoTaskAllocations
+            .Include(a => a.Dealers)
+            .Include(a => a.Programs)
+            .Where(a => visibleStatuses.Contains(a.Status) && (isAdmin || a.HeadquarterId == hqId!.Value))
+            .OrderByDescending(a => a.SubmittedAt)
+            .AsNoTracking()
+            .ToListAsync();
+
+        if (allocations.Count == 0)
+            return Ok(new List<TaskMonitoringRowDto>());
+
+        var userIds = allocations.Select(a => a.SubmittedByUserId).Distinct().ToList();
+        var jmdoInfo = await (
+            from login in _db.Employeelogins
+            join info in _db.EmployeeInformation on login.EmployeeInformationID equals info.Id
+            join hq in _db.Headquarters on login.HeadquartersId equals hq.Id into hqJoin
+            from hq in hqJoin.DefaultIfEmpty()
+            where userIds.Contains(login.UserId)
+            select new { login.UserId, info.Name, info.EmployeeCode, HeadquarterName = hq != null ? hq.HeadquarterName : null }
+            ).ToDictionaryAsync(x => x.UserId);
+
+        string StatusText(JmdoTaskAllocationStatus allocationStatus, AllocTaskStatus taskStatus) =>
+            allocationStatus == JmdoTaskAllocationStatus.Pending
+                ? "Requested"
+                : taskStatus switch
+                {
+                    AllocTaskStatus.InProgress => "In Progress",
+                    AllocTaskStatus.Completed => "Completed",
+                    _ => "Yet to Start"
+                };
+
+        var rows = new List<TaskMonitoringRowDto>();
+
+        foreach (var a in allocations)
+        {
+            jmdoInfo.TryGetValue(a.SubmittedByUserId, out var info);
+
+            TaskMonitoringRowDto NewRow(string type, DateTime? due, AllocTaskStatus taskStatus) => new()
+            {
+                AllocationId = a.Id,
+                JmdoName = info?.Name ?? "Unknown JMDO",
+                JmdoCode = info?.EmployeeCode,
+                Location = info?.HeadquarterName,
+                StateId = a.StateId,
+                RegionId = a.RegionId,
+                TaskType = type,
+                Due = due,
+                Status = StatusText(a.Status, taskStatus)
+            };
+
+            foreach (var dealer in a.Dealers)
+                rows.Add(NewRow("Dealer", dealer.PlannedDate ?? a.AllocationDate, dealer.Status));
+
+            foreach (var program in a.Programs)
+                rows.Add(NewRow("MD Program", a.AllocationDate, program.Status));
+
+            if (a.SpcmTarget.HasValue)
+                rows.Add(NewRow("SPCM", a.AllocationDate, a.SpcmStatus));
+
+            if (a.SoilSampleTarget.HasValue)
+                rows.Add(NewRow("Soil Sample", a.AllocationDate, a.SoilSampleStatus));
+
+            if (a.UreaTarget.HasValue || a.DapTarget.HasValue || a.NpsTarget.HasValue || a.OthersTarget.HasValue)
+                rows.Add(NewRow("PoS Liquidation", a.AllocationDate, a.PosLiquidationStatus));
+        }
+
+        return Ok(rows);
+    }
+
     // GET api/JmdoTaskAllocation/{id}
     // Full detail for the MDO's Review page.
     [Authorize(Roles = "Admin,MO,MDO")]
