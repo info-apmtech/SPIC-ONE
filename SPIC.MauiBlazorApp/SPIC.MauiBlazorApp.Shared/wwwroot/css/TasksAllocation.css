@@ -942,10 +942,12 @@
     .ta-page {
         padding-top: 12px !important;
         padding-bottom: calc(16px + var(--safe-bottom, 0px)) !important;
+        overflow-x: hidden;
     }
 
     .ta-header-card {
         padding: 1rem 1.1rem;
+        margin-bottom: 12px;
     }
 
     .ta-title {
@@ -957,11 +959,14 @@
     }
 
     .ta-content-card {
-        padding: 1rem 1rem 1.25rem;
+        padding: 1rem 0.85rem 1.1rem;
+        min-width: 0;
     }
 
+    /* ---- Top tabs ---- */
     .ta-tabs {
         gap: 16px;
+        margin-bottom: 1rem;
     }
 
     .ta-tab {
@@ -980,75 +985,130 @@
         font-size: 1rem;
     }
 
-    /* Wizard: the 280px step sidebar can't sit beside content on a phone
-       screen, so it becomes a horizontal, scrollable step strip above the
-       content instead. The collapse toggle only makes sense for the
-       side-by-side desktop layout, so it's hidden here and labels are
-       forced back on regardless of the (irrelevant) collapsed state. */
+    /* ---- Wizard shell: stack and STRETCH to full width ---- */
     .ta-wizard {
         flex-direction: column;
+        align-items: stretch; /* was flex-start -> children sized to content */
+        width: 100%;
+        min-width: 0;
     }
 
-    .ta-stepper {
-        flex-direction: row;
-        flex-basis: auto;
-        margin-right: 0;
-        margin-bottom: 14px;
-        gap: 6px;
-        padding: 8px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
+    .ta-wizard-content {
+        flex: 0 0 auto; /* was 1 1 0 -> acts on height in column mode */
+        width: 100%;
+        min-width: 0;
+        padding-left: 0;
     }
 
+    /* ---- Step strip: all steps visible, equal width, no clipping ---- */
+    .ta-stepper,
     .ta-stepper-collapsed {
-        flex-basis: auto;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        flex: 0 0 auto;
+        width: 100%;
+        min-width: 0;
+        gap: 4px;
+        padding: 6px;
+        margin: 0 0 14px 0;
+        overflow: visible;
     }
 
-    .ta-step-item,
-    .ta-stepper-collapsed .ta-step-item {
-        flex: 0 0 auto;
-        flex-direction: column;
-        justify-content: center;
-        gap: 4px;
-        padding: 8px 12px;
-        min-height: 44px;
+        .ta-step-item,
+        .ta-stepper-collapsed .ta-step-item {
+            position: relative;
+            min-width: 0;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 2px;
+            min-height: 56px;
+            text-align: center;
+        }
+
+    .ta-step-num {
+        width: 24px;
+        height: 24px;
+        font-size: 0.78rem;
     }
 
     .ta-step-label,
     .ta-stepper-collapsed .ta-step-label {
         display: block !important;
-        font-size: 0.72rem;
-        white-space: nowrap;
+        font-size: 0.68rem;
+        line-height: 1.2;
+        white-space: normal; /* wrap "PoS liquidation" instead of overflowing */
+        word-break: break-word;
+    }
+
+    /* Today tab: bell sits in the corner instead of taking row space */
+    .ta-today-bell {
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        margin: 0;
+        font-size: 0.8rem;
     }
 
     .ta-stepper-toggle {
         display: none;
     }
 
-    .ta-wizard-content {
-        padding-left: 0;
+    .ta-step-instruction {
+        font-size: 0.88rem;
+        margin-bottom: 0.75rem;
     }
 
+    /* ---- Sun-Sat day tabs: horizontally scrollable ---- */
+    .ta-day-tabs {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x proximity;
+        padding-bottom: 6px;
+        margin-bottom: 0.75rem;
+        scrollbar-width: thin;
+    }
+
+    .ta-day-tab {
+        scroll-snap-align: start;
+        padding: 0.4rem 0.85rem;
+        font-size: 0.8rem;
+        min-height: 36px;
+    }
+
+    /* ---- Toolbar: compact search + filters ---- */
     .ta-step-toolbar {
         flex-direction: column;
         align-items: stretch;
+        gap: 8px;
+        margin-bottom: 1rem;
     }
 
-    .ta-search-box input {
-        font-size: 16px; /* prevents iOS zoom on focus */
+    .ta-search-box {
+        flex: 0 0 auto; /* was 1 1 320px -> 320px TALL in column mode */
+        width: 100%;
+        min-width: 0;
+        padding: 0.5rem 0.75rem;
     }
 
-    .ta-target-card {
-        max-width: none;
-        padding: 1rem 1.1rem;
-    }
+        .ta-search-box input {
+            min-width: 0;
+            width: 100%;
+            font-size: 16px; /* prevents iOS zoom on focus */
+        }
 
-    .ta-target-input-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-
-    .ta-target-input {
+    .ta-filter-select {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        padding: 0.5rem 0.75rem;
         font-size: 16px; /* prevents iOS zoom on focus */
     }
 
@@ -1057,28 +1117,55 @@
         min-height: 44px;
     }
 
-    .ta-filter-select {
-        flex: 1 1 100%;
-        min-height: 44px;
+    /* ---- Cards ---- */
+    .ta-dealer-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        margin-bottom: 1rem;
+    }
+
+    .ta-dealer-card {
+        min-width: 0;
+    }
+
+    .ta-dealer-name {
+        word-break: break-word;
+    }
+
+    .ta-dealer-code-row {
+        flex-wrap: wrap;
+    }
+
+    .ta-target-card {
+        max-width: none;
+        padding: 1rem;
+    }
+
+    .ta-target-input-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+    }
+
+    .ta-target-input {
         font-size: 16px; /* prevents iOS zoom on focus */
     }
 
-    .ta-dealer-grid {
-        grid-template-columns: 1fr;
-    }
-
     .ta-today-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
     }
 
+    .ta-today-card,
     .ta-today-card-wide,
     .ta-today-card-narrow {
         grid-column: span 1;
         max-width: none;
+        min-width: 0;
     }
 
     .ta-today-products-row {
         flex-direction: column;
+        gap: 8px;
     }
 
     .ta-start-btn {
@@ -1094,20 +1181,25 @@
         margin-top: 1rem;
     }
 
+    /* ---- Footer: no phantom height ---- */
     .ta-step-footer {
         flex-direction: column;
         align-items: stretch;
+        gap: 10px;
     }
 
     .ta-selected-summary {
+        flex: 0 0 auto; /* was 1 1 320px -> 320px of blank space */
         order: 2;
         text-align: center;
+        word-break: break-word;
     }
 
     .ta-step-footer-actions {
         flex-direction: column-reverse;
         width: 100%;
         margin-left: 0;
+        gap: 8px;
     }
 
     .ta-btn-next,
@@ -1122,5 +1214,93 @@
     .ta-step-footer-simple {
         flex-direction: column-reverse;
         gap: 10px;
+        margin-top: 1rem;
+    }
+    /* ---- Step strip: numbers only, active step expands with its label ---- */
+    .ta-stepper,
+    .ta-stepper-collapsed {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        flex: 0 0 auto;
+        width: 100%;
+        min-width: 0;
+        gap: 6px;
+        padding: 6px;
+        margin: 0 0 12px 0;
+        overflow: hidden;
+    }
+
+        .ta-step-item,
+        .ta-stepper-collapsed .ta-step-item {
+            position: relative;
+            flex: 0 0 auto;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 44px;
+            min-height: 44px;
+            padding: 6px;
+            border-radius: 999px;
+        }
+
+            .ta-step-item.active,
+            .ta-stepper-collapsed .ta-step-item.active {
+                flex: 1 1 auto;
+                min-width: 0;
+                justify-content: flex-start;
+                padding: 6px 12px 6px 6px;
+            }
+
+    .ta-step-num {
+        width: 30px;
+        height: 30px;
+        font-size: 0.85rem;
+    }
+
+    /* hide labels on inactive steps */
+    .ta-step-label,
+    .ta-stepper-collapsed .ta-step-label {
+        display: none !important;
+    }
+
+    /* show label only on the active step, single line */
+    .ta-step-item.active .ta-step-label,
+    .ta-stepper-collapsed .ta-step-item.active .ta-step-label {
+        display: block !important;
+        min-width: 0;
+        font-size: 0.82rem;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Today tab: bell becomes a corner badge on the number */
+    .ta-today-bell {
+        position: absolute;
+        top: 0;
+        left: 26px;
+        margin: 0;
+        font-size: 0; /* hide bell icon, keep red count badge */
+    }
+
+        .ta-today-bell .ta-today-badge {
+            position: static;
+            display: inline-block;
+        }
+
+    .ta-stepper-toggle {
+        display: none;
+    }
+
+    /* ---- Top tabs: tighter so more fits at 320px ---- */
+    .ta-tabs {
+        gap: 14px;
+    }
+
+    .ta-tab {
+        font-size: 0.8rem;
     }
 }
