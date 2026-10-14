@@ -46,17 +46,34 @@
 
         @if (currentTab == TaTab.All)
         {
-            @if (isAllocationSubmitted)
+            <div class="ta-week-nav">
+                <button type="button" class="ta-week-nav-btn" @onclick="() => ChangeWeek(-1)" disabled="@_isCheckingPlanning">
+                    <i class="bi bi-chevron-left"></i> Previous Week
+                </button>
+                <span class="ta-week-nav-label">@WeekRangeLabel</span>
+                <button type="button" class="ta-week-nav-btn" @onclick="() => ChangeWeek(1)" disabled="@_isCheckingPlanning">
+                    Next Week <i class="bi bi-chevron-right"></i>
+                </button>
+            </div>
+
+            @if (_isCheckingPlanning)
             {
-                @if (todayAllocation?.Status == "Approved")
+                <EmptyState Icon="bi-hourglass-split" Title="Checking this week's allocation..." Compact="true" />
+            }
+            else if (isPlanningSubmitted)
+            {
+                @if (planningAllocation?.Status == "Approved")
                 {
                     <div class="ta-status-card ta-status-completed">
                         <div class="ta-status-icon"><i class="bi bi-check-circle"></i></div>
                         <div class="ta-status-title">Allocation Approved</div>
-                        <div class="ta-status-summary">@submittedSummary</div>
-                        <button type="button" class="ta-btn ta-btn-next mt-3" @onclick="() => currentTab = TaTab.Today">
-                            Go to Today's Tasks <i class="bi bi-arrow-right"></i>
-                        </button>
+                        <div class="ta-status-summary">@planningSummary</div>
+                        @if (_weekOffset == 0)
+                        {
+                            <button type="button" class="ta-btn ta-btn-next mt-3" @onclick="() => currentTab = TaTab.Today">
+                                Go to Today's Tasks <i class="bi bi-arrow-right"></i>
+                            </button>
+                        }
                     </div>
                 }
                 else
@@ -64,7 +81,7 @@
                     <div class="ta-status-card ta-status-pending">
                         <div class="ta-status-icon"><i class="bi bi-clock-history"></i></div>
                         <div class="ta-status-title">Allocation submitted &mdash; awaiting MDO approval</div>
-                        <div class="ta-status-summary">@submittedSummary</div>
+                        <div class="ta-status-summary">@planningSummary</div>
                     </div>
                 }
             }
@@ -868,7 +885,8 @@
             LoadDealersAsync(),
             LoadProgramsAsync(),
             LookupCache.EnsureLoadedAsync(),
-            CheckExistingAllocationAsync());
+            CheckExistingAllocationAsync(),
+            CheckPlanningAllocationAsync());
     }
 
     private string HeaderSubtitle => currentTab switch
@@ -883,6 +901,94 @@
     // pending-approval design for why that card has no live data either).
     private bool isAllocationSubmitted;
     private JmdoTaskAllocationResponseDto? todayAllocation;
+
+    // ---------- "All Allocations" tab: week navigation ----------
+    // Deliberately a SEPARATE allocation/flag pair from todayAllocation/isAllocationSubmitted
+    // above - those two stay pinned to the real current week for the "Today's Allocation" /
+    // "Completed Allocations" tabs regardless of what the JMDO is browsing here, so navigating
+    // weeks on this tab can never make "today's" tasks disappear or show the wrong week's data.
+    private int _weekOffset;
+    private bool isPlanningSubmitted;
+    private JmdoTaskAllocationResponseDto? planningAllocation;
+    private string planningSummary = "";
+    // Defaults true so the wizard never flashes before the "does a submission already exist for
+    // this week" check resolves - previously isAllocationSubmitted defaulted to false, so the
+    // fresh-submission wizard rendered for a moment even when the week was already approved.
+    private bool _isCheckingPlanning = true;
+
+    private static DateTime CurrentWeekStartDate()
+    {
+        var today = DateTime.Today;
+        return today.AddDays(-(int)today.DayOfWeek);
+    }
+
+    private DateTime SelectedWeekStart => CurrentWeekStartDate().AddDays(_weekOffset * 7);
+
+    private string WeekRangeLabel
+    {
+        get
+        {
+            var end = SelectedWeekStart.AddDays(6);
+            var range = SelectedWeekStart.Year == end.Year
+                ? $"{SelectedWeekStart:dd MMM} – {end:dd MMM yyyy}"
+                : $"{SelectedWeekStart:dd MMM yyyy} – {end:dd MMM yyyy}";
+            return _weekOffset switch
+            {
+                0 => $"This Week ({range})",
+                -1 => $"Last Week ({range})",
+                1 => $"Next Week ({range})",
+                _ => range
+            };
+        }
+    }
+
+    private async Task ChangeWeek(int delta)
+    {
+        _weekOffset += delta;
+        currentStep = 1;
+        selectedDay = SelectedWeekStart.DayOfWeek;
+        foreach (var set in selectionsByDay.Values) set.Clear();
+        spcmTarget = "";
+        soilTarget = "";
+        ureaTarget = "";
+        dapTarget = "";
+        npsTarget = "";
+        othersTarget = "";
+        await CheckPlanningAllocationAsync();
+    }
+
+    // Mirrors CheckExistingAllocationAsync below but scoped to whichever week is selected here,
+    // and passes weekStart explicitly so the server skips its "fall back to the latest allocation
+    // ever" behaviour - that fallback exists for CheckExistingAllocationAsync's always-current-week
+    // case (so there's always something to show), but would otherwise make it impossible to ever
+    // see a genuinely empty, not-yet-submitted week once ANY allocation exists.
+    private async Task CheckPlanningAllocationAsync()
+    {
+        _isCheckingPlanning = true;
+        isPlanningSubmitted = false;
+        planningAllocation = null;
+        try
+        {
+            var response = await Http.GetAsync($"api/JmdoTaskAllocation/mine/today?weekStart={SelectedWeekStart:yyyy-MM-dd}");
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+                return;
+
+            var existing = await response.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
+            if (existing is null) return;
+
+            planningAllocation = existing;
+            planningSummary = BuildSubmittedSummary(existing);
+            isPlanningSubmitted = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Checking the selected week's allocation failed: {ex.Message}");
+        }
+        finally
+        {
+            _isCheckingPlanning = false;
+        }
+    }
 
     // ---------- Today's Allocation tab ----------
     // The 5 task kinds shown here (dealer visits, MD programs, SPCM/Soil/PoS
@@ -1080,20 +1186,40 @@
                 UreaTarget = ParseTargetOrNull(ureaTarget),
                 DapTarget = ParseTargetOrNull(dapTarget),
                 NpsTarget = ParseTargetOrNull(npsTarget),
-                OthersTarget = ParseTargetOrNull(othersTarget)
+                OthersTarget = ParseTargetOrNull(othersTarget),
+                WeekStart = SelectedWeekStart
             };
 
             var response = await Http.PostAsJsonAsync("api/JmdoTaskAllocation", dto);
             if (!response.IsSuccessStatusCode)
             {
-                Toast.Error("Could not submit the allocation. Please try again.");
+                string? message = null;
+                try
+                {
+                    var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (body.TryGetProperty("message", out var m)) message = m.GetString();
+                }
+                catch { /* body wasn't the expected { message } shape - fall back below */ }
+
+                Toast.Error(message ?? "Could not submit the allocation. Please try again.");
                 return;
             }
 
             var saved = await response.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
-            submittedSummary = BuildSubmittedSummary(saved);
+            planningSummary = BuildSubmittedSummary(saved);
+            planningAllocation = saved;
+            isPlanningSubmitted = true;
 
-            isAllocationSubmitted = true;
+            // The current-week tabs (Today's/Completed Allocations) read todayAllocation, not
+            // planningAllocation - keep them in sync too, but only when the submission actually
+            // was for the current week (not some other week being planned ahead of time).
+            if (_weekOffset == 0)
+            {
+                todayAllocation = saved;
+                submittedSummary = planningSummary;
+                isAllocationSubmitted = true;
+            }
+
             currentStep = 1;
             Toast.Success("Allocation submitted for MDO approval.");
         }
@@ -1176,12 +1302,9 @@
         DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday
     };
 
-    private DateTime GetDateForDay(DayOfWeek day)
-    {
-        var today = DateTime.Today;
-        int diff = day - today.DayOfWeek;
-        return today.AddDays(diff);
-    }
+    // Relative to the selected week (see _weekOffset/SelectedWeekStart above), not always
+    // DateTime.Today - lets the Sun-Sat tabs plan a week other than the current one.
+    private DateTime GetDateForDay(DayOfWeek day) => SelectedWeekStart.AddDays((int)day);
 
     private string DayLabel(DayOfWeek day) => $"{day.ToString().Substring(0, 3)}, {GetDateForDay(day):dd MMM}";
 

@@ -945,138 +945,34 @@
 
             @if (AnyJmdoAccessible)
             {
-                <div class="settings-menu-wrapper">
-                    <a href="javascript:void(0);"
-                       class="nav-link @(isJmdoOpen ? "active" : "")"
-                       @onclick="ToggleJmdoMenu">
-                        <i class="bi bi-person-badge SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                        @(LoginState.UserRole == AppRole.MDO ? "MDO" : "JMDO")
-                        <i class="bi @(isJmdoOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon" style="float: right;"></i>
-                    </a>
+                @if (LoginState.UserRole is AppRole.JMDO or AppRole.MDO)
+                {
+                    @* JMDO/MDO see only this one menu section anyway, so it renders flat here too
+                       (mirrors NavMenu.razor's desktop sidebar) - items directly in the offcanvas,
+                       no collapsible parent header/arrow/tree-line indent. *@
+                    <ul class="submenu-list submenu-list-flat">
+                        @JmdoMenuItems
+                    </ul>
+                }
+                else
+                {
+                    <div class="settings-menu-wrapper">
+                        <a href="javascript:void(0);"
+                           class="nav-link @(isJmdoOpen ? "active" : "")"
+                           @onclick="ToggleJmdoMenu">
+                            <i class="bi bi-person-badge SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                            @(LoginState.UserRole == AppRole.MDO ? "MDO" : "JMDO")
+                            <i class="bi @(isJmdoOpen ? "bi-chevron-up" : "bi-chevron-down") chevron-icon" style="float: right;"></i>
+                        </a>
 
-                    @if (isJmdoOpen)
-                    {
-                        <ul class="submenu-list">
-                            @if (LoginState.CanSeeMenu(PagePermission.FieldDashboard))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/FieldDashboard" Match="NavLinkMatch.All">
-                                        <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        My Dashboard
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.FieldReports))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/FieldReports" Match="NavLinkMatch.All">
-                                        <i class="bi bi-file-earmark-bar-graph SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        My Reports
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.MdoDashboard))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/MdoDashboard" Match="NavLinkMatch.All">
-                                        <i class="bi bi-diagram-3 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Team Dashboard
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.AllocationRequests))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/AllocationRequests" Match="NavLinkMatch.All">
-                                        <i class="bi bi-person-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Allocation Requests
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.TaskMonitoring))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/TaskMonitoring" Match="NavLinkMatch.All">
-                                        <i class="bi bi-list-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Task Monitoring
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.PerformanceTracker))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/PerformanceTracker" Match="NavLinkMatch.All">
-                                        <i class="bi bi-trophy SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Performance Tracker
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.TargetAchievement))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/TargetAchievement" Match="NavLinkMatch.All">
-                                        <i class="bi bi-bullseye SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Target / Achievement
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.FarmerData))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/FarmerData" Match="NavLinkMatch.All">
-                                        <i class="bi bi-people SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Farmer Data
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.MdoReports))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/MdoReports" Match="NavLinkMatch.All">
-                                        <i class="bi bi-bar-chart SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Reports
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.TasksAllocation))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/TasksAllocation" Match="NavLinkMatch.All">
-                                        <i class="bi bi-list-task SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Tasks Allocation
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.MarkAttendance))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/MarkAttendance" Match="NavLinkMatch.All">
-                                        <i class="bi bi-calendar-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Mark Attendance
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.ExtensionRequests))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/ExtensionRequests" Match="NavLinkMatch.All">
-                                        <i class="bi bi-calendar-plus SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Extension Requests
-                                    </NavLink>
-                                </li>
-                            }
-                            @if (LoginState.CanSeeMenu(PagePermission.SalesAudit))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink class="submenu-link" href="/SalesAudit" Match="NavLinkMatch.All">
-                                        <i class="bi bi-clipboard-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                                        Sales Audit
-                                    </NavLink>
-                                </li>
-                            }
-                        </ul>
-                    }
-                </div>
+                        @if (isJmdoOpen)
+                        {
+                            <ul class="submenu-list">
+                                @JmdoMenuItems
+                            </ul>
+                        }
+                    </div>
+                }
             }
 
 
@@ -1451,95 +1347,43 @@
                unchanged - PageGuard still decides that for itself. *@
             @if (AnyDemoDocumentationAccessible)
             {
-                <div class="settings-menu-wrapper">
+                @if (LoginState.UserRole is AppRole.JMDO or AppRole.MDO)
+                {
+                    @* Same flat treatment as the JMDO/MDO section above - no collapsible parent
+                       header for these two roles anywhere in the sidebar. *@
+                    <ul class="submenu-list submenu-list-flat">
+                        @DemoDocumentationMenuItems
+                    </ul>
+                }
+                else
+                {
+                    <div class="settings-menu-wrapper">
 
-                    <a href="javascript:void(0);"
-                       class="nav-link mt-2 @(isDemoDocumentationOpen ? "active" : "")"
-                       @onclick="ToggleDemoDocumentationMenu">
+                        <a href="javascript:void(0);"
+                           class="nav-link mt-2 @(isDemoDocumentationOpen ? "active" : "")"
+                           @onclick="ToggleDemoDocumentationMenu">
 
-                        <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DemoDocumentationIcon.svg"
-                             class="SideBariconimg" />
+                            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/DemoDocumentationIcon.svg"
+                                 class="SideBariconimg" />
 
-                        Demo Documentation
+                            Demo Documentation
 
-                        <i class="bi @(isDemoDocumentationOpen
-                                                                                                                    ? "bi-chevron-up"
-                                                                                                                    : "bi-chevron-down") chevron-icon">
-                        </i>
+                            <i class="bi @(isDemoDocumentationOpen
+                                                                                                                        ? "bi-chevron-up"
+                                                                                                                        : "bi-chevron-down") chevron-icon">
+                            </i>
 
-                    </a>
+                        </a>
 
-                    @if (isDemoDocumentationOpen)
-                    {
-                        <ul class="submenu-list">
+                        @if (isDemoDocumentationOpen)
+                        {
+                            <ul class="submenu-list">
+                                @DemoDocumentationMenuItems
+                            </ul>
+                        }
 
-                            @if (LoginState.CanSeeMenu(PagePermission.DemoDocumentation))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink href="/DemoDocumentation" class="submenu-link" Match="NavLinkMatch.All">
-                                        Demo Documentation
-                                    </NavLink>
-                                </li>
-                            }
-
-                            @if (LoginState.CanSeeMenu(PagePermission.StartDocumentation))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink href="/StartDocumentation" class="submenu-link" Match="NavLinkMatch.All">
-                                        Start Documentation
-                                    </NavLink>
-                                </li>
-                            }
-
-                            @if (LoginState.CanSeeMenu(PagePermission.DemoDetails))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink href="/DemoDetails" class="submenu-link" Match="NavLinkMatch.All">
-                                        Demo Details
-                                    </NavLink>
-                                </li>
-                            }
-
-                            @if (LoginState.CanSeeMenu(PagePermission.TreatmentDetails))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink href="/TreatmentDetails" class="submenu-link" Match="NavLinkMatch.All">
-                                        Treatment Details
-                                    </NavLink>
-                                </li>
-                            }
-
-                            @if (LoginState.CanSeeMenu(PagePermission.Treatment01))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink href="/Treatment01" class="submenu-link" Match="NavLinkMatch.All">
-                                        Treatment 01
-                                    </NavLink>
-                                </li>
-                            }
-
-                            @if (LoginState.CanSeeMenu(PagePermission.TreatmentDemoDetails))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink href="/TreatmentDemoDetails" class="submenu-link" Match="NavLinkMatch.All">
-                                        Treatment Demo Details
-                                    </NavLink>
-                                </li>
-                            }
-
-                            @if (LoginState.CanSeeMenu(PagePermission.Treatment02))
-                            {
-                                <li class="submenu-item">
-                                    <NavLink href="/Treatment02" class="submenu-link" Match="NavLinkMatch.All">
-                                        Treatment 02
-                                    </NavLink>
-                                </li>
-                            }
-
-                        </ul>
-                    }
-
-                </div>
+                    </div>
+                }
             }
 
 
@@ -1728,6 +1572,197 @@
         || LoginState.CanSeeMenu(PagePermission.Treatment01)
         || LoginState.CanSeeMenu(PagePermission.TreatmentDemoDetails)
         || LoginState.CanSeeMenu(PagePermission.Treatment02);
+
+    // Shared between the flat (JMDO/MDO) and collapsible (every other role) renderings above.
+    private RenderFragment DemoDocumentationMenuItems =>
+    @<text>
+        @if (LoginState.CanSeeMenu(PagePermission.DemoDocumentation))
+        {
+            <li class="submenu-item">
+                <NavLink href="/DemoDocumentation" class="submenu-link" Match="NavLinkMatch.All">
+                    <i class="bi bi-file-earmark-text SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Demo Documentation
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.StartDocumentation))
+        {
+            <li class="submenu-item">
+                <NavLink href="/StartDocumentation" class="submenu-link" Match="NavLinkMatch.All">
+                    <i class="bi bi-play-circle SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Start Documentation
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.DemoDetails))
+        {
+            <li class="submenu-item">
+                <NavLink href="/DemoDetails" class="submenu-link" Match="NavLinkMatch.All">
+                    <i class="bi bi-info-circle SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Demo Details
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.TreatmentDetails))
+        {
+            <li class="submenu-item">
+                <NavLink href="/TreatmentDetails" class="submenu-link" Match="NavLinkMatch.All">
+                    <i class="bi bi-clipboard2-pulse SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Treatment Details
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.Treatment01))
+        {
+            <li class="submenu-item">
+                <NavLink href="/Treatment01" class="submenu-link" Match="NavLinkMatch.All">
+                    <i class="bi bi-1-circle SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Treatment 01
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.TreatmentDemoDetails))
+        {
+            <li class="submenu-item">
+                <NavLink href="/TreatmentDemoDetails" class="submenu-link" Match="NavLinkMatch.All">
+                    <i class="bi bi-journal-medical SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Treatment Demo Details
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.Treatment02))
+        {
+            <li class="submenu-item">
+                <NavLink href="/Treatment02" class="submenu-link" Match="NavLinkMatch.All">
+                    <i class="bi bi-2-circle SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Treatment 02
+                </NavLink>
+            </li>
+        }
+    </text>;
+
+    // Shared between the flat (JMDO/MDO) and collapsible (every other role) renderings above, so
+    // the item list only ever exists once in the markup - edit it here, not in either @if branch.
+    private RenderFragment JmdoMenuItems =>
+    @<text>
+        @if (LoginState.CanSeeMenu(PagePermission.FieldDashboard))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/FieldDashboard" Match="NavLinkMatch.All">
+                    <i class="bi bi-speedometer2 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    My Dashboard
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.FieldReports))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/FieldReports" Match="NavLinkMatch.All">
+                    <i class="bi bi-file-earmark-bar-graph SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    My Reports
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.MdoDashboard))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/MdoDashboard" Match="NavLinkMatch.All">
+                    <i class="bi bi-diagram-3 SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Team Dashboard
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.AllocationRequests))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/AllocationRequests" Match="NavLinkMatch.All">
+                    <i class="bi bi-person-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Allocation Requests
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.TaskMonitoring))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/TaskMonitoring" Match="NavLinkMatch.All">
+                    <i class="bi bi-list-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Task Monitoring
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.PerformanceTracker))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/PerformanceTracker" Match="NavLinkMatch.All">
+                    <i class="bi bi-trophy SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Performance Tracker
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.TargetAchievement))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/TargetAchievement" Match="NavLinkMatch.All">
+                    <i class="bi bi-bullseye SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Target / Achievement
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.FarmerData))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/FarmerData" Match="NavLinkMatch.All">
+                    <i class="bi bi-people SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Farmer Data
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.MdoReports))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/MdoReports" Match="NavLinkMatch.All">
+                    <i class="bi bi-bar-chart SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Reports
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.TasksAllocation))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/TasksAllocation" Match="NavLinkMatch.All">
+                    <i class="bi bi-list-task SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Tasks Allocation
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.MarkAttendance))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/MarkAttendance" Match="NavLinkMatch.All">
+                    <i class="bi bi-calendar-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Mark Attendance
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.ExtensionRequests))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/ExtensionRequests" Match="NavLinkMatch.All">
+                    <i class="bi bi-calendar-plus SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Extension Requests
+                </NavLink>
+            </li>
+        }
+        @if (LoginState.CanSeeMenu(PagePermission.SalesAudit))
+        {
+            <li class="submenu-item">
+                <NavLink class="submenu-link" href="/SalesAudit" Match="NavLinkMatch.All">
+                    <i class="bi bi-clipboard-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Sales Audit
+                </NavLink>
+            </li>
+        }
+    </text>;
 
     private bool AnyJmdoAccessible =>
         LoginState.CanSeeMenu(PagePermission.FieldDashboard)
