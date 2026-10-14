@@ -265,6 +265,15 @@ namespace Spic.Infrastructure.Data
             entity.Property(x => x.Budget).HasColumnType("numeric(12,2)");
         });
 
+        // MDO -> JMDO yearly targets: table created manually (no migration). The unique index
+        // mirrors the one expected on the table so save is an update, never a duplicate row.
+        builder.Entity<JmdoYearlyTarget>(entity =>
+        {
+            entity.ToTable("JmdoYearlyTargets");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.EmployeeLoginId, x.FinancialYearStart }).IsUnique();
+        });
+
         builder.Entity<SampleItem>(entity =>
         {
             entity.HasKey(x => x.Id);
@@ -933,6 +942,7 @@ namespace Spic.Infrastructure.Data
 		public DbSet<JmdoTaskAllocationProgram> JmdoTaskAllocationPrograms { get; set; }
 		public DbSet<JmdoTaskCloseout> JmdoTaskCloseouts { get; set; }
 		public DbSet<JmdoTaskCloseoutProduct> JmdoTaskCloseoutProducts { get; set; }
+		public DbSet<JmdoYearlyTarget> JmdoYearlyTargets { get; set; }
 
 		//// Knowledge Community
 		public DbSet<CommunityPost> CommunityPosts { get; set; }
