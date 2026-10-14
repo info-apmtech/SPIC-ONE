@@ -73,14 +73,14 @@
                 <th class="alreq-th-jmdo">JMDO</th>
                 @if (LoginState.UserRole == AppRole.Admin)
                 {
-                    <th class="alreq-th-sm">Status</th>
+                    <th class="alreq-th-sm" style="@SmColumnWidthStyle">Status</th>
                 }
-                <th class="alreq-th-sm">Submitted</th>
-                <th class="alreq-th-sm">Dealer Tasks</th>
-                <th class="alreq-th-sm">SPCM Target</th>
-                <th class="alreq-th-sm">Soil Target</th>
-                <th class="alreq-th-sm">MD Programs</th>
-                <th class="alreq-th-sm">Pos Liquidation</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">Submitted</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">Dealer Tasks</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">SPCM Target</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">Soil Target</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">MD Programs</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">Pos Liquidation</th>
                 <th></th>
             </TableHeader>
             <TableRow Context="row">
@@ -202,6 +202,16 @@
     // Free-text search - SpicDataTable matches this against every column below on its own,
     // no extra filtering logic needed here.
     private string _searchText = "";
+
+    // table-layout: fixed needs every column told its width explicitly, computed here rather
+    // than as a flat CSS percentage: the "Status" column only renders for Admin, so the number
+    // of .alreq-th-sm columns actually in the row is 7 for Admin and 6 for everyone else. A
+    // fixed per-column % sized for one count left the row short (and the extra space collapsed
+    // the other columns into each other) whenever the other count rendered instead. Dividing a
+    // constant 74% budget (JMDO gets 20%, actions gets a fixed 110px - see AllocationRequests.css)
+    // by however many columns are actually present keeps the row exactly full either way.
+    private int SmColumnCount => LoginState.UserRole == AppRole.Admin ? 7 : 6;
+    private string SmColumnWidthStyle => $"width:{74.0 / SmColumnCount:0.##}%;";
 
     private List<ExportColumn<PendingAllocationRowDto>> GetExportColumns() => new()
     {
