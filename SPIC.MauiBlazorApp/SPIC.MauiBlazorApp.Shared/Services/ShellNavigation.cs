@@ -315,10 +315,8 @@ public static class ShellNavigation
         },
         new("DataExplorer", "Data Explorer", "bi-database-fill", "/DataExplorer", "DataExplorer")
         {
-            // Mirrors NavMenu.razor / MobileSidebar.razor: BOTH list Data Explorer for Admin or
-            // SuperAdmin, and PageGuard lets those two roles through the role bypass - so the shell
-            // rule must not be narrower than the sidebar or Admin loses the entry here.
-            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.Admin or AppRole.SuperAdmin
+            // Allowed for SuperAdmin or configured CorporateAdmin only; Admin is strictly denied.
+            Group = GroupAdminTools, Rule = s => SPIC.Core.DTOs.DataExplorerAuthorization.IsAuthorized(s.UserRole, s.UserId, s?.GetDataExplorerAuthorizedId())
         },
         new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", nameof(PagePermission.IfmsRelaySetup))
         {
