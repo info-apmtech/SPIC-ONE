@@ -3,6 +3,7 @@
 @inject ISessionStore SessionStore
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject IJSRuntime JS
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 @using System.Linq
 @using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Services
@@ -95,14 +96,23 @@
         // SuperAdmin bypasses everything else.
         if (LoginState.UserRole == AppRole.SuperAdmin) return;
 
-        // Admin bypasses everything EXCEPT the SAS Lab (/Lab/...) and payment
-        // (/Sas/Payments...) routes: those are reached through the designation only (product
-        // decision 2026-09-27), so admins go through the strict checks below like everyone else.
-        // SuperAdmin is handled above. Every other role - including CorporateAdmin, Director and
-        // AVP - falls through to the Designation check at the bottom of this method.
+        // Data Explorer: SuperAdmin or authorized CorporateAdmin only. Admin is strictly denied.
+        bool isDataExplorer = firstSegment.Equals("DataExplorer", StringComparison.OrdinalIgnoreCase);
+        bool isDataExplorerAuthorized = isDataExplorer
+            && SPIC.Core.DTOs.DataExplorerAuthorization.IsAuthorized(LoginState.UserRole, LoginState.UserId, Config["DataExplorer:AuthorizedEmployeeId"]);
+
+        if (isDataExplorer && !isDataExplorerAuthorized)
+        {
+            Nav.NavigateTo(LoginState.LandingPage, replace: true);
+            return;
+        }
+
+        // Admin bypasses everything EXCEPT the SAS Lab (/Lab/...), payment (/Sas/Payments...),
+        // and Data Explorer (/DataExplorer) routes.
         bool designationOnlyRoute = firstSegment.Equals("Lab", StringComparison.OrdinalIgnoreCase)
             || (firstSegment.Equals("Sas", StringComparison.OrdinalIgnoreCase)
-                && secondSegment.Equals("Payments", StringComparison.OrdinalIgnoreCase));
+                && secondSegment.Equals("Payments", StringComparison.OrdinalIgnoreCase))
+            || isDataExplorer;
         if (LoginState.UserRole is AppRole.Admin && !designationOnlyRoute) return;
 
         // Dealers can always access the SDWA Dashboard and SDWA welfare pages,
@@ -138,6 +148,7 @@
         // Welcome page. Infrastructure pages (login / AccountSelector / error /
         // notfound / forbidden) stay reachable so the login and multi-role flows
         // still work, but Dashboard and every feature page are blocked.
+        // Special exception: the authorized CorporateAdmin may reach DataExplorer.
         if (LoginState.AllowedPages.Count == 0)
         {
             bool isWelcome = firstSegment.Equals("Welcome", StringComparison.OrdinalIgnoreCase);
@@ -157,12 +168,14 @@
                            && !firstSegment.Equals("Dashboard", StringComparison.OrdinalIgnoreCase)
                            && !isDefaultLanding;
 
-            if (!isWelcome && !isDealerDash && !isInfra && !isDirectorSchemeApproval)
+            if (!isWelcome && !isDealerDash && !isInfra && !isDirectorSchemeApproval && !isDataExplorerAuthorized)
             {
                 Nav.NavigateTo("/Welcome", replace: true);
             }
             return;
         }
+
+        if (isDataExplorerAuthorized) return;
 
         if (_alwaysOpen.Contains(firstSegment)) return;
         // Shell hubs and the read-only Digital Library are open to every signed-in user for the

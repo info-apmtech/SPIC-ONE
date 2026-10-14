@@ -1,7 +1,9 @@
 @page "/MarkAttendance"
 @using SPIC.Core.Entities
 @using SPIC.Core.DTOs
+@using System.Net.Http.Json
 @inject NavigationManager Navigation
+@inject HttpClient Http
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.FieldAttendanceState AttendanceState
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
@@ -112,7 +114,12 @@
                     </select>
 
                     <div class="ma-location-row">
-                        <i class="bi bi-check-circle-fill"></i> @LocationStatusText &middot;
+                        <i class="bi bi-check-circle-fill"></i> @LocationStatusText
+                        @if (CoordinatesText is not null)
+                        {
+                            <span class="ma-info-sub">(@CoordinatesText)</span>
+                        }
+                        &middot;
                         <button type="button" class="ma-link-btn" @onclick="ViewOnMap">view on map</button>
                     </div>
 
@@ -141,6 +148,10 @@
                         <span class="ma-info-key"><i class="bi bi-person"></i> Current Location</span>
                         <span class="ma-info-val ma-info-val-stack">
                             <span>@LocationStatusText</span>
+                            @if (CoordinatesText is not null)
+                            {
+                                <span class="ma-info-sub">@CoordinatesText</span>
+                            }
                             @if (_locatedAt is not null)
                             {
                                 <span class="ma-info-sub">(@_locatedAt.Value.ToString("dd MMM yyyy, hh:mm tt"))</span>
@@ -218,16 +229,36 @@
     private DateTime? _locatedAt;
     private string? _locationError;
 
+    // Readable address for the captured fix - display-only, never sent with the attendance.
+    private string? _address;
+    private bool _resolvingAddress;
+    private string? _addressKey; // coordinates (4 dp, ~11 m) _address / the in-flight lookup belongs to
+
     private string LocationStatusText =>
         _locating ? "Capturing location..."
         : _latitude is null ? (_locationError ?? "Location unavailable")
-        : $"Location captured ({_latitude.Value.ToString("0.####")}, {_longitude!.Value.ToString("0.####")})";
+        : _resolvingAddress ? "Fetching address..."
+        : _address is not null && _addressKey == CoordinateKey(_latitude.Value, _longitude!.Value) ? $"Location captured: {_address}"
+        : "Location captured · Address unavailable";
+
+    private string? CoordinatesText =>
+        _locating || _latitude is null ? null
+        : $"{_latitude.Value.ToString("0.####")}, {_longitude!.Value.ToString("0.####")}";
+
+    private static string CoordinateKey(double lat, double lng) =>
+        FormattableString.Invariant($"{lat:0.####},{lng:0.####}");
 
     private sealed class GeoResult
     {
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public string? Error { get; set; }
+    }
+
+    private sealed class NominatimReverseResult
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("display_name")]
+        public string? DisplayName { get; set; }
     }
 
     protected override async Task OnInitializedAsync()
@@ -248,7 +279,58 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
+        {
             await CaptureLocationAsync();
+            await ResolveAddressAsync();
+        }
+    }
+
+    // Same reverse-geocoding call as TaskDetail.ResolvePlaceNameAsync (OpenStreetMap Nominatim,
+    // full "display_name"). Best-effort: a failure leaves _address null and the coordinates shown,
+    // and it's never awaited on the submit path, so it can't hold up or block attendance.
+    private async Task ResolveAddressAsync()
+    {
+        if (_latitude is not { } lat || _longitude is not { } lng) return;
+
+        var key = CoordinateKey(lat, lng);
+        if (key == _addressKey && (_resolvingAddress || _address is not null)) return; // already resolved / in flight
+
+        _addressKey = key;
+        _address = null;
+        _resolvingAddress = true;
+        StateHasChanged();
+
+        string? address = null;
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, FormattableString.Invariant(
+                $"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={lat}&lon={lng}&zoom=18"));
+            request.Headers.UserAgent.ParseAdd("SPICOne/1.0 (+https://apmtechnologies.in)");
+
+            var response = await Http.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<NominatimReverseResult>();
+                address = string.IsNullOrWhiteSpace(result?.DisplayName) ? null : result!.DisplayName;
+            }
+            else
+            {
+                Console.WriteLine($"Reverse geocoding failed: HTTP {(int)response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Reverse geocoding failed: {ex.Message}");
+        }
+
+        // A newer fix may have replaced the coordinates while this lookup was running.
+        if (_addressKey != key) return;
+
+        _address = address;
+        _resolvingAddress = false;
+        if (address is null)
+            _addressKey = null; // allow a retry for these coordinates on the next capture
+        StateHasChanged();
     }
 
     private async Task CaptureLocationAsync()
@@ -359,7 +441,13 @@
 
             var saved = await Api.UpdateAttendanceAsync(
                 visitDate, visitArea.Trim(), ParseStatus(attendanceStatus), _latitude.Value, _longitude.Value);
-            if (saved is null) return; // Api already raised an error toast
+            if (saved is null)
+            {
+                // Api already raised an error toast. Still on this page, so label the fresh fix -
+                // not awaited, the address lookup must never hold up the form.
+                _ = ResolveAddressAsync();
+                return;
+            }
 
             AttendanceState.IsOnDuty = saved.DutyStatus == JMDODutyStatus.OnDuty;
             Toast.Success("Attendance updated.");

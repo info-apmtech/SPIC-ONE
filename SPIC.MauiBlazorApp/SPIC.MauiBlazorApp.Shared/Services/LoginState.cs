@@ -5,11 +5,21 @@ using System.Security.Claims;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 
 namespace SPIC.MauiBlazorApp.Shared.Services
 {
     public class LoginState
     {
+        private readonly IConfiguration? _configuration;
+
+        public LoginState() { }
+
+        public LoginState(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
         public bool IsBusy { get; set; }
         public string? ErrorMessage { get; set; }
 
@@ -178,6 +188,11 @@ namespace SPIC.MauiBlazorApp.Shared.Services
                     result.Add(id);
             }
             return result;
+        }
+
+        public string? GetDataExplorerAuthorizedId()
+        {
+            return _configuration?["DataExplorer:AuthorizedEmployeeId"];
         }
 
         // ---- Single permission decision (SPIC.Core.Entities.PageAuthorization) -------------
