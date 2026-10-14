@@ -1206,6 +1206,7 @@ namespace SpicAPI.Controllers
             }
         }
 
+
         [HttpGet("details/{id}")]
         public async Task<IActionResult> GetCSR1Details(int id)
         {
@@ -1635,6 +1636,7 @@ namespace SpicAPI.Controllers
         // State Scope: SMM approves
         // ============================================================
 
+
         [HttpPost("{id:int}/approve")]
         [HttpPut("{id:int}/approve")]
         public async Task<IActionResult> ApproveCSR1(int id)
@@ -1642,120 +1644,568 @@ namespace SpicAPI.Controllers
             try
             {
                 var csr1 = await _csr1Repo.GetByIdAsync(id);
+
                 if (csr1 == null)
                 {
-                    return NotFound(new { message = $"CSR-1 #{id} not found." });
-                }
-
-                if (string.Equals(csr1.Status, "Approved", StringComparison.OrdinalIgnoreCase))
-                {
-                    return BadRequest(new { message = "CSR-1 is already approved." });
-                }
-
-                var currentRole = User.FindFirst(ClaimTypes.Role)?.Value?.Trim() ?? "";
-                bool isAdmin = currentRole == AppRole.Admin.ToString() ||
-                               currentRole == AppRole.CorporateAdmin.ToString() ||
-                               currentRole == AppRole.Director.ToString() ||
-                               currentRole == AppRole.AVP.ToString();
-
-                // Must be validated first, unless Admin bypasses
-                if (!isAdmin && !string.Equals(csr1.Status, "Validated", StringComparison.OrdinalIgnoreCase))
-                {
-                    return BadRequest(new { message = "CSR-1 must be validated before it can be approved." });
-                }
-
-                var (scope, creatorRole) = await ResolveCSR1ScopeAsync(csr1);
-
-                if (!isAdmin)
-                {
-                    if (scope == "HQ")
+                    return NotFound(new
                     {
-                        // HQ scope: RM / RMD approves
-                        if (!string.Equals(currentRole, AppRole.RM.ToString(), StringComparison.OrdinalIgnoreCase) &&
-                            !string.Equals(currentRole, AppRole.RMD.ToString(), StringComparison.OrdinalIgnoreCase))
+                        message = $"CSR-1 #{id} not found."
+                    });
+                }
+
+                if (string.Equals(
+                    csr1.Status,
+                    "Approved",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new
+                    {
+                        message = "CSR-1 is already approved."
+                    });
+                }
+
+                if (string.Equals(csr1.Status, "Rejected",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(csr1.Status, "Draft",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new
+                    {
+                        message = "This CSR-1 cannot be approved in its current status."
+                    });
+                }
+
+                // --------------------------------------------------
+                // 1. Identify current user's roles.
+                // --------------------------------------------------
+
+                var roles = User.FindAll(ClaimTypes.Role)
+                    .Select(x => x.Value.Trim())
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                bool HasRole(params string[] names) =>
+                    names.Any(roles.Contains);
+
+                bool isAdmin = HasRole(
+                    AppRole.Admin.ToString(),
+                    AppRole.CorporateAdmin.ToString(),
+                    AppRole.Director.ToString(),
+                    AppRole.AVP.ToString());
+
+                // --------------------------------------------------
+                // 2. Determine workflow using the original
+                //    application submission date.
+                //
+                //    IMPORTANT: CreatedAt is used here only because
+                //    the supplied entity has no SubmittedAt.
+                //    Replace it with the actual submission timestamp
+                //    if drafts can be created before submission.
+                // --------------------------------------------------
+
+                var applicationDateIst = csr1.CreatedAt;
+
+                // Assumes CreatedAt was stored in India local time.
+                // Do not convert this value again unless your DB
+                // stores UTC timestamps.
+
+                bool requiresThreeLevelApproval =
+                    applicationDateIst.Day >= 27;
+
+                // --------------------------------------------------
+                // 3. Resolve existing application scope.
+                // --------------------------------------------------
+
+                var (scope, creatorRole) =
+                    await ResolveCSR1ScopeAsync(csr1);
+
+                bool isHQScope = string.Equals(
+                    scope,
+                    "HQ",
+                    StringComparison.OrdinalIgnoreCase);
+
+                bool isStateScope = string.Equals(
+                    scope,
+                    "State",
+                    StringComparison.OrdinalIgnoreCase);
+
+                if (!isHQScope && !isStateScope)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Unable to determine CSR-1 approval scope."
+                    });
+                }
+
+                // --------------------------------------------------
+                // 4. Existing single-level approval (Day 1-26).
+                //    Preserve current approval behaviour.
+                // --------------------------------------------------
+
+                if (!requiresThreeLevelApproval)
+                {
+                    if (!isAdmin &&
+                        !string.Equals(
+                            csr1.Status,
+                            "Validated",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        return BadRequest(new
                         {
-                            return StatusCode(StatusCodes.Status403Forbidden, new
+                            message = "CSR-1 must be validated before approval."
+                        });
+                    }
+
+                    if (!isAdmin)
+                    {
+                        if (isHQScope &&
+                            !HasRole(
+                                AppRole.RM.ToString(),
+                                AppRole.RMD.ToString()))
+                        {
+                            return StatusCode(403, new
                             {
-                                message = "Only Regional Managers (RM) can approve Headquarters-level CSR-1."
+                                message = "Only RM/RMD can approve HQ-level CSR-1."
+                            });
+                        }
+
+                        if (isStateScope &&
+                            !HasRole(AppRole.SMM.ToString()))
+                        {
+                            return StatusCode(403, new
+                            {
+                                message = "Only SMM can approve State-level CSR-1."
                             });
                         }
                     }
-                    else // State scope
+
+                    if (string.IsNullOrWhiteSpace(csr1.SanctionNo))
                     {
-                        // State scope: SMM approves
-                        if (!string.Equals(currentRole, AppRole.SMM.ToString(), StringComparison.OrdinalIgnoreCase))
+                        csr1.SanctionNo =
+                            await GenerateSanctionForCSR1Async(
+                                csr1,
+                                scope);
+                    }
+
+                    csr1.Status = "Approved";
+                    csr1.ApprovedBy = CurrentUserId;
+                    csr1.ApprovedAt = DateTime.UtcNow;
+
+                    csr1.UpdatedBy = CurrentUserId;
+                    csr1.UpdatedAt = DateTime.UtcNow;
+
+                    await _csr1Repo.PatchAsync(id, csr1);
+
+                    return Ok(new
+                    {
+                        message = "CSR-1 approved successfully.",
+                        approvalLevel = 1,
+                        isFinalApproval = true,
+                        sanctionNo = csr1.SanctionNo,
+                        data = csr1
+                    });
+                }
+
+                // --------------------------------------------------
+                // 5. Three-level approval (Day 27 onwards).
+                //    Validation remains mandatory.
+                // --------------------------------------------------
+
+                if (!string.Equals(
+                    csr1.Status,
+                    "Validated",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return BadRequest(new
+                    {
+                        message = "CSR-1 must be validated before approval."
+                    });
+                }
+
+                var now = DateTime.UtcNow;
+
+                bool level1Completed =
+                    !string.IsNullOrWhiteSpace(csr1.Level1ApprovedBy) &&
+                    csr1.Level1ApprovedAt.HasValue;
+
+                bool level2Completed =
+                    !string.IsNullOrWhiteSpace(csr1.Level2ApprovedBy) &&
+                    csr1.Level2ApprovedAt.HasValue;
+
+                bool level3Completed =
+                    !string.IsNullOrWhiteSpace(csr1.Level3ApprovedBy) &&
+                    csr1.Level3ApprovedAt.HasValue;
+
+                if (level3Completed)
+                {
+                    return BadRequest(new
+                    {
+                        message = "All three approval levels are already completed."
+                    });
+                }
+
+                // --------------------------------------------------
+                // LEVEL 1: SMM / RMM
+                // --------------------------------------------------
+
+                if (!level1Completed)
+                {
+                    if (level2Completed || level3Completed)
+                    {
+                        return BadRequest(new
                         {
-                            return StatusCode(StatusCodes.Status403Forbidden, new
+                            message = "Invalid CSR-1 approval sequence."
+                        });
+                    }
+
+                    if (isHQScope)
+                    {
+                        // RMM is the new designation; RM/RMD
+                        // are retained for existing role compatibility.
+                        if (!HasRole("RMM",
+                            AppRole.RM.ToString(),
+                            AppRole.RMD.ToString()))
+                        {
+                            return StatusCode(403, new
                             {
-                                message = "Only State Marketing Managers (SMM) can approve State-level CSR-1."
+                                message = "Only RMM can perform Level 1 approval for HQ scope."
                             });
                         }
                     }
+                    else
+                    {
+                        if (!HasRole(AppRole.SMM.ToString()))
+                        {
+                            return StatusCode(403, new
+                            {
+                                message = "Only SMM can perform Level 1 approval for State scope."
+                            });
+                        }
+                    }
+
+                    csr1.Level1ApprovedBy = CurrentUserId;
+                    csr1.Level1ApprovedAt = now;
+
+                    // Do not mark overall approved.
+                    // Do not generate sanction number.
+                    csr1.UpdatedBy = CurrentUserId;
+                    csr1.UpdatedAt = now;
+
+                    await _csr1Repo.PatchAsync(id, csr1);
+
+                    return Ok(new
+                    {
+                        message = "Level 1 approved successfully. Forwarded to MDAdmin.",
+                        approvalLevel = 1,
+                        nextApprover = "MDAdmin",
+                        isFinalApproval = false,
+                        sanctionNo = (string?)null,
+                        data = csr1
+                    });
                 }
+
+                // --------------------------------------------------
+                // LEVEL 2: MDAdmin
+                // --------------------------------------------------
+
+                if (!level2Completed)
+                {
+                    if (level3Completed)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Invalid CSR-1 approval sequence."
+                        });
+                    }
+
+                    if (!HasRole("MDAdmin"))
+                    {
+                        return StatusCode(403, new
+                        {
+                            message = "Only MDAdmin can perform Level 2 approval."
+                        });
+                    }
+
+                    csr1.Level2ApprovedBy = CurrentUserId;
+                    csr1.Level2ApprovedAt = now;
+
+                    // Still not finally approved.
+                    // No sanction number.
+                    csr1.UpdatedBy = CurrentUserId;
+                    csr1.UpdatedAt = now;
+
+                    await _csr1Repo.PatchAsync(id, csr1);
+
+                    return Ok(new
+                    {
+                        message = "Level 2 approved successfully. Forwarded to CSMD-HOD.",
+                        approvalLevel = 2,
+                        nextApprover = "CSMD-HOD",
+                        isFinalApproval = false,
+                        sanctionNo = (string?)null,
+                        data = csr1
+                    });
+                }
+
+                // --------------------------------------------------
+                // LEVEL 3: CSMD-HOD
+                // Final approval and sanction number.
+                // --------------------------------------------------
+
+                if (!HasRole("CSMD-HOD"))
+                {
+                    return StatusCode(403, new
+                    {
+                        message = "Only CSMD-HOD can perform Level 3 approval."
+                    });
+                }
+
+                // Both prior approvals must be complete.
+                if (!level1Completed || !level2Completed)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Level 1 and Level 2 approvals must be completed first."
+                    });
+                }
+
                 if (string.IsNullOrWhiteSpace(csr1.SanctionNo))
                 {
-                    csr1.SanctionNo = await GenerateCSR1SanctionNoAsync();
+                    csr1.SanctionNo =
+                        await GenerateSanctionForCSR1Async(
+                            csr1,
+                            scope);
                 }
-                csr1.Status = "Approved";
-                csr1.UpdatedBy = CurrentUserId;
-                csr1.UpdatedAt = DateTime.Now;
+
+                csr1.Level3ApprovedBy = CurrentUserId;
+                csr1.Level3ApprovedAt = now;
+
+                // Overall final approval.
                 csr1.ApprovedBy = CurrentUserId;
-                csr1.ApprovedAt = DateTime.Now;
+                csr1.ApprovedAt = now;
+                csr1.Status = "Approved";
+
+                csr1.UpdatedBy = CurrentUserId;
+                csr1.UpdatedAt = now;
 
                 await _csr1Repo.PatchAsync(id, csr1);
 
                 return Ok(new
                 {
-                    message = "CSR-1 approved successfully.",
+                    message = "Level 3 approved successfully. Sanction number generated.",
+                    approvalLevel = 3,
+                    isFinalApproval = true,
                     sanctionNo = csr1.SanctionNo,
                     data = csr1
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, new
-                {
-                    message = "Error while approving CSR-1",
-                    error = ex.Message
-                });
-            }
-        }
-
-        private async Task<string> GenerateCSR1SanctionNoAsync()
-        {
-            int year = DateTime.Now.Year;
-            string prefix = $"CSR1-{year}-";
-
-            // Get existing sanction numbers for current year
-            var existingNumbers = await _csr1Repo.GetAll()
-                .AsNoTracking()
-                .Where(x => x.SanctionNo != null &&
-                            x.SanctionNo.StartsWith(prefix))
-                .Select(x => x.SanctionNo!)
-                .ToListAsync();
-
-            int maxNumber = 0;
-
-            foreach (var sanctionNo in existingNumbers)
-            {
-                // Extract numeric part after CSR1-2026-
-                string numberPart = sanctionNo.Substring(prefix.Length);
-
-                if (int.TryParse(numberPart, out int number))
-                {
-                    if (number > maxNumber)
+                return StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    new
                     {
-                        maxNumber = number;
-                    }
-                }
+                        message = "Error while approving CSR-1",
+                        error = ex.Message
+                    });
+            }
+        }
+
+        private async Task<(int StateId, int? RegionId)>
+            ResolveCSR1SanctionLocationAsync(CSR1 csr1)
+        {
+            if (csr1 == null)
+                throw new ArgumentNullException(nameof(csr1));
+
+            if (!csr1.HeadquarterId.HasValue ||
+                csr1.HeadquarterId.Value <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"CSR-1 #{csr1.Id} has no HeadquarterId. " +
+                    "State-level applications without a headquarters " +
+                    "require a separate state lookup.");
             }
 
-            // Increment last sanction number
-            int nextNumber = maxNumber + 1;
+            // Existing Headquarter repository
+            var headquarter = await _headquarterRepo
+                .GetWhere(x =>
+                    x.Id == csr1.HeadquarterId.Value)
+                .Include(x => x.Region)
+                .FirstOrDefaultAsync();
 
-            // Generate sequential sanction number
-            return $"{prefix}{nextNumber:D3}";
+            if (headquarter == null)
+            {
+                throw new InvalidOperationException(
+                    $"Headquarter #{csr1.HeadquarterId.Value} not found.");
+            }
+
+            if (headquarter.RegionId <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Headquarter has no valid RegionId.");
+            }
+
+            if (headquarter.Region == null ||
+                headquarter.Region.StateId <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Region or StateId could not be resolved.");
+            }
+
+            return (
+                headquarter.Region.StateId,
+                headquarter.RegionId
+            );
         }
+
+
+        private async Task<string> GenerateSanctionForCSR1Async(
+            CSR1 csr1,
+            string scope)
+        {
+            // Resolve StateId and RegionId from the actual
+            // application hierarchy before generating.
+            var (stateId, regionId) =
+                await ResolveCSR1SanctionLocationAsync(csr1);
+
+            bool isRegionalApproval = string.Equals(
+                scope,
+                "HQ",
+                StringComparison.OrdinalIgnoreCase);
+
+            if (stateId <= 0)
+                throw new InvalidOperationException(
+                    "Unable to determine CSR-1 State.");
+
+            if (isRegionalApproval &&
+                (!regionId.HasValue || regionId.Value <= 0))
+                throw new InvalidOperationException(
+                    "Unable to determine CSR-1 Region.");
+
+            return await GenerateCSR1SanctionNoAsync(
+                stateId,
+                regionId,
+                isRegionalApproval,
+                csr1.CSR1Date);
+        }
+
+
+        private async Task<string> GenerateCSR1SanctionNoAsync(
+            int stateId,
+            int? regionId,
+            bool isRegionalApproval,
+            DateTime programDate)
+        {
+            if (stateId <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Valid StateId is required.");
+            }
+
+            // --------------------------------------------
+            // FINANCIAL YEAR
+            // Example: 2026-2027 => FY27
+            // --------------------------------------------
+
+            int fyEndYear = programDate.Month >= 4
+                ? programDate.Year + 1
+                : programDate.Year;
+
+            string financialYear = $"FY{fyEndYear % 100:D2}";
+
+            // Month: 01, 02 ... 12
+            string month = programDate.ToString("MM");
+
+            // --------------------------------------------
+            // REGION SANCTION NUMBER
+            // FY27/TN/MDUI/11/0546
+            // --------------------------------------------
+
+            if (isRegionalApproval)
+            {
+                if (!regionId.HasValue || regionId.Value <= 0)
+                {
+                    throw new InvalidOperationException(
+                        "RegionId is required for regional sanction.");
+                }
+
+                var sequence = await _db
+                    .SanctionNumberSequences
+                    .FirstOrDefaultAsync(x =>
+                        x.StateId == stateId &&
+                        x.RegionId == regionId.Value);
+
+                if (sequence == null)
+                {
+                    throw new InvalidOperationException(
+                        "Regional sanction number sequence not found.");
+                }
+
+                if (string.IsNullOrWhiteSpace(sequence.StateSAPCode) ||
+                    string.IsNullOrWhiteSpace(sequence.RegionSAPCode))
+                {
+                    throw new InvalidOperationException(
+                        "State or Region SAP Code is missing.");
+                }
+
+                // Stored number assumed to be LAST issued.
+                int nextNumber = checked(sequence.SanctionNumber + 1);
+
+                string sanctionNo =
+                    $"{financialYear}/" +
+                    $"{sequence.StateSAPCode.Trim()}/" +
+                    $"{sequence.RegionSAPCode.Trim()}/" +
+                    $"{month}/" +
+                    $"{nextNumber:D4}";
+
+                sequence.SanctionNumber = nextNumber;
+                sequence.UpdatedBy = CurrentUserId;
+                sequence.UpdatedAt = DateTime.UtcNow;
+
+                // SaveChanges is handled by the caller's
+                // approval transaction.
+                return sanctionNo;
+            }
+
+            // --------------------------------------------
+            // STATE SANCTION NUMBER
+            // FY27/TN/11/0005
+            // --------------------------------------------
+
+            var stateSequence = await _db
+                .SanctionNumberSequences
+                .FirstOrDefaultAsync(x =>
+                    x.StateId == stateId &&
+                    x.RegionId == null);
+
+            if (stateSequence == null)
+            {
+                throw new InvalidOperationException(
+                    "State sanction number sequence not found.");
+            }
+
+            if (string.IsNullOrWhiteSpace(stateSequence.StateSAPCode))
+            {
+                throw new InvalidOperationException(
+                    "State SAP Code is missing.");
+            }
+
+            // Stored number assumed to be LAST issued.
+            int nextStateNumber =
+                checked(stateSequence.SanctionNumberState + 1);
+
+            string stateSanctionNo =
+                $"{financialYear}/" +
+                $"{stateSequence.StateSAPCode.Trim()}/" +
+                $"{month}/" +
+                $"{nextStateNumber:D4}";
+
+            stateSequence.SanctionNumberState = nextStateNumber;
+            stateSequence.UpdatedBy = CurrentUserId;
+            stateSequence.UpdatedAt = DateTime.UtcNow;
+
+            return stateSanctionNo;
+        }
+
         // ============================================================
         // REJECT CSR1
         // POST / PUT: api/CSR1/{id}/reject
