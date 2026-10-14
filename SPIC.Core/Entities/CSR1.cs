@@ -111,12 +111,28 @@ namespace SPIC.Core.Entities
         public DateTime CSR1Date { get; set; }
         public string? SanctionNo { get; set; }
         public string? ValidateBy { get; set; }
-
         public DateTime? ValidateAt { get; set; }
 
         public string? ApprovedBy { get; set; }
-
         public DateTime? ApprovedAt { get; set; }
+
+        // -------------------------
+        // Level 1 Approval - SMM / RMM
+        // -------------------------
+        public string? Level1ApprovedBy { get; set; }
+        public DateTime? Level1ApprovedAt { get; set; }
+
+        // -------------------------
+        // Level 2 Approval - MDAdmin
+        // -------------------------
+        public string? Level2ApprovedBy { get; set; }
+        public DateTime? Level2ApprovedAt { get; set; }
+
+        // -------------------------
+        // Level 3 Approval - CSMD-HOD
+        // -------------------------
+        public string? Level3ApprovedBy { get; set; }
+        public DateTime? Level3ApprovedAt { get; set; }
     }
 
 
