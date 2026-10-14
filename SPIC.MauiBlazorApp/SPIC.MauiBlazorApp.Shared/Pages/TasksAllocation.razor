@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject HttpClient Http
@@ -117,7 +118,27 @@
                                         <i class="bi bi-search"></i>
                                         <input type="text" placeholder="Search dealer name or code..." @bind="dealerSearch" @bind:event="oninput" />
                                     </div>
-                                    @* <button type="button" class="ta-filter-btn"><i class="bi bi-sliders"></i> Filter</button> *@
+                                    <select class="ta-filter-select" @bind="selectedDistrictFilter" @bind:after="OnDistrictFilterChanged">
+                                        <option value="0">All Districts</option>
+                                        @foreach (var district in AvailableDistrictFilters)
+                                        {
+                                            <option value="@district.Id">@district.DistrictName</option>
+                                        }
+                                    </select>
+                                    <select class="ta-filter-select" @bind="selectedTalukFilter" @bind:after="OnTalukFilterChanged">
+                                        <option value="">All Sub Districts</option>
+                                        @foreach (var taluk in AvailableTalukFilters)
+                                        {
+                                            <option value="@taluk">@taluk</option>
+                                        }
+                                    </select>
+                                    <select class="ta-filter-select" @bind="selectedDealerFilter">
+                                        <option value="0">All Dealers</option>
+                                        @foreach (var dealer in AvailableDealerFilters)
+                                        {
+                                            <option value="@dealer.Id">@dealer.Name</option>
+                                        }
+                                    </select>
                                 </div>
 
                                 <div class="ta-dealer-grid">
@@ -261,7 +282,7 @@
                         else if (currentStep == 4)
                         {
                             <div class="ta-step-panel">
-                                <p class="ta-step-instruction">Step 4 of 5 &mdash; select the MD programs you'll cover this week, then submit for MDO approval.</p>
+                                <p class="ta-step-instruction">Step 4 of 5 &mdash; MD programs assigned to you in CSR1 are included automatically; submit for MDO approval when ready.</p>
 
                                 <div class="ta-dealer-grid">
                                     @if (isLoadingPrograms)
@@ -274,13 +295,13 @@
                                     }
                                     else if (!Programs.Any())
                                     {
-                                        <EmptyState Icon="bi-easel" Title="No MD programs found for your HQ" Compact="true" />
+                                        <EmptyState Icon="bi-easel" Title="No MD programs are assigned to you" Compact="true" />
                                     }
                                     else
                                     {
                                         @foreach (var program in Programs)
                                         {
-                                            <div class="ta-dealer-card @(program.IsSelected ? "selected" : "")" @onclick="() => ToggleProgram(program)">
+                                            <div class="ta-dealer-card selected">
                                                 <div class="ta-dealer-top">
                                                     <span class="ta-program-day-badge">@DayLabel(program.CreatedAt.DayOfWeek)</span>
                                                     <span class="ta-type-pill ta-type-pill-purple"><i class="bi bi-people"></i> @program.TypeLabel</span>
@@ -320,13 +341,13 @@
 
                                 <div class="ta-step-footer">
                                     <div class="ta-selected-summary">
-                                        @if (SelectedPrograms.Any())
+                                        @if (Programs.Any())
                                         {
-                                            @string.Join("  ·  ", SelectedPrograms.Select(p => $"{p.ProgramCount} Program - {p.Title}"))
+                                            @string.Join("  ·  ", Programs.Select(p => $"{p.ProgramCount} Program - {p.Title}"))
                                         }
                                         else
                                         {
-                                            <span>Select at least one MD program to continue.</span>
+                                            <span>No MD programs assigned to you this week.</span>
                                         }
                                     </div>
                                     <div class="ta-step-footer-actions">
@@ -458,11 +479,7 @@
                                                 <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
                                             </div>
 
-                                            <div class="ta-dealer-stats-row">
-                                                <div class="ta-mini-stat ta-mini-stat-dues">
-                                                    <div class="ta-mini-stat-label"><i class="bi bi-clock"></i> Dues</div>
-                                                    <div class="ta-mini-stat-val">—</div>
-                                                </div>
+                                            <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                                 <div class="ta-mini-stat ta-mini-stat-pending">
                                                     <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
                                                     <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
@@ -490,12 +507,12 @@
                                             <h4 class="ta-dealer-name ta-program-name">@program.ProgramName</h4>
 
                                             <div class="ta-dealer-code-row">
-                                                <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>—</strong>
+                                                <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>@FormatProgramSanctionNo(program)</strong>
                                             </div>
 
                                             <div class="ta-dealer-info-row">
                                                 <span><i class="bi bi-calendar3"></i> Sanction Date</span>
-                                                <strong>—</strong>
+                                                <strong>@FormatProgramSanctionDate(program)</strong>
                                             </div>
 
                                             <div class="ta-dealer-stats-row">
@@ -505,7 +522,7 @@
                                                 </div>
                                                 <div class="ta-mini-stat ta-mini-stat-budget">
                                                     <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
-                                                    <div class="ta-mini-stat-val">—</div>
+                                                    <div class="ta-mini-stat-val">@(program.Budget > 0 ? (program.Budget % 1 == 0 ? $"₹{program.Budget:N0}" : $"₹{program.Budget:N2}") : "—")</div>
                                                 </div>
                                             </div>
 
@@ -550,7 +567,7 @@
                                             </div>
                                         </div>
 
-                                        <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo("/SampleCollection/new")'>
+                                        <button type="button" class="ta-start-btn" @onclick="StartSoilSampleTask">
                                             @ActionLabel(soilStatus) <i class="bi bi-arrow-right"></i>
                                         </button>
                                     </div>
@@ -574,7 +591,7 @@
                                             @if (todayAllocation.NpsTarget > 0)
                                             {
                                                 <div class="ta-today-product-tile">
-                                                    <div class="ta-today-product-name">NSP</div>
+                                                    <div class="ta-today-product-name">NPKS</div>
                                                     <div class="ta-today-product-val">@todayAllocation.NpsTarget</div>
                                                 </div>
                                             }
@@ -623,9 +640,13 @@
             <!-- Static reference list of every finished task (no filter sidebar
                  here, unlike Today's Allocation - this tab is just a flat
                  record of what's done), always in the purple "completed" theme. -->
-            <div class="ta-today-grid">
-                @if (todayAllocation != null)
-                {
+            @if (todayAllocation == null || CountByStatus(AllocTaskStatus.Completed) == 0)
+            {
+                <EmptyState Icon="bi-check2-circle" Title="No completed tasks yet" Compact="true" />
+            }
+            else
+            {
+                <div class="ta-today-grid">
                     @foreach (var assignment in todayAllocation.DealerAssignments.Where(d => d.Day == DateTime.Today.DayOfWeek))
                     {
                         var dStatus = GetStatus($"dealer_{assignment.DealerId}");
@@ -655,11 +676,7 @@
                                     <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
                                 </div>
 
-                                <div class="ta-dealer-stats-row">
-                                    <div class="ta-mini-stat ta-mini-stat-dues">
-                                        <div class="ta-mini-stat-label"><i class="bi bi-clock"></i> Dues</div>
-                                        <div class="ta-mini-stat-val">—</div>
-                                    </div>
+                                <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                     <div class="ta-mini-stat ta-mini-stat-pending">
                                         <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
                                         <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
@@ -687,12 +704,12 @@
                                 <h4 class="ta-dealer-name ta-program-name">@program.ProgramName</h4>
 
                                 <div class="ta-dealer-code-row">
-                                    <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>—</strong>
+                                    <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>@FormatProgramSanctionNo(program)</strong>
                                 </div>
 
                                 <div class="ta-dealer-info-row">
                                     <span><i class="bi bi-calendar3"></i> Sanction Date</span>
-                                    <strong>—</strong>
+                                    <strong>@FormatProgramSanctionDate(program)</strong>
                                 </div>
 
                                 <div class="ta-dealer-stats-row">
@@ -702,7 +719,7 @@
                                     </div>
                                     <div class="ta-mini-stat ta-mini-stat-budget">
                                         <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
-                                        <div class="ta-mini-stat-val">—</div>
+                                        <div class="ta-mini-stat-val">@(program.Budget > 0 ? (program.Budget % 1 == 0 ? $"₹{program.Budget:N0}" : $"₹{program.Budget:N2}") : "—")</div>
                                     </div>
                                 </div>
 
@@ -713,8 +730,8 @@
                         }
                     }
 
-                    var spcmStatus = GetStatus("spcm");
-                    if (todayAllocation.SpcmTarget is > 0 && spcmStatus == AllocTaskStatus.Completed)
+                    @{ var spcmStatus = GetStatus("spcm"); }
+                    @if (todayAllocation.SpcmTarget is > 0 && spcmStatus == AllocTaskStatus.Completed)
                     {
                         <div class="ta-today-card ta-today-card-narrow ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
@@ -733,8 +750,8 @@
                         </div>
                     }
 
-                    var soilStatus = GetStatus("soil");
-                    if (todayAllocation.SoilSampleTarget is > 0 && soilStatus == AllocTaskStatus.Completed)
+                    @{ var soilStatus = GetStatus("soil"); }
+                    @if (todayAllocation.SoilSampleTarget is > 0 && soilStatus == AllocTaskStatus.Completed)
                     {
                         <div class="ta-today-card ta-today-card-narrow ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
@@ -753,8 +770,8 @@
                         </div>
                     }
 
-                    var posStatus = GetStatus("pos");
-                    if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && posStatus == AllocTaskStatus.Completed)
+                    @{ var posStatus = GetStatus("pos"); }
+                    @if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && posStatus == AllocTaskStatus.Completed)
                     {
                         <div class="ta-today-card ta-today-card-wide ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
@@ -771,7 +788,7 @@
                                 @if (todayAllocation.NpsTarget > 0)
                                 {
                                     <div class="ta-today-product-tile">
-                                        <div class="ta-today-product-name">NSP</div>
+                                        <div class="ta-today-product-name">NPKS</div>
                                         <div class="ta-today-product-val">@todayAllocation.NpsTarget</div>
                                     </div>
                                 }
@@ -796,8 +813,8 @@
                             </button>
                         </div>
                     }
-                }
-            </div>
+                </div>
+            }
         }
     </div>
 
@@ -823,6 +840,26 @@
             "completed" => TaTab.Completed,
             _ => TaTab.All
         };
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var targetTab = TabQuery?.ToLowerInvariant() switch
+        {
+            "today" => TaTab.Today,
+            "completed" => TaTab.Completed,
+            _ => (TaTab?)null
+        };
+
+        if (targetTab.HasValue && targetTab.Value != currentTab)
+        {
+            currentTab = targetTab.Value;
+        }
+
+        if (todayAllocation != null)
+        {
+            await CheckExistingAllocationAsync();
+        }
     }
 
     protected override async Task OnInitializedAsync()
@@ -887,10 +924,31 @@
         return taskId switch
         {
             "spcm" => todayAllocation.SpcmStatus,
-            "soil" => todayAllocation.SoilSampleStatus,
-            "pos" => todayAllocation.PosLiquidationStatus,
+            "soil" or "soilsample" => todayAllocation.SoilSampleStatus,
+            "pos" or "posliquidation" => todayAllocation.PosLiquidationStatus,
             _ => AllocTaskStatus.YetToStart
         };
+    }
+
+    // Soil Sample has no TaskDetail-style page of its own - its Start button goes straight to
+    // the SAS Sample Collection wizard - so unlike Dealer/SPCM/MD Program/PoS (which only flip
+    // to InProgress once the user presses "Start Task" inside TaskDetail), this is the only place
+    // that can mark it InProgress at all. Safe to call every time the button is pressed: the
+    // server only stamps SoilSampleStartedAt the first time (never overwritten), and this card
+    // only renders for YetToStart/InProgress status, never Completed.
+    private async Task StartSoilSampleTask()
+    {
+        try
+        {
+            await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",
+                new UpdateTaskStatusDto { TaskKey = "soil", Status = AllocTaskStatus.InProgress });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Could not mark Soil Sample task in-progress: {ex.Message}");
+        }
+
+        Navigation.NavigateTo("/SampleCollection/new");
     }
 
     private int CountByStatus(AllocTaskStatus status)
@@ -1106,6 +1164,8 @@
         public string? PosLiquidation { get; init; }
         public int? PendingAckMt { get; init; }
         public string TypeLabel { get; init; } = "Dealer";
+        public int? DistrictId { get; init; }
+        public string? Taluk { get; init; }
     }
 
     // Sun-Sat tabs (confirmed with the user: full weekly planning, not just a
@@ -1171,7 +1231,9 @@
                 // real type (replaces the old generic "Dealer" badge).
                 TypeLabel = !string.IsNullOrWhiteSpace(item.WholesaleMFMSId) ? "Wholesaler"
                     : !string.IsNullOrWhiteSpace(item.RetailMFMSId) ? "Retailer"
-                    : "Dealer"
+                    : "Dealer",
+                DistrictId = item.DistrictId,
+                Taluk = item.Taluk
                 // IfmsId/PosLiquidation/PendingAckMt stay null ("—"):
                 // SubDealerRegistration, the Pending Ack./LiquidationCycle
                 // dealer records, and IfmsDealer are three separate identity
@@ -1192,10 +1254,50 @@
         }
     }
 
+    // 0 / "" mean "no filter" - same sentinel convention AllocationRequestReview.razor's own
+    // dealer-picker dropdown already uses, rather than nullable int/string binds.
+    private int selectedDistrictFilter = 0;
+    private string selectedTalukFilter = "";
+    private int selectedDealerFilter = 0;
+
+    private IEnumerable<DealerOption> DistrictFilteredDealers =>
+        selectedDistrictFilter > 0 ? Dealers.Where(d => d.DistrictId == selectedDistrictFilter) : Dealers;
+
+    private IEnumerable<DealerOption> DistrictAndTalukFilteredDealers =>
+        string.IsNullOrWhiteSpace(selectedTalukFilter)
+            ? DistrictFilteredDealers
+            : DistrictFilteredDealers.Where(d => string.Equals(d.Taluk, selectedTalukFilter, StringComparison.OrdinalIgnoreCase));
+
+    // Only districts/taluks that actually have a dealer in them - an empty dropdown entry that
+    // filters to nothing would be worse than not offering it at all.
+    private IEnumerable<LocationItemDto> AvailableDistrictFilters =>
+        LookupCache.Districts
+            .Where(dist => Dealers.Any(d => d.DistrictId == dist.Id))
+            .OrderBy(dist => dist.DistrictName);
+
+    private IEnumerable<string> AvailableTalukFilters =>
+        DistrictFilteredDealers
+            .Select(d => d.Taluk)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t);
+
+    private IEnumerable<DealerOption> AvailableDealerFilters =>
+        DistrictAndTalukFilteredDealers.OrderBy(d => d.Name);
+
+    private void OnDistrictFilterChanged()
+    {
+        // Narrowing the district can orphan whatever was picked in the two dependent filters.
+        selectedTalukFilter = "";
+        selectedDealerFilter = 0;
+    }
+
+    private void OnTalukFilterChanged() => selectedDealerFilter = 0;
+
     private IEnumerable<DealerOption> FilteredDealers =>
-        string.IsNullOrWhiteSpace(dealerSearch)
-            ? Dealers
-            : Dealers.Where(d =>
+        DistrictAndTalukFilteredDealers
+            .Where(d => selectedDealerFilter == 0 || d.Id == selectedDealerFilter)
+            .Where(d => string.IsNullOrWhiteSpace(dealerSearch) ||
                 d.Name.Contains(dealerSearch, StringComparison.OrdinalIgnoreCase) ||
                 d.DealerCode.Contains(dealerSearch, StringComparison.OrdinalIgnoreCase));
 
@@ -1215,10 +1317,6 @@
     {
         public int Id { get; init; }
         public string Title { get; init; } = "";
-        // CSR1 (the real backend entity) has no Sanction No/Date columns at
-        // all yet - confirmed via CSR-1Management.razor itself already
-        // rendering "--" for Sanction Number against this same API. Null
-        // here renders as "—" in the card, same as the dealer grid's fallbacks.
         public string? SanctionNo { get; init; }
         public string? SanctionDate { get; init; }
         public int ProgramCount { get; init; }
@@ -1228,7 +1326,6 @@
         // program record was entered) is the only date available, so the
         // weekday badge is derived from that.
         public DateTime CreatedAt { get; init; }
-        public bool IsSelected { get; set; }
     }
 
     private bool isLoadingPrograms = true;
@@ -1236,9 +1333,10 @@
 
     private readonly List<ProgramOption> Programs = new();
 
-    // Real MD program list from CSR1 (api/CSR1/list has no query params or
-    // server-side scoping at all - unlike SubDealerRegistration - so the
-    // HQ filter happens client-side here).
+    // MD programs are assigned directly on the CSR1 record (ResponsiblePersonId), not something
+    // the JMDO picks for themselves - api/CSR1/list?mine=true scopes the result server-side to
+    // only the CSR1 rows where the signed-in JMDO IS the responsible person, so every program
+    // returned here is automatically part of this week's submission.
     private async Task LoadProgramsAsync()
     {
         isLoadingPrograms = true;
@@ -1246,17 +1344,21 @@
 
         try
         {
-            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list");
+            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list?mine=true");
 
             Programs.Clear();
             Programs.AddRange((result ?? new())
-                .Where(p => p.IsActive && (LoginState.HQId <= 0 || (p.HeadquarterId ?? 0) <= 0 || p.HeadquarterId == LoginState.HQId))
+                .Where(p => p.IsActive)
                 .Select(p => new ProgramOption
                 {
                     Id = p.Id,
                     Title = p.ProgramName,
+                    SanctionNo = !string.IsNullOrWhiteSpace(p.SanctionNo) ? p.SanctionNo : $"MD-{p.Id}",
+                    SanctionDate = p.CSR1Date != default && p.CSR1Date != DateTime.MinValue
+                        ? p.CSR1Date.ToString("dd MMM yyyy")
+                        : (p.CreatedAt != default ? p.CreatedAt.ToString("dd MMM yyyy") : "—"),
                     ProgramCount = p.NumberOfPrograms,
-                    TotalBudget = $"₹{p.Budget:N0}",
+                    TotalBudget = p.Budget > 0 ? (p.Budget % 1 == 0 ? $"₹{p.Budget:N0}" : $"₹{p.Budget:N2}") : "—",
                     TypeLabel = string.IsNullOrWhiteSpace(p.ProgramType) ? "Training" : p.ProgramType,
                     CreatedAt = p.CreatedAt
                 }));
@@ -1273,7 +1375,32 @@
         }
     }
 
-    private IEnumerable<ProgramOption> SelectedPrograms => Programs.Where(p => p.IsSelected);
+    // Every loaded program is already assigned to this JMDO (see LoadProgramsAsync) - there is no
+    // separate "selected" subset anymore, this just names the full list for the submit/summary code
+    // below so that logic didn't need to change.
+    private IEnumerable<ProgramOption> SelectedPrograms => Programs;
 
-    private void ToggleProgram(ProgramOption program) => program.IsSelected = !program.IsSelected;
+    private string FormatProgramSanctionNo(JmdoAllocationProgramRowDto program)
+    {
+        if (!string.IsNullOrWhiteSpace(program.SanctionNo))
+            return program.SanctionNo;
+
+        var opt = Programs.FirstOrDefault(p => p.Id == program.Csr1Id);
+        if (!string.IsNullOrWhiteSpace(opt?.SanctionNo))
+            return opt.SanctionNo;
+
+        return $"MD-{program.Csr1Id}";
+    }
+
+    private string FormatProgramSanctionDate(JmdoAllocationProgramRowDto program)
+    {
+        if (program.SanctionDate.HasValue && program.SanctionDate.Value != default && program.SanctionDate.Value != DateTime.MinValue)
+            return program.SanctionDate.Value.ToString("dd MMM yyyy");
+
+        var opt = Programs.FirstOrDefault(p => p.Id == program.Csr1Id);
+        if (!string.IsNullOrWhiteSpace(opt?.SanctionDate) && opt.SanctionDate != "—")
+            return opt.SanctionDate;
+
+        return "—";
+    }
 }

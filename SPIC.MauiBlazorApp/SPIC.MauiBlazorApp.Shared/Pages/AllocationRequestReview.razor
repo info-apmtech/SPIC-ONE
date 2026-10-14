@@ -1,11 +1,14 @@
 @page "/AllocationRequestReview"
 @using System.Net.Http.Json
+@using System.Text.Json
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
+@implements IDisposable
 @inject NavigationManager Navigation
 @inject HttpClient Http
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 alreq-page">
 
@@ -23,13 +26,26 @@
     }
     else
     {
-        <h2 class="alreq-title">@_detail.JmdoName's Allocation</h2>
+        <div class="alreq-title-row">
+            <h2 class="alreq-title">@_detail.JmdoName's Allocation</h2>
+            <span class="alreq-status-pill alreq-status-@(_detail.Status.ToLowerInvariant())">@_detail.Status</span>
+        </div>
         <p class="alreq-subtitle">Review and approve this JMDO's weekly allocation &mdash; dealer tasks, SPCM &amp; soil sample targets, and MD programs.</p>
 
-        <div class="alreq-notice-banner">
-            <i class="bi bi-info-circle-fill"></i>
-            <span>@_detail.JmdoName submitted this allocation (@_detail.SubmittedAt.ToString("dd MMM yyyy")) for your approval. You can add or remove dealer tasks, pin them to a date, add/remove MD programs, or adjust targets before approving. @OtherPendingCount more JMDO(s) still waiting on your review.</span>
-        </div>
+        @if (_detail.Status == "Approved")
+        {
+            <div class="alreq-notice-banner">
+                <i class="bi bi-info-circle-fill"></i>
+                <span>This allocation was already approved on @(_detail.SubmittedAt.ToString("dd MMM yyyy")). As Admin you can still add/remove dealer tasks, change their date, add/remove MD programs, or adjust targets here if something needs correcting.</span>
+            </div>
+        }
+        else
+        {
+            <div class="alreq-notice-banner">
+                <i class="bi bi-info-circle-fill"></i>
+                <span>@_detail.JmdoName submitted this allocation (@_detail.SubmittedAt.ToString("dd MMM yyyy")) for your approval. You can add or remove dealer tasks, pin them to a date, add/remove MD programs, or adjust targets before approving. @OtherPendingCount more JMDO(s) still waiting on your review.</span>
+            </div>
+        }
 
         <div class="alreq-card">
             <h3 class="alreq-card-title">Dealer Tasks</h3>
@@ -42,6 +58,7 @@
                             <th>Party</th>
                             <th>Assign To</th>
                             <th>Date</th>
+                            <th>Priority</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -62,6 +79,12 @@
                                            value="@(task.PlannedDate?.ToString("yyyy-MM-dd"))"
                                            @onchange="e => UpdateDealerPlannedDate(task, e.Value?.ToString())" />
                                 </td>
+                                <td data-label="Priority">
+                                    <select class="alreq-select alreq-assign-select" @bind="task.Priority" @bind:after="() => UpdateDealerPriority(task)">
+                                        <option value="@DealerTaskPriority.Normal">Normal</option>
+                                        <option value="@DealerTaskPriority.High">High Priority</option>
+                                    </select>
+                                </td>
                                 <td class="alreq-cell-actions">
                                     <button type="button" class="alreq-icon-btn-danger" title="Remove task" @onclick="() => RemoveDealerTask(task)">
                                         <i class="bi bi-trash"></i>
@@ -71,7 +94,7 @@
                         }
                         @if (!_detail.Dealers.Any())
                         {
-                            <tr><td colspan="5" class="text-muted">No dealer tasks on this allocation.</td></tr>
+                            <tr><td colspan="6" class="text-muted">No dealer tasks on this allocation.</td></tr>
                         }
                     </tbody>
                 </table>
@@ -79,9 +102,8 @@
 
             <div class="alreq-add-row">
                 <div class="alreq-add-field">
-                    <label class="alreq-add-label">Add a dealer task</label>
-                    <select class="alreq-select" @bind="selectedDealerToAdd">
-                        <option value="0">&mdash; Select to add &mdash;</option>
+                    <label class="alreq-add-label">Add dealer task(s)</label>
+                    <select id="alreq-add-dealer-select" class="alreq-select" multiple="multiple">
                         @foreach (var option in AvailableDealers)
                         {
                             <option value="@option.Id">@option.FirmName &mdash; @option.SubDealerCode</option>
@@ -119,7 +141,7 @@
                         <input id="alreq-dap" type="number" min="0" class="alreq-input" @bind="dapTarget" @bind:event="onchange" @bind:after="SaveTargets" />
                     </div>
                     <div class="alreq-target-field">
-                        <label class="alreq-field-label" for="alreq-nps">NPS</label>
+                        <label class="alreq-field-label" for="alreq-nps">NPKS</label>
                         <input id="alreq-nps" type="number" min="0" class="alreq-input" @bind="npsTarget" @bind:event="onchange" @bind:after="SaveTargets" />
                     </div>
                     <div class="alreq-target-field">
@@ -142,24 +164,15 @@
                     }
                     @if (!_detail.Programs.Any())
                     {
-                        <span class="alreq-chip-empty">No programs added.</span>
+                        <span class="alreq-chip-empty">No programs assigned.</span>
                     }
                 </div>
-
-                <label class="alreq-add-label">Add a program</label>
-                <select class="alreq-select" @bind="selectedProgramToAdd" @bind:after="AddProgramRow">
-                    <option value="0">&mdash; Select to add &mdash;</option>
-                    @foreach (var option in AvailablePrograms)
-                    {
-                        <option value="@option.Id">@option.ProgramName</option>
-                    }
-                </select>
             </div>
         </div>
 
         <div class="alreq-summary-bar">
             <div class="alreq-summary-text">
-                @_detail.Dealers.Count dealer task(s) &middot; SPCM target @Fallback(spcmTarget) &middot; Soil sample target @Fallback(soilTarget) &middot; @_detail.Programs.Count program(s) &middot; @Fallback(ureaTarget)-Urea &middot; @Fallback(dapTarget)-DAP &middot; @Fallback(npsTarget)-NPS &middot; @Fallback(otherTarget)-Other
+                @_detail.Dealers.Count dealer task(s) &middot; SPCM target @Fallback(spcmTarget) &middot; Soil sample target @Fallback(soilTarget) &middot; @_detail.Programs.Count program(s) &middot; @Fallback(ureaTarget)-Urea &middot; @Fallback(dapTarget)-DAP &middot; @Fallback(npsTarget)-NPKS &middot; @Fallback(otherTarget)-Other
             </div>
             <button type="button" class="alreq-btn-approve" disabled="@_isApproving" @onclick="ApproveAllocation">
                 <i class="bi bi-check-lg"></i> @(_isApproving ? "Approving..." : "Approve Allocation")
@@ -181,9 +194,65 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadPendingCountAsync();
-        await LoadDetailAsync();
+        await Task.WhenAll(LoadPendingCountAsync(), LoadDetailAsync());
     }
+
+    // "Add a dealer task" multiselect - same shared spicSelect2 interop every other page's
+    // multiselect uses (see select2-interop.js), not a one-off for this page.
+    private DotNetObjectReference<AllocationRequestReview>? _objRef;
+    private bool _select2Initialized;
+    private static readonly string[] AddDealerSelect2Ids = { "alreq-add-dealer-select" };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_detail is null || _select2Initialized) return;
+
+        try
+        {
+            _objRef ??= DotNetObjectReference.Create(this);
+            await InitAddDealerSelect2Async();
+            _select2Initialized = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Select2 init failed: {ex.Message}");
+        }
+    }
+
+    private Task InitAddDealerSelect2Async() =>
+        JS.InvokeVoidAsync("spicSelect2.initMultiple",
+            new object[] { new { id = "alreq-add-dealer-select", method = nameof(OnDealerSelectionChanged), parent = (string?)null } },
+            _objRef).AsTask();
+
+    // The option list changes after every successful add/remove (a just-added dealer drops out
+    // of "available to add") - Select2 doesn't pick up <option> changes on its own, so it has to
+    // be destroyed and re-initialized, same pattern as every cascading multiselect elsewhere.
+    private async Task RefreshAddDealerSelect2Async()
+    {
+        if (_objRef is null) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", AddDealerSelect2Ids);
+            await Task.Delay(50);
+            await InitAddDealerSelect2Async();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Select2 refresh failed: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public void OnDealerSelectionChanged(List<string>? values)
+    {
+        selectedDealerIdsToAdd = (values ?? new())
+            .Select(v => int.TryParse(v, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
+    }
+
+    public void Dispose() => _objRef?.Dispose();
 
     private sealed class PendingCountRow { }
 
@@ -244,7 +313,6 @@
             }
 
             await LoadAvailableDealersAsync();
-            await LoadAvailableProgramsAsync();
         }
         catch (Exception ex)
         {
@@ -266,7 +334,7 @@
     }
 
     private List<SubDealerOptionDto> AvailableDealers = new();
-    private int selectedDealerToAdd;
+    private List<int> selectedDealerIdsToAdd = new();
     private DateTime selectedDateToAdd = DateTime.Today;
 
     // Scoped to the allocation's own HQ (falling back to the signed-in MDO's)
@@ -288,6 +356,10 @@
             AvailableDealers = (result?.Items ?? new())
                 .Select(d => new SubDealerOptionDto { Id = d.Id, FirmName = d.FirmName, SubDealerCode = d.SubDealerCode })
                 .ToList();
+
+            // The <option> list just changed (a just-added dealer drops out of this list) -
+            // no-ops safely before Select2 is first initialized (see OnAfterRenderAsync).
+            await RefreshAddDealerSelect2Async();
         }
         catch (Exception ex)
         {
@@ -297,28 +369,74 @@
 
     private async Task AddDealerTask()
     {
-        if (selectedDealerToAdd <= 0 || _detail is null) return;
+        if (_detail is null || selectedDealerIdsToAdd.Count == 0) return;
 
+        // Same (dealer, date) check the server enforces in AddDealer - checked here first so an
+        // obvious duplicate is rejected instantly instead of waiting on a round trip.
+        var alreadyAssigned = selectedDealerIdsToAdd
+            .Where(id => _detail.Dealers.Any(d => d.SubDealerId == id && d.PlannedDate?.Date == selectedDateToAdd.Date))
+            .ToList();
+        if (alreadyAssigned.Count > 0)
+        {
+            var names = AvailableDealers.Where(d => alreadyAssigned.Contains(d.Id)).Select(d => d.FirmName);
+            Toast.Error($"Already assigned on that date: {string.Join(", ", names)}");
+            return;
+        }
+
+        // No bulk-add endpoint - add one at a time, same AddDealer call the single-select version
+        // used, and keep going even if one fails so a single rejected dealer doesn't block the rest.
+        var failures = new List<string>();
+        foreach (var dealerId in selectedDealerIdsToAdd)
+        {
+            try
+            {
+                var dto = new AddDealerToAllocationDto { DealerId = dealerId, PlannedDate = selectedDateToAdd };
+                var response = await Http.PostAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers", dto);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var dealerName = AvailableDealers.FirstOrDefault(d => d.Id == dealerId)?.FirmName ?? $"#{dealerId}";
+                    failures.Add($"{dealerName}: {await ExtractApiErrorAsync(response, "could not be added")}");
+                    continue;
+                }
+
+                var row = await response.Content.ReadFromJsonAsync<JmdoAllocationDealerRowDto>();
+                if (row != null) _detail.Dealers.Add(row);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Add dealer task failed: {ex.Message}");
+                failures.Add($"#{dealerId}: unexpected error");
+            }
+        }
+
+        if (failures.Count > 0)
+            Toast.Error(string.Join("; ", failures));
+
+        selectedDealerIdsToAdd = new();
+        await LoadAvailableDealersAsync();
+    }
+
+    // The server's BadRequest bodies here are a plain { success, message } object (not the
+    // ModelState/Identity-errors shapes other controllers return), so this just needs to pull
+    // "message" back out instead of showing a generic toast for an already-specific server reason
+    // (e.g. the duplicate-dealer-on-date check in AddDealer/UpdateDealerPlannedDate).
+    private static async Task<string> ExtractApiErrorAsync(HttpResponseMessage response, string fallback)
+    {
         try
         {
-            var dto = new AddDealerToAllocationDto { DealerId = selectedDealerToAdd, PlannedDate = selectedDateToAdd };
-            var response = await Http.PostAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers", dto);
-            if (!response.IsSuccessStatusCode)
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            if (body.ValueKind == JsonValueKind.Object && body.TryGetProperty("message", out var msg)
+                && msg.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(msg.GetString()))
             {
-                Toast.Error("Could not add that dealer task.");
-                return;
+                return msg.GetString()!;
             }
-
-            var row = await response.Content.ReadFromJsonAsync<JmdoAllocationDealerRowDto>();
-            if (row != null) _detail.Dealers.Add(row);
-            selectedDealerToAdd = 0;
-            await LoadAvailableDealersAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Console.WriteLine($"Add dealer task failed: {ex.Message}");
-            Toast.Error("Could not add that dealer task.");
+            // Not JSON, or no "message" property - fall back below.
         }
+
+        return fallback;
     }
 
     private async Task RemoveDealerTask(JmdoAllocationDealerRowDto task)
@@ -353,7 +471,7 @@
             var response = await Http.PutAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers/{task.RowId}/date", new UpdateDealerPlannedDateDto { PlannedDate = date });
             if (!response.IsSuccessStatusCode)
             {
-                Toast.Error("Could not update the planned date.");
+                Toast.Error(await ExtractApiErrorAsync(response, "Could not update the planned date."));
                 return;
             }
 
@@ -366,62 +484,30 @@
         }
     }
 
-    // ---------- MD Programs ----------
-    private sealed class ProgramOptionDto
-    {
-        public int Id { get; set; }
-        public string ProgramName { get; set; } = "";
-    }
-
-    private List<ProgramOptionDto> AvailablePrograms = new();
-    private int selectedProgramToAdd;
-
-    private async Task LoadAvailableProgramsAsync()
+    // task.Priority is already the new value by the time this runs (@bind applies it before
+    // @bind:after fires) - same "no rollback on failure" behavior as SaveTargets below.
+    private async Task UpdateDealerPriority(JmdoAllocationDealerRowDto task)
     {
         if (_detail is null) return;
 
         try
         {
-            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list");
-            var existingIds = _detail.Programs.Select(p => p.Csr1Id).ToHashSet();
-            var hqId = _detail.HeadquarterId ?? (LoginState.HQId > 0 ? LoginState.HQId : (int?)null);
-
-            AvailablePrograms = (result ?? new())
-                .Where(p => p.IsActive && !existingIds.Contains(p.Id) && (hqId is not > 0 || p.HeadquarterId == hqId))
-                .Select(p => new ProgramOptionDto { Id = p.Id, ProgramName = p.ProgramName })
-                .ToList();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Available program list load failed: {ex.Message}");
-        }
-    }
-
-    private async Task AddProgramRow()
-    {
-        if (selectedProgramToAdd <= 0 || _detail is null) return;
-
-        try
-        {
-            var response = await Http.PostAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/programs", new AddProgramToAllocationDto { Csr1Id = selectedProgramToAdd });
+            var response = await Http.PutAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers/{task.RowId}/priority", new UpdateDealerPriorityDto { Priority = task.Priority });
             if (!response.IsSuccessStatusCode)
-            {
-                Toast.Error("Could not add that program.");
-                return;
-            }
-
-            var row = await response.Content.ReadFromJsonAsync<JmdoAllocationProgramRowDto>();
-            if (row != null) _detail.Programs.Add(row);
-            selectedProgramToAdd = 0;
-            await LoadAvailableProgramsAsync();
+                Toast.Error(await ExtractApiErrorAsync(response, "Could not update the dealer's priority."));
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Add program failed: {ex.Message}");
-            Toast.Error("Could not add that program.");
+            Console.WriteLine($"Update dealer priority failed: {ex.Message}");
+            Toast.Error("Could not update the dealer's priority.");
         }
     }
 
+    // ---------- MD Programs ----------
+    // No "available programs to add" list anymore - MD programs come from CSR1's own
+    // ResponsiblePersonId assignment (set when the CSR1 record is created/approved), not from a
+    // picker on this review page. Removal stays available for the MDO to exclude a program from
+    // this week's work order without touching the underlying CSR1 assignment.
     private async Task RemoveProgramRow(JmdoAllocationProgramRowDto program)
     {
         if (_detail is null) return;
@@ -435,7 +521,6 @@
             }
 
             _detail.Programs.Remove(program);
-            await LoadAvailableProgramsAsync();
         }
         catch (Exception ex)
         {

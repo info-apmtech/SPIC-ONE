@@ -1,4 +1,12 @@
 @page "/TaskMonitoring"
+@implements IDisposable
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@using SPIC.MauiBlazorApp.Shared.Services
+@inject NavigationManager Navigation
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject LookupCacheService LookupCache
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 
 <div class="container-fluid py-4 px-0 tm-page">
@@ -10,10 +18,7 @@
         </div>
 
         <div class="tm-header-actions">
-            <button type="button" class="tm-btn tm-btn-outline" @onclick="ExportExcel">
-                <i class="bi bi-download"></i> Excel
-            </button>
-            <button type="button" class="tm-btn tm-btn-outline" @onclick="Refresh">
+            <button type="button" class="tm-btn tm-btn-outline" @onclick="Refresh" disabled="@_isLoading">
                 <i class="bi bi-arrow-clockwise"></i> Refresh
             </button>
         </div>
@@ -25,54 +30,56 @@
         <div class="tm-filter-grid">
             <div class="tm-filter-field">
                 <label class="tm-field-label" for="tm-jmdo">JMDO</label>
-                <select id="tm-jmdo" class="tm-select" @bind="jmdoFilter">
-                    <option>All JMDOs</option>
+                <select id="tm-jmdo" class="tm-select" multiple="multiple">
                     @foreach (var jmdo in JmdoNames)
                     {
-                        <option>@jmdo</option>
+                        <option value="@jmdo" selected="@jmdoFilter.Contains(jmdo)">@jmdo</option>
                     }
                 </select>
             </div>
             <div class="tm-filter-field">
                 <label class="tm-field-label" for="tm-type">Task Type</label>
-                <select id="tm-type" class="tm-select" @bind="typeFilter">
-                    <option>All Types</option>
+                <select id="tm-type" class="tm-select" multiple="multiple">
                     @foreach (var type in TaskTypes)
                     {
-                        <option>@type</option>
+                        <option value="@type" selected="@typeFilter.Contains(type)">@type</option>
                     }
                 </select>
             </div>
             <div class="tm-filter-field">
                 <label class="tm-field-label" for="tm-status">Status</label>
-                <select id="tm-status" class="tm-select" @bind="statusFilter">
-                    <option>All Status</option>
+                <select id="tm-status" class="tm-select" multiple="multiple">
                     @foreach (var status in Statuses)
                     {
-                        <option>@status</option>
+                        <option value="@status" selected="@statusFilter.Contains(status)">@status</option>
                     }
                 </select>
             </div>
             <div class="tm-filter-field">
                 <label class="tm-field-label" for="tm-state">State</label>
-                <select id="tm-state" class="tm-select">
-                    <option value="">Select</option>
-                    <option>Tamil Nadu</option>
-                </select>
-            </div>
-            <div class="tm-filter-field">
-                <label class="tm-field-label" for="tm-region">Region</label>
-                <select id="tm-region" class="tm-select">
-                    <option value="">Select</option>
-                    @foreach (var location in Locations)
+                <select id="tm-state" class="tm-select" multiple="multiple">
+                    @foreach (var state in AvailableStateFilters)
                     {
-                        <option>@location</option>
+                        <option value="@state.Id" selected="@stateFilter.Contains(state.Id)">@state.StateName</option>
                     }
                 </select>
             </div>
             <div class="tm-filter-field">
-                <label class="tm-field-label" for="tm-date-range">Date Range</label>
-                <input id="tm-date-range" type="date" class="tm-select" />
+                <label class="tm-field-label" for="tm-region">Region</label>
+                <select id="tm-region" class="tm-select" multiple="multiple">
+                    @foreach (var region in AvailableRegionFilters)
+                    {
+                        <option value="@region.Id" selected="@regionFilter.Contains(region.Id)">@region.RegionName</option>
+                    }
+                </select>
+            </div>
+            <div class="tm-filter-field tm-filter-field--range">
+                <label class="tm-field-label" for="tm-date-from">Date Range</label>
+                <div class="tm-date-range">
+                    <input id="tm-date-from" type="date" class="tm-select" @bind="fromDateFilter" />
+                    <span class="tm-date-range-sep">to</span>
+                    <input id="tm-date-to" type="date" class="tm-select" @bind="toDateFilter" />
+                </div>
             </div>
         </div>
 
@@ -82,117 +89,311 @@
         </div>
     </div>
 
-    <div class="tm-table-card">
-        <div class="tm-table-scroll">
-            <table class="tm-table">
-                <thead>
-                    <tr>
-                        <th>JMDO</th>
-                        <th>Type</th>
-                        <th>Location</th>
-                        <th>Due</th>
-                        <th>Status</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in FilteredRows)
+    @if (_loadFailed)
+    {
+        <div class="tm-filter-card p-3 text-muted">Couldn't load task monitoring data. Please try again in a moment.</div>
+    }
+    else
+    {
+        <SpicDataTable Items="FilteredRows.ToList()"
+                       IsLoading="_isLoading"
+                       Title="Tasks"
+                       FileName="TaskMonitoring"
+                       ExportColumns="GetExportColumns()"
+                       SearchText="@_searchText"
+                       EmptyTitle="@(AllRows.Any() ? "No tasks match these filters" : "No tasks yet")">
+            <FilterControls>
+                <input type="text" class="tm-select tm-quick-search"
+                       placeholder="Search..."
+                       @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+            </FilterControls>
+            <TableHeader>
+                <th class="tm-th-jmdo">JMDO</th>
+                <th class="tm-th-sm">Type</th>
+                <th class="tm-th-sm">Location</th>
+                <th class="tm-th-sm">Due</th>
+                <th class="tm-th-sm">Status</th>
+                <th></th>
+            </TableHeader>
+            <TableRow Context="row">
+                <td class="tm-jmdo-name tm-cell-header">@row.JmdoName</td>
+                <td data-label="Type"><span class="tm-type-pill">@row.TaskType</span></td>
+                <td data-label="Location">@(row.Location ?? "—")</td>
+                <td data-label="Due">@(row.Due?.ToString("dd MMM yyyy") ?? "—")</td>
+                <td data-label="Status"><span class="tm-status @StatusClass(row.Status)"><span class="tm-status-dot"></span>@row.Status</span></td>
+                <td class="tm-cell-actions">
+                    @if (row.Status == "Requested")
                     {
-                        <tr>
-                            <td class="tm-jmdo-name tm-cell-header">@row.Jmdo</td>
-                            <td data-label="Type"><span class="tm-type-pill">@row.Type</span></td>
-                            <td data-label="Location">@row.Location</td>
-                            <td data-label="Due">@row.Due</td>
-                            <td data-label="Status"><span class="tm-status @row.StatusClass"><span class="tm-status-dot"></span>@row.Status</span></td>
-                            <td class="tm-cell-actions">
-                                <button type="button" class="tm-icon-btn" title="View task" @onclick="() => ViewTask(row)">
-                                    <i class="bi bi-eye"></i>
-                                </button>
-                            </td>
-                        </tr>
+                        <button type="button" class="tm-icon-btn" title="View allocation" @onclick="() => ViewTask(row)">
+                            <i class="bi bi-eye"></i>
+                        </button>
                     }
-
-                    @if (!FilteredRows.Any())
-                    {
-                        <tr>
-                            <td colspan="6" class="tm-empty-cell">No tasks match these filters.</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
+                </td>
+            </TableRow>
+            <CardActions Context="row">
+                @if (row.Status == "Requested")
+                {
+                    <button type="button" class="tm-icon-btn" title="View allocation" @onclick="() => ViewTask(row)">
+                        <i class="bi bi-eye"></i>
+                    </button>
+                }
+            </CardActions>
+        </SpicDataTable>
+    }
 
 </div>
 
 @code {
-    // Static placeholder: no Task Monitoring API exists yet. JMDO names and
-    // locations reuse the same 5 field officers / regions from
-    // MdoDashboard's JMDO-wise summary table.
-    private static readonly string[] JmdoNames =
-    {
-        "Karthik Raja", "Selvam M", "Priya Dharshini", "Ganesh Kumar", "Lakshmi Narayanan"
-    };
-
     private static readonly string[] TaskTypes = { "Dealer", "SPCM", "Soil Sample", "MD Program", "PoS Liquidation" };
 
-    private static readonly string[] Statuses = { "Requested", "Assigned", "Yet to Start", "In Progress", "Completed" };
+    private static readonly string[] Statuses = { "Requested", "Yet to Start", "In Progress", "Completed" };
 
-    private static readonly string[] Locations = { "Coimbatore", "Pollachi", "Udumalpet", "Annur", "Mettupalayam" };
+    private bool _isLoading = true;
+    private bool _loadFailed;
+    private List<TaskMonitoringRowDto> AllRows = new();
 
-    private sealed record TaskRow(string Jmdo, string Type, string Location, string Due, string Status, string StatusClass);
+    private IEnumerable<string> JmdoNames =>
+        AllRows.Select(r => r.JmdoName).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n);
 
-    private static readonly List<TaskRow> AllRows = new()
+    // Empty list means "no filter" (every Select2 box starts and can return to unselected),
+    // same semantics the single-value "All X" sentinel used to carry.
+    private List<string> jmdoFilter = new();
+    private List<string> typeFilter = new();
+    private List<string> statusFilter = new();
+    private List<int> stateFilter = new();
+    private List<int> regionFilter = new();
+    // Defaults to today, both here and in the applied values below, so the list opens scoped to
+    // "what's due today" instead of every task ever submitted - Clear All is still the way back
+    // to an unbounded range.
+    private DateTime? fromDateFilter = DateTime.Today;
+    private DateTime? toDateFilter = DateTime.Today;
+
+    private List<string> appliedJmdo = new();
+    private List<string> appliedType = new();
+    private List<string> appliedStatus = new();
+    private List<int> appliedState = new();
+    private List<int> appliedRegion = new();
+    private DateTime? appliedFrom = DateTime.Today;
+    private DateTime? appliedTo = DateTime.Today;
+
+    // Only states/regions that actually appear in the loaded rows - same convention as
+    // AllocationRequests.razor's district/taluk filters, so an empty dropdown entry never shows.
+    private IEnumerable<LocationItemDto> AvailableStateFilters =>
+        LookupCache.States.Where(s => AllRows.Any(r => r.StateId == s.Id)).OrderBy(s => s.StateName);
+
+    private IEnumerable<LocationItemDto> AvailableRegionFilters =>
+        (stateFilter.Count > 0 ? LookupCache.Regions.Where(r => stateFilter.Contains(r.StateId)) : LookupCache.Regions)
+            .Where(r => AllRows.Any(row => row.RegionId == r.Id))
+            .OrderBy(r => r.RegionName);
+
+    private IEnumerable<TaskMonitoringRowDto> FilteredRows => AllRows.Where(r =>
+        (appliedJmdo.Count == 0 || appliedJmdo.Contains(r.JmdoName, StringComparer.OrdinalIgnoreCase)) &&
+        (appliedType.Count == 0 || appliedType.Contains(r.TaskType, StringComparer.OrdinalIgnoreCase)) &&
+        (appliedStatus.Count == 0 || appliedStatus.Contains(r.Status, StringComparer.OrdinalIgnoreCase)) &&
+        (appliedState.Count == 0 || (r.StateId.HasValue && appliedState.Contains(r.StateId.Value))) &&
+        (appliedRegion.Count == 0 || (r.RegionId.HasValue && appliedRegion.Contains(r.RegionId.Value))) &&
+        (appliedFrom == null || r.Due == null || r.Due.Value.Date >= appliedFrom.Value.Date) &&
+        (appliedTo == null || r.Due == null || r.Due.Value.Date <= appliedTo.Value.Date));
+
+    // Quick free-text box inside the table toolbar - SpicDataTable matches this against every
+    // export column on its own, same pattern as AllocationRequests.razor. It narrows whatever
+    // the Filters panel above already selected, rather than replacing it.
+    private string _searchText = "";
+
+    private List<ExportColumn<TaskMonitoringRowDto>> GetExportColumns() => new()
     {
-        new("Karthik Raja", "Dealer", "Coimbatore", "23 Sep 2026", "In Progress", "tm-status-progress"),
-        new("Karthik Raja", "Dealer", "Pollachi", "22 Sep 2026", "Yet to Start", "tm-status-yettostart"),
-        new("Karthik Raja", "Dealer", "Udumalpet", "22 Sep 2026", "In Progress", "tm-status-progress"),
-        new("Karthik Raja", "Dealer", "Annur", "28 Sep 2026", "Requested", "tm-status-requested"),
-        new("Selvam M", "Dealer", "Udumalpet", "24 Sep 2026", "Completed", "tm-status-completed"),
-        new("Selvam M", "Dealer", "Annur", "25 Sep 2026", "Requested", "tm-status-requested"),
-        new("Selvam M", "Dealer", "Mettupalayam", "29 Sep 2026", "Assigned", "tm-status-assigned"),
-        new("Priya Dharshini", "Dealer", "Mettupalayam", "23 Sep 2026", "Requested", "tm-status-requested"),
-        new("Priya Dharshini", "Dealer", "Coimbatore", "26 Sep 2026", "Requested", "tm-status-requested"),
-        new("Priya Dharshini", "Dealer", "Coimbatore", "19 Sep 2026", "Completed", "tm-status-completed"),
-        new("Ganesh Kumar", "Dealer", "Pollachi", "21 Sep 2026", "Completed", "tm-status-completed")
+        new() { Header = "JMDO", ValueSelector = r => r.JmdoName },
+        new() { Header = "Type", ValueSelector = r => r.TaskType },
+        new() { Header = "Location", ValueSelector = r => r.Location ?? "" },
+        new() { Header = "Due", ValueSelector = r => r.Due?.ToString("dd MMM yyyy") ?? "" },
+        new() { Header = "Status", ValueSelector = r => r.Status }
     };
 
-    private string jmdoFilter = "All JMDOs";
-    private string typeFilter = "All Types";
-    private string statusFilter = "All Status";
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(LoadRowsAsync(), LookupCache.EnsureLoadedAsync());
+    }
 
-    // JMDO/Task Type/Status filter against real columns; State/Region/Date
-    // Range have no corresponding data on these placeholder rows, so they
-    // stay UI-only for now (same as several other filter bars in this app).
-    private string appliedJmdo = "All JMDOs";
-    private string appliedType = "All Types";
-    private string appliedStatus = "All Status";
-
-    private IEnumerable<TaskRow> FilteredRows => AllRows.Where(r =>
-        (appliedJmdo == "All JMDOs" || r.Jmdo == appliedJmdo) &&
-        (appliedType == "All Types" || r.Type == appliedType) &&
-        (appliedStatus == "All Status" || r.Status == appliedStatus));
+    private async Task LoadRowsAsync()
+    {
+        _isLoading = true;
+        _loadFailed = false;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<TaskMonitoringRowDto>>("api/JmdoTaskAllocation/monitoring");
+            AllRows = result ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Task monitoring list load failed: {ex.Message}");
+            Toast.Error("Could not load task monitoring data. Please try again.");
+            _loadFailed = true;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
 
     private void ApplyFilters()
     {
         appliedJmdo = jmdoFilter;
         appliedType = typeFilter;
         appliedStatus = statusFilter;
+        appliedState = stateFilter;
+        appliedRegion = regionFilter;
+        appliedFrom = fromDateFilter;
+        appliedTo = toDateFilter;
     }
 
-    private void ClearAll()
+    private async Task ClearAll()
     {
-        jmdoFilter = "All JMDOs";
-        typeFilter = "All Types";
-        statusFilter = "All Status";
-        appliedJmdo = "All JMDOs";
-        appliedType = "All Types";
-        appliedStatus = "All Status";
+        jmdoFilter = new();
+        typeFilter = new();
+        statusFilter = new();
+        stateFilter = new();
+        regionFilter = new();
+        fromDateFilter = null;
+        toDateFilter = null;
+        appliedJmdo = new();
+        appliedType = new();
+        appliedStatus = new();
+        appliedState = new();
+        appliedRegion = new();
+        appliedFrom = null;
+        appliedTo = null;
+
+        // Select2 owns its own selection state in the DOM - clearing the C# lists alone doesn't
+        // untick anything the user already picked, so every box needs a real destroy + reinit.
+        await RefreshAllSelect2Async();
     }
 
-    private void ExportExcel() => Toast.Info("Excel export isn't built yet.");
+    // All five filter boxes share the same spicSelect2 interop every other multiselect in this
+    // app uses (see select2-interop.js) - JMDO/State start empty until data loads, and Region's
+    // own option list depends on which State(s) are picked, so all are refreshed together
+    // whenever their underlying <option> list can have changed.
+    private DotNetObjectReference<TaskMonitoring>? _objRef;
+    private bool _select2Initialized;
+    private static readonly string[] AllSelect2Ids = { "tm-jmdo", "tm-type", "tm-status", "tm-state", "tm-region" };
 
-    private void Refresh() => Toast.Info("Task list refreshed.");
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_isLoading || _select2Initialized) return;
 
-    private void ViewTask(TaskRow row) => Toast.Info($"Detailed view for {row.Jmdo}'s {row.Type} task isn't built yet.");
+        try
+        {
+            _objRef ??= DotNetObjectReference.Create(this);
+            await InitAllSelect2Async();
+            _select2Initialized = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Select2 init failed: {ex.Message}");
+        }
+    }
+
+    private Task InitAllSelect2Async() =>
+        JS.InvokeVoidAsync("spicSelect2.initMultiple",
+            new object[]
+            {
+                new { id = "tm-jmdo", method = nameof(OnJmdoSelectionChanged), parent = (string?)null },
+                new { id = "tm-type", method = nameof(OnTypeSelectionChanged), parent = (string?)null },
+                new { id = "tm-status", method = nameof(OnStatusSelectionChanged), parent = (string?)null },
+                new { id = "tm-state", method = nameof(OnStateSelectionChanged), parent = (string?)null },
+                new { id = "tm-region", method = nameof(OnRegionSelectionChanged), parent = (string?)null }
+            },
+            _objRef).AsTask();
+
+    private async Task RefreshAllSelect2Async()
+    {
+        if (_objRef is null) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", AllSelect2Ids);
+            StateHasChanged();
+            await Task.Delay(50);
+            await InitAllSelect2Async();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Select2 refresh failed: {ex.Message}");
+        }
+    }
+
+    // Region's own <option> list narrows to the picked State(s) - Select2 doesn't notice an
+    // <option> list changing underneath it, so just that one box needs to be destroyed and
+    // re-initialized, same pattern as every other cascading multiselect in this app.
+    private async Task RefreshRegionSelect2Async()
+    {
+        if (_objRef is null) return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("spicSelect2.destroyMultiple", new[] { "tm-region" });
+            StateHasChanged();
+            await Task.Delay(50);
+            await JS.InvokeVoidAsync("spicSelect2.initMultiple",
+                new object[] { new { id = "tm-region", method = nameof(OnRegionSelectionChanged), parent = (string?)null } },
+                _objRef);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Region select2 refresh failed: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public void OnJmdoSelectionChanged(List<string>? values) => jmdoFilter = values ?? new();
+
+    [JSInvokable]
+    public void OnTypeSelectionChanged(List<string>? values) => typeFilter = values ?? new();
+
+    [JSInvokable]
+    public void OnStatusSelectionChanged(List<string>? values) => statusFilter = values ?? new();
+
+    [JSInvokable]
+    public async Task OnStateSelectionChanged(List<string>? values)
+    {
+        stateFilter = (values ?? new())
+            .Select(v => int.TryParse(v, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
+        regionFilter = new();
+        await RefreshRegionSelect2Async();
+    }
+
+    [JSInvokable]
+    public void OnRegionSelectionChanged(List<string>? values) =>
+        regionFilter = (values ?? new())
+            .Select(v => int.TryParse(v, out var id) ? id : 0)
+            .Where(id => id > 0)
+            .ToList();
+
+    public void Dispose() => _objRef?.Dispose();
+
+    private static string StatusClass(string status) => status switch
+    {
+        "Requested" => "tm-status-requested",
+        "Yet to Start" => "tm-status-yettostart",
+        "In Progress" => "tm-status-progress",
+        "Completed" => "tm-status-completed",
+        _ => "tm-status-assigned"
+    };
+
+    private async Task Refresh()
+    {
+        await LoadRowsAsync();
+
+        // JMDO/State's own option lists are derived from AllRows, which just changed - Select2
+        // doesn't notice <option> changes on its own once initialized (see RefreshAllSelect2Async),
+        // so a refresh needs the same destroy + reinit as Clear All.
+        if (_select2Initialized)
+            await RefreshAllSelect2Async();
+
+        Toast.Info("Task list refreshed.");
+    }
+
+    private void ViewTask(TaskMonitoringRowDto row) =>
+        Navigation.NavigateTo($"/AllocationRequestReview?allocationId={row.AllocationId}");
 }

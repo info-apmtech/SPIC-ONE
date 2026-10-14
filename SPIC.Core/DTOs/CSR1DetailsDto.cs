@@ -66,6 +66,16 @@ namespace SPIC.Core.DTOs
 
         public DateTime? UpdatedAt { get; set; }
 
+        public DateTime CSR1Date { get; set; }
+        public string? ValidateBy { get; set; }
+
+        public DateTime? ValidateAt { get; set; }
+
+        public string? ApprovedBy { get; set; }
+
+        public DateTime? ApprovedAt { get; set; }
+        public string? SanctionNo { get; set; }
+
 
         // Focus Groups
         public List<CSR1FocusDetailsDto> Focus1 { get; set; } = new();

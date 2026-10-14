@@ -8,6 +8,7 @@
 @inject NavigationManager Nav
 @inject LoadingService Loading
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 emp-reg-page">
 
@@ -588,6 +589,7 @@
         if (!ValidateUserName())
         {
             ErrorMessage = UserNameError;
+            await ScrollToErrorAsync();
             return;
         }
         
@@ -634,13 +636,13 @@
                 if (!empResponse.IsSuccessStatusCode)
                 {
                     var error = await empResponse.Content.ReadAsStringAsync();
-                    throw new Exception($"Employee save failed: {error}");
+                    throw new ApiCallFailedException(ExtractErrorMessage(error, "Employee save failed."));
                 }
 
                 var empResult = await empResponse.Content.ReadFromJsonAsync<ApiResponse<EmployeeInformation>>();
 
                 if (empResult?.data == null)
-                    throw new Exception("Employee save failed: invalid response");
+                    throw new ApiCallFailedException("Employee save failed: the server returned an unexpected response.");
 
                 var loginRequest = new EmployeeLoginCreateRequest
                 {
@@ -666,7 +668,7 @@
                 if (!loginResponse.IsSuccessStatusCode)
                 {
                     var error = await loginResponse.Content.ReadAsStringAsync();
-                    throw new Exception($"Login save failed: {error}");
+                    throw new ApiCallFailedException(ExtractErrorMessage(error, "Login save failed."));
                 }
             }
             else
@@ -676,7 +678,7 @@
                 if (!employeeUpdateResponse.IsSuccessStatusCode)
                 {
                     var error = await employeeUpdateResponse.Content.ReadAsStringAsync();
-                    throw new Exception($"Employee update failed: {error}");
+                    throw new ApiCallFailedException(ExtractErrorMessage(error, "Employee update failed."));
                 }
 
                 var loginRequest = new EmployeeLoginCreateRequest
@@ -701,18 +703,31 @@
                 if (!loginUpdateResponse.IsSuccessStatusCode)
                 {
                     var error = await loginUpdateResponse.Content.ReadAsStringAsync();
-                    throw new Exception($"Login update failed: {error}");
+                    throw new ApiCallFailedException(ExtractErrorMessage(error, "Login update failed."));
                 }
             }
 
-            ResetForm();
+            Nav.NavigateTo("/EmployeeManagement");
+            return;
+        }
+        catch (ApiCallFailedException ex)
+        {
+            // The server already returned a clean, human-readable reason (password policy,
+            // duplicate username, "EmployeeInformation not found", etc.) - show it as-is instead
+            // of running it through the keyword-matching below, which only recognizes a few
+            // hardcoded phrases and silently replaces anything else with a useless generic
+            // message (this is exactly what hid a plain "Passwords must be at least 6
+            // characters." error behind "contact support").
+            Console.WriteLine($"Error in SaveEmployee: {ex.Message}");
+            ErrorMessage = ex.Message;
+            await ScrollToErrorAsync();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error in SaveEmployee: {ex.ToString()}");
-            
+
             string msg = ex.Message.ToLower();
-            
+
             if (msg.Contains("duplicate") || msg.Contains("already exist") || msg.Contains("unique"))
             {
                 ErrorMessage = "A user or employee with these details already exists. Please check User Name, Employee ID, or Email.";
@@ -734,11 +749,77 @@
             {
                 ErrorMessage = "An unexpected error occurred while saving. Please try again later or contact support.";
             }
+
+            await ScrollToErrorAsync();
         }
         finally
         {
             Loading.Hide();
         }
+    }
+
+    // The error banner renders at the top of the page, but this form is long enough that the
+    // Save button at the bottom is scrolled well out of view - without this, a failed save looked
+    // like nothing happened at all unless the user scrolled up themselves.
+    private async Task ScrollToErrorAsync()
+    {
+        try { await JS.InvokeVoidAsync("scrollPageToTop"); } catch (JSException) { }
+    }
+
+    // Marks a failed-HTTP-response error (already a clean, server-authored message) so the
+    // catch block above can show it directly instead of running it through the generic
+    // keyword-matching meant for genuinely unexpected .NET exceptions.
+    private sealed class ApiCallFailedException : Exception
+    {
+        public ApiCallFailedException(string message) : base(message) { }
+    }
+
+    // Server error bodies come in three shapes depending on which BadRequest(...) overload the
+    // controller used: a plain JSON string ("Username already exists"), a JSON array of strings
+    // (identityResult.Errors.Select(x => x.Description) - e.g. password policy failures), or an
+    // ASP.NET ValidationProblemDetails object (BadRequest(ModelState), with messages nested under
+    // "errors"). Falls back to the raw body (or fallbackContext) if it's none of those - e.g. an
+    // actual unhandled server exception, which won't be valid JSON at all.
+    private static string ExtractErrorMessage(string rawBody, string fallbackContext)
+    {
+        if (string.IsNullOrWhiteSpace(rawBody)) return fallbackContext;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(rawBody);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == System.Text.Json.JsonValueKind.String)
+                return root.GetString() is { Length: > 0 } s ? s : fallbackContext;
+
+            if (root.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                var messages = root.EnumerateArray()
+                    .Select(e => e.ValueKind == System.Text.Json.JsonValueKind.String ? e.GetString() : null)
+                    .Where(s => !string.IsNullOrWhiteSpace(s));
+                var joined = string.Join(" ", messages);
+                return joined.Length > 0 ? joined : fallbackContext;
+            }
+
+            if (root.ValueKind == System.Text.Json.JsonValueKind.Object && root.TryGetProperty("errors", out var errorsEl)
+                && errorsEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                var messages = errorsEl.EnumerateObject()
+                    .SelectMany(p => p.Value.ValueKind == System.Text.Json.JsonValueKind.Array
+                        ? p.Value.EnumerateArray().Select(e => e.GetString())
+                        : Enumerable.Empty<string?>())
+                    .Where(s => !string.IsNullOrWhiteSpace(s));
+                var joined = string.Join(" ", messages);
+                return joined.Length > 0 ? joined : fallbackContext;
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Not JSON at all - most likely a raw ASP.NET exception page/stack trace from an
+            // actual unhandled server error, not a clean validation message worth showing as-is.
+        }
+
+        return fallbackContext;
     }
 
     private async Task LoadForEdit(int loginId)

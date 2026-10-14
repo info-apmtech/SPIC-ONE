@@ -180,7 +180,12 @@ namespace Spic.Infrastructure.Data
         builder.Entity<SasFarmer>(entity =>
         {
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.Mobile);
+            // Mobile must be unique among active farmers - the controller already rejects a
+            // duplicate on create/update, but that check alone can't stop two concurrent
+            // requests from both passing it before either commits. The filtered index is the
+            // actual guarantee; soft-deleted rows (IsDeleted) are excluded so a freed number
+            // can be reused by a new farmer.
+            entity.HasIndex(x => x.Mobile).IsUnique().HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(x => x.Name);
             entity.HasIndex(x => x.UserId);
         });
@@ -258,6 +263,15 @@ namespace Spic.Infrastructure.Data
         builder.Entity<JmdoTaskAllocationProgram>(entity =>
         {
             entity.Property(x => x.Budget).HasColumnType("numeric(12,2)");
+        });
+
+        // MDO -> JMDO yearly targets: table created manually (no migration). The unique index
+        // mirrors the one expected on the table so save is an update, never a duplicate row.
+        builder.Entity<JmdoYearlyTarget>(entity =>
+        {
+            entity.ToTable("JmdoYearlyTargets");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.EmployeeLoginId, x.FinancialYearStart }).IsUnique();
         });
 
         builder.Entity<SampleItem>(entity =>
@@ -738,6 +752,15 @@ namespace Spic.Infrastructure.Data
                 .HasForeignKey(x => x.StateId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+
+            builder.Entity<RMDHQMapping>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.EmployeeId, x.StateId, x.RegionId }).IsUnique();
+                entity.Property(x => x.HeadquartersIds).IsRequired().HasMaxLength(4000);
+                entity.Property(x => x.CreatedAt).IsRequired();
+            });
+
         }
 
         // Same prettification the existing Designation UI uses (Designation.razor
@@ -919,6 +942,7 @@ namespace Spic.Infrastructure.Data
 		public DbSet<JmdoTaskAllocationProgram> JmdoTaskAllocationPrograms { get; set; }
 		public DbSet<JmdoTaskCloseout> JmdoTaskCloseouts { get; set; }
 		public DbSet<JmdoTaskCloseoutProduct> JmdoTaskCloseoutProducts { get; set; }
+		public DbSet<JmdoYearlyTarget> JmdoYearlyTargets { get; set; }
 
 		//// Knowledge Community
 		public DbSet<CommunityPost> CommunityPosts { get; set; }
@@ -978,5 +1002,8 @@ namespace Spic.Infrastructure.Data
         public DbSet<StateBudgetSummaryHistory> StateBudgetSummaryHistories { get; set; }
         public DbSet<RegionBudgetSummaryHistory> RegionBudgetSummaryHistories { get; set; }
         public DbSet<HeadquarterBudgetSummaryHistory> HeadquarterBudgetSummaryHistories { get; set; }
+        public DbSet<RMDHQMapping> RMDHQMappings { get; set; }
+
+        public DbSet<SanctionNumberSequence> SanctionNumberSequences { get; set; }
     }
 }

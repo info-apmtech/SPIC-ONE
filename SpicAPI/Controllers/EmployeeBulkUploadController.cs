@@ -263,10 +263,10 @@ namespace SpicAPI.Controllers
                             continue;
                         }
 
-                        // Phone number must be at least 6 digits to pass Identity Password requirements
-                        if (phone.Length < 6)
+                        // Phone number must be at least 8 digits to pass Identity Password requirements
+                        if (phone.Length < 8)
                         {
-                            AddError("Invalid Password length", $"Row {rowNum} ({empName}): Phone number must be at least 6 characters.");
+                            AddError("Invalid Password length", $"Row {rowNum} ({empName}): Phone number must be at least 8 characters.");
                             skipped++;
                             continue;
                         }

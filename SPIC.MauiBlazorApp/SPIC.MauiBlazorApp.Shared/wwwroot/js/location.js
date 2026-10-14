@@ -9,11 +9,12 @@ window.getCurrentPosition = function () {
                 resolve({
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy ? Math.round(position.coords.accuracy) : 20,
                     error: null
                 });
             },
             (err) => {
-                resolve({ latitude: 0, longitude: 0, error: err.message });
+                resolve({ latitude: 0, longitude: 0, accuracy: 0, error: err.message });
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );

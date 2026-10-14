@@ -599,6 +599,1663 @@ namespace Spic.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Pages");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Dashboard",
+                            Module = "DealerRegistration",
+                            Name = "Dashboard",
+                            SortOrder = 0,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Register",
+                            Module = "DealerRegistration",
+                            Name = "Register",
+                            SortOrder = 1,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Experience",
+                            Module = "DealerRegistration",
+                            Name = "Experience",
+                            SortOrder = 2,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AnnualSales",
+                            Module = "DealerRegistration",
+                            Name = "Annual Sales",
+                            SortOrder = 3,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Warehouse",
+                            Module = "DealerRegistration",
+                            Name = "Warehouse",
+                            SortOrder = 4,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "MarketDetails",
+                            Module = "DealerRegistration",
+                            Name = "Market Details",
+                            SortOrder = 5,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 7,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Companies",
+                            Module = "DealerRegistration",
+                            Name = "Companies",
+                            SortOrder = 6,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 8,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Proprietor",
+                            Module = "DealerRegistration",
+                            Name = "Proprietor",
+                            SortOrder = 7,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SalesPlaning",
+                            Module = "DealerRegistration",
+                            Name = "Sales Planing",
+                            SortOrder = 8,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Investment",
+                            Module = "DealerRegistration",
+                            Name = "Investment",
+                            SortOrder = 9,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 11,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CreditLimit",
+                            Module = "DealerRegistration",
+                            Name = "Credit Limit",
+                            SortOrder = 10,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 12,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CreditLimitForGreenStar",
+                            Module = "DealerRegistration",
+                            Name = "Credit Limit For Green Star",
+                            SortOrder = 11,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 13,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Enclosures",
+                            Module = "DealerRegistration",
+                            Name = "Enclosures",
+                            SortOrder = 12,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 14,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FinalSubmission",
+                            Module = "DealerRegistration",
+                            Name = "Final Submission",
+                            SortOrder = 13,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 15,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DealershipPDF",
+                            Module = "DealerRegistration",
+                            Name = "Dealership PDF",
+                            SortOrder = 14,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 16,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SavedDealerReview",
+                            Module = "DealerRegistration",
+                            Name = "Saved Dealer Review",
+                            SortOrder = 15,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 17,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Designation",
+                            Name = "Designation",
+                            SortOrder = 16,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 18,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "EmployeeManagement",
+                            Module = "Employee Management",
+                            Name = "Employee Management",
+                            SortOrder = 17,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 19,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "EmployeeRegistration",
+                            Module = "Employee Management",
+                            Name = "Employee Registration",
+                            SortOrder = 18,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 20,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "dealerreviewlist",
+                            Name = "dealerreviewlist",
+                            SortOrder = 19,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 21,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CreditLimitSales",
+                            Name = "Credit Limit Sales",
+                            SortOrder = 20,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 22,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LocationMaster",
+                            Name = "Location Master",
+                            SortOrder = 21,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 23,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Agriculture",
+                            Name = "Agriculture",
+                            SortOrder = 22,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 24,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Logistics",
+                            Name = "Logistics",
+                            SortOrder = 23,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 25,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Financial",
+                            Name = "Financial",
+                            SortOrder = 24,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 26,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Relationship",
+                            Name = "Relationship",
+                            SortOrder = 25,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 27,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Schemes",
+                            Name = "Schemes",
+                            SortOrder = 26,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 28,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CompanySales",
+                            Name = "Company Sales",
+                            SortOrder = 27,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 29,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SalesReport",
+                            Name = "Sales Report",
+                            SortOrder = 28,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 30,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AgeingReport",
+                            Name = "Ageing Report",
+                            SortOrder = 29,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 31,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Acknowledgement",
+                            Name = "Acknowledgement",
+                            SortOrder = 30,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 32,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LiquidationCycle",
+                            Name = "Liquidation Cycle",
+                            SortOrder = 31,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 33,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BudgetSubmissions",
+                            Name = "Budget Submissions",
+                            SortOrder = 32,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 34,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "WelfareSchemes",
+                            Name = "Welfare Schemes",
+                            SortOrder = 33,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 35,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SDWADashboard",
+                            Name = "SDWADashboard",
+                            SortOrder = 34,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 36,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Purchases",
+                            Name = "Purchases",
+                            SortOrder = 35,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 37,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Rewards",
+                            Name = "Rewards",
+                            SortOrder = 36,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 38,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CropAdvice",
+                            Name = "Crop Advice",
+                            SortOrder = 37,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 39,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "YieldPrediction",
+                            Name = "Yield Prediction",
+                            SortOrder = 38,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 40,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DiseaseDetection",
+                            Name = "Disease Detection",
+                            SortOrder = 39,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 41,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Community",
+                            Name = "Community",
+                            SortOrder = 40,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 42,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Notifications",
+                            Name = "Notifications",
+                            SortOrder = 41,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 43,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Profile",
+                            Name = "Profile",
+                            SortOrder = 42,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 44,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CSR1Create",
+                            Name = "CSR1 Create",
+                            SortOrder = 43,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 45,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CSR1Management",
+                            Name = "CSR1 Management",
+                            SortOrder = 44,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 46,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "TopRankingDistrict",
+                            Name = "Top Ranking District",
+                            SortOrder = 45,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 47,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "TopRankingRetailers",
+                            Name = "Top Ranking Retailers",
+                            SortOrder = 46,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 48,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "TopRankingWholesalers",
+                            Name = "Top Ranking Wholesalers",
+                            SortOrder = 47,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 49,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ProductWiseStockAvailability",
+                            Name = "Product Wise Stock Availability",
+                            SortOrder = 48,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 50,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "StockDetails",
+                            Name = "Stock Details",
+                            SortOrder = 49,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 51,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SubDealerRegistration",
+                            Name = "Sub Dealer Registration",
+                            SortOrder = 50,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 52,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SubDealerList",
+                            Name = "Sub Dealer List",
+                            SortOrder = 51,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 53,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SchemeApproval",
+                            Name = "Scheme Approval",
+                            SortOrder = 52,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 54,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SubDealerEmployeeMaster",
+                            Name = "Sub Dealer Employee Master",
+                            SortOrder = 53,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 55,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SDWA",
+                            Name = "SDWA",
+                            SortOrder = 54,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 56,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SDWAAdmin",
+                            Name = "SDWAAdmin",
+                            SortOrder = 55,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 57,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GuestHouse",
+                            Name = "Guest House",
+                            SortOrder = 56,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 58,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GuestHouseBooking",
+                            Name = "Guest House Booking",
+                            SortOrder = 57,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 59,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Rooms",
+                            Name = "Rooms",
+                            SortOrder = 58,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 60,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "RoomDetails",
+                            Name = "Room Details",
+                            SortOrder = 59,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 61,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GuestDetails",
+                            Name = "Guest Details",
+                            SortOrder = 60,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 62,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Payment",
+                            Name = "Payment",
+                            SortOrder = 61,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 63,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "MyBookings",
+                            Name = "My Bookings",
+                            SortOrder = 62,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 64,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BookingPreview",
+                            Name = "Booking Preview",
+                            SortOrder = 63,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 65,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BookingDetails",
+                            Name = "Booking Details",
+                            SortOrder = 64,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 66,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FrontOffice",
+                            Name = "Front Office",
+                            SortOrder = 65,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 67,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GenerateBill",
+                            Name = "Generate Bill",
+                            SortOrder = 66,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 68,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BillList",
+                            Name = "Bill List",
+                            SortOrder = 67,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 69,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LogisticsReport",
+                            Name = "Logistics Report",
+                            SortOrder = 68,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 70,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DealerStateSummary",
+                            Name = "Dealer State Summary",
+                            SortOrder = 69,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 71,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DigitalLibrary",
+                            Module = "Digital Library",
+                            Name = "Digital Library",
+                            SortOrder = 70,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 72,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SampleCollection",
+                            Module = "SAS",
+                            Name = "Sample Collection",
+                            SortOrder = 71,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 73,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ConsignmentHistory",
+                            Module = "SAS",
+                            Name = "Consignment History",
+                            SortOrder = 72,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 74,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "IfmsRelaySetup",
+                            Name = "Ifms Relay Setup",
+                            SortOrder = 73,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 75,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SchemeOverview",
+                            Name = "Scheme Overview",
+                            SortOrder = 74,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 76,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AddScheme",
+                            Name = "Add Scheme",
+                            SortOrder = 75,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 77,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "WinnerPopUp",
+                            Name = "Winner Pop Up",
+                            SortOrder = 76,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 78,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "WinnerDetails",
+                            Name = "Winner Details",
+                            SortOrder = 77,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 79,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Luckydraw",
+                            Name = "Luckydraw",
+                            SortOrder = 78,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 80,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LuckyDrawList",
+                            Name = "Lucky Draw List",
+                            SortOrder = 79,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 81,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SelectPurchasedProducts",
+                            Name = "Select Purchased Products",
+                            SortOrder = 80,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 82,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Scanproduct",
+                            Name = "Scanproduct",
+                            SortOrder = 81,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 83,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "qr-scanner",
+                            Name = "QR Scanner",
+                            SortOrder = 82,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 84,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BudgetOverview",
+                            Name = "Budget Overview",
+                            SortOrder = 83,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 85,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "BudgetingManagements",
+                            Name = "Budgeting Managements",
+                            SortOrder = 84,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 86,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "CSR2",
+                            Name = "CSR2",
+                            SortOrder = 85,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 87,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FinalReportCSRView",
+                            Name = "Final Report CSRView",
+                            SortOrder = 86,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 88,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "RMDValidationQueue",
+                            Name = "RMDValidation Queue",
+                            SortOrder = 87,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 89,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "MOSubmissionValidation",
+                            Name = "MOSubmission Validation",
+                            SortOrder = 88,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 90,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "RMApprovalStatus",
+                            Name = "RMApproval Status",
+                            SortOrder = 89,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 91,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SMMApprovals",
+                            Name = "SMMApprovals",
+                            SortOrder = 90,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 92,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AVPApprovals",
+                            Name = "AVPApprovals",
+                            SortOrder = 91,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 93,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ReportDashboard",
+                            Name = "Report Dashboard",
+                            SortOrder = 92,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 94,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ReportsCenter",
+                            Name = "Reports Center",
+                            SortOrder = 93,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 95,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ContactUs",
+                            Name = "Contact Us",
+                            SortOrder = 94,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 96,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LogisticsMaster",
+                            Name = "Logistics Master",
+                            SortOrder = 95,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 97,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "UserProfile",
+                            Name = "User Profile",
+                            SortOrder = 96,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 98,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabDashboard",
+                            Module = "SAS Lab",
+                            Name = "Lab Dashboard",
+                            SortOrder = 97,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 99,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabConsignments",
+                            Module = "SAS Lab",
+                            Name = "Lab Consignments",
+                            SortOrder = 98,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 100,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabAnalysis",
+                            Module = "SAS Lab",
+                            Name = "Lab Analysis",
+                            SortOrder = 99,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 101,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabReports",
+                            Module = "SAS Lab",
+                            Name = "Lab Reports",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 102,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabTestEntry",
+                            Module = "SAS Lab",
+                            Name = "Lab Test Entry",
+                            SortOrder = 101,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 103,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "LabTracking",
+                            Module = "SAS Lab",
+                            Name = "Lab Tracking",
+                            SortOrder = 102,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 104,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SasPaymentApproval",
+                            Module = "SAS",
+                            Name = "Sas Payment Approval",
+                            SortOrder = 103,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 105,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SasPaymentVerification",
+                            Module = "SAS",
+                            Name = "Sas Payment Verification",
+                            SortOrder = 104,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 106,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "Metrics",
+                            Module = "Administration",
+                            Name = "Metrics",
+                            SortOrder = 105,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 107,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AnnualBudgeting",
+                            Name = "Annual Budgeting",
+                            SortOrder = 106,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 108,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "StateBudgetManagement",
+                            Name = "State Budget Management",
+                            SortOrder = 107,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 109,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FieldReports",
+                            Name = "Field Reports",
+                            SortOrder = 108,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 110,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "MdoDashboard",
+                            Name = "Mdo Dashboard",
+                            SortOrder = 109,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 111,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "AllocationRequests",
+                            Name = "Allocation Requests",
+                            SortOrder = 110,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 112,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "TaskMonitoring",
+                            Name = "Task Monitoring",
+                            SortOrder = 111,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 113,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "PerformanceTracker",
+                            Name = "Performance Tracker",
+                            SortOrder = 112,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 114,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "TargetAchievement",
+                            Name = "Target Achievement",
+                            SortOrder = 113,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 115,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FarmerData",
+                            Name = "Farmer Data",
+                            SortOrder = 114,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 116,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "MdoReports",
+                            Name = "Mdo Reports",
+                            SortOrder = 115,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 117,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SdwaCompanyMaster",
+                            Name = "Sdwa Company Master",
+                            SortOrder = 116,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 118,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "GuestHouseCancellations",
+                            Name = "Guest House Cancellations",
+                            SortOrder = 117,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 119,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "DemoDocumentation",
+                            Name = "Demo Documentation",
+                            SortOrder = 118,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 120,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "SalesAudit",
+                            Name = "Sales Audit",
+                            SortOrder = 119,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 121,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ExtensionRequests",
+                            Name = "Extension Requests",
+                            SortOrder = 120,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 122,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "FarmDashboard",
+                            Name = "Farm Dashboard",
+                            SortOrder = 121,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 123,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "IfmsAutoImport",
+                            Name = "Ifms Auto Import",
+                            SortOrder = 122,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 124,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "ProgramMaster",
+                            Name = "Program Master",
+                            SortOrder = 123,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        },
+                        new
+                        {
+                            Id = 125,
+                            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CreatedBy = "System",
+                            HasActions = true,
+                            IsActive = true,
+                            Key = "RMDHQMapping",
+                            Name = "RMDHQMapping",
+                            SortOrder = 124,
+                            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            UpdatedBy = "System"
+                        });
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Bank", b =>
@@ -801,8 +2458,17 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
                     b.Property<decimal>("Budget")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CSR1Date")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<decimal>("Compliments")
                         .HasColumnType("decimal(18,2)");
@@ -824,6 +2490,24 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<decimal>("JeepRunningExpenses")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("Level1ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level1ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("Level2ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level2ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("Level3ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level3ApprovedBy")
+                        .HasColumnType("text");
 
                     b.Property<int?>("LocationId")
                         .HasColumnType("integer");
@@ -858,6 +2542,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("ResponsiblePersonId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SanctionNo")
+                        .HasColumnType("text");
+
                     b.Property<decimal>("ServiceChargesLCA")
                         .HasColumnType("decimal(18,2)");
 
@@ -876,6 +2563,12 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidateAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ValidateBy")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -4500,6 +6193,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("OthersTarget")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("PosLiquidationCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("PosLiquidationStartPlaceName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("PosLiquidationStartedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -4518,6 +6217,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("ReviewedByUserId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("SoilSampleCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SoilSampleStartPlaceName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("SoilSampleStartedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -4526,6 +6231,12 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int?>("SoilSampleTarget")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SpcmCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SpcmStartPlaceName")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("SpcmStartedAt")
                         .HasColumnType("timestamp without time zone");
@@ -4577,6 +6288,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("AllocationId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<string>("DealerCode")
                         .IsRequired()
                         .HasColumnType("text");
@@ -4590,6 +6304,12 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int?>("PlannedDay")
                         .HasColumnType("integer");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StartPlaceName")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("timestamp without time zone");
@@ -4621,11 +6341,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("Budget")
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<int>("Csr1Id")
                         .HasColumnType("integer");
 
                     b.Property<string>("ProgramName")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StartPlaceName")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("StartedAt")
@@ -6849,6 +8575,48 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("ProgramTypes");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.RMDHQMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("HeadquartersIds")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId", "StateId", "RegionId")
+                        .IsUnique();
+
+                    b.ToTable("RMDHQMappings");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
                 {
                     b.Property<int>("Id")
@@ -8322,6 +10090,52 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("SamplePayments");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.SanctionNumberSequence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RegionSAPCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("SanctionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SanctionNumberState")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StateSAPCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SanctionNumberSequences");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.SasCourier", b =>
                 {
                     b.Property<int>("Id")
@@ -8450,7 +10264,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Mobile");
+                    b.HasIndex("Mobile")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.HasIndex("Name");
 

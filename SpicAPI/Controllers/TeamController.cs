@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services.LabReports;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using static SPIC.Core.Entities.EmployeeRegistration;
@@ -110,5 +112,120 @@ public class TeamController : ControllerBase
         }
 
         return Ok(team.Select(t => t.Jmdo).ToList());
+    }
+
+    // The exact "this MDO's team" predicate GetJmdos applies above (active JMDO logins at the
+    // caller's HQ) - every yearly-target endpoint goes through this so its scope can't drift.
+    private IQueryable<Employeelogin> TeamJmdoLogins(int hqId) =>
+        _db.Employeelogins.Where(l => l.Role == AppRole.JMDO && l.HeadquartersId == hqId && l.IsActive);
+
+    // GET api/Team/yearly-targets
+    // Current-FY (April-March) yearly targets for the caller's own team only.
+    [Authorize(Roles = "Admin,MO,MDO")]
+    [HttpGet("yearly-targets")]
+    public async Task<ActionResult<List<JmdoYearlyTargetDto>>> GetYearlyTargets()
+    {
+        var hqId = CurrentHqId();
+        if (hqId is not > 0)
+            return Ok(new List<JmdoYearlyTargetDto>());
+
+        var fy = LabReportRules.FinancialYearStart(DateTime.Today);
+
+        var rows = await (
+            from target in _db.JmdoYearlyTargets
+            join login in TeamJmdoLogins(hqId.Value) on target.EmployeeLoginId equals login.Id
+            join info in _db.EmployeeInformation on login.EmployeeInformationID equals info.Id
+            join hq in _db.Headquarters on login.HeadquartersId equals hq.Id into hqJoin
+            from hq in hqJoin.DefaultIfEmpty()
+            where target.FinancialYearStart == fy
+            orderby info.Name
+            select new JmdoYearlyTargetDto
+            {
+                EmployeeLoginId = login.Id,
+                Name = info.Name,
+                EmployeeCode = info.EmployeeCode,
+                HeadquarterName = hq != null ? hq.HeadquarterName : null,
+                FinancialYearStart = target.FinancialYearStart,
+                SpcmTarget = target.SpcmTarget,
+                SoilSampleTarget = target.SoilSampleTarget,
+                UpdatedAt = target.UpdatedAt
+            }).AsNoTracking().ToListAsync();
+
+        return Ok(rows);
+    }
+
+    // PUT api/Team/yearly-targets
+    // Upsert on (EmployeeLoginId, current FY): updates the existing row, inserts only if none.
+    [Authorize(Roles = "Admin,MO,MDO")]
+    [HttpPut("yearly-targets")]
+    public async Task<ActionResult<JmdoYearlyTargetDto>> SaveYearlyTarget([FromBody] SaveJmdoYearlyTargetDto dto)
+    {
+        if (dto == null || dto.EmployeeLoginId <= 0)
+            return BadRequest(new { Success = false, Message = "Select a JMDO." });
+        if (dto.SpcmTarget is not >= 0 || dto.SoilSampleTarget is not >= 0)
+            return BadRequest(new { Success = false, Message = "SPCM and Soil Sample targets are required and cannot be negative." });
+
+        var hqId = CurrentHqId();
+        if (hqId is not > 0)
+            return StatusCode(403, new { Success = false, Message = "Your login has no headquarters, so it has no JMDO team." });
+
+        // Never trust the posted id on its own - it must resolve to a JMDO on the caller's team.
+        var jmdo = await (
+            from login in TeamJmdoLogins(hqId.Value)
+            join info in _db.EmployeeInformation on login.EmployeeInformationID equals info.Id
+            join hq in _db.Headquarters on login.HeadquartersId equals hq.Id into hqJoin
+            from hq in hqJoin.DefaultIfEmpty()
+            where login.Id == dto.EmployeeLoginId
+            select new { login.Id, login.HeadquartersId, info.Name, info.EmployeeCode, HeadquarterName = hq != null ? hq.HeadquarterName : null }
+            ).AsNoTracking().FirstOrDefaultAsync();
+        if (jmdo == null)
+            return StatusCode(403, new { Success = false, Message = "This JMDO is not part of your team." });
+
+        var fy = LabReportRules.FinancialYearStart(DateTime.Today);
+        var actor = User.Identity?.Name;
+        var now = DateTime.Now;
+
+        var target = await _db.JmdoYearlyTargets
+            .FirstOrDefaultAsync(t => t.EmployeeLoginId == jmdo.Id && t.FinancialYearStart == fy);
+
+        if (target is null)
+        {
+            target = new JmdoYearlyTarget
+            {
+                EmployeeLoginId = jmdo.Id,
+                FinancialYearStart = fy,
+                CreatedBy = actor,
+                CreatedAt = now
+            };
+            _db.JmdoYearlyTargets.Add(target);
+        }
+
+        target.SpcmTarget = dto.SpcmTarget!.Value;
+        target.SoilSampleTarget = dto.SoilSampleTarget!.Value;
+        target.HeadquarterId = jmdo.HeadquartersId;
+        target.UpdatedBy = actor;
+        target.UpdatedAt = now;
+
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            // Another save for the same JMDO/FY landed between our read and insert.
+            return Conflict(new { Success = false, Message = "This JMDO's target was just saved by another request. Please reload and try again." });
+        }
+
+        return Ok(new JmdoYearlyTargetDto
+        {
+            EmployeeLoginId = jmdo.Id,
+            Name = jmdo.Name,
+            EmployeeCode = jmdo.EmployeeCode,
+            HeadquarterName = jmdo.HeadquarterName,
+            FinancialYearStart = target.FinancialYearStart,
+            SpcmTarget = target.SpcmTarget,
+            SoilSampleTarget = target.SoilSampleTarget,
+            UpdatedAt = target.UpdatedAt
+        });
     }
 }

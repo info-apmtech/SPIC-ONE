@@ -406,6 +406,7 @@ public class SubDealerRegistrationController : ControllerBase
 				Village = x.Village,
 				Block = x.Block,
 				Taluk = x.Taluk,
+				DistrictId = x.DistrictId,
 				PinCode = x.PinCode,
 
 				UpdatedAt = x.UpdatedAt
