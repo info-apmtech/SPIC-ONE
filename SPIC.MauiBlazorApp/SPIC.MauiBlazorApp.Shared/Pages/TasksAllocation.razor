@@ -427,25 +427,32 @@
         else if (currentTab == TaTab.Today)
         {
             <div class="ta-wizard">
-                <!-- Status filter sidebar -->
-                <div class="ta-stepper @(todayStepperCollapsed ? "ta-stepper-collapsed" : "")">
-                    @foreach (var filter in TodayFilters)
-                    {
-                        var count = BadgeCount(filter.Status);
-                        <button type="button"
-                                class="ta-step-item @(todayFilter == filter.Status ? "active" : "")"
-                                @onclick="() => todayFilter = filter.Status">
-                            <span class="ta-step-num">@filter.Number</span>
-                            <span class="ta-step-label">@filter.Label</span>
-                            <span class="ta-today-bell">
-                                <i class="bi bi-bell"></i>
-                                @if (count > 0)
-                                {
-                                    <span class="ta-today-badge">@count</span>
-                                }
-                            </span>
-                        </button>
-                    }
+                <!-- Status filter sidebar. The extra ta-stepper-wrap level (not used by the
+                     steps 1-5 wizard above, which uses .ta-stepper directly) keeps the legend
+                     OUTSIDE .ta-stepper itself - at phone width .ta-stepper becomes a horizontal
+                     row of pill buttons with overflow: hidden (see TasksAllocation.css), so the
+                     legend rendered as just another squeezed-in item in that row instead of
+                     stacking below it. -->
+                <div class="ta-stepper-wrap @(todayStepperCollapsed ? "ta-stepper-collapsed" : "")">
+                    <div class="ta-stepper">
+                        @foreach (var filter in TodayFilters)
+                        {
+                            var count = BadgeCount(filter.Status);
+                            <button type="button"
+                                    class="ta-step-item @(todayFilter == filter.Status ? "active" : "")"
+                                    @onclick="() => todayFilter = filter.Status">
+                                <span class="ta-step-num">@filter.Number</span>
+                                <span class="ta-step-label">@filter.Label</span>
+                                <span class="ta-today-bell">
+                                    <i class="bi bi-bell"></i>
+                                    @if (count > 0)
+                                    {
+                                        <span class="ta-today-badge">@count</span>
+                                    }
+                                </span>
+                            </button>
+                        }
+                    </div>
 
                     @if (!todayStepperCollapsed)
                     {
@@ -675,101 +682,128 @@
         }
         else
         {
-            <!-- Static reference list of every finished task (no filter sidebar
-                 here, unlike Today's Allocation - this tab is just a flat
-                 record of what's done), always in the purple "completed" theme. -->
-            @if (todayAllocation == null || CountByStatus(AllocTaskStatus.Completed) == 0)
+            <!-- Every finished task across EVERY week the JMDO has ever submitted (not just
+                 todayAllocation's current week - see GetMineAll), defaulting to today's date so
+                 the tab opens the same as before, with a date range + dealer filter to reach
+                 anything older. Always in the purple "completed" theme. -->
+            <div class="ta-completed-filters">
+                <div class="ta-completed-filter-field">
+                    <label class="ta-field-label" for="ta-completed-from">From</label>
+                    <input id="ta-completed-from" type="date" class="ta-filter-select" @bind="completedFromDate" />
+                </div>
+                <div class="ta-completed-filter-field">
+                    <label class="ta-field-label" for="ta-completed-to">To</label>
+                    <input id="ta-completed-to" type="date" class="ta-filter-select" @bind="completedToDate" />
+                </div>
+                <div class="ta-completed-filter-field">
+                    <label class="ta-field-label" for="ta-completed-dealer">Dealer</label>
+                    <select id="ta-completed-dealer" class="ta-filter-select" @bind="completedDealerFilter">
+                        <option value="">All Dealers</option>
+                        @foreach (var name in CompletedDealerOptions)
+                        {
+                            <option value="@name">@name</option>
+                        }
+                    </select>
+                </div>
+                <button type="button" class="ta-filter-btn ta-filter-btn-primary" @onclick="ApplyCompletedFilters">
+                    <i class="bi bi-search"></i> Search
+                </button>
+                <button type="button" class="ta-filter-btn" @onclick="ResetCompletedFilters">
+                    <i class="bi bi-arrow-counterclockwise"></i> Today
+                </button>
+            </div>
+
+            @if (_isLoadingCompleted)
             {
-                <EmptyState Icon="bi-check2-circle" Title="No completed tasks yet" Compact="true" />
+                <EmptyState Icon="bi-hourglass-split" Title="Loading completed tasks..." Compact="true" />
+            }
+            else if (!AnyFilteredCompletedTasks)
+            {
+                <EmptyState Icon="bi-check2-circle" Title="No completed tasks for this filter" Compact="true" />
             }
             else
             {
                 <div class="ta-today-grid">
-                    @foreach (var assignment in todayAllocation.DealerAssignments.Where(d => d.Day == DateTime.Today.DayOfWeek))
+                    @foreach (var assignment in FilteredCompletedDealers)
                     {
-                        var dStatus = GetStatus($"dealer_{assignment.DealerId}");
-                        if (dStatus == AllocTaskStatus.Completed)
-                        {
-                            <div class="ta-today-card ta-status-completed">
-                                <div class="ta-dealer-top">
-                                    <span class="ta-type-pill ta-type-pill-blue"><i class="bi bi-person"></i> Dealer</span>
-                                    <span class="ta-type-pill ta-type-pill-today"><i class="bi bi-shop"></i> Retailer</span>
-                                </div>
+                        <div class="ta-today-card ta-status-completed">
+                            <div class="ta-dealer-top">
+                                <span class="ta-type-pill ta-type-pill-blue"><i class="bi bi-person"></i> Dealer</span>
+                                <span class="ta-type-pill ta-type-pill-today"><i class="bi bi-shop"></i> Retailer</span>
+                            </div>
 
-                                <h4 class="ta-dealer-name">@assignment.DealerName</h4>
+                            <h4 class="ta-dealer-name">@assignment.DealerName</h4>
 
-                                <div class="ta-dealer-code-row">
-                                    <i class="bi bi-person"></i> Dealer Code <strong>@assignment.DealerCode</strong>
-                                    <button type="button" class="ta-copy-btn" title="Copy dealer code" @onclick='() => CopyCode(assignment.DealerCode)' @onclick:stopPropagation="true">
-                                        <i class="bi bi-copy"></i>
-                                    </button>
-                                </div>
-
-                                <div class="ta-dealer-info-row">
-                                    <span>iFMS ID</span>
-                                    <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.IfmsId ?? "—")</strong>
-                                </div>
-                                <div class="ta-dealer-info-row">
-                                    <span>PoS Liquidation</span>
-                                    <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
-                                </div>
-
-                                <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
-                                    <div class="ta-mini-stat ta-mini-stat-pending">
-                                        <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
-                                        <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
-                                    </div>
-                                </div>
-
-                                <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
-                                    @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
+                            <div class="ta-dealer-code-row">
+                                <i class="bi bi-person"></i> Dealer Code <strong>@assignment.DealerCode</strong>
+                                <button type="button" class="ta-copy-btn" title="Copy dealer code" @onclick='() => CopyCode(assignment.DealerCode)' @onclick:stopPropagation="true">
+                                    <i class="bi bi-copy"></i>
                                 </button>
                             </div>
-                        }
-                    }
 
-                    @foreach (var program in todayAllocation.Programs)
-                    {
-                        var pStatus = GetStatus($"prog_{program.Csr1Id}");
-                        if (pStatus == AllocTaskStatus.Completed)
-                        {
-                            <div class="ta-today-card ta-status-completed">
-                                <div class="ta-dealer-top">
-                                    <span class="ta-type-pill ta-type-pill-purple"><i class="bi bi-easel"></i> MD Program</span>
-                                    <span class="ta-type-pill ta-type-pill-outline"><i class="bi bi-people"></i> Training</span>
-                                </div>
-
-                                <h4 class="ta-dealer-name ta-program-name">@program.ProgramName</h4>
-
-                                <div class="ta-dealer-code-row">
-                                    <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>@FormatProgramSanctionNo(program)</strong>
-                                </div>
-
-                                <div class="ta-dealer-info-row">
-                                    <span><i class="bi bi-calendar3"></i> Sanction Date</span>
-                                    <strong>@FormatProgramSanctionDate(program)</strong>
-                                </div>
-
-                                <div class="ta-dealer-stats-row">
-                                    <div class="ta-mini-stat ta-mini-stat-programs">
-                                        <div class="ta-mini-stat-label"><i class="bi bi-file-earmark-text"></i> Programs</div>
-                                        <div class="ta-mini-stat-val">1 <span>Program</span></div>
-                                    </div>
-                                    <div class="ta-mini-stat ta-mini-stat-budget">
-                                        <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
-                                        <div class="ta-mini-stat-val">@(program.Budget > 0 ? (program.Budget % 1 == 0 ? $"₹{program.Budget:N0}" : $"₹{program.Budget:N2}") : "—")</div>
-                                    </div>
-                                </div>
-
-                                <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=mdprogram&id=prog_{program.Csr1Id}")'>
-                                    @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
-                                </button>
+                            <div class="ta-dealer-info-row">
+                                <span>iFMS ID</span>
+                                <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.IfmsId ?? "—")</strong>
                             </div>
-                        }
+                            <div class="ta-dealer-info-row">
+                                <span>PoS Liquidation</span>
+                                <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
+                            </div>
+                            <div class="ta-dealer-info-row">
+                                <span>Completed</span>
+                                <strong>@(assignment.CompletedAt?.ToString("dd MMM yyyy") ?? "—")</strong>
+                            </div>
+
+                            <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
+                                <div class="ta-mini-stat ta-mini-stat-pending">
+                                    <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
+                                    <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
+                                </div>
+                            </div>
+
+                            <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=dealer&id=dealer_{assignment.DealerId}")'>
+                                @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
+                            </button>
+                        </div>
                     }
 
-                    @{ var spcmStatus = GetStatus("spcm"); }
-                    @if (todayAllocation.SpcmTarget is > 0 && spcmStatus == AllocTaskStatus.Completed)
+                    @foreach (var program in FilteredCompletedPrograms)
+                    {
+                        <div class="ta-today-card ta-status-completed">
+                            <div class="ta-dealer-top">
+                                <span class="ta-type-pill ta-type-pill-purple"><i class="bi bi-easel"></i> MD Program</span>
+                                <span class="ta-type-pill ta-type-pill-outline"><i class="bi bi-people"></i> Training</span>
+                            </div>
+
+                            <h4 class="ta-dealer-name ta-program-name">@program.ProgramName</h4>
+
+                            <div class="ta-dealer-code-row">
+                                <i class="bi bi-file-earmark-text"></i> Sanction No. <strong>@FormatProgramSanctionNo(program)</strong>
+                            </div>
+
+                            <div class="ta-dealer-info-row">
+                                <span><i class="bi bi-calendar3"></i> Sanction Date</span>
+                                <strong>@FormatProgramSanctionDate(program)</strong>
+                            </div>
+
+                            <div class="ta-dealer-stats-row">
+                                <div class="ta-mini-stat ta-mini-stat-programs">
+                                    <div class="ta-mini-stat-label"><i class="bi bi-file-earmark-text"></i> Programs</div>
+                                    <div class="ta-mini-stat-val">1 <span>Program</span></div>
+                                </div>
+                                <div class="ta-mini-stat ta-mini-stat-budget">
+                                    <div class="ta-mini-stat-label"><i class="bi bi-bullseye"></i> Total Budget</div>
+                                    <div class="ta-mini-stat-val">@(program.Budget > 0 ? (program.Budget % 1 == 0 ? $"₹{program.Budget:N0}" : $"₹{program.Budget:N2}") : "—")</div>
+                                </div>
+                            </div>
+
+                            <button type="button" class="ta-start-btn" @onclick='() => Navigation.NavigateTo($"/TaskDetail?type=mdprogram&id=prog_{program.Csr1Id}")'>
+                                @ActionLabel(AllocTaskStatus.Completed) <i class="bi bi-arrow-right"></i>
+                            </button>
+                        </div>
+                    }
+
+                    @foreach (var alloc in FilteredCompletedSpcmAllocations)
                     {
                         <div class="ta-today-card ta-today-card-narrow ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
@@ -777,8 +811,8 @@
                             <div class="ta-today-target-box">
                                 <span class="ta-today-target-icon"><i class="bi bi-bullseye"></i></span>
                                 <div>
-                                    <div class="ta-target-label">Today's Target</div>
-                                    <div class="ta-today-target-val">@todayAllocation.SpcmTarget</div>
+                                    <div class="ta-target-label">Target &middot; @(alloc.SpcmCompletedAt?.ToString("dd MMM yyyy") ?? "—")</div>
+                                    <div class="ta-today-target-val">@alloc.SpcmTarget</div>
                                 </div>
                             </div>
 
@@ -788,8 +822,7 @@
                         </div>
                     }
 
-                    @{ var soilStatus = GetStatus("soil"); }
-                    @if (todayAllocation.SoilSampleTarget is > 0 && soilStatus == AllocTaskStatus.Completed)
+                    @foreach (var alloc in FilteredCompletedSoilAllocations)
                     {
                         <div class="ta-today-card ta-today-card-narrow ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
@@ -797,8 +830,8 @@
                             <div class="ta-today-target-box">
                                 <span class="ta-today-target-icon"><i class="bi bi-eyedropper"></i></span>
                                 <div>
-                                    <div class="ta-target-label">Today's Target</div>
-                                    <div class="ta-today-target-val">@todayAllocation.SoilSampleTarget</div>
+                                    <div class="ta-target-label">Target &middot; @(alloc.SoilSampleCompletedAt?.ToString("dd MMM yyyy") ?? "—")</div>
+                                    <div class="ta-today-target-val">@alloc.SoilSampleTarget</div>
                                 </div>
                             </div>
 
@@ -808,40 +841,39 @@
                         </div>
                     }
 
-                    @{ var posStatus = GetStatus("pos"); }
-                    @if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && posStatus == AllocTaskStatus.Completed)
+                    @foreach (var alloc in FilteredCompletedPosAllocations)
                     {
                         <div class="ta-today-card ta-today-card-wide ta-status-completed">
                             <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
 
-                            <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate</div>
+                            <div class="ta-today-products-label"><i class="bi bi-clipboard-check"></i> Products to liquidate &middot; @(alloc.PosLiquidationCompletedAt?.ToString("dd MMM yyyy") ?? "—")</div>
                             <div class="ta-today-products-row">
-                                @if (todayAllocation.UreaTarget > 0)
+                                @if (alloc.UreaTarget > 0)
                                 {
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">UREA</div>
-                                        <div class="ta-today-product-val">@todayAllocation.UreaTarget</div>
+                                        <div class="ta-today-product-val">@alloc.UreaTarget</div>
                                     </div>
                                 }
-                                @if (todayAllocation.NpsTarget > 0)
+                                @if (alloc.NpsTarget > 0)
                                 {
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">NPKS</div>
-                                        <div class="ta-today-product-val">@todayAllocation.NpsTarget</div>
+                                        <div class="ta-today-product-val">@alloc.NpsTarget</div>
                                     </div>
                                 }
-                                @if (todayAllocation.DapTarget > 0)
+                                @if (alloc.DapTarget > 0)
                                 {
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">DAP</div>
-                                        <div class="ta-today-product-val">@todayAllocation.DapTarget</div>
+                                        <div class="ta-today-product-val">@alloc.DapTarget</div>
                                     </div>
                                 }
-                                @if (todayAllocation.OthersTarget > 0)
+                                @if (alloc.OthersTarget > 0)
                                 {
                                     <div class="ta-today-product-tile">
                                         <div class="ta-today-product-name">OTHER</div>
-                                        <div class="ta-today-product-val">@todayAllocation.OthersTarget</div>
+                                        <div class="ta-today-product-val">@alloc.OthersTarget</div>
                                     </div>
                                 }
                             </div>
@@ -907,8 +939,114 @@
             LoadProgramsAsync(),
             LookupCache.EnsureLoadedAsync(),
             CheckExistingAllocationAsync(),
-            CheckPlanningAllocationAsync());
+            CheckPlanningAllocationAsync(),
+            LoadAllAllocationsAsync());
     }
+
+    // ---------- "Completed Allocations" tab ----------
+    // Every allocation the JMDO has ever submitted (any week), unlike todayAllocation which is
+    // only ever the current week's - needed so completed tasks from a past week (now that
+    // submissions aren't locked to "this week only" - see ChangeWeek/SelectedWeekStart above)
+    // still show up here instead of silently disappearing once the week moves on.
+    private List<JmdoTaskAllocationResponseDto> _allAllocations = new();
+    private bool _isLoadingCompleted = true;
+
+    // Defaults to today both ways (both the inputs AND what's actually applied), so the tab opens
+    // scoped to "what did I finish today" - picking a different range and clicking Search (below)
+    // re-applies to that range instead.
+    // Staged values - bound to the input fields, but NOT what filtering reads. Changing a date
+    // or the dealer dropdown only stages it; nothing re-filters until Search is clicked (below),
+    // same "edit freely, only apply on demand" pattern as AllocationRequests/TaskMonitoring's own
+    // filter bars.
+    private DateTime? completedFromDate = DateTime.Today;
+    private DateTime? completedToDate = DateTime.Today;
+    private string completedDealerFilter = "";
+
+    // Applied values - what FilteredCompleted* below actually read.
+    private DateTime? appliedCompletedFrom = DateTime.Today;
+    private DateTime? appliedCompletedTo = DateTime.Today;
+    private string appliedCompletedDealer = "";
+
+    private async Task LoadAllAllocationsAsync()
+    {
+        _isLoadingCompleted = true;
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<JmdoTaskAllocationResponseDto>>("api/JmdoTaskAllocation/mine/all");
+            _allAllocations = result ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading completed allocations failed: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingCompleted = false;
+        }
+    }
+
+    private void ApplyCompletedFilters()
+    {
+        appliedCompletedFrom = completedFromDate;
+        appliedCompletedTo = completedToDate;
+        appliedCompletedDealer = completedDealerFilter;
+    }
+
+    private void ResetCompletedFilters()
+    {
+        completedFromDate = DateTime.Today;
+        completedToDate = DateTime.Today;
+        completedDealerFilter = "";
+        appliedCompletedFrom = DateTime.Today;
+        appliedCompletedTo = DateTime.Today;
+        appliedCompletedDealer = "";
+    }
+
+    private bool CompletedDealerFilterActive => !string.IsNullOrWhiteSpace(appliedCompletedDealer);
+
+    private bool MatchesCompletedDateFilter(DateTime? completedAt)
+    {
+        if (appliedCompletedFrom is { } from && (completedAt is null || completedAt.Value.Date < from.Date)) return false;
+        if (appliedCompletedTo is { } to && (completedAt is null || completedAt.Value.Date > to.Date)) return false;
+        return true;
+    }
+
+    private IEnumerable<string> CompletedDealerOptions =>
+        _allAllocations.SelectMany(a => a.DealerAssignments)
+            .Where(d => d.Status == AllocTaskStatus.Completed)
+            .Select(d => d.DealerName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(n => n);
+
+    // Dealer filter only makes sense for dealer visits - Program/SPCM/Soil/PoS aren't tied to a
+    // dealer, so picking one hides those sections entirely rather than showing them regardless.
+    private IEnumerable<JmdoDealerAssignmentResponseDto> FilteredCompletedDealers =>
+        _allAllocations.SelectMany(a => a.DealerAssignments)
+            .Where(d => d.Status == AllocTaskStatus.Completed
+                && MatchesCompletedDateFilter(d.CompletedAt)
+                && (!CompletedDealerFilterActive || string.Equals(d.DealerName, appliedCompletedDealer, StringComparison.OrdinalIgnoreCase)));
+
+    private IEnumerable<JmdoAllocationProgramRowDto> FilteredCompletedPrograms =>
+        CompletedDealerFilterActive ? Enumerable.Empty<JmdoAllocationProgramRowDto>() :
+        _allAllocations.SelectMany(a => a.Programs)
+            .Where(p => p.Status == AllocTaskStatus.Completed && MatchesCompletedDateFilter(p.CompletedAt));
+
+    private IEnumerable<JmdoTaskAllocationResponseDto> FilteredCompletedSpcmAllocations =>
+        CompletedDealerFilterActive ? Enumerable.Empty<JmdoTaskAllocationResponseDto>() :
+        _allAllocations.Where(a => a.SpcmTarget is > 0 && a.SpcmStatus == AllocTaskStatus.Completed && MatchesCompletedDateFilter(a.SpcmCompletedAt));
+
+    private IEnumerable<JmdoTaskAllocationResponseDto> FilteredCompletedSoilAllocations =>
+        CompletedDealerFilterActive ? Enumerable.Empty<JmdoTaskAllocationResponseDto>() :
+        _allAllocations.Where(a => a.SoilSampleTarget is > 0 && a.SoilSampleStatus == AllocTaskStatus.Completed && MatchesCompletedDateFilter(a.SoilSampleCompletedAt));
+
+    private IEnumerable<JmdoTaskAllocationResponseDto> FilteredCompletedPosAllocations =>
+        CompletedDealerFilterActive ? Enumerable.Empty<JmdoTaskAllocationResponseDto>() :
+        _allAllocations.Where(a => (a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0)
+            && a.PosLiquidationStatus == AllocTaskStatus.Completed && MatchesCompletedDateFilter(a.PosLiquidationCompletedAt));
+
+    private bool AnyFilteredCompletedTasks =>
+        FilteredCompletedDealers.Any() || FilteredCompletedPrograms.Any() || FilteredCompletedSpcmAllocations.Any()
+        || FilteredCompletedSoilAllocations.Any() || FilteredCompletedPosAllocations.Any();
 
     private string HeaderSubtitle => currentTab switch
     {
