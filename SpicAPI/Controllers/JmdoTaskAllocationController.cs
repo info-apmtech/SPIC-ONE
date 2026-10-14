@@ -96,11 +96,26 @@ public class JmdoTaskAllocationController : ControllerBase
             .Where(pm => programs.Select(p => p.ProgramId).Contains(pm.Id))
             .ToDictionaryAsync(pm => pm.Id, pm => pm.Name);
 
+        // WeekStart lets the JMDO plan a week other than the current one (e.g. submit next
+        // week's visits in advance) - null keeps the original, only-ever-current-week behaviour.
+        // AllocationDate is stamped to that week's Sunday (not DateTime.Today) so the week-range
+        // matches in GetMineToday/GetPending/GetMonitoring correctly file this submission under
+        // the PLANNED week, not whatever week it happens to be submitted in.
+        var weekStart = WeekStartFor(dto.WeekStart ?? DateTime.Today);
+
+        // Rejected doesn't count as "already submitted" - otherwise a JMDO whose week was
+        // rejected could never resubmit for that same week again.
+        var alreadyExistsForWeek = await _db.JmdoTaskAllocations.AnyAsync(a =>
+            a.SubmittedByUserId == userId && a.AllocationDate >= weekStart && a.AllocationDate < weekStart.AddDays(7)
+            && a.Status != JmdoTaskAllocationStatus.Rejected);
+        if (alreadyExistsForWeek)
+            return BadRequest(new { Success = false, Message = "You've already submitted an allocation for that week." });
+
         await using var tx = await _db.Database.BeginTransactionAsync();
 
         var allocation = new JmdoTaskAllocation
         {
-            AllocationDate = DateTime.Today,
+            AllocationDate = weekStart,
             SubmittedByUserId = userId,
             SubmittedByRole = CurrentRole(),
             HeadquarterId = CurrentHqId(),
@@ -162,23 +177,42 @@ public class JmdoTaskAllocationController : ControllerBase
     }
 
     // GET api/JmdoTaskAllocation/mine/today
+    // weekStart is optional and purely additive: omitted (the only way TaskDetail.razor calls
+    // this), behaviour is byte-for-byte what it always was - current week, falling back to the
+    // user's latest-ever allocation so there's always something to show. TasksAllocation.razor's
+    // "All Allocations" planning tab passes an explicit weekStart when the JMDO navigates to a
+    // week other than the current one - in that case the fallback is skipped, since silently
+    // substituting an unrelated week's old allocation would make it impossible to ever see (or
+    // start) a fresh, empty week.
     [Authorize(Roles = "Admin,MO,MDO,JMDO")]
     [HttpGet("mine/today")]
-    public async Task<ActionResult<JmdoTaskAllocationResponseDto>> GetMineToday()
+    public async Task<ActionResult<JmdoTaskAllocationResponseDto>> GetMineToday([FromQuery] DateTime? weekStart = null)
     {
         var userId = CurrentUserId();
         if (string.IsNullOrWhiteSpace(userId))
             return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
 
-        var allocation = await _db.JmdoTaskAllocations
+        var targetWeekStart = weekStart.HasValue ? WeekStartFor(weekStart.Value) : CurrentWeekStart();
+
+        var weekQuery = _db.JmdoTaskAllocations
             .Include(a => a.Dealers)
             .Include(a => a.Programs)
             .Include(a => a.Closeouts).ThenInclude(c => c.Products)
             .AsNoTracking()
-            .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId
-                && a.AllocationDate >= CurrentWeekStart() && a.AllocationDate < CurrentWeekStart().AddDays(7));
+            .Where(a => a.SubmittedByUserId == userId
+                && a.AllocationDate >= targetWeekStart && a.AllocationDate < targetWeekStart.AddDays(7));
 
-        if (allocation == null)
+        // Only for the explicit-week case (the planning tab): a Rejected allocation shouldn't
+        // read back as "already submitted" for that week, or the JMDO could never see (or
+        // start) a fresh wizard for a week the MDO rejected. The default/no-weekStart case below
+        // keeps its original behaviour untouched, since that one feeds TaskDetail.razor's "what
+        // am I actively working on" view, not the resubmission flow.
+        if (weekStart.HasValue)
+            weekQuery = weekQuery.Where(a => a.Status != JmdoTaskAllocationStatus.Rejected);
+
+        var allocation = await weekQuery.FirstOrDefaultAsync();
+
+        if (allocation == null && !weekStart.HasValue)
         {
             allocation = await _db.JmdoTaskAllocations
                 .Include(a => a.Dealers)
@@ -242,11 +276,9 @@ public class JmdoTaskAllocationController : ControllerBase
         return alloc;
     }
 
-    private static DateTime CurrentWeekStart()
-    {
-        var today = DateTime.Today;
-        return today.AddDays(-(int)today.DayOfWeek);
-    }
+    private static DateTime CurrentWeekStart() => WeekStartFor(DateTime.Today);
+
+    private static DateTime WeekStartFor(DateTime date) => date.Date.AddDays(-(int)date.Date.DayOfWeek);
 
     // GET api/JmdoTaskAllocation/pending
     // Feeds the MDO's "Allocation Requests" list - every Pending allocation

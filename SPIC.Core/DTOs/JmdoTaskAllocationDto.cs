@@ -20,6 +20,10 @@ namespace SPIC.Core.DTOs
         public int? DapTarget { get; set; }
         public int? NpsTarget { get; set; }
         public int? OthersTarget { get; set; }
+        // Which Sun-Sat week this submission plans for - any date within that week works, the
+        // server only uses it to find that week's Sunday. Null means "this week" (the original,
+        // only-ever-current-week behaviour), so existing callers need no change.
+        public DateTime? WeekStart { get; set; }
     }
 
     public class JmdoDealerAssignmentResponseDto
