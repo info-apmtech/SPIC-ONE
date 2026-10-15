@@ -1032,7 +1032,7 @@
                                     <div class="ta-week-target-tile">
                                         <div class="ta-week-target-top">
                                             <span><i class="bi @target.Icon"></i> @target.Label</span>
-                                            <span class="ta-summary-status-pill @SummaryStatusClass(target.Status)">@SummaryStatusLabel(target.Status)</span>
+                                            <span class="ta-summary-status-pill @SummaryStatusClass(target.EffectiveStatus)">@SummaryStatusLabel(target.EffectiveStatus)</span>
                                         </div>
                                         <div class="ta-week-target-bar"><div class="ta-week-target-bar-fill" style="width:@target.PercentDone%"></div></div>
                                         <div class="ta-week-target-numbers">Target <strong>@target.Target</strong> &middot; Achieved <strong>@target.Achieved</strong> &middot; Pending <strong>@target.Pending</strong></div>
@@ -1389,6 +1389,18 @@
         public AllocTaskStatus Status;
         public int Pending => Math.Max(Target - Achieved, 0);
         public int PercentDone => Target <= 0 ? 0 : Math.Min(100, (int)Math.Round(100.0 * Achieved / Target));
+
+        // What's actually shown on the pill - derived from Target/Achieved rather than trusting
+        // Status as-is. Status can be stale "Completed" for allocations marked done before the
+        // backend started gating that transition on the logged count actually reaching Target
+        // (see JmdoTaskAllocationController's CreateCloseout/UpdateMyTaskStatus) - showing
+        // "Completed" next to "Achieved 2 - Pending 198" read as a bug even though it was really
+        // just old data. Once Achieved truly reaches Target this always reads Completed, even if
+        // Status itself hasn't caught up yet.
+        public AllocTaskStatus EffectiveStatus =>
+            Target > 0 && Achieved >= Target ? AllocTaskStatus.Completed
+            : Status == AllocTaskStatus.Completed ? AllocTaskStatus.InProgress
+            : Status;
     }
 
     private sealed class WeekSummary
@@ -1501,14 +1513,28 @@
             }
         }
 
+        // "Done" for SPCM/PoS is re-derived from the real logged count vs Target here too, same
+        // as TargetBreakdown.EffectiveStatus above and for the same reason - a.SpcmStatus/
+        // a.PosLiquidationStatus can be stale "Completed" from before the backend started gating
+        // that transition on the count actually reaching Target, which would otherwise overstate
+        // OverallPercent (e.g. crediting SPCM as done at 2 of 200 achieved).
+        var allSpcmAchieved = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
+        var allPosCloseouts = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+        var spcmDone = a.SpcmTarget is > 0 && allSpcmAchieved >= a.SpcmTarget;
+        var posDone = (a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0)
+            && (a.UreaTarget is not > 0 || allPosCloseouts.Sum(c => c.Urea ?? 0) >= a.UreaTarget)
+            && (a.NpsTarget is not > 0 || allPosCloseouts.Sum(c => c.Nps ?? 0) >= a.NpsTarget)
+            && (a.DapTarget is not > 0 || allPosCloseouts.Sum(c => c.Dap ?? 0) >= a.DapTarget)
+            && (a.OthersTarget is not > 0 || allPosCloseouts.Sum(c => c.Other ?? 0) >= a.OthersTarget);
+
         var totalUnits = a.DealerAssignments.Count + a.Programs.Count
             + (a.SpcmTarget is > 0 ? 1 : 0)
             + (a.SoilSampleTarget is > 0 ? 1 : 0)
             + (a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0 ? 1 : 0);
         var doneUnits = a.DealerAssignments.Count(d => d.Status == AllocTaskStatus.Completed) + a.Programs.Count(p => p.Status == AllocTaskStatus.Completed)
-            + (a.SpcmTarget is > 0 && a.SpcmStatus == AllocTaskStatus.Completed ? 1 : 0)
+            + (spcmDone ? 1 : 0)
             + (a.SoilSampleTarget is > 0 && a.SoilSampleStatus == AllocTaskStatus.Completed ? 1 : 0)
-            + ((a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0) && a.PosLiquidationStatus == AllocTaskStatus.Completed ? 1 : 0);
+            + (posDone ? 1 : 0);
         week.OverallPercent = totalUnits == 0 ? 0 : (int)Math.Round(100.0 * doneUnits / totalUnits);
 
         return week;

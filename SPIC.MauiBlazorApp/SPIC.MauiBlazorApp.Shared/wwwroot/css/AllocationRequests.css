@@ -195,6 +195,12 @@
     color: #111827;
 }
 
+.alreq-card-hint {
+    margin: -0.8rem 0 1rem;
+    font-size: 0.8rem;
+    color: #000;
+}
+
 /* ---------- Dealer Tasks table ---------- */
 .alreq-table-scroll {
     overflow-x: auto;
@@ -326,9 +332,13 @@
    .alreq-th-sm's width inline instead (SmColumnWidthStyle), based on how many of them are
    actually rendered for the current role - that's the one source of truth that can't drift from
    what's really in the row. */
+/* 110px was too tight for "Review ->"/"Edit ->" at .alreq-btn-review's own padding/font-size -
+   table-layout: fixed doesn't let a cell grow to fit its content the way auto layout would, so
+   the button just overflowed its own cell's right edge instead of wrapping, bleeding into (and
+   visually past) the card's own right padding. */
 .alreq-page .spic-table th:last-child,
 .alreq-page .spic-table td.alreq-cell-actions {
-    width: 110px;
+    width: 140px;
     white-space: nowrap;
 }
 
@@ -478,6 +488,10 @@
     flex: 0 1 160px;
 }
 
+.alreq-add-field-priority {
+    flex: 0 1 180px;
+}
+
     .alreq-add-row .alreq-select {
         max-width: 320px;
         width: auto;
@@ -518,9 +532,35 @@
     grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
     gap: 20px;
     align-items: start;
+    margin-bottom: 20px;
 }
 
     .alreq-two-col .alreq-card {
+        margin-bottom: 0;
+    }
+
+/* SPCM/Soil Sample/PoS Liquidation stacked in the .alreq-two-col's left column, all the same
+   width (matching MD Programs' column being a fixed width too) instead of SPCM/Soil sitting
+   side by side at two different widths. Gap handles spacing between them since the descendant
+   selector above (.alreq-two-col .alreq-card) zeroes out each card's own margin-bottom
+   regardless of nesting depth. */
+.alreq-target-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+
+/* SPCM and Soil Sample side by side (each its own card, so neither is mistaken for part of the
+   other), sitting above PoS Liquidation Targets, which spans the full width of the same column
+   below them. */
+.alreq-target-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+    .alreq-target-pair .alreq-card {
         margin-bottom: 0;
     }
 
@@ -578,6 +618,12 @@
     border-radius: 50%;
     background: #4338ca;
     flex-shrink: 0;
+}
+
+/* Read-only - no remove button, so the extra right-padding .alreq-chip reserves for it
+   would otherwise look like empty dead space. */
+.alreq-chip-readonly {
+    padding: 5px 12px;
 }
 
 .alreq-chip-remove {
@@ -670,7 +716,8 @@
         grid-template-columns: 1fr;
     }
 
-    .alreq-target-grid {
+    .alreq-target-grid,
+    .alreq-target-pair {
         grid-template-columns: 1fr;
     }
 
@@ -786,7 +833,15 @@
         align-items: stretch;
     }
 
-    .alreq-add-field-date {
+    /* .alreq-add-field's own "flex: 1 1 220px" (and the date/priority fields' "0 1 160/180px")
+       are sized for the desktop ROW layout above - 220px/160px/180px there are WIDTH bases.
+       .alreq-add-row just became a COLUMN flex container on mobile, so that same flex-basis
+       would otherwise be read as a HEIGHT basis instead, stretching the dealer-select field to a
+       220px-tall box (confirmed by inspecting its rendered layout - the field's own height
+       matched the literal "220px" from its desktop flex-basis, not its actual content). Resets
+       all three fields' basis now that the axis has changed, same fix as
+       TasksAllocation.css's .ta-search-box/.ta-filter-select for the identical bug shape. */
+    .alreq-add-field {
         flex-basis: auto;
     }
 
@@ -801,3 +856,103 @@
 .alreq-page .text-muted {
     color: #000 !important;
 }
+
+/* ---------- Confirm modals (delete dealer task / approve allocation) ---------- */
+.alreq-modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+}
+
+.alreq-modal-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 24px;
+    width: 100%;
+    max-width: 440px;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+}
+
+.alreq-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+    .alreq-modal-header h4 {
+        margin: 0;
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: #111827;
+    }
+
+.alreq-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    color: #9ca3af;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.alreq-modal-body {
+    font-size: 0.92rem;
+    color: #1f2937;
+    line-height: 1.5;
+}
+
+.alreq-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 22px;
+}
+
+.alreq-modal-btn-outline,
+.alreq-modal-btn-danger,
+.alreq-modal-btn-primary {
+    border-radius: 8px;
+    padding: 0.55rem 1.1rem;
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+    border: none;
+}
+
+.alreq-modal-btn-outline {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    color: #374151;
+}
+
+    .alreq-modal-btn-outline:hover {
+        background: #f3f4f6;
+    }
+
+.alreq-modal-btn-danger {
+    background: #dc2626;
+    color: #fff;
+}
+
+    .alreq-modal-btn-danger:hover {
+        background: #b91c1c;
+    }
+
+.alreq-modal-btn-primary {
+    background: #4f46e5;
+    color: #fff;
+}
+
+    .alreq-modal-btn-primary:hover {
+        background: #4338ca;
+    }
+
+    .alreq-modal-btn-primary:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }

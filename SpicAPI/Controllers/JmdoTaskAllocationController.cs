@@ -149,7 +149,15 @@ public class JmdoTaskAllocationController : ControllerBase
                 SubDealerId = dealer.Id,
                 DealerName = dealer.FirmName,
                 DealerCode = dealer.SubDealerCode ?? "",
-                PlannedDay = assignment.Day
+                PlannedDay = assignment.Day,
+                // Stamped from the SAME weekStart as the allocation header, not left null -
+                // previously this was only ever backfilled client-side when the MDO's review page
+                // happened to load (AllocationRequestReview.razor), and an earlier version of that
+                // backfill used the wrong week basis, writing incorrect dates for any allocation
+                // planned for a week other than "this week". Setting it correctly here means
+                // PlannedDate is right from the moment of submission, with no dependency on that
+                // page ever being opened.
+                PlannedDate = weekStart.AddDays((int)assignment.Day)
             });
         }
 
@@ -732,6 +740,11 @@ public class JmdoTaskAllocationController : ControllerBase
             JmdoCode = info?.EmployeeCode,
             Location = info?.HeadquarterName,
             SubmittedAt = allocation.SubmittedAt,
+            // Normalized rather than trusted as-is - rows auto-provisioned before AllocationDate
+            // was always guaranteed to be a Sunday (see GetMyCurrentAllocationAsync) can still
+            // hold a non-Sunday date, which would otherwise shift the week-range the review page
+            // constrains dealer task dates to.
+            AllocationDate = WeekStartFor(allocation.AllocationDate),
             HeadquarterId = allocation.HeadquarterId,
             Dealers = allocation.Dealers.Select(d =>
             {
@@ -772,6 +785,16 @@ public class JmdoTaskAllocationController : ControllerBase
         });
     }
 
+    // A dealer task's date can't be moved outside the week the JMDO actually allocated for - the
+    // MDO is reviewing/adjusting that week's work order, not reassigning it to a different week
+    // entirely (that would need a brand new allocation). Normalizes AllocationDate first for the
+    // same reason GetById does.
+    private static bool IsWithinAllocationWeek(JmdoTaskAllocation allocation, DateTime date)
+    {
+        var weekStart = WeekStartFor(allocation.AllocationDate);
+        return date.Date >= weekStart && date.Date <= weekStart.AddDays(6);
+    }
+
     // POST api/JmdoTaskAllocation/{id}/dealers
     [Authorize(Roles = "Admin,MO,MDO")]
     [HttpPost("{id:int}/dealers")]
@@ -786,6 +809,9 @@ public class JmdoTaskAllocationController : ControllerBase
 
         if (dto.PlannedDate.HasValue)
         {
+            if (!IsWithinAllocationWeek(allocation, dto.PlannedDate.Value))
+                return BadRequest(new { Success = false, Message = "The date must fall within the JMDO's allocated week." });
+
             var alreadyOnThatDate = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
                 d.AllocationId == id && d.SubDealerId == dto.DealerId
                 && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == dto.PlannedDate.Value.Date);
@@ -803,7 +829,8 @@ public class JmdoTaskAllocationController : ControllerBase
             // The JMDO's own Today's/Completed Allocation views filter strictly by
             // Day == DateTime.Today.DayOfWeek - without this, a dealer the MDO adds here never
             // shows up for the JMDO at all, no matter what PlannedDate says.
-            PlannedDay = dto.PlannedDate?.DayOfWeek
+            PlannedDay = dto.PlannedDate?.DayOfWeek,
+            Priority = dto.Priority
         };
         _db.JmdoTaskAllocationDealers.Add(row);
         await _db.SaveChangesAsync();
@@ -851,6 +878,9 @@ public class JmdoTaskAllocationController : ControllerBase
 
         if (dto.PlannedDate.HasValue)
         {
+            if (!IsWithinAllocationWeek(allocation, dto.PlannedDate.Value))
+                return BadRequest(new { Success = false, Message = "The date must fall within the JMDO's allocated week." });
+
             var alreadyOnThatDate = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
                 d.AllocationId == id && d.Id != rowId && d.SubDealerId == row.SubDealerId
                 && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == dto.PlannedDate.Value.Date);
