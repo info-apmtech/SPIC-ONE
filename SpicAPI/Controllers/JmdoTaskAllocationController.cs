@@ -460,7 +460,13 @@ public class JmdoTaskAllocationController : ControllerBase
         {
             alloc = new JmdoTaskAllocation
             {
-                AllocationDate = DateTime.Today,
+                // The week's Sunday, same convention as Create's WeekStartFor(...) - using the
+                // literal DateTime.Today here (as this used to) stores a non-Sunday date whenever
+                // this auto-provisioning path fires on anything but a Sunday, which then silently
+                // breaks every later "which week does this belong to" comparison that assumes
+                // AllocationDate is already week-aligned (e.g. TasksAllocation.razor's Task
+                // History/Task Summary date filters).
+                AllocationDate = CurrentWeekStart(),
                 SubmittedByUserId = userId,
                 SubmittedByRole = CurrentRole(),
                 HeadquarterId = CurrentHqId(),
