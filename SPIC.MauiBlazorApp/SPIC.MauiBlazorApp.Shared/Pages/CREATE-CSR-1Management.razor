@@ -396,6 +396,8 @@ else
                     <th>Program Type</th>
                     <th>Program Name</th>
                     <th>Number of Programs</th>
+                    <th>Completed Programs</th>
+                    <th>Remaining Programs</th>
                     <th>Beneficiaries</th>
                     <th>Approved Budget</th>
                     <th style="text-align:right;">Action</th>
@@ -410,6 +412,8 @@ else
                     <td>@program.ProgramType</td>
                     <td>@program.ProgramName</td>
                     <td>@program.NumberOfPrograms</td>
+                    <td>@program.CompletedPrograms</td>
+                    <td>@program.RemainingPrograms</td>
                     <td>
                         @(string.IsNullOrWhiteSpace(program.Beneficiaries)
                             ? "-"
@@ -574,7 +578,9 @@ else
                         <label class="csr-form-label">Date</label>
                         <input type="date"
                                class="csr-form-control"
-                               @bind="selectedDate" />
+                               @bind="selectedDate"
+                               min="@ProgramMinDate"
+                               max="@ProgramMaxDate" />
                     </div>
 
                 </div>
@@ -2224,6 +2230,17 @@ else
     private bool showCSRPopup;
     private bool csrPopupSuccess = true;
     private string csrPopupMessage = string.Empty;
+    private int selectedBudgetProgramId = 0;
+
+    private string ProgramMinDate =>
+    GetTargetProgramMonth()
+        .ToString("yyyy-MM-dd");
+
+    private string ProgramMaxDate =>
+        GetTargetProgramMonth()
+            .AddMonths(1)
+            .AddDays(-1)
+            .ToString("yyyy-MM-dd");
 
     private void ShowCSRPopup(string message, bool success = true)
     {
@@ -2459,6 +2476,9 @@ else
         public string Beneficiaries { get; set; } = "";
 
         public bool IsSelected { get; set; }
+
+        public int CompletedPrograms { get; set; }
+        public decimal RemainingPrograms { get; set; }
     }
 
     private List<BudgetProgramFilterDto> budgetPrograms = new();
@@ -2725,7 +2745,8 @@ else
     {
         get
         {
-            IEnumerable<BudgetProgramFilterDto> result = budgetPrograms;
+            IEnumerable<BudgetProgramFilterDto> result = budgetPrograms
+    .Where(x => x.NumberOfPrograms > x.CompletedPrograms);
 
 
             // API already returns only Approved / Validated records.
@@ -2886,8 +2907,9 @@ else
         selectedProgramName = program.ProgramName;
         selectedProgramTypeId = program.ProgramTypeId;
         selectedProgramId = program.ProgramId;
+        selectedBudgetProgramId = program.Id;
         selectedBudget = program.TotalBudget;
-
+        selectedDate = GetTargetProgramMonth();
         programCount =
        program.NumberOfPrograms > 0
            ? (int)program.NumberOfPrograms
@@ -2948,17 +2970,18 @@ else
             // FIND SELECTED PROGRAM
             // =========================================================
 
-            var selectedProgram =
-                budgetPrograms.FirstOrDefault(x =>
-                    !string.IsNullOrWhiteSpace(x.ProgramType) &&
-                    !string.IsNullOrWhiteSpace(x.ProgramName) &&
-                    x.ProgramType.Equals(
-                        selectedProgramType,
-                        StringComparison.OrdinalIgnoreCase) &&
-                    x.ProgramName.Equals(
-                        selectedProgramName,
-                        StringComparison.OrdinalIgnoreCase));
-
+            // var selectedProgram =
+            //     budgetPrograms.FirstOrDefault(x =>
+            //         !string.IsNullOrWhiteSpace(x.ProgramType) &&
+            //         !string.IsNullOrWhiteSpace(x.ProgramName) &&
+            //         x.ProgramType.Equals(
+            //             selectedProgramType,
+            //             StringComparison.OrdinalIgnoreCase) &&
+            //         x.ProgramName.Equals(
+            //             selectedProgramName,
+            //             StringComparison.OrdinalIgnoreCase));
+            var selectedProgram = budgetPrograms.FirstOrDefault(x =>
+    x.Id == selectedBudgetProgramId);
             if (selectedProgram == null)
             {
                 ShowCSRPopup(
@@ -2989,7 +3012,7 @@ else
                 return;
             }
 
-            if (!isStateScope && selectedEmployeeId <= 0)
+            if (selectedEmployeeId <= 0)
             {
                 ShowCSRPopup("Please select Responsible Person.", false);
                 return;
@@ -3010,22 +3033,28 @@ else
                 ShowCSRPopup($"Total Expense Breakdown (₹{TotalExpense:N2}) exceeds the allocated Budget (₹{selectedBudget.Value:N2}). Total expenses must be within ₹{selectedBudget.Value:N2}.", false);
                 return;
             }
-
+            if (TotalExpense <= 0)
+            {
+                ShowCSRPopup(
+                    "Please enter at least one expense amount.",
+                    false);
+                return;
+            }
             // =========================================================
             // EXPENSE BREAKDOWN VALIDATION
             // Total Expense must exactly match Selected Budget
             // =========================================================
 
-            if (Math.Round(TotalExpense, 2) != Math.Round(selectedBudget.Value, 2))
-            {
-                ShowCSRPopup(
-                    $"Total Expense (₹{TotalExpense:N2}) must be equal to " +
-                    $"Selected Budget (₹{selectedBudget.Value:N2}). " +
-                    $"Difference: ₹{Math.Abs(TotalExpense - selectedBudget.Value):N2}."
-                , false);
+            // if (Math.Round(TotalExpense, 2) != Math.Round(selectedBudget.Value, 2))
+            // {
+            //     ShowCSRPopup(
+            //         $"Total Expense (₹{TotalExpense:N2}) must be equal to " +
+            //         $"Selected Budget (₹{selectedBudget.Value:N2}). " +
+            //         $"Difference: ₹{Math.Abs(TotalExpense - selectedBudget.Value):N2}."
+            //     , false);
 
-                return;
-            }
+            //     return;
+            // }
 
 
             // =========================================================
