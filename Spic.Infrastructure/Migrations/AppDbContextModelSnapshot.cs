@@ -810,6 +810,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("Budget")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("BudgetProgramId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CSR1Date")
                         .HasColumnType("timestamp without time zone");
 
@@ -870,7 +873,13 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("ProgramId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ProgramMonth")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ProgramTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProgramYear")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("PublicityMaterial")
