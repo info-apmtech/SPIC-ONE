@@ -304,16 +304,25 @@
    added in the .razor's TableHeader) removes that guesswork entirely. */
 .alreq-page .spic-table {
     table-layout: fixed;
+    /* Form.css's own .spic-table rule sets min-width: max-content (with white-space: nowrap),
+       which fights table-layout: fixed directly - it forces the whole table wider than its
+       container to fit every column's unwrapped text, so each column's % below gets computed
+       against that inflated width instead of the real container width. That's what was showing
+       as oversized gaps between columns AND a horizontal scrollbar that shouldn't be there. */
+    min-width: 0;
 }
 
 .alreq-page .spic-table th.alreq-th-jmdo {
     width: 20%;
 }
 
-.alreq-page .spic-table th.alreq-th-sm {
-    width: 9%;
-}
-
+/* .alreq-th-sm has no width here - the "Status" column only renders for Admin (MDO/MO never see
+   it), so a flat per-column % sized for one role's column count left the row short for the other
+   (and relying on table-layout: fixed to divide the leftover space equally on its own collapsed
+   every unsized column into the same spot instead). AllocationRequests.razor computes each
+   .alreq-th-sm's width inline instead (SmColumnWidthStyle), based on how many of them are
+   actually rendered for the current role - that's the one source of truth that can't drift from
+   what's really in the row. */
 .alreq-page .spic-table th:last-child,
 .alreq-page .spic-table td.alreq-cell-actions {
     width: 110px;

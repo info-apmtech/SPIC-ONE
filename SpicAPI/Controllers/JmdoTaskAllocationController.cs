@@ -396,6 +396,44 @@ public class JmdoTaskAllocationController : ControllerBase
         return EarthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 
+    // GET api/JmdoTaskAllocation/mine/all
+    // Every allocation the signed-in user has ever submitted (any week, any status), newest
+    // first. GetMineToday only ever returns ONE allocation (the current week's, or the latest as
+    // a fallback) - the "Completed Allocations" tab needs to show completed tasks from ANY past
+    // week now that a JMDO can submit for a week other than the current one (see Create's
+    // WeekStart), not just whatever happens to be "current" today.
+    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [HttpGet("mine/all")]
+    public async Task<ActionResult<List<JmdoTaskAllocationResponseDto>>> GetMineAll()
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var allocations = await _db.JmdoTaskAllocations
+            .Include(a => a.Dealers)
+            .Include(a => a.Programs)
+            .Include(a => a.Closeouts).ThenInclude(c => c.Products)
+            .AsNoTracking()
+            .Where(a => a.SubmittedByUserId == userId)
+            .OrderByDescending(a => a.AllocationDate)
+            .ToListAsync();
+
+        // One batched CSR1 lookup across every allocation's programs, instead of one query per
+        // allocation (GetMineToday only ever has one allocation to look up for).
+        var csr1Ids = allocations.SelectMany(a => a.Programs).Select(p => p.Csr1Id).Distinct().ToList();
+        var csr1Lookup = await _db.CSR1
+            .Where(c => csr1Ids.Contains(c.Id))
+            .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
+            .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
+
+        var result = allocations
+            .Select(a => ToResponseDto(a, a.Dealers.ToList(), a.Programs.ToList(), a.Closeouts.ToList(), csr1Lookup))
+            .ToList();
+
+        return Ok(result);
+    }
+
     // Shared by every endpoint that acts on "my own" current allocation (status
     // updates, close-out records) - falls back to the user's latest allocation or
     // provisions one so task execution and closeout never fail with 404.
