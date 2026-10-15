@@ -48,7 +48,7 @@ namespace Spic.Infrastructure.Services
                 UserName = dto.UserName,
                 Password = dto.Password,
                 Role = dto.Role,
-                DesignationId = dto.DesignationId ?? 0,
+                DesignationId = dto.DesignationId is > 0 ? dto.DesignationId : null,
                 CreatedAt = DateTime.Now,
                 CreatedBy = createdBy,
                 UpdatedBy = currentUserId
@@ -126,7 +126,12 @@ namespace Spic.Infrastructure.Services
 			user.UserName = dto.UserName ?? user.UserName;
 			user.Email = dto.Email ?? user.Email;
 			user.Role = dto.Role;
-			user.DesignationId = dto.DesignationId ?? user.DesignationId;
+			// null/omitted = leave unchanged; 0 or negative = explicitly clear it (same ">0 ?
+			// value : null" convention as CreateUserAsync, since 0 is never a real Designations.Id
+			// and would otherwise throw the same FK violation CreateUserAsync had); a real
+			// positive id = set it.
+			user.DesignationId = dto.DesignationId is null ? user.DesignationId
+				: dto.DesignationId > 0 ? dto.DesignationId : null;
 			user.UpdatedAt = DateTime.Now;
 			user.UpdatedBy = currentUserId;
 
