@@ -553,54 +553,6 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("AppUsageDaily");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.ApplicationPage", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("HasActions")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Module")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.ToTable("Pages");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.Bank", b =>
                 {
                     b.Property<int>("Id")
@@ -2760,33 +2712,6 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Designations");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.DesignationPermission", b =>
-                {
-                    b.Property<int>("DesignationId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PageId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("Delete")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("Entry")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("Update")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("View")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("DesignationId", "PageId");
-
-                    b.HasIndex("PageId");
-
-                    b.ToTable("DesignationPermissions");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
@@ -10487,25 +10412,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Consignment");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.DesignationPermission", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.Designation", "Designation")
-                        .WithMany()
-                        .HasForeignKey("DesignationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SPIC.Core.Entities.ApplicationPage", "Page")
-                        .WithMany()
-                        .HasForeignKey("PageId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Designation");
-
-                    b.Navigation("Page");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
