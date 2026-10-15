@@ -222,11 +222,6 @@
 
             </div>
 
-            @if (!string.IsNullOrEmpty(filterErrorMessage))
-            {
-                <div class="text-danger small mb-2" role="alert">@filterErrorMessage</div>
-            }
-
             <div class="csrm-filter-actions">
                 <button type="button" class="csrm-btn csrm-btn-outline" @onclick="ClearFilters">
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -422,10 +417,128 @@
     }
 </div>
 
+
+@if (showCSRPopup)
+{
+    <div class="csrm-toast-overlay">
+        <div class="csrm-toast-popup" role="alertdialog" aria-modal="true"
+             aria-labelledby="csrm-popup-title" aria-describedby="csrm-popup-message">
+            <div class="csrm-toast-icon @(csrPopupSuccess ? "success" : "error")" aria-hidden="true">
+                <i class="bi @(csrPopupSuccess ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+            </div>
+            <h3 id="csrm-popup-title">@(csrPopupSuccess ? "Success" : "Action Failed")</h3>
+            <p id="csrm-popup-message">@csrPopupMessage</p>
+            <button type="button" class="csrm-popup-confirm" @onclick="CloseCSRPopup">OK</button>
+        </div>
+    </div>
+}
+
+<style>
+    .csrm-toast-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, .48);
+    }
+
+    .csrm-toast-popup {
+        width: min(460px, 100%);
+        background: #fff;
+        border-radius: 18px;
+        padding: 38px 30px 30px;
+        text-align: center;
+        box-shadow: 0 24px 70px rgba(0,0,0,.22);
+        animation: csrmPopupIn .2s ease-out;
+    }
+
+    .csrm-toast-icon {
+        font-size: 60px;
+        margin-bottom: 14px;
+        line-height: 1.2;
+    }
+
+        .csrm-toast-icon.success {
+            color: #16a34a;
+        }
+
+        .csrm-toast-icon.error {
+            color: #dc2626;
+        }
+
+    .csrm-toast-popup h3 {
+        color: #0f172a;
+        font-size: 23px;
+        font-weight: 700;
+        margin: 0 0 12px;
+    }
+
+    .csrm-toast-popup p {
+        color: #475569;
+        font-size: 15px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+        margin: 0 0 26px;
+    }
+
+    .csrm-popup-confirm {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 135px;
+        min-height: 40px;
+        border: none;
+        border-radius: 6px;
+        padding: 10px 20px;
+        background: #2563eb;
+        color: white;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .csrm-popup-confirm:hover {
+            background: #1d4ed8;
+        }
+
+    @@keyframes csrmPopupIn {
+        from {
+            opacity: 0;
+            transform: translateY(12px) scale(.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+</style>
+
 <CSR1ProgramDetailsDrawer @bind-IsOpen="isCSR1ProgramDetailsDrawerOpen"
                           CSR1Id="@selectedCSR1Id"
                           OnStatusChanged="LoadCSR1" />
 @code {
+
+    private bool showCSRPopup;
+    private bool csrPopupSuccess = true;
+    private string csrPopupMessage = string.Empty;
+
+    private void ShowCSRPopup(string message, bool success = true)
+    {
+        csrPopupMessage = message;
+        csrPopupSuccess = success;
+        showCSRPopup = true;
+    }
+
+    private void CloseCSRPopup()
+    {
+        showCSRPopup = false;
+    }
+
+
     private bool isCSR1ProgramDetailsDrawerOpen = false;
     private int selectedCSR1Id = 0;
 
@@ -581,6 +694,7 @@
             selectedFromDate.Value.Date > selectedToDate.Value.Date)
         {
             filterErrorMessage = "From Date cannot be later than To Date.";
+            ShowCSRPopup(filterErrorMessage, false);
             return;
         }
 
@@ -618,21 +732,27 @@
     {
         try
         {
-            var response = await Http.DeleteAsync($"api/CSR1/{id}");
+            using var response = await Http.DeleteAsync($"api/CSR1/{id}");
 
             if (response.IsSuccessStatusCode)
             {
                 await LoadCSR1();
+                ShowCSRPopup("CSR-1 deleted successfully.");
             }
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
                 Console.WriteLine($"CSR1 Delete Error: {error}");
+                ShowCSRPopup(
+                    string.IsNullOrWhiteSpace(error)
+                        ? "Unable to delete CSR-1."
+                        : $"Unable to delete CSR-1. {error}", false);
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"CSR1 Delete Error: {ex.Message}");
+            ShowCSRPopup($"Unable to delete CSR-1. {ex.Message}", false);
         }
     }
 

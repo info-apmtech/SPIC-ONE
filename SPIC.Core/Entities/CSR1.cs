@@ -133,6 +133,10 @@ namespace SPIC.Core.Entities
         // -------------------------
         public string? Level3ApprovedBy { get; set; }
         public DateTime? Level3ApprovedAt { get; set; }
+
+        public int? BudgetProgramId { get; set; }
+        public int? ProgramMonth { get; set; }
+        public int? ProgramYear { get; set; }
     }
 
 
