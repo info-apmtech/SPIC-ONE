@@ -417,8 +417,8 @@ else
                     </td>
                     <td>
                         ₹@program.TotalBudget.ToString(
-                                                                                                                                                                                            "N0",
-                                                                                                                                                                                            CultureInfo.CreateSpecificCulture("en-IN"))
+                                                                                                                                                                                                                    "N0",
+                                                                                                                                                                                                                    CultureInfo.CreateSpecificCulture("en-IN"))
                     </td>
                     <td style="text-align:right;">
                         <button type="button"
@@ -994,7 +994,105 @@ else
     </div>
 }
 
+@if (showCSRPopup)
+{
+    <div class="csr-toast-overlay">
+        <div class="csr-toast-popup" role="alertdialog" aria-modal="true"
+             aria-labelledby="csr-popup-title" aria-describedby="csr-popup-message">
+            <div class="csr-toast-icon @(csrPopupSuccess ? "success" : "error")" aria-hidden="true">
+                <i class="bi @(csrPopupSuccess ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+            </div>
+            <h3 id="csr-popup-title">@(csrPopupSuccess ? "Success" : "Action Failed")</h3>
+            <p id="csr-popup-message">@csrPopupMessage</p>
+            <button type="button" class="csr-popup-confirm" @onclick="CloseCSRPopup">OK</button>
+        </div>
+    </div>
+}
+
 <style>
+    /* Centered CSR-1 notification, same styling as BudgetingManagements. */
+    .csr-toast-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, .48);
+    }
+
+    .csr-toast-popup {
+        width: min(460px, 100%);
+        background: #fff;
+        border-radius: 18px;
+        padding: 38px 30px 30px;
+        text-align: center;
+        box-shadow: 0 24px 70px rgba(0,0,0,.22);
+        animation: csrPopupIn .2s ease-out;
+    }
+
+    .csr-toast-icon {
+        font-size: 60px;
+        margin-bottom: 14px;
+        line-height: 1.2;
+    }
+
+        .csr-toast-icon.success {
+            color: #16a34a;
+        }
+
+        .csr-toast-icon.error {
+            color: #dc2626;
+        }
+
+    .csr-toast-popup h3 {
+        color: #0f172a;
+        font-size: 23px;
+        font-weight: 700;
+        margin: 0 0 12px;
+    }
+
+    .csr-toast-popup p {
+        color: #475569;
+        font-size: 15px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+        margin: 0 0 26px;
+    }
+
+    .csr-popup-confirm {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 135px;
+        background-color: #2563eb;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 10px 20px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .csr-popup-confirm:hover {
+            background-color: #1d4ed8;
+        }
+
+    @@keyframes csrPopupIn {
+        from {
+            opacity: 0;
+            transform: translateY(12px) scale(.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+
     /* Scoped layout additions */
     .csr-header-wrapper {
         display: flex;
@@ -1534,8 +1632,8 @@ else
             font-weight: 700;
         }
     /* =========================================================
-                                           BUDGET PLAN FILTER
-                                           ========================================================= */
+                                               BUDGET PLAN FILTER
+                                               ========================================================= */
 
     .csr-filter-card {
         background: #ffffff;
@@ -1872,7 +1970,7 @@ else
                 min-height: 44px;
             }
         /* minmax(0,…) so a long "₹ 50,00,000" cannot push the tile (and the
-                                               page) wider than the 392px viewport. */
+                                                   page) wider than the 392px viewport. */
         .csr-stats-grid-4 {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
@@ -1911,7 +2009,7 @@ else
             display: none; /* decorative only */
         }
         /* Program table becomes one card per program so "Apply CSR 1" and the
-                                               budget columns are on screen instead of off the right edge. */
+                                                   budget columns are on screen instead of off the right edge. */
         .csr-table-container {
             overflow: visible;
             padding: 0 12px 4px;
@@ -2076,7 +2174,7 @@ else
         }
 
     /* Budget plan list (SpicDataTable) pagination on phones: one row, "Items Per Page"
-               left and the pager right, only prev / current / next — same as the other lists. */
+                   left and the pager right, only prev / current / next — same as the other lists. */
     @@media (max-width: 767.98px) {
         .csr1c-page .spic-dt .pagination-container {
             flex-direction: row;
@@ -2123,6 +2221,23 @@ else
 </style>
 
 @code {
+    private bool showCSRPopup;
+    private bool csrPopupSuccess = true;
+    private string csrPopupMessage = string.Empty;
+
+    private void ShowCSRPopup(string message, bool success = true)
+    {
+        csrPopupMessage = message;
+        csrPopupSuccess = success;
+        showCSRPopup = true;
+    }
+
+    private void CloseCSRPopup()
+    {
+        showCSRPopup = false;
+    }
+
+
     // =========================================================
     // View State
     // =========================================================
@@ -2806,26 +2921,26 @@ else
 
             if (string.IsNullOrWhiteSpace(selectedProgramType))
             {
-                Toast.Error("Please select Program Type.");
+                ShowCSRPopup("Please select Program Type.", false);
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(selectedProgramName))
             {
-                Toast.Error("Please select Program Name.");
+                ShowCSRPopup("Please select Program Name.", false);
                 return;
             }
 
             if (programCount <= 0)
             {
-                Toast.Error("Please enter Number of Programs.");
+                ShowCSRPopup("Please enter Number of Programs.", false);
                 return;
             }
 
             if (!selectedBudget.HasValue ||
                 selectedBudget.Value <= 0)
             {
-                Toast.Error("Please enter Budget.");
+                ShowCSRPopup("Please enter Budget.", false);
                 return;
             }
 
@@ -2846,15 +2961,15 @@ else
 
             if (selectedProgram == null)
             {
-                Toast.Error(
-                    "Unable to find the selected program details.");
+                ShowCSRPopup(
+                    "Unable to find the selected program details.", false);
                 return;
             }
 
             if (selectedProgram.ProgramId <= 0)
             {
-                Toast.Error(
-                    "Invalid Program Id received from Budget data.");
+                ShowCSRPopup(
+                    "Invalid Program Id received from Budget data.", false);
                 return;
             }
 
@@ -2864,25 +2979,25 @@ else
 
             if (!isStateScope && selectedHQId <= 0)
             {
-                Toast.Error("Please select HQ.");
+                ShowCSRPopup("Please select HQ.", false);
                 return;
             }
 
             if (!isStateScope && selectedZoneId <= 0)
             {
-                Toast.Error("Please select Location.");
+                ShowCSRPopup("Please select Location.", false);
                 return;
             }
 
             if (!isStateScope && selectedEmployeeId <= 0)
             {
-                Toast.Error("Please select Responsible Person.");
+                ShowCSRPopup("Please select Responsible Person.", false);
                 return;
             }
 
             if (!selectedDate.HasValue || selectedDate.Value == default)
             {
-                Toast.Error("Please select Date.");
+                ShowCSRPopup("Please select Date.", false);
                 return;
             }
 
@@ -2892,7 +3007,7 @@ else
             // =========================================================
             if (TotalExpense > selectedBudget.Value)
             {
-                Toast.Error($"Total Expense Breakdown (₹{TotalExpense:N2}) exceeds the allocated Budget (₹{selectedBudget.Value:N2}). Total expenses must be within ₹{selectedBudget.Value:N2}.");
+                ShowCSRPopup($"Total Expense Breakdown (₹{TotalExpense:N2}) exceeds the allocated Budget (₹{selectedBudget.Value:N2}). Total expenses must be within ₹{selectedBudget.Value:N2}.", false);
                 return;
             }
 
@@ -2903,11 +3018,11 @@ else
 
             if (Math.Round(TotalExpense, 2) != Math.Round(selectedBudget.Value, 2))
             {
-                Toast.Error(
+                ShowCSRPopup(
                     $"Total Expense (₹{TotalExpense:N2}) must be equal to " +
                     $"Selected Budget (₹{selectedBudget.Value:N2}). " +
                     $"Difference: ₹{Math.Abs(TotalExpense - selectedBudget.Value):N2}."
-                );
+                , false);
 
                 return;
             }
@@ -2925,13 +3040,13 @@ else
 
             if (focusCrop1Id <= 0)
             {
-                Toast.Error("Please select Focus Crop 1.");
+                ShowCSRPopup("Please select Focus Crop 1.", false);
                 return;
             }
 
             if (focusProduct1Ids.Count == 0)
             {
-                Toast.Error("Please select at least one Product for Focus Crop 1.");
+                ShowCSRPopup("Please select at least one Product for Focus Crop 1.", false);
                 return;
             }
 
@@ -2942,7 +3057,7 @@ else
 
             if (focusCrop2Id > 0 && focusProduct2Ids.Count == 0)
             {
-                Toast.Error("Please select at least one Product for Focus Crop 2.");
+                ShowCSRPopup("Please select at least one Product for Focus Crop 2.", false);
                 return;
             }
 
@@ -2953,7 +3068,7 @@ else
 
             if (focusCrop3Id > 0 && focusProduct3Ids.Count == 0)
             {
-                Toast.Error("Please select at least one Product for Focus Crop 3.");
+                ShowCSRPopup("Please select at least one Product for Focus Crop 3.", false);
                 return;
             }
 
@@ -2965,7 +3080,7 @@ else
                 focusProduct2Ids.Count > 3 ||
                 focusProduct3Ids.Count > 3)
             {
-                Toast.Error("Maximum 3 products allowed per Focus section.");
+                ShowCSRPopup("Maximum 3 products allowed per Focus section.", false);
                 return;
             }
 
@@ -2973,7 +3088,7 @@ else
             if ((focusCrop2Id <= 0 && focusProduct2Ids.Any()) ||
                 (focusCrop3Id <= 0 && focusProduct3Ids.Any()))
             {
-                Toast.Error("Select a Focus Crop before selecting its products.");
+                ShowCSRPopup("Select a Focus Crop before selecting its products.", false);
                 return;
             }
 
@@ -2997,6 +3112,13 @@ else
 
             csr1Model.Budget =
                 selectedBudget.Value;
+
+            csr1Model.BudgetProgramId = selectedProgram.Id;
+
+            var targetProgramMonth = GetTargetProgramMonth();
+
+            csr1Model.ProgramMonth = targetProgramMonth.Month;
+            csr1Model.ProgramYear = targetProgramMonth.Year;
 
             csr1Model.HeadquarterId =
                 selectedHQId > 0 ? selectedHQId : null;
@@ -3172,7 +3294,7 @@ else
 
             if (response.IsSuccessStatusCode)
             {
-                Toast.Success(
+                ShowCSRPopup(
                     "CSR1 saved successfully");
 
                 ClearCSR1Form();
@@ -3188,10 +3310,10 @@ else
                     $"CSR1 API Error: {apiError}");
 
 
-                Toast.Error(
+                ShowCSRPopup(
                     string.IsNullOrWhiteSpace(apiError)
                         ? "Unable to submit CSR-1."
-                        : $"Unable to submit CSR-1. {apiError}");
+                        : $"Unable to submit CSR-1. {apiError}", false);
             }
         }
         catch (Exception ex)
@@ -3200,8 +3322,8 @@ else
                 $"CSR1 Submit Error: {ex}");
 
 
-            Toast.Error(
-                $"Error while submitting CSR-1: {ex.Message}");
+            ShowCSRPopup(
+                $"Error while submitting CSR-1: {ex.Message}", false);
         }
         finally
         {
@@ -3488,7 +3610,7 @@ else
 
         if (focusCrop1Id <= 0)
         {
-            Toast.Error("Please select Focus Crop 1 first.");
+            ShowCSRPopup("Please select Focus Crop 1 first.", false);
             selectedFocusProduct1Id = 0;
             return;
         }
@@ -3501,7 +3623,7 @@ else
 
         if (focusProduct1Ids.Count >= MaxFocusProducts)
         {
-            Toast.Error("Maximum 3 products allowed for Focus Crop 1.");
+            ShowCSRPopup("Maximum 3 products allowed for Focus Crop 1.", false);
             selectedFocusProduct1Id = 0;
             return;
         }
@@ -3529,7 +3651,7 @@ else
 
         if (focusCrop2Id <= 0)
         {
-            Toast.Error("Please select Focus Crop 2 first.");
+            ShowCSRPopup("Please select Focus Crop 2 first.", false);
             selectedFocusProduct2Id = 0;
             return;
         }
@@ -3542,7 +3664,7 @@ else
 
         if (focusProduct2Ids.Count >= MaxFocusProducts)
         {
-            Toast.Error("Maximum 3 products allowed for Focus Crop 2.");
+            ShowCSRPopup("Maximum 3 products allowed for Focus Crop 2.", false);
             selectedFocusProduct2Id = 0;
             return;
         }
@@ -3570,7 +3692,7 @@ else
 
         if (focusCrop3Id <= 0)
         {
-            Toast.Error("Please select Focus Crop 3 first.");
+            ShowCSRPopup("Please select Focus Crop 3 first.", false);
             selectedFocusProduct3Id = 0;
             return;
         }
@@ -3583,7 +3705,7 @@ else
 
         if (focusProduct3Ids.Count >= MaxFocusProducts)
         {
-            Toast.Error("Maximum 3 products allowed for Focus Crop 3.");
+            ShowCSRPopup("Maximum 3 products allowed for Focus Crop 3.", false);
             selectedFocusProduct3Id = 0;
             return;
         }

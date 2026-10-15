@@ -33,7 +33,15 @@ public sealed class JMDOAttendanceApi
     }
 
     /// <summary>The caller's own attendance row for today, or null if none has been marked yet.</summary>
-    public async Task<JMDOAttendanceDto?> GetTodayAsync(CancellationToken ct = default)
+    public async Task<JMDOAttendanceDto?> GetTodayAsync(CancellationToken ct = default) =>
+        (await LoadTodayAsync(ct)).Attendance;
+
+    /// <summary>
+    /// Like <see cref="GetTodayAsync"/>, but tells "no attendance today" (Loaded, Attendance null)
+    /// apart from "could not load" (not Loaded) - so callers only overwrite their duty status with
+    /// an authoritative answer.
+    /// </summary>
+    public async Task<(bool Loaded, JMDOAttendanceDto? Attendance)> LoadTodayAsync(CancellationToken ct = default)
     {
         try
         {
@@ -41,17 +49,41 @@ public sealed class JMDOAttendanceApi
             if (!response.IsSuccessStatusCode)
             {
                 _toast.Error("Could not load today's attendance.");
-                return null;
+                return (false, null);
             }
 
             var body = await response.Content.ReadAsStringAsync(ct);
-            if (string.IsNullOrWhiteSpace(body) || body == "null") return null;
+            if (string.IsNullOrWhiteSpace(body) || body == "null") return (true, null);
 
-            return JsonSerializer.Deserialize<JMDOAttendanceDto>(body, Json);
+            return (true, JsonSerializer.Deserialize<JMDOAttendanceDto>(body, Json));
         }
         catch (Exception)
         {
             _toast.Error("Could not reach the server to load today's attendance.");
+            return (false, null);
+        }
+    }
+
+    /// <summary>
+    /// The caller's current Sunday-Saturday week summary, or null on failure. No toast: the page
+    /// shows its own inline error state, and a failure here must not get in the way of marking attendance.
+    /// </summary>
+    public async Task<JMDOWeeklySummaryDto?> GetWeekAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await _http.GetAsync($"{Root}/week", ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"Loading the weekly attendance summary failed: HTTP {(int)response.StatusCode}");
+                return null;
+            }
+
+            return await response.Content.ReadFromJsonAsync<JMDOWeeklySummaryDto>(Json, ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading the weekly attendance summary failed: {ex.Message}");
             return null;
         }
     }

@@ -13,7 +13,7 @@ namespace SPIC.RegressionHarness;
 /// </summary>
 internal static class DataExplorerAuthorizationTests
 {
-	private const string Authorized = "62d84251-b25b-4986-bf7e-e9402bccb2bb";
+	private const string Authorized = "34efaa8c-a4a0-4063-8524-2a38393cda35";
 
 	public static void Run()
 	{

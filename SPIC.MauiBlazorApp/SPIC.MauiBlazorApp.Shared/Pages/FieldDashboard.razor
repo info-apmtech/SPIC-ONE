@@ -6,6 +6,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.FieldAttendanceState AttendanceState
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
+@inject SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi AttendanceApi
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -271,7 +272,21 @@
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
+        {
+            // Today's duty status from the database first, so opening this page straight after
+            // login shows (and starts tracking for) the real status, not the in-memory default.
+            if (LoginState.UserRole == AppRole.JMDO)
+            {
+                var (loaded, today) = await AttendanceApi.LoadTodayAsync();
+                if (loaded)
+                {
+                    AttendanceState.IsOnDuty = today?.DutyStatus == JMDODutyStatus.OnDuty;
+                    StateHasChanged();
+                }
+            }
+
             await StartTrackingIfNeededAsync();
+        }
     }
 
     private async Task StartTrackingIfNeededAsync()
