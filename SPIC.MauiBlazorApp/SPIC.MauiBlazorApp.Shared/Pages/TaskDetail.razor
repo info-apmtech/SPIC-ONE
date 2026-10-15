@@ -237,8 +237,16 @@
 
                     @if (kind == TaskKind.Spcm)
                     {
+                        @if (SpcmTargetValue > 0)
+                        {
+                            <div class="td-target-progress">
+                                <span>Weekly Target <strong>@SpcmTargetValue</strong></span>
+                                <span>Achieved So Far <strong>@SpcmAchievedSoFar</strong></span>
+                                <span>Remaining <strong>@SpcmRemaining</strong></span>
+                            </div>
+                        }
                         <label class="td-field-label" for="td-achieved">Achieved Target</label>
-                        <input id="td-achieved" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
+                        <input id="td-achieved" type="number" min="0" max="@SpcmRemaining" class="td-input" placeholder="e.g. 1" @bind="achievedTarget" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
                     }
 
                     @if (kind == TaskKind.PosLiquidation)
@@ -246,18 +254,34 @@
                         <div class="td-pos-grid">
                             <div>
                                 <label class="td-field-label" for="td-pos-urea">Urea</label>
+                                @if (PosUreaTargetValue > 0)
+                                {
+                                    <div class="td-target-progress td-target-progress-compact">Target <strong>@PosUreaTargetValue</strong> &middot; Done <strong>@PosUreaAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosUreaTargetValue - PosUreaAchievedSoFar, 0))</strong></div>
+                                }
                                 <input id="td-pos-urea" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posUrea" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
                             </div>
                             <div>
                                 <label class="td-field-label" for="td-pos-nps">NPKS</label>
+                                @if (PosNpsTargetValue > 0)
+                                {
+                                    <div class="td-target-progress td-target-progress-compact">Target <strong>@PosNpsTargetValue</strong> &middot; Done <strong>@PosNpsAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosNpsTargetValue - PosNpsAchievedSoFar, 0))</strong></div>
+                                }
                                 <input id="td-pos-nps" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posNps" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
                             </div>
                             <div>
                                 <label class="td-field-label" for="td-pos-dap">DAP</label>
+                                @if (PosDapTargetValue > 0)
+                                {
+                                    <div class="td-target-progress td-target-progress-compact">Target <strong>@PosDapTargetValue</strong> &middot; Done <strong>@PosDapAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosDapTargetValue - PosDapAchievedSoFar, 0))</strong></div>
+                                }
                                 <input id="td-pos-dap" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posDap" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
                             </div>
                             <div>
                                 <label class="td-field-label" for="td-pos-other">Other</label>
+                                @if (PosOtherTargetValue > 0)
+                                {
+                                    <div class="td-target-progress td-target-progress-compact">Target <strong>@PosOtherTargetValue</strong> &middot; Done <strong>@PosOtherAchievedSoFar</strong> &middot; Left <strong>@(Math.Max(PosOtherTargetValue - PosOtherAchievedSoFar, 0))</strong></div>
+                                }
                                 <input id="td-pos-other" type="number" min="0" class="td-input" placeholder="e.g. 1" @bind="posOther" @bind:event="oninput" disabled="@(!isStarted || isClosed)" readonly="@(!isStarted || isClosed)" />
                             </div>
                         </div>
@@ -574,6 +598,28 @@
     padding: 16px;
     vertical-align: middle;
 }
+.td-target-progress {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+.td-target-progress strong {
+    color: #111827;
+}
+.td-target-progress-compact {
+    background: none;
+    border: none;
+    padding: 0;
+    margin-bottom: 4px;
+    font-size: 0.72rem;
+}
 .td-spcm-badge {
     color: #15803d;
     border: 1px solid #86efac;
@@ -834,18 +880,7 @@
             catch { }
         }
 
-        try
-        {
-            var response = await Http.GetAsync("api/JmdoTaskAllocation/mine/today");
-            if (response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NoContent)
-            {
-                currentAllocation = await response.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Allocation load failed: {ex.Message}");
-        }
+        currentAllocation = await FetchCurrentAllocationAsync();
 
         if (currentAllocation != null)
         {
@@ -1055,6 +1090,37 @@
         posRecords = allocation.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
     }
 
+    private async Task<JmdoTaskAllocationResponseDto?> FetchCurrentAllocationAsync()
+    {
+        try
+        {
+            var response = await Http.GetAsync("api/JmdoTaskAllocation/mine/today");
+            if (response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NoContent)
+            {
+                return await response.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Allocation load failed: {ex.Message}");
+        }
+        return null;
+    }
+
+    // Re-syncs isStarted/isClosed/the records lists from the server after saving a close-out
+    // record - needed because SPCM/PoS Liquidation can now auto-complete the moment a save
+    // pushes the logged count to the weekly target (see CreateCloseout), so the form has to
+    // disable itself right away instead of waiting for a page reload to notice.
+    private async Task ReloadAllocationStateAsync()
+    {
+        var allocation = await FetchCurrentAllocationAsync();
+        if (allocation == null) return;
+
+        currentAllocation = allocation;
+        await ApplyStatusFromAllocationAsync(allocation);
+        PopulateCloseoutRecords(allocation);
+    }
+
     private static string ProductsSummary(JmdoTaskCloseoutDto record) =>
         record.Products.Any() ? $"{record.Products.Count} product(s)" : "None";
 
@@ -1169,6 +1235,23 @@
     }
 
     private string ElapsedDisplay => TimeSpan.FromSeconds(elapsedSeconds).ToString(@"mm\:ss");
+
+    // SPCM/PoS are weekly count targets, not a single visit - these surface "how much is left"
+    // so the JMDO can see progress before saving, instead of finding out only when a save is
+    // rejected for exceeding what's left (see CreateCloseout's server-side gate, which is the
+    // authoritative check - these are just for display/UX).
+    private int SpcmAchievedSoFar => spcmRecords.Sum(r => r.AchievedTarget ?? 0);
+    private int SpcmTargetValue => currentAllocation?.SpcmTarget ?? 0;
+    private int SpcmRemaining => Math.Max(SpcmTargetValue - SpcmAchievedSoFar, 0);
+
+    private int PosUreaAchievedSoFar => posRecords.Sum(r => r.Urea ?? 0);
+    private int PosNpsAchievedSoFar => posRecords.Sum(r => r.Nps ?? 0);
+    private int PosDapAchievedSoFar => posRecords.Sum(r => r.Dap ?? 0);
+    private int PosOtherAchievedSoFar => posRecords.Sum(r => r.Other ?? 0);
+    private int PosUreaTargetValue => currentAllocation?.UreaTarget ?? 0;
+    private int PosNpsTargetValue => currentAllocation?.NpsTarget ?? 0;
+    private int PosDapTargetValue => currentAllocation?.DapTarget ?? 0;
+    private int PosOtherTargetValue => currentAllocation?.OthersTarget ?? 0;
 
     private string outcome = "Fully Completed";
     private string remarks = "";
@@ -1484,7 +1567,18 @@
             var response = await Http.PostAsJsonAsync("api/JmdoTaskAllocation/closeouts", dto);
             if (!response.IsSuccessStatusCode)
             {
-                Toast.Error("Could not save the record. Please try again.");
+                var errorMsg = "Could not save the record. Please try again.";
+                try
+                {
+                    var errObj = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+                    if (errObj.TryGetProperty("message", out var m) || errObj.TryGetProperty("Message", out m))
+                    {
+                        var text = m.GetString();
+                        if (!string.IsNullOrWhiteSpace(text)) errorMsg = text;
+                    }
+                }
+                catch { }
+                Toast.Error(errorMsg);
                 return;
             }
 
@@ -1504,7 +1598,21 @@
             remarks = "";
             ResetFileSelection();
 
-            Toast.Success("Record saved.");
+            // SPCM/PoS can auto-complete server-side the instant this save pushes the logged
+            // count to the weekly target (see CreateCloseout) - re-sync local state right away
+            // so the form disables itself without waiting for a page reload.
+            if (kind == TaskKind.Spcm || kind == TaskKind.PosLiquidation)
+            {
+                var wasClosed = isClosed;
+                await ReloadAllocationStateAsync();
+                Toast.Success(isClosed && !wasClosed
+                    ? "Record saved - weekly target reached, task completed!"
+                    : "Record saved.");
+            }
+            else
+            {
+                Toast.Success("Record saved.");
+            }
         }
         catch (Exception ex)
         {

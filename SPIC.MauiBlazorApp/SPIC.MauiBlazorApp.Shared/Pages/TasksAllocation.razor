@@ -1460,12 +1460,16 @@
 
         if (!dealerFilterActive)
         {
-            var spcmAchieved = a.Closeouts.FirstOrDefault(c => c.Kind == JmdoCloseoutKind.Spcm)?.AchievedTarget;
-            var posCloseout = a.Closeouts.FirstOrDefault(c => c.Kind == JmdoCloseoutKind.PosLiquidation);
+            // Sum across EVERY closeout of that Kind, not just the first one - SPCM/PoS are
+            // weekly count targets a JMDO can log against on several different days (see
+            // JmdoTaskAllocationController's CreateCloseout), so a single FirstOrDefault()
+            // under-reported "Achieved" the moment more than one record existed for the week.
+            var spcmAchieved = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
+            var posCloseouts = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
 
             if (a.SpcmTarget is > 0 && MatchesStatus(a.SpcmStatus))
             {
-                week.Targets.Add(new TargetBreakdown { Label = "SPCM", Icon = "bi-bullseye", Target = a.SpcmTarget.Value, Achieved = spcmAchieved ?? 0, Status = a.SpcmStatus });
+                week.Targets.Add(new TargetBreakdown { Label = "SPCM", Icon = "bi-bullseye", Target = a.SpcmTarget.Value, Achieved = spcmAchieved, Status = a.SpcmStatus });
             }
 
             if (a.SoilSampleTarget is > 0 && MatchesStatus(a.SoilSampleStatus))
@@ -1479,13 +1483,13 @@
             if (MatchesStatus(a.PosLiquidationStatus))
             {
                 if (a.UreaTarget > 0)
-                    week.Targets.Add(new TargetBreakdown { Label = "Urea", Icon = "bi-box-seam", Target = a.UreaTarget.Value, Achieved = posCloseout?.Urea ?? 0, Status = a.PosLiquidationStatus });
+                    week.Targets.Add(new TargetBreakdown { Label = "Urea", Icon = "bi-box-seam", Target = a.UreaTarget.Value, Achieved = posCloseouts.Sum(c => c.Urea ?? 0), Status = a.PosLiquidationStatus });
                 if (a.NpsTarget > 0)
-                    week.Targets.Add(new TargetBreakdown { Label = "NPKS", Icon = "bi-box-seam", Target = a.NpsTarget.Value, Achieved = posCloseout?.Nps ?? 0, Status = a.PosLiquidationStatus });
+                    week.Targets.Add(new TargetBreakdown { Label = "NPKS", Icon = "bi-box-seam", Target = a.NpsTarget.Value, Achieved = posCloseouts.Sum(c => c.Nps ?? 0), Status = a.PosLiquidationStatus });
                 if (a.DapTarget > 0)
-                    week.Targets.Add(new TargetBreakdown { Label = "DAP", Icon = "bi-box-seam", Target = a.DapTarget.Value, Achieved = posCloseout?.Dap ?? 0, Status = a.PosLiquidationStatus });
+                    week.Targets.Add(new TargetBreakdown { Label = "DAP", Icon = "bi-box-seam", Target = a.DapTarget.Value, Achieved = posCloseouts.Sum(c => c.Dap ?? 0), Status = a.PosLiquidationStatus });
                 if (a.OthersTarget > 0)
-                    week.Targets.Add(new TargetBreakdown { Label = "Other", Icon = "bi-box-seam", Target = a.OthersTarget.Value, Achieved = posCloseout?.Other ?? 0, Status = a.PosLiquidationStatus });
+                    week.Targets.Add(new TargetBreakdown { Label = "Other", Icon = "bi-box-seam", Target = a.OthersTarget.Value, Achieved = posCloseouts.Sum(c => c.Other ?? 0), Status = a.PosLiquidationStatus });
             }
         }
 
