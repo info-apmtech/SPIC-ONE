@@ -107,7 +107,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 
         // The ceilings the API enforces (LibraryController.MaxCoverBytes / MaxVideoBytes / MaxDocumentBytes).
         public const long MaxCoverBytes = 5L * 1024 * 1024;
-        public const long MaxVideoBytes = 200L * 1024 * 1024;
+        public const long MaxVideoBytes = 700L * 1024 * 1024;
         public const long MaxDocumentBytes = 25L * 1024 * 1024;
 
         public Task<LibraryFileDto?> UploadCoverAsync(int id, IBrowserFile file, CancellationToken ct = default)
