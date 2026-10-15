@@ -446,6 +446,27 @@
                             </span>
                         </button>
                     }
+
+                    @if (!todayStepperCollapsed)
+                    {
+                        <!-- Explains what each task card's colour theme means (see StatusCardClass /
+                             .ta-today-card.ta-status-* below) - same 3 stages as the filters above,
+                             just as a colour key instead of a clickable filter. -->
+                        <div class="ta-status-legend">
+                            <div class="ta-status-legend-item">
+                                <span class="ta-status-legend-dot ta-legend-yettostart"></span>
+                                Yet to Start
+                            </div>
+                            <div class="ta-status-legend-item">
+                                <span class="ta-status-legend-dot ta-legend-inprogress"></span>
+                                In Progress
+                            </div>
+                            <div class="ta-status-legend-item">
+                                <span class="ta-status-legend-dot ta-legend-completed"></span>
+                                Completed
+                            </div>
+                        </div>
+                    }
                 </div>
 
                 <button type="button" class="ta-stepper-toggle" title="@(todayStepperCollapsed ? "Expand" : "Collapse")" @onclick="() => todayStepperCollapsed = !todayStepperCollapsed">
@@ -461,7 +482,7 @@
                         }
                         else
                         {
-                            @if (CountByStatus(todayFilter) == 0)
+                            @if (BadgeCount(todayFilter) == 0)
                             {
                                 <EmptyState Icon="bi-inbox" Title="@EmptyTodayTitle" Compact="true" />
                             }
@@ -470,7 +491,7 @@
                                 @foreach (var assignment in todayAllocation.DealerAssignments.Where(d => d.Day == DateTime.Today.DayOfWeek))
                                 {
                                     var dStatus = GetStatus($"dealer_{assignment.DealerId}");
-                                    @if (dStatus == todayFilter)
+                                    @if (MatchesTodayFilter(dStatus))
                                     {
                                         <div class="ta-today-card @StatusCardClass(dStatus)">
                                             <div class="ta-dealer-top">
@@ -513,7 +534,7 @@
                                 @foreach (var program in todayAllocation.Programs)
                                 {
                                     var pStatus = GetStatus($"prog_{program.Csr1Id}");
-                                    @if (pStatus == todayFilter)
+                                    @if (MatchesTodayFilter(pStatus))
                                     {
                                         <div class="ta-today-card @StatusCardClass(pStatus)">
                                             <div class="ta-dealer-top">
@@ -551,7 +572,7 @@
                                 }
 
                                 var spcmStatus = GetStatus("spcm");
-                                @if (todayAllocation.SpcmTarget is > 0 && spcmStatus == todayFilter)
+                                @if (todayAllocation.SpcmTarget is > 0 && MatchesTodayFilter(spcmStatus))
                                 {
                                     <div class="ta-today-card ta-today-card-narrow @StatusCardClass(spcmStatus)">
                                         <span class="ta-type-pill ta-type-pill-teal"><i class="bi bi-bullseye"></i> SPCM</span>
@@ -571,7 +592,7 @@
                                 }
 
                                 var soilStatus = GetStatus("soil");
-                                @if (todayAllocation.SoilSampleTarget is > 0 && soilStatus == todayFilter)
+                                @if (todayAllocation.SoilSampleTarget is > 0 && MatchesTodayFilter(soilStatus))
                                 {
                                     <div class="ta-today-card ta-today-card-narrow @StatusCardClass(soilStatus)">
                                         <span class="ta-type-pill ta-type-pill-orange"><i class="bi bi-moisture"></i> Soil Sample</span>
@@ -591,7 +612,7 @@
                                 }
 
                                 var posStatus = GetStatus("pos");
-                                @if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && posStatus == todayFilter)
+                                @if ((todayAllocation.UreaTarget > 0 || todayAllocation.NpsTarget > 0 || todayAllocation.DapTarget > 0 || todayAllocation.OthersTarget > 0) && MatchesTodayFilter(posStatus))
                                 {
                                     <div class="ta-today-card ta-today-card-wide @StatusCardClass(posStatus)">
                                         <span class="ta-type-pill ta-type-pill-grey"><i class="bi bi-box-seam"></i> PoS Liquidation</span>
@@ -996,17 +1017,23 @@
     // their Start/Stop progress is real, persisted on the backend (per-dealer
     // and per-program Status columns, plus Spcm/SoilSample/PosLiquidation
     // Status on the allocation header), not just a filter label.
-    private AllocTaskStatus todayFilter = AllocTaskStatus.YetToStart;
+    // Nullable: null means "All" (every task regardless of status), not a real AllocTaskStatus
+    // value - that enum is also the backend's real per-task status column, so a UI-only "show
+    // everything" concept doesn't belong as a member of it.
+    private AllocTaskStatus? todayFilter = AllocTaskStatus.YetToStart;
     private bool todayStepperCollapsed;
 
-    private sealed record TodayFilter(int Number, string Label, AllocTaskStatus Status);
+    private sealed record TodayFilter(int Number, string Label, AllocTaskStatus? Status);
 
     private static readonly List<TodayFilter> TodayFilters = new()
     {
         new(1, "Yet to Start", AllocTaskStatus.YetToStart),
         new(2, "In Progress", AllocTaskStatus.InProgress),
-        new(3, "Completed", AllocTaskStatus.Completed)
+        new(3, "Completed", AllocTaskStatus.Completed),
+        new(4, "All", null)
     };
+
+    private bool MatchesTodayFilter(AllocTaskStatus status) => todayFilter is null || todayFilter == status;
 
     // Parses the same "dealer_{id}" / "prog_{id}" / "spcm" / "soil" / "pos" key
     // convention TaskDetail.razor builds for itself, reading status straight off
@@ -1076,13 +1103,17 @@
     // numbers don't correspond to this placeholder set - they represent
     // other tasks not shown here). CountByStatus stays live since it drives
     // which cards are actually visible under each filter.
-    private int BadgeCount(AllocTaskStatus status) => CountByStatus(status);
+    // null ("All") sums every status instead of counting one specific status.
+    private int BadgeCount(AllocTaskStatus? status) => status is null
+        ? CountByStatus(AllocTaskStatus.YetToStart) + CountByStatus(AllocTaskStatus.InProgress) + CountByStatus(AllocTaskStatus.Completed)
+        : CountByStatus(status.Value);
 
     private string EmptyTodayTitle => todayFilter switch
     {
         AllocTaskStatus.YetToStart => "Nothing left to start",
         AllocTaskStatus.InProgress => "Nothing in progress right now",
-        _ => "Nothing completed yet"
+        AllocTaskStatus.Completed => "Nothing completed yet",
+        _ => "No tasks assigned yet"
     };
 
     // Card theme + button label follow the task's own status, not just
