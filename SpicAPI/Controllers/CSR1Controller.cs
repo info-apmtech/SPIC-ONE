@@ -5,9 +5,11 @@ using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
+using SpicAPI.Services;
 using System.Security.Claims;
 using System.Xml;
 using static SPIC.Core.Entities.EmployeeRegistration;
+using System.Linq;
 
 namespace SpicAPI.Controllers
 {
@@ -130,13 +132,15 @@ namespace SpicAPI.Controllers
         {
             if (!string.IsNullOrEmpty(creatorRole))
             {
-                if (string.Equals(creatorRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                if (string.Equals(creatorRole, "SMDO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(creatorRole, AppRole.SMM.ToString(), StringComparison.OrdinalIgnoreCase))
                 {
                     return "State";
                 }
 
-                if (string.Equals(creatorRole, AppRole.MDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                if (string.Equals(creatorRole, "RMDO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, AppRole.MDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(creatorRole, AppRole.JMDO.ToString(), StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(creatorRole, AppRole.MO.ToString(), StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(creatorRole, AppRole.RM.ToString(), StringComparison.OrdinalIgnoreCase) ||
@@ -149,6 +153,7 @@ namespace SpicAPI.Controllers
             // Fallback: If HeadquarterId is present and > 0, it's HQ scope; otherwise State scope.
             return (headquarterId.HasValue && headquarterId.Value > 0) ? "HQ" : "State";
         }
+
 
         private async Task<(string Scope, string? CreatorRole)> ResolveCSR1ScopeAsync(CSR1 csr1)
         {
@@ -173,7 +178,7 @@ namespace SpicAPI.Controllers
 
         [HttpPost]
         public async Task<IActionResult> SaveCSR1(
-    [FromBody] CSR1SaveRequest request)
+[FromBody] CSR1SaveRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -329,6 +334,39 @@ namespace SpicAPI.Controllers
 
                 model.Status =
                     "SubmittedForValidation";
+
+                // NEW: Post-26th application rules only. Keep legacy validation workflow.
+                // Server date determines which approval workflow this record uses.
+                if (Csr1WorkflowRules.IsThreeLevelApplication(currentDate))
+                {
+                    var callerRoles = User.FindAll(ClaimTypes.Role)
+                        .Select(x => x.Value.Trim())
+                        .ToArray();
+
+                    if (!callerRoles.Any(Csr1WorkflowRules.CanApplyThreeLevel))
+                        return StatusCode(StatusCodes.Status403Forbidden, new
+                        {
+                            message = "After the 26th, only MO, SMDO or RMDO can submit CSR-1."
+                        });
+
+                    // CSR1Date is treated as PROGRAM date (not application date).
+                    var allowedMonth = Csr1WorkflowRules.AllowedProgramMonth(currentDate);
+                    if (model.CSR1Date == default ||
+                        model.CSR1Date.Year != allowedMonth.Year ||
+                        model.CSR1Date.Month != allowedMonth.Month)
+                        return BadRequest(new
+                        {
+                            message = $"After the 26th, only {allowedMonth:MMMM yyyy} programs can be submitted."
+                        });
+
+                    // Do not allow incoming CreatedAt to impersonate an old workflow.
+                    model.CreatedAt = currentDate;
+                    model.CreatedBy = CurrentUserId;
+                    model.UpdatedBy = CurrentUserId;
+
+                    // SubmittedForValidation remains mandatory; no automatic approval.
+                    // On validation: Validated -> Level1Approved -> Level2Approved -> Approved.
+                }
 
 
                 // =====================================================
@@ -674,10 +712,11 @@ namespace SpicAPI.Controllers
         // PUT: api/CSR1/5
         // ============================================================
 
+
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
-     int id,
-     [FromBody] CSR1SaveRequest request)
+            int id,
+            [FromBody] CSR1SaveRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -688,29 +727,40 @@ namespace SpicAPI.Controllers
                 {
                     return BadRequest(new
                     {
-                        message =
-                            "Invalid CSR1 data."
+                        message = "Invalid CSR1 data."
                     });
                 }
 
+                var entity = request.CSR1;
 
-                var entity =
-                    request.CSR1;
-
-
-                var existing =
-                    await _csr1Repo.GetByIdAsync(id);
-
+                var existing = await _csr1Repo.GetByIdAsync(id);
 
                 if (existing == null)
                 {
                     return NotFound(new
                     {
-                        message =
-                            "CSR1 record not found"
+                        message = "CSR1 record not found"
                     });
                 }
 
+                // =====================================================
+                // NEW: THREE-LEVEL CSR1 EDIT RESTRICTION (AFTER 26TH)
+                // Existing CSR1 workflow remains unchanged.
+                // =====================================================
+
+                if (Csr1WorkflowRules.IsThreeLevelApplication(existing.CreatedAt))
+                {
+                    if (!string.Equals(
+                        existing.Status,
+                        "Draft",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Submitted three-level CSR-1 cannot be edited through this endpoint."
+                        });
+                    }
+                }
 
                 // =====================================================
                 // VALIDATE PROGRAM
@@ -720,142 +770,113 @@ namespace SpicAPI.Controllers
                 {
                     return BadRequest(new
                     {
-                        message =
-                            "ProgramId is required."
+                        message = "ProgramId is required."
                     });
                 }
 
-
-                var programMaster =
-                    await _programMasterRepo
-                        .GetWhere(x =>
-                            x.Id == entity.ProgramId)
-                        .FirstOrDefaultAsync();
-
+                var programMaster = await _programMasterRepo
+                    .GetWhere(x => x.Id == entity.ProgramId)
+                    .FirstOrDefaultAsync();
 
                 if (programMaster == null)
                 {
                     return BadRequest(new
                     {
-                        message =
-                            "Selected Program not found."
+                        message = "Selected Program not found."
                     });
                 }
 
-
-                entity.ProgramTypeId =
-                    programMaster.ProgramTypeId;
-
+                entity.ProgramTypeId = programMaster.ProgramTypeId;
 
                 // =====================================================
                 // UPDATE AUDIT
                 // =====================================================
 
-                entity.Id =
-                    id;
+                entity.Id = id;
 
                 var currentUserId = CurrentUserId;
-                var resolvedUserId = (!string.IsNullOrWhiteSpace(currentUserId) && currentUserId != "System" && currentUserId.Contains("-"))
-                    ? currentUserId
-                    : (!string.IsNullOrWhiteSpace(entity.UpdatedBy) && entity.UpdatedBy.Contains("-") ? entity.UpdatedBy : currentUserId);
 
-                // Preserve CreatedBy, but heal if existing record saved username instead of ID
+                var resolvedUserId =
+                    (!string.IsNullOrWhiteSpace(currentUserId) &&
+                     currentUserId != "System" &&
+                     currentUserId.Contains("-"))
+                        ? currentUserId
+                        : (!string.IsNullOrWhiteSpace(entity.UpdatedBy) &&
+                           entity.UpdatedBy.Contains("-")
+                            ? entity.UpdatedBy
+                            : currentUserId);
+
+                // Preserve CreatedBy, but heal if existing record
+                // saved username instead of ID.
                 var createdBy = existing.CreatedBy;
-                if ((string.IsNullOrWhiteSpace(createdBy) || !createdBy.Contains("-")) 
-                    && !string.IsNullOrWhiteSpace(entity.CreatedBy) && entity.CreatedBy.Contains("-"))
+
+                if ((string.IsNullOrWhiteSpace(createdBy) ||
+                     !createdBy.Contains("-")) &&
+                    !string.IsNullOrWhiteSpace(entity.CreatedBy) &&
+                    entity.CreatedBy.Contains("-"))
                 {
                     createdBy = entity.CreatedBy;
                 }
 
-                entity.CreatedBy =
-                    createdBy;
+                entity.CreatedBy = createdBy;
+                entity.CreatedAt = existing.CreatedAt;
 
-                entity.CreatedAt =
-                    existing.CreatedAt;
-
-                entity.UpdatedBy =
-                    resolvedUserId;
-
-                entity.UpdatedAt =
-                    DateTime.Now;
-
-                entity.IsActive =
-                    existing.IsActive;
-
+                entity.UpdatedBy = resolvedUserId;
+                entity.UpdatedAt = DateTime.Now;
+                entity.IsActive = existing.IsActive;
 
                 // =====================================================
                 // UPDATE CSR1
                 // =====================================================
 
-                var updated =
-                    await _csr1Repo.PatchAsync(
-                        id,
-                        entity);
-
+                var updated = await _csr1Repo.PatchAsync(id, entity);
 
                 if (updated == null)
                 {
                     return NotFound(new
                     {
-                        message =
-                            "CSR1 record not found."
+                        message = "CSR1 record not found."
                     });
                 }
-
 
                 // =====================================================
                 // DELETE OLD GROUP 1
                 // =====================================================
 
-                var existingProducts1 =
-                    await _csr1Products1Repo
-                        .GetWhere(x =>
-                            x.CSR1Id == id)
-                        .ToListAsync();
-
+                var existingProducts1 = await _csr1Products1Repo
+                    .GetWhere(x => x.CSR1Id == id)
+                    .ToListAsync();
 
                 foreach (var item in existingProducts1)
                 {
-                    await _csr1Products1Repo
-                        .DeleteAsync(item.Id);
+                    await _csr1Products1Repo.DeleteAsync(item.Id);
                 }
-
 
                 // =====================================================
                 // DELETE OLD GROUP 2
                 // =====================================================
 
-                var existingProducts2 =
-                    await _csr1Products2Repo
-                        .GetWhere(x =>
-                            x.CSR1Id == id)
-                        .ToListAsync();
-
+                var existingProducts2 = await _csr1Products2Repo
+                    .GetWhere(x => x.CSR1Id == id)
+                    .ToListAsync();
 
                 foreach (var item in existingProducts2)
                 {
-                    await _csr1Products2Repo
-                        .DeleteAsync(item.Id);
+                    await _csr1Products2Repo.DeleteAsync(item.Id);
                 }
-
 
                 // =====================================================
                 // DELETE OLD GROUP 3
                 // =====================================================
 
-                var existingProducts3 =
-                    await _csr1Products3Repo
-                        .GetWhere(x =>
-                            x.CSR1Id == id)
-                        .ToListAsync();
-
+                var existingProducts3 = await _csr1Products3Repo
+                    .GetWhere(x => x.CSR1Id == id)
+                    .ToListAsync();
 
                 foreach (var item in existingProducts3)
                 {
-                    await _csr1Products3Repo
-                        .DeleteAsync(item.Id);
+                    await _csr1Products3Repo.DeleteAsync(item.Id);
                 }
-
 
                 // =====================================================
                 // RECREATE GROUP 1
@@ -868,25 +889,16 @@ namespace SpicAPI.Controllers
                                  .Where(x => x > 0)
                                  .Distinct())
                     {
-                        await _csr1Products1Repo
-                            .CreateAsync(
-                                new CSR1Products1
-                                {
-                                    CSR1Id =
-                                        id,
-
-                                    CropId =
-                                        request.Crop1Id,
-
-                                    ProductId =
-                                        productId,
-
-                                    IsActive =
-                                        true
-                                });
+                        await _csr1Products1Repo.CreateAsync(
+                            new CSR1Products1
+                            {
+                                CSR1Id = id,
+                                CropId = request.Crop1Id,
+                                ProductId = productId,
+                                IsActive = true
+                            });
                     }
                 }
-
 
                 // =====================================================
                 // RECREATE GROUP 2
@@ -899,25 +911,16 @@ namespace SpicAPI.Controllers
                                  .Where(x => x > 0)
                                  .Distinct())
                     {
-                        await _csr1Products2Repo
-                            .CreateAsync(
-                                new CSR1Products2
-                                {
-                                    CSR1Id =
-                                        id,
-
-                                    CropId =
-                                        request.Crop2Id,
-
-                                    ProductId =
-                                        productId,
-
-                                    IsActive =
-                                        true
-                                });
+                        await _csr1Products2Repo.CreateAsync(
+                            new CSR1Products2
+                            {
+                                CSR1Id = id,
+                                CropId = request.Crop2Id,
+                                ProductId = productId,
+                                IsActive = true
+                            });
                     }
                 }
-
 
                 // =====================================================
                 // RECREATE GROUP 3
@@ -930,33 +933,25 @@ namespace SpicAPI.Controllers
                                  .Where(x => x > 0)
                                  .Distinct())
                     {
-                        await _csr1Products3Repo
-                            .CreateAsync(
-                                new CSR1Products3
-                                {
-                                    CSR1Id =
-                                        id,
-
-                                    CropId =
-                                        request.Crop3Id,
-
-                                    ProductId =
-                                        productId,
-
-                                    IsActive =
-                                        true
-                                });
+                        await _csr1Products3Repo.CreateAsync(
+                            new CSR1Products3
+                            {
+                                CSR1Id = id,
+                                CropId = request.Crop3Id,
+                                ProductId = productId,
+                                IsActive = true
+                            });
                     }
                 }
 
+                // =====================================================
+                // RESPONSE
+                // =====================================================
 
                 return Ok(new
                 {
-                    message =
-                        "CSR1 updated successfully",
-
-                    data =
-                        updated
+                    message = "CSR1 updated successfully",
+                    data = updated
                 });
             }
             catch (Exception ex)
@@ -965,14 +960,12 @@ namespace SpicAPI.Controllers
                     StatusCodes.Status500InternalServerError,
                     new
                     {
-                        message =
-                            "Error while updating CSR1",
-
-                        error =
-                            ex.Message
+                        message = "Error while updating CSR1",
+                        error = ex.Message
                     });
             }
         }
+
 
         // ============================================================
         // DELETE
@@ -1561,6 +1554,11 @@ namespace SpicAPI.Controllers
                     return NotFound(new { message = $"CSR-1 #{id} not found." });
                 }
 
+                if (Csr1WorkflowRules.IsThreeLevelApplication(csr1.CreatedAt) &&
+                    !new[] { "SubmittedForValidation", "Submitted", "Pending" }
+                        .Contains(csr1.Status, StringComparer.OrdinalIgnoreCase))
+                    return BadRequest(new { message = "This CSR-1 is not awaiting validation." });
+
                 if (string.Equals(csr1.Status, "Validated", StringComparison.OrdinalIgnoreCase))
                 {
                     return BadRequest(new { message = "CSR-1 is already validated." });
@@ -1595,7 +1593,9 @@ namespace SpicAPI.Controllers
                     else // State scope
                     {
                         // State scope: only SMDO (SMD) can validate (SMDO applies, SMDO validates, SMM approves)
-                        if (!string.Equals(currentRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase))
+                        if (!string.Equals(currentRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) &&
+                            !(Csr1WorkflowRules.IsThreeLevelApplication(csr1.CreatedAt) &&
+                              string.Equals(currentRole, "SMDO", StringComparison.OrdinalIgnoreCase)))
                         {
                             return StatusCode(StatusCodes.Status403Forbidden, new
                             {
@@ -1628,6 +1628,7 @@ namespace SpicAPI.Controllers
                 });
             }
         }
+
 
         // ============================================================
         // APPROVE CSR1
@@ -1806,194 +1807,50 @@ namespace SpicAPI.Controllers
                 }
 
                 // --------------------------------------------------
-                // 5. Three-level approval (Day 27 onwards).
-                //    Validation remains mandatory.
+                // 5. Three-level approval. Validation is mandatory FIRST.
+                //     Validated -> Level1Approved -> Level2Approved -> Approved.
                 // --------------------------------------------------
-
-                if (!string.Equals(
-                    csr1.Status,
-                    "Validated",
-                    StringComparison.OrdinalIgnoreCase))
-                {
-                    return BadRequest(new
-                    {
-                        message = "CSR-1 must be validated before approval."
-                    });
-                }
+                var next = Csr1WorkflowRules.NextStatus(true, csr1.Status,
+                    isStateScope ? (HasRole("SMM") ? "SMM" : GetHighestNewRole(roles))
+                                 : (HasRole("RMM") ? "RMM" : GetHighestNewRole(roles)),
+                    scope);
+                if (next == null)
+                    return StatusCode(403, new { message = "Not authorized for the current CSR-1 approval stage, or validation is pending." });
 
                 var now = DateTime.UtcNow;
-
-                bool level1Completed =
-                    !string.IsNullOrWhiteSpace(csr1.Level1ApprovedBy) &&
-                    csr1.Level1ApprovedAt.HasValue;
-
-                bool level2Completed =
-                    !string.IsNullOrWhiteSpace(csr1.Level2ApprovedBy) &&
-                    csr1.Level2ApprovedAt.HasValue;
-
-                bool level3Completed =
-                    !string.IsNullOrWhiteSpace(csr1.Level3ApprovedBy) &&
-                    csr1.Level3ApprovedAt.HasValue;
-
-                if (level3Completed)
+                if (next == "Level1Approved")
                 {
-                    return BadRequest(new
-                    {
-                        message = "All three approval levels are already completed."
-                    });
-                }
-
-                // --------------------------------------------------
-                // LEVEL 1: SMM / RMM
-                // --------------------------------------------------
-
-                if (!level1Completed)
-                {
-                    if (level2Completed || level3Completed)
-                    {
-                        return BadRequest(new
-                        {
-                            message = "Invalid CSR-1 approval sequence."
-                        });
-                    }
-
-                    if (isHQScope)
-                    {
-                        // RMM is the new designation; RM/RMD
-                        // are retained for existing role compatibility.
-                        if (!HasRole("RMM",
-                            AppRole.RM.ToString(),
-                            AppRole.RMD.ToString()))
-                        {
-                            return StatusCode(403, new
-                            {
-                                message = "Only RMM can perform Level 1 approval for HQ scope."
-                            });
-                        }
-                    }
-                    else
-                    {
-                        if (!HasRole(AppRole.SMM.ToString()))
-                        {
-                            return StatusCode(403, new
-                            {
-                                message = "Only SMM can perform Level 1 approval for State scope."
-                            });
-                        }
-                    }
-
+                    if (csr1.Level1ApprovedAt.HasValue)
+                        return BadRequest(new { message = "Level 1 is already completed." });
                     csr1.Level1ApprovedBy = CurrentUserId;
                     csr1.Level1ApprovedAt = now;
-
-                    // Do not mark overall approved.
-                    // Do not generate sanction number.
-                    csr1.UpdatedBy = CurrentUserId;
-                    csr1.UpdatedAt = now;
-
-                    await _csr1Repo.PatchAsync(id, csr1);
-
-                    return Ok(new
-                    {
-                        message = "Level 1 approved successfully. Forwarded to MDAdmin.",
-                        approvalLevel = 1,
-                        nextApprover = "MDAdmin",
-                        isFinalApproval = false,
-                        sanctionNo = (string?)null,
-                        data = csr1
-                    });
                 }
-
-                // --------------------------------------------------
-                // LEVEL 2: MDAdmin
-                // --------------------------------------------------
-
-                if (!level2Completed)
+                else if (next == "Level2Approved")
                 {
-                    if (level3Completed)
-                    {
-                        return BadRequest(new
-                        {
-                            message = "Invalid CSR-1 approval sequence."
-                        });
-                    }
-
-                    if (!HasRole("MDAdmin"))
-                    {
-                        return StatusCode(403, new
-                        {
-                            message = "Only MDAdmin can perform Level 2 approval."
-                        });
-                    }
-
+                    if (!csr1.Level1ApprovedAt.HasValue || csr1.Level2ApprovedAt.HasValue)
+                        return BadRequest(new { message = "Invalid Level 2 approval sequence." });
                     csr1.Level2ApprovedBy = CurrentUserId;
                     csr1.Level2ApprovedAt = now;
-
-                    // Still not finally approved.
-                    // No sanction number.
-                    csr1.UpdatedBy = CurrentUserId;
-                    csr1.UpdatedAt = now;
-
-                    await _csr1Repo.PatchAsync(id, csr1);
-
-                    return Ok(new
-                    {
-                        message = "Level 2 approved successfully. Forwarded to CSMD-HOD.",
-                        approvalLevel = 2,
-                        nextApprover = "CSMD-HOD",
-                        isFinalApproval = false,
-                        sanctionNo = (string?)null,
-                        data = csr1
-                    });
                 }
-
-                // --------------------------------------------------
-                // LEVEL 3: CSMD-HOD
-                // Final approval and sanction number.
-                // --------------------------------------------------
-
-                if (!HasRole("CSMD-HOD"))
+                else if (next == "Approved")
                 {
-                    return StatusCode(403, new
-                    {
-                        message = "Only CSMD-HOD can perform Level 3 approval."
-                    });
+                    if (!csr1.Level1ApprovedAt.HasValue || !csr1.Level2ApprovedAt.HasValue || csr1.Level3ApprovedAt.HasValue)
+                        return BadRequest(new { message = "Complete Level 1 and Level 2 before final approval." });
+                    if (string.IsNullOrWhiteSpace(csr1.SanctionNo))
+                        csr1.SanctionNo = await GenerateSanctionForCSR1Async(csr1, scope);
+                    csr1.Level3ApprovedBy = CurrentUserId;
+                    csr1.Level3ApprovedAt = now;
+                    csr1.ApprovedBy = CurrentUserId;
+                    csr1.ApprovedAt = now;
                 }
-
-                // Both prior approvals must be complete.
-                if (!level1Completed || !level2Completed)
-                {
-                    return BadRequest(new
-                    {
-                        message = "Level 1 and Level 2 approvals must be completed first."
-                    });
-                }
-
-                if (string.IsNullOrWhiteSpace(csr1.SanctionNo))
-                {
-                    csr1.SanctionNo =
-                        await GenerateSanctionForCSR1Async(
-                            csr1,
-                            scope);
-                }
-
-                csr1.Level3ApprovedBy = CurrentUserId;
-                csr1.Level3ApprovedAt = now;
-
-                // Overall final approval.
-                csr1.ApprovedBy = CurrentUserId;
-                csr1.ApprovedAt = now;
-                csr1.Status = "Approved";
-
+                csr1.Status = next;
                 csr1.UpdatedBy = CurrentUserId;
                 csr1.UpdatedAt = now;
-
                 await _csr1Repo.PatchAsync(id, csr1);
-
                 return Ok(new
                 {
-                    message = "Level 3 approved successfully. Sanction number generated.",
-                    approvalLevel = 3,
-                    isFinalApproval = true,
+                    message = next == "Approved" ? "CSR-1 final approval completed." : $"CSR-1 advanced to {next}.",
+                    isFinalApproval = next == "Approved",
                     sanctionNo = csr1.SanctionNo,
                     data = csr1
                 });
@@ -2008,6 +1865,54 @@ namespace SpicAPI.Controllers
                         error = ex.Message
                     });
             }
+        }
+
+        // =====================================================
+        // CSR1 - RESOLVE CURRENT USER ROLE FOR NEW WORKFLOW
+        // =====================================================
+
+        private static string GetHighestNewRole(HashSet<string> roles)
+        {
+            if (roles.Contains("MDHOD") || roles.Contains("CSMD-HOD"))
+                return "MDHOD";
+
+            if (roles.Contains("MDAdmin"))
+                return "MDAdmin";
+
+            if (roles.Contains("SMM"))
+                return "SMM";
+
+            if (roles.Contains("RMM"))
+                return "RMM";
+
+            if (roles.Contains("SMDO") || roles.Contains("SMD"))
+                return "SMDO";
+
+            if (roles.Contains("RMDO") || roles.Contains("RMD"))
+                return "RMDO";
+
+            if (roles.Contains("MO"))
+                return "MO";
+
+            return string.Empty;
+        }
+
+        // Supports GetHighestNewRole(User)
+        private static string GetHighestNewRole(ClaimsPrincipal user)
+        {
+            var roles = user.FindAll(ClaimTypes.Role)
+                .Select(x => x.Value?.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return GetHighestNewRole(roles);
+        }
+
+        // Supports GetHighestNewRole()
+        private string GetHighestNewRole()
+        {
+            return GetHighestNewRole(User);
         }
 
         private async Task<(int StateId, int? RegionId)>
@@ -2296,5 +2201,46 @@ namespace SpicAPI.Controllers
                 });
             }
         }
+
+        [HttpGet("{id:int}/workflow")]
+        public async Task<IActionResult> GetWorkflow(int id)
+        {
+            var csr1 = await _csr1Repo.GetByIdAsync(id);
+            if (csr1 == null) return NotFound();
+            var three = Csr1WorkflowRules.IsThreeLevelApplication(csr1.CreatedAt);
+            var (scope, _) = await ResolveCSR1ScopeAsync(csr1);
+            var roles = User.FindAll(ClaimTypes.Role)
+                .Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var next = three ? Csr1WorkflowRules.NextStatus(true, csr1.Status,
+                scope.Equals("State", StringComparison.OrdinalIgnoreCase)
+                  ? (roles.Contains("SMM") ? "SMM" : GetHighestNewRole(roles))
+                  : (roles.Contains("RMM") ? "RMM" : GetHighestNewRole(roles)), scope) : null;
+            var validated = string.Equals(csr1.Status, "Validated", StringComparison.OrdinalIgnoreCase);
+            var pending = new[] { "Submitted", "SubmittedForValidation", "Pending" }
+                .Contains(csr1.Status, StringComparer.OrdinalIgnoreCase);
+            var firstRole = scope.Equals("State", StringComparison.OrdinalIgnoreCase) ? "SMM" : "RMM";
+            var awaiting = !three ? "" : pending ? (scope == "State" ? "Awaiting SMDO validation" : "Awaiting MO validation")
+                : validated ? $"Awaiting {firstRole} approval" :
+                csr1.Status == "Level1Approved" ? "Awaiting MDAdmin approval" :
+                csr1.Status == "Level2Approved" ? "Awaiting MDHOD approval" : "";
+            return Ok(new
+            {
+                isThreeLevelWorkflow = three,
+                canValidate = three && pending && (scope == "State"
+                    ? roles.Contains("SMD") || roles.Contains("SMDO") : roles.Contains("MO")),
+                canApprove = three && next != null,
+                canReject = false,
+                approvalLabel = next == "Level1Approved" ? "1st Approval" :
+                    next == "Level2Approved" ? "2nd Approval" :
+                    next == "Approved" ? "Final Approval" : "Approve",
+                awaitingLabel = awaiting,
+                steps = three ? new object[] {
+                    new { name = $"{firstRole} First Approval", actor = csr1.Level1ApprovedBy, at = csr1.Level1ApprovedAt, completed = csr1.Level1ApprovedAt.HasValue },
+                    new { name = "MDAdmin Second Approval", actor = csr1.Level2ApprovedBy, at = csr1.Level2ApprovedAt, completed = csr1.Level2ApprovedAt.HasValue },
+                    new { name = "MDHOD Final Approval", actor = csr1.Level3ApprovedBy, at = csr1.Level3ApprovedAt, completed = csr1.Level3ApprovedAt.HasValue }
+                } : Array.Empty<object>()
+            });
+        }
+
     }
 }

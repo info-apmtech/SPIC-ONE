@@ -6,7 +6,6 @@
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
-@inject ToastService Toast
 
 
 @if (IsOpen)
@@ -345,7 +344,26 @@
                             }
 
 
-                            @if (string.Equals(
+                            @if (IsThreeLevelWorkflow && approvalFlow != null)
+                            {
+                                @foreach (var step in approvalFlow.Steps)
+                                {
+                                    <div class="csr-pd-timeline-item">
+                                        <div class="csr-pd-timeline-marker">
+                                            <i class="bi @(step.Completed ? "bi-check" : "bi-hourglass")"></i>
+                                        </div>
+                                        <div class="csr-pd-timeline-content">
+                                            <strong>@step.Name</strong>
+                                            <div class="csr-pd-timeline-meta">
+                                                <span>@ShowValue(step.Actor)</span>
+                                                <span class="csr-pd-date-pill">@(step.At?.ToString("dd MMM yyyy") ?? "Pending")</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }
+
+                            @if (!IsThreeLevelWorkflow && (string.Equals(
                                 details.Status,
                                 "Validated",
                                 StringComparison.OrdinalIgnoreCase)
@@ -353,7 +371,7 @@
                                 string.Equals(
                                     details.Status,
                                     "Approved",
-                                    StringComparison.OrdinalIgnoreCase))
+                                    StringComparison.OrdinalIgnoreCase)))
                             {
                                 <div class="csr-pd-timeline-item">
 
@@ -387,7 +405,7 @@
                             }
 
 
-                            @if (string.Equals(
+                            @if (!IsThreeLevelWorkflow && string.Equals(
                                 details.Status,
                                 "Approved",
                                 StringComparison.OrdinalIgnoreCase))
@@ -546,8 +564,15 @@
                             {
                                 <i class="bi bi-check2-all"></i>
                             }
-                            Approve
+                            @ApproveButtonText
                         </button>
+                    }
+                    else if (IsThreeLevelWorkflow && !string.IsNullOrWhiteSpace(approvalFlow?.AwaitingLabel))
+                    {
+                        <div class="csr-pd-awaiting-badge">
+                            <i class="bi bi-hourglass-split"></i>
+                            <span>@approvalFlow.AwaitingLabel</span>
+                        </div>
                     }
                     else if (IsAwaitingValidation)
                     {
@@ -611,11 +636,111 @@
 }
 
 
+
+@if (showCSRPopup)
+{
+    <div class="csr-pd-message-overlay">
+        <div class="csr-pd-message-popup" role="alertdialog" aria-modal="true"
+             aria-labelledby="csr-pd-message-title" aria-describedby="csr-pd-message-body">
+            <div class="csr-pd-message-icon @(csrPopupSuccess ? "success" : "error")" aria-hidden="true">
+                <i class="bi @(csrPopupSuccess ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+            </div>
+            <h3 id="csr-pd-message-title">@(csrPopupSuccess ? "Success" : "Action Failed")</h3>
+            <p id="csr-pd-message-body">@csrPopupMessage</p>
+            <button type="button" class="csr-pd-message-confirm" @onclick="CloseCSRPopup">OK</button>
+        </div>
+    </div>
+}
+
 <style>
 
+    /* Match BudgetingManagements center notification. Above drawer/rejection backdrop. */
+    .csr-pd-message-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, .48);
+    }
+
+    .csr-pd-message-popup {
+        width: min(460px, 100%);
+        background: #fff;
+        border-radius: 18px;
+        padding: 38px 30px 30px;
+        text-align: center;
+        box-shadow: 0 24px 70px rgba(0,0,0,.22);
+        animation: csrPdPopupIn .2s ease-out;
+    }
+
+    .csr-pd-message-icon {
+        font-size: 60px;
+        margin-bottom: 14px;
+        line-height: 1.2;
+    }
+
+        .csr-pd-message-icon.success {
+            color: #16a34a;
+        }
+
+        .csr-pd-message-icon.error {
+            color: #dc2626;
+        }
+
+    .csr-pd-message-popup h3 {
+        color: #0f172a;
+        font-size: 23px;
+        font-weight: 700;
+        margin: 0 0 12px;
+    }
+
+    .csr-pd-message-popup p {
+        color: #475569;
+        font-size: 15px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+        margin: 0 0 26px;
+    }
+
+    .csr-pd-message-confirm {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 135px;
+        min-height: 40px;
+        padding: 10px 20px;
+        border: 0;
+        border-radius: 6px;
+        background: #2563eb;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .csr-pd-message-confirm:hover {
+            background: #1d4ed8;
+        }
+
+    @@keyframes csrPdPopupIn {
+        from {
+            opacity: 0;
+            transform: translateY(12px) scale(.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
+
     /* =========================================================
-                   DRAWER
-                   ========================================================= */
+                       DRAWER
+                       ========================================================= */
 
     .csr-pd-overlay {
         position: fixed;
@@ -639,8 +764,8 @@
 
 
     /* =========================================================
-                   HEADER
-                   ========================================================= */
+                       HEADER
+                       ========================================================= */
 
     .csr-pd-header {
         min-height: 72px;
@@ -750,8 +875,8 @@
 
 
     /* =========================================================
-                   CONTENT
-                   ========================================================= */
+                       CONTENT
+                       ========================================================= */
 
     .csr-pd-content {
         flex: 1;
@@ -778,8 +903,8 @@
 
 
     /* =========================================================
-                   PROGRAM INFO
-                   ========================================================= */
+                       PROGRAM INFO
+                       ========================================================= */
 
     .csr-pd-info-grid {
         display: grid;
@@ -827,8 +952,8 @@
 
 
     /* =========================================================
-                   EXPENSE
-                   ========================================================= */
+                       EXPENSE
+                       ========================================================= */
 
     .csr-pd-expense-grid {
         display: grid;
@@ -875,8 +1000,8 @@
 
 
     /* =========================================================
-                   FOCUS AREA
-                   ========================================================= */
+                       FOCUS AREA
+                       ========================================================= */
 
     .csr-pd-focus-grid {
         padding: 12px;
@@ -930,8 +1055,8 @@
 
 
     /* =========================================================
-                   TIMELINE
-                   ========================================================= */
+                       TIMELINE
+                       ========================================================= */
 
     .csr-pd-timeline {
         padding: 3px 2px;
@@ -1006,8 +1131,8 @@
 
 
     /* =========================================================
-                   REMARKS
-                   ========================================================= */
+                       REMARKS
+                       ========================================================= */
 
     .csr-pd-remarks {
         padding: 12px;
@@ -1018,8 +1143,8 @@
 
 
     /* =========================================================
-                   FOOTER
-                   ========================================================= */
+                       FOOTER
+                       ========================================================= */
 
     .csr-pd-footer {
         min-height: 60px;
@@ -1156,8 +1281,8 @@
 
 
     /* =========================================================
-                   LOADING
-                   ========================================================= */
+                       LOADING
+                       ========================================================= */
 
     .csr-pd-loading {
         min-height: 300px;
@@ -1171,8 +1296,8 @@
 
 
     /* =========================================================
-                   RESPONSIVE
-                   ========================================================= */
+                       RESPONSIVE
+                       ========================================================= */
 
     @@media (max-width: 768px) {
 
@@ -1240,7 +1365,49 @@
     // STATE
     // =========================================================
 
+
+    private bool showCSRPopup;
+    private bool csrPopupSuccess = true;
+    private string csrPopupMessage = string.Empty;
+
+    private void ShowCSRPopup(string message, bool success = true)
+    {
+        csrPopupMessage = message;
+        csrPopupSuccess = success;
+        showCSRPopup = true;
+    }
+
+    private void CloseCSRPopup()
+    {
+        showCSRPopup = false;
+    }
+
     private CSR1DetailsDto? details;
+
+    // New workflow is opt-in per CSR-1 record. The server must persist this flag.
+    // Legacy records continue to use the original role and status checks.
+    private Csr1ApprovalFlow? approvalFlow;
+    private sealed class Csr1ApprovalFlow
+    {
+        public bool IsThreeLevelWorkflow { get; set; }
+        public bool CanApprove { get; set; }
+        public bool CanValidate { get; set; }
+        public bool CanReject { get; set; }
+        public string? ApprovalLabel { get; set; }
+        public string? AwaitingLabel { get; set; }
+        public string? ProgramMonth { get; set; }
+        public List<Csr1ApprovalStep> Steps { get; set; } = new();
+    }
+    private sealed class Csr1ApprovalStep
+    {
+        public string Name { get; set; } = "";
+        public string? Actor { get; set; }
+        public DateTime? At { get; set; }
+        public bool Completed { get; set; }
+    }
+    private bool IsThreeLevelWorkflow => approvalFlow?.IsThreeLevelWorkflow == true;
+    private string ApproveButtonText => IsThreeLevelWorkflow
+        ? (approvalFlow?.ApprovalLabel ?? "Approve stage") : "Approve";
 
     private bool isLoading = false;
 
@@ -1281,12 +1448,27 @@
                 await Http.GetFromJsonAsync<CSR1DetailsDto>(
                     $"api/CSR1/details/{CSR1Id}");
 
+            approvalFlow = null;
+            // Server supplies workflow mode and permissions for post-26th applications.
+            // A missing endpoint does not change legacy button behavior.
+            try
+            {
+                using var response = await Http.GetAsync($"api/CSR1/{CSR1Id}/workflow");
+                if (response.IsSuccessStatusCode)
+                    approvalFlow = await response.Content.ReadFromJsonAsync<Csr1ApprovalFlow>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"CSR1 optional workflow metadata unavailable: {ex.Message}");
+            }
+
             lastLoadedId =
                 CSR1Id;
         }
         catch (Exception ex)
         {
             details = null;
+            approvalFlow = null;
 
             Console.WriteLine(
                 $"CSR1 Details Load Error: {ex.Message}");
@@ -1366,7 +1548,18 @@
     private bool IsStateScope =>
         string.Equals(details?.Scope, "State", StringComparison.OrdinalIgnoreCase);
 
-    private bool CanValidate =>
+    // Existing rules below remain unchanged; only three-level records branch away.
+    private bool CanValidate => IsThreeLevelWorkflow
+        ? details != null && approvalFlow?.CanValidate == true
+        : LegacyCanValidate;
+    private bool CanApprove => IsThreeLevelWorkflow
+        ? details != null && approvalFlow?.CanApprove == true
+        : LegacyCanApprove;
+    private bool CanReject => IsThreeLevelWorkflow
+        ? details != null && approvalFlow?.CanReject == true
+        : LegacyCanReject;
+
+    private bool LegacyCanValidate =>
         details != null &&
         (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
          string.Equals(details.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
@@ -1375,7 +1568,7 @@
          (IsHQScope && loginState.UserRole == AppRole.MO) ||
          (IsStateScope && loginState.UserRole == AppRole.SMD));
 
-    private bool CanApprove =>
+    private bool LegacyCanApprove =>
         details != null &&
         (string.Equals(details.Status, "Validated", StringComparison.OrdinalIgnoreCase) ||
          (loginState.IsAdmin && (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
@@ -1384,7 +1577,8 @@
          (IsHQScope && (loginState.UserRole == AppRole.RM || loginState.UserRole == AppRole.RMD)) ||
          (IsStateScope && loginState.UserRole == AppRole.SMM));
 
-    private bool IsAwaitingValidation =>
+    private bool IsAwaitingValidation => !IsThreeLevelWorkflow && LegacyIsAwaitingValidation;
+    private bool LegacyIsAwaitingValidation =>
         details != null &&
         (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
          string.Equals(details.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
@@ -1392,7 +1586,7 @@
         ((IsHQScope && (loginState.UserRole == AppRole.RM || loginState.UserRole == AppRole.RMD)) ||
          (IsStateScope && loginState.UserRole == AppRole.SMM));
 
-    private bool CanReject =>
+    private bool LegacyCanReject =>
         details != null &&
         !string.Equals(details.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
         !string.Equals(details.Status, "Rejected", StringComparison.OrdinalIgnoreCase) &&
@@ -1410,19 +1604,19 @@
             var response = await Http.PostAsync($"api/CSR1/{details.Id}/validate", null);
             if (response.IsSuccessStatusCode)
             {
-                Toast.Success("CSR-1 validated successfully.");
+                ShowCSRPopup("CSR-1 validated successfully.");
                 await LoadCSR1Details();
                 await OnStatusChanged.InvokeAsync();
             }
             else
             {
                 var err = await response.Content.ReadAsStringAsync();
-                Toast.Error(string.IsNullOrWhiteSpace(err) ? "Failed to validate CSR-1." : err);
+                ShowCSRPopup(string.IsNullOrWhiteSpace(err) ? "Failed to validate CSR-1." : err, false);
             }
         }
         catch (Exception ex)
         {
-            Toast.Error($"Error validating CSR-1: {ex.Message}");
+            ShowCSRPopup($"Error validating CSR-1: {ex.Message}", false);
         }
         finally
         {
@@ -1432,26 +1626,29 @@
 
     private async Task ApproveCSR1()
     {
-        if (details == null || isActionInProgress) return;
+        if (details == null || isActionInProgress || !CanApprove) return;
         try
         {
             isActionInProgress = true;
+            // Backend must branch by persisted workflow mode and authorize each stage.
             var response = await Http.PostAsync($"api/CSR1/{details.Id}/approve", null);
             if (response.IsSuccessStatusCode)
             {
-                Toast.Success("CSR-1 approved successfully.");
+                ShowCSRPopup(IsThreeLevelWorkflow
+                    ? "CSR-1 approval stage completed successfully."
+                    : "CSR-1 approved successfully.");
                 await LoadCSR1Details();
                 await OnStatusChanged.InvokeAsync();
             }
             else
             {
                 var err = await response.Content.ReadAsStringAsync();
-                Toast.Error(string.IsNullOrWhiteSpace(err) ? "Failed to approve CSR-1." : err);
+                ShowCSRPopup(string.IsNullOrWhiteSpace(err) ? "Failed to approve CSR-1." : err, false);
             }
         }
         catch (Exception ex)
         {
-            Toast.Error($"Error approving CSR-1: {ex.Message}");
+            ShowCSRPopup($"Error approving CSR-1: {ex.Message}", false);
         }
         finally
         {
@@ -1479,6 +1676,7 @@
         if (string.IsNullOrWhiteSpace(rejectionRemarks))
         {
             rejectErrorMessage = "Please enter rejection remarks.";
+            ShowCSRPopup(rejectErrorMessage, false);
             return;
         }
 
@@ -1489,7 +1687,7 @@
             var response = await Http.PostAsJsonAsync($"api/CSR1/{details.Id}/reject", request);
             if (response.IsSuccessStatusCode)
             {
-                Toast.Success("CSR-1 rejected successfully.");
+                ShowCSRPopup("CSR-1 rejected successfully.");
                 showRejectModal = false;
                 await LoadCSR1Details();
                 await OnStatusChanged.InvokeAsync();
@@ -1498,13 +1696,13 @@
             {
                 var err = await response.Content.ReadAsStringAsync();
                 rejectErrorMessage = string.IsNullOrWhiteSpace(err) ? "Failed to reject CSR-1." : err;
-                Toast.Error(rejectErrorMessage);
+                ShowCSRPopup(rejectErrorMessage, false);
             }
         }
         catch (Exception ex)
         {
             rejectErrorMessage = ex.Message;
-            Toast.Error($"Error rejecting CSR-1: {ex.Message}");
+            ShowCSRPopup($"Error rejecting CSR-1: {ex.Message}", false);
         }
         finally
         {
