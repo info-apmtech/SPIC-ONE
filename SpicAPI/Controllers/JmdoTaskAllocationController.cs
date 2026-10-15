@@ -149,7 +149,15 @@ public class JmdoTaskAllocationController : ControllerBase
                 SubDealerId = dealer.Id,
                 DealerName = dealer.FirmName,
                 DealerCode = dealer.SubDealerCode ?? "",
-                PlannedDay = assignment.Day
+                PlannedDay = assignment.Day,
+                // Stamped from the SAME weekStart as the allocation header, not left null -
+                // previously this was only ever backfilled client-side when the MDO's review page
+                // happened to load (AllocationRequestReview.razor), and an earlier version of that
+                // backfill used the wrong week basis, writing incorrect dates for any allocation
+                // planned for a week other than "this week". Setting it correctly here means
+                // PlannedDate is right from the moment of submission, with no dependency on that
+                // page ever being opened.
+                PlannedDate = weekStart.AddDays((int)assignment.Day)
             });
         }
 
@@ -442,6 +450,7 @@ public class JmdoTaskAllocationController : ControllerBase
         var alloc = await _db.JmdoTaskAllocations
             .Include(a => a.Dealers)
             .Include(a => a.Programs)
+            .Include(a => a.Closeouts)
             .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId
                 && a.AllocationDate >= CurrentWeekStart() && a.AllocationDate < CurrentWeekStart().AddDays(7));
 
@@ -450,6 +459,7 @@ public class JmdoTaskAllocationController : ControllerBase
             alloc = await _db.JmdoTaskAllocations
                 .Include(a => a.Dealers)
                 .Include(a => a.Programs)
+                .Include(a => a.Closeouts)
                 .OrderByDescending(a => a.AllocationDate)
                 .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId);
         }
@@ -458,7 +468,13 @@ public class JmdoTaskAllocationController : ControllerBase
         {
             alloc = new JmdoTaskAllocation
             {
-                AllocationDate = DateTime.Today,
+                // The week's Sunday, same convention as Create's WeekStartFor(...) - using the
+                // literal DateTime.Today here (as this used to) stores a non-Sunday date whenever
+                // this auto-provisioning path fires on anything but a Sunday, which then silently
+                // breaks every later "which week does this belong to" comparison that assumes
+                // AllocationDate is already week-aligned (e.g. TasksAllocation.razor's Task
+                // History/Task Summary date filters).
+                AllocationDate = CurrentWeekStart(),
                 SubmittedByUserId = userId,
                 SubmittedByRole = CurrentRole(),
                 HeadquarterId = CurrentHqId(),
@@ -478,6 +494,29 @@ public class JmdoTaskAllocationController : ControllerBase
     private static DateTime CurrentWeekStart() => WeekStartFor(DateTime.Today);
 
     private static DateTime WeekStartFor(DateTime date) => date.Date.AddDays(-(int)date.Date.DayOfWeek);
+
+    // SPCM/PoS Liquidation are weekly count targets, not a single visit like Dealer/MD Program -
+    // "done" has to mean "the cumulative logged count across every closeout saved this week (one
+    // per day/visit) reached the target", not "a closeout was saved at all". Requires
+    // allocation.Closeouts to already be loaded (see GetMyCurrentAllocationAsync's .Include).
+    private static int SpcmAchievedCount(JmdoTaskAllocation allocation) =>
+        allocation.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
+
+    // PoS Liquidation tracks 4 independent product targets (Urea/NPKS/DAP/Other) under one
+    // Status field - only "done" once every target that's actually set (>0) has its own
+    // cumulative logged amount meet or exceed it; a target left at 0/null needs nothing logged
+    // against it to count as satisfied.
+    private static bool PosTargetsMet(JmdoTaskAllocation allocation)
+    {
+        var closeouts = allocation.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+        bool Met(int? target, Func<JmdoTaskCloseout, int?> selector) =>
+            target is not > 0 || closeouts.Sum(c => selector(c) ?? 0) >= target;
+
+        return Met(allocation.UreaTarget, c => c.Urea)
+            && Met(allocation.NpsTarget, c => c.Nps)
+            && Met(allocation.DapTarget, c => c.Dap)
+            && Met(allocation.OthersTarget, c => c.Other);
+    }
 
     // GET api/JmdoTaskAllocation/pending
     // Feeds the MDO's "Allocation Requests" list - every Pending allocation
@@ -701,6 +740,11 @@ public class JmdoTaskAllocationController : ControllerBase
             JmdoCode = info?.EmployeeCode,
             Location = info?.HeadquarterName,
             SubmittedAt = allocation.SubmittedAt,
+            // Normalized rather than trusted as-is - rows auto-provisioned before AllocationDate
+            // was always guaranteed to be a Sunday (see GetMyCurrentAllocationAsync) can still
+            // hold a non-Sunday date, which would otherwise shift the week-range the review page
+            // constrains dealer task dates to.
+            AllocationDate = WeekStartFor(allocation.AllocationDate),
             HeadquarterId = allocation.HeadquarterId,
             Dealers = allocation.Dealers.Select(d =>
             {
@@ -741,6 +785,16 @@ public class JmdoTaskAllocationController : ControllerBase
         });
     }
 
+    // A dealer task's date can't be moved outside the week the JMDO actually allocated for - the
+    // MDO is reviewing/adjusting that week's work order, not reassigning it to a different week
+    // entirely (that would need a brand new allocation). Normalizes AllocationDate first for the
+    // same reason GetById does.
+    private static bool IsWithinAllocationWeek(JmdoTaskAllocation allocation, DateTime date)
+    {
+        var weekStart = WeekStartFor(allocation.AllocationDate);
+        return date.Date >= weekStart && date.Date <= weekStart.AddDays(6);
+    }
+
     // POST api/JmdoTaskAllocation/{id}/dealers
     [Authorize(Roles = "Admin,MO,MDO")]
     [HttpPost("{id:int}/dealers")]
@@ -755,6 +809,9 @@ public class JmdoTaskAllocationController : ControllerBase
 
         if (dto.PlannedDate.HasValue)
         {
+            if (!IsWithinAllocationWeek(allocation, dto.PlannedDate.Value))
+                return BadRequest(new { Success = false, Message = "The date must fall within the JMDO's allocated week." });
+
             var alreadyOnThatDate = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
                 d.AllocationId == id && d.SubDealerId == dto.DealerId
                 && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == dto.PlannedDate.Value.Date);
@@ -772,7 +829,8 @@ public class JmdoTaskAllocationController : ControllerBase
             // The JMDO's own Today's/Completed Allocation views filter strictly by
             // Day == DateTime.Today.DayOfWeek - without this, a dealer the MDO adds here never
             // shows up for the JMDO at all, no matter what PlannedDate says.
-            PlannedDay = dto.PlannedDate?.DayOfWeek
+            PlannedDay = dto.PlannedDate?.DayOfWeek,
+            Priority = dto.Priority
         };
         _db.JmdoTaskAllocationDealers.Add(row);
         await _db.SaveChangesAsync();
@@ -820,6 +878,9 @@ public class JmdoTaskAllocationController : ControllerBase
 
         if (dto.PlannedDate.HasValue)
         {
+            if (!IsWithinAllocationWeek(allocation, dto.PlannedDate.Value))
+                return BadRequest(new { Success = false, Message = "The date must fall within the JMDO's allocated week." });
+
             var alreadyOnThatDate = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
                 d.AllocationId == id && d.Id != rowId && d.SubDealerId == row.SubDealerId
                 && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == dto.PlannedDate.Value.Date);
@@ -1001,6 +1062,18 @@ public class JmdoTaskAllocationController : ControllerBase
         }
         else if (string.Equals(taskKey, "spcm", StringComparison.OrdinalIgnoreCase))
         {
+            // SPCM is a weekly count target, not a single visit - don't let a Stop click close
+            // the whole week's allocation before the logged count actually reaches it (CreateCloseout
+            // already auto-completes the instant it does, so this is mainly a safety net for a
+            // direct/early Stop click). InProgress always goes through untouched so Day 2/3 can
+            // keep resuming the same task.
+            if (dto.Status == AllocTaskStatus.Completed && allocation.SpcmTarget is > 0
+                && SpcmAchievedCount(allocation) < allocation.SpcmTarget)
+            {
+                var remaining = allocation.SpcmTarget.Value - SpcmAchievedCount(allocation);
+                return BadRequest(new { Success = false, Message = $"SPCM target not yet reached - {remaining} of {allocation.SpcmTarget} still pending this week. Keep logging records on other days until it's done." });
+            }
+
             allocation.SpcmStatus = dto.Status;
             if (startedAt.HasValue && allocation.SpcmStartedAt is null) allocation.SpcmStartedAt = startedAt;
             if (completedAt.HasValue && allocation.SpcmCompletedAt is null) allocation.SpcmCompletedAt = completedAt;
@@ -1009,6 +1082,10 @@ public class JmdoTaskAllocationController : ControllerBase
         else if (string.Equals(taskKey, "soil", StringComparison.OrdinalIgnoreCase)
               || string.Equals(taskKey, "soilsample", StringComparison.OrdinalIgnoreCase))
         {
+            // Soil Sample has no logged-quantity mechanism in this flow (its Start button goes
+            // straight to the separate /SampleCollection module, not through this page's
+            // close-out form), so there's nothing to gate Completed against here - unchanged,
+            // pre-existing binary behaviour.
             allocation.SoilSampleStatus = dto.Status;
             if (startedAt.HasValue && allocation.SoilSampleStartedAt is null) allocation.SoilSampleStartedAt = startedAt;
             if (completedAt.HasValue && allocation.SoilSampleCompletedAt is null) allocation.SoilSampleCompletedAt = completedAt;
@@ -1017,6 +1094,13 @@ public class JmdoTaskAllocationController : ControllerBase
         else if (string.Equals(taskKey, "pos", StringComparison.OrdinalIgnoreCase)
               || string.Equals(taskKey, "posliquidation", StringComparison.OrdinalIgnoreCase))
         {
+            // Same reasoning as SPCM above, but PoS tracks 4 independent product targets under
+            // this one Status - see PosTargetsMet.
+            if (dto.Status == AllocTaskStatus.Completed && !PosTargetsMet(allocation))
+            {
+                return BadRequest(new { Success = false, Message = "PoS Liquidation targets haven't all been reached yet this week. Keep logging records on other days until every product is done." });
+            }
+
             allocation.PosLiquidationStatus = dto.Status;
             if (startedAt.HasValue && allocation.PosLiquidationStartedAt is null) allocation.PosLiquidationStartedAt = startedAt;
             if (completedAt.HasValue && allocation.PosLiquidationCompletedAt is null) allocation.PosLiquidationCompletedAt = completedAt;
@@ -1063,6 +1147,33 @@ public class JmdoTaskAllocationController : ControllerBase
         if (allocation == null)
             return NotFound(new { Success = false, Message = "No current allocation found." });
 
+        // Reject logging more than what's actually left on the weekly target, rather than
+        // silently letting the running total blow past it - a prior closeout plus this one
+        // can't add up to more than SpcmTarget/{Urea,Nps,Dap,Other}Target.
+        if (dto.Kind == JmdoCloseoutKind.Spcm && dto.AchievedTarget is > 0 && allocation.SpcmTarget is > 0)
+        {
+            var remaining = allocation.SpcmTarget.Value - SpcmAchievedCount(allocation);
+            if (dto.AchievedTarget.Value > remaining)
+                return BadRequest(new { Success = false, Message = $"Only {Math.Max(remaining, 0)} left on this week's SPCM target - cannot log {dto.AchievedTarget.Value}." });
+        }
+        else if (dto.Kind == JmdoCloseoutKind.PosLiquidation)
+        {
+            var overLimit = new List<string>();
+            void CheckProduct(string label, int? value, int? target, Func<JmdoTaskCloseout, int?> selector)
+            {
+                if (value is not > 0) return;
+                var alreadyLogged = allocation.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).Sum(c => selector(c) ?? 0);
+                var remaining = (target ?? 0) - alreadyLogged;
+                if (value.Value > remaining) overLimit.Add($"{label} (only {Math.Max(remaining, 0)} left)");
+            }
+            CheckProduct("Urea", dto.Urea, allocation.UreaTarget, c => c.Urea);
+            CheckProduct("NPKS", dto.Nps, allocation.NpsTarget, c => c.Nps);
+            CheckProduct("DAP", dto.Dap, allocation.DapTarget, c => c.Dap);
+            CheckProduct("Other", dto.Other, allocation.OthersTarget, c => c.Other);
+            if (overLimit.Count > 0)
+                return BadRequest(new { Success = false, Message = $"Exceeds this week's remaining target for: {string.Join(", ", overLimit)}." });
+        }
+
         var closeout = new JmdoTaskCloseout
         {
             AllocationId = allocation.Id,
@@ -1092,8 +1203,29 @@ public class JmdoTaskAllocationController : ControllerBase
             });
         }
 
-        _db.JmdoTaskCloseouts.Add(closeout);
+        allocation.Closeouts.Add(closeout);
         await _db.SaveChangesAsync();
+
+        // Auto-complete the moment the cumulative logged count actually reaches the weekly
+        // target, instead of requiring a separate "Stop Task" click - matches how Dealer/MD
+        // Program still require an explicit Stop, but those are single-visit tasks where "saved
+        // a record" and "done" are the same moment; SPCM/PoS are multi-day count targets where
+        // they aren't, until this point.
+        if (dto.Kind == JmdoCloseoutKind.Spcm && allocation.SpcmStatus != AllocTaskStatus.Completed
+            && allocation.SpcmTarget is > 0 && SpcmAchievedCount(allocation) >= allocation.SpcmTarget)
+        {
+            allocation.SpcmStatus = AllocTaskStatus.Completed;
+            allocation.SpcmCompletedAt ??= DateTime.Now;
+            await _db.SaveChangesAsync();
+        }
+        else if (dto.Kind == JmdoCloseoutKind.PosLiquidation && allocation.PosLiquidationStatus != AllocTaskStatus.Completed
+            && (allocation.UreaTarget > 0 || allocation.NpsTarget > 0 || allocation.DapTarget > 0 || allocation.OthersTarget > 0)
+            && PosTargetsMet(allocation))
+        {
+            allocation.PosLiquidationStatus = AllocTaskStatus.Completed;
+            allocation.PosLiquidationCompletedAt ??= DateTime.Now;
+            await _db.SaveChangesAsync();
+        }
 
         return Ok(new JmdoTaskCloseoutDto
         {
@@ -1131,6 +1263,7 @@ public class JmdoTaskAllocationController : ControllerBase
 
         var closeout = await _db.JmdoTaskCloseouts
             .Include(c => c.Allocation)
+            .ThenInclude(a => a!.Closeouts)
             .FirstOrDefaultAsync(c => c.Id == id);
         if (closeout == null)
             return NotFound();
@@ -1139,8 +1272,35 @@ public class JmdoTaskAllocationController : ControllerBase
         if (closeout.Allocation?.SubmittedByUserId != userId && !User.IsInRole("Admin"))
             return Forbid();
 
+        var allocation = closeout.Allocation;
+        var kind = closeout.Kind;
+
         _db.JmdoTaskCloseouts.Remove(closeout);
         await _db.SaveChangesAsync();
+
+        // Removing a logged record can drop the cumulative count back below target - if that
+        // closeout was what had pushed SPCM/PoS to Completed, reopen it rather than leave a
+        // "Completed" status that no longer reflects what's actually been logged.
+        if (allocation != null)
+        {
+            allocation.Closeouts.Remove(closeout);
+
+            if (kind == JmdoCloseoutKind.Spcm && allocation.SpcmStatus == AllocTaskStatus.Completed
+                && allocation.SpcmTarget is > 0 && SpcmAchievedCount(allocation) < allocation.SpcmTarget)
+            {
+                allocation.SpcmStatus = AllocTaskStatus.InProgress;
+                allocation.SpcmCompletedAt = null;
+                await _db.SaveChangesAsync();
+            }
+            else if (kind == JmdoCloseoutKind.PosLiquidation && allocation.PosLiquidationStatus == AllocTaskStatus.Completed
+                && !PosTargetsMet(allocation))
+            {
+                allocation.PosLiquidationStatus = AllocTaskStatus.InProgress;
+                allocation.PosLiquidationCompletedAt = null;
+                await _db.SaveChangesAsync();
+            }
+        }
+
         return NoContent();
     }
 

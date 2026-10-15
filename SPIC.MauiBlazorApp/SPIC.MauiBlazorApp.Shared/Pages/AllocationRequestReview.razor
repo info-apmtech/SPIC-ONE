@@ -18,7 +18,25 @@
 
     @if (_isLoading)
     {
-        <div class="p-3 text-muted">Loading allocation...</div>
+        <!-- Same shimmering Skeleton component AllocationRequests.razor's own table uses (via
+             SpicDataTable's IsLoading), shaped to roughly match this page's real layout instead
+             of a plain "Loading..." line. -->
+        <div class="alreq-card">
+            <Skeleton Variant="text" Rows="2" />
+        </div>
+        <div class="alreq-card">
+            <Skeleton Variant="table" Rows="5" />
+        </div>
+        <div class="alreq-two-col">
+            <div class="alreq-target-stack">
+                <div class="alreq-target-pair">
+                    <div class="alreq-card"><Skeleton Variant="card" Rows="1" /></div>
+                    <div class="alreq-card"><Skeleton Variant="card" Rows="1" /></div>
+                </div>
+                <div class="alreq-card"><Skeleton Variant="card" Rows="1" /></div>
+            </div>
+            <div class="alreq-card"><Skeleton Variant="card" Rows="1" /></div>
+        </div>
     }
     else if (_loadFailed || _detail is null)
     {
@@ -36,19 +54,20 @@
         {
             <div class="alreq-notice-banner">
                 <i class="bi bi-info-circle-fill"></i>
-                <span>This allocation was already approved on @(_detail.SubmittedAt.ToString("dd MMM yyyy")). As Admin you can still add/remove dealer tasks, change their date, add/remove MD programs, or adjust targets here if something needs correcting.</span>
+                <span>This allocation was already approved on @(_detail.SubmittedAt.ToString("dd MMM yyyy")). As Admin you can still add/remove dealer tasks, change their date and priority (within @WeekRangeLabel), or adjust targets here if something needs correcting. MD Programs are read-only - they come from CSR1's own assignment.</span>
             </div>
         }
         else
         {
             <div class="alreq-notice-banner">
                 <i class="bi bi-info-circle-fill"></i>
-                <span>@_detail.JmdoName submitted this allocation (@_detail.SubmittedAt.ToString("dd MMM yyyy")) for your approval. You can add or remove dealer tasks, pin them to a date, add/remove MD programs, or adjust targets before approving. @OtherPendingCount more JMDO(s) still waiting on your review.</span>
+                <span>@_detail.JmdoName submitted this allocation (@_detail.SubmittedAt.ToString("dd MMM yyyy")) for your approval. You can add or remove dealer tasks, pin them to a date and priority (within @WeekRangeLabel), or adjust targets before approving. MD Programs are read-only - they come from CSR1's own assignment. @OtherPendingCount more JMDO(s) still waiting on your review.</span>
             </div>
         }
 
         <div class="alreq-card">
             <h3 class="alreq-card-title">Dealer Tasks</h3>
+            <p class="alreq-card-hint">Dates must fall within the JMDO's allocated week: @WeekRangeLabel.</p>
 
             <div class="alreq-table-scroll">
                 <table class="alreq-table">
@@ -77,6 +96,7 @@
                                 <td data-label="Date">
                                     <input type="date" class="alreq-select alreq-assign-select alreq-date-select"
                                            value="@(task.PlannedDate?.ToString("yyyy-MM-dd"))"
+                                           min="@WeekStart.ToString("yyyy-MM-dd")" max="@WeekEnd.ToString("yyyy-MM-dd")"
                                            @onchange="e => UpdateDealerPlannedDate(task, e.Value?.ToString())" />
                                 </td>
                                 <td data-label="Priority">
@@ -86,7 +106,7 @@
                                     </select>
                                 </td>
                                 <td class="alreq-cell-actions">
-                                    <button type="button" class="alreq-icon-btn-danger" title="Remove task" @onclick="() => RemoveDealerTask(task)">
+                                    <button type="button" class="alreq-icon-btn-danger" title="Remove task" @onclick="() => ConfirmRemoveDealerTask(task)">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </td>
@@ -112,7 +132,15 @@
                 </div>
                 <div class="alreq-add-field alreq-add-field-date">
                     <label class="alreq-add-label">Date</label>
-                    <input type="date" class="alreq-select alreq-date-select" @bind="selectedDateToAdd" />
+                    <input type="date" class="alreq-select alreq-date-select" @bind="selectedDateToAdd"
+                           min="@WeekStart.ToString("yyyy-MM-dd")" max="@WeekEnd.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="alreq-add-field alreq-add-field-priority">
+                    <label class="alreq-add-label">Priority</label>
+                    <select class="alreq-select" @bind="selectedPriorityToAdd">
+                        <option value="@DealerTaskPriority.Normal">Normal</option>
+                        <option value="@DealerTaskPriority.High">High Priority</option>
+                    </select>
                 </div>
                 <button type="button" class="alreq-btn-add" @onclick="AddDealerTask">
                     <i class="bi bi-plus-lg"></i> Add
@@ -120,46 +148,67 @@
             </div>
         </div>
 
+        <!-- SPCM, Soil Sample, and PoS Liquidation are three independent tasks (each with its own
+             Start/Stop and completion status everywhere else in the app - TaskDetail/
+             TasksAllocation) - previously shown in one shared 2-column grid under one ambiguous
+             "This Week's Targets" heading, which read as if they were all one combined target.
+             Each now gets its own clearly labelled card so the MDO can't confuse them. Stacked in
+             one column (all the same width) rather than side by side, with MD Programs alongside. -->
         <div class="alreq-two-col">
-            <div class="alreq-card">
-                <h3 class="alreq-card-title">This Week's Targets</h3>
-                <div class="alreq-target-grid">
-                    <div class="alreq-target-field">
-                        <label class="alreq-field-label" for="alreq-spcm">SPCM Target</label>
-                        <input id="alreq-spcm" type="number" min="0" class="alreq-input" @bind="spcmTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+            <div class="alreq-target-stack">
+                <div class="alreq-target-pair">
+                    <div class="alreq-card">
+                        <h3 class="alreq-card-title">SPCM Target</h3>
+                        <p class="alreq-card-hint">A separate task from Soil Sample and PoS Liquidation.</p>
+                        <div class="alreq-target-field">
+                            <label class="alreq-field-label" for="alreq-spcm">Weekly Target</label>
+                            <input id="alreq-spcm" type="number" min="0" class="alreq-input" @bind="spcmTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+                        </div>
                     </div>
-                    <div class="alreq-target-field">
-                        <label class="alreq-field-label" for="alreq-soil">Soil Sample Target</label>
-                        <input id="alreq-soil" type="number" min="0" class="alreq-input" @bind="soilTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+
+                    <div class="alreq-card">
+                        <h3 class="alreq-card-title">Soil Sample Target</h3>
+                        <p class="alreq-card-hint">A separate task from SPCM and PoS Liquidation.</p>
+                        <div class="alreq-target-field">
+                            <label class="alreq-field-label" for="alreq-soil">Weekly Target</label>
+                            <input id="alreq-soil" type="number" min="0" class="alreq-input" @bind="soilTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+                        </div>
                     </div>
-                    <div class="alreq-target-field">
-                        <label class="alreq-field-label" for="alreq-urea">Urea</label>
-                        <input id="alreq-urea" type="number" min="0" class="alreq-input" @bind="ureaTarget" @bind:event="onchange" @bind:after="SaveTargets" />
-                    </div>
-                    <div class="alreq-target-field">
-                        <label class="alreq-field-label" for="alreq-dap">DAP</label>
-                        <input id="alreq-dap" type="number" min="0" class="alreq-input" @bind="dapTarget" @bind:event="onchange" @bind:after="SaveTargets" />
-                    </div>
-                    <div class="alreq-target-field">
-                        <label class="alreq-field-label" for="alreq-nps">NPKS</label>
-                        <input id="alreq-nps" type="number" min="0" class="alreq-input" @bind="npsTarget" @bind:event="onchange" @bind:after="SaveTargets" />
-                    </div>
-                    <div class="alreq-target-field">
-                        <label class="alreq-field-label" for="alreq-other">Other</label>
-                        <input id="alreq-other" type="number" min="0" class="alreq-input" @bind="otherTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+                </div>
+
+                <div class="alreq-card">
+                    <h3 class="alreq-card-title">PoS Liquidation Targets</h3>
+                    <p class="alreq-card-hint">Urea, DAP, NPKS, and Other are each tracked independently.</p>
+                    <div class="alreq-target-grid">
+                        <div class="alreq-target-field">
+                            <label class="alreq-field-label" for="alreq-urea">Urea</label>
+                            <input id="alreq-urea" type="number" min="0" class="alreq-input" @bind="ureaTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+                        </div>
+                        <div class="alreq-target-field">
+                            <label class="alreq-field-label" for="alreq-dap">DAP</label>
+                            <input id="alreq-dap" type="number" min="0" class="alreq-input" @bind="dapTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+                        </div>
+                        <div class="alreq-target-field">
+                            <label class="alreq-field-label" for="alreq-nps">NPKS</label>
+                            <input id="alreq-nps" type="number" min="0" class="alreq-input" @bind="npsTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+                        </div>
+                        <div class="alreq-target-field">
+                            <label class="alreq-field-label" for="alreq-other">Other</label>
+                            <input id="alreq-other" type="number" min="0" class="alreq-input" @bind="otherTarget" @bind:event="onchange" @bind:after="SaveTargets" />
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div class="alreq-card">
                 <h3 class="alreq-card-title">MD Programs</h3>
+                <p class="alreq-card-hint">Read-only - these come automatically from CSR1's own Responsible Person assignment.</p>
 
                 <div class="alreq-chip-list">
                     @foreach (var program in _detail.Programs)
                     {
-                        <span class="alreq-chip">
+                        <span class="alreq-chip alreq-chip-readonly">
                             <span class="alreq-chip-dot"></span>@program.ProgramName
-                            <button type="button" class="alreq-chip-remove" title="Remove program" @onclick="() => RemoveProgramRow(program)">&times;</button>
                         </span>
                     }
                     @if (!_detail.Programs.Any())
@@ -174,13 +223,66 @@
             <div class="alreq-summary-text">
                 @_detail.Dealers.Count dealer task(s) &middot; SPCM target @Fallback(spcmTarget) &middot; Soil sample target @Fallback(soilTarget) &middot; @_detail.Programs.Count program(s) &middot; @Fallback(ureaTarget)-Urea &middot; @Fallback(dapTarget)-DAP &middot; @Fallback(npsTarget)-NPKS &middot; @Fallback(otherTarget)-Other
             </div>
-            <button type="button" class="alreq-btn-approve" disabled="@_isApproving" @onclick="ApproveAllocation">
+            <button type="button" class="alreq-btn-approve" disabled="@_isApproving" @onclick="() => _showApproveConfirm = true">
                 <i class="bi bi-check-lg"></i> @(_isApproving ? "Approving..." : "Approve Allocation")
             </button>
         </div>
     }
 
 </div>
+
+@if (_pendingDeleteTask != null)
+{
+    <div class="alreq-modal-overlay">
+        <div class="alreq-modal-card">
+            <div class="alreq-modal-header">
+                <h4>Remove Dealer Task</h4>
+                <button type="button" class="alreq-modal-close" @onclick="() => _pendingDeleteTask = null">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="alreq-modal-body">
+                <p>Remove <strong>@_pendingDeleteTask.DealerName</strong> from this allocation? This can't be undone.</p>
+            </div>
+            <div class="alreq-modal-footer">
+                <button type="button" class="alreq-modal-btn-outline" @onclick="() => _pendingDeleteTask = null">Cancel</button>
+                <button type="button" class="alreq-modal-btn-danger" @onclick="RemoveDealerTask">Remove</button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_showApproveConfirm)
+{
+    <div class="alreq-modal-overlay">
+        <div class="alreq-modal-card">
+            <div class="alreq-modal-header">
+                <h4>@(_detail?.Status == "Approved" ? "Save Changes" : "Approve Allocation")</h4>
+                <button type="button" class="alreq-modal-close" @onclick="() => _showApproveConfirm = false">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="alreq-modal-body">
+                <p>
+                    @if (_detail?.Status == "Approved")
+                    {
+                        <text>Save these changes to <strong>@_detail.JmdoName</strong>'s already-approved allocation?</text>
+                    }
+                    else
+                    {
+                        <text>Approve <strong>@_detail?.JmdoName</strong>'s weekly allocation? They'll be able to start on it right away.</text>
+                    }
+                </p>
+            </div>
+            <div class="alreq-modal-footer">
+                <button type="button" class="alreq-modal-btn-outline" @onclick="() => _showApproveConfirm = false">Cancel</button>
+                <button type="button" class="alreq-modal-btn-primary" disabled="@_isApproving" @onclick="ApproveAllocation">
+                    @(_isApproving ? "Approving..." : "Yes, Approve")
+                </button>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     [SupplyParameterFromQuery(Name = "allocationId")]
@@ -297,20 +399,33 @@
             npsTarget = detail.NpsTarget?.ToString() ?? "";
             otherTarget = detail.OthersTarget?.ToString() ?? "";
 
-            // Calculate PlannedDate from Day if it's null
+            // PlannedDate is always derived from AllocationDate (the JMDO's actual allocated
+            // week) + Day - recompute and self-heal it whenever it's missing OR stale, rather
+            // than only backfilling a null. An earlier version of this backfill computed the
+            // week from SubmittedAt (the literal submission timestamp) instead of AllocationDate,
+            // which silently wrote the WRONG date to the database for any allocation submitted
+            // for a week other than "this week" (e.g. planned one week ahead via the JMDO's own
+            // "Next Week" navigation) - this corrects those already-stored bad values too, not
+            // just rows that never got a date at all.
             foreach (var task in _detail.Dealers)
             {
-                if (task.PlannedDate == null && task.Day.HasValue)
+                if (task.Day.HasValue)
                 {
-                    DateTime weekStart = _detail.SubmittedAt.Date;
-                    int diff = (int)weekStart.DayOfWeek;
-                    weekStart = weekStart.AddDays(-diff);
-                    task.PlannedDate = weekStart.AddDays((int)task.Day.Value);
-                    
-                    // Fire update to backend silently so it's persisted
-                    _ = UpdateDealerPlannedDate(task, task.PlannedDate.Value.ToString("yyyy-MM-dd"));
+                    var correctDate = WeekStart.AddDays((int)task.Day.Value);
+                    if (task.PlannedDate?.Date != correctDate.Date)
+                    {
+                        task.PlannedDate = correctDate;
+
+                        // Fire update to backend silently so it's persisted
+                        _ = UpdateDealerPlannedDate(task, task.PlannedDate.Value.ToString("yyyy-MM-dd"));
+                    }
                 }
             }
+
+            // Defaults the "Add dealer task(s)" date field to somewhere inside the actual
+            // allocated week instead of literally today, which could easily fall outside it when
+            // reviewing a different week's submission.
+            selectedDateToAdd = DateTime.Today >= WeekStart && DateTime.Today <= WeekEnd ? DateTime.Today : WeekStart;
 
             await LoadAvailableDealersAsync();
         }
@@ -336,6 +451,15 @@
     private List<SubDealerOptionDto> AvailableDealers = new();
     private List<int> selectedDealerIdsToAdd = new();
     private DateTime selectedDateToAdd = DateTime.Today;
+    private DealerTaskPriority selectedPriorityToAdd = DealerTaskPriority.Normal;
+
+    // The JMDO's actual allocated week (Sunday-Saturday) - dealer task dates are constrained to
+    // this range everywhere on this page (existing rows' date picker, and the "Add dealer
+    // task(s)" date field) so the MDO adjusts this week's work order instead of accidentally
+    // reassigning a task to an entirely different week.
+    private DateTime WeekStart => _detail?.AllocationDate.Date ?? DateTime.Today;
+    private DateTime WeekEnd => WeekStart.AddDays(6);
+    private string WeekRangeLabel => $"{WeekStart:dd MMM} - {WeekEnd:dd MMM yyyy}";
 
     // Scoped to the allocation's own HQ (falling back to the signed-in MDO's)
     // so the add-dealer list reflects the submitting JMDO's area, not the
@@ -371,6 +495,14 @@
     {
         if (_detail is null || selectedDealerIdsToAdd.Count == 0) return;
 
+        // Same week-range check the server enforces in AddDealer - checked here first so an
+        // out-of-week date is rejected instantly instead of waiting on a round trip.
+        if (selectedDateToAdd.Date < WeekStart || selectedDateToAdd.Date > WeekEnd)
+        {
+            Toast.Error($"The date must fall within the JMDO's allocated week ({WeekRangeLabel}).");
+            return;
+        }
+
         // Same (dealer, date) check the server enforces in AddDealer - checked here first so an
         // obvious duplicate is rejected instantly instead of waiting on a round trip.
         var alreadyAssigned = selectedDealerIdsToAdd
@@ -390,7 +522,7 @@
         {
             try
             {
-                var dto = new AddDealerToAllocationDto { DealerId = dealerId, PlannedDate = selectedDateToAdd };
+                var dto = new AddDealerToAllocationDto { DealerId = dealerId, PlannedDate = selectedDateToAdd, Priority = selectedPriorityToAdd };
                 var response = await Http.PostAsJsonAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers", dto);
                 if (!response.IsSuccessStatusCode)
                 {
@@ -413,6 +545,7 @@
             Toast.Error(string.Join("; ", failures));
 
         selectedDealerIdsToAdd = new();
+        selectedPriorityToAdd = DealerTaskPriority.Normal;
         await LoadAvailableDealersAsync();
     }
 
@@ -439,9 +572,19 @@
         return fallback;
     }
 
-    private async Task RemoveDealerTask(JmdoAllocationDealerRowDto task)
+    // Trash icon just stages which task would be removed - RemoveDealerTask (below) only runs
+    // once the MDO confirms in the modal, so a misclick can't instantly delete a task.
+    private JmdoAllocationDealerRowDto? _pendingDeleteTask;
+
+    private void ConfirmRemoveDealerTask(JmdoAllocationDealerRowDto task)
     {
-        if (_detail is null) return;
+        _pendingDeleteTask = task;
+    }
+
+    private async Task RemoveDealerTask()
+    {
+        if (_detail is null || _pendingDeleteTask is not { } task) return;
+        _pendingDeleteTask = null;
         try
         {
             var response = await Http.DeleteAsync($"api/JmdoTaskAllocation/{_detail.Id}/dealers/{task.RowId}");
@@ -504,30 +647,9 @@
     }
 
     // ---------- MD Programs ----------
-    // No "available programs to add" list anymore - MD programs come from CSR1's own
-    // ResponsiblePersonId assignment (set when the CSR1 record is created/approved), not from a
-    // picker on this review page. Removal stays available for the MDO to exclude a program from
-    // this week's work order without touching the underlying CSR1 assignment.
-    private async Task RemoveProgramRow(JmdoAllocationProgramRowDto program)
-    {
-        if (_detail is null) return;
-        try
-        {
-            var response = await Http.DeleteAsync($"api/JmdoTaskAllocation/{_detail.Id}/programs/{program.RowId}");
-            if (!response.IsSuccessStatusCode)
-            {
-                Toast.Error("Could not remove that program.");
-                return;
-            }
-
-            _detail.Programs.Remove(program);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Remove program failed: {ex.Message}");
-            Toast.Error("Could not remove that program.");
-        }
-    }
+    // Read-only on this page - MD programs come entirely from CSR1's own ResponsiblePersonId
+    // assignment (set when the CSR1 record is created/approved), so the MDO reviews them here but
+    // can't add/remove them; the underlying CSR1 assignment is the only place that changes.
 
     // ---------- Targets ----------
     private string spcmTarget = "";
@@ -569,6 +691,7 @@
 
     // ---------- Approve ----------
     private bool _isApproving;
+    private bool _showApproveConfirm;
 
     private async Task ApproveAllocation()
     {
@@ -594,6 +717,7 @@
         finally
         {
             _isApproving = false;
+            _showApproveConfirm = false;
         }
     }
 }
