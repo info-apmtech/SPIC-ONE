@@ -8,7 +8,7 @@ namespace SPIC.Core.DTOs;
 ///
 ///   GET  api/JMDOAttendance/today            -> JMDOAttendanceDto? (the caller's own row for today, or null)
 ///   POST api/JMDOAttendance                  -> JMDOAttendanceDto (body: JMDOAttendanceUpsertDto; upserts by UserId+Date)
-///   GET  api/JMDOAttendance/week             -> JMDOWeeklySummaryDto (the caller's own current Monday-Sunday week)
+///   GET  api/JMDOAttendance/week             -> JMDOWeeklySummaryDto (the caller's own current Sunday-Saturday week)
 ///
 /// Enums serialize as integers (no string converter in the API).
 /// </summary>
@@ -37,9 +37,9 @@ public class JMDOAttendanceDto
 }
 
 /// <summary>
-/// The caller's current Monday-Sunday week. WeekStart is Monday 00:00 and WeekEnd is the Sunday
+/// The caller's current Sunday-Saturday week. WeekStart is Sunday 00:00 and WeekEnd is the Saturday
 /// (date only, inclusive) - records are queried with the half-open range [WeekStart, WeekStart + 7 days).
-/// Always exactly 7 Days, Monday first, including days with no attendance.
+/// Always exactly 7 Days, Sunday first, including days with no attendance.
 /// </summary>
 public class JMDOWeeklySummaryDto
 {

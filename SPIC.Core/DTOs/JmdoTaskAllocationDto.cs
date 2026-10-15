@@ -279,4 +279,51 @@ namespace SPIC.Core.DTOs
         // Rejected allocations are excluded entirely upstream (their tasks are dead, not "requested").
         public string Status { get; set; } = "";
     }
+
+    // GET api/JmdoTaskAllocation/mine/summary - the signed-in JMDO's own allocation for the current
+    // Sunday-Saturday week, counted with the same "what is a task" rules as the Monitoring report.
+    // Allocated always equals Completed + InProgress + Pending (Pending = YetToStart only).
+    public class JmdoTaskSummaryDto
+    {
+        public DateTime WeekStart { get; set; } // Sunday
+        public DateTime WeekEnd { get; set; }   // Saturday (inclusive)
+
+        public bool HasAllocation { get; set; }
+        public JmdoTaskAllocationStatus? AllocationStatus { get; set; }
+
+        public int Allocated { get; set; }
+        public int Completed { get; set; }
+        public int InProgress { get; set; }
+        public int Pending { get; set; }
+
+        // Nearby covers dealer tasks only - no other task type has coordinates.
+        public int PendingDealerTasks { get; set; }
+        public int PendingDealerTasksWithCoordinates { get; set; }
+        /// <summary>Null when no valid device location was supplied (not "zero nearby").</summary>
+        public int? NearbyPendingDealerTasks { get; set; }
+        public double NearbyRadiusKm { get; set; }
+
+        // The same tasks as Allocated above, split so each is counted exactly once:
+        //   Days            - dealer visits, under their planned day (PlannedDate, else PlannedDay), Sunday first, always 7;
+        //   WeeklyTasks     - MD Program / SPCM / Soil Sample / PoS: no day exists for these in the data model;
+        //   UnscheduledDealerTasks - dealer visits with no day, or a PlannedDate outside this week.
+        // Sum of Days + WeeklyTasks + UnscheduledDealerTasks == the totals above.
+        public List<JmdoTaskDayCountsDto> Days { get; set; } = new();
+        public JmdoTaskCountsDto WeeklyTasks { get; set; } = new();
+        public JmdoTaskCountsDto UnscheduledDealerTasks { get; set; } = new();
+    }
+
+    // Allocated == Completed + InProgress + Pending (Pending = YetToStart only).
+    public class JmdoTaskCountsDto
+    {
+        public int Allocated { get; set; }
+        public int Completed { get; set; }
+        public int InProgress { get; set; }
+        public int Pending { get; set; }
+    }
+
+    public class JmdoTaskDayCountsDto : JmdoTaskCountsDto
+    {
+        public DateTime Date { get; set; }
+    }
 }

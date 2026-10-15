@@ -15,11 +15,16 @@ public class JmdoTaskAllocationController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly IWebHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
 
-    public JmdoTaskAllocationController(AppDbContext db, IWebHostEnvironment environment)
+    // "JmdoTasks:NearbyRadiusKm" in appsettings overrides this; no radius existed anywhere before.
+    private const double DefaultNearbyRadiusKm = 5;
+
+    public JmdoTaskAllocationController(AppDbContext db, IWebHostEnvironment environment, IConfiguration configuration)
     {
         _db = db;
         _environment = environment;
+        _configuration = configuration;
     }
 
     // ---- Claim helpers, copied from SubDealerRegistrationController so the two controllers'
@@ -233,6 +238,162 @@ public class JmdoTaskAllocationController : ControllerBase
             .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
 
         return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList(), csr1Lookup));
+    }
+
+    // GET api/JmdoTaskAllocation/mine/summary?latitude=&longitude=
+    // Read-only counts for MarkAttendance's task card. Only the current Sunday-Saturday week's
+    // allocation (no fallback to an older week, and never provisions one - unlike
+    // GetMyCurrentAllocationAsync). "What is a task" follows GetMonitoring exactly. The device
+    // location is optional and only feeds the nearby-dealer count.
+    [Authorize(Roles = "JMDO")]
+    [HttpGet("mine/summary")]
+    public async Task<ActionResult<JmdoTaskSummaryDto>> GetMySummary([FromQuery] double? latitude = null, [FromQuery] double? longitude = null)
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var weekStart = CurrentWeekStart();
+        var radiusKm = _configuration.GetValue<double?>("JmdoTasks:NearbyRadiusKm") is { } configured && configured > 0
+            ? configured
+            : DefaultNearbyRadiusKm;
+
+        var summary = new JmdoTaskSummaryDto
+        {
+            WeekStart = weekStart,
+            WeekEnd = weekStart.AddDays(6),
+            NearbyRadiusKm = radiusKm,
+            Days = Enumerable.Range(0, 7).Select(i => new JmdoTaskDayCountsDto { Date = weekStart.AddDays(i) }).ToList()
+        };
+
+        // Rejected is excluded as in GetMonitoring/Create. Create allows one live allocation per
+        // week; lowest Id keeps the pick deterministic if older data ever has more than one.
+        var allocation = await _db.JmdoTaskAllocations.AsNoTracking()
+            .Where(a => a.SubmittedByUserId == userId
+                && a.AllocationDate >= weekStart && a.AllocationDate < weekStart.AddDays(7)
+                && a.Status != JmdoTaskAllocationStatus.Rejected)
+            .OrderBy(a => a.Id)
+            .Select(a => new
+            {
+                a.Id,
+                a.Status,
+                a.SpcmTarget,
+                a.SoilSampleTarget,
+                a.UreaTarget,
+                a.DapTarget,
+                a.NpsTarget,
+                a.OthersTarget,
+                a.SpcmStatus,
+                a.SoilSampleStatus,
+                a.PosLiquidationStatus
+            })
+            .FirstOrDefaultAsync();
+
+        if (allocation == null)
+            return Ok(summary);
+
+        summary.HasAllocation = true;
+        summary.AllocationStatus = allocation.Status;
+
+        // One row = one task (duplicate dealer rows each count, as in GetMonitoring). Only the
+        // columns needed for status + day are read.
+        var dealerTasks = await _db.JmdoTaskAllocationDealers.AsNoTracking()
+            .Where(d => d.AllocationId == allocation.Id)
+            .Select(d => new { d.Status, d.PlannedDate, d.PlannedDay })
+            .ToListAsync();
+        var programCounts = await _db.JmdoTaskAllocationPrograms.AsNoTracking()
+            .Where(p => p.AllocationId == allocation.Id)
+            .GroupBy(p => p.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        // Weekly tasks: no day exists for MD Program or the three targets anywhere in the model.
+        var weeklyStatuses = programCounts.SelectMany(c => Enumerable.Repeat(c.Status, c.Count)).ToList();
+
+        // Target tasks: GetMonitoring's HasValue rule (a target of 0 still counts as a task).
+        if (allocation.SpcmTarget.HasValue)
+            weeklyStatuses.Add(allocation.SpcmStatus);
+        if (allocation.SoilSampleTarget.HasValue)
+            weeklyStatuses.Add(allocation.SoilSampleStatus);
+        if (allocation.UreaTarget.HasValue || allocation.DapTarget.HasValue || allocation.NpsTarget.HasValue || allocation.OthersTarget.HasValue)
+            weeklyStatuses.Add(allocation.PosLiquidationStatus);
+
+        foreach (var status in weeklyStatuses)
+            AddStatus(summary.WeeklyTasks, status);
+
+        // Dealer day: the MDO-pinned PlannedDate when set, otherwise the JMDO's PlannedDay mapped
+        // onto this week (the same weekStart + Day rule AllocationRequestReview uses to back-fill
+        // PlannedDate). No day, or a PlannedDate outside this week, counts as unscheduled.
+        foreach (var dealer in dealerTasks)
+        {
+            DateTime? day = dealer.PlannedDate?.Date
+                ?? (dealer.PlannedDay is { } plannedDay ? weekStart.AddDays((int)plannedDay) : null);
+
+            var bucket = day is { } d && d >= weekStart && d < weekStart.AddDays(7)
+                ? summary.Days[(d - weekStart).Days]
+                : summary.UnscheduledDealerTasks;
+            AddStatus(bucket, dealer.Status);
+        }
+
+        var buckets = summary.Days.Cast<JmdoTaskCountsDto>()
+            .Append(summary.WeeklyTasks)
+            .Append(summary.UnscheduledDealerTasks)
+            .ToList();
+        summary.Allocated = buckets.Sum(b => b.Allocated);
+        summary.Completed = buckets.Sum(b => b.Completed);
+        summary.InProgress = buckets.Sum(b => b.InProgress);
+        summary.Pending = buckets.Sum(b => b.Pending);
+
+        // Nearby: pending (YetToStart) dealer tasks only, using the dealer's registered coordinates.
+        var pendingDealers = await (
+            from d in _db.JmdoTaskAllocationDealers.AsNoTracking()
+            join s in _db.SubDealerRegistrations.AsNoTracking() on d.SubDealerId equals s.Id into dealerJoin
+            from s in dealerJoin.DefaultIfEmpty()
+            where d.AllocationId == allocation.Id && d.Status == AllocTaskStatus.YetToStart
+            select new { Latitude = s != null ? s.Latitude : null, Longitude = s != null ? s.Longitude : null }
+            ).ToListAsync();
+
+        var located = pendingDealers
+            .Where(d => IsUsableCoordinate(d.Latitude, d.Longitude))
+            .Select(d => (Lat: d.Latitude!.Value, Lng: d.Longitude!.Value))
+            .ToList();
+
+        summary.PendingDealerTasks = pendingDealers.Count;
+        summary.PendingDealerTasksWithCoordinates = located.Count;
+
+        if (IsUsableCoordinate(latitude, longitude))
+            summary.NearbyPendingDealerTasks = located.Count(d => HaversineKm(latitude!.Value, longitude!.Value, d.Lat, d.Lng) <= radiusKm);
+
+        return Ok(summary);
+    }
+
+    // Status -> bucket: Completed, InProgress, or Pending (YetToStart only); always also Allocated.
+    private static void AddStatus(JmdoTaskCountsDto counts, AllocTaskStatus status)
+    {
+        counts.Allocated++;
+        switch (status)
+        {
+            case AllocTaskStatus.Completed: counts.Completed++; break;
+            case AllocTaskStatus.InProgress: counts.InProgress++; break;
+            default: counts.Pending++; break;
+        }
+    }
+
+    // (0, 0) is treated as "not captured", the same way TaskDetail ignores a 0/0 GPS fix.
+    private static bool IsUsableCoordinate(double? latitude, double? longitude) =>
+        latitude is { } lat && longitude is { } lng
+        && !double.IsNaN(lat) && !double.IsInfinity(lat) && !double.IsNaN(lng) && !double.IsInfinity(lng)
+        && lat is >= -90 and <= 90 && lng is >= -180 and <= 180
+        && !(lat == 0 && lng == 0);
+
+    private static double HaversineKm(double lat1, double lng1, double lat2, double lng2)
+    {
+        const double EarthRadiusKm = 6371.0;
+        var dLat = (lat2 - lat1) * Math.PI / 180;
+        var dLng = (lng2 - lng1) * Math.PI / 180;
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+            + Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) * Math.Sin(dLng / 2) * Math.Sin(dLng / 2);
+        return EarthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 
     // Shared by every endpoint that acts on "my own" current allocation (status

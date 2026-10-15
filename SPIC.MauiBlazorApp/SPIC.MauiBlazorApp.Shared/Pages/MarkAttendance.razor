@@ -188,11 +188,31 @@
                                 <span class="ma-info-sub">@(day.AttendanceStatus is { } status ? (status == JMDOAttendanceStatus.Absent ? "Absent" : StatusToLabel(status)) : "No attendance")</span>
                                 <span class="ma-weekly-hours">@FormatDuration(day.WorkingDuration)</span>
                                 <span class="ma-weekly-sep">-</span>
-                                <span class="ma-weekly-locations">@day.TasksStarted @(day.TasksStarted == 1 ? "task" : "tasks")</span>
+                                <span class="ma-weekly-locations">@day.TasksStarted @(day.TasksStarted == 1 ? "task" : "tasks") started</span>
                                 <span class="ma-weekly-km">@day.DistanceKm.ToString("0.0") km</span>
+                                <span class="ma-weekly-tasks">@DayTaskText(day.Date)</span>
                             </div>
                         }
                     </div>
+
+                    @if (_tasks is { HasAllocation: true } tasks)
+                    {
+                        <div class="ma-weekly-row ma-weekly-extra">
+                            <span class="ma-weekly-dot"></span>
+                            <span class="ma-weekly-day">Weekly tasks</span>
+                            <span class="ma-info-sub">MD Program, SPCM, Soil Sample, PoS &middot; no planned day</span>
+                            <span class="ma-weekly-tasks">@TaskCountsText(tasks.WeeklyTasks)</span>
+                        </div>
+                        @if (tasks.UnscheduledDealerTasks.Allocated > 0)
+                        {
+                            <div class="ma-weekly-row ma-weekly-extra">
+                                <span class="ma-weekly-dot"></span>
+                                <span class="ma-weekly-day">Unscheduled dealers</span>
+                                <span class="ma-info-sub">no planned day in this week</span>
+                                <span class="ma-weekly-tasks">@TaskCountsText(tasks.UnscheduledDealerTasks)</span>
+                            </div>
+                        }
+                    }
                 }
             </div>
         </div>
@@ -242,8 +262,52 @@
 
         var prefillForm = !_loadedOnce;
         _loadedOnce = true;
-        await Task.WhenAll(RefreshTodayStatusAsync(prefillForm), RefreshWeekAsync());
+        await Task.WhenAll(RefreshTodayStatusAsync(prefillForm), RefreshWeekAsync(), RefreshTaskSummaryAsync());
     }
+
+    // ---- Daily task counts (Weekly Summary rows): api/JmdoTaskAllocation/mine/summary, loaded
+    // independently of the attendance calls so a failure here never blocks them.
+    private bool _tasksLoading = true;
+    private JmdoTaskSummaryDto? _tasks;
+
+    private async Task RefreshTaskSummaryAsync()
+    {
+        _tasksLoading = true;
+
+        JmdoTaskSummaryDto? result = null;
+        try
+        {
+            var response = await Http.GetAsync("api/JmdoTaskAllocation/mine/summary");
+            if (response.IsSuccessStatusCode)
+                result = await response.Content.ReadFromJsonAsync<JmdoTaskSummaryDto>();
+            else
+                Console.WriteLine($"Loading the task summary failed: HTTP {(int)response.StatusCode}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loading the task summary failed: {ex.Message}");
+        }
+
+        _tasks = result;
+        _tasksLoading = false;
+    }
+
+    // Per-day allocated dealer visits (the only task type with a day). Matched by date, so a task
+    // summary for a different week (e.g. loaded either side of midnight Saturday) never lines up wrongly.
+    private string DayTaskText(DateTime date)
+    {
+        if (_tasks is null) return _tasksLoading ? "Tasks: loading..." : "Tasks: unavailable";
+        if (!_tasks.HasAllocation) return "Tasks: no allocation";
+
+        var counts = _tasks.Days.FirstOrDefault(d => d.Date.Date == date.Date);
+        return counts is null ? "Tasks: -" : TaskCountsText(counts);
+    }
+
+    private static string TaskCountsText(JmdoTaskCountsDto c) =>
+        c.Allocated == 0
+            ? "Allocated: 0"
+            : $"Allocated: {c.Allocated} | Completed: {c.Completed} | Pending: {c.Pending}"
+              + (c.InProgress > 0 ? $" | In Progress: {c.InProgress}" : "");
 
     // ---- This Week / Current Status / Weekly Summary: all from the server, for the signed-in JMDO.
     private bool _statusLoading = true;

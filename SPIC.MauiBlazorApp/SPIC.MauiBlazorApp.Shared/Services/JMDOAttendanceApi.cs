@@ -65,7 +65,7 @@ public sealed class JMDOAttendanceApi
     }
 
     /// <summary>
-    /// The caller's current Monday-Sunday week summary, or null on failure. No toast: the page
+    /// The caller's current Sunday-Saturday week summary, or null on failure. No toast: the page
     /// shows its own inline error state, and a failure here must not get in the way of marking attendance.
     /// </summary>
     public async Task<JMDOWeeklySummaryDto?> GetWeekAsync(CancellationToken ct = default)

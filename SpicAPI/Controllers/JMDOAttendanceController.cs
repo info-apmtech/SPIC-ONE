@@ -96,7 +96,7 @@ namespace SpicAPI.Controllers
         }
 
         // GET /api/JMDOAttendance/week
-        // The caller's current Monday-Sunday week, one row per day. Server local time throughout,
+        // The caller's current Sunday-Saturday week (same week as the task allocation), one row per day. Server local time throughout,
         // the same clock GetToday/UpdateAttendance and the tracking endpoints stamp rows with.
         [HttpGet("week")]
         public async Task<IActionResult> GetWeek()
@@ -106,7 +106,7 @@ namespace SpicAPI.Controllers
 
             var userId = CurrentUserId();
             var now = DateTime.Now;
-            var weekStart = WeekStartMonday(now.Date);
+            var weekStart = WeekStartSunday(now.Date);
             var weekEndExclusive = weekStart.AddDays(7);
 
             var attendances = await _db.JMDOAttendances.AsNoTracking()
@@ -190,9 +190,9 @@ namespace SpicAPI.Controllers
             });
         }
 
-        // Monday of the week containing date (Sunday belongs to the week that started six days earlier).
-        private static DateTime WeekStartMonday(DateTime date) =>
-            date.Date.AddDays(-(((int)date.DayOfWeek + 6) % 7));
+        // Sunday of the week containing date - the same rule as JmdoTaskAllocationController.WeekStartFor.
+        private static DateTime WeekStartSunday(DateTime date) =>
+            date.Date.AddDays(-(int)date.DayOfWeek);
 
         // Every task the caller started in [from, to): each task row has one StartedAt, stamped once
         // (JmdoTaskAllocationController.UpdateMyTaskStatus never overwrites it), so each start counts once.
