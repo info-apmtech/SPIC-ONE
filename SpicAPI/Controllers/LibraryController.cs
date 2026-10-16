@@ -30,7 +30,7 @@ namespace SpicAPI.Controllers
     public class LibraryController : ControllerBase
     {
         private const long MaxCoverBytes = 5L * 1024 * 1024;
-        private const long MaxVideoBytes = 200L * 1024 * 1024;
+        private const long MaxVideoBytes = 700L * 1024 * 1024;
         private const long MaxDocumentBytes = 25L * 1024 * 1024;
 
         private static readonly string[] CoverExtensions = { ".jpg", ".jpeg", ".png", ".webp" };

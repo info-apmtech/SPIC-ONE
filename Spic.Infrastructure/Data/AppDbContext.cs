@@ -90,51 +90,6 @@ namespace Spic.Infrastructure.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-        // =====================================================================
-        //  Permission System Phase 1 - page catalog tables (ADDITIVE ONLY).
-        //
-        //  These two tables are a normalized compatibility mirror of the existing
-        //  PagePermission enum + Designation.RoleAccess. Nothing at runtime reads
-        //  them yet - login, LoginState, NavMenu, PageGuard, Designation.razor
-        //  and the server-side SDWA checks all continue to use RoleAccess exactly
-        //  as before. They exist only so a future Phase 2+ can become database
-        //  driven without a destructive rewrite.
-        // =====================================================================
-
-        builder.Entity<ApplicationPage>(entity =>
-        {
-            entity.HasKey(p => p.Id);
-            entity.Property(p => p.Key).IsRequired();
-            entity.HasIndex(p => p.Key).IsUnique();
-        });
-
-        builder.Entity<DesignationPermission>(entity =>
-        {
-            entity.HasKey(dp => new { dp.DesignationId, dp.PageId });
-
-            entity.HasOne(dp => dp.Designation)
-                .WithMany()
-                .HasForeignKey(dp => dp.DesignationId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(dp => dp.Page)
-                .WithMany()
-                .HasForeignKey(dp => dp.PageId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(dp => dp.PageId);
-        });
-
-        // Page catalogue seeding was intentionally removed. ApplicationPage
-        // ("Pages") is owned by the live database (created in
-        // V5j_PagePermissionCatalog and maintained through the Page Management
-        // UI). Keeping HasData here turned every PagePermission enum change into
-        // a model diff that would INSERT/UPDATE/DELETE Pages rows in future
-        // migrations, and its enum-index ids collided with ids already in use on
-        // the live site. The Pages table, DbSet, mapping and Designation
-        // permissions are unchanged.
-
-
         // ---------------------------------------------------------------- Digital Library
         builder.Entity<LibraryContent>(entity =>
         {
@@ -763,37 +718,8 @@ namespace Spic.Infrastructure.Data
 
         }
 
-        // Same prettification the existing Designation UI uses (Designation.razor
-        // DisplayFor): "AnnualSales" -> "Annual Sales". Lower-case keys such as
-        // "dealerreviewlist" are left as-is, matching that UI exactly.
-        private static string PageDisplayName(string key)
-        {
-            if (string.Equals(key, nameof(PagePermission.QRScanner), StringComparison.OrdinalIgnoreCase))
-                return "QR Scanner";
-
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < key.Length; i++)
-            {
-                if (i > 0 && char.IsUpper(key[i]) && !char.IsUpper(key[i - 1]))
-                    sb.Append(' ');
-                sb.Append(key[i]);
-            }
-            return sb.ToString();
-        }
-
-        // Module grouping from PageModuleAttribute (null = standalone page).
-        private static string? PageModuleName(string key)
-        {
-            var field = typeof(PagePermission).GetField(key);
-            return field?.GetCustomAttribute<PageModuleAttribute>()?.Module;
-        }
-
         // User related
         public DbSet<Designation> Designations { get; set; }
-
-        // Permission System Phase 1 (additive - not read by any runtime flow yet)
-        public DbSet<ApplicationPage> Pages { get; set; }
-        public DbSet<DesignationPermission> DesignationPermissions { get; set; }
 
         // Location
         public DbSet<Zone> Zones { get; set; }

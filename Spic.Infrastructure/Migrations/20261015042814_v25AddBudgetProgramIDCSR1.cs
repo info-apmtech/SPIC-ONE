@@ -118,38 +118,8 @@ namespace Spic.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "RMDHQMappings");
-
-            migrationBuilder.DropTable(
-                name: "SanctionNumberSequences");
-
             migrationBuilder.DropColumn(
-                name: "BudgetProgramId",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level1ApprovedAt",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level1ApprovedBy",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level2ApprovedAt",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level2ApprovedBy",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level3ApprovedAt",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level3ApprovedBy",
+                name: "ProgramYear",
                 table: "CSR1");
 
             migrationBuilder.DropColumn(
@@ -157,7 +127,7 @@ namespace Spic.Infrastructure.Migrations
                 table: "CSR1");
 
             migrationBuilder.DropColumn(
-                name: "ProgramYear",
+                name: "BudgetProgramId",
                 table: "CSR1");
         }
     }

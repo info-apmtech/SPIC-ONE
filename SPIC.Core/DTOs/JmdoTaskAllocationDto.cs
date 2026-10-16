@@ -122,6 +122,9 @@ namespace SPIC.Core.DTOs
         public string? JmdoCode { get; set; }
         public string? Location { get; set; }
         public DateTime SubmittedAt { get; set; }
+        // The week's Sunday this allocation is for - lets the review page constrain dealer task
+        // dates to the JMDO's actual allocated week instead of any arbitrary date.
+        public DateTime AllocationDate { get; set; }
         public int? HeadquarterId { get; set; }
         public List<JmdoAllocationDealerRowDto> Dealers { get; set; } = new();
         public List<JmdoAllocationProgramRowDto> Programs { get; set; } = new();
@@ -171,6 +174,7 @@ namespace SPIC.Core.DTOs
     {
         public int DealerId { get; set; }
         public DateTime? PlannedDate { get; set; }
+        public DealerTaskPriority Priority { get; set; } = DealerTaskPriority.Normal;
     }
 
     public class UpdateDealerPlannedDateDto

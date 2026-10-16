@@ -1032,7 +1032,7 @@
                                     <div class="ta-week-target-tile">
                                         <div class="ta-week-target-top">
                                             <span><i class="bi @target.Icon"></i> @target.Label</span>
-                                            <span class="ta-summary-status-pill @SummaryStatusClass(target.Status)">@SummaryStatusLabel(target.Status)</span>
+                                            <span class="ta-summary-status-pill @SummaryStatusClass(target.EffectiveStatus)">@SummaryStatusLabel(target.EffectiveStatus)</span>
                                         </div>
                                         <div class="ta-week-target-bar"><div class="ta-week-target-bar-fill" style="width:@target.PercentDone%"></div></div>
                                         <div class="ta-week-target-numbers">Target <strong>@target.Target</strong> &middot; Achieved <strong>@target.Achieved</strong> &middot; Pending <strong>@target.Pending</strong></div>
@@ -1190,11 +1190,13 @@
 
     private bool CompletedDealerFilterActive => !string.IsNullOrWhiteSpace(appliedCompletedDealer);
 
-    // A dealer visit's actual calendar date - AllocationDate is always that week's Sunday, Day is
-    // which weekday within it the JMDO picked at submission (falls back to the Sunday itself if
-    // somehow unset).
+    // A dealer visit's actual calendar date - AllocationDate is supposed to always be that week's
+    // Sunday, but rows auto-provisioned before this was enforced server-side (see
+    // GetMyCurrentAllocationAsync) can hold a non-Sunday date instead; normalizing here first
+    // means Day still maps to the correct real-world weekday even for one of those older rows,
+    // instead of silently drifting by however many days AllocationDate was off by.
     private static DateTime ExactTaskDate(DateTime weekStart, DayOfWeek? day) =>
-        weekStart.AddDays((int)(day ?? DayOfWeek.Sunday));
+        NormalizeToWeekStart(weekStart).AddDays((int)(day ?? DayOfWeek.Sunday));
 
     // For dealer visits, which have a real calendar date (see ExactTaskDate) - defaults to
     // today/today so the tab opens on exactly today's scheduled visits.
@@ -1215,11 +1217,16 @@
     // the raw From/To dates directly) so today/today resolves to "this week's Sunday only" -
     // comparing against raw dates with a +/-6 day overlap window would also catch any OTHER
     // allocation whose AllocationDate happens to land in that 7-day band, which is exactly what
-    // was pulling in stray allocations from nearby weeks.
+    // was pulling in stray allocations from nearby weeks. weekStart itself is also normalized,
+    // not trusted as already being a Sunday - an allocation auto-provisioned before that was
+    // enforced server-side (see GetMyCurrentAllocationAsync) can hold a non-Sunday date, which
+    // would otherwise compare as "a different week" than the Dealer tasks on that very same
+    // allocation (whose dates go through the same normalization in ExactTaskDate above).
     private bool MatchesCompletedWeekFilter(DateTime weekStart)
     {
-        if (appliedCompletedFrom is { } from && weekStart.Date < NormalizeToWeekStart(from)) return false;
-        if (appliedCompletedTo is { } to && weekStart.Date > NormalizeToWeekStart(to)) return false;
+        var normalizedWeekStart = NormalizeToWeekStart(weekStart);
+        if (appliedCompletedFrom is { } from && normalizedWeekStart < NormalizeToWeekStart(from)) return false;
+        if (appliedCompletedTo is { } to && normalizedWeekStart > NormalizeToWeekStart(to)) return false;
         return true;
     }
 
@@ -1338,12 +1345,13 @@
         appliedSummaryStatus = "";
     }
 
-    // Same week-range convention as Task History's MatchesCompletedWeekFilter - both From and To
-    // are snapped to their own week's Sunday before comparing.
+    // Same week-range convention as Task History's MatchesCompletedWeekFilter - both From/To and
+    // weekStart itself are all snapped to their own week's Sunday before comparing.
     private bool MatchesSummaryWeekFilter(DateTime weekStart)
     {
-        if (appliedSummaryFrom is { } from && weekStart.Date < NormalizeToWeekStart(from)) return false;
-        if (appliedSummaryTo is { } to && weekStart.Date > NormalizeToWeekStart(to)) return false;
+        var normalizedWeekStart = NormalizeToWeekStart(weekStart);
+        if (appliedSummaryFrom is { } from && normalizedWeekStart < NormalizeToWeekStart(from)) return false;
+        if (appliedSummaryTo is { } to && normalizedWeekStart > NormalizeToWeekStart(to)) return false;
         return true;
     }
 
@@ -1381,6 +1389,18 @@
         public AllocTaskStatus Status;
         public int Pending => Math.Max(Target - Achieved, 0);
         public int PercentDone => Target <= 0 ? 0 : Math.Min(100, (int)Math.Round(100.0 * Achieved / Target));
+
+        // What's actually shown on the pill - derived from Target/Achieved rather than trusting
+        // Status as-is. Status can be stale "Completed" for allocations marked done before the
+        // backend started gating that transition on the logged count actually reaching Target
+        // (see JmdoTaskAllocationController's CreateCloseout/UpdateMyTaskStatus) - showing
+        // "Completed" next to "Achieved 2 - Pending 198" read as a bug even though it was really
+        // just old data. Once Achieved truly reaches Target this always reads Completed, even if
+        // Status itself hasn't caught up yet.
+        public AllocTaskStatus EffectiveStatus =>
+            Target > 0 && Achieved >= Target ? AllocTaskStatus.Completed
+            : Status == AllocTaskStatus.Completed ? AllocTaskStatus.InProgress
+            : Status;
     }
 
     private sealed class WeekSummary
@@ -1460,12 +1480,16 @@
 
         if (!dealerFilterActive)
         {
-            var spcmAchieved = a.Closeouts.FirstOrDefault(c => c.Kind == JmdoCloseoutKind.Spcm)?.AchievedTarget;
-            var posCloseout = a.Closeouts.FirstOrDefault(c => c.Kind == JmdoCloseoutKind.PosLiquidation);
+            // Sum across EVERY closeout of that Kind, not just the first one - SPCM/PoS are
+            // weekly count targets a JMDO can log against on several different days (see
+            // JmdoTaskAllocationController's CreateCloseout), so a single FirstOrDefault()
+            // under-reported "Achieved" the moment more than one record existed for the week.
+            var spcmAchieved = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
+            var posCloseouts = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
 
             if (a.SpcmTarget is > 0 && MatchesStatus(a.SpcmStatus))
             {
-                week.Targets.Add(new TargetBreakdown { Label = "SPCM", Icon = "bi-bullseye", Target = a.SpcmTarget.Value, Achieved = spcmAchieved ?? 0, Status = a.SpcmStatus });
+                week.Targets.Add(new TargetBreakdown { Label = "SPCM", Icon = "bi-bullseye", Target = a.SpcmTarget.Value, Achieved = spcmAchieved, Status = a.SpcmStatus });
             }
 
             if (a.SoilSampleTarget is > 0 && MatchesStatus(a.SoilSampleStatus))
@@ -1479,24 +1503,38 @@
             if (MatchesStatus(a.PosLiquidationStatus))
             {
                 if (a.UreaTarget > 0)
-                    week.Targets.Add(new TargetBreakdown { Label = "Urea", Icon = "bi-box-seam", Target = a.UreaTarget.Value, Achieved = posCloseout?.Urea ?? 0, Status = a.PosLiquidationStatus });
+                    week.Targets.Add(new TargetBreakdown { Label = "Urea", Icon = "bi-box-seam", Target = a.UreaTarget.Value, Achieved = posCloseouts.Sum(c => c.Urea ?? 0), Status = a.PosLiquidationStatus });
                 if (a.NpsTarget > 0)
-                    week.Targets.Add(new TargetBreakdown { Label = "NPKS", Icon = "bi-box-seam", Target = a.NpsTarget.Value, Achieved = posCloseout?.Nps ?? 0, Status = a.PosLiquidationStatus });
+                    week.Targets.Add(new TargetBreakdown { Label = "NPKS", Icon = "bi-box-seam", Target = a.NpsTarget.Value, Achieved = posCloseouts.Sum(c => c.Nps ?? 0), Status = a.PosLiquidationStatus });
                 if (a.DapTarget > 0)
-                    week.Targets.Add(new TargetBreakdown { Label = "DAP", Icon = "bi-box-seam", Target = a.DapTarget.Value, Achieved = posCloseout?.Dap ?? 0, Status = a.PosLiquidationStatus });
+                    week.Targets.Add(new TargetBreakdown { Label = "DAP", Icon = "bi-box-seam", Target = a.DapTarget.Value, Achieved = posCloseouts.Sum(c => c.Dap ?? 0), Status = a.PosLiquidationStatus });
                 if (a.OthersTarget > 0)
-                    week.Targets.Add(new TargetBreakdown { Label = "Other", Icon = "bi-box-seam", Target = a.OthersTarget.Value, Achieved = posCloseout?.Other ?? 0, Status = a.PosLiquidationStatus });
+                    week.Targets.Add(new TargetBreakdown { Label = "Other", Icon = "bi-box-seam", Target = a.OthersTarget.Value, Achieved = posCloseouts.Sum(c => c.Other ?? 0), Status = a.PosLiquidationStatus });
             }
         }
+
+        // "Done" for SPCM/PoS is re-derived from the real logged count vs Target here too, same
+        // as TargetBreakdown.EffectiveStatus above and for the same reason - a.SpcmStatus/
+        // a.PosLiquidationStatus can be stale "Completed" from before the backend started gating
+        // that transition on the count actually reaching Target, which would otherwise overstate
+        // OverallPercent (e.g. crediting SPCM as done at 2 of 200 achieved).
+        var allSpcmAchieved = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.Spcm).Sum(c => c.AchievedTarget ?? 0);
+        var allPosCloseouts = a.Closeouts.Where(c => c.Kind == JmdoCloseoutKind.PosLiquidation).ToList();
+        var spcmDone = a.SpcmTarget is > 0 && allSpcmAchieved >= a.SpcmTarget;
+        var posDone = (a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0)
+            && (a.UreaTarget is not > 0 || allPosCloseouts.Sum(c => c.Urea ?? 0) >= a.UreaTarget)
+            && (a.NpsTarget is not > 0 || allPosCloseouts.Sum(c => c.Nps ?? 0) >= a.NpsTarget)
+            && (a.DapTarget is not > 0 || allPosCloseouts.Sum(c => c.Dap ?? 0) >= a.DapTarget)
+            && (a.OthersTarget is not > 0 || allPosCloseouts.Sum(c => c.Other ?? 0) >= a.OthersTarget);
 
         var totalUnits = a.DealerAssignments.Count + a.Programs.Count
             + (a.SpcmTarget is > 0 ? 1 : 0)
             + (a.SoilSampleTarget is > 0 ? 1 : 0)
             + (a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0 ? 1 : 0);
         var doneUnits = a.DealerAssignments.Count(d => d.Status == AllocTaskStatus.Completed) + a.Programs.Count(p => p.Status == AllocTaskStatus.Completed)
-            + (a.SpcmTarget is > 0 && a.SpcmStatus == AllocTaskStatus.Completed ? 1 : 0)
+            + (spcmDone ? 1 : 0)
             + (a.SoilSampleTarget is > 0 && a.SoilSampleStatus == AllocTaskStatus.Completed ? 1 : 0)
-            + ((a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0) && a.PosLiquidationStatus == AllocTaskStatus.Completed ? 1 : 0);
+            + (posDone ? 1 : 0);
         week.OverallPercent = totalUnits == 0 ? 0 : (int)Math.Round(100.0 * doneUnits / totalUnits);
 
         return week;
