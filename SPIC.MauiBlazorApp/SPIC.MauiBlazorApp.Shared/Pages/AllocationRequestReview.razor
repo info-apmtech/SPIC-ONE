@@ -463,7 +463,9 @@
 
     // Scoped to the allocation's own HQ (falling back to the signed-in MDO's)
     // so the add-dealer list reflects the submitting JMDO's area, not the
-    // reviewer's own if they ever differ.
+    // reviewer's own if they ever differ. Sourced from DealerRegistration (same as
+    // TasksAllocation.razor's own picker) so a dealer added here resolves to real
+    // iFMS ID/PoS Liquidation/Pending Ack, not SubDealerRegistration's dead end.
     private async Task LoadAvailableDealersAsync()
     {
         if (_detail is null) return;
@@ -471,14 +473,14 @@
         try
         {
             var hqId = _detail.HeadquarterId ?? (LoginState.HQId > 0 ? LoginState.HQId : (int?)null);
-            var query = new List<string> { "page=1", "pageSize=1000", $"status={(int)SubDealerStatus.Active}" };
+            var query = new List<string> { "page=1", "pageSize=1000" };
             if (hqId is > 0) query.Add($"hqId={hqId}");
 
-            var url = "api/SubDealerRegistration/list?" + string.Join("&", query);
-            var result = await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
+            var url = "api/DealerRegistration/list?" + string.Join("&", query);
+            var result = await Http.GetFromJsonAsync<DealerPagedListResponse>(url);
 
             AvailableDealers = (result?.Items ?? new())
-                .Select(d => new SubDealerOptionDto { Id = d.Id, FirmName = d.FirmName, SubDealerCode = d.SubDealerCode })
+                .Select(d => new SubDealerOptionDto { Id = d.Id, FirmName = d.FirmName, SubDealerCode = d.DealerCode ?? "" })
                 .ToList();
 
             // The <option> list just changed (a just-added dealer drops out of this list) -

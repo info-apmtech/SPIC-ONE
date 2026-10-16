@@ -38,6 +38,15 @@ namespace SPIC.Core.DTOs
         public string? StartPlaceName { get; set; }
         // Set by the MDO during review, not by the JMDO at submission - optional, defaults to Normal.
         public DealerTaskPriority Priority { get; set; }
+
+        // Resolved from this dealer's own Excel-upload transaction history (DptReport/
+        // SalesCompanySale/SalesWholesaler/WholesalerStockAsOnToday/SalesAndReceipt), matched by
+        // DealerRegistrationId - null when this dealer has no matching upload history yet.
+        public int? IfmsId { get; set; }
+        public decimal? PosLiquidationQty { get; set; }
+        public DateTime? PosLiquidationDate { get; set; }
+        public decimal? PendingAckQty { get; set; }
+        public string? PendingAckStatus { get; set; }
     }
 
     public class JmdoTaskAllocationResponseDto
@@ -149,11 +158,18 @@ namespace SPIC.Core.DTOs
         public DateTime? PlannedDate { get; set; }
         // Set by the MDO during review, not by the JMDO at submission - optional, defaults to Normal.
         public DealerTaskPriority Priority { get; set; }
-        // Resolved from the live SubDealerRegistration row (not snapshotted at submission like
+        // Resolved from the live DealerRegistration row (not snapshotted at submission like
         // DealerName/DealerCode) so the District/Taluk filters on this page reflect the dealer's
         // current location, not whatever it was when the JMDO submitted.
         public int? DistrictId { get; set; }
         public string? Taluk { get; set; }
+
+        // Same meaning as JmdoDealerAssignmentResponseDto's fields - see there.
+        public int? IfmsId { get; set; }
+        public decimal? PosLiquidationQty { get; set; }
+        public DateTime? PosLiquidationDate { get; set; }
+        public decimal? PendingAckQty { get; set; }
+        public string? PendingAckStatus { get; set; }
     }
 
     public class JmdoAllocationProgramRowDto

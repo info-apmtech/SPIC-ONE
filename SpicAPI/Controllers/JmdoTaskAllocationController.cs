@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
+using Spic.Infrastructure.Services;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
+using SPIC.Core.Interfaces;
 using static SPIC.Core.Entities.EmployeeRegistration;
 
 namespace SPIC.Api.Controllers;
@@ -16,15 +18,21 @@ public class JmdoTaskAllocationController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
+    private readonly IDealerInsightService _dealerInsightService;
 
     // "JmdoTasks:NearbyRadiusKm" in appsettings overrides this; no radius existed anywhere before.
     private const double DefaultNearbyRadiusKm = 5;
 
-    public JmdoTaskAllocationController(AppDbContext db, IWebHostEnvironment environment, IConfiguration configuration)
+    public JmdoTaskAllocationController(
+        AppDbContext db,
+        IWebHostEnvironment environment,
+        IConfiguration configuration,
+        IDealerInsightService dealerInsightService)
     {
         _db = db;
         _environment = environment;
         _configuration = configuration;
+        _dealerInsightService = dealerInsightService;
     }
 
     // ---- Claim helpers, copied from SubDealerRegistrationController so the two controllers'
@@ -83,8 +91,8 @@ public class JmdoTaskAllocationController : ControllerBase
             return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
 
         var dealerIds = dto.DealerAssignments.Select(a => a.DealerId).Distinct().ToList();
-        var dealers = await _db.SubDealerRegistrations
-            .Where(d => dealerIds.Contains(d.Id))
+        var dealers = await _db.DealerRegistrations
+            .Where(d => dealerIds.Contains(d.Id) && d.Status == DealerStatus.Active)
             .ToListAsync();
         if (dealers.Count != dealerIds.Count)
             return BadRequest(new { Success = false, Message = "One or more selected dealers could not be found." });
@@ -146,9 +154,9 @@ public class JmdoTaskAllocationController : ControllerBase
             _db.JmdoTaskAllocationDealers.Add(new JmdoTaskAllocationDealer
             {
                 AllocationId = allocation.Id,
-                SubDealerId = dealer.Id,
+                DealerRegistrationId = dealer.Id,
                 DealerName = dealer.FirmName,
-                DealerCode = dealer.SubDealerCode ?? "",
+                DealerCode = dealer.DealerCode ?? "",
                 PlannedDay = assignment.Day,
                 // Stamped from the SAME weekStart as the allocation header, not left null -
                 // previously this was only ever backfilled client-side when the MDO's review page
@@ -185,8 +193,9 @@ public class JmdoTaskAllocationController : ControllerBase
 
         var csr1Lookup = programs
             .ToDictionary(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
+        var dealerInsights = await _dealerInsightService.GetInsightsAsync(DealerRegistrationIdsOf(allocationDealers));
 
-        return StatusCode(201, ToResponseDto(allocation, allocationDealers, allocationPrograms, null, csr1Lookup));
+        return StatusCode(201, ToResponseDto(allocation, allocationDealers, allocationPrograms, null, csr1Lookup, dealerInsights));
     }
 
     // GET api/JmdoTaskAllocation/mine/today
@@ -244,8 +253,9 @@ public class JmdoTaskAllocationController : ControllerBase
             .Where(c => csr1Ids.Contains(c.Id))
             .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
             .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
+        var dealerInsights = await _dealerInsightService.GetInsightsAsync(DealerRegistrationIdsOf(allocation.Dealers));
 
-        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList(), csr1Lookup));
+        return Ok(ToResponseDto(allocation, allocation.Dealers.ToList(), allocation.Programs.ToList(), allocation.Closeouts.ToList(), csr1Lookup, dealerInsights));
     }
 
     // GET api/JmdoTaskAllocation/mine/summary?latitude=&longitude=
@@ -353,13 +363,24 @@ public class JmdoTaskAllocationController : ControllerBase
         summary.Pending = buckets.Sum(b => b.Pending);
 
         // Nearby: pending (YetToStart) dealer tasks only, using the dealer's registered coordinates.
-        var pendingDealers = await (
+        // Two sources, not one join: a new-style row's dealer lives in DealerRegistrations, a
+        // legacy row's (pre-dealer-source-switch) still lives in SubDealerRegistrations - see
+        // JmdoTaskAllocationDealer.DealerRegistrationId's own doc comment.
+        var newDealerCoords = await (
             from d in _db.JmdoTaskAllocationDealers.AsNoTracking()
-            join s in _db.SubDealerRegistrations.AsNoTracking() on d.SubDealerId equals s.Id into dealerJoin
-            from s in dealerJoin.DefaultIfEmpty()
-            where d.AllocationId == allocation.Id && d.Status == AllocTaskStatus.YetToStart
-            select new { Latitude = s != null ? s.Latitude : null, Longitude = s != null ? s.Longitude : null }
+            where d.AllocationId == allocation.Id && d.Status == AllocTaskStatus.YetToStart && d.DealerRegistrationId != null
+            join s in _db.DealerRegistrations.AsNoTracking() on d.DealerRegistrationId!.Value equals s.Id
+            select new { Latitude = (double?)s.Latitude, Longitude = (double?)s.Longitude }
             ).ToListAsync();
+
+        var legacyDealerCoords = await (
+            from d in _db.JmdoTaskAllocationDealers.AsNoTracking()
+            join s in _db.SubDealerRegistrations.AsNoTracking() on d.SubDealerId equals s.Id
+            where d.AllocationId == allocation.Id && d.Status == AllocTaskStatus.YetToStart && d.DealerRegistrationId == null
+            select new { Latitude = (double?)s.Latitude, Longitude = (double?)s.Longitude }
+            ).ToListAsync();
+
+        var pendingDealers = newDealerCoords.Concat(legacyDealerCoords).ToList();
 
         var located = pendingDealers
             .Where(d => IsUsableCoordinate(d.Latitude, d.Longitude))
@@ -434,9 +455,10 @@ public class JmdoTaskAllocationController : ControllerBase
             .Where(c => csr1Ids.Contains(c.Id))
             .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
             .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
+        var dealerInsights = await _dealerInsightService.GetInsightsAsync(DealerRegistrationIdsOf(allocations.SelectMany(a => a.Dealers)));
 
         var result = allocations
-            .Select(a => ToResponseDto(a, a.Dealers.ToList(), a.Programs.ToList(), a.Closeouts.ToList(), csr1Lookup))
+            .Select(a => ToResponseDto(a, a.Dealers.ToList(), a.Programs.ToList(), a.Closeouts.ToList(), csr1Lookup, dealerInsights))
             .ToList();
 
         return Ok(result);
@@ -563,14 +585,7 @@ public class JmdoTaskAllocationController : ControllerBase
             select new { login.UserId, info.Name, info.EmployeeCode, HeadquarterName = hq != null ? hq.HeadquarterName : null }
             ).ToDictionaryAsync(x => x.UserId);
 
-        // District/Taluk aren't snapshotted on JmdoTaskAllocationDealer (only DealerName/DealerCode
-        // are) - resolved from the live SubDealerRegistration row so the client's filter dropdowns
-        // reflect each dealer's current location.
-        var dealerIds = allocations.SelectMany(a => a.Dealers).Select(d => d.SubDealerId).Distinct().ToList();
-        var dealerLocations = await _db.SubDealerRegistrations
-            .Where(d => dealerIds.Contains(d.Id))
-            .Select(d => new { d.Id, d.DistrictId, d.Taluk })
-            .ToDictionaryAsync(d => d.Id);
+        var dealerLocations = await GetDealerLocationsAsync(allocations.SelectMany(a => a.Dealers));
 
         var rows = allocations.Select(a =>
         {
@@ -596,14 +611,14 @@ public class JmdoTaskAllocationController : ControllerBase
                 PosLiquidationFieldCount = posFieldsFilled,
                 Dealers = a.Dealers.Select(d =>
                 {
-                    dealerLocations.TryGetValue(d.SubDealerId, out var loc);
+                    dealerLocations.TryGetValue(EffectiveDealerId(d), out var loc);
                     return new PendingAllocationDealerFilterDto
                     {
-                        SubDealerId = d.SubDealerId,
+                        SubDealerId = EffectiveDealerId(d),
                         DealerName = d.DealerName,
                         DealerCode = d.DealerCode,
-                        DistrictId = loc?.DistrictId,
-                        Taluk = loc?.Taluk
+                        DistrictId = loc.DistrictId,
+                        Taluk = loc.Taluk
                     };
                 }).ToList()
             };
@@ -724,13 +739,8 @@ public class JmdoTaskAllocationController : ControllerBase
             .Select(c => new { c.Id, c.SanctionNo, c.CSR1Date })
             .ToDictionaryAsync(c => c.Id, c => (SanctionNo: c.SanctionNo, CSR1Date: (DateTime?)c.CSR1Date));
 
-        // District/Taluk aren't snapshotted on JmdoTaskAllocationDealer - resolved from the live
-        // SubDealerRegistration row so this allocation's own District/Taluk filters stay accurate.
-        var dealerIds = allocation.Dealers.Select(d => d.SubDealerId).Distinct().ToList();
-        var dealerLocations = await _db.SubDealerRegistrations
-            .Where(d => dealerIds.Contains(d.Id))
-            .Select(d => new { d.Id, d.DistrictId, d.Taluk })
-            .ToDictionaryAsync(d => d.Id);
+        var dealerLocations = await GetDealerLocationsAsync(allocation.Dealers);
+        var dealerInsights = await _dealerInsightService.GetInsightsAsync(DealerRegistrationIdsOf(allocation.Dealers));
 
         return Ok(new JmdoAllocationDetailDto
         {
@@ -748,18 +758,24 @@ public class JmdoTaskAllocationController : ControllerBase
             HeadquarterId = allocation.HeadquarterId,
             Dealers = allocation.Dealers.Select(d =>
             {
-                dealerLocations.TryGetValue(d.SubDealerId, out var loc);
+                var effectiveId = EffectiveDealerId(d);
+                dealerLocations.TryGetValue(effectiveId, out var loc);
+                dealerInsights.TryGetValue(effectiveId, out var insight);
                 return new JmdoAllocationDealerRowDto
                 {
                     RowId = d.Id,
-                    SubDealerId = d.SubDealerId,
+                    SubDealerId = effectiveId,
                     DealerName = d.DealerName,
                     DealerCode = d.DealerCode,
                     Day = d.PlannedDay,
                     PlannedDate = d.PlannedDate,
                     Priority = d.Priority,
-                    DistrictId = loc?.DistrictId,
-                    Taluk = loc?.Taluk
+                    DistrictId = loc.DistrictId,
+                    Taluk = loc.Taluk,
+                    IfmsId = insight?.IfmsId,
+                    PosLiquidationQty = insight?.PosLiquidationQty,
+                    PosLiquidationDate = insight?.PosLiquidationDate,
+                    PendingAckQty = insight?.PendingAckQty
                 };
             }).ToList(),
             Programs = allocation.Programs.Select(p =>
@@ -803,7 +819,7 @@ public class JmdoTaskAllocationController : ControllerBase
         var (allocation, forbidden) = await LoadEditableAllocation(id);
         if (allocation == null) return forbidden!;
 
-        var dealer = await _db.SubDealerRegistrations.FindAsync(dto.DealerId);
+        var dealer = await _db.DealerRegistrations.FirstOrDefaultAsync(d => d.Id == dto.DealerId && d.Status == DealerStatus.Active);
         if (dealer == null)
             return BadRequest(new { Success = false, Message = "Dealer not found." });
 
@@ -813,7 +829,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 return BadRequest(new { Success = false, Message = "The date must fall within the JMDO's allocated week." });
 
             var alreadyOnThatDate = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
-                d.AllocationId == id && d.SubDealerId == dto.DealerId
+                d.AllocationId == id && d.DealerRegistrationId == dto.DealerId
                 && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == dto.PlannedDate.Value.Date);
             if (alreadyOnThatDate)
                 return BadRequest(new { Success = false, Message = "This dealer is already assigned on that date." });
@@ -822,9 +838,9 @@ public class JmdoTaskAllocationController : ControllerBase
         var row = new JmdoTaskAllocationDealer
         {
             AllocationId = id,
-            SubDealerId = dealer.Id,
+            DealerRegistrationId = dealer.Id,
             DealerName = dealer.FirmName,
-            DealerCode = dealer.SubDealerCode ?? "",
+            DealerCode = dealer.DealerCode ?? "",
             PlannedDate = dto.PlannedDate,
             // The JMDO's own Today's/Completed Allocation views filter strictly by
             // Day == DateTime.Today.DayOfWeek - without this, a dealer the MDO adds here never
@@ -838,7 +854,7 @@ public class JmdoTaskAllocationController : ControllerBase
         return Ok(new JmdoAllocationDealerRowDto
         {
             RowId = row.Id,
-            SubDealerId = row.SubDealerId,
+            SubDealerId = EffectiveDealerId(row),
             DealerName = row.DealerName,
             DealerCode = row.DealerCode,
             Day = row.PlannedDay,
@@ -881,8 +897,13 @@ public class JmdoTaskAllocationController : ControllerBase
             if (!IsWithinAllocationWeek(allocation, dto.PlannedDate.Value))
                 return BadRequest(new { Success = false, Message = "The date must fall within the JMDO's allocated week." });
 
+            // Compared via the translatable (DealerRegistrationId ?? -SubDealerId) expression, not
+            // a direct d.DealerRegistrationId == row.DealerRegistrationId comparison - when row is
+            // a legacy row (DealerRegistrationId null), EF's null-semantics rewriting of "== null"
+            // would otherwise match EVERY other legacy dealer on this allocation, not just this one.
+            var targetEffectiveId = EffectiveDealerId(row);
             var alreadyOnThatDate = await _db.JmdoTaskAllocationDealers.AnyAsync(d =>
-                d.AllocationId == id && d.Id != rowId && d.SubDealerId == row.SubDealerId
+                d.AllocationId == id && d.Id != rowId && (d.DealerRegistrationId ?? -d.SubDealerId) == targetEffectiveId
                 && d.PlannedDate.HasValue && d.PlannedDate.Value.Date == dto.PlannedDate.Value.Date);
             if (alreadyOnThatDate)
                 return BadRequest(new { Success = false, Message = "This dealer is already assigned on that date." });
@@ -1043,7 +1064,7 @@ public class JmdoTaskAllocationController : ControllerBase
         if (taskKey.StartsWith("dealer_", StringComparison.OrdinalIgnoreCase)
             && int.TryParse(taskKey.AsSpan("dealer_".Length), out var dealerId))
         {
-            var dealer = allocation.Dealers.FirstOrDefault(d => d.SubDealerId == dealerId);
+            var dealer = allocation.Dealers.FirstOrDefault(d => EffectiveDealerId(d) == dealerId);
             if (dealer == null) return NotFound(new { Success = false, Message = "Dealer task not found." });
             dealer.Status = dto.Status;
             if (startedAt.HasValue && dealer.StartedAt is null) dealer.StartedAt = startedAt;
@@ -1442,12 +1463,62 @@ public class JmdoTaskAllocationController : ControllerBase
         return info == null ? null : (info.Name, info.EmployeeCode, info.HeadquarterName);
     }
 
+    // The one external dealer id used everywhere outside this file (DTOs, TaskKey, status
+    // matching): DealerRegistrationId for a new-style row, or the legacy SubDealerId negated for
+    // an old one - negating keeps the two id spaces from ever colliding (DealerRegistration and
+    // SubDealerRegistration both start their own ids at 1, so the same positive number can be a
+    // real but completely different dealer in each table). See JmdoTaskAllocationDealer's own doc
+    // comment for why these were kept as two separate columns instead of one reinterpreted column.
+    private static int EffectiveDealerId(JmdoTaskAllocationDealer d) => d.DealerRegistrationId ?? -d.SubDealerId;
+
+    // District/Taluk aren't snapshotted on JmdoTaskAllocationDealer (only DealerName/DealerCode
+    // are) - resolved from the live dealer-master row, DealerRegistration for a new-style row or
+    // SubDealerRegistration for a legacy one, keyed by EffectiveDealerId so callers can look up
+    // either kind the same way.
+    private async Task<Dictionary<int, (int? DistrictId, string? Taluk)>> GetDealerLocationsAsync(
+        IEnumerable<JmdoTaskAllocationDealer> dealers)
+    {
+        var result = new Dictionary<int, (int?, string?)>();
+
+        var newIds = dealers.Where(d => d.DealerRegistrationId.HasValue)
+            .Select(d => d.DealerRegistrationId!.Value).Distinct().ToList();
+        if (newIds.Count > 0)
+        {
+            var rows = await _db.DealerRegistrations.AsNoTracking()
+                .Where(d => newIds.Contains(d.Id))
+                .Select(d => new { d.Id, d.DistrictId, d.Taluk })
+                .ToListAsync();
+            foreach (var r in rows) result[r.Id] = (r.DistrictId, r.Taluk);
+        }
+
+        var legacyIds = dealers.Where(d => !d.DealerRegistrationId.HasValue)
+            .Select(d => d.SubDealerId).Distinct().ToList();
+        if (legacyIds.Count > 0)
+        {
+            var rows = await _db.SubDealerRegistrations.AsNoTracking()
+                .Where(d => legacyIds.Contains(d.Id))
+                .Select(d => new { d.Id, d.DistrictId, d.Taluk })
+                .ToListAsync();
+            foreach (var r in rows) result[-r.Id] = (r.DistrictId, r.Taluk);
+        }
+
+        return result;
+    }
+
+    // Only ever looked up for new-style rows (DealerRegistrationId set) - a legacy row
+    // (pre-dealer-source-switch) has no reliable DealerRegistration-keyed transaction history to
+    // find, so it's simply left out of the id list passed to IDealerInsightService and the card
+    // shows "—", exactly as it always has.
+    private static IEnumerable<int> DealerRegistrationIdsOf(IEnumerable<JmdoTaskAllocationDealer> dealers) =>
+        dealers.Where(d => d.DealerRegistrationId.HasValue).Select(d => d.DealerRegistrationId!.Value);
+
     private static JmdoTaskAllocationResponseDto ToResponseDto(
         JmdoTaskAllocation allocation,
         List<JmdoTaskAllocationDealer> dealers,
         List<JmdoTaskAllocationProgram> programs,
         List<JmdoTaskCloseout>? closeouts = null,
-        Dictionary<int, (string? SanctionNo, DateTime? CSR1Date)>? csr1Lookup = null) => new()
+        Dictionary<int, (string? SanctionNo, DateTime? CSR1Date)>? csr1Lookup = null,
+        Dictionary<int, DealerInsightDto>? dealerInsights = null) => new()
     {
         Id = allocation.Id,
         AllocationDate = allocation.AllocationDate,
@@ -1455,17 +1526,27 @@ public class JmdoTaskAllocationController : ControllerBase
         SubmittedAt = allocation.SubmittedAt,
         DealerCount = dealers.Count,
         ProgramCount = programs.Count,
-        DealerAssignments = dealers.Select(d => new JmdoDealerAssignmentResponseDto
+        DealerAssignments = dealers.Select(d =>
         {
-            DealerId = d.SubDealerId,
-            DealerName = d.DealerName,
-            DealerCode = d.DealerCode,
-            Day = d.PlannedDay,
-            Status = d.Status,
-            StartedAt = d.StartedAt,
-            CompletedAt = d.CompletedAt,
-            StartPlaceName = d.StartPlaceName,
-            Priority = d.Priority
+            DealerInsightDto? insight = null;
+            if (d.DealerRegistrationId.HasValue)
+                dealerInsights?.TryGetValue(d.DealerRegistrationId.Value, out insight);
+            return new JmdoDealerAssignmentResponseDto
+            {
+                DealerId = EffectiveDealerId(d),
+                DealerName = d.DealerName,
+                DealerCode = d.DealerCode,
+                Day = d.PlannedDay,
+                Status = d.Status,
+                StartedAt = d.StartedAt,
+                CompletedAt = d.CompletedAt,
+                StartPlaceName = d.StartPlaceName,
+                Priority = d.Priority,
+                IfmsId = insight?.IfmsId,
+                PosLiquidationQty = insight?.PosLiquidationQty,
+                PosLiquidationDate = insight?.PosLiquidationDate,
+                PendingAckQty = insight?.PendingAckQty
+            };
         }).ToList(),
         Programs = programs.Select(p =>
         {

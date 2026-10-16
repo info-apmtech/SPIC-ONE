@@ -125,7 +125,12 @@ namespace SPIC.Core.Entities
         // (see AppDbContext) - inserting in the middle would renumber every later row.
         Activities, Farmers, Alerts,
         StartDocumentation, DemoDetails, TreatmentDetails,
-        Treatment01, Treatment02, TreatmentDemoDetails,GHAdmin
+        Treatment01, Treatment02, TreatmentDemoDetails,GHAdmin,
+
+        // Plant / Dealer Nature master (2026-10-16): these two lookup tables had no admin UI at
+        // all, so Excel bulk-upload rows referencing a new Plant/Dealer Nature could never be
+        // entered ahead of time. Appended at the END on purpose - see the comment above.
+        PlantDealerNatureMaster
 
     }
 }

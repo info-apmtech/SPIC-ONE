@@ -461,6 +461,18 @@ namespace Spic.Infrastructure.Services
 				throw new UploadValidationException($"Row {rowNumber}: Invalid numeric value '{raw}' in column '{key}'.");
 			}
 
+			// Raw dealer/wholesaler/retailer id as typed in the Excel sheet itself - distinct
+			// from IfmsDealerId/IfmsWholesalerId, which hold the matched IfmsDealer master's
+			// surrogate key, not the literal Excel value.
+			int? ParseOptionalExternalId(string? raw)
+			{
+				if (string.IsNullOrWhiteSpace(raw)) return null;
+				var normalized = raw.Replace(",", string.Empty).Trim();
+				return int.TryParse(normalized, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+					? value
+					: null;
+			}
+
 			void EnsureNonNegative(decimal value, int rowNumber, string columnName)
 			{
 				if (value >= 0m)
@@ -656,21 +668,21 @@ namespace Spic.Infrastructure.Services
 						.Where(s => s.StateName != null)
 						.Select(s => new { s.Id, s.StateName })
 						.ToListAsync(cancellationToken))
-					.GroupBy(s => s.StateName.Trim().ToLowerInvariant())
+					.GroupBy(s => NormalizeKey(s.StateName))
 					.ToDictionary(g => g.Key, g => g.First().Id);
 
 				var districtDict = (await _db.Districts
 						.Where(d => d.DistrictName != null)
 						.Select(d => new { d.Id, d.DistrictName, d.StateId })
 						.ToListAsync(cancellationToken))
-					.GroupBy(d => $"{d.DistrictName.Trim().ToLowerInvariant()}_{d.StateId}")
+					.GroupBy(d => $"{NormalizeKey(d.DistrictName)}_{d.StateId}")
 					.ToDictionary(g => g.Key, g => g.First().Id);
 
 				var subDistrictDict = (await _db.SubDistricts
 						.Where(sd => sd.SubDistrictName != null)
 						.Select(sd => new { sd.Id, sd.SubDistrictName, sd.DistrictId })
 						.ToListAsync(cancellationToken))
-					.GroupBy(sd => $"{sd.SubDistrictName.Trim().ToLowerInvariant()}_{sd.DistrictId}")
+					.GroupBy(sd => $"{NormalizeKey(sd.SubDistrictName)}_{sd.DistrictId}")
 					.ToDictionary(g => g.Key, g => g.First().Id);
 
 				var rawRegDealers = await _db.DealerRegistrations
@@ -1152,7 +1164,7 @@ namespace Spic.Infrastructure.Services
 						})
 						.Where(item => !string.IsNullOrWhiteSpace(item.Name))
 						.GroupBy(
-							item => item.Name!.Trim().ToLowerInvariant(),
+							item => NormalizeKey(item.Name),
 							StringComparer.Ordinal)
 						.ToDictionary(
 							group => group.Key,
@@ -1835,6 +1847,7 @@ namespace Spic.Infrastructure.Services
 							dptRecord.RetailerName = agencyNameStr;
 							dptRecord.DealerRegistrationId = dealerRegistrationId;
 							dptRecord.IfmsDealerId = ifmsDealerId;
+							dptRecord.IfmsId = ParseOptionalExternalId(preparedMaster.DealerExternalId);
 							if (!string.IsNullOrWhiteSpace(mobileNoStr))
 								dptRecord.MobileNo = mobileNoStr;
 							dptRecord.DealershipNatureId = natureId;
@@ -1880,6 +1893,7 @@ namespace Spic.Infrastructure.Services
 							stockRecord.DistrictId = districtId;
 							stockRecord.DealerRegistrationId = dealerRegistrationId;
 							stockRecord.IfmsDealerId = ifmsDealerId;
+							stockRecord.IfmsId = ParseOptionalExternalId(preparedMaster.DealerExternalId);
 							stockRecord.AgencyName = agencyNameStr;
 							stockRecord.DealerTypeId = dealerTypeId;
 							stockRecord.DealershipNatureId = natureId;
@@ -1921,7 +1935,8 @@ namespace Spic.Infrastructure.Services
 							EnsureNonNegative(totalSalesByWs, rowNumber, "totalsalesbyws");
 							EnsureNonNegative(stockTransferWsToRetailer, rowNumber, "stocktransferfromwstoretailer");
 							EnsureNonNegative(stockTransferWsToRetailerAck, rowNumber, "stocktransferfromwstoretailerack");
-							EnsureNonNegative(balanceWithWs, rowNumber, "balancewithws");
+							// BalanceWithWs can legitimately go negative (a deficit), unlike every other
+							// field in this row - no non-negative check here on purpose.
 							EnsureNonNegative(totalAckToWs, rowNumber, "totalacktows");
 
 							var salesReceiptBusinessKey = SalesReceiptKey(
@@ -1953,6 +1968,7 @@ namespace Spic.Infrastructure.Services
 							srRecord.AgencyName = agencyNameStr;
 							srRecord.DealerRegistrationId = dealerRegistrationId;
 							srRecord.IfmsDealerId = ifmsDealerId;
+							srRecord.IfmsId = ParseOptionalExternalId(preparedMaster.DealerExternalId);
 							srRecord.OpeningBalance = openingBalance;
 							srRecord.CompWsSale = compWsSale;
 							srRecord.CompWsSaleRcpt = compWsSaleRcpt;
@@ -2056,6 +2072,7 @@ namespace Spic.Infrastructure.Services
 							salesWholesaler.PlantId = plantId;
 							salesWholesaler.WholesalerId = wholesalerRegistrationId;
 							salesWholesaler.IfmsWholesalerId = ifmsWholesalerId;
+							salesWholesaler.IfmsWholesalerSalesId = ParseOptionalExternalId(preparedMaster.WholesalerExternalId);
 							salesWholesaler.WholesalerAgencyName = wholesalerAgencyStr;
 							salesWholesaler.WholesalerNatureId = wholesalerNatureId;
 							salesWholesaler.StateId = stateId;
@@ -2064,6 +2081,7 @@ namespace Spic.Infrastructure.Services
 							salesWholesaler.DealerId = dealerRegistrationId;
 							salesWholesaler.DealerTypeId = dealerTypeId;
 							salesWholesaler.IfmsDealerId = ifmsDealerId;
+							salesWholesaler.IfmsDealerSalesId = ParseOptionalExternalId(preparedMaster.DealerExternalId);
 							salesWholesaler.AgencyName = agencyNameStr;
 							salesWholesaler.DealerNatureId = dealerNatureId;
 							if (!string.IsNullOrWhiteSpace(dealerMobileNo))
@@ -2168,6 +2186,7 @@ namespace Spic.Infrastructure.Services
 								salesCompany.MobileNo = dealerMobileNo;
 							salesCompany.DealerRegistrationId = dealerRegistrationId;
 							salesCompany.IfmsDealerId = ifmsDealerId;
+							salesCompany.IfmsId = ParseOptionalExternalId(preparedMaster.DealerExternalId);
 							salesCompany.StateId = stateId;
 							salesCompany.DistrictId = districtId;
 							salesCompany.ProductId = productId;

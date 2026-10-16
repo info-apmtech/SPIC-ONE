@@ -32,6 +32,12 @@ namespace SpicAPI.Controllers
     [Route("api/[controller]")]
     public class ProductController(IGenericRepository<Product> repo) : GenericCrudController<Product>(repo);
 
+    [Route("api/[controller]")]
+    public class PlantController(IGenericRepository<Plant> repo) : GenericCrudController<Plant>(repo);
+
+    [Route("api/[controller]")]
+    public class DealershipNatureController(IGenericRepository<DealershipNature> repo) : GenericCrudController<DealershipNature>(repo);
+
     // ---------------------------------------------------------------------
     // WAREHOUSE
     // Existing Warehouse CRUD/API route is preserved.
