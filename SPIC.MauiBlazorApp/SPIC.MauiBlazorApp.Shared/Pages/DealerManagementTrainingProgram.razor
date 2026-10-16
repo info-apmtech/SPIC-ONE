@@ -5,6 +5,7 @@
 @using SPIC.Core.DTOs
 @using System.Globalization
 @using Microsoft.AspNetCore.Components.Forms
+@using System.Net.Http.Headers
 
 @if (isLoadingCSR1)
 {
@@ -78,7 +79,7 @@ else if (csr1Plan != null)
                         <div class="dmtp-budget-text">
                             <span class="dmtp-budget-label">Difference</span>
                             <span class="dmtp-budget-value">@Money(BudgetBalance)</span>
-                            <span class="dmtp-budget-note">Within Budget <span class="dmtp-mini-badge">Saved</span></span>
+                            <span class="dmtp-budget-note">@(BudgetBalance < 0 ? "Over approved budget" : "Remaining approved budget")</span>
                         </div>
                         <div class="dmtp-budget-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -106,7 +107,7 @@ else if (csr1Plan != null)
                 <div class="dmtp-review-banner">
                     <div class="dmtp-review-pills">
                         <span class="dmtp-review-pill dmtp-pill-blue">CSR-2</span>
-                        <span class="dmtp-review-pill dmtp-pill-green">Ready for Submission</span>
+                        <span class="dmtp-review-pill dmtp-pill-green">@(csr2Status == "Submitted" ? "Submitted" : "Draft - Review before submission")</span>
                         <span class="dmtp-review-pill dmtp-pill-gray">@Display(csr1Plan.Scope) Level</span>
                     </div>
                     <h2 class="dmtp-review-title">@csr1Plan.ProgramName</h2>
@@ -140,7 +141,7 @@ else if (csr1Plan != null)
                     <div class="dmtp-budget-card dmtp-budget-orange">
                         <div class="dmtp-budget-text">
                             <span class="dmtp-budget-label">Total Attendance</span>
-                            <span class="dmtp-budget-value">136</span>
+                            <span class="dmtp-budget-value">@overallAttendance</span>
                         </div>
                         <div class="dmtp-budget-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
@@ -243,19 +244,19 @@ else if (csr1Plan != null)
                     <h3 class="dmtp-card-title">Actual Event Date</h3>
                     <div class="dmtp-event-grid">
                         <div class="dmtp-form-group">
-                            <label class="dmtp-form-label">Actual Event Date</label>
+                            <label class="dmtp-form-label">Actual Event Date <span class="text-danger">*</span></label>
                             <input type="date" class="dmtp-form-control" @bind="actualEventDate" />
                         </div>
                         <div class="dmtp-form-group">
-                            <label class="dmtp-form-label">Start Time</label>
+                            <label class="dmtp-form-label">Start Time <span class="text-danger">*</span></label>
                             <input type="time" class="dmtp-form-control" @bind="startTime" />
                         </div>
                         <div class="dmtp-form-group">
-                            <label class="dmtp-form-label">End Time</label>
+                            <label class="dmtp-form-label">End Time <span class="text-danger">*</span></label>
                             <input type="time" class="dmtp-form-control" @bind="endTime" />
                         </div>
                         <div class="dmtp-form-group">
-                            <label class="dmtp-form-label">Event Coordinator</label>
+                            <label class="dmtp-form-label">Event Coordinator <span class="text-danger">*</span></label>
                             <select class="dmtp-form-select" @bind="eventCoordinatorId">
                                 <option value="0">Select Employee</option>
                                 @foreach (var employee in employeeList)
@@ -265,7 +266,7 @@ else if (csr1Plan != null)
                             </select>
                         </div>
                         <div class="dmtp-form-group dmtp-span-2">
-                            <label class="dmtp-form-label">Actual Location</label>
+                            <label class="dmtp-form-label">Actual Location <span class="text-danger">*</span></label>
                             <input type="text" class="dmtp-form-control" placeholder="Venue name, address, city" @bind="actualLocation" />
                         </div>
                     </div>
@@ -336,10 +337,7 @@ else if (csr1Plan != null)
                             </select>
                         </div>
                     </div>
-                    @if (!string.IsNullOrEmpty(participantError))
-                    {
-                        <div class="alert alert-danger py-2" role="alert">@participantError</div>
-                    }
+
                     @if (editingParticipantId is not null)
                     {
                         <button type="button" class="dmtp-btn-previous mb-3" @onclick="ClearParticipantForm">Cancel Edit</button>
@@ -432,14 +430,7 @@ else if (csr1Plan != null)
                         </div>
                     </div>
 
-                    @if (!string.IsNullOrWhiteSpace(employeeLoadError))
-                    {
-                        <div class="alert alert-danger py-2">@employeeLoadError</div>
-                    }
-                    @if (!string.IsNullOrWhiteSpace(employeeAddError))
-                    {
-                        <div class="alert alert-danger py-2">@employeeAddError</div>
-                    }
+
                     <div class="dmtp-people-grid">
                         @foreach (var person in employees)
                         {
@@ -471,7 +462,7 @@ else if (csr1Plan != null)
                         <h3 class="dmtp-card-title dmtp-no-margin">Expected Participants Count</h3>
                         <p>Planned external participant count; individual records optional for large groups</p>
                     </div>
-                    <input type="text" class="dmtp-form-control dmtp-expected-input" placeholder="e.g 150" readonly>
+                    <input type="number" min="0" class="dmtp-form-control dmtp-expected-input" placeholder="e.g. 150" @bind="expectedParticipantsCount" />
                 </div>
             }
             else if (currentStep == 2)
@@ -516,10 +507,7 @@ else if (csr1Plan != null)
                     {
                         <div class="text-muted small mt-2">Loading selected photos...</div>
                     }
-                    @if (!string.IsNullOrWhiteSpace(photoError))
-                    {
-                        <div class="alert alert-danger py-2 mt-2" role="alert">@photoError</div>
-                    }
+
                     @if (eventPhotos.Count == 0)
                     {
                         <p class="text-muted mt-3">No event photos added yet.</p>
@@ -529,7 +517,14 @@ else if (csr1Plan != null)
                         {
                             <div class="dmtp-photo-card" @key="photo.Id">
                                 <div class="dmtp-photo-thumb" style="overflow:hidden;">
-                                    <img src="@photo.PreviewUrl" alt="@photo.FileName" style="width:100%;height:100%;object-fit:cover;" />
+                                    @if (!string.IsNullOrWhiteSpace(photo.PreviewUrl))
+                                    {
+                                        <img src="@photo.PreviewUrl" alt="@photo.FileName" loading="lazy" style="width:100%;height:100%;object-fit:cover;" />
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted small text-center p-3">@(photo.PreviewError ?? "Loading saved photo...")</div>
+                                    }
                                 </div>
                                 <span class="dmtp-photo-filename" title="@photo.FileName">@photo.FileName</span>
                                 <input type="text" class="dmtp-form-control" placeholder="Add caption" @bind="photo.Caption" />
@@ -548,7 +543,7 @@ else if (csr1Plan != null)
                     </div>
                 </div>
 
-                <!-- Event Videos: gallery upload and mobile camera recording -->
+                <!-- Event Videos: streamed directly to CSR-2 API to reduce memory usage -->
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Event Videos (@eventVideos.Count)</h3>
@@ -582,12 +577,9 @@ else if (csr1Plan != null)
                     </div>
                     @if (isReadingVideos)
                     {
-                        <div class="text-muted small mt-2">Loading selected videos...</div>
+                        <div class="text-muted small mt-2">Uploading videos directly to server...</div>
                     }
-                    @if (!string.IsNullOrWhiteSpace(videoError))
-                    {
-                        <div class="alert alert-danger py-2 mt-2" role="alert">@videoError</div>
-                    }
+
                     @if (eventVideos.Count == 0)
                     {
                         <p class="text-muted mt-3">No event videos added yet.</p>
@@ -606,7 +598,7 @@ else if (csr1Plan != null)
                                         <div class="text-white text-center p-4">Preview unavailable for large video; select a shorter clip or save via server upload.</div>
                                     }
                                 </div>
-                                <span class="dmtp-photo-filename" title="@video.FileName">@video.FileName (@FormatVideoSize(video.Bytes.LongLength))</span>
+                                <span class="dmtp-photo-filename" title="@video.FileName">@video.FileName (@FormatVideoSize(video.Bytes.LongLength > 0 ? video.Bytes.LongLength : video.SavedFileSize))</span>
                                 <input type="text" class="dmtp-form-control" placeholder="Add video caption" @bind="video.Caption" />
                                 <div class="dmtp-photo-footer">
                                     <label class="dmtp-toggle-switch" style="cursor:pointer;">
@@ -668,10 +660,7 @@ else if (csr1Plan != null)
                                 <input type="text" class="dmtp-form-control" placeholder="Additional remarks" @bind="activityRemarks" />
                             </div>
                         </div>
-                        @if (!string.IsNullOrWhiteSpace(activityError))
-                        {
-                            <div class="alert alert-danger py-2 mt-2">@activityError</div>
-                        }
+
                         <div class="dmtp-new-activity-actions">
                             <button type="button" class="dmtp-btn-cancel-neutral" @onclick="ClearActivityForm">Cancel</button>
                             <button type="button" class="dmtp-btn-start-event" @onclick="SaveActivity">@(editingActivityId.HasValue ? "Update Activity" : "Add Activity")</button>
@@ -726,7 +715,7 @@ else if (csr1Plan != null)
                                     <div class="dmtp-expense-color-fields">
                                         <div class="dmtp-form-group">
                                             <label class="dmtp-form-label">Actual amount (₹)</label>
-                                            <input type="number" step="0.01" min="0" class="dmtp-form-control" placeholder="₹ 0" @bind="item.ActualAmount" />
+                                            <input type="number" step="0.01" min="0" class="dmtp-form-control" placeholder="₹ 0" @bind="item.ActualAmount" disabled="@(csr2Status != "Draft")" />
                                         </div>
                                         <div class="dmtp-form-group">
                                             <label class="dmtp-form-label">Date</label>
@@ -745,10 +734,7 @@ else if (csr1Plan != null)
                                             <button type="button" class="dmtp-link-remove" @onclick="() => RemoveExpenseProof(item)">Remove</button>
                                         </div>
                                     }
-                                    @if (!string.IsNullOrWhiteSpace(item.Error))
-                                    {
-                                        <div class="text-danger small mt-1">@item.Error</div>
-                                    }
+
                                 </div>
                             </div>
                         }
@@ -797,28 +783,28 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Actual Event Details</h3>
-                        <button type="button" class="dmtp-btn-edit-outline">Edit</button>
+                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
                     </div>
                     <div class="dmtp-plan-grid dmtp-review-grid-5">
                         <div class="dmtp-plan-item">
                             <span class="dmtp-plan-label">Event Date</span>
-                            <span class="dmtp-plan-value">18 Sep 2026</span>
+                            <span class="dmtp-plan-value">@(actualEventDate?.ToString("dd MMM yyyy") ?? "-")</span>
                         </div>
                         <div class="dmtp-plan-item">
                             <span class="dmtp-plan-label">Venue</span>
-                            <span class="dmtp-plan-value">Tambaram Community Hall</span>
+                            <span class="dmtp-plan-value">@Display(actualLocation)</span>
                         </div>
                         <div class="dmtp-plan-item">
                             <span class="dmtp-plan-label">Start Time</span>
-                            <span class="dmtp-plan-value">10:00 AM</span>
+                            <span class="dmtp-plan-value">@(startTime?.ToString("hh:mm tt", CultureInfo.InvariantCulture) ?? "-")</span>
                         </div>
                         <div class="dmtp-plan-item">
                             <span class="dmtp-plan-label">End Time</span>
-                            <span class="dmtp-plan-value">03:30 PM</span>
+                            <span class="dmtp-plan-value">@(endTime?.ToString("hh:mm tt", CultureInfo.InvariantCulture) ?? "-")</span>
                         </div>
                         <div class="dmtp-plan-item">
                             <span class="dmtp-plan-label">Duration</span>
-                            <span class="dmtp-plan-value">5 hours 30 Minutes</span>
+                            <span class="dmtp-plan-value">@EventDurationText</span>
                         </div>
                     </div>
                 </div>
@@ -843,27 +829,27 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin dmtp-center-title">Attendance Summary</h3>
-                        <button type="button" class="dmtp-btn-edit-outline">Edit</button>
+                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
                     </div>
                     <div class="dmtp-attendance-grid">
                         <div class="dmtp-attendance-card dmtp-attendance-green">
                             <span class="dmtp-plan-label">Participants</span>
-                            <span class="dmtp-attendance-value">128</span>
+                            <span class="dmtp-attendance-value">@totalParticipants</span>
                         </div>
                         <div class="dmtp-attendance-card dmtp-attendance-blue">
                             <span class="dmtp-plan-label">SPIC Employees</span>
-                            <span class="dmtp-attendance-value">128</span>
+                            <span class="dmtp-attendance-value">@totalEmployees</span>
                         </div>
                         <div class="dmtp-attendance-card dmtp-attendance-orange">
                             <span class="dmtp-plan-label">Total Attendance</span>
-                            <span class="dmtp-attendance-value">128</span>
+                            <span class="dmtp-attendance-value">@overallAttendance</span>
                         </div>
                     </div>
                     <div class="dmtp-attendance-legend">
-                        <span><span class="dmtp-legend-dot dmtp-legend-green"></span>Farmers: 96 (75%)</span>
-                        <span><span class="dmtp-legend-dot dmtp-legend-blue"></span>Dealer: 96 (75%)</span>
-                        <span><span class="dmtp-legend-dot dmtp-legend-purple"></span>Distributors: 96 (75%)</span>
-                        <span><span class="dmtp-legend-dot dmtp-legend-orange"></span>Others 96 (75%)</span>
+                        <span><span class="dmtp-legend-dot dmtp-legend-green"></span>Farmers: @participants.Count(x => x.Role == "Farmer")</span>
+                        <span><span class="dmtp-legend-dot dmtp-legend-blue"></span>Dealer: @participants.Count(x => x.Role == "Dealer")</span>
+                        <span><span class="dmtp-legend-dot dmtp-legend-purple"></span>Distributors: @participants.Count(x => x.Role == "Distributor")</span>
+                        <span><span class="dmtp-legend-dot dmtp-legend-orange"></span>Others: @participants.Count(x => x.Role == "Other")</span>
                     </div>
                 </div>
 
@@ -871,14 +857,21 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Photos and Videos</h3>
-                        <button type="button" class="dmtp-btn-edit-outline">Edit</button>
+                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(2)">Edit</button>
                     </div>
                     <div class="dmtp-review-photo-grid">
                         @foreach (var photo in eventPhotos)
                         {
                             <div class="dmtp-review-photo-card">
                                 <div class="dmtp-review-photo-thumb" style="overflow:hidden;">
-                                    <img src="@photo.PreviewUrl" alt="@photo.FileName" style="width:100%;height:100%;object-fit:cover;" />
+                                    @if (!string.IsNullOrWhiteSpace(photo.PreviewUrl))
+                                    {
+                                        <img src="@photo.PreviewUrl" alt="@photo.FileName" loading="lazy" style="width:100%;height:100%;object-fit:cover;" />
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted small text-center p-3">@(photo.PreviewError ?? "Loading saved photo...")</div>
+                                    }
                                 </div>
                                 <span class="dmtp-photo-filename">@photo.Caption</span>
                             </div>
@@ -918,7 +911,7 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Activities Conducted</h3>
-                        <button type="button" class="dmtp-btn-edit-outline">Edit</button>
+                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(3)">Edit</button>
                     </div>
                     <div class="dmtp-table-wrap">
                         <table class="dmtp-table">
@@ -965,6 +958,7 @@ else if (csr1Plan != null)
                 </div>
             }
 
+
             <!-- Bottom Action Bar -->
             @if (currentStep == 1)
             {
@@ -990,7 +984,7 @@ else if (csr1Plan != null)
                         Previous
                     </button>
                     <div class="dmtp-action-buttons">
-                        <button type="button" class="dmtp-btn-save-draft">
+                        <button type="button" class="dmtp-btn-save-draft" @onclick="() => SaveCSR2Draft()" disabled="@(savingCSR2 || csr2Status != "Draft")">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
                             Save Draft
                         </button>
@@ -1004,13 +998,13 @@ else if (csr1Plan != null)
             else if (currentStep == 5)
             {
                 <div class="dmtp-action-bar">
-                    <span class="dmtp-action-note dmtp-action-note-success">All required information is complete. Ready to submit.</span>
+                    <span class="dmtp-action-note dmtp-action-note-success">Review all details before submitting CSR-2.</span>
                     <div class="dmtp-action-buttons">
                         <button type="button" class="dmtp-btn-not-organized">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                             Request Approval
                         </button>
-                        <button type="button" class="dmtp-btn-start-event">
+                        <button type="button" class="dmtp-btn-start-event" @onclick="SubmitCSR2" disabled="@(savingCSR2 || csr2Status != "Draft")">
                             Submit CSR-2
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                         </button>
@@ -1021,6 +1015,28 @@ else if (csr1Plan != null)
         </div>
     </div>
 
+}
+
+<!-- CSR-2 centered feedback modal (errors, validation, and successful actions) -->
+@if (showCsr2Alert)
+{
+    <div class="csr2-alert-backdrop" role="presentation" @onclick="CloseCsr2Alert">
+        <div class="csr2-alert-box" role="alertdialog" aria-modal="true" aria-labelledby="csr2-alert-title" aria-describedby="csr2-alert-description" @onclick:stopPropagation="true">
+            <div class="csr2-alert-symbol @(csr2AlertIsError ? "csr2-alert-danger" : "csr2-alert-success")" aria-hidden="true">
+                @if (csr2AlertIsError)
+                {
+                    <i class="bi bi-x-lg"></i>
+                }
+                else
+                {
+                    <i class="bi bi-check-lg"></i>
+                }
+            </div>
+            <h3 id="csr2-alert-title">@csr2AlertTitle</h3>
+            <p id="csr2-alert-description">@csr2AlertMessage</p>
+            <button type="button" class="csr2-alert-confirm" @onclick="CloseCsr2Alert">OK</button>
+        </div>
+    </div>
 }
 
 <!-- Start Event Confirmation Modal -->
@@ -1043,6 +1059,81 @@ else if (csr1Plan != null)
 
 
 <style>
+    /* Fixed overlay intentionally uses viewport centering on all CSR-2 wizard steps. */
+    .csr2-alert-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 11000;
+        background: rgba(21,31,49,.47);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 18px;
+    }
+
+    .csr2-alert-box {
+        width: min(414px,100%);
+        background: #fff;
+        border-radius: 17px;
+        padding: 41px 28px 27px;
+        box-shadow: 0 20px 60px rgba(0,0,0,.15);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+
+    .csr2-alert-symbol {
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 29px;
+        margin-bottom: 18px;
+    }
+
+    .csr2-alert-danger {
+        background: #e3222c;
+    }
+
+    .csr2-alert-success {
+        background: #168f60;
+    }
+
+    .csr2-alert-box h3 {
+        font-size: 21px;
+        font-weight: 700;
+        color: #192234;
+        margin: 0 0 13px;
+    }
+
+    .csr2-alert-box p {
+        font-size: 14px;
+        color: #48566e;
+        line-height: 1.55;
+        margin: 0 0 25px;
+        overflow-wrap: anywhere;
+    }
+
+    .csr2-alert-confirm {
+        background: #2861eb;
+        color: white;
+        border: 0;
+        border-radius: 6px;
+        width: 122px;
+        height: 36px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .csr2-alert-confirm:focus-visible {
+            outline: 3px solid #9cbbff;
+            outline-offset: 2px;
+        }
+
     .dmtp-expense-color-grid {
         display: grid;
         grid-template-columns: repeat(2,minmax(0,1fr));
@@ -1255,6 +1346,21 @@ else if (csr1Plan != null)
 @code {
     [SupplyParameterFromQuery(Name = "csr1Id")]
     public int? CSR1Id { get; set; }
+    // A single modal replaces scattered inline toasts, matching the requested alert design.
+    private bool showCsr2Alert;
+    private bool csr2AlertIsError = true;
+    private string csr2AlertTitle = "Action Failed";
+    private string csr2AlertMessage = "";
+    private void ShowCsr2Alert(string message, bool isError = true, string? title = null)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        csr2AlertMessage = message;
+        csr2AlertIsError = isError;
+        csr2AlertTitle = title ?? (isError ? "Action Failed" : "Success");
+        showCsr2Alert = true;
+    }
+    private void CloseCsr2Alert() => showCsr2Alert = false;
+
     private int selectedEmployeeId = 0;
 
     private CSR1DetailsDto? csr1Plan;
@@ -1289,25 +1395,39 @@ else if (csr1Plan != null)
     private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
     private static string Money(decimal amount) => "₹ " + amount.ToString("N2", CultureInfo.GetCultureInfo("en-IN"));
 
+    private int? loadedCsr1Id;
     protected override async Task OnParametersSetAsync()
     {
+        if (CSR1Id.HasValue && CSR1Id == loadedCsr1Id && csr1Plan != null) return;
         isLoadingCSR1 = true;
         csr1Plan = null;
         csr1Error = "";
+        loadedCsr1Id = null;
         if (CSR1Id is null or <= 0)
         {
             csr1Error = "Missing or invalid csr1Id in the page URL.";
             isLoadingCSR1 = false;
             return;
         }
+
+        // Independent lookups are requested concurrently rather than serially.
+        // Apply the draft only after CSR-1 has initialized the expense categories.
+        var csr1Id = CSR1Id.Value;
         try
         {
-            using var response = await Http.GetAsync($"api/CSR1/details/{CSR1Id}");
+            var planTask = Http.GetAsync($"api/CSR1/details/{csr1Id}");
+            var employeeTask = LoadEmployees();
+            var draftTask = Http.GetAsync($"api/CSR2/by-csr1/{csr1Id}");
+
+            using var response = await planTask;
             if (!response.IsSuccessStatusCode)
             {
-                csr1Error = $"Unable to load CSR-1 #{CSR1Id}. HTTP {(int)response.StatusCode}.";
+                csr1Error = $"Unable to load CSR-1 #{csr1Id}. HTTP {(int)response.StatusCode}.";
+                await employeeTask;
+                using var ignoredDraft = await draftTask;
                 return;
             }
+
             csr1Plan = await response.Content.ReadFromJsonAsync<CSR1DetailsDto>();
             if (csr1Plan == null)
                 csr1Error = "CSR-1 details API returned no data.";
@@ -1316,14 +1436,27 @@ else if (csr1Plan != null)
                 csr1Error = "CSR-2 can be opened only for an approved CSR-1.";
                 csr1Plan = null;
             }
+
             if (csr1Plan != null)
             {
+                // Prevent old report data carrying over when a different CSR-1 is opened.
+                expenseItems.Clear();
                 InitializeExpensesFromCSR1();
-                // Employee Master is loaded below for both employee and coordinator dropdowns.
             }
-            await LoadEmployees();
+
+            // Employee and draft responses were already downloading alongside CSR-1.
+            await employeeTask;
+            using var draftResponse = await draftTask;
+            if (csr1Plan != null)
+            {
+                await ApplyCSR2DraftResponse(draftResponse);
+                loadedCsr1Id = csr1Id;
+            }
         }
-        catch (Exception ex) { csr1Error = $"CSR-1 load error: {ex.Message}"; }
+        catch (Exception ex)
+        {
+            csr1Error = $"CSR-2 page load error: {ex.Message}";
+        }
         finally { isLoadingCSR1 = false; }
     }
 
@@ -1402,16 +1535,19 @@ else if (csr1Plan != null)
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(participantRole))
         {
             participantError = "Please enter participant name, phone number and role.";
+            ShowCsr2Alert(participantError);
             return;
         }
         if (phone.Length != 10 || !phone.All(char.IsDigit))
         {
             participantError = "Please enter a valid 10-digit mobile number.";
+            ShowCsr2Alert(participantError);
             return;
         }
         if (participants.Any(p => p.Phone == phone && p.Id != editingParticipantId))
         {
             participantError = "This phone number is already added.";
+            ShowCsr2Alert(participantError);
             return;
         }
         if (editingParticipantId is int id)
@@ -1488,6 +1624,8 @@ else if (csr1Plan != null)
         public bool UseInLibrary { get; set; } = true;
         // Binary data is kept in memory; no server persistence is performed here.
         public byte[] Bytes { get; set; } = Array.Empty<byte>();
+        public int ServerId { get; set; }
+        public string? PreviewError { get; set; }
     }
 
     private async Task OnPhotosSelected(InputFileChangeEventArgs args)
@@ -1538,15 +1676,15 @@ else if (csr1Plan != null)
         finally
         {
             photoError = string.Join("; ", rejected);
+            if (!string.IsNullOrWhiteSpace(photoError)) ShowCsr2Alert(photoError);
             isReadingPhotos = false;
         }
     }
 
-    private void RemovePhoto(Guid id) => eventPhotos.RemoveAll(x => x.Id == id);
+    private void RemovePhoto(Guid id) { var media = eventPhotos.FirstOrDefault(x => x.Id == id); if (media?.ServerId > 0) removedMediaIds.Add(media.ServerId); eventPhotos.RemoveAll(x => x.Id == id); }
 
     private const long MaxVideoBytes = 200L * 1024 * 1024;
-    // Base64 previews above this size can freeze mobile browsers. Files remain in page state.
-    private const long MaxVideoPreviewBytes = 20L * 1024 * 1024;
+    // Videos are streamed to CSR2Controller on selection, not buffered in page state.
     private readonly List<VideoItem> eventVideos = new();
     private bool isReadingVideos;
     private string videoError = "";
@@ -1560,21 +1698,29 @@ else if (csr1Plan != null)
         public string ContentType { get; set; } = "";
         public bool UseInLibrary { get; set; } = true;
         public byte[] Bytes { get; set; } = Array.Empty<byte>();
+        public int ServerId { get; set; }
+        public long SavedFileSize { get; set; }
     }
 
     private static string FormatVideoSize(long bytes) => $"{bytes / (1024d * 1024d):N1} MB";
 
+    // Stream directly from IBrowserFile to the existing CSR2Controller media API.
+    // Avoid MemoryStream, byte[] copies, and base64 video data URLs.
     private async Task OnVideosSelected(InputFileChangeEventArgs args)
     {
+        if (isReadingVideos || savingCSR2) return;
         videoError = "";
+        if (csr2Status != "Draft") { ShowCsr2Alert("This CSR-2 is read-only."); return; }
+        if (!ValidateRequiredEventDetails()) { GoToStep(1); return; }
         isReadingVideos = true;
         var rejected = new List<string>();
         try
         {
+            // The draft must have a server ID before a streaming upload can begin.
+            await SaveCSR2DraftInternal();
             foreach (var file in args.GetMultipleFiles(10))
             {
                 var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
-                // Mobile-recorded files may use MOV; browser video codec support varies.
                 if (ext != ".mp4" && ext != ".mov")
                 {
                     rejected.Add($"{file.Name}: MP4/MOV only");
@@ -1587,39 +1733,47 @@ else if (csr1Plan != null)
                 }
                 try
                 {
-                    await using var stream = file.OpenReadStream(MaxVideoBytes);
-                    using var buffer = new MemoryStream();
-                    await stream.CopyToAsync(buffer);
-                    var bytes = buffer.ToArray();
                     var mime = ext == ".mov" ? "video/quicktime" : "video/mp4";
+                    await using var stream = file.OpenReadStream(MaxVideoBytes);
+                    using var form = new MultipartFormDataContent();
+                    using var content = new StreamContent(stream);
+                    content.Headers.ContentType = MediaTypeHeaderValue.Parse(mime);
+                    form.Add(content, "file", file.Name);
+                    form.Add(new StringContent("Video"), "mediaType");
+                    form.Add(new StringContent(""), "caption");
+                    form.Add(new StringContent("true"), "useInDigitalLibrary");
+                    using var response = await Http.PostAsync($"api/CSR2/{csr2DbId}/media", form);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        rejected.Add($"{file.Name}: upload failed (HTTP {(int)response.StatusCode})");
+                        continue;
+                    }
+                    using var result = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                    var id = result.RootElement.GetProperty("id").GetInt32();
                     eventVideos.Add(new VideoItem
                     {
+                        ServerId = id,
                         FileName = file.Name,
                         ContentType = mime,
-                        Bytes = bytes,
-                        PreviewUrl = bytes.LongLength <= MaxVideoPreviewBytes
-                            ? $"data:{mime};base64,{Convert.ToBase64String(bytes)}"
-                            : ""
+                        SavedFileSize = file.Size,
+                        PreviewUrl = $"api/CSR2/media/{id}/file"
                     });
+                    // Stream was consumed without allocating a complete video byte array.
+                    StateHasChanged();
                 }
-                catch (Exception ex)
-                {
-                    rejected.Add($"{file.Name}: {ex.Message}");
-                }
+                catch (Exception ex) { rejected.Add($"{file.Name}: {ex.Message}"); }
             }
         }
-        catch (Exception ex)
-        {
-            rejected.Add($"Unable to read videos: {ex.Message}");
-        }
+        catch (Exception ex) { rejected.Add($"Unable to upload videos: {ex.Message}"); }
         finally
         {
             videoError = string.Join("; ", rejected);
+            if (!string.IsNullOrWhiteSpace(videoError)) ShowCsr2Alert(videoError);
             isReadingVideos = false;
         }
     }
 
-    private void RemoveVideo(Guid id) => eventVideos.RemoveAll(v => v.Id == id);
+    private void RemoveVideo(Guid id) { var media = eventVideos.FirstOrDefault(x => x.Id == id); if (media?.ServerId > 0) removedMediaIds.Add(media.ServerId); eventVideos.RemoveAll(v => v.Id == id); }
 
     private class ActivityItem
     {
@@ -1662,16 +1816,19 @@ else if (csr1Plan != null)
             string.IsNullOrWhiteSpace(activityDescription))
         {
             activityError = "Enter activity name, start time, end time and description.";
+            ShowCsr2Alert(activityError);
             return;
         }
         if (activityEndTime.Value <= activityStartTime.Value)
         {
             activityError = "End time must be later than start time.";
+            ShowCsr2Alert(activityError);
             return;
         }
         if (activityParticipants < 0)
         {
             activityError = "Participants cannot be negative.";
+            ShowCsr2Alert(activityError);
             return;
         }
         ActivityItem? item = editingActivityId.HasValue
@@ -1723,6 +1880,7 @@ else if (csr1Plan != null)
         public string ProofFileName { get; set; } = "";
         public string ProofContentType { get; set; } = "";
         public byte[] ProofBytes { get; set; } = Array.Empty<byte>();
+        public int? ProofId { get; set; }
         public string Error { get; set; } = "";
     }
 
@@ -1759,11 +1917,13 @@ else if (csr1Plan != null)
         if (extension != ".pdf" && extension != ".jpg" && extension != ".jpeg" && extension != ".png")
         {
             item.Error = "Upload PDF, JPG or PNG only.";
+            ShowCsr2Alert(item.Error);
             return;
         }
         if (file.Size == 0 || file.Size > MaxExpenseProofBytes)
         {
             item.Error = "Proof must be smaller than 10 MB.";
+            ShowCsr2Alert(item.Error);
             return;
         }
         try
@@ -1778,37 +1938,19 @@ else if (csr1Plan != null)
         catch (Exception ex)
         {
             item.Error = $"Unable to read proof: {ex.Message}";
+            ShowCsr2Alert(item.Error);
         }
     }
 
     private void RemoveExpenseProof(ExpenseItem item)
     {
+        if (item.ProofId.HasValue) removedProofIds.Add(item.ProofId.Value);
+        item.ProofId = null;
         item.ProofFileName = "";
         item.ProofContentType = "";
         item.ProofBytes = Array.Empty<byte>();
         item.Error = "";
     }
-
-    private class ExpenseSummaryRow
-    {
-        public int SNo { get; set; }
-        public string Category { get; set; } = "";
-        public string Planned { get; set; } = "";
-        public string Actual { get; set; } = "";
-        public string Variance { get; set; } = "";
-        public string Date { get; set; } = "";
-        public string ProofFile { get; set; } = "";
-        public int Participants { get; set; }
-        public string Note { get; set; } = "";
-    }
-
-    private readonly List<ExpenseSummaryRow> expenseSummaryRows = new()
-    {
-        new ExpenseSummaryRow { SNo = 1, Category = "Farmer Awareness Session", Planned = "₹ 1,10,000", Actual = "₹ 1,42,000", Variance = "+ ₹32,000 (-29.09%)", Date = "May 9, 2026", ProofFile = "Venue_Invoice.pdf", Participants = 80, Note = "Awareness on crop best practices" },
-        new ExpenseSummaryRow { SNo = 2, Category = "Farmer Awareness Session", Planned = "₹ 1,20,000", Actual = "Not recorded", Variance = "+ ₹32,000 (-29.09%)", Date = "May 9, 2026", ProofFile = "Venue_Invoice.pdf", Participants = 80, Note = "Awareness on crop best practices" },
-        new ExpenseSummaryRow { SNo = 3, Category = "Farmer Awareness Session", Planned = "₹ 1,20,000", Actual = "Not recorded", Variance = "+ ₹32,000 (-29.09%)", Date = "May 9, 2026", ProofFile = "Venue_Invoice.pdf", Participants = 80, Note = "Awareness on crop best practices" },
-        new ExpenseSummaryRow { SNo = 4, Category = "Farmer Awareness Session", Planned = "₹ 1,20,000", Actual = "Not recorded", Variance = "+ ₹32,000 (-29.09%)", Date = "May 9, 2026", ProofFile = "Venue_Invoice.pdf", Participants = 80, Note = "Awareness on crop best practices" },
-    };
 
     // API: GET api/CSR2/all
     // EmployeeInformation.Name and phone numbers + active Employeelogins.Roles.
@@ -1838,19 +1980,22 @@ else if (csr1Plan != null)
             if (!response.IsSuccessStatusCode)
             {
                 employeeList = new();
-                employeeLoadError = $"Unable to load employee details and roles (HTTP {(int)response.StatusCode}).";
+                employeeLoadError = $"Unable to load employee details and roles (HTTP {(int)response.StatusCode})."; ShowCsr2Alert(employeeLoadError);
                 return;
             }
 
             employeeList = await response.Content.ReadFromJsonAsync<List<Csr2EmployeeLookupDto>>() ?? new();
             if (employeeList.Count == 0)
+            {
                 employeeLoadError = "No employees returned by the employee lookup API.";
+                ShowCsr2Alert(employeeLoadError);
+            }
             OnEmployeeChanged();
         }
         catch (Exception ex)
         {
             employeeList = new();
-            employeeLoadError = $"Employee lookup error: {ex.Message}";
+            employeeLoadError = $"Employee lookup error: {ex.Message}"; ShowCsr2Alert(employeeLoadError);
             Console.WriteLine(employeeLoadError);
         }
     }
@@ -1881,16 +2026,19 @@ else if (csr1Plan != null)
         if (emp == null)
         {
             employeeAddError = "Please select an employee.";
+            ShowCsr2Alert(employeeAddError);
             return;
         }
         if (string.IsNullOrWhiteSpace(selectedEmployeeRole) || !selectedEmployeeRoles.Contains(selectedEmployeeRole))
         {
             employeeAddError = "Please select a role assigned to this employee.";
+            ShowCsr2Alert(employeeAddError);
             return;
         }
         if (employees.Any(x => x.Id == emp.Id && x.Id != editingEmployeeId))
         {
             employeeAddError = "This employee has already been added.";
+            ShowCsr2Alert(employeeAddError);
             return;
         }
 
@@ -1934,4 +2082,272 @@ else if (csr1Plan != null)
         }
         employeeAddError = "";
     }
+    private readonly List<int> removedMediaIds = new();
+    private readonly List<int> removedProofIds = new();
+    private int? csr2DbId;
+    private string csr2Status = "Draft";
+    private int? expectedParticipantsCount;
+    private string EventDurationText => startTime.HasValue && endTime.HasValue && endTime.Value > startTime.Value
+        ? $"{(int)(endTime.Value - startTime.Value).TotalHours} hours {(endTime.Value - startTime.Value).Minutes} minutes" : "-";
+    private bool savingCSR2;
+    private bool csr2SaveError;
+    private string csr2SaveMessage = "";
+
+    private CSR2SaveDto BuildCSR2SaveDto() => new()
+    {
+        Id = csr2DbId,
+        CSR1Id = CSR1Id ?? 0,
+        ActualEventDate = actualEventDate,
+        StartTime = startTime,
+        EndTime = endTime,
+        EventCoordinatorEmployeeId = eventCoordinatorId > 0 ? eventCoordinatorId : null,
+        ActualLocation = actualLocation,
+        ExpectedParticipantsCount = expectedParticipantsCount,
+        Participants = participants.Select(x => new CSR2ParticipantDto { Name = x.Name, PhoneNumber = x.Phone, Role = x.Role }).ToList(),
+        Employees = employees.Select(x => new CSR2EmployeeDto { EmployeeInformationId = x.Id, EmployeeName = x.Name, PhoneNumber = x.Phone, RoleName = x.Role }).ToList(),
+        Activities = activities.Select((x, i) => new CSR2ActivityDto
+        {
+            ActivityName = x.Title,
+            StartTime = TimeOnly.ParseExact(x.StartTime, "HH:mm", CultureInfo.InvariantCulture),
+            EndTime = TimeOnly.ParseExact(x.EndTime, "HH:mm", CultureInfo.InvariantCulture),
+            ParticipantsCount = x.Participants,
+            Description = x.Description,
+            Remarks = x.Remarks,
+            SortOrder = i + 1
+        }).ToList(),
+        Expenses = expenseItems.Select(x => new CSR2ExpenseDto
+        {
+            CategoryKey = x.Key,
+            CategoryName = x.Label,
+            PlannedAmount = x.PlannedAmount,
+            ActualAmount = x.ActualAmount,
+            ExpenseDate = x.ExpenseDate
+        }).ToList()
+    };
+
+    private async Task ApplyCSR2DraftResponse(HttpResponseMessage response)
+    {
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return;
+        if (!response.IsSuccessStatusCode) { csr2SaveError = true; csr2SaveMessage = $"Unable to load CSR-2: HTTP {(int)response.StatusCode}"; ShowCsr2Alert(csr2SaveMessage); return; }
+        var saved = await response.Content.ReadFromJsonAsync<CSR2DetailsDto>();
+        if (saved is null) return;
+        csr2DbId = saved.Id;
+        csr2Status = saved.Status;
+        expectedParticipantsCount = saved.ExpectedParticipantsCount;
+        actualEventDate = saved.ActualEventDate; startTime = saved.StartTime; endTime = saved.EndTime;
+        eventCoordinatorId = saved.EventCoordinatorEmployeeId ?? 0; actualLocation = saved.ActualLocation ?? "";
+        participants.Clear();
+        foreach (var item in saved.Participants) participants.Add(new PersonInfo { Id = nextParticipantId++, Name = item.Name, Phone = item.PhoneNumber ?? "", Role = item.Role, Initials = GetInitials(item.Name) });
+        employees.Clear();
+        foreach (var item in saved.Employees) employees.Add(new PersonInfo { Id = item.EmployeeInformationId, Name = item.EmployeeName, Phone = item.PhoneNumber ?? "", Role = item.RoleName, Initials = GetInitials(item.EmployeeName) });
+        activities.Clear();
+        foreach (var item in saved.Activities.OrderBy(x => x.SortOrder)) activities.Add(new ActivityItem
+        {
+            Title = item.ActivityName,
+            StartTime = item.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+            EndTime = item.EndTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+            Participants = item.ParticipantsCount,
+            Description = item.Description,
+            Remarks = item.Remarks ?? ""
+        });
+        foreach (var item in saved.Expenses)
+        {
+            var row = expenseItems.FirstOrDefault(x => x.Key == item.CategoryKey);
+            if (row is null) continue;
+            row.ActualAmount = item.ActualAmount; row.ExpenseDate = item.ExpenseDate;
+            row.ProofId = item.ProofId; row.ProofFileName = item.ProofFileName ?? "";
+        }
+        eventPhotos.Clear(); eventVideos.Clear();
+        triedSavedPhotoPreviews.Clear();
+        foreach (var file in saved.Media)
+        {
+            var url = $"api/CSR2/media/{file.Id}/file";
+            if (file.MediaType == "Photo") eventPhotos.Add(new PhotoItem { ServerId = file.Id, FileName = file.OriginalFileName, Caption = file.Caption ?? "", UseInLibrary = file.UseInDigitalLibrary, PreviewUrl = "" });
+            if (file.MediaType == "Video") eventVideos.Add(new VideoItem { ServerId = file.Id, FileName = file.OriginalFileName, Caption = file.Caption ?? "", UseInLibrary = file.UseInDigitalLibrary, PreviewUrl = url, SavedFileSize = file.FileSizeBytes });
+        }
+        if (saved.Status != "Draft") { csr2SaveMessage = $"CSR-2 status: {saved.Status}"; }
+    }
+
+    // Protected API images cannot reliably be rendered with <img src="api/..."> when
+    // authentication is attached to HttpClient requests (e.g. bearer authorization).
+    // Load saved photo bytes only when the user opens the media or review step.
+    // No file bytes are added to the CSR-2 JSON response.
+    private bool loadingSavedPhotoPreviews;
+    private readonly HashSet<int> triedSavedPhotoPreviews = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (currentStep != 2 && currentStep != 5) return;
+        if (loadingSavedPhotoPreviews) return;
+        var pending = eventPhotos.Where(p => p.ServerId > 0 &&
+            string.IsNullOrWhiteSpace(p.PreviewUrl) && !triedSavedPhotoPreviews.Contains(p.ServerId)).ToList();
+        if (pending.Count == 0) return;
+
+        loadingSavedPhotoPreviews = true;
+        try
+        {
+            foreach (var photo in pending)
+            {
+                triedSavedPhotoPreviews.Add(photo.ServerId);
+                try
+                {
+                    // The existing injected HttpClient carries the application's auth setup.
+                    using var reply = await Http.GetAsync($"api/CSR2/media/{photo.ServerId}/file",
+                        System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
+                    if (!reply.IsSuccessStatusCode)
+                    {
+                        photo.PreviewError = $"Photo unavailable (HTTP {(int)reply.StatusCode}).";
+                        continue;
+                    }
+                    var length = reply.Content.Headers.ContentLength;
+                    if (length.HasValue && length.Value > MaxPhotoBytes)
+                    {
+                        photo.PreviewError = "Photo exceeds the preview size limit.";
+                        continue;
+                    }
+                    await using var source = await reply.Content.ReadAsStreamAsync();
+                    using var buffer = new MemoryStream();
+                    var chunk = new byte[64 * 1024];
+                    int count;
+                    while ((count = await source.ReadAsync(chunk.AsMemory())) > 0)
+                    {
+                        if (buffer.Length + count > MaxPhotoBytes)
+                            throw new InvalidDataException("Photo exceeds the preview size limit.");
+                        await buffer.WriteAsync(chunk.AsMemory(0, count));
+                    }
+                    var type = reply.Content.Headers.ContentType?.MediaType;
+                    if (type != "image/png" && type != "image/jpeg")
+                    {
+                        photo.PreviewError = "Unsupported saved photo format.";
+                        continue;
+                    }
+                    photo.PreviewUrl = $"data:{type};base64,{Convert.ToBase64String(buffer.ToArray())}";
+                    photo.PreviewError = null;
+                }
+                catch (Exception ex)
+                {
+                    photo.PreviewError = $"Unable to load photo: {ex.Message}";
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        finally
+        {
+            loadingSavedPhotoPreviews = false;
+        }
+    }
+
+    private async Task<bool> SaveCSR2DraftInternal()
+    {
+        var response = await Http.PostAsJsonAsync("api/CSR2/save-draft", BuildCSR2SaveDto());
+        if (!response.IsSuccessStatusCode) throw new Exception($"Save draft failed: HTTP {(int)response.StatusCode} - {await response.Content.ReadAsStringAsync()}");
+        using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        csr2DbId = doc.RootElement.GetProperty("id").GetInt32();
+        foreach (var mediaId in removedMediaIds.Distinct().ToList())
+        {
+            using var delete = await Http.DeleteAsync($"api/CSR2/media/{mediaId}");
+            if (!delete.IsSuccessStatusCode && delete.StatusCode != System.Net.HttpStatusCode.NotFound)
+                throw new Exception($"Remove media failed: HTTP {(int)delete.StatusCode}");
+        }
+        removedMediaIds.Clear();
+        foreach (var proofId in removedProofIds.Distinct().ToList())
+        {
+            using var delete = await Http.DeleteAsync($"api/CSR2/proof/{proofId}");
+            if (!delete.IsSuccessStatusCode && delete.StatusCode != System.Net.HttpStatusCode.NotFound)
+                throw new Exception($"Remove expense proof failed: HTTP {(int)delete.StatusCode}");
+        }
+        removedProofIds.Clear();
+        // Update metadata for previously uploaded files, then upload pending files.
+        foreach (var photo in eventPhotos) await UploadOrUpdateMedia(photo.ServerId, photo.Bytes, photo.FileName, "Photo", photo.Caption, photo.UseInLibrary, photo.ContentType, id => { photo.ServerId = id; photo.Bytes = Array.Empty<byte>(); });
+        foreach (var video in eventVideos) await UploadOrUpdateMedia(video.ServerId, video.Bytes, video.FileName, "Video", video.Caption, video.UseInLibrary, video.ContentType, id => { video.ServerId = id; video.SavedFileSize = video.Bytes.LongLength; video.Bytes = Array.Empty<byte>(); });
+        foreach (var item in expenseItems.Where(x => x.ProofBytes.Length > 0))
+        {
+            using var form = new MultipartFormDataContent();
+            using var content = new ByteArrayContent(item.ProofBytes);
+            content.Headers.ContentType = MediaTypeHeaderValue.Parse(string.IsNullOrEmpty(item.ProofContentType) ? "application/octet-stream" : item.ProofContentType);
+            form.Add(content, "file", item.ProofFileName);
+            using var proofResponse = await Http.PostAsync($"api/CSR2/{csr2DbId}/expenses/{Uri.EscapeDataString(item.Key)}/proof", form);
+            if (!proofResponse.IsSuccessStatusCode) throw new Exception($"Proof upload failed ({item.Label}): {await proofResponse.Content.ReadAsStringAsync()}");
+            var oldProofId = item.ProofId;
+            item.ProofBytes = Array.Empty<byte>();
+            using var proofDoc = System.Text.Json.JsonDocument.Parse(await proofResponse.Content.ReadAsStringAsync());
+            item.ProofId = proofDoc.RootElement.GetProperty("id").GetInt32();
+            if (oldProofId.HasValue && oldProofId.Value != item.ProofId.Value)
+            {
+                using var deleteOld = await Http.DeleteAsync($"api/CSR2/proof/{oldProofId.Value}");
+                if (!deleteOld.IsSuccessStatusCode && deleteOld.StatusCode != System.Net.HttpStatusCode.NotFound)
+                    throw new Exception($"New proof uploaded, but old proof deletion failed for {item.Label}.");
+            }
+        }
+        return true;
+    }
+    private async Task UploadOrUpdateMedia(int serverId, byte[] bytes, string fileName, string mediaType, string caption, bool inLibrary, string contentType, Action<int> setId)
+    {
+        if (serverId > 0)
+        {
+            using var patch = await Http.PatchAsJsonAsync($"api/CSR2/media/{serverId}", new CSR2MediaDto { Caption = caption, UseInDigitalLibrary = inLibrary });
+            if (!patch.IsSuccessStatusCode) throw new Exception($"Media update failed: HTTP {(int)patch.StatusCode}");
+            return;
+        }
+        if (bytes.Length == 0) return;
+        using var form = new MultipartFormDataContent();
+        using var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = MediaTypeHeaderValue.Parse(!string.IsNullOrWhiteSpace(contentType) ? contentType : (mediaType == "Photo" ? "image/jpeg" : "video/mp4"));
+        form.Add(content, "file", fileName); form.Add(new StringContent(mediaType), "mediaType");
+        form.Add(new StringContent(caption ?? ""), "caption"); form.Add(new StringContent(inLibrary.ToString().ToLowerInvariant()), "useInDigitalLibrary");
+        using var reply = await Http.PostAsync($"api/CSR2/{csr2DbId}/media", form);
+        if (!reply.IsSuccessStatusCode) throw new Exception($"{mediaType} upload failed: {await reply.Content.ReadAsStringAsync()}");
+        using var doc = System.Text.Json.JsonDocument.Parse(await reply.Content.ReadAsStringAsync());
+        setId(doc.RootElement.GetProperty("id").GetInt32());
+    }
+    // Required before any draft save or submission. Do not call the API for incomplete event details.
+    private bool ValidateRequiredEventDetails()
+    {
+        string? message = null;
+        if (!actualEventDate.HasValue)
+            message = "Please select Actual Event Date.";
+        else if (!startTime.HasValue)
+            message = "Please select Start Time.";
+        else if (!endTime.HasValue)
+            message = "Please select End Time.";
+        else if (endTime.Value <= startTime.Value)
+            message = "End Time must be later than Start Time.";
+        else if (eventCoordinatorId <= 0)
+            message = "Please select Event Coordinator.";
+        else if (string.IsNullOrWhiteSpace(actualLocation))
+            message = "Please enter Actual Location.";
+
+        if (message == null) return true;
+        csr2SaveError = true;
+        csr2SaveMessage = message;
+        ShowCsr2Alert(message);
+        return false;
+    }
+
+    private async Task SaveCSR2Draft(bool showSuccess = true)
+    {
+        if (savingCSR2) return;
+        if (csr2Status != "Draft") { csr2SaveError = true; csr2SaveMessage = "This CSR-2 has already been submitted and is read-only."; ShowCsr2Alert(csr2SaveMessage); return; }
+        if (!ValidateRequiredEventDetails()) return;
+        savingCSR2 = true; csr2SaveError = false; csr2SaveMessage = "Saving CSR-2...";
+        try { await SaveCSR2DraftInternal(); csr2SaveMessage = "CSR-2 draft saved successfully."; if (showSuccess) ShowCsr2Alert(csr2SaveMessage, false); }
+        catch (Exception ex) { csr2SaveError = true; csr2SaveMessage = ex.Message; ShowCsr2Alert(csr2SaveMessage); }
+        finally { savingCSR2 = false; }
+    }
+    private async Task SubmitCSR2()
+    {
+        await SaveCSR2Draft(false);
+        if (csr2SaveError || csr2DbId is null) return;
+        savingCSR2 = true;
+        try
+        {
+            using var response = await Http.PostAsync($"api/CSR2/{csr2DbId}/submit", null);
+            if (!response.IsSuccessStatusCode) throw new Exception(await response.Content.ReadAsStringAsync());
+            csr2Status = "Submitted";
+            csr2SaveMessage = "CSR-2 submitted successfully."; ShowCsr2Alert(csr2SaveMessage, false);
+        }
+        catch (Exception ex) { csr2SaveError = true; csr2SaveMessage = $"Submit failed: {ex.Message}"; ShowCsr2Alert(csr2SaveMessage); }
+        finally { savingCSR2 = false; }
+    }
+
 }

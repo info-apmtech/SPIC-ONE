@@ -955,6 +955,327 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("CSR1Products3");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ActualEventDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ActualLocation")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("ApprovedBudgetSnapshot")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("CSR1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<TimeOnly?>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int?>("EventCoordinatorEmployeeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ExpectedParticipantsCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsOrganized")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<TimeOnly?>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SubmittedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR1Id")
+                        .IsUnique();
+
+                    b.ToTable("CSR2s");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Activity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActivityName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(3000)
+                        .HasColumnType("character varying(3000)");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int?>("ParticipantsCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id", "SortOrder");
+
+                    b.ToTable("CSR2Activities");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Employee", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EmployeeName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RoleName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id", "EmployeeInformationId")
+                        .IsUnique();
+
+                    b.ToTable("CSR2Employees");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Expense", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("ActualAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CategoryKey")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("CategoryName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime?>("ExpenseDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("PlannedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id", "CategoryKey")
+                        .IsUnique();
+
+                    b.ToTable("CSR2Expenses");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2ExpenseProof", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2ExpenseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2ExpenseId");
+
+                    b.ToTable("CSR2ExpenseProofs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Media", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("UseInDigitalLibrary")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id", "MediaType");
+
+                    b.ToTable("CSR2Media");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Participant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.ToTable("CSR2Participants");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -10370,6 +10691,83 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Program");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR1", "CSR1")
+                        .WithMany()
+                        .HasForeignKey("CSR1Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CSR1");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Activity", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Activities")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Employee", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Employees")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Expense", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Expenses")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2ExpenseProof", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2Expense", "CSR2Expense")
+                        .WithMany("Proofs")
+                        .HasForeignKey("CSR2ExpenseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2Expense");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Media", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Media")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Participant", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Participants")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.Unit", "Unit")
@@ -11236,6 +11634,24 @@ namespace Spic.Infrastructure.Migrations
             modelBuilder.Entity("SPIC.Core.Entities.BudgetProgramMains", b =>
                 {
                     b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2", b =>
+                {
+                    b.Navigation("Activities");
+
+                    b.Navigation("Employees");
+
+                    b.Navigation("Expenses");
+
+                    b.Navigation("Media");
+
+                    b.Navigation("Participants");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Expense", b =>
+                {
+                    b.Navigation("Proofs");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CommunityPost", b =>

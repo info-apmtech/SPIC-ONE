@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
 using static SPIC.Core.Entities.EmployeeRegistration;
@@ -716,6 +717,25 @@ namespace Spic.Infrastructure.Data
                 entity.Property(x => x.CreatedAt).IsRequired();
             });
 
+            builder.Entity<CSR2>(e =>
+            {
+                // Exactly one CSR-2 report per CSR-1. Remove this index if multiple reports/events are permitted.
+                e.HasIndex(x => x.CSR1Id).IsUnique();
+                e.HasOne(x => x.CSR1).WithMany().HasForeignKey(x => x.CSR1Id).OnDelete(DeleteBehavior.Restrict);
+                e.HasMany(x => x.Participants).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Employees).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Activities).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Media).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Expenses).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<CSR2Employee>().HasIndex(x => new { x.CSR2Id, x.EmployeeInformationId }).IsUnique();
+            builder.Entity<CSR2Expense>(e =>
+            {
+                e.HasIndex(x => new { x.CSR2Id, x.CategoryKey }).IsUnique();
+                e.HasMany(x => x.Proofs).WithOne(x => x.CSR2Expense).HasForeignKey(x => x.CSR2ExpenseId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<CSR2Activity>().HasIndex(x => new { x.CSR2Id, x.SortOrder });
+            builder.Entity<CSR2Media>().HasIndex(x => new { x.CSR2Id, x.MediaType });
         }
 
         // User related
@@ -929,7 +949,14 @@ namespace Spic.Infrastructure.Data
         public DbSet<RegionBudgetSummaryHistory> RegionBudgetSummaryHistories { get; set; }
         public DbSet<HeadquarterBudgetSummaryHistory> HeadquarterBudgetSummaryHistories { get; set; }
         public DbSet<RMDHQMapping> RMDHQMappings { get; set; }
-
         public DbSet<SanctionNumberSequence> SanctionNumberSequences { get; set; }
+
+        public DbSet<CSR2> CSR2s => Set<CSR2>();
+        public DbSet<CSR2Participant> CSR2Participants => Set<CSR2Participant>();
+        public DbSet<CSR2Employee> CSR2Employees => Set<CSR2Employee>();
+        public DbSet<CSR2Activity> CSR2Activities => Set<CSR2Activity>();
+        public DbSet<CSR2Media> CSR2Media => Set<CSR2Media>();
+        public DbSet<CSR2Expense> CSR2Expenses => Set<CSR2Expense>();
+        public DbSet<CSR2ExpenseProof> CSR2ExpenseProofs => Set<CSR2ExpenseProof>();
     }
 }
