@@ -4,6 +4,7 @@
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
 @using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
 
 @if (isLoadingCSR1)
 {
@@ -66,7 +67,7 @@ else if (csr1Plan != null)
                     <div class="dmtp-budget-card dmtp-budget-pink">
                         <div class="dmtp-budget-text">
                             <span class="dmtp-budget-label">Actual Expense</span>
-                            <span class="dmtp-budget-value">Not recorded</span>
+                            <span class="dmtp-budget-value">@Money(ActualExpenseTotal)</span>
                             <span class="dmtp-budget-note">Calculated from entries below</span>
                         </div>
                         <div class="dmtp-budget-icon">
@@ -76,7 +77,7 @@ else if (csr1Plan != null)
                     <div class="dmtp-budget-card dmtp-budget-blue">
                         <div class="dmtp-budget-text">
                             <span class="dmtp-budget-label">Difference</span>
-                            <span class="dmtp-budget-value">Not calculated</span>
+                            <span class="dmtp-budget-value">@Money(BudgetBalance)</span>
                             <span class="dmtp-budget-note">Within Budget <span class="dmtp-mini-badge">Saved</span></span>
                         </div>
                         <div class="dmtp-budget-icon">
@@ -130,7 +131,7 @@ else if (csr1Plan != null)
                     <div class="dmtp-budget-card dmtp-budget-blue">
                         <div class="dmtp-budget-text">
                             <span class="dmtp-budget-label">Actual Expense</span>
-                            <span class="dmtp-budget-value">Not recorded</span>
+                            <span class="dmtp-budget-value">@Money(ActualExpenseTotal)</span>
                         </div>
                         <div class="dmtp-budget-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -148,7 +149,7 @@ else if (csr1Plan != null)
                     <div class="dmtp-budget-card dmtp-budget-purple">
                         <div class="dmtp-budget-text">
                             <span class="dmtp-budget-label">Media Uploaded</span>
-                            <span class="dmtp-budget-value">18 items</span>
+                            <span class="dmtp-budget-value">@(eventPhotos.Count + eventVideos.Count) items</span>
                         </div>
                         <div class="dmtp-budget-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
@@ -243,32 +244,29 @@ else if (csr1Plan != null)
                     <div class="dmtp-event-grid">
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Actual Event Date</label>
-                            <div class="dmtp-input-wrapper">
-                                <input type="text" class="dmtp-form-control" placeholder="dd-mm-yyyy" readonly>
-                                <svg class="dmtp-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                            </div>
+                            <input type="date" class="dmtp-form-control" @bind="actualEventDate" />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Start Time</label>
-                            <div class="dmtp-input-wrapper">
-                                <input type="text" class="dmtp-form-control" placeholder="--:--" readonly>
-                                <svg class="dmtp-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                            </div>
+                            <input type="time" class="dmtp-form-control" @bind="startTime" />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">End Time</label>
-                            <div class="dmtp-input-wrapper">
-                                <input type="text" class="dmtp-form-control" placeholder="--:--" readonly>
-                                <svg class="dmtp-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                            </div>
+                            <input type="time" class="dmtp-form-control" @bind="endTime" />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Event Coordinator</label>
-                            <input type="text" class="dmtp-form-control" placeholder="Employee Name" readonly>
+                            <select class="dmtp-form-select" @bind="eventCoordinatorId">
+                                <option value="0">Select Employee</option>
+                                @foreach (var employee in employeeList)
+                                {
+                                    <option value="@employee.Id">@employee.Name</option>
+                                }
+                            </select>
                         </div>
                         <div class="dmtp-form-group dmtp-span-2">
                             <label class="dmtp-form-label">Actual Location</label>
-                            <input type="text" class="dmtp-form-control" placeholder="Venue name, address, city" readonly>
+                            <input type="text" class="dmtp-form-control" placeholder="Venue name, address, city" @bind="actualLocation" />
                         </div>
                     </div>
                 </div>
@@ -313,61 +311,79 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Participant List</h3>
-                        <button type="button" class="dmtp-btn-add">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Add Participant
+                        <button type="button" class="dmtp-btn-add" @onclick="AddParticipant">
+                            <i class="bi bi-plus-lg"></i> @(editingParticipantId is null ? "Add Participant" : "Update Participant")
                         </button>
                     </div>
 
                     <div class="dmtp-filter-row">
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Name</label>
-                            <input type="text" class="dmtp-form-control" placeholder="Enter Name" readonly>
+                            <input type="text" class="dmtp-form-control" placeholder="Enter Name" @bind="participantName" />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Phone Number</label>
-                            <input type="text" class="dmtp-form-control" readonly>
+                            <input type="tel" class="dmtp-form-control" placeholder="10-digit phone number" maxlength="10" @bind="participantPhone" />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Role</label>
-                            <select class="dmtp-form-select" disabled>
-                                <option>Select Role</option>
+                            <select class="dmtp-form-select" @bind="participantRole">
+                                <option value="">Select Role</option>
+                                <option value="Farmer">Farmer</option>
+                                <option value="Dealer">Dealer</option>
+                                <option value="Distributor">Distributor</option>
+                                <option value="Other">Other</option>
                             </select>
                         </div>
                     </div>
+                    @if (!string.IsNullOrEmpty(participantError))
+                    {
+                        <div class="alert alert-danger py-2" role="alert">@participantError</div>
+                    }
+                    @if (editingParticipantId is not null)
+                    {
+                        <button type="button" class="dmtp-btn-previous mb-3" @onclick="ClearParticipantForm">Cancel Edit</button>
+                    }
 
                     <div class="dmtp-people-grid">
-                        @foreach (var person in participants)
+                        @foreach (var person in PagedParticipants)
                         {
-                            <div class="dmtp-person-row">
+                            <div class="dmtp-person-row" @key="person.Id">
                                 <div class="dmtp-person-avatar">@person.Initials</div>
                                 <div class="dmtp-person-info">
                                     <span class="dmtp-person-name">@person.Name</span>
                                     <span class="dmtp-person-phone">Phone Number: @person.Phone</span>
                                 </div>
                                 <span class="dmtp-role-badge">@person.Role</span>
-                                <button class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                <button type="button" class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit" @onclick="() => EditParticipant(person)">
+                                    <i class="bi bi-pencil-square"></i>
                                 </button>
-                                <button class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => DeleteParticipant(person.Id)">
+                                    <i class="bi bi-trash"></i>
                                 </button>
                             </div>
                         }
                     </div>
 
                     <div class="dmtp-pagination">
-                        <span class="dmtp-pagination-text">Showing 1 to 5 of 35 Participants</span>
+                        <span class="dmtp-pagination-text">
+                            @if (participants.Count == 0)
+                            {
+                                <span>No participants added</span>
+                            }
+                            else
+                            {
+                                <span>Showing @((participantPage - 1) * participantPageSize + 1) to @(Math.Min(participantPage * participantPageSize, participants.Count)) of @participants.Count Participants</span>
+                            }
+                        </span>
                         <div class="dmtp-page-controls">
-                            <button class="dmtp-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                            <button class="dmtp-page-btn active">1</button>
-                            <button class="dmtp-page-btn">2</button>
-                            <button class="dmtp-page-btn">3</button>
-                            <button class="dmtp-page-btn dots">..</button>
-                            <button class="dmtp-page-btn">8</button>
-                            <button class="dmtp-page-btn">9</button>
-                            <button class="dmtp-page-btn">10</button>
-                            <button class="dmtp-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
+                            <button type="button" class="dmtp-page-btn" disabled="@(participantPage == 1)" @onclick="() => SetParticipantPage(participantPage - 1)">‹</button>
+                            @for (var page = 1; page <= ParticipantPageCount; page++)
+                            {
+                                var pageNumber = page;
+                                <button type="button" class="dmtp-page-btn @(participantPage == pageNumber ? "active" : "")" @onclick="() => SetParticipantPage(pageNumber)">@pageNumber</button>
+                            }
+                            <button type="button" class="dmtp-page-btn" disabled="@(participantPage == ParticipantPageCount)" @onclick="() => SetParticipantPage(participantPage + 1)">›</button>
                         </div>
                     </div>
                 </div>
@@ -376,7 +392,7 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">SPIC Employee List</h3>
-                        <button type="button" class="dmtp-btn-add">
+                        <button type="button" class="dmtp-btn-add" @onclick="AddEmployee">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                             Add Employee
                         </button>
@@ -384,21 +400,46 @@ else if (csr1Plan != null)
 
                     <div class="dmtp-filter-row">
                         <div class="dmtp-form-group">
-                            <label class="dmtp-form-label">Name</label>
-                            <input type="text" class="dmtp-form-control" placeholder="Enter Name" readonly>
+                            <label class="dmtp-form-label">Employee Name</label>
+
+                            <select class="dmtp-form-select"
+                                    @bind="selectedEmployeeId"
+                                    @bind:after="OnEmployeeChanged">
+
+                                <option value="0">Select Employee</option>
+
+                                @foreach (var emp in employeeList)
+                                {
+                                    <option value="@emp.Id">
+                                        @emp.Name
+                                    </option>
+                                }
+                            </select>
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Phone Number</label>
-                            <input type="text" class="dmtp-form-control" readonly>
+                            <input type="tel" class="dmtp-form-control" placeholder="No mobile number in Employee Master" @bind="selectedEmployeePhone" readonly />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Role</label>
-                            <select class="dmtp-form-select" disabled>
-                                <option>Select Role</option>
+                            <select class="dmtp-form-select" @bind="selectedEmployeeRole">
+                                <option value="">Select Role</option>
+                                @foreach (var role in selectedEmployeeRoles)
+                                {
+                                    <option value="@role">@role</option>
+                                }
                             </select>
                         </div>
                     </div>
 
+                    @if (!string.IsNullOrWhiteSpace(employeeLoadError))
+                    {
+                        <div class="alert alert-danger py-2">@employeeLoadError</div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(employeeAddError))
+                    {
+                        <div class="alert alert-danger py-2">@employeeAddError</div>
+                    }
                     <div class="dmtp-people-grid">
                         @foreach (var person in employees)
                         {
@@ -409,10 +450,10 @@ else if (csr1Plan != null)
                                     <span class="dmtp-person-phone">PH: @person.Phone</span>
                                 </div>
                                 <span class="dmtp-role-badge">@person.Role</span>
-                                <button class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit">
+                                <button type="button" class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit" @onclick="() => EditEmployee(person.Id)">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
                                 </button>
-                                <button class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete">
+                                <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => DeleteEmployee(person.Id)">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                 </button>
                             </div>
@@ -420,18 +461,7 @@ else if (csr1Plan != null)
                     </div>
 
                     <div class="dmtp-pagination">
-                        <span class="dmtp-pagination-text">Showing 1 to 5 of 35 Participants</span>
-                        <div class="dmtp-page-controls">
-                            <button class="dmtp-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
-                            <button class="dmtp-page-btn active">1</button>
-                            <button class="dmtp-page-btn">2</button>
-                            <button class="dmtp-page-btn">3</button>
-                            <button class="dmtp-page-btn dots">..</button>
-                            <button class="dmtp-page-btn">8</button>
-                            <button class="dmtp-page-btn">9</button>
-                            <button class="dmtp-page-btn">10</button>
-                            <button class="dmtp-page-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></button>
-                        </div>
+                        <span class="dmtp-pagination-text">@employees.Count SPIC employees added</span>
                     </div>
                 </div>
 
@@ -446,51 +476,71 @@ else if (csr1Plan != null)
             }
             else if (currentStep == 2)
             {
-                <!-- Event Photos -->
+                <!-- Event Photos: dynamic local previews; saved by CSR-2 API in a later step -->
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
-                        <h3 class="dmtp-card-title dmtp-no-margin">Event Photos</h3>
-                        <button type="button" class="dmtp-btn-add">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Upload Photos
-                        </button>
+                        <h3 class="dmtp-card-title dmtp-no-margin">Event Photos (@eventPhotos.Count)</h3>
+                        <label for="dmtp-photos-header" class="dmtp-btn-add" style="cursor:pointer;">
+                            <i class="bi bi-plus-lg"></i> Upload Photos
+                        </label>
+                        <InputFile id="dmtp-photos-header" OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple style="display:none" />
                     </div>
 
-                    <div class="dmtp-dropzone">
+                    <div class="dmtp-dropzone" style="position:relative;">
+                        <InputFile OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
+                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
                         <div class="dmtp-dropzone-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                            <i class="bi bi-image"></i>
                         </div>
-                        <p class="dmtp-dropzone-title">Drag and Drop photos here, or choose an option</p>
+                        <p class="dmtp-dropzone-title">Drag and drop photos here, or click to browse</p>
                         <p class="dmtp-dropzone-sub">JPG, PNG up to 20MB each</p>
-                        <div class="dmtp-dropzone-actions">
-                            <button type="button" class="dmtp-btn-outline-plain">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                                Browse Files
-                            </button>
-                            <button type="button" class="dmtp-btn-outline-plain">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
-                                Take Photo
-                            </button>
+                        <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
+                            <label for="dmtp-photos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                <i class="bi bi-folder2-open"></i> Browse Files
+                            </label>
+                            @* On mobile this opens the gallery/file picker; it does not force the camera. *@
+                            <InputFile id="dmtp-photos-browse" OnChange="OnPhotosSelected"
+                                       accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
+                                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
+                            <label for="dmtp-photos-camera" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                <i class="bi bi-camera"></i> Take Photo
+                            </label>
+                            @* Mobile camera: rear-facing camera where supported; browsers may offer a chooser. *@
+                            <InputFile id="dmtp-photos-camera" OnChange="OnPhotosSelected"
+                                       accept="image/jpeg,image/png,image/*" capture="environment"
+                                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
                         </div>
+                        <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile: Take Photo opens the camera when supported; Browse Files opens your gallery or files.</p>
                     </div>
-
+                    @if (isReadingPhotos)
+                    {
+                        <div class="text-muted small mt-2">Loading selected photos...</div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(photoError))
+                    {
+                        <div class="alert alert-danger py-2 mt-2" role="alert">@photoError</div>
+                    }
+                    @if (eventPhotos.Count == 0)
+                    {
+                        <p class="text-muted mt-3">No event photos added yet.</p>
+                    }
                     <div class="dmtp-photo-grid">
                         @foreach (var photo in eventPhotos)
                         {
-                            <div class="dmtp-photo-card">
-                                <div class="dmtp-photo-thumb">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                            <div class="dmtp-photo-card" @key="photo.Id">
+                                <div class="dmtp-photo-thumb" style="overflow:hidden;">
+                                    <img src="@photo.PreviewUrl" alt="@photo.FileName" style="width:100%;height:100%;object-fit:cover;" />
                                 </div>
-                                <span class="dmtp-photo-filename">@photo.FileName</span>
-                                <input type="text" class="dmtp-form-control" placeholder="Add caption" readonly>
+                                <span class="dmtp-photo-filename" title="@photo.FileName">@photo.FileName</span>
+                                <input type="text" class="dmtp-form-control" placeholder="Add caption" @bind="photo.Caption" />
                                 <div class="dmtp-photo-footer">
-                                    <span class="dmtp-toggle-switch">
+                                    <label class="dmtp-toggle-switch" style="cursor:pointer;">
+                                        <input type="checkbox" @bind="photo.UseInLibrary" style="position:absolute;opacity:0;width:1px;height:1px;" />
                                         <span class="dmtp-toggle @(photo.UseInLibrary ? "on" : "")"></span>
                                         Use in Digital Library
-                                    </span>
-                                    <button type="button" class="dmtp-link-remove">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                        Remove
+                                    </label>
+                                    <button type="button" class="dmtp-link-remove" @onclick="() => RemovePhoto(photo.Id)">
+                                        <i class="bi bi-trash"></i> Remove
                                     </button>
                                 </div>
                             </div>
@@ -498,118 +548,159 @@ else if (csr1Plan != null)
                     </div>
                 </div>
 
-                <!-- Event Videos -->
+                <!-- Event Videos: gallery upload and mobile camera recording -->
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
-                        <h3 class="dmtp-card-title dmtp-no-margin">Event Videos</h3>
-                        <button type="button" class="dmtp-btn-add">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Upload Videos
-                        </button>
+                        <h3 class="dmtp-card-title dmtp-no-margin">Event Videos (@eventVideos.Count)</h3>
+                        <label for="dmtp-videos-header" class="dmtp-btn-add" style="cursor:pointer;">
+                            <i class="bi bi-plus-lg"></i> Upload Videos
+                        </label>
+                        <InputFile id="dmtp-videos-header" OnChange="OnVideosSelected" accept="video/mp4,video/quicktime,.mp4,.mov" multiple
+                                   style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
                     </div>
-
-                    <div class="dmtp-dropzone">
-                        <div class="dmtp-dropzone-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                        </div>
-                        <p class="dmtp-dropzone-title">Drag and Drop Videos here, or Choose an Option</p>
+                    <div class="dmtp-dropzone" style="position:relative;">
+                        <InputFile OnChange="OnVideosSelected" accept="video/mp4,video/quicktime,.mp4,.mov" multiple
+                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
+                        <div class="dmtp-dropzone-icon"><i class="bi bi-camera-video"></i></div>
+                        <p class="dmtp-dropzone-title">Drag and Drop Videos here, or choose an option</p>
                         <p class="dmtp-dropzone-sub">MP4, MOV up to 200MB each</p>
-                        <div class="dmtp-dropzone-actions">
-                            <button type="button" class="dmtp-btn-outline-plain">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                                Browse Files
-                            </button>
-                            <button type="button" class="dmtp-btn-outline-plain">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
-                                Record Video
-                            </button>
+                        <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
+                            <label for="dmtp-videos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                <i class="bi bi-folder2-open"></i> Browse Files
+                            </label>
+                            <InputFile id="dmtp-videos-browse" OnChange="OnVideosSelected"
+                                       accept="video/mp4,video/quicktime,.mp4,.mov" multiple
+                                       style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+                            <label for="dmtp-videos-record" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                <i class="bi bi-camera-video"></i> Record Video
+                            </label>
+                            <InputFile id="dmtp-videos-record" OnChange="OnVideosSelected"
+                                       accept="video/*" capture="environment"
+                                       style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
                         </div>
+                        <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile, Record Video requests the camera. Browse Files selects a saved video.</p>
+                    </div>
+                    @if (isReadingVideos)
+                    {
+                        <div class="text-muted small mt-2">Loading selected videos...</div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(videoError))
+                    {
+                        <div class="alert alert-danger py-2 mt-2" role="alert">@videoError</div>
+                    }
+                    @if (eventVideos.Count == 0)
+                    {
+                        <p class="text-muted mt-3">No event videos added yet.</p>
+                    }
+                    <div class="dmtp-photo-grid">
+                        @foreach (var video in eventVideos)
+                        {
+                            <div class="dmtp-photo-card" @key="video.Id">
+                                <div class="dmtp-photo-thumb" style="height:auto;min-height:140px;overflow:hidden;background:#152633;">
+                                    @if (!string.IsNullOrEmpty(video.PreviewUrl))
+                                    {
+                                        <video controls playsinline preload="metadata" src="@video.PreviewUrl" style="width:100%;max-height:220px;display:block;"></video>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-white text-center p-4">Preview unavailable for large video; select a shorter clip or save via server upload.</div>
+                                    }
+                                </div>
+                                <span class="dmtp-photo-filename" title="@video.FileName">@video.FileName (@FormatVideoSize(video.Bytes.LongLength))</span>
+                                <input type="text" class="dmtp-form-control" placeholder="Add video caption" @bind="video.Caption" />
+                                <div class="dmtp-photo-footer">
+                                    <label class="dmtp-toggle-switch" style="cursor:pointer;">
+                                        <input type="checkbox" @bind="video.UseInLibrary" style="position:absolute;opacity:0;width:1px;height:1px;" />
+                                        <span class="dmtp-toggle @(video.UseInLibrary ? "on" : "")"></span>
+                                        Use in Digital Library
+                                    </label>
+                                    <button type="button" class="dmtp-link-remove" @onclick="() => RemoveVideo(video.Id)">
+                                        <i class="bi bi-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        }
                     </div>
                 </div>
             }
             else if (currentStep == 3)
             {
-                <!-- Event Activities -->
+                <!-- Dynamic Event Activities -->
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <div>
                             <h3 class="dmtp-card-title dmtp-no-margin">Event Activities</h3>
-                            <p class="dmtp-card-subtitle">Capture what actually happened during the program, Add as many activities as needed</p>
+                            <p class="dmtp-card-subtitle">Record activities actually conducted during the event</p>
                         </div>
-                        <div class="dmtp-list-header-actions">
-                            <span class="dmtp-count-pill">@activities.Count Activities</span>
-
-                        </div>
+                        <span class="dmtp-count-pill">@activities.Count Activities</span>
                     </div>
-
                     <div class="dmtp-new-activity-box">
-                        <h4>New Activity</h4>
+                        <h4>@(editingActivityId.HasValue ? "Edit Activity" : "New Activity")</h4>
                         <div class="dmtp-quickfill-row">
                             <span class="dmtp-quickfill-label">Quick fill:</span>
-                            <span class="dmtp-quickfill-chip">Farmer Awareness Session</span>
-                            <span class="dmtp-quickfill-chip">Product Demonstration</span>
-                            <span class="dmtp-quickfill-chip">Crop Guidance Session</span>
+                            <button type="button" class="dmtp-quickfill-chip" @onclick='() => FillActivityName("Farmer Awareness Session")'>Farmer Awareness Session</button>
+                            <button type="button" class="dmtp-quickfill-chip" @onclick='() => FillActivityName("Product Demonstration")'>Product Demonstration</button>
+                            <button type="button" class="dmtp-quickfill-chip" @onclick='() => FillActivityName("Crop Guidance Session")'>Crop Guidance Session</button>
                         </div>
                         <div class="dmtp-activity-grid">
                             <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">Activity Name</label>
-                                <input type="text" class="dmtp-form-control" placeholder="e.g Farmer Awareness session" readonly>
+                                <label class="dmtp-form-label">Activity Name *</label>
+                                <input type="text" class="dmtp-form-control" placeholder="Enter activity name" @bind="activityName" />
                             </div>
                             <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">Time / Duration</label>
-                                <select class="dmtp-form-select" disabled>
-                                    <option>e.g 09:00-10:30 or 90 minutes</option>
-                                </select>
+                                <label class="dmtp-form-label">Start Time *</label>
+                                <input type="time" class="dmtp-form-control" @bind="activityStartTime" />
                             </div>
                             <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">Participants <span class="dmtp-optional">(optional)</span></label>
-                                <input type="text" class="dmtp-form-control" value="1" readonly>
+                                <label class="dmtp-form-label">End Time *</label>
+                                <input type="time" class="dmtp-form-control" @bind="activityEndTime" />
+                            </div>
+                            <div class="dmtp-form-group">
+                                <label class="dmtp-form-label">Participants (optional)</label>
+                                <input type="number" min="0" class="dmtp-form-control" placeholder="Number attending this activity" @bind="activityParticipants" />
                             </div>
                             <div class="dmtp-form-group dmtp-span-2">
-                                <label class="dmtp-form-label">Activity Description</label>
-                                <input type="text" class="dmtp-form-control" placeholder="Brief description of what happened" readonly>
+                                <label class="dmtp-form-label">Activity Description *</label>
+                                <input type="text" class="dmtp-form-control" placeholder="What happened during this activity?" @bind="activityDescription" />
                             </div>
                             <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">Remarks <span class="dmtp-optional">(optional)</span></label>
-                                <input type="text" class="dmtp-form-control" placeholder="Any additional remarks" readonly>
+                                <label class="dmtp-form-label">Remarks (optional)</label>
+                                <input type="text" class="dmtp-form-control" placeholder="Additional remarks" @bind="activityRemarks" />
                             </div>
                         </div>
+                        @if (!string.IsNullOrWhiteSpace(activityError))
+                        {
+                            <div class="alert alert-danger py-2 mt-2">@activityError</div>
+                        }
                         <div class="dmtp-new-activity-actions">
-                            <button type="button" class="dmtp-btn-cancel-neutral">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                Cancel
-                            </button>
-                            <button type="button" class="dmtp-btn-start-event">Save Activity</button>
+                            <button type="button" class="dmtp-btn-cancel-neutral" @onclick="ClearActivityForm">Cancel</button>
+                            <button type="button" class="dmtp-btn-start-event" @onclick="SaveActivity">@(editingActivityId.HasValue ? "Update Activity" : "Add Activity")</button>
                         </div>
                     </div>
-
+                    @if (activities.Count == 0)
+                    {
+                        <p class="text-muted mt-3">No activities added yet.</p>
+                    }
                     <div class="dmtp-activity-list">
                         @foreach (var activity in activities)
                         {
-                            <div class="dmtp-activity-card">
-                                <div class="dmtp-activity-avatar">@activity.Initials</div>
+                            <div class="dmtp-activity-card" @key="activity.Id">
+                                <div class="dmtp-activity-avatar">@GetInitials(activity.Title)</div>
                                 <div class="dmtp-activity-info">
-                                    <span class="dmtp-activity-title">@activity.Title <span class="dmtp-activity-number">#@activity.Number</span></span>
+                                    <span class="dmtp-activity-title">@activity.Title <span class="dmtp-activity-number">#@(activities.IndexOf(activity) + 1)</span></span>
                                     <span class="dmtp-activity-desc">@activity.Description</span>
                                     <div class="dmtp-activity-meta">
-                                        <span>
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                            @activity.Time
-                                        </span>
-                                        <span>
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-                                            Participants
-                                        </span>
-                                        <span>Remarks: @activity.Remarks</span>
+                                        <span>@activity.StartTime - @activity.EndTime</span>
+                                        <span>@activity.Participants Participants</span>
+                                        @if (!string.IsNullOrWhiteSpace(activity.Remarks))
+                                        {
+                                            <span>Remarks: @activity.Remarks</span>
+                                        }
                                     </div>
                                 </div>
                                 <div class="dmtp-activity-icons">
-                                    <button class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                    </button>
-                                    <button class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                    </button>
+                                    <button type="button" class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit" @onclick="() => EditActivity(activity.Id)"><i class="bi bi-pencil-square"></i></button>
+                                    <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => DeleteActivity(activity.Id)"><i class="bi bi-trash"></i></button>
                                 </div>
                             </div>
                         }
@@ -618,34 +709,54 @@ else if (csr1Plan != null)
             }
             else if (currentStep == 4)
             {
-                <!-- Event Expense & Proof -->
+                <!-- Expense & Proof: CSR-1 planned amounts with CSR-2 actual amounts -->
                 <div class="dmtp-card">
-                    <h3 class="dmtp-card-title">Event Expense &amp; Proof</h3>
-                    <p class="dmtp-card-subtitle dmtp-expense-subtitle">Capture actual expenses for each category and attach supporting proof</p>
-
-                    <div class="dmtp-expense-grid">
+                    <h3 class="dmtp-card-title">Expense &amp; Proof</h3>
+                    <p class="dmtp-card-subtitle dmtp-expense-subtitle">Add actual expenses and upload bills/proofs for verification. Planned amounts are from approved CSR-1.</p>
+                    <div class="dmtp-expense-color-grid">
                         @foreach (var item in expenseItems)
                         {
-                            <div class="dmtp-expense-item">
-                                <div class="dmtp-form-group dmtp-expense-amount">
-                                    <label class="dmtp-form-label">@item.Label</label>
-                                    <input type="text" class="dmtp-form-control" value="0" readonly>
+                            <div class="dmtp-expense-color-card @(item.Key == "Others" ? "dmtp-expense-color-full" : "")" @key="item.Key">
+                                <span class="dmtp-expense-color-icon @item.IconClass" aria-hidden="true"><i class="bi @item.Icon"></i></span>
+                                <div class="dmtp-expense-color-content">
+                                    <div class="dmtp-expense-color-heading">
+                                        <strong>@item.Label</strong>
+                                        <span>CSR-1 planned: @Money(item.PlannedAmount)</span>
+                                    </div>
+                                    <div class="dmtp-expense-color-fields">
+                                        <div class="dmtp-form-group">
+                                            <label class="dmtp-form-label">Actual amount (₹)</label>
+                                            <input type="number" step="0.01" min="0" class="dmtp-form-control" placeholder="₹ 0" @bind="item.ActualAmount" />
+                                        </div>
+                                        <div class="dmtp-form-group">
+                                            <label class="dmtp-form-label">Date</label>
+                                            <input type="date" class="dmtp-form-control" @bind="item.ExpenseDate" />
+                                        </div>
+                                        <div class="dmtp-form-group dmtp-expense-proof-control">
+                                            <label class="dmtp-form-label">&nbsp;</label>
+                                            <label for="@($"expense-proof-{item.Key}")" class="dmtp-expense-color-upload"><i class="bi bi-upload"></i> Upload proof</label>
+                                            <InputFile id="@($"expense-proof-{item.Key}")" OnChange="@(e => OnExpenseProofSelected(e, item))" accept=".pdf,.jpg,.jpeg,.png" style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+                                        </div>
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(item.ProofFileName))
+                                    {
+                                        <div class="dmtp-expense-color-file">
+                                            <span title="@item.ProofFileName"><i class="bi bi-paperclip"></i> @item.ProofFileName</span>
+                                            <button type="button" class="dmtp-link-remove" @onclick="() => RemoveExpenseProof(item)">Remove</button>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(item.Error))
+                                    {
+                                        <div class="text-danger small mt-1">@item.Error</div>
+                                    }
                                 </div>
-                                <div class="dmtp-form-group dmtp-expense-date">
-                                    <label class="dmtp-form-label">Date</label>
-                                    <input type="text" class="dmtp-form-control" placeholder="dd - mm - yyyy" readonly>
-                                </div>
-                                <button type="button" class="dmtp-btn-upload-proof">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                                    Upload proof
-                                </button>
                             </div>
                         }
                     </div>
-
-                    <div class="dmtp-form-group dmtp-expense-others">
-                        <label class="dmtp-form-label">Others</label>
-                        <input type="text" class="dmtp-form-control" value="0" readonly>
+                    <div class="d-flex flex-wrap justify-content-end gap-3 mt-3 small">
+                        <span>Approved budget: <strong>@Money(csr1Plan.Budget)</strong></span>
+                        <span>Actual expense: <strong>@Money(ActualExpenseTotal)</strong></span>
+                        <span>Balance: <strong class="@(BudgetBalance < 0 ? "text-danger" : "text-success")">@Money(BudgetBalance)</strong></span>
                     </div>
                 </div>
             }
@@ -766,17 +877,38 @@ else if (csr1Plan != null)
                         @foreach (var photo in eventPhotos)
                         {
                             <div class="dmtp-review-photo-card">
-                                <div class="dmtp-review-photo-thumb">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                <div class="dmtp-review-photo-thumb" style="overflow:hidden;">
+                                    <img src="@photo.PreviewUrl" alt="@photo.FileName" style="width:100%;height:100%;object-fit:cover;" />
                                 </div>
                                 <span class="dmtp-photo-filename">@photo.Caption</span>
                             </div>
                         }
                     </div>
+                    @if (eventVideos.Count > 0)
+                    {
+                        <div class="dmtp-review-photo-grid mt-3">
+                            @foreach (var video in eventVideos)
+                            {
+                                <div class="dmtp-review-photo-card" @key="video.Id">
+                                    <div class="dmtp-review-photo-thumb" style="overflow:hidden;">
+                                        @if (!string.IsNullOrEmpty(video.PreviewUrl))
+                                        {
+                                            <video controls playsinline preload="metadata" src="@video.PreviewUrl" style="width:100%;height:100%;object-fit:cover;"></video>
+                                        }
+                                        else
+                                        {
+                                            <span>Video preview unavailable</span>
+                                        }
+                                    </div>
+                                    <span class="dmtp-photo-filename">@(!string.IsNullOrWhiteSpace(video.Caption) ? video.Caption : video.FileName)</span>
+                                </div>
+                            }
+                        </div>
+                    }
                     <div class="dmtp-review-photo-footer">
                         <span class="dmtp-review-selected">
                             <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                            18 items selected for Digital Library
+                            @(eventPhotos.Count(x => x.UseInLibrary) + eventVideos.Count(x => x.UseInLibrary)) items selected for Digital Library
                         </span>
                         <span class="dmtp-review-viewall">View All</span>
                     </div>
@@ -800,14 +932,14 @@ else if (csr1Plan != null)
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var row in activityRows)
+                                @foreach (var row in activities)
                                 {
                                     <tr>
-                                        <td>@row.SNo</td>
-                                        <td>@row.Name</td>
-                                        <td>@row.Start</td>
-                                        <td>@row.End</td>
-                                        <td>@row.Participants @row.Note</td>
+                                        <td>@(activities.IndexOf(row) + 1)</td>
+                                        <td>@row.Title</td>
+                                        <td>@row.StartTime</td>
+                                        <td>@row.EndTime</td>
+                                        <td>@(row.Participants?.ToString() ?? "-")</td>
                                     </tr>
                                 }
                             </tbody>
@@ -824,9 +956,9 @@ else if (csr1Plan != null)
                             <tbody>
                                 @foreach (var item in CSR1PlannedExpenses)
                                 {
-                                    <tr><td>@item.Label</td><td>@Money(item.Amount)</td><td>Not recorded</td></tr>
+                                    <tr><td>@item.Label</td><td>@Money(item.Amount)</td><td>@Money(expenseItems.FirstOrDefault(x => x.Label == item.Label)?.ActualAmount ?? 0m)</td></tr>
                                 }
-                                <tr class="dmtp-table-total-row"><td>Total</td><td>@Money(CSR1PlannedExpenses.Sum(x => x.Amount))</td><td>Not recorded</td></tr>
+                                <tr class="dmtp-table-total-row"><td>Total</td><td>@Money(CSR1PlannedExpenses.Sum(x => x.Amount))</td><td>@Money(ActualExpenseTotal)</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -909,9 +1041,221 @@ else if (csr1Plan != null)
     </div>
 }
 
+
+<style>
+    .dmtp-expense-color-grid {
+        display: grid;
+        grid-template-columns: repeat(2,minmax(0,1fr));
+        gap: 12px;
+        margin-top: 14px
+    }
+
+    .dmtp-expense-color-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        background: #fff;
+        border: 1px solid #e6e9ee;
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 2px 8px rgba(16,46,38,.045)
+    }
+
+    .dmtp-expense-color-full {
+        grid-column: 1/-1
+    }
+
+    .dmtp-expense-color-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 42px;
+        width: 42px;
+        height: 42px;
+        border-radius: 9px;
+        font-size: 19px
+    }
+
+    .dmtp-expense-color-content {
+        flex: 1;
+        min-width: 0
+    }
+
+    .dmtp-expense-color-heading {
+        display: flex;
+        justify-content: space-between;
+        gap: 7px;
+        flex-wrap: wrap;
+        align-items: baseline;
+        margin-bottom: 7px;
+        font-size: 12px
+    }
+
+        .dmtp-expense-color-heading strong {
+            font-size: 12px;
+            color: #1f2937
+        }
+
+        .dmtp-expense-color-heading span {
+            font-size: 10px;
+            color: #748093
+        }
+
+    .dmtp-expense-color-fields {
+        display: grid;
+        grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto;
+        gap: 8px;
+        align-items: end
+    }
+
+        .dmtp-expense-color-fields .dmtp-form-group {
+            min-width: 0
+        }
+
+        .dmtp-expense-color-fields .dmtp-form-control {
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box
+        }
+
+    .dmtp-expense-proof-control {
+        position: relative
+    }
+
+    .dmtp-expense-color-upload {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        min-height: 36px;
+        padding: 0 9px;
+        border: 1px solid #75b891;
+        border-radius: 6px;
+        color: #11693b;
+        font-size: 11px;
+        white-space: nowrap;
+        cursor: pointer;
+        background: white
+    }
+
+        .dmtp-expense-color-upload:hover {
+            background: #edf9f1
+        }
+
+    .dmtp-expense-color-file {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: center;
+        margin-top: 8px;
+        font-size: 11px
+    }
+
+        .dmtp-expense-color-file span {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            color: #167347
+        }
+
+    .exp-green {
+        background: #e1f2e8;
+        color: #5f9d77
+    }
+
+    .exp-violet {
+        background: #f1e8fc;
+        color: #9562c9
+    }
+
+    .exp-peach {
+        background: #ffeddf;
+        color: #df9c61
+    }
+
+    .exp-blue {
+        background: #e5efff;
+        color: #698fd6
+    }
+
+    .exp-indigo {
+        background: #eae9ff;
+        color: #7775d3
+    }
+
+    .exp-mint {
+        background: #dff3f0;
+        color: #52aa9c
+    }
+
+    .exp-yellow {
+        background: #faf5dc;
+        color: #c4a72c
+    }
+
+    .exp-pink {
+        background: #fce5f1;
+        color: #d779ac
+    }
+
+    .exp-cyan {
+        background: #e5f4f8;
+        color: #69afc5
+    }
+
+    .exp-sky {
+        background: #e3f1fa;
+        color: #69a9cc
+    }
+
+    .exp-gray {
+        background: #f0f2f4;
+        color: #7c8590
+    }
+
+    @@media(max-width:1090px) {
+        .dmtp-expense-color-grid {
+            grid-template-columns: 1fr
+        }
+
+        .dmtp-expense-color-full {
+            grid-column: auto
+        }
+    }
+
+    @@media(max-width:540px) {
+        .dmtp-expense-color-card {
+            align-items: flex-start
+        }
+
+        .dmtp-expense-color-icon {
+            width: 36px;
+            height: 36px;
+            flex-basis: 36px
+        }
+
+        .dmtp-expense-color-fields {
+            grid-template-columns: minmax(0,1fr) minmax(0,1fr)
+        }
+
+        .dmtp-expense-proof-control {
+            grid-column: 1/-1
+        }
+
+            .dmtp-expense-proof-control .dmtp-form-label {
+                display: none
+            }
+
+        .dmtp-expense-color-upload {
+            width: 100%
+        }
+    }
+</style>
+
 @code {
     [SupplyParameterFromQuery(Name = "csr1Id")]
     public int? CSR1Id { get; set; }
+    private int selectedEmployeeId = 0;
 
     private CSR1DetailsDto? csr1Plan;
     private bool isLoadingCSR1 = true;
@@ -972,18 +1316,24 @@ else if (csr1Plan != null)
                 csr1Error = "CSR-2 can be opened only for an approved CSR-1.";
                 csr1Plan = null;
             }
+            if (csr1Plan != null)
+            {
+                InitializeExpensesFromCSR1();
+                // Employee Master is loaded below for both employee and coordinator dropdowns.
+            }
+            await LoadEmployees();
         }
         catch (Exception ex) { csr1Error = $"CSR-1 load error: {ex.Message}"; }
         finally { isLoadingCSR1 = false; }
     }
 
-    // UI-only view state. Static/mock display data below — no API, calculation or business logic.
+    // Step navigation; the event and participant inputs are interactive, but not yet persisted.
     private int currentStep = 1;
     private bool showStartConfirm = false;
 
-    private readonly int totalParticipants = 0;
-    private readonly int totalEmployees = 0;
-    private readonly int overallAttendance = 0;
+    private int totalParticipants => participants.Count;
+    private int totalEmployees => employees.Count;
+    private int overallAttendance => totalParticipants + totalEmployees;
 
     private string StepClass(int stepNumber) =>
         stepNumber < currentStep ? "dmtp-step-done" :
@@ -1024,96 +1374,420 @@ else if (csr1Plan != null)
         new StepInfo { Number = 5, Label = "Review & Submit" },
     };
 
+    // Local component state only. Persist event and participant entries through your CSR-2 API when ready.
+    private DateTime? actualEventDate;
+    private TimeOnly? startTime;
+    private TimeOnly? endTime;
+    private int eventCoordinatorId = 0;
+    private string actualLocation = "";
+
+    private string participantName = "";
+    private string participantPhone = "";
+    private string participantRole = "";
+    private string participantError = "";
+    private int? editingParticipantId;
+    private int nextParticipantId = 1;
+    private const int participantPageSize = 5;
+    private int participantPage = 1;
+    private int ParticipantPageCount => Math.Max(1, (int)Math.Ceiling(participants.Count / (double)participantPageSize));
+    private IEnumerable<PersonInfo> PagedParticipants => participants.Skip((participantPage - 1) * participantPageSize).Take(participantPageSize);
+
+    private static string GetInitials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+
+    private void AddParticipant()
+    {
+        participantError = "";
+        var name = participantName.Trim();
+        var phone = participantPhone.Trim();
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(phone) || string.IsNullOrWhiteSpace(participantRole))
+        {
+            participantError = "Please enter participant name, phone number and role.";
+            return;
+        }
+        if (phone.Length != 10 || !phone.All(char.IsDigit))
+        {
+            participantError = "Please enter a valid 10-digit mobile number.";
+            return;
+        }
+        if (participants.Any(p => p.Phone == phone && p.Id != editingParticipantId))
+        {
+            participantError = "This phone number is already added.";
+            return;
+        }
+        if (editingParticipantId is int id)
+        {
+            var existing = participants.FirstOrDefault(p => p.Id == id);
+            if (existing != null)
+            {
+                existing.Name = name;
+                existing.Phone = phone;
+                existing.Role = participantRole;
+                existing.Initials = GetInitials(name);
+            }
+        }
+        else
+        {
+            participants.Add(new PersonInfo { Id = nextParticipantId++, Name = name, Phone = phone, Role = participantRole, Initials = GetInitials(name) });
+            participantPage = ParticipantPageCount;
+        }
+        ClearParticipantForm();
+    }
+
+    private void EditParticipant(PersonInfo person)
+    {
+        editingParticipantId = person.Id;
+        participantName = person.Name;
+        participantPhone = person.Phone;
+        participantRole = person.Role;
+        participantError = "";
+    }
+
+    private void DeleteParticipant(int id)
+    {
+        participants.RemoveAll(p => p.Id == id);
+        participantPage = Math.Min(participantPage, ParticipantPageCount);
+        if (editingParticipantId == id) ClearParticipantForm();
+    }
+
+    private void ClearParticipantForm()
+    {
+        participantName = "";
+        participantPhone = "";
+        participantRole = "";
+        participantError = "";
+        editingParticipantId = null;
+    }
+
+    private void SetParticipantPage(int page) => participantPage = Math.Clamp(page, 1, ParticipantPageCount);
+
     private class PersonInfo
     {
+        public int Id { get; set; }
         public string Initials { get; set; } = "";
         public string Name { get; set; } = "";
         public string Phone { get; set; } = "";
         public string Role { get; set; } = "";
     }
 
-    private readonly List<PersonInfo> participants = new()
-    {
-        new PersonInfo { Initials = "RK", Name = "Raj Kumar", Phone = "+91 8877996676", Role = "Farmer" },
-        new PersonInfo { Initials = "RK", Name = "Raj Kumar", Phone = "+91 8877996676", Role = "Farmer" },
-        new PersonInfo { Initials = "RK", Name = "Raj Kumar", Phone = "+91 8877996676", Role = "Farmer" },
-        new PersonInfo { Initials = "RK", Name = "Raj Kumar", Phone = "+91 8877996676", Role = "Farmer" },
-    };
+    private readonly List<PersonInfo> participants = new();
 
-    private readonly List<PersonInfo> employees = new()
-    {
-        new PersonInfo { Initials = "RK", Name = "Raj Kumar", Phone = "+91 8877996676", Role = "Farmer" },
-        new PersonInfo { Initials = "RK", Name = "Raj Kumar", Phone = "+91 8877996676", Role = "Farmer" },
-        new PersonInfo { Initials = "RK", Name = "Raj Kumar", Phone = "+91 8877996676", Role = "Farmer" },
-        new PersonInfo { Initials = "RK", Name = "Raj Kumar", Phone = "+91 8877996676", Role = "Farmer" },
-    };
+    private readonly List<PersonInfo> employees = new();
 
-    private class PhotoItem
+    private const long MaxPhotoBytes = 20L * 1024 * 1024;
+    private readonly List<PhotoItem> eventPhotos = new();
+    private bool isReadingPhotos;
+    private string photoError = "";
+
+    private sealed class PhotoItem
     {
+        public Guid Id { get; set; } = Guid.NewGuid();
         public string FileName { get; set; } = "";
         public string Caption { get; set; } = "";
-        public bool UseInLibrary { get; set; }
+        public string PreviewUrl { get; set; } = "";
+        public string ContentType { get; set; } = "";
+        public bool UseInLibrary { get; set; } = true;
+        // Binary data is kept in memory; no server persistence is performed here.
+        public byte[] Bytes { get; set; } = Array.Empty<byte>();
     }
 
-    private readonly List<PhotoItem> eventPhotos = new()
+    private async Task OnPhotosSelected(InputFileChangeEventArgs args)
     {
-        new PhotoItem { FileName = "event_photo_001.jpg", Caption = "Workshop opting", UseInLibrary = true },
-        new PhotoItem { FileName = "event_photo_002.jpg", Caption = "Workshop opting", UseInLibrary = true },
-        new PhotoItem { FileName = "event_photo_003.jpg", Caption = "Workshop opting", UseInLibrary = true },
-        new PhotoItem { FileName = "event_photo_004.jpg", Caption = "Workshop opting", UseInLibrary = true },
-    };
+        photoError = "";
+        isReadingPhotos = true;
+        var rejected = new List<string>();
+        try
+        {
+            foreach (var file in args.GetMultipleFiles(30))
+            {
+                var extension = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+                if (extension != ".jpg" && extension != ".jpeg" && extension != ".png")
+                {
+                    rejected.Add($"{file.Name}: JPG/PNG only");
+                    continue;
+                }
+                if (file.Size > MaxPhotoBytes)
+                {
+                    rejected.Add($"{file.Name}: exceeds 20MB");
+                    continue;
+                }
+                var mime = extension == ".png" ? "image/png" : "image/jpeg";
+                try
+                {
+                    await using var stream = file.OpenReadStream(MaxPhotoBytes);
+                    using var buffer = new MemoryStream();
+                    await stream.CopyToAsync(buffer);
+                    var bytes = buffer.ToArray();
+                    eventPhotos.Add(new PhotoItem
+                    {
+                        FileName = file.Name,
+                        ContentType = mime,
+                        Bytes = bytes,
+                        PreviewUrl = $"data:{mime};base64,{Convert.ToBase64String(bytes)}"
+                    });
+                }
+                catch (Exception ex)
+                {
+                    rejected.Add($"{file.Name}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            rejected.Add($"Unable to read selection: {ex.Message}");
+        }
+        finally
+        {
+            photoError = string.Join("; ", rejected);
+            isReadingPhotos = false;
+        }
+    }
+
+    private void RemovePhoto(Guid id) => eventPhotos.RemoveAll(x => x.Id == id);
+
+    private const long MaxVideoBytes = 200L * 1024 * 1024;
+    // Base64 previews above this size can freeze mobile browsers. Files remain in page state.
+    private const long MaxVideoPreviewBytes = 20L * 1024 * 1024;
+    private readonly List<VideoItem> eventVideos = new();
+    private bool isReadingVideos;
+    private string videoError = "";
+
+    private sealed class VideoItem
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public string FileName { get; set; } = "";
+        public string Caption { get; set; } = "";
+        public string PreviewUrl { get; set; } = "";
+        public string ContentType { get; set; } = "";
+        public bool UseInLibrary { get; set; } = true;
+        public byte[] Bytes { get; set; } = Array.Empty<byte>();
+    }
+
+    private static string FormatVideoSize(long bytes) => $"{bytes / (1024d * 1024d):N1} MB";
+
+    private async Task OnVideosSelected(InputFileChangeEventArgs args)
+    {
+        videoError = "";
+        isReadingVideos = true;
+        var rejected = new List<string>();
+        try
+        {
+            foreach (var file in args.GetMultipleFiles(10))
+            {
+                var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+                // Mobile-recorded files may use MOV; browser video codec support varies.
+                if (ext != ".mp4" && ext != ".mov")
+                {
+                    rejected.Add($"{file.Name}: MP4/MOV only");
+                    continue;
+                }
+                if (file.Size <= 0 || file.Size > MaxVideoBytes)
+                {
+                    rejected.Add($"{file.Name}: must be under 200MB");
+                    continue;
+                }
+                try
+                {
+                    await using var stream = file.OpenReadStream(MaxVideoBytes);
+                    using var buffer = new MemoryStream();
+                    await stream.CopyToAsync(buffer);
+                    var bytes = buffer.ToArray();
+                    var mime = ext == ".mov" ? "video/quicktime" : "video/mp4";
+                    eventVideos.Add(new VideoItem
+                    {
+                        FileName = file.Name,
+                        ContentType = mime,
+                        Bytes = bytes,
+                        PreviewUrl = bytes.LongLength <= MaxVideoPreviewBytes
+                            ? $"data:{mime};base64,{Convert.ToBase64String(bytes)}"
+                            : ""
+                    });
+                }
+                catch (Exception ex)
+                {
+                    rejected.Add($"{file.Name}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            rejected.Add($"Unable to read videos: {ex.Message}");
+        }
+        finally
+        {
+            videoError = string.Join("; ", rejected);
+            isReadingVideos = false;
+        }
+    }
+
+    private void RemoveVideo(Guid id) => eventVideos.RemoveAll(v => v.Id == id);
 
     private class ActivityItem
     {
-        public string Initials { get; set; } = "";
+        public Guid Id { get; set; } = Guid.NewGuid();
         public string Title { get; set; } = "";
-        public string Number { get; set; } = "";
+        public string StartTime { get; set; } = "";
+        public string EndTime { get; set; } = "";
+        public int? Participants { get; set; }
         public string Description { get; set; } = "";
-        public string Time { get; set; } = "";
         public string Remarks { get; set; } = "";
     }
 
-    private readonly List<ActivityItem> activities = new()
-    {
-        new ActivityItem { Initials = "RK", Title = "Farmer Awareness Session", Number = "01", Description = "Brief description of what happened", Time = "09:00-10:30", Remarks = "Any additional remarks" },
-        new ActivityItem { Initials = "RK", Title = "Farmer Awareness Session", Number = "02", Description = "Brief description of what happened", Time = "09:00-10:30", Remarks = "Any additional remarks" },
-    };
+    private readonly List<ActivityItem> activities = new();
+    private Guid? editingActivityId;
+    private string activityName = "";
+    private TimeOnly? activityStartTime;
+    private TimeOnly? activityEndTime;
+    private int? activityParticipants;
+    private string activityDescription = "";
+    private string activityRemarks = "";
+    private string activityError = "";
 
-    private class ExpenseItem
+    private void FillActivityName(string name) => activityName = name;
+
+    private void ClearActivityForm()
     {
+        editingActivityId = null;
+        activityName = activityDescription = activityRemarks = activityError = "";
+        activityStartTime = null;
+        activityEndTime = null;
+        activityParticipants = null;
+    }
+
+    private void SaveActivity()
+    {
+        activityError = "";
+        if (string.IsNullOrWhiteSpace(activityName) ||
+            !activityStartTime.HasValue ||
+            !activityEndTime.HasValue ||
+            string.IsNullOrWhiteSpace(activityDescription))
+        {
+            activityError = "Enter activity name, start time, end time and description.";
+            return;
+        }
+        if (activityEndTime.Value <= activityStartTime.Value)
+        {
+            activityError = "End time must be later than start time.";
+            return;
+        }
+        if (activityParticipants < 0)
+        {
+            activityError = "Participants cannot be negative.";
+            return;
+        }
+        ActivityItem? item = editingActivityId.HasValue
+            ? activities.FirstOrDefault(x => x.Id == editingActivityId.Value) : null;
+        if (item is null)
+        {
+            item = new ActivityItem();
+            activities.Add(item);
+        }
+        item.Title = activityName.Trim();
+        item.StartTime = activityStartTime.Value.ToString("HH:mm", CultureInfo.InvariantCulture);
+        item.EndTime = activityEndTime.Value.ToString("HH:mm", CultureInfo.InvariantCulture);
+        item.Participants = activityParticipants;
+        item.Description = activityDescription.Trim();
+        item.Remarks = activityRemarks.Trim();
+        ClearActivityForm();
+    }
+
+    private void EditActivity(Guid id)
+    {
+        var item = activities.FirstOrDefault(x => x.Id == id);
+        if (item is null) return;
+        editingActivityId = id;
+        activityName = item.Title;
+        activityStartTime = TimeOnly.TryParseExact(item.StartTime, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedStart) ? parsedStart : null;
+        activityEndTime = TimeOnly.TryParseExact(item.EndTime, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedEnd) ? parsedEnd : null;
+        activityParticipants = item.Participants;
+        activityDescription = item.Description;
+        activityRemarks = item.Remarks;
+        activityError = "";
+    }
+
+    private void DeleteActivity(Guid id)
+    {
+        activities.RemoveAll(x => x.Id == id);
+        if (editingActivityId == id) ClearActivityForm();
+    }
+
+    private const long MaxExpenseProofBytes = 10L * 1024 * 1024;
+    private sealed class ExpenseItem
+    {
+        public string Key { get; set; } = "";
         public string Label { get; set; } = "";
+        public string Icon { get; set; } = "bi-receipt";
+        public string IconClass { get; set; } = "exp-gray";
+        public decimal PlannedAmount { get; set; }
+        public decimal? ActualAmount { get; set; }
+        public DateTime? ExpenseDate { get; set; }
+        public string ProofFileName { get; set; } = "";
+        public string ProofContentType { get; set; } = "";
+        public byte[] ProofBytes { get; set; } = Array.Empty<byte>();
+        public string Error { get; set; } = "";
     }
 
-    private readonly List<ExpenseItem> expenseItems = new()
-    {
-        new ExpenseItem { Label = "Printing & Stationary" },
-        new ExpenseItem { Label = "Publicity Material" },
-        new ExpenseItem { Label = "Stage Arrangements" },
-        new ExpenseItem { Label = "Service Charges - LCA" },
-        new ExpenseItem { Label = "Transport / Rent" },
-        new ExpenseItem { Label = "Jeep Running Expenses" },
-        new ExpenseItem { Label = "Refreshments" },
-        new ExpenseItem { Label = "Inputs" },
-        new ExpenseItem { Label = "Compliments" },
-        new ExpenseItem { Label = "Photography" },
-    };
+    private readonly List<ExpenseItem> expenseItems = new();
+    private decimal ActualExpenseTotal => expenseItems.Sum(x => x.ActualAmount ?? 0m);
+    private decimal BudgetBalance => (csr1Plan?.Budget ?? 0m) - ActualExpenseTotal;
 
-    private class ActivityRow
+    private void InitializeExpensesFromCSR1()
     {
-        public int SNo { get; set; }
-        public string Name { get; set; } = "";
-        public string Start { get; set; } = "";
-        public string End { get; set; } = "";
-        public int Participants { get; set; }
-        public string Note { get; set; } = "";
+        if (csr1Plan is null) return;
+        // Only create the rows once: navigating between steps must not clear user input.
+        if (expenseItems.Count > 0) return;
+        expenseItems.AddRange(new[]
+        {
+            new ExpenseItem { Key="PrintingAndStationery", Label="Printing & Stationery", Icon="bi-printer", IconClass="exp-green", PlannedAmount=csr1Plan.PrintingAndStationery },
+            new ExpenseItem { Key="PublicityMaterial", Label="Publicity Material", Icon="bi-megaphone", IconClass="exp-violet", PlannedAmount=csr1Plan.PublicityMaterial },
+            new ExpenseItem { Key="StageArrangements", Label="Stage Arrangements", Icon="bi-shop-window", IconClass="exp-peach", PlannedAmount=csr1Plan.StageArrangements },
+            new ExpenseItem { Key="ServiceChargesLCA", Label="Service Charges - LCA", Icon="bi-gear", IconClass="exp-blue", PlannedAmount=csr1Plan.ServiceChargesLCA },
+            new ExpenseItem { Key="TransportRent", Label="Transport / Rent", Icon="bi-truck", IconClass="exp-indigo", PlannedAmount=csr1Plan.TransportRent },
+            new ExpenseItem { Key="JeepRunningExpenses", Label="Jeep Running Expenses", Icon="bi-car-front", IconClass="exp-mint", PlannedAmount=csr1Plan.JeepRunningExpenses },
+            new ExpenseItem { Key="Refreshments", Label="Refreshments", Icon="bi-cup-hot", IconClass="exp-yellow", PlannedAmount=csr1Plan.Refreshments },
+            new ExpenseItem { Key="Inputs", Label="Inputs", Icon="bi-basket", IconClass="exp-pink", PlannedAmount=csr1Plan.Inputs },
+            new ExpenseItem { Key="Compliments", Label="Compliments", Icon="bi-gift", IconClass="exp-cyan", PlannedAmount=csr1Plan.Compliments },
+            new ExpenseItem { Key="Photography", Label="Photography", Icon="bi-camera", IconClass="exp-sky", PlannedAmount=csr1Plan.Photography },
+            new ExpenseItem { Key="Others", Label="Others", Icon="bi-grid", IconClass="exp-gray", PlannedAmount=csr1Plan.Others }
+        });
     }
 
-    private readonly List<ActivityRow> activityRows = new()
+    private async Task OnExpenseProofSelected(InputFileChangeEventArgs e, ExpenseItem item)
     {
-        new ActivityRow { SNo = 1, Name = "Farmer Awareness Session", Start = "9:00 AM", End = "10:00 AM", Participants = 80, Note = "Awareness on crop best practices" },
-        new ActivityRow { SNo = 2, Name = "Farmer Awareness Session", Start = "9:00 AM", End = "10:00 AM", Participants = 80, Note = "Awareness on crop best practices" },
-        new ActivityRow { SNo = 3, Name = "Farmer Awareness Session", Start = "9:00 AM", End = "10:00 AM", Participants = 80, Note = "Awareness on crop best practices" },
-    };
+        item.Error = "";
+        var file = e.File;
+        var extension = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+        if (extension != ".pdf" && extension != ".jpg" && extension != ".jpeg" && extension != ".png")
+        {
+            item.Error = "Upload PDF, JPG or PNG only.";
+            return;
+        }
+        if (file.Size == 0 || file.Size > MaxExpenseProofBytes)
+        {
+            item.Error = "Proof must be smaller than 10 MB.";
+            return;
+        }
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxExpenseProofBytes);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            item.ProofBytes = memory.ToArray();
+            item.ProofFileName = file.Name;
+            item.ProofContentType = file.ContentType;
+        }
+        catch (Exception ex)
+        {
+            item.Error = $"Unable to read proof: {ex.Message}";
+        }
+    }
+
+    private void RemoveExpenseProof(ExpenseItem item)
+    {
+        item.ProofFileName = "";
+        item.ProofContentType = "";
+        item.ProofBytes = Array.Empty<byte>();
+        item.Error = "";
+    }
 
     private class ExpenseSummaryRow
     {
@@ -1135,4 +1809,129 @@ else if (csr1Plan != null)
         new ExpenseSummaryRow { SNo = 3, Category = "Farmer Awareness Session", Planned = "₹ 1,20,000", Actual = "Not recorded", Variance = "+ ₹32,000 (-29.09%)", Date = "May 9, 2026", ProofFile = "Venue_Invoice.pdf", Participants = 80, Note = "Awareness on crop best practices" },
         new ExpenseSummaryRow { SNo = 4, Category = "Farmer Awareness Session", Planned = "₹ 1,20,000", Actual = "Not recorded", Variance = "+ ₹32,000 (-29.09%)", Date = "May 9, 2026", ProofFile = "Venue_Invoice.pdf", Participants = 80, Note = "Awareness on crop best practices" },
     };
+
+    // API: GET api/CSR2/all
+    // EmployeeInformation.Name and phone numbers + active Employeelogins.Roles.
+    private sealed class Csr2EmployeeLookupDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? OfficialPhoneNumber { get; set; }
+        public string? PersonalPhoneNumber { get; set; }
+        public List<string> Roles { get; set; } = new();
+    }
+
+    private List<Csr2EmployeeLookupDto> employeeList = new();
+    private List<string> selectedEmployeeRoles = new();
+    private string employeeLoadError = "";
+    private string employeeAddError = "";
+    private string selectedEmployeePhone = "";
+    private string selectedEmployeeRole = "";
+    private int? editingEmployeeId;
+
+    private async Task LoadEmployees()
+    {
+        employeeLoadError = "";
+        try
+        {
+            using var response = await Http.GetAsync("api/CSR2/all");
+            if (!response.IsSuccessStatusCode)
+            {
+                employeeList = new();
+                employeeLoadError = $"Unable to load employee details and roles (HTTP {(int)response.StatusCode}).";
+                return;
+            }
+
+            employeeList = await response.Content.ReadFromJsonAsync<List<Csr2EmployeeLookupDto>>() ?? new();
+            if (employeeList.Count == 0)
+                employeeLoadError = "No employees returned by the employee lookup API.";
+            OnEmployeeChanged();
+        }
+        catch (Exception ex)
+        {
+            employeeList = new();
+            employeeLoadError = $"Employee lookup error: {ex.Message}";
+            Console.WriteLine(employeeLoadError);
+        }
+    }
+
+    private void OnEmployeeChanged()
+    {
+        employeeAddError = "";
+        selectedEmployeePhone = "";
+        selectedEmployeeRole = "";
+        selectedEmployeeRoles = new();
+
+        var emp = employeeList.FirstOrDefault(e => e.Id == selectedEmployeeId);
+        if (emp == null) return;
+
+        selectedEmployeePhone = !string.IsNullOrWhiteSpace(emp.OfficialPhoneNumber)
+            ? emp.OfficialPhoneNumber
+            : emp.PersonalPhoneNumber ?? "";
+        selectedEmployeeRoles = emp.Roles?.Where(r => !string.IsNullOrWhiteSpace(r))
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(r => r).ToList() ?? new();
+        if (selectedEmployeeRoles.Count == 1)
+            selectedEmployeeRole = selectedEmployeeRoles[0];
+    }
+
+    private void AddEmployee()
+    {
+        employeeAddError = "";
+        var emp = employeeList.FirstOrDefault(e => e.Id == selectedEmployeeId);
+        if (emp == null)
+        {
+            employeeAddError = "Please select an employee.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(selectedEmployeeRole) || !selectedEmployeeRoles.Contains(selectedEmployeeRole))
+        {
+            employeeAddError = "Please select a role assigned to this employee.";
+            return;
+        }
+        if (employees.Any(x => x.Id == emp.Id && x.Id != editingEmployeeId))
+        {
+            employeeAddError = "This employee has already been added.";
+            return;
+        }
+
+        var entry = editingEmployeeId is int editId
+            ? employees.FirstOrDefault(e => e.Id == editId)
+            : null;
+        if (entry == null)
+        {
+            entry = new PersonInfo();
+            employees.Add(entry);
+        }
+        entry.Id = emp.Id;
+        entry.Name = emp.Name;
+        entry.Phone = selectedEmployeePhone;
+        entry.Role = selectedEmployeeRole;
+        entry.Initials = GetInitials(emp.Name);
+        editingEmployeeId = null;
+        selectedEmployeeId = 0;
+        OnEmployeeChanged();
+    }
+
+    private void EditEmployee(int id)
+    {
+        var selected = employees.FirstOrDefault(e => e.Id == id);
+        if (selected == null) return;
+        editingEmployeeId = id;
+        selectedEmployeeId = selected.Id;
+        OnEmployeeChanged();
+        if (selectedEmployeeRoles.Contains(selected.Role))
+            selectedEmployeeRole = selected.Role;
+    }
+
+    private void DeleteEmployee(int id)
+    {
+        employees.RemoveAll(e => e.Id == id);
+        if (editingEmployeeId == id)
+        {
+            editingEmployeeId = null;
+            selectedEmployeeId = 0;
+            OnEmployeeChanged();
+        }
+        employeeAddError = "";
+    }
 }

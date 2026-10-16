@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
 using System.Security.Claims;
+using static SPIC.Core.Entities.EmployeeRegistration;
 
 // REQUIRED: add the namespace containing your existing AppDbContext.
 // Example: using SPIC.Infrastructure.Data;
@@ -154,6 +155,54 @@ namespace SpicAPI.Controllers
                 Focus2 = focus2,
                 Focus3 = focus3
             });
+        }
+
+        [HttpGet("all")]
+        public async Task<IActionResult> All()
+        {
+            // EmployeeInformation table supplies name and official/personal mobile numbers.
+            var people = await _db.Set<EmployeeInformation>()
+                .AsNoTracking()
+                .Select(e => new
+                {
+                    e.Id,
+                    e.Name,
+                    e.OfficialPhoneNumber,
+                    e.PersonalPhoneNumber
+                })
+                .ToListAsync();
+
+            // Employeelogins supplies assigned roles (which are stored as AppRole).
+            // Load only active logins; remove the filter if inactive roles should also appear.
+            var logins = await _db.Set<Employeelogin>()
+                .AsNoTracking()
+                .Where(l => l.IsActive)
+                .Select(l => new { l.EmployeeInformationID, l.Role })
+                .ToListAsync();
+
+            var rolesByEmployee = logins
+                .GroupBy(l => l.EmployeeInformationID)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(x => x.Role.ToString())
+                          .Distinct()
+                          .OrderBy(role => role)
+                          .ToList());
+
+            var result = people.Select(e => new
+            {
+                e.Id,
+                e.Name,
+                e.OfficialPhoneNumber,
+                e.PersonalPhoneNumber,
+                Roles = rolesByEmployee.TryGetValue(e.Id, out var roles)
+                    ? roles
+                    : new List<string>()
+            })
+            .OrderBy(e => e.Name)
+            .ToList();
+
+            return Ok(result);
         }
     }
 }
