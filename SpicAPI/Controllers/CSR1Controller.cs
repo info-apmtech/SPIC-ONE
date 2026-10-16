@@ -1544,7 +1544,7 @@ namespace SpicAPI.Controllers
 
         [HttpPost("{id:int}/validate")]
         [HttpPut("{id:int}/validate")]
-        public async Task<IActionResult> ValidateCSR1(int id)
+        public async Task<IActionResult> ValidateCSR1(int id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CSR1SaveRequest? request)
         {
             try
             {
@@ -1611,7 +1611,7 @@ namespace SpicAPI.Controllers
                 csr1.ValidateBy = CurrentUserId;
                 csr1.ValidateAt = DateTime.Now;
 
-                await _csr1Repo.PatchAsync(id, csr1);
+                await SaveReviewAndWorkflowAsync(csr1, request);
 
                 return Ok(new
                 {
@@ -1637,10 +1637,139 @@ namespace SpicAPI.Controllers
         // State Scope: SMM approves
         // ============================================================
 
+        [HttpGet("{id:int}/review-edit")]
+        public async Task<IActionResult> GetReviewEdit(int id)
+        {
+            // IMPORTANT: use the SAME per-record authorization/scope check as
+            // details/{id}; do NOT expose editable records to unrelated users.
+            var csr = await _db.Set<CSR1>().AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id && x.IsActive);
+            if (csr == null) return NotFound();
+            // INSERT the existing record-level access check here BEFORE returning data.
+
+            var g1 = await _db.Set<CSR1Products1>().AsNoTracking()
+                .Where(x => x.CSR1Id == id && x.IsActive)
+                .Select(x => new { x.CropId, x.ProductId }).ToListAsync();
+            var g2 = await _db.Set<CSR1Products2>().AsNoTracking()
+                .Where(x => x.CSR1Id == id && x.IsActive)
+                .Select(x => new { x.CropId, x.ProductId }).ToListAsync();
+            var g3 = await _db.Set<CSR1Products3>().AsNoTracking()
+                .Where(x => x.CSR1Id == id && x.IsActive)
+                .Select(x => new { x.CropId, x.ProductId }).ToListAsync();
+
+            return Ok(new CSR1SaveRequest
+            {
+                CSR1 = csr,
+                Crop1Id = g1.FirstOrDefault()?.CropId ?? 0,
+                Product1Ids = g1.Select(x => x.ProductId).Distinct().ToList(),
+                Crop2Id = g2.FirstOrDefault()?.CropId ?? 0,
+                Product2Ids = g2.Select(x => x.ProductId).Distinct().ToList(),
+                Crop3Id = g3.FirstOrDefault()?.CropId ?? 0,
+                Product3Ids = g3.Select(x => x.ProductId).Distinct().ToList()
+            });
+        }
+
+
+        private async Task SaveReviewAndWorkflowAsync(CSR1 csr1, CSR1SaveRequest? request)
+        {
+            // This transaction includes all four tables plus status/approval fields.
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var persistent = await _db.Set<CSR1>().FindAsync(csr1.Id)
+                    ?? throw new InvalidOperationException("CSR-1 not found during update.");
+
+                if (request?.CSR1 is { } incoming)
+                {
+                    var expenses = new[] {
+                incoming.PrintingAndStationery, incoming.PublicityMaterial,
+                incoming.StageArrangements, incoming.ServiceChargesLCA,
+                incoming.TransportRent, incoming.JeepRunningExpenses,
+                incoming.Refreshments, incoming.Inputs, incoming.Photography,
+                incoming.Compliments, incoming.Others };
+                    decimal total = expenses.Sum();
+                    if (expenses.Any(v => v < 0) || total <= 0 ||
+                        incoming.Budget <= 0 || total > incoming.Budget || incoming.Budget > persistent.Budget)
+                        throw new ArgumentException("Expense total must be > 0 and <= Budget; individual expenses cannot be negative.");
+                    if (incoming.NumberOfPrograms <= 0)
+                        throw new ArgumentException("Number of Programs is required.");
+                    if (persistent.ProgramMonth.HasValue && persistent.ProgramYear.HasValue &&
+                        (incoming.CSR1Date.Month != persistent.ProgramMonth ||
+                         incoming.CSR1Date.Year != persistent.ProgramYear))
+                        throw new ArgumentException("Program date must remain in its allocated month/year.");
+                    static List<int> Clean(List<int>? ids) => (ids ?? new()).Where(x => x > 0).Distinct().ToList();
+                    var p1 = Clean(request.Product1Ids);
+                    var p2 = Clean(request.Product2Ids);
+                    var p3 = Clean(request.Product3Ids);
+                    if (request.Crop1Id <= 0 || p1.Count == 0 || p1.Count > 3 ||
+                        p2.Count > 3 || p3.Count > 3 ||
+                        (p2.Count > 0 && request.Crop2Id <= 0) ||
+                        (p3.Count > 0 && request.Crop3Id <= 0) ||
+                        (request.Crop2Id > 0 && p2.Count == 0) ||
+                        (request.Crop3Id > 0 && p3.Count == 0))
+                        throw new ArgumentException("Invalid focus crops/products (1-3 products per chosen crop).");
+
+                    persistent.NumberOfPrograms = incoming.NumberOfPrograms;
+                    // Allocated budget is immutable during review.
+                    // persistent.Budget = incoming.Budget;
+                    persistent.HeadquarterId = incoming.HeadquarterId;
+                    persistent.LocationId = incoming.LocationId;
+                    persistent.ResponsiblePersonId = incoming.ResponsiblePersonId;
+                    persistent.CSR1Date = incoming.CSR1Date;
+                    persistent.PrintingAndStationery = incoming.PrintingAndStationery;
+                    persistent.PublicityMaterial = incoming.PublicityMaterial;
+                    persistent.StageArrangements = incoming.StageArrangements;
+                    persistent.ServiceChargesLCA = incoming.ServiceChargesLCA;
+                    persistent.TransportRent = incoming.TransportRent;
+                    persistent.JeepRunningExpenses = incoming.JeepRunningExpenses;
+                    persistent.Refreshments = incoming.Refreshments;
+                    persistent.Inputs = incoming.Inputs;
+                    persistent.Photography = incoming.Photography;
+                    persistent.Compliments = incoming.Compliments;
+                    persistent.Others = incoming.Others;
+
+                    // Only replace children if review payload was supplied.
+                    var old1 = await _db.Set<CSR1Products1>().Where(x => x.CSR1Id == persistent.Id).ToListAsync();
+                    var old2 = await _db.Set<CSR1Products2>().Where(x => x.CSR1Id == persistent.Id).ToListAsync();
+                    var old3 = await _db.Set<CSR1Products3>().Where(x => x.CSR1Id == persistent.Id).ToListAsync();
+                    _db.Set<CSR1Products1>().RemoveRange(old1);
+                    _db.Set<CSR1Products2>().RemoveRange(old2);
+                    _db.Set<CSR1Products3>().RemoveRange(old3);
+                    _db.Set<CSR1Products1>().AddRange(p1.Select(p => new CSR1Products1 { CSR1Id = persistent.Id, CropId = request.Crop1Id, ProductId = p, IsActive = true }));
+                    _db.Set<CSR1Products2>().AddRange(p2.Select(p => new CSR1Products2 { CSR1Id = persistent.Id, CropId = request.Crop2Id, ProductId = p, IsActive = true }));
+                    _db.Set<CSR1Products3>().AddRange(p3.Select(p => new CSR1Products3 { CSR1Id = persistent.Id, CropId = request.Crop3Id, ProductId = p, IsActive = true }));
+                }
+
+                // Copy ONLY server-authorized workflow results from the existing method.
+                // Never take workflow fields from request.CSR1.
+                persistent.Status = csr1.Status;
+                persistent.UpdatedBy = csr1.UpdatedBy;
+                persistent.UpdatedAt = csr1.UpdatedAt;
+                persistent.ValidateBy = csr1.ValidateBy;
+                persistent.ValidateAt = csr1.ValidateAt;
+                persistent.ApprovedBy = csr1.ApprovedBy;
+                persistent.ApprovedAt = csr1.ApprovedAt;
+                persistent.Level1ApprovedBy = csr1.Level1ApprovedBy;
+                persistent.Level1ApprovedAt = csr1.Level1ApprovedAt;
+                persistent.Level2ApprovedBy = csr1.Level2ApprovedBy;
+                persistent.Level2ApprovedAt = csr1.Level2ApprovedAt;
+                persistent.Level3ApprovedBy = csr1.Level3ApprovedBy;
+                persistent.Level3ApprovedAt = csr1.Level3ApprovedAt;
+                persistent.SanctionNo = csr1.SanctionNo;
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
 
         [HttpPost("{id:int}/approve")]
         [HttpPut("{id:int}/approve")]
-        public async Task<IActionResult> ApproveCSR1(int id)
+        public async Task<IActionResult> ApproveCSR1(int id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CSR1SaveRequest? request)
         {
             try
             {
@@ -1794,7 +1923,7 @@ namespace SpicAPI.Controllers
                     csr1.UpdatedBy = CurrentUserId;
                     csr1.UpdatedAt = DateTime.UtcNow;
 
-                    await _csr1Repo.PatchAsync(id, csr1);
+                    await SaveReviewAndWorkflowAsync(csr1, request);
 
                     return Ok(new
                     {
@@ -1846,7 +1975,7 @@ namespace SpicAPI.Controllers
                 csr1.Status = next;
                 csr1.UpdatedBy = CurrentUserId;
                 csr1.UpdatedAt = now;
-                await _csr1Repo.PatchAsync(id, csr1);
+                await SaveReviewAndWorkflowAsync(csr1, request);
                 return Ok(new
                 {
                     message = next == "Approved" ? "CSR-1 final approval completed." : $"CSR-1 advanced to {next}.",
