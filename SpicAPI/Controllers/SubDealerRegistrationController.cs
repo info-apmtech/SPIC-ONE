@@ -554,8 +554,12 @@ public class SubDealerRegistrationController : ControllerBase
 	[RequestSizeLimit(MaxExcelImportSize)]
 	public async Task<ActionResult<SubDealerExcelParseResponse>> ParseImportExcel(
 		IFormFile file,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		[FromQuery] bool partial = false)
 	{
+		// partial=true: row-level problems (missing values, duplicate codes) are NOT
+		// reported as file-level errors. Every non-blank row is returned and the
+		// caller validates each row so valid rows can still be imported.
 		var result = new SubDealerExcelParseResponse();
 
 		if (file == null || file.Length == 0)
@@ -646,23 +650,26 @@ public class SubDealerRegistrationController : ControllerBase
 					continue;
 				}
 
-				if (string.IsNullOrWhiteSpace(code))
-					result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Code is required.");
+				if (!partial)
+				{
+					if (string.IsNullOrWhiteSpace(code))
+						result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Code is required.");
 
-				if (string.IsNullOrWhiteSpace(name))
-					result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Name is required.");
+					if (string.IsNullOrWhiteSpace(name))
+						result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Name is required.");
 
-				if (string.IsNullOrWhiteSpace(hq))
-					result.Errors.Add($"Excel row {rowNumber}: HQ is required.");
+					if (string.IsNullOrWhiteSpace(hq))
+						result.Errors.Add($"Excel row {rowNumber}: HQ is required.");
 
-				if (string.IsNullOrWhiteSpace(region))
-					result.Errors.Add($"Excel row {rowNumber}: Region is required.");
+					if (string.IsNullOrWhiteSpace(region))
+						result.Errors.Add($"Excel row {rowNumber}: Region is required.");
 
-				if (string.IsNullOrWhiteSpace(state))
-					result.Errors.Add($"Excel row {rowNumber}: State is required.");
+					if (string.IsNullOrWhiteSpace(state))
+						result.Errors.Add($"Excel row {rowNumber}: State is required.");
 
-				if (!string.IsNullOrWhiteSpace(code) && !seenCodes.Add(code))
-					result.Errors.Add($"Excel row {rowNumber}: duplicate Sub Dealer Code '{code}'.");
+					if (!string.IsNullOrWhiteSpace(code) && !seenCodes.Add(code))
+						result.Errors.Add($"Excel row {rowNumber}: duplicate Sub Dealer Code '{code}'.");
+				}
 
 				result.Rows.Add(new SubDealerExcelRowDto
 				{
@@ -692,7 +699,8 @@ public class SubDealerRegistrationController : ControllerBase
 	[HttpPost("bulk-import")]
 	public async Task<ActionResult<SubDealerBulkImportResponse>> BulkImport(
 		[FromBody] SubDealerBulkImportRequest request,
-		CancellationToken cancellationToken)
+		CancellationToken cancellationToken,
+		[FromQuery] bool partial = false)
 	{
 		var result = new SubDealerBulkImportResponse();
 
@@ -709,42 +717,83 @@ public class SubDealerRegistrationController : ControllerBase
 		if (request.Rows == null || request.Rows.Count == 0)
 			return BadRequest("No Sub Dealer rows were supplied for import.");
 
+		// partial=false (legacy): any row problem rejects the whole request.
+		// partial=true: problem rows are reported in result.Rejected and every
+		// other row is still imported (first occurrence of a duplicate code wins).
 		var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		var rows = new List<SubDealerBulkImportRowDto>();
 
 		foreach (var row in request.Rows)
 		{
 			var code = row.SubDealerCode?.Trim() ?? string.Empty;
 			var name = row.FirmName?.Trim() ?? string.Empty;
+			var reasons = new List<string>();
 
 			if (string.IsNullOrWhiteSpace(code))
-				result.Errors.Add($"Excel row {row.ExcelRowNumber}: Sub Dealer Code is required.");
+				reasons.Add("Sub Dealer Code is required.");
 
 			if (string.IsNullOrWhiteSpace(name))
-				result.Errors.Add($"Excel row {row.ExcelRowNumber}: Sub Dealer Name is required.");
+				reasons.Add("Sub Dealer Name is required.");
 
 			if (row.StateId <= 0)
-				result.Errors.Add($"Excel row {row.ExcelRowNumber}: State mapping is invalid.");
+				reasons.Add("State mapping is invalid.");
 
 			if (row.RegionId <= 0)
-				result.Errors.Add($"Excel row {row.ExcelRowNumber}: Region mapping is invalid.");
+				reasons.Add("Region mapping is invalid.");
 
 			if (row.HQId <= 0)
-				result.Errors.Add($"Excel row {row.ExcelRowNumber}: HQ mapping is invalid.");
+				reasons.Add("HQ mapping is invalid.");
 
 			if (isMoImport && currentHqId.HasValue && row.HQId != currentHqId.Value)
 			{
-				result.Errors.Add(
-					$"Excel row {row.ExcelRowNumber}: HQ is outside your assigned MO HQ. Import is allowed only for HQ Id {currentHqId.Value}.");
+				reasons.Add(
+					$"HQ is outside your assigned MO HQ. Import is allowed only for HQ Id {currentHqId.Value}.");
 			}
 
-			if (!string.IsNullOrWhiteSpace(code) && !seenCodes.Add(code))
-				result.Errors.Add($"Excel row {row.ExcelRowNumber}: duplicate Sub Dealer Code '{code}'.");
+			if (!partial)
+			{
+				if (!string.IsNullOrWhiteSpace(code) && !seenCodes.Add(code))
+					reasons.Add($"duplicate Sub Dealer Code '{code}'.");
+
+				foreach (var reason in reasons)
+					result.Errors.Add($"Excel row {row.ExcelRowNumber}: {reason}");
+
+				continue;
+			}
+
+			if (reasons.Count > 0)
+			{
+				result.Rejected.Add(ToRejected(row, SubDealerImportRejectCategory.Validation, string.Join(" ", reasons)));
+				continue;
+			}
+
+			// Only a fully valid row claims its code, so the "first valid occurrence" is kept.
+			if (!seenCodes.Add(code))
+			{
+				result.Rejected.Add(ToRejected(
+					row,
+					SubDealerImportRejectCategory.Duplicate,
+					$"Duplicate Sub Dealer Code '{code}' in the uploaded file; an earlier row with this code was used."));
+				continue;
+			}
+
+			rows.Add(row);
 		}
 
-		if (result.Errors.Count > 0)
-			return BadRequest(result);
+		if (!partial)
+		{
+			if (result.Errors.Count > 0)
+				return BadRequest(result);
 
-		var codes = request.Rows
+			rows = request.Rows;
+		}
+		else if (rows.Count == 0)
+		{
+			// Every row was rejected: nothing to save, still report the rejections.
+			return Ok(result);
+		}
+
+		var codes = rows
 			.Select(x => x.SubDealerCode.Trim().ToUpperInvariant())
 			.Distinct(StringComparer.OrdinalIgnoreCase)
 			.ToList();
@@ -765,19 +814,31 @@ public class SubDealerRegistrationController : ControllerBase
 
 		if (isMoImport && currentHqId.HasValue)
 		{
-			foreach (var row in request.Rows)
+			foreach (var row in rows.ToList())
 			{
 				var code = MasterNormalizer.Normalize(row.SubDealerCode);
 				if (existingByCode.TryGetValue(code, out var existing) &&
 					existing.HQ != currentHqId.Value)
 				{
-					result.Errors.Add(
-						$"Excel row {row.ExcelRowNumber}: Sub Dealer Code '{code}' belongs to another HQ and cannot be updated by this MO.");
+					var reason = $"Sub Dealer Code '{code}' belongs to another HQ and cannot be updated by this MO.";
+
+					if (partial)
+					{
+						result.Rejected.Add(ToRejected(row, SubDealerImportRejectCategory.Validation, reason));
+						rows.Remove(row);
+					}
+					else
+					{
+						result.Errors.Add($"Excel row {row.ExcelRowNumber}: {reason}");
+					}
 				}
 			}
 
-			if (result.Errors.Count > 0)
+			if (!partial && result.Errors.Count > 0)
 				return BadRequest(result);
+
+			if (partial && rows.Count == 0)
+				return Ok(result);
 		}
 
 		await using var transaction =
@@ -792,7 +853,7 @@ public class SubDealerRegistrationController : ControllerBase
 					: "Admin Excel Import")
 				: request.ImportedBy.Trim();
 
-			foreach (var row in request.Rows)
+			foreach (var row in rows)
 			{
 				var code = row.SubDealerCode.Trim().ToUpperInvariant();
 				var firmName = row.FirmName.Trim().ToUpperInvariant();
@@ -848,9 +909,37 @@ public class SubDealerRegistrationController : ControllerBase
 		{
 			await transaction.RollbackAsync(cancellationToken);
 			result.Errors.Add($"Database import failed: {ex.Message}");
-			return BadRequest(result);
+
+			if (!partial)
+				return BadRequest(result);
+
+			// The valid batch is one atomic transaction: on failure nothing from it
+			// was committed, so report zero saved and every batch row as rejected.
+			result.Inserted = 0;
+			result.Updated = 0;
+			foreach (var row in rows)
+			{
+				result.Rejected.Add(ToRejected(
+					row,
+					SubDealerImportRejectCategory.DatabaseError,
+					$"Not saved - the database transaction was rolled back: {ex.Message}"));
+			}
+
+			return Ok(result);
 		}
 	}
+
+	private static SubDealerImportRejectedRowDto ToRejected(
+		SubDealerBulkImportRowDto row,
+		string category,
+		string reason) => new()
+	{
+		ExcelRowNumber = row.ExcelRowNumber,
+		SubDealerCode = row.SubDealerCode?.Trim() ?? string.Empty,
+		SubDealerName = row.FirmName?.Trim() ?? string.Empty,
+		Category = category,
+		Reason = reason
+	};
 
 	[HttpDelete("{id:int}")]
 	public async Task<IActionResult> Delete(
