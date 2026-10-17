@@ -150,7 +150,16 @@ namespace SPIC.Ifms.Automation.Portal
 				return automatic;
 			}
 
-			return await TryOperatorLoginAsync(runId, automatic.CaptchaAttempts, cancellationToken);
+			var operatorResult = await TryOperatorLoginAsync(runId, automatic.CaptchaAttempts, cancellationToken);
+			if (operatorResult.Success || operatorResult.CaptchaAccepted)
+				return operatorResult;
+
+			// Nobody answered. By now the portal has long forgotten the wrong
+			// submit that made its images unreadable, so one more automatic
+			// round costs nothing and has saved the night before.
+			_logger.LogInformation("The operator did not answer; trying the automatic path once more.");
+			var again = await TryAutomaticLoginAsync(runId, cancellationToken);
+			return again.Success ? again : operatorResult;
 		}
 
 		/// <summary>
@@ -164,10 +173,20 @@ namespace SPIC.Ifms.Automation.Portal
 			var guesses = new List<string>();
 			string? lastFailure = null;
 			string? method = null;
+			var lastUnreadableAt = DateTime.MinValue;
 
 			for (var attempt = 1; attempt <= maxAttempts; attempt++)
 			{
 				cancellationToken.ThrowIfCancellationRequested();
+
+				// After a wrong submit the portal serves unreadable images for a
+				// while; run 127 burned seven attempts in eight seconds that way.
+				// Give it half a minute before asking for another one.
+				if (DateTime.UtcNow - lastUnreadableAt < TimeSpan.FromSeconds(15))
+				{
+					_logger.LogInformation("Two unreadable CAPTCHAs in a row; pausing 30 s before the next attempt.");
+					await Task.Delay(TimeSpan.FromSeconds(30), cancellationToken);
+				}
 
 				_logger.LogInformation("Login attempt {Attempt} of {Max}.", attempt, maxAttempts);
 
@@ -184,6 +203,7 @@ namespace SPIC.Ifms.Automation.Portal
 					{
 						lastFailure = "The CAPTCHA could not be read automatically.";
 						_logger.LogWarning("No automatic solver could read attempt {Attempt}'s CAPTCHA.", attempt);
+						lastUnreadableAt = DateTime.UtcNow;
 						continue;
 					}
 
