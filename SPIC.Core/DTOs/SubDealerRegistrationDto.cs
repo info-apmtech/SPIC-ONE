@@ -154,11 +154,30 @@ public class SubDealerBulkImportRequest
 	public List<SubDealerBulkImportRowDto> Rows { get; set; } = new();
 }
 
+public static class SubDealerImportRejectCategory
+{
+	public const string Duplicate = "Duplicate";
+	public const string Validation = "Validation";
+	public const string DatabaseError = "Database error";
+}
+
+public class SubDealerImportRejectedRowDto
+{
+	public int ExcelRowNumber { get; set; }
+	public string SubDealerCode { get; set; } = string.Empty;
+	public string SubDealerName { get; set; } = string.Empty;
+	public string Category { get; set; } = SubDealerImportRejectCategory.Validation;
+	public string Reason { get; set; } = string.Empty;
+}
+
 public class SubDealerBulkImportResponse
 {
 	public int Inserted { get; set; }
 	public int Updated { get; set; }
 	public List<string> Errors { get; set; } = new();
+
+	/// <summary>Rows the server rejected (only populated by the partial-success import).</summary>
+	public List<SubDealerImportRejectedRowDto> Rejected { get; set; } = new();
 }
 
 
