@@ -553,54 +553,6 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("AppUsageDaily");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.ApplicationPage", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("HasActions")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Module")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Key")
-                        .IsUnique();
-
-                    b.ToTable("Pages");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.Bank", b =>
                 {
                     b.Property<int>("Id")
@@ -801,8 +753,20 @@ namespace Spic.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasColumnType("text");
+
                     b.Property<decimal>("Budget")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("BudgetProgramId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CSR1Date")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<decimal>("Compliments")
                         .HasColumnType("decimal(18,2)");
@@ -825,6 +789,24 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("JeepRunningExpenses")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTime?>("Level1ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level1ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("Level2ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level2ApprovedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("Level3ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Level3ApprovedBy")
+                        .HasColumnType("text");
+
                     b.Property<int?>("LocationId")
                         .HasColumnType("integer");
 
@@ -843,7 +825,13 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("ProgramId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ProgramMonth")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ProgramTypeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ProgramYear")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("PublicityMaterial")
@@ -857,6 +845,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int?>("ResponsiblePersonId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("SanctionNo")
+                        .HasColumnType("text");
 
                     b.Property<decimal>("ServiceChargesLCA")
                         .HasColumnType("decimal(18,2)");
@@ -876,6 +867,12 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ValidateAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ValidateBy")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -956,6 +953,327 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("CSR1Products3");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ActualEventDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ActualLocation")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("ApprovedBudgetSnapshot")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("CSR1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<TimeOnly?>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int?>("EventCoordinatorEmployeeId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ExpectedParticipantsCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsOrganized")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<TimeOnly?>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SubmittedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR1Id")
+                        .IsUnique();
+
+                    b.ToTable("CSR2s");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Activity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActivityName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(3000)
+                        .HasColumnType("character varying(3000)");
+
+                    b.Property<TimeOnly>("EndTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<int?>("ParticipantsCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Remarks")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly>("StartTime")
+                        .HasColumnType("time without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id", "SortOrder");
+
+                    b.ToTable("CSR2Activities");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Employee", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EmployeeInformationId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EmployeeName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("RoleName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id", "EmployeeInformationId")
+                        .IsUnique();
+
+                    b.ToTable("CSR2Employees");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Expense", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal?>("ActualAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CategoryKey")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("CategoryName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime?>("ExpenseDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal>("PlannedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id", "CategoryKey")
+                        .IsUnique();
+
+                    b.ToTable("CSR2Expenses");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2ExpenseProof", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2ExpenseId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2ExpenseId");
+
+                    b.ToTable("CSR2ExpenseProofs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Media", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("UseInDigitalLibrary")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id", "MediaType");
+
+                    b.ToTable("CSR2Media");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Participant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.ToTable("CSR2Participants");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
@@ -2717,33 +3035,6 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("Designations");
                 });
 
-            modelBuilder.Entity("SPIC.Core.Entities.DesignationPermission", b =>
-                {
-                    b.Property<int>("DesignationId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("PageId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("Delete")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("Entry")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("Update")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("View")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("DesignationId", "PageId");
-
-                    b.HasIndex("PageId");
-
-                    b.ToTable("DesignationPermissions");
-                });
-
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
                 {
                     b.Property<int>("Id")
@@ -2809,6 +3100,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("IfmsProductId")
@@ -4500,6 +4794,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("OthersTarget")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("PosLiquidationCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("PosLiquidationStartPlaceName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("PosLiquidationStartedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -4518,6 +4818,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("ReviewedByUserId")
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("SoilSampleCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SoilSampleStartPlaceName")
+                        .HasColumnType("text");
+
                     b.Property<DateTime?>("SoilSampleStartedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -4526,6 +4832,12 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int?>("SoilSampleTarget")
                         .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SpcmCompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("SpcmStartPlaceName")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("SpcmStartedAt")
                         .HasColumnType("timestamp without time zone");
@@ -4577,6 +4889,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("AllocationId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<string>("DealerCode")
                         .IsRequired()
                         .HasColumnType("text");
@@ -4585,11 +4900,20 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int?>("DealerRegistrationId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("PlannedDate")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<int?>("PlannedDay")
                         .HasColumnType("integer");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StartPlaceName")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("StartedAt")
                         .HasColumnType("timestamp without time zone");
@@ -4621,11 +4945,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<decimal>("Budget")
                         .HasColumnType("numeric(12,2)");
 
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<int>("Csr1Id")
                         .HasColumnType("integer");
 
                     b.Property<string>("ProgramName")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StartPlaceName")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("StartedAt")
@@ -4731,6 +5061,49 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("CloseoutId");
 
                     b.ToTable("JmdoTaskCloseoutProducts");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.JmdoYearlyTarget", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("EmployeeLoginId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FinancialYearStart")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HeadquarterId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SoilSampleTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SpcmTarget")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeLoginId", "FinancialYearStart")
+                        .IsUnique();
+
+                    b.ToTable("JmdoYearlyTargets", (string)null);
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.LabActivity", b =>
@@ -6849,6 +7222,48 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("ProgramTypes");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.RMDHQMapping", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("EmployeeId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("HeadquartersIds")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId", "StateId", "RegionId")
+                        .IsUnique();
+
+                    b.ToTable("RMDHQMappings");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.RackPoint", b =>
                 {
                     b.Property<int>("Id")
@@ -7386,6 +7801,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("IfmsDealerId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("IfmsId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("IfmsProductId")
                         .HasColumnType("integer");
 
@@ -7482,6 +7900,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("IfmsProductId")
@@ -7709,10 +8130,16 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("IfmsDealerId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("IfmsDealerSalesId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("IfmsProductId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("IfmsWholesalerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsWholesalerSalesId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("InvoiceDate")
@@ -8322,6 +8749,52 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("SamplePayments");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.SanctionNumberSequence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("RegionId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RegionSAPCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("SanctionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SanctionNumberState")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("StateId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StateSAPCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SanctionNumberSequences");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.SasCourier", b =>
                 {
                     b.Property<int>("Id")
@@ -8450,7 +8923,9 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Mobile");
+                    b.HasIndex("Mobile")
+                        .IsUnique()
+                        .HasFilter("\"IsDeleted\" = false");
 
                     b.HasIndex("Name");
 
@@ -10098,6 +10573,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("IfmsDealerId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("IfmsId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("IfmsProductId")
                         .HasColumnType("integer");
 
@@ -10234,6 +10712,83 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Program");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR1", "CSR1")
+                        .WithMany()
+                        .HasForeignKey("CSR1Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CSR1");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Activity", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Activities")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Employee", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Employees")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Expense", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Expenses")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2ExpenseProof", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2Expense", "CSR2Expense")
+                        .WithMany("Proofs")
+                        .HasForeignKey("CSR2ExpenseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2Expense");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Media", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Media")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Participant", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Participants")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.Unit", "Unit")
@@ -10276,25 +10831,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Consignment");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.DesignationPermission", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.Designation", "Designation")
-                        .WithMany()
-                        .HasForeignKey("DesignationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SPIC.Core.Entities.ApplicationPage", "Page")
-                        .WithMany()
-                        .HasForeignKey("PageId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Designation");
-
-                    b.Navigation("Page");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.District", b =>
@@ -11119,6 +11655,24 @@ namespace Spic.Infrastructure.Migrations
             modelBuilder.Entity("SPIC.Core.Entities.BudgetProgramMains", b =>
                 {
                     b.Navigation("Programs");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2", b =>
+                {
+                    b.Navigation("Activities");
+
+                    b.Navigation("Employees");
+
+                    b.Navigation("Expenses");
+
+                    b.Navigation("Media");
+
+                    b.Navigation("Participants");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Expense", b =>
+                {
+                    b.Navigation("Proofs");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CommunityPost", b =>

@@ -34,7 +34,7 @@ namespace SPIC.Core.Entities
     }
     public enum AppRole
     {
-        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin, SuperAdmin, CommonRole
+        Admin, CorporateAdmin, Director, AVP, SMD, SMM, RM, RMD, MDO, MO, JMDO, Dealer, Farmer, SpecialAdmin, SuperAdmin, CommonRole, MDAdmin, MDHOD
     }
     public enum PagePermission
     {
@@ -59,7 +59,7 @@ namespace SPIC.Core.Entities
         [PageModule("Employee Management")] EmployeeRegistration, 
         dealerreviewlist, CreditLimitSales, LocationMaster, Agriculture, Logistics, Financial, Relationship, Schemes,
         CompanySales, SalesReport, AgeingReport, Acknowledgement, LiquidationCycle, BudgetSubmissions, WelfareSchemes, SDWADashboard, Purchases, Rewards, CropAdvice, YieldPrediction, DiseaseDetection,
-        [OpenToAll] Community, Notifications, Profile, CSR1Create, CSR1Management, TopRankingDistrict, TopRankingRetailers, TopRankingWholesalers, ProductWiseStockAvailability, StockDetails, SubDealerRegistration, SubDealerList , SchemeApproval,
+        [OpenToAll] Community, [OpenToAll] Notifications, [OpenToAll] Profile, CSR1Create, [OpenToAll] CSR1Management, [OpenToAll] TopRankingDistrict, [OpenToAll] TopRankingRetailers, [OpenToAll] TopRankingWholesalers, [OpenToAll] ProductWiseStockAvailability, [OpenToAll] StockDetails, [OpenToAll] SubDealerRegistration, [OpenToAll] SubDealerList, [OpenToAll] SchemeApproval,
         SubDealerEmployeeMaster,SDWA,SDWAAdmin,GuestHouse,GuestHouseBooking,Rooms,RoomDetails,GuestDetails,Payment, MyBookings,BookingPreview,BookingDetails,FrontOffice,GenerateBill,BillList,LogisticsReport, DealerStateSummary,
         // Appended at the END on purpose: ApplicationPage seed ids are enum-index based (see AppDbContext).
         // OpenToAll: the product opens the read-only Digital Library to every signed-in user.
@@ -117,7 +117,7 @@ namespace SPIC.Core.Entities
         // every other normal page; Admin / SuperAdmin keep reaching them through the role bypass.
         // Appended at the END on purpose: ApplicationPage seed ids are enum-index based
         // (see AppDbContext).
-        FarmDashboard, IfmsAutoImport, ProgramMaster,
+        FarmDashboard, IfmsAutoImport, ProgramMaster, SanctionNumberSequence, RMDHQMapping,
 
         // Menu-authorization standard (2026-10-07). Nine normal menus that were shown by an
         // open route or a role check only, so no Designation could grant or revoke them.
@@ -125,7 +125,12 @@ namespace SPIC.Core.Entities
         // (see AppDbContext) - inserting in the middle would renumber every later row.
         Activities, Farmers, Alerts,
         StartDocumentation, DemoDetails, TreatmentDetails,
-        Treatment01, Treatment02, TreatmentDemoDetails,GHAdmin
+        Treatment01, Treatment02, TreatmentDemoDetails,GHAdmin,
+
+        // Plant / Dealer Nature master (2026-10-16): these two lookup tables had no admin UI at
+        // all, so Excel bulk-upload rows referencing a new Plant/Dealer Nature could never be
+        // entered ahead of time. Appended at the END on purpose - see the comment above.
+        PlantDealerNatureMaster
 
     }
 }

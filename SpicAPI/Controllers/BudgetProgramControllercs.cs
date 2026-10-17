@@ -3367,6 +3367,7 @@ namespace SpicAPI.Controllers
             });
         }
 
+
         [Authorize]
         [HttpGet("approved-programs")]
         public async Task<IActionResult> GetApprovedPrograms()
@@ -3374,9 +3375,7 @@ namespace SpicAPI.Controllers
             var role = User.FindFirst(ClaimTypes.Role)?.Value;
 
             if (string.IsNullOrWhiteSpace(role))
-            {
                 return Forbid();
-            }
 
             var stateClaim = User.FindFirst("spic:state_id")?.Value;
             var regionClaim = User.FindFirst("spic:region_id")?.Value;
@@ -3392,18 +3391,16 @@ namespace SpicAPI.Controllers
 
             if (role == AppRole.Admin.ToString())
             {
-                // Admin sees all approved / validated program budgets.
+                // Admin sees all approved / validated budgets.
             }
             else if (role == AppRole.SMM.ToString() ||
                      role == AppRole.SMD.ToString())
             {
                 if (stateId <= 0)
-                {
                     return BadRequest(new
                     {
                         message = "State not assigned for user."
                     });
-                }
 
                 query = query.Where(x => x.StateId == stateId);
             }
@@ -3411,20 +3408,16 @@ namespace SpicAPI.Controllers
                      role == AppRole.RMD.ToString())
             {
                 if (stateId <= 0)
-                {
                     return BadRequest(new
                     {
                         message = "State not assigned for user."
                     });
-                }
 
                 if (regionId <= 0)
-                {
                     return BadRequest(new
                     {
                         message = "Region not assigned for user."
                     });
-                }
 
                 query = query.Where(x =>
                     x.StateId == stateId &&
@@ -3435,28 +3428,22 @@ namespace SpicAPI.Controllers
                      role == AppRole.JMDO.ToString())
             {
                 if (stateId <= 0)
-                {
                     return BadRequest(new
                     {
                         message = "State not assigned for user."
                     });
-                }
 
                 if (regionId <= 0)
-                {
                     return BadRequest(new
                     {
                         message = "Region not assigned for user."
                     });
-                }
 
                 if (headquartersId <= 0)
-                {
                     return BadRequest(new
                     {
                         message = "Headquarter not assigned for user."
                     });
-                }
 
                 query = query.Where(x =>
                     x.StateId == stateId &&
@@ -3472,6 +3459,21 @@ namespace SpicAPI.Controllers
                 x.Status == "Approved" ||
                 x.Status == "Validated");
 
+            // Same target-month rule used by CSR1 frontend.
+            var indiaTime = TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.UtcNow,
+                TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"));
+
+            var targetMonth = new DateTime(
+                indiaTime.Year,
+                indiaTime.Month,
+                1
+            ).AddMonths(indiaTime.Day <= 26 ? 1 : 2);
+
+            int month = targetMonth.Month;
+            int year = targetMonth.Year;
+
+            // Existing approved-program query with added counts.
             var result = await query
                 .SelectMany(main =>
                     main.Programs.Select(program => new
@@ -3487,6 +3489,7 @@ namespace SpicAPI.Controllers
                         StateId = main.StateId,
                         RegionId = main.RegionId,
                         HeadQuartersId = main.HeadQuartersId,
+
                         AprilCount = program.AprilCount,
                         MayCount = program.MayCount,
                         JuneCount = program.JuneCount,
@@ -3499,15 +3502,79 @@ namespace SpicAPI.Controllers
                         JanuaryCount = program.JanuaryCount,
                         FebruaryCount = program.FebruaryCount,
                         MarchCount = program.MarchCount,
+
+                        // NEW: target month's approved count.
+                        NumberOfPrograms =
+                            month == 1 ? program.JanuaryCount :
+                            month == 2 ? program.FebruaryCount :
+                            month == 3 ? program.MarchCount :
+                            month == 4 ? program.AprilCount :
+                            month == 5 ? program.MayCount :
+                            month == 6 ? program.JuneCount :
+                            month == 7 ? program.JulyCount :
+                            month == 8 ? program.AugustCount :
+                            month == 9 ? program.SeptemberCount :
+                            month == 10 ? program.OctoberCount :
+                            month == 11 ? program.NovemberCount :
+                            program.DecemberCount,
+
+                        // NEW: CSR1 submissions for this budget/month.
+                        CompletedPrograms = _db.Set<CSR1>()
+                            .Count(c =>
+                                c.BudgetProgramId == program.Id &&
+                                c.ProgramMonth == month &&
+                                c.ProgramYear == year &&
+                                c.IsActive),
+
                         Beneficiaries = ""
                     }))
                 .OrderBy(x => x.ProgramType)
                 .ThenBy(x => x.ProgramName)
                 .ToListAsync();
 
-            return Ok(result);
+            // Add remaining count without changing DB query filters.
+            var response = result.Select(x => new
+            {
+                x.Id,
+                x.ProgramId,
+                x.ProgramTypeId,
+                x.ProgramType,
+                x.ProgramName,
+                x.TotalBudget,
+                x.Status,
+                x.FinancialYear,
+                x.StateId,
+                x.RegionId,
+                x.HeadQuartersId,
+
+                x.AprilCount,
+                x.MayCount,
+                x.JuneCount,
+                x.JulyCount,
+                x.AugustCount,
+                x.SeptemberCount,
+                x.OctoberCount,
+                x.NovemberCount,
+                x.DecemberCount,
+                x.JanuaryCount,
+                x.FebruaryCount,
+                x.MarchCount,
+
+                x.NumberOfPrograms,
+                x.CompletedPrograms,
+
+                RemainingPrograms = Math.Max(
+                    0m,
+                    x.NumberOfPrograms - x.CompletedPrograms
+                ),
+
+                x.Beneficiaries
+            }).ToList();
+
+            return Ok(response);
         }
-                
+
+
         private sealed class CreatorRoleLookup
         {
             public string UserId { get; set; } = "";

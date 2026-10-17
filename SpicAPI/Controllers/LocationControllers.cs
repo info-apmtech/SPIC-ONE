@@ -1,18 +1,23 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Spic.Infrastructure.Data;
 using SPIC.Core.Entities;
 using SPIC.Core.Interfaces;
 
 namespace SpicAPI.Controllers
 {
+    // Existing route names and endpoints are intentionally unchanged.
     [Route("api/[controller]")]
-    public class ZoneController(IGenericRepository<Zone> repo) : GenericCrudController<Zone>(repo);
+    public class ZoneController(IGenericRepository<Zone> repo, AppDbContext db)
+        : LocationCrudController<Zone>(repo, db, "ZoneId");
 
     [Route("api/[controller]")]
-    public class StateController(IGenericRepository<State> repo) : GenericCrudController<State>(repo);
+    public class StateController(IGenericRepository<State> repo, AppDbContext db)
+        : LocationCrudController<State>(repo, db, "StateId");
 
     [Route("api/[controller]")]
-    public class DistrictController(IGenericRepository<District> repo) : GenericCrudController<District>(repo)
+    public class DistrictController(IGenericRepository<District> repo, AppDbContext db)
+        : LocationCrudController<District>(repo, db, "DistrictId")
     {
         [HttpGet("byState/{stateId}")]
         public async Task<IActionResult> GetByState(int stateId)
@@ -23,7 +28,8 @@ namespace SpicAPI.Controllers
     }
 
     [Route("api/[controller]")]
-    public class SubDistrictController(IGenericRepository<SubDistrict> repo) : GenericCrudController<SubDistrict>(repo)
+    public class SubDistrictController(IGenericRepository<SubDistrict> repo, AppDbContext db)
+        : LocationCrudController<SubDistrict>(repo, db, "SubDistrictId")
     {
         [HttpGet("byDistrict/{districtId}")]
         public async Task<IActionResult> GetByDistrict(int districtId)
@@ -34,7 +40,8 @@ namespace SpicAPI.Controllers
     }
 
     [Route("api/[controller]")]
-    public class RegionController(IGenericRepository<Region> repo) : GenericCrudController<Region>(repo)
+    public class RegionController(IGenericRepository<Region> repo, AppDbContext db)
+        : LocationCrudController<Region>(repo, db, "RegionId", "Region")
     {
         [HttpGet("byState/{stateId}")]
         public async Task<IActionResult> GetByState(int stateId)
@@ -63,7 +70,9 @@ namespace SpicAPI.Controllers
     }
 
     [Route("api/[controller]")]
-    public class HeadquarterController(IGenericRepository<Headquarter> repo) : GenericCrudController<Headquarter>(repo)
+    public class HeadquarterController(IGenericRepository<Headquarter> repo, AppDbContext db)
+        : LocationCrudController<Headquarter>(repo, db,
+            "HeadquarterId", "HeadquartersId", "HeadQuartersId", "HQ")
     {
         [HttpGet("byRegion/{regionId}")]
         public async Task<IActionResult> GetByRegion(int regionId)
@@ -72,8 +81,8 @@ namespace SpicAPI.Controllers
             return Ok(items);
         }
 
-        // For SpecialAdmin multi-region: returns all HQs belonging to any of the
-        // supplied regions. regionIds is a comma-separated list.
+        // For SpecialAdmin multi-region: returns all HQs belonging to any of
+        // the supplied regions. regionIds is a comma-separated list.
         [HttpGet("byRegions")]
         public async Task<IActionResult> GetByRegions([FromQuery] string regionIds)
         {

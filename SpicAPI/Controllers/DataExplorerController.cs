@@ -61,11 +61,12 @@ namespace SpicAPI.Controllers
 
 		private IActionResult? Guard()
 		{
-			var role = User.FindFirstValue(ClaimTypes.Role);
+			var roleStr = User.FindFirstValue(ClaimTypes.Role);
+			AppRole? role = Enum.TryParse<AppRole>(roleStr, out var r) ? r : null;
 			var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-			var authorizedCorporateAdmin = _config["DataExplorer:AuthorizedEmployeeId"];
+			var authorizedConfig = _config["DataExplorer:AuthorizedEmployeeId"];
 
-			if (role != nameof(AppRole.SuperAdmin) && !(role == nameof(AppRole.CorporateAdmin) && userId == authorizedCorporateAdmin))
+			if (!DataExplorerAuthorization.IsAuthorized(role, userId, authorizedConfig))
 				return StatusCode(403, new { message = "Data Explorer is available to SuperAdmin or the authorized CorporateAdmin only." });
 
 			var expected = _config["DataExplorer:Password"];

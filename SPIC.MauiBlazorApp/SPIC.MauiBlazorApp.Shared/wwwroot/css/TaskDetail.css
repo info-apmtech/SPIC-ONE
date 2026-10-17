@@ -7,23 +7,36 @@
     color: #1f2937;
 }
 
+/* Back button + the "which task is this" badge share one row - button on the left,
+   badge right-aligned opposite it, instead of stacking as two separate lines. */
+.td-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
 .td-back-link {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    background: none;
-    border: none;
-    padding: 0;
-    margin-bottom: 14px;
-    font-size: 0.9rem;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-size: 0.88rem;
     font-weight: 600;
     color: #374151;
     cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
     .td-back-link:hover {
+        background: #f3f4f6;
+        border-color: #9ca3af;
         color: #111827;
-        text-decoration: underline;
     }
 
 .td-category-badge {
@@ -36,7 +49,7 @@
     letter-spacing: 0.3px;
     border-radius: 20px;
     padding: 3px 12px;
-    margin-bottom: 8px;
+    flex-shrink: 0;
 }
 
 .td-title {
@@ -49,7 +62,7 @@
 .td-subtitle {
     margin: 0 0 20px;
     font-size: 0.92rem;
-    color: #6b7280;
+    color: #000;
 }
 
 /* ---------- Timeline ---------- */
@@ -112,7 +125,7 @@
 
 .td-timeline-sub {
     font-size: 0.78rem;
-    color: #9ca3af;
+    color: #000;
     margin-top: 2px;
 }
 
@@ -166,7 +179,7 @@
 .td-card-subtitle {
     margin: 0 0 1.1rem;
     font-size: 0.85rem;
-    color: #6b7280;
+    color: #000;
 }
 
 /* ---------- Task Details grid ---------- */
@@ -184,13 +197,17 @@
 
 .td-detail-label {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: #000;
 }
 
 .td-detail-val {
     font-size: 1rem;
     font-weight: 700;
     color: #111827;
+}
+
+.td-detail-val-priority-high {
+    color: #b91c1c;
 }
 
 /* ---------- Time-on-task bar ---------- */
@@ -203,17 +220,21 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    flex-wrap: wrap;
 }
 
 .td-time-left {
     display: flex;
     flex-direction: column;
+    flex-shrink: 0;
+}
+
+.td-time-bar > .td-btn {
+    flex-shrink: 0;
 }
 
 .td-time-label {
     font-size: 0.8rem;
-    color: #6b7280;
+    color: #000;
 }
 
 .td-time-val {
@@ -227,10 +248,19 @@
 .td-time-location {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     font-size: 0.9rem;
     font-weight: 600;
     color: #15803d;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.td-time-location-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ---------- Buttons ---------- */
@@ -326,7 +356,7 @@
 .td-file-input {
     display: block;
     font-size: 0.85rem;
-    color: #6b7280;
+    color: #000;
 }
 
 /* ---------- Quick actions ---------- */
@@ -364,20 +394,13 @@
 /* ---------- Tablet (768px - 1199.98px) ---------- */
 @media (min-width: 768px) and (max-width: 1199.98px) {
     .td-main-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr); /* 1fr alone lets tables blow out width */
     }
 
-    /* Only 1 column now - col-right would otherwise land in an unwanted
-       implicit 2nd column. Reset both to the single column and move Quick
-       actions to the end instead of interrupting Task Details -> Time on
-       task -> Close-out form. */
-    .td-col-left,
-    .td-col-right {
+    .td-col-left-wrap,
+    .td-col-right-wrap {
         grid-column: 1;
-    }
-
-    .td-col-right {
-        order: 99;
+        min-width: 0;
     }
 }
 
@@ -386,77 +409,269 @@
     .td-page {
         padding-top: 12px !important;
         padding-bottom: calc(16px + var(--safe-bottom, 0px)) !important;
+        overflow-x: hidden;
+    }
+
+    .td-header-row {
+        flex-wrap: wrap;
+    }
+
+    .td-back-link {
+        min-height: 44px;
     }
 
     .td-title {
-        font-size: 1.25rem;
+        font-size: 1.2rem;
+        word-break: break-word;
+    }
+
+    .td-subtitle {
+        font-size: 0.82rem;
+        margin-bottom: 14px;
+        word-break: break-word;
     }
 
     .td-timeline-card,
     .td-card {
-        padding: 1rem 1.1rem;
+        padding: 1rem;
     }
 
+    .td-timeline-card {
+        margin-bottom: 14px;
+    }
+
+    .td-timeline-title {
+        margin-bottom: 0.9rem;
+    }
+
+    /* ---- Timeline: vertical on phone ---- */
     .td-timeline {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        padding-bottom: 4px;
+        flex-direction: column;
+        align-items: stretch;
+        overflow: visible;
+        padding: 0;
     }
 
     .td-timeline-step {
-        width: 100px;
+        width: 100%;
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr);
+        grid-template-rows: auto auto;
+        column-gap: 12px;
+        align-items: center;
+        text-align: left;
+    }
+
+    .td-timeline-node {
+        grid-row: 1 / span 2;
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+        margin: 0;
     }
 
     .td-timeline-label {
-        font-size: 0.8rem;
+        font-size: 0.85rem;
+        align-self: end;
     }
 
+    .td-timeline-sub {
+        font-size: 0.75rem;
+        margin: 0;
+        align-self: start;
+    }
+
+    .td-timeline-connector {
+        flex: 0 0 auto;
+        width: 2px;
+        height: 18px;
+        margin: 4px 0 4px 15px;
+        background: repeating-linear-gradient(to bottom, #d1d5db 0, #d1d5db 4px, transparent 4px, transparent 8px);
+    }
+
+        .td-timeline-connector.done {
+            background: #15803d;
+        }
+
+    /* ---- Main layout: single column, no overflow ---- */
     .td-main-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+    }
+
+    .td-col-left-wrap,
+    .td-col-right-wrap {
+        grid-column: 1;
+        min-width: 0;
+        gap: 14px !important;
     }
 
     .td-col-left,
     .td-col-right {
-        grid-column: 1;
+        min-width: 0;
+        max-width: 100%;
     }
 
-    .td-col-right {
-        order: 99;
-    }
-
+    /* ---- Details ---- */
     .td-details-grid,
     .td-pos-grid {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.9rem 1rem;
     }
 
+    .td-detail-val {
+        font-size: 0.92rem;
+        word-break: break-word;
+    }
+
+    /* ---- Time bar ---- */
     .td-time-bar {
         flex-direction: column;
         align-items: stretch;
         text-align: center;
+        gap: 10px;
+        padding: 1rem;
     }
 
     .td-time-left {
         align-items: center;
     }
 
-    .td-time-location {
-        justify-content: center;
+    .td-time-val {
+        font-size: 1.6rem;
     }
 
-    .td-btn,
-    .td-back-link {
+    .td-time-location {
+        justify-content: center;
+        align-items: flex-start;
+        font-size: 0.82rem;
+    }
+
+    .td-time-location-text {
+        white-space: normal; /* show full address, wrapped */
+        overflow: visible;
+        word-break: break-word;
+        text-align: left;
+    }
+
+    .td-time-bar > .td-btn,
+    .td-time-bar > div.text-success {
+        width: 100%;
+        text-align: center;
+    }
+
+    /* ---- Buttons / inputs ---- */
+    .td-btn {
         min-height: 44px;
+    }
+
+    .td-card .d-flex.justify-content-end.mt-4 .td-btn {
+        width: 100%;
     }
 
     .td-input,
     .td-textarea {
         font-size: 16px; /* prevents iOS zoom on focus */
     }
+
+    .td-file-input {
+        width: 100%;
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    .td-selected-file {
+        word-break: break-all;
+    }
+
+    /* ---- Product cards: stack columns ---- */
+    .td-page .td-product-card {
+        flex-direction: column;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+
+    .td-page .td-product-col.td-border-left {
+        border-left: none;
+        border-top: 1px solid #d1d5db;
+        padding-left: 0;
+        padding-top: 8px;
+    }
+
+    /* ---- Quick actions ---- */
+    .td-quick-action {
+        min-height: 44px;
+        padding: 0.75rem 0.9rem;
+    }
+
+    /* ---- Records tables: scroll inside the card, not the page ---- */
+    .td-page .table-responsive {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .td-page .td-spcm-table {
+        min-width: 560px;
+    }
+
+        .td-page .td-spcm-table th {
+            padding: 10px 12px;
+            white-space: nowrap;
+        }
+
+        .td-page .td-spcm-table td {
+            padding: 10px 12px;
+            font-size: 0.82rem;
+        }
+
+    /* ---- Modals ---- */
+    .td-page .td-modal-overlay {
+        padding: 16px;
+        align-items: flex-end;
+    }
+
+    .td-page .td-modal-card {
+        padding: 18px 16px;
+        max-height: calc(100vh - 32px);
+        overflow-y: auto;
+        border-radius: 12px;
+    }
+
+    .td-page .td-modal-header {
+        margin-bottom: 14px;
+    }
+
+        .td-page .td-modal-header h4 {
+            font-size: 1.1rem;
+        }
+
+    .td-page .td-modal-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .td-page .td-modal-footer {
+        flex-direction: column-reverse;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+        .td-page .td-modal-footer .td-btn {
+            width: 100%;
+        }
 }
 
 @media (max-width: 420px) {
     .td-details-grid,
     .td-pos-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
+}
+
+/* Bootstrap's .text-muted grey (#6c757d) was reported as hard to read - overridden to
+   black within this page only, scoped so it does not bleed into shared layout chrome. */
+.td-page .text-muted {
+    color: #000 !important;
 }

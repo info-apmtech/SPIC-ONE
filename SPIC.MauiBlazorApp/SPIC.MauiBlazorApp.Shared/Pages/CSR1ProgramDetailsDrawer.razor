@@ -1,9 +1,11 @@
-﻿@using System.Net.Http.Json
+@using System.Net.Http.Json
 @using System.Globalization
 @using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState loginState
 
 
 @if (IsOpen)
@@ -46,6 +48,10 @@
 
                     <div class="csr-pd-header-right">
 
+                        <span class="csr-pd-scope-pill @(IsStateScope ? "csr-pd-scope-pill-state" : "")">
+                            @(IsHQScope ? "Headquarters" : "State")
+                        </span>
+
                         <span class="@GetHeaderStatusClass(details.Status)">
                             @GetStatusDisplay(details.Status)
                         </span>
@@ -65,425 +71,777 @@
 
                 <div class="csr-pd-content">
 
-                    @* ================================================= *@
-                    @* PROGRAM INFORMATION                               *@
-                    @* ================================================= *@
-
+                    @* Inline editable CSR-1 form: same source fields as CREATE-CSR-1Management *@
                     <section class="csr-pd-section">
-
                         <h3>Program Information</h3>
-
-                        <div class="csr-pd-panel csr-pd-info-grid">
-
-                            <div class="csr-pd-info-column">
-
-                                <div class="csr-pd-field">
-                                    <span>Program Type</span>
-                                    <strong>@ShowValue(details.ProgramType)</strong>
+                        @if (CanValidate || CanApprove)
+                        {
+                            @if (reviewRequest == null)
+                            {
+                                <div class="alert alert-warning">@reviewError</div>
+                            }
+                            else
+                            {
+                                <div class="csr-pd-panel csr-inline-edit-grid">
+                                    <label class="csr-inline-field">
+                                        Program Type
+                                        <input class="form-control" value="@details.ProgramType" disabled />
+                                    </label>
+                                    <label class="csr-inline-field">
+                                        Program Name
+                                        <input class="form-control" value="@details.ProgramName" disabled />
+                                    </label>
+                                    <label class="csr-inline-field">
+                                        Number of Programs
+                                        <input type="number" min="1" class="form-control" @bind="reviewRequest.CSR1.NumberOfPrograms" />
+                                    </label>
+                                    <label class="csr-inline-field">
+                                        Allocated Budget (fixed)
+                                        <input type="number" class="form-control" value="@details.Budget" disabled />
+                                    </label>
+                                    <label class="csr-inline-field">
+                                        HQ
+                                        <select class="form-select" @bind="reviewRequest.CSR1.HeadquarterId">
+                                            <option value="">Select HQ</option>
+                                            @foreach (var h in reviewHeadquarters)
+                                            {
+                                                <option value="@h.Id">@h.HeadquarterName</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label class="csr-inline-field">
+                                        Location
+                                        <select class="form-select" @bind="reviewRequest.CSR1.LocationId">
+                                            <option value="">Select Location</option>
+                                            @foreach (var z in reviewZones)
+                                            {
+                                                <option value="@z.Id">@z.ZoneName</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label class="csr-inline-field">
+                                        Responsible Person
+                                        <select class="form-select" @bind="reviewRequest.CSR1.ResponsiblePersonId">
+                                            <option value="">Select Person</option>
+                                            @foreach (var e in reviewEmployees)
+                                            {
+                                                <option value="@e.Id">@e.Name</option>
+                                            }
+                                        </select>
+                                    </label>
+                                    <label class="csr-inline-field">
+                                        Program Date
+                                        <input type="date" class="form-control" @bind="reviewRequest.CSR1.CSR1Date" @bind:format="yyyy-MM-dd" min="@ReviewMinDate" max="@ReviewMaxDate" />
+                                    </label>
                                 </div>
-
-                                <div class="csr-pd-field">
-                                    <span>Program Name</span>
-                                    <strong>@ShowValue(details.ProgramName)</strong>
+                            }
+                        }
+                        else
+                        {
+                            <div class="csr-pd-panel csr-pd-info-grid">
+                                <div class="csr-pd-info-column">
+                                    <div class="csr-pd-field"><span>Program Type</span><strong>@ShowValue(details.ProgramType)</strong></div>
+                                    <div class="csr-pd-field"><span>Program Name</span><strong>@ShowValue(details.ProgramName)</strong></div>
+                                    <div class="csr-pd-field"><span>Number of Programs</span><strong>@details.NumberOfPrograms</strong></div>
+                                    <div class="csr-pd-field"><span>Responsible Person</span><strong>@ShowValue(details.ResponsiblePersonName)</strong></div>
                                 </div>
-
-                                <div class="csr-pd-field">
-                                    <span>Number of Programs</span>
-                                    <strong>@details.NumberOfPrograms</strong>
+                                <div class="csr-pd-info-column">
+                                    <div class="csr-pd-field"><span>HQ</span><strong>@ShowValue(details.HeadquarterName)</strong></div>
+                                    <div class="csr-pd-field"><span>Location</span><strong>@ShowValue(details.LocationName)</strong></div>
+                                    <div class="csr-pd-field"><span>Budget</span><strong>@FormatAmount(details.Budget)</strong></div>
+                                    <div class="csr-pd-field"><span>Program Date</span><strong>@details.CSR1Date.ToString("dd MMM yyyy")</strong></div>
                                 </div>
-
-                                <div class="csr-pd-field csr-pd-highlight-green">
-                                    <span>Responsible Person</span>
-                                    <strong>@ShowValue(details.ResponsiblePersonName)</strong>
-                                </div>
-
                             </div>
-
-
-                            <div class="csr-pd-info-column">
-
-                                <div class="csr-pd-field">
-                                    <span>HQ</span>
-                                    <strong>@ShowValue(details.HeadquarterName)</strong>
-                                </div>
-
-                                <div class="csr-pd-field">
-                                    <span>Location</span>
-                                    <strong>@ShowValue(details.LocationName)</strong>
-                                </div>
-
-                                <div class="csr-pd-field">
-                                    <span>Status</span>
-                                    <strong>@GetStatusDisplay(details.Status)</strong>
-                                </div>
-
-                                <div class="csr-pd-field">
-                                    <span>Submission Date</span>
-
-                                    <strong>
-                                        @details.CreatedAt.ToString("dd MMM yyyy")
-                                    </strong>
-                                </div>
-
-                            </div>
-
-                        </div>
-
+                        }
                     </section>
-
-
-                    @* ================================================= *@
-                    @* EXPENSE BREAKDOWN                                 *@
-                    @* ================================================= *@
-
                     <section class="csr-pd-section">
-
                         <h3>Expense Breakdown</h3>
-
-                        <div class="csr-pd-panel csr-pd-expense-grid">
-
-                            <div class="csr-pd-expense-column">
-
-                                @ExpenseRow(
-                                    "Printing & Stationery",
-                                    details.PrintingAndStationery)
-
-                                @ExpenseRow(
-                                    "Publicity Material",
-                                    details.PublicityMaterial)
-
-                                @ExpenseRow(
-                                    "Stage Material",
-                                    details.StageArrangements)
-
-                                @ExpenseRow(
-                                    "Service Charges - LCA",
-                                    details.ServiceChargesLCA)
-
-                                @ExpenseRow(
-                                    "Transport / Rent",
-                                    details.TransportRent)
-
-                                @ExpenseRow(
-                                    "Jeep Running Expenses",
-                                    details.JeepRunningExpenses)
-
-                            </div>
-
-
-                            <div class="csr-pd-expense-column">
-
-                                @ExpenseRow(
-                                    "Refreshments",
-                                    details.Refreshments)
-
-                                @ExpenseRow(
-                                    "Inputs",
-                                    details.Inputs)
-
-                                @ExpenseRow(
-                                    "Photography",
-                                    details.Photography)
-
-                                @ExpenseRow(
-                                    "Compliments",
-                                    details.Compliments)
-
-                                @ExpenseRow(
-                                    "Others",
-                                    details.Others)
-
-
-                                <div class="csr-pd-expense-row csr-pd-total-row">
-
-                                    <span>Total Budget</span>
-
-                                    <strong>
-                                        @FormatAmount(details.Budget)
-                                    </strong>
-
+                        @if ((CanValidate || CanApprove) && reviewRequest != null)
+                        {
+                            <div class="csr-pd-panel csr-inline-edit-grid">
+                                <label class="csr-inline-field">
+                                    Printing & Stationery
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.PrintingAndStationery" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Publicity Material
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.PublicityMaterial" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Stage Arrangements
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.StageArrangements" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Service Charges - LCA
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.ServiceChargesLCA" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Transport / Rent
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.TransportRent" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Jeep Running Expenses
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.JeepRunningExpenses" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Refreshments
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Refreshments" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Inputs
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Inputs" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Photography
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Photography" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Compliments
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Compliments" @bind:event="oninput" />
+                                </label>
+                                <label class="csr-inline-field">
+                                    Others
+                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Others" @bind:event="oninput" />
+                                </label>
+                                <div class="csr-review-total">
+                                    <strong>Total Expenses: @FormatAmount(ReviewTotalExpense)</strong>
+                                    <span>Remaining Budget: @FormatAmount(details.Budget - ReviewTotalExpense)</span>
                                 </div>
-
                             </div>
-
-                        </div>
-
+                        }
+                        else
+                        {
+                            <div class="csr-pd-panel csr-pd-expense-grid">
+                                <div class="csr-pd-expense-column">
+                                    @ExpenseRow("Printing & Stationery", details.PrintingAndStationery)
+                                    @ExpenseRow("Publicity Material", details.PublicityMaterial)
+                                    @ExpenseRow("Stage Arrangements", details.StageArrangements)
+                                    @ExpenseRow("Service Charges - LCA", details.ServiceChargesLCA)
+                                    @ExpenseRow("Transport / Rent", details.TransportRent)
+                                    @ExpenseRow("Jeep Running Expenses", details.JeepRunningExpenses)
+                                </div>
+                                <div class="csr-pd-expense-column">
+                                    @ExpenseRow("Refreshments", details.Refreshments)
+                                    @ExpenseRow("Inputs", details.Inputs)
+                                    @ExpenseRow("Photography", details.Photography)
+                                    @ExpenseRow("Compliments", details.Compliments)
+                                    @ExpenseRow("Others", details.Others)
+                                    @ExpenseRow("Allocated Budget", details.Budget)
+                                </div>
+                            </div>
+                        }
                     </section>
-
-
-                    @* ================================================= *@
-                    @* FOCUS AREAS                                       *@
-                    @* ================================================= *@
-
                     <section class="csr-pd-section">
-
-                        <h3>Focus Areas</h3>
-
-                        <div class="csr-pd-panel csr-pd-focus-grid">
-
-                            <div class="csr-pd-focus-item">
-
-                                <label>Focused Crops:</label>
-
-                                <div class="csr-pd-pills">
-
-                                    @foreach (var crop in AllFocusCrops)
+                        <h3>Focus Details</h3>
+                        @if ((CanValidate || CanApprove) && reviewRequest != null)
+                        {
+                            <div class="csr-pd-panel" style="padding:14px">
+                                <div class="csr-focus-inline-grid">
+                                    @for (var groupIndex = 1; groupIndex <= 3; groupIndex++)
                                     {
-                                        <span class="csr-pd-pill csr-pd-pill-green">
-                                            @crop
-                                        </span>
+                                        var group = groupIndex;
+                                        <div class="csr-focus-inline-card">
+                                            <strong>Focus @group</strong>
+                                            <label class="csr-inline-field">
+                                                Focused Crop
+                                                <select class="form-select" value="@GetCrop(group)" @onchange="e => SetCrop(group, e.Value?.ToString())">
+                                                    <option value="0">Select Crop</option>
+                                                    @foreach (var c in reviewCrops)
+                                                    {
+                                                        <option value="@c.Id">@c.Name</option>
+                                                    }
+                                                </select>
+                                            </label>
+                                            <label class="csr-inline-field">Focused Product</label>
+                                            <div class="csr-pd-pills">
+                                                @foreach (var productId in GetProducts(group).ToList())
+                                                {
+                                                    var product = reviewProducts.FirstOrDefault(x => x.Id == productId);
+                                                    <span class="csr-pd-pill csr-pd-pill-blue">
+                                                        @(product?.Name ?? productId.ToString())
+                                                        <button type="button" class="btn btn-sm p-0 ms-1" @onclick="() => ToggleReviewProduct(group, productId, false)">×</button>
+                                                    </span>
+                                                }
+                                            </div>
+                                            <select class="form-select mt-2" value="0" @onchange="e => AddReviewProduct(group, e.Value?.ToString())">
+                                                <option value="0">Select Product</option>
+                                                @foreach (var product in reviewProducts.Where(x => !GetProducts(group).Contains(x.Id)))
+                                                {
+                                                    <option value="@product.Id">@product.Name</option>
+                                                }
+                                            </select>
+                                        </div>
                                     }
-
-                                    @if (!AllFocusCrops.Any())
-                                    {
-                                        <span class="csr-pd-empty">-</span>
-                                    }
-
                                 </div>
-
+                                @if (!string.IsNullOrWhiteSpace(reviewError))
+                                {
+                                    <div class="text-danger mt-2">@reviewError</div>
+                                }
                             </div>
+                        }
+                        else
+                        {
+                            <div class="csr-pd-panel csr-pd-focus-grid">
+                                <div class="csr-pd-focus-item"><label>Focused Crops</label><div class="csr-pd-pills">@foreach (var crop in AllFocusCrops) {
+                                    <span class="csr-pd-pill csr-pd-pill-green">@crop</span>
+                                }
+                            </div></div>
+                            <div class="csr-pd-focus-item"><label>Focused Products</label><div class="csr-pd-pills">@foreach (var product in AllFocusProducts) {
+                                <span class="csr-pd-pill csr-pd-pill-blue">@product</span>
+                            }
+                        </div></div>
+                    </div>
+                }
+            </section>
 
+            @* ================================================= *@
+            @* BUDGET / WORKFLOW TIMELINE                        *@
+            @* ================================================= *@
 
-                            <div class="csr-pd-focus-item">
+            <section class="csr-pd-section">
 
-                                <label>Focused Products:</label>
+                <h3>Budget Details</h3>
 
-                                <div class="csr-pd-pills">
+                <div class="csr-pd-timeline">
 
-                                    @foreach (var product in AllFocusProducts)
-                                    {
-                                        <span class="csr-pd-pill csr-pd-pill-blue">
-                                            @product
-                                        </span>
-                                    }
+                    <div class="csr-pd-timeline-item">
 
-                                    @if (!AllFocusProducts.Any())
-                                    {
-                                        <span class="csr-pd-empty">-</span>
-                                    }
+                        <div class="csr-pd-timeline-marker">
+                            <i class="bi bi-check"></i>
+                        </div>
 
-                                </div>
+                        <div class="csr-pd-timeline-content">
+
+                            <strong>Created</strong>
+
+                            <div class="csr-pd-timeline-meta">
+
+                                <span>
+                                    @ShowValue(details.CreatedBy)
+                                </span>
+
+                                <span class="csr-pd-date-pill">
+                                    @details.CreatedAt.ToString("dd MMM yyyy")
+                                </span>
 
                             </div>
 
                         </div>
 
-                    </section>
+                    </div>
 
 
-                    @* ================================================= *@
-                    @* BUDGET / WORKFLOW TIMELINE                        *@
-                    @* ================================================= *@
-
-                    <section class="csr-pd-section">
-
-                        <h3>Budget Details</h3>
-
-                        <div class="csr-pd-timeline">
-
-                            <div class="csr-pd-timeline-item">
-
-                                <div class="csr-pd-timeline-marker">
-                                    <i class="bi bi-check"></i>
-                                </div>
-
-                                <div class="csr-pd-timeline-content">
-
-                                    <strong>Created</strong>
-
-                                    <div class="csr-pd-timeline-meta">
-
-                                        <span>
-                                            @ShowValue(details.CreatedBy)
-                                        </span>
-
-                                        <span class="csr-pd-date-pill">
-                                            @details.CreatedAt.ToString("dd MMM yyyy")
-                                        </span>
-
-                                    </div>
-
-                                </div>
-
-                            </div>
-
-
-                            @if (IsSubmittedOrLater)
-                            {
-                                <div class="csr-pd-timeline-item">
-
-                                    <div class="csr-pd-timeline-marker">
-                                        <i class="bi bi-check"></i>
-                                    </div>
-
-                                    <div class="csr-pd-timeline-content">
-
-                                        <strong>Submitted</strong>
-
-                                        <div class="csr-pd-timeline-meta">
-
-                                            <span>
-                                                @ShowValue(details.CreatedBy)
-                                            </span>
-
-                                            <span class="csr-pd-date-pill">
-                                                @details.CreatedAt.ToString("dd MMM yyyy")
-                                            </span>
-
-                                        </div>
-
-                                    </div>
-
-                                </div>
-                            }
-
-
-                            @if (string.Equals(
-                                details.Status,
-                                "Validated",
-                                StringComparison.OrdinalIgnoreCase)
-                                ||
-                                string.Equals(
-                                    details.Status,
-                                    "Approved",
-                                    StringComparison.OrdinalIgnoreCase))
-                            {
-                                <div class="csr-pd-timeline-item">
-
-                                    <div class="csr-pd-timeline-marker">
-                                        <i class="bi bi-check"></i>
-                                    </div>
-
-                                    <div class="csr-pd-timeline-content">
-
-                                        <strong>Validated</strong>
-
-                                        <div class="csr-pd-timeline-meta">
-
-                                            <span>
-                                                @ShowValue(details.UpdatedBy)
-                                            </span>
-
-                                            <span class="csr-pd-date-pill">
-
-                                                @(details.UpdatedAt.HasValue
-                                                    ? details.UpdatedAt.Value.ToString("dd MMM yyyy")
-                                                    : "-")
-
-                                            </span>
-
-                                        </div>
-
-                                    </div>
-
-                                </div>
-                            }
-
-
-                            @if (string.Equals(
-                                details.Status,
-                                "Approved",
-                                StringComparison.OrdinalIgnoreCase))
-                            {
-                                <div class="csr-pd-timeline-item csr-pd-timeline-last">
-
-                                    <div class="csr-pd-timeline-marker">
-                                        <i class="bi bi-check"></i>
-                                    </div>
-
-                                    <div class="csr-pd-timeline-content">
-
-                                        <strong>Approved</strong>
-
-                                        <div class="csr-pd-timeline-meta">
-
-                                            <span>
-                                                @ShowValue(details.UpdatedBy)
-                                            </span>
-
-                                            <span class="csr-pd-date-pill">
-
-                                                @(details.UpdatedAt.HasValue
-                                                    ? details.UpdatedAt.Value.ToString("dd MMM yyyy")
-                                                    : "-")
-
-                                            </span>
-
-                                        </div>
-
-                                    </div>
-
-                                </div>
-                            }
-
-                        </div>
-
-                    </section>
-
-
-                    @if (!string.IsNullOrWhiteSpace(details.Remarks))
+                    @if (IsSubmittedOrLater)
                     {
-                        <section class="csr-pd-section">
+                        <div class="csr-pd-timeline-item">
 
-                            <h3>Remarks</h3>
-
-                            <div class="csr-pd-panel csr-pd-remarks">
-                                @details.Remarks
+                            <div class="csr-pd-timeline-marker">
+                                <i class="bi bi-check"></i>
                             </div>
 
-                        </section>
+                            <div class="csr-pd-timeline-content">
+
+                                <strong>Submitted</strong>
+
+                                <div class="csr-pd-timeline-meta">
+
+                                    <span>
+                                        @ShowValue(details.CreatedBy)
+                                    </span>
+
+                                    <span class="csr-pd-date-pill">
+                                        @(details.CSR1Date != default ? details.CSR1Date.ToString("dd MMM yyyy") : "-")
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+                    }
+
+
+                    @if (IsThreeLevelWorkflow && approvalFlow != null)
+                    {
+                        @foreach (var step in approvalFlow.Steps)
+                        {
+                            <div class="csr-pd-timeline-item">
+                                <div class="csr-pd-timeline-marker">
+                                    <i class="bi @(step.Completed ? "bi-check" : "bi-hourglass")"></i>
+                                </div>
+                                <div class="csr-pd-timeline-content">
+                                    <strong>@step.Name</strong>
+                                    <div class="csr-pd-timeline-meta">
+                                        <span>@ShowValue(step.Actor)</span>
+                                        <span class="csr-pd-date-pill">@(step.At?.ToString("dd MMM yyyy") ?? "Pending")</span>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+
+                    @if (!IsThreeLevelWorkflow && (string.Equals(
+                        details.Status,
+                        "Validated",
+                        StringComparison.OrdinalIgnoreCase)
+                        ||
+                        string.Equals(
+                            details.Status,
+                            "Approved",
+                            StringComparison.OrdinalIgnoreCase)))
+                    {
+                        <div class="csr-pd-timeline-item">
+
+                            <div class="csr-pd-timeline-marker">
+                                <i class="bi bi-check"></i>
+                            </div>
+
+                            <div class="csr-pd-timeline-content">
+
+                                <strong>Validated</strong>
+
+                                <div class="csr-pd-timeline-meta">
+
+                                    <span>
+                                        @ShowValue(details.ValidateBy)
+                                    </span>
+
+                                    <span class="csr-pd-date-pill">
+
+                                        @(details.ValidateAt.HasValue
+                                            ? details.ValidateAt.Value.ToString("dd MMM yyyy")
+                                            : "-")
+
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+                    }
+
+
+                    @if (!IsThreeLevelWorkflow && string.Equals(
+                        details.Status,
+                        "Approved",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        <div class="csr-pd-timeline-item csr-pd-timeline-last">
+
+                            <div class="csr-pd-timeline-marker">
+                                <i class="bi bi-check"></i>
+                            </div>
+
+                            <div class="csr-pd-timeline-content">
+
+                                <strong>Approved</strong>
+
+                                <div class="csr-pd-timeline-meta">
+
+                                    <span>
+                                        @ShowValue(details.ApprovedBy)
+                                    </span>
+
+                                    <span class="csr-pd-date-pill">
+
+                                        @(details.ApprovedAt.HasValue
+                                            ? details.ApprovedAt.Value.ToString("dd MMM yyyy")
+                                            : "-")
+
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+                        </div>
+                    }
+
+                    @if (string.Equals(
+                        details.Status,
+                        "Rejected",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        <div class="csr-pd-timeline-item csr-pd-timeline-last">
+
+                            <div class="csr-pd-timeline-marker csr-pd-marker-rejected">
+                                <i class="bi bi-x"></i>
+                            </div>
+
+                            <div class="csr-pd-timeline-content">
+
+                                <strong style="color: #dc2626;">Rejected</strong>
+
+                                <div class="csr-pd-timeline-meta">
+
+                                    <span>
+                                        @ShowValue(details.UpdatedBy)
+                                    </span>
+
+                                    <span class="csr-pd-date-pill" style="background: #dc2626;">
+
+                                        @(details.UpdatedAt.HasValue
+                                            ? details.UpdatedAt.Value.ToString("dd MMM yyyy")
+                                            : "-")
+
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+                        </div>
                     }
 
                 </div>
 
-
-                @* ================================================= *@
-                @* FOOTER                                            *@
-                @* ================================================= *@
-
-                <div class="csr-pd-footer">
-
-                    <button type="button"
-                            class="csr-pd-footer-btn csr-pd-footer-outline">
-
-                        <i class="bi bi-download"></i>
-                        Export PDF
-
-                    </button>
+            </section>
 
 
-                    <button type="button"
-                            class="csr-pd-footer-btn csr-pd-footer-outline">
+            @if (!string.IsNullOrWhiteSpace(details.Remarks))
+            {
+                <section class="csr-pd-section">
 
-                        <i class="bi bi-printer"></i>
-                        Print
+                    <h3 style="color: #dc2626;">Remarks</h3>
 
-                    </button>
+                    <div class="csr-pd-panel csr-pd-remarks">
+                        @details.Remarks
+                    </div>
 
-
-                    <button type="button"
-                            class="csr-pd-footer-btn csr-pd-footer-primary"
-                            @onclick="OpenCsr2">
-
-                        <i class="bi bi-box-arrow-up-right"></i>
-                        Open CSR-2
-
-                    </button>
-
-                </div>
+                </section>
             }
 
         </div>
 
+
+        @* ================================================= *@
+        @* FOOTER                                            *@
+        @* ================================================= *@
+
+        <div class="csr-pd-footer">
+
+            <button type="button"
+                    class="csr-pd-footer-btn csr-pd-footer-outline">
+
+                <i class="bi bi-download"></i>
+                Export PDF
+
+            </button>
+
+
+            <button type="button"
+                    class="csr-pd-footer-btn csr-pd-footer-outline">
+
+                <i class="bi bi-printer"></i>
+                Print
+
+            </button>
+
+            @if (CanReject)
+            {
+                <button type="button"
+                        class="csr-pd-footer-btn csr-pd-footer-danger"
+                        disabled="@isActionInProgress"
+                        @onclick="OpenRejectModal">
+                    <i class="bi bi-x-circle"></i>
+                    Reject
+                </button>
+            }
+
+            @if (CanValidate)
+            {
+                <button type="button"
+                        class="csr-pd-footer-btn csr-pd-footer-validate"
+                        disabled="@isActionInProgress"
+                        @onclick="ValidateCSR1">
+                    @if (isActionInProgress)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-check-circle"></i>
+                    }
+                    Validate
+                </button>
+            }
+
+            @if (CanApprove)
+            {
+                <button type="button"
+                        class="csr-pd-footer-btn csr-pd-footer-approve"
+                        disabled="@isActionInProgress"
+                        @onclick="ApproveCSR1">
+                    @if (isActionInProgress)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1"></span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-check2-all"></i>
+                    }
+                    @ApproveButtonText
+                </button>
+            }
+            else if (IsThreeLevelWorkflow && !string.IsNullOrWhiteSpace(approvalFlow?.AwaitingLabel))
+            {
+                <div class="csr-pd-awaiting-badge">
+                    <i class="bi bi-hourglass-split"></i>
+                    <span>@approvalFlow.AwaitingLabel</span>
+                </div>
+            }
+            else if (IsAwaitingValidation)
+            {
+                <div class="csr-pd-awaiting-badge">
+                    <i class="bi bi-hourglass-split"></i>
+                    <span>Awaiting @(IsHQScope ? "MO" : "SMD") Validation</span>
+                </div>
+            }
+
+            @if (string.Equals(details.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+            {
+                <button type="button"
+                        class="csr-pd-footer-btn csr-pd-footer-primary"
+                        @onclick="OpenCsr2">
+
+                    <i class="bi bi-box-arrow-up-right"></i>
+                    Open CSR-2
+
+                </button>
+            }
+
+        </div>
+    }
+
+</div>
+
+@* Reject popup must be outside Program Details modal *@
+@if (showRejectModal)
+{
+    <div class="csr-pd-reject-modal-backdrop" @onclick="CloseRejectModal">
+        <div class="csr-pd-reject-modal" @onclick:stopPropagation="true">
+            <div class="csr-pd-reject-modal-header">
+                <h4>Reject CSR-1</h4>
+                <button type="button" class="btn-close" @onclick="CloseRejectModal"></button>
+            </div>
+
+            <div class="csr-pd-reject-modal-body">
+                <p>Please enter the reason / remarks for rejecting this CSR-1:</p>
+                <textarea class="form-control"
+                          rows="3"
+                          placeholder="Enter remarks..."
+                          @bind="rejectionRemarks"></textarea>
+
+                @if (!string.IsNullOrWhiteSpace(rejectErrorMessage))
+                {
+                    <div class="text-danger mt-2 small">@rejectErrorMessage</div>
+                }
+            </div>
+
+            <div class="csr-pd-reject-modal-footer">
+                <button type="button" class="btn btn-sm btn-secondary" @onclick="CloseRejectModal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-danger" disabled="@isActionInProgress" @onclick="SubmitRejection">
+                    Confirm Reject
+                </button>
+            </div>
+        </div>
     </div>
 }
 
+</div>
+}
+
+
+
+@if (showCSRPopup)
+{
+    <div class="csr-pd-message-overlay">
+        <div class="csr-pd-message-popup" role="alertdialog" aria-modal="true"
+             aria-labelledby="csr-pd-message-title" aria-describedby="csr-pd-message-body">
+            <div class="csr-pd-message-icon @(csrPopupSuccess ? "success" : "error")" aria-hidden="true">
+                <i class="bi @(csrPopupSuccess ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+            </div>
+            <h3 id="csr-pd-message-title">@(csrPopupSuccess ? "Success" : "Action Failed")</h3>
+            <p id="csr-pd-message-body">@csrPopupMessage</p>
+            <button type="button" class="csr-pd-message-confirm" @onclick="CloseCSRPopup">OK</button>
+        </div>
+    </div>
+}
 
 <style>
+    .csr-inline-edit-grid {
+        display: grid;
+        grid-template-columns: repeat(2,minmax(0,1fr));
+        gap: 14px;
+        padding: 16px
+    }
+
+    .csr-inline-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 11px;
+        color: #475569;
+        min-width: 0
+    }
+
+        .csr-inline-field .form-control, .csr-inline-field .form-select {
+            font-size: 12px;
+            min-height: 35px
+        }
+
+    .csr-review-total {
+        grid-column: 1/-1;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+        background: #effcf5;
+        padding: 12px;
+        border-radius: 6px
+    }
+
+    .csr-focus-inline-grid {
+        display: grid;
+        grid-template-columns: repeat(3,minmax(0,1fr));
+        gap: 12px
+    }
+
+    .csr-focus-inline-card {
+        min-width: 0;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px
+    }
+
+    @@media(max-width:750px) {
+        .csr-inline-edit-grid, .csr-focus-inline-grid {
+            grid-template-columns: 1fr
+        }
+    }
+
+
+    .csr-review-grid {
+        display: grid;
+        grid-template-columns: repeat(2,minmax(0,1fr));
+        gap: 12px;
+    }
+
+        .csr-review-grid label {
+            display: block;
+            font-size: 11px;
+            color: #334155;
+        }
+
+    .csr-review-products {
+        max-height: 155px;
+        overflow: auto;
+        border: 1px solid #ddd;
+        padding: 8px;
+        background: white;
+    }
+
+        .csr-review-products label {
+            display: block;
+            margin: 4px 0;
+        }
+
+    @@media(max-width:650px) {
+        .csr-review-grid {
+            grid-template-columns: 1fr
+        }
+    }
+    /* Match BudgetingManagements center notification. Above drawer/rejection backdrop. */
+    .csr-pd-message-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, .48);
+    }
+
+    .csr-pd-message-popup {
+        width: min(460px, 100%);
+        background: #fff;
+        border-radius: 18px;
+        padding: 38px 30px 30px;
+        text-align: center;
+        box-shadow: 0 24px 70px rgba(0,0,0,.22);
+        animation: csrPdPopupIn .2s ease-out;
+    }
+
+    .csr-pd-message-icon {
+        font-size: 60px;
+        margin-bottom: 14px;
+        line-height: 1.2;
+    }
+
+        .csr-pd-message-icon.success {
+            color: #16a34a;
+        }
+
+        .csr-pd-message-icon.error {
+            color: #dc2626;
+        }
+
+    .csr-pd-message-popup h3 {
+        color: #0f172a;
+        font-size: 23px;
+        font-weight: 700;
+        margin: 0 0 12px;
+    }
+
+    .csr-pd-message-popup p {
+        color: #475569;
+        font-size: 15px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+        margin: 0 0 26px;
+    }
+
+    .csr-pd-message-confirm {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 135px;
+        min-height: 40px;
+        padding: 10px 20px;
+        border: 0;
+        border-radius: 6px;
+        background: #2563eb;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .csr-pd-message-confirm:hover {
+            background: #1d4ed8;
+        }
+
+    @@keyframes csrPdPopupIn {
+        from {
+            opacity: 0;
+            transform: translateY(12px) scale(.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+
 
     /* =========================================================
-           DRAWER
-           ========================================================= */
+                               DRAWER
+                               ========================================================= */
 
     .csr-pd-overlay {
         position: fixed;
@@ -507,8 +865,8 @@
 
 
     /* =========================================================
-           HEADER
-           ========================================================= */
+                               HEADER
+                               ========================================================= */
 
     .csr-pd-header {
         min-height: 72px;
@@ -564,6 +922,12 @@
         color: #c2410c;
     }
 
+    .csr-pd-status-validated {
+        background: #fef3c7;
+        border: 1px solid #fde68a;
+        color: #d97706;
+    }
+
     .csr-pd-status-rejected {
         background: #fef2f2;
         border: 1px solid #fecaca;
@@ -574,6 +938,26 @@
         background: #f1f5f9;
         border: 1px solid #e2e8f0;
         color: #475569;
+    }
+
+    .csr-pd-scope-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 24px;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 10px;
+        font-weight: 600;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        color: #166534;
+    }
+
+    .csr-pd-scope-pill-state {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        color: #1d4ed8;
     }
 
     .csr-pd-close {
@@ -592,8 +976,8 @@
 
 
     /* =========================================================
-           CONTENT
-           ========================================================= */
+                               CONTENT
+                               ========================================================= */
 
     .csr-pd-content {
         flex: 1;
@@ -620,8 +1004,8 @@
 
 
     /* =========================================================
-           PROGRAM INFO
-           ========================================================= */
+                               PROGRAM INFO
+                               ========================================================= */
 
     .csr-pd-info-grid {
         display: grid;
@@ -669,8 +1053,8 @@
 
 
     /* =========================================================
-           EXPENSE
-           ========================================================= */
+                               EXPENSE
+                               ========================================================= */
 
     .csr-pd-expense-grid {
         display: grid;
@@ -717,8 +1101,8 @@
 
 
     /* =========================================================
-           FOCUS AREA
-           ========================================================= */
+                               FOCUS AREA
+                               ========================================================= */
 
     .csr-pd-focus-grid {
         padding: 12px;
@@ -772,8 +1156,8 @@
 
 
     /* =========================================================
-           TIMELINE
-           ========================================================= */
+                               TIMELINE
+                               ========================================================= */
 
     .csr-pd-timeline {
         padding: 3px 2px;
@@ -848,8 +1232,8 @@
 
 
     /* =========================================================
-           REMARKS
-           ========================================================= */
+                               REMARKS
+                               ========================================================= */
 
     .csr-pd-remarks {
         padding: 12px;
@@ -860,8 +1244,8 @@
 
 
     /* =========================================================
-           FOOTER
-           ========================================================= */
+                               FOOTER
+                               ========================================================= */
 
     .csr-pd-footer {
         min-height: 60px;
@@ -908,10 +1292,101 @@
             background: #14532d;
         }
 
+    .csr-pd-footer-validate {
+        border: 1px solid #0284c7;
+        background: #0284c7;
+        color: #ffffff;
+    }
+
+        .csr-pd-footer-validate:hover {
+            background: #0369a1;
+        }
+
+    .csr-pd-footer-approve {
+        border: 1px solid #16a34a;
+        background: #16a34a;
+        color: #ffffff;
+    }
+
+        .csr-pd-footer-approve:hover {
+            background: #15803d;
+        }
+
+    .csr-pd-footer-danger {
+        border: 1px solid #ef4444;
+        background: #ffffff;
+        color: #dc2626;
+    }
+
+        .csr-pd-footer-danger:hover {
+            background: #fef2f2;
+        }
+
+    .csr-pd-marker-rejected {
+        border-color: #ef4444 !important;
+        background: #fee2e2 !important;
+        color: #dc2626 !important;
+    }
+
+    .csr-pd-reject-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 99999 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.55);
+    }
+
+    .csr-pd-reject-modal {
+        position: relative;
+        z-index: 100000;
+        background: #ffffff;
+        width: 100%;
+        max-width: 460px;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+        overflow: hidden;
+    }
+
+    .csr-pd-reject-modal-header {
+        padding: 14px 18px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+        .csr-pd-reject-modal-header h4 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+    .csr-pd-reject-modal-body {
+        padding: 16px 18px;
+    }
+
+        .csr-pd-reject-modal-body p {
+            margin: 0 0 10px;
+            font-size: 12px;
+            color: #475569;
+        }
+
+    .csr-pd-reject-modal-footer {
+        padding: 12px 18px;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        background: #f8fafc;
+    }
+
 
     /* =========================================================
-           LOADING
-           ========================================================= */
+                               LOADING
+                               ========================================================= */
 
     .csr-pd-loading {
         min-height: 300px;
@@ -925,8 +1400,8 @@
 
 
     /* =========================================================
-           RESPONSIVE
-           ========================================================= */
+                               RESPONSIVE
+                               ========================================================= */
 
     @@media (max-width: 768px) {
 
@@ -954,6 +1429,20 @@
         }
     }
 
+    .csr-pd-awaiting-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #b45309;
+        background: #fef3c7;
+        border: 1px solid #fde68a;
+        padding: 8px 14px;
+        border-radius: 6px;
+        white-space: nowrap;
+    }
+
 </style>
 
 
@@ -972,16 +1461,138 @@
     [Parameter]
     public EventCallback<bool> IsOpenChanged { get; set; }
 
+    [Parameter]
+    public EventCallback OnStatusChanged { get; set; }
+
 
     // =========================================================
     // STATE
     // =========================================================
 
+
+    private bool showCSRPopup;
+    private bool csrPopupSuccess = true;
+    private string csrPopupMessage = string.Empty;
+
+    private void ShowCSRPopup(string message, bool success = true)
+    {
+        csrPopupMessage = message;
+        csrPopupSuccess = success;
+        showCSRPopup = true;
+    }
+
+    private void CloseCSRPopup()
+    {
+        showCSRPopup = false;
+    }
+
     private CSR1DetailsDto? details;
+    private CSR1SaveRequest? reviewRequest;
+    private string reviewError = "";
+    private sealed class ReviewLookup { public int Id { get; set; } public string Name { get; set; } = ""; }
+    private sealed class ReviewHeadquarter { public int Id { get; set; } public string HeadquarterName { get; set; } = ""; }
+    private sealed class ReviewZone { public int Id { get; set; } public string ZoneName { get; set; } = ""; }
+    private List<ReviewHeadquarter> reviewHeadquarters = new();
+    private List<ReviewZone> reviewZones = new();
+    private List<ReviewLookup> reviewEmployees = new();
+    private string ReviewMinDate => reviewRequest?.CSR1?.ProgramYear is int y && reviewRequest.CSR1.ProgramMonth is int m && m >= 1 && m <= 12 ? new DateTime(y, m, 1).ToString("yyyy-MM-dd") : "";
+    private string ReviewMaxDate => reviewRequest?.CSR1?.ProgramYear is int y && reviewRequest.CSR1.ProgramMonth is int m && m >= 1 && m <= 12 ? new DateTime(y, m, DateTime.DaysInMonth(y, m)).ToString("yyyy-MM-dd") : "";
+    private decimal ReviewTotalExpense => reviewRequest?.CSR1 == null ? 0 :
+        reviewRequest.CSR1.PrintingAndStationery + reviewRequest.CSR1.PublicityMaterial + reviewRequest.CSR1.StageArrangements +
+        reviewRequest.CSR1.ServiceChargesLCA + reviewRequest.CSR1.TransportRent + reviewRequest.CSR1.JeepRunningExpenses +
+        reviewRequest.CSR1.Refreshments + reviewRequest.CSR1.Inputs + reviewRequest.CSR1.Photography + reviewRequest.CSR1.Compliments + reviewRequest.CSR1.Others;
+    private void AddReviewProduct(int group, string? value)
+    {
+        if (int.TryParse(value, out var id) && id > 0) ToggleReviewProduct(group, id, true);
+    }
+    private List<ReviewLookup> reviewCrops = new();
+    private List<ReviewLookup> reviewProducts = new();
+    private int GetCrop(int group) => reviewRequest == null ? 0 : group switch
+    {
+        1 => reviewRequest.Crop1Id,
+        2 => reviewRequest.Crop2Id,
+        _ => reviewRequest.Crop3Id
+    };
+    private List<int> GetProducts(int group)
+    {
+        if (reviewRequest == null) return new();
+        return group switch
+        {
+            1 => reviewRequest.Product1Ids ??= new(),
+            2 => reviewRequest.Product2Ids ??= new(),
+            _ => reviewRequest.Product3Ids ??= new()
+        };
+    }
+    private void SetCrop(int group, string? value)
+    {
+        if (reviewRequest == null) return;
+        int.TryParse(value, out var cropId);
+        if (group == 1) reviewRequest.Crop1Id = cropId;
+        else if (group == 2) reviewRequest.Crop2Id = cropId;
+        else reviewRequest.Crop3Id = cropId;
+        GetProducts(group).Clear();
+    }
+    private void ToggleReviewProduct(int group, int productId, bool selected)
+    {
+        var list = GetProducts(group);
+        if (selected && !list.Contains(productId))
+        {
+            if (list.Count >= 3) { reviewError = "Maximum 3 products per focus group."; return; }
+            list.Add(productId);
+        }
+        else if (!selected) list.Remove(productId);
+        reviewError = "";
+    }
+    private async Task LoadReviewFormAsync()
+    {
+        reviewRequest = null;
+        reviewError = "";
+        try
+        {
+            reviewRequest = await Http.GetFromJsonAsync<CSR1SaveRequest>($"api/CSR1/{CSR1Id}/review-edit");
+            reviewCrops = await Http.GetFromJsonAsync<List<ReviewLookup>>("api/Budget/crops") ?? new();
+            reviewProducts = await Http.GetFromJsonAsync<List<ReviewLookup>>("api/Budget/products") ?? new();
+            reviewHeadquarters = await Http.GetFromJsonAsync<List<ReviewHeadquarter>>("api/Budget/headquarters") ?? new();
+            reviewZones = await Http.GetFromJsonAsync<List<ReviewZone>>("api/Budget/zones") ?? new();
+            reviewEmployees = await Http.GetFromJsonAsync<List<ReviewLookup>>("api/Budget/employees") ?? new();
+        }
+        catch (Exception ex) { reviewError = $"Could not load editable CSR1 data: {ex.Message}"; }
+    }
+
+
+    // New workflow is opt-in per CSR-1 record. The server must persist this flag.
+    // Legacy records continue to use the original role and status checks.
+    private Csr1ApprovalFlow? approvalFlow;
+    private sealed class Csr1ApprovalFlow
+    {
+        public bool IsThreeLevelWorkflow { get; set; }
+        public bool CanApprove { get; set; }
+        public bool CanValidate { get; set; }
+        public bool CanReject { get; set; }
+        public string? ApprovalLabel { get; set; }
+        public string? AwaitingLabel { get; set; }
+        public string? ProgramMonth { get; set; }
+        public List<Csr1ApprovalStep> Steps { get; set; } = new();
+    }
+    private sealed class Csr1ApprovalStep
+    {
+        public string Name { get; set; } = "";
+        public string? Actor { get; set; }
+        public DateTime? At { get; set; }
+        public bool Completed { get; set; }
+    }
+    private bool IsThreeLevelWorkflow => approvalFlow?.IsThreeLevelWorkflow == true;
+    private string ApproveButtonText => IsThreeLevelWorkflow
+        ? (approvalFlow?.ApprovalLabel ?? "Approve stage") : "Approve";
 
     private bool isLoading = false;
 
     private int lastLoadedId = 0;
+
+    private bool isActionInProgress = false;
+    private bool showRejectModal = false;
+    private string rejectionRemarks = "";
+    private string rejectErrorMessage = "";
 
 
     // =========================================================
@@ -1013,12 +1624,28 @@
                 await Http.GetFromJsonAsync<CSR1DetailsDto>(
                     $"api/CSR1/details/{CSR1Id}");
 
+            await LoadReviewFormAsync();
+            approvalFlow = null;
+            // Server supplies workflow mode and permissions for post-26th applications.
+            // A missing endpoint does not change legacy button behavior.
+            try
+            {
+                using var response = await Http.GetAsync($"api/CSR1/{CSR1Id}/workflow");
+                if (response.IsSuccessStatusCode)
+                    approvalFlow = await response.Content.ReadFromJsonAsync<Csr1ApprovalFlow>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"CSR1 optional workflow metadata unavailable: {ex.Message}");
+            }
+
             lastLoadedId =
                 CSR1Id;
         }
         catch (Exception ex)
         {
             details = null;
+            approvalFlow = null;
 
             Console.WriteLine(
                 $"CSR1 Details Load Error: {ex.Message}");
@@ -1079,7 +1706,7 @@
 
 
     // =========================================================
-    // STATUS FLOW
+    // STATUS FLOW & WORKFLOW ELIGIBILITY
     // =========================================================
 
     private bool IsSubmittedOrLater =>
@@ -1089,6 +1716,178 @@
             "Draft",
             StringComparison.OrdinalIgnoreCase);
 
+    // The API resolves CSR-1 scope from the creator role first.
+    // A State-level application may still contain HeadquarterId,
+    // so never override an explicit State scope with that value.
+    private bool IsHQScope =>
+        string.Equals(details?.Scope, "HQ", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsStateScope =>
+        string.Equals(details?.Scope, "State", StringComparison.OrdinalIgnoreCase);
+
+    // Existing rules below remain unchanged; only three-level records branch away.
+    private bool CanValidate => IsThreeLevelWorkflow
+        ? details != null && approvalFlow?.CanValidate == true
+        : LegacyCanValidate;
+    private bool CanApprove => IsThreeLevelWorkflow
+        ? details != null && approvalFlow?.CanApprove == true
+        : LegacyCanApprove;
+    private bool CanReject => IsThreeLevelWorkflow
+        ? details != null && approvalFlow?.CanReject == true
+        : LegacyCanReject;
+
+    private bool LegacyCanValidate =>
+        details != null &&
+        (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(details.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(details.Status, "Pending", StringComparison.OrdinalIgnoreCase)) &&
+        (loginState.IsAdmin ||
+         (IsHQScope && loginState.UserRole == AppRole.MO) ||
+         (IsStateScope && loginState.UserRole == AppRole.SMD));
+
+    private bool LegacyCanApprove =>
+        details != null &&
+        (string.Equals(details.Status, "Validated", StringComparison.OrdinalIgnoreCase) ||
+         (loginState.IsAdmin && (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(details.Status, "Validated", StringComparison.OrdinalIgnoreCase)))) &&
+        (loginState.IsAdmin ||
+         (IsHQScope && (loginState.UserRole == AppRole.RM || loginState.UserRole == AppRole.RMD)) ||
+         (IsStateScope && loginState.UserRole == AppRole.SMM));
+
+    private bool IsAwaitingValidation => !IsThreeLevelWorkflow && LegacyIsAwaitingValidation;
+    private bool LegacyIsAwaitingValidation =>
+        details != null &&
+        (string.Equals(details.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(details.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(details.Status, "Pending", StringComparison.OrdinalIgnoreCase)) &&
+        ((IsHQScope && (loginState.UserRole == AppRole.RM || loginState.UserRole == AppRole.RMD)) ||
+         (IsStateScope && loginState.UserRole == AppRole.SMM));
+
+    private bool LegacyCanReject =>
+        details != null &&
+        !string.Equals(details.Status, "Approved", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(details.Status, "Rejected", StringComparison.OrdinalIgnoreCase) &&
+        !string.Equals(details.Status, "Draft", StringComparison.OrdinalIgnoreCase) &&
+        (loginState.IsAdmin ||
+         (IsHQScope && (loginState.UserRole == AppRole.MO || loginState.UserRole == AppRole.RM || loginState.UserRole == AppRole.RMD)) ||
+         (IsStateScope && (loginState.UserRole == AppRole.SMD || loginState.UserRole == AppRole.SMM)));
+
+    private async Task ValidateCSR1()
+    {
+        if (details == null || isActionInProgress || !CanValidate || reviewRequest == null) return;
+        try
+        {
+            isActionInProgress = true;
+            reviewError = "";
+            var response = await Http.PostAsJsonAsync($"api/CSR1/{details.Id}/validate", reviewRequest);
+            if (response.IsSuccessStatusCode)
+            {
+                ShowCSRPopup("CSR-1 validated successfully.");
+                await LoadCSR1Details();
+                await OnStatusChanged.InvokeAsync();
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                ShowCSRPopup(string.IsNullOrWhiteSpace(err) ? "Failed to validate CSR-1." : err, false);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowCSRPopup($"Error validating CSR-1: {ex.Message}", false);
+        }
+        finally
+        {
+            isActionInProgress = false;
+        }
+    }
+
+    private async Task ApproveCSR1()
+    {
+        if (details == null || isActionInProgress || !CanApprove || reviewRequest == null) return;
+        try
+        {
+            isActionInProgress = true;
+            // Backend must branch by persisted workflow mode and authorize each stage.
+            reviewError = "";
+            var response = await Http.PostAsJsonAsync($"api/CSR1/{details.Id}/approve", reviewRequest);
+            if (response.IsSuccessStatusCode)
+            {
+                ShowCSRPopup(IsThreeLevelWorkflow
+                    ? "CSR-1 approval stage completed successfully."
+                    : "CSR-1 approved successfully.");
+                await LoadCSR1Details();
+                await OnStatusChanged.InvokeAsync();
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                ShowCSRPopup(string.IsNullOrWhiteSpace(err) ? "Failed to approve CSR-1." : err, false);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowCSRPopup($"Error approving CSR-1: {ex.Message}", false);
+        }
+        finally
+        {
+            isActionInProgress = false;
+        }
+    }
+
+    private void OpenRejectModal()
+    {
+        rejectionRemarks = "";
+        rejectErrorMessage = "";
+        showRejectModal = true;
+    }
+
+    private void CloseRejectModal()
+    {
+        showRejectModal = false;
+        rejectionRemarks = "";
+        rejectErrorMessage = "";
+    }
+
+    private async Task SubmitRejection()
+    {
+        if (details == null || isActionInProgress) return;
+        if (string.IsNullOrWhiteSpace(rejectionRemarks))
+        {
+            rejectErrorMessage = "Please enter rejection remarks.";
+            ShowCSRPopup(rejectErrorMessage, false);
+            return;
+        }
+
+        try
+        {
+            isActionInProgress = true;
+            var request = new CSR1RejectRequest { Remarks = rejectionRemarks.Trim() };
+            var response = await Http.PostAsJsonAsync($"api/CSR1/{details.Id}/reject", request);
+            if (response.IsSuccessStatusCode)
+            {
+                ShowCSRPopup("CSR-1 rejected successfully.");
+                showRejectModal = false;
+                await LoadCSR1Details();
+                await OnStatusChanged.InvokeAsync();
+            }
+            else
+            {
+                var err = await response.Content.ReadAsStringAsync();
+                rejectErrorMessage = string.IsNullOrWhiteSpace(err) ? "Failed to reject CSR-1." : err;
+                ShowCSRPopup(rejectErrorMessage, false);
+            }
+        }
+        catch (Exception ex)
+        {
+            rejectErrorMessage = ex.Message;
+            ShowCSRPopup($"Error rejecting CSR-1: {ex.Message}", false);
+        }
+        finally
+        {
+            isActionInProgress = false;
+        }
+    }
 
     private string GetHeaderStatusClass(
         string? status)
@@ -1098,6 +1897,9 @@
             {
                 "approved" =>
                     "csr-pd-status-approved",
+
+                "validated" =>
+                    "csr-pd-status-validated",
 
                 "rejected" =>
                     "csr-pd-status-rejected",

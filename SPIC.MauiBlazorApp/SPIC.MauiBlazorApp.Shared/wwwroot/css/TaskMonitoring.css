@@ -7,6 +7,69 @@
     color: #1f2937;
 }
 
+/* All five filter boxes are Select2 multiselects. Default Select2 puts the "x" remove button on
+   the left of each pill, covering the first letter of whatever's selected - same fix already
+   proven on CompanySales.razor's and AllocationRequests.razor's own multiselects, rescoped to
+   .tm-page. Moves the "x" to the right and pads the pill to make room for it instead of
+   covering the text. */
+.tm-page .select2-container--default .select2-selection--multiple .select2-selection__choice {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    max-width: calc(100% - 4px);
+    min-height: 26px;
+    margin: 1px 4px 1px 0 !important;
+    padding: 3px 27px 3px 8px !important;
+    overflow: hidden;
+    color: #334155 !important;
+    font-size: 0.85rem !important;
+    line-height: 18px !important;
+    background-color: #e8eef7 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 5px !important;
+}
+
+.tm-page .select2-container--default .select2-selection--multiple .select2-selection__choice__display {
+    display: block;
+    max-width: 100%;
+    padding: 0 !important;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.tm-page .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+    position: absolute !important;
+    top: 50% !important;
+    right: 3px !important;
+    left: auto !important;
+    width: 20px !important;
+    height: 20px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #64748b !important;
+    font-size: 0 !important;
+    line-height: 1 !important;
+    background: transparent !important;
+    border: none !important;
+    transform: translateY(-50%);
+}
+
+    .tm-page .select2-container--default .select2-selection--multiple .select2-selection__choice__remove::before {
+        content: "\00D7";
+        font-size: 16px;
+        font-weight: 600;
+        line-height: 1;
+    }
+
+    .tm-page .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+        color: #0f172a !important;
+        background-color: #cbd5e1 !important;
+    }
+
 .tm-header-row {
     display: flex;
     align-items: flex-start;
@@ -26,7 +89,7 @@
 .tm-subtitle {
     margin: 0;
     font-size: 0.92rem;
-    color: #6b7280;
+    color: #000;
 }
 
 .tm-header-actions {
@@ -113,9 +176,31 @@
     outline: none;
 }
 
+/* The 5 filter <select multiple> boxes render as the browser's native multi-row listbox for the
+   brief moment before select2-interop.js wraps them (jQuery/Select2 load + OnAfterRenderAsync) -
+   height constrains that native listbox to one compact row so the page doesn't flash a tall
+   scrollable list before collapsing into the real Select2 widget. Select2 hides the original
+   <select> outright once it takes over, so this only ever matters during that brief window. */
+select.tm-select[multiple] {
+    height: 42px;
+    overflow-y: auto;
+}
+
     .tm-select:focus {
         border-color: #15803d;
     }
+
+.tm-date-range {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tm-date-range-sep {
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    color: #000;
+}
 
 .tm-filter-footer {
     display: flex;
@@ -123,51 +208,66 @@
     gap: 10px;
 }
 
-/* ---------- Task table ---------- */
-.tm-table-card {
+/* ---------- Task table (SpicDataTable) ----------
+   SpicDataTable's own .main-card/.section-header/.section-title/.table-controls ship with
+   zero desktop styling (it only touches them in its phone media query) - every consuming
+   page scopes its own layout for them, same as AllocationRequests.css/EmployeeRegistration.css.
+   table-layout: fixed with explicit per-column widths avoids the auto-layout trap found on
+   AllocationRequests: an unconstrained actions column (or any single constrained column)
+   makes the browser dump its leftover row width somewhere unpredictable instead of sizing
+   every column deliberately. */
+.tm-page .main-card {
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 12px;
-    padding: 0.5rem 1.5rem;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 20px;
 }
 
-.tm-table-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+.tm-page .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 1.1rem;
 }
 
-.tm-table {
-    width: 100%;
-    border-collapse: collapse;
-    min-width: 680px;
+.tm-page .section-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #111827;
 }
 
-    .tm-table th {
-        text-align: left;
-        font-size: 0.9rem;
-        font-weight: 700;
-        color: #111827;
-        padding: 1rem 0.75rem;
-        border-bottom: 1px solid #e5e7eb;
-        white-space: nowrap;
-    }
+.tm-page .table-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
 
-    .tm-table th:first-child,
-    .tm-table td:first-child {
-        padding-left: 0;
-    }
+.tm-quick-search {
+    width: 260px;
+    max-width: 100%;
+}
 
-    .tm-table td {
-        padding: 1rem 0.75rem;
-        border-bottom: 1px solid #f1f5f9;
-        font-size: 0.9rem;
-        color: #111827;
-        vertical-align: middle;
-    }
+.tm-page .spic-table {
+    table-layout: fixed;
+}
 
-    .tm-table tr:last-child td {
-        border-bottom: none;
-    }
+.tm-page .spic-table th.tm-th-jmdo {
+    width: 22%;
+}
+
+.tm-page .spic-table th.tm-th-sm {
+    width: 16%;
+}
+
+.tm-page .spic-table th:last-child,
+.tm-page .spic-table td.tm-cell-actions {
+    width: 70px;
+    white-space: nowrap;
+}
 
 .tm-jmdo-name {
     font-weight: 700;
@@ -259,12 +359,6 @@
         background: #f9fafb;
     }
 
-.tm-empty-cell {
-    text-align: center;
-    color: #9ca3af;
-    padding: 2rem 0.75rem;
-}
-
 /* ---------- Tablet (768px - 1199.98px) ---------- */
 @media (min-width: 768px) and (max-width: 1199.98px) {
     .tm-filter-grid {
@@ -299,7 +393,7 @@
     }
 
     .tm-filter-card,
-    .tm-table-card {
+    .tm-page .main-card {
         padding: 1.1rem 1.1rem;
     }
 
@@ -312,6 +406,16 @@
         font-size: 16px; /* prevents iOS zoom on focus */
     }
 
+    .tm-date-range {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+
+    .tm-date-range-sep {
+        text-align: center;
+    }
+
     .tm-filter-footer {
         flex-direction: column-reverse;
     }
@@ -322,73 +426,14 @@
         min-height: 44px;
     }
 
-    /* Table becomes a stack of cards, one per task, instead of a
-       horizontally-scrolling grid. */
-    .tm-table-scroll {
-        overflow-x: visible;
-    }
+    /* The task list itself is now SpicDataTable, which swaps to its own phone-card view
+       (.spic-cards) below 768px on its own - no .tm-table stacking rules needed here
+       anymore. .tm-jmdo-name / .tm-type-pill / .tm-status / .tm-icon-btn above still style
+       the card content, since those classes are applied directly to the cell markup. */
+}
 
-    .tm-table {
-        min-width: 0;
-    }
-
-    .tm-table thead {
-        display: none;
-    }
-
-    .tm-table,
-    .tm-table tbody,
-    .tm-table tr,
-    .tm-table td {
-        display: block;
-        width: 100%;
-    }
-
-    .tm-table tr {
-        border: 1px solid #e5e7eb;
-        border-radius: 10px;
-        padding: 0.9rem 1rem;
-        margin-bottom: 12px;
-    }
-
-    .tm-table tr:last-child {
-        margin-bottom: 0;
-    }
-
-    .tm-table td {
-        border-bottom: none !important;
-        padding: 6px 0;
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-        text-align: right;
-    }
-
-    .tm-table td::before {
-        content: attr(data-label);
-        font-weight: 600;
-        color: #6b7280;
-        text-align: left;
-        flex-shrink: 0;
-    }
-
-    .tm-table td.tm-cell-header {
-        display: block;
-        text-align: left;
-        padding-bottom: 10px;
-        margin-bottom: 4px;
-        border-bottom: 1px solid #f1f5f9 !important;
-    }
-
-    .tm-table td.tm-cell-actions {
-        display: flex;
-        justify-content: flex-end;
-        margin-top: 4px;
-    }
-
-    .tm-table td.tm-empty-cell {
-        display: block;
-        text-align: center;
-    }
+/* Bootstrap's .text-muted grey (#6c757d) was reported as hard to read - overridden to
+   black within this page only, scoped so it does not bleed into shared layout chrome. */
+.tm-page .text-muted {
+    color: #000 !important;
 }

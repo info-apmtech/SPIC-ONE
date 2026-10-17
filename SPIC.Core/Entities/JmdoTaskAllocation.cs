@@ -15,6 +15,10 @@ public enum JmdoTaskAllocationStatus { Pending = 0, Approved = 1, Rejected = 2 }
 /// approval status of the whole week's submission, not progress on any individual task within it.</summary>
 public enum AllocTaskStatus { YetToStart = 0, InProgress = 1, Completed = 2 }
 
+/// <summary>Set by the MDO on a dealer task during review, not by the JMDO at submission - defaults
+/// to Normal, only raised to High when the MDO specifically flags that dealer as needing priority.</summary>
+public enum DealerTaskPriority { Normal = 0, High = 1 }
+
 public class JmdoTaskAllocation
 {
     public int Id { get; set; }
@@ -49,6 +53,19 @@ public class JmdoTaskAllocation
     public DateTime? SoilSampleStartedAt { get; set; }
     public DateTime? PosLiquidationStartedAt { get; set; }
 
+    // Reverse-geocoded from the GPS fix taken at the same moment as StartedAt, and cached here
+    // (rather than re-resolved from lat/lng on every page load) so it survives navigating away
+    // and back without hitting the geocoding service again.
+    public string? SpcmStartPlaceName { get; set; }
+    public string? SoilSampleStartPlaceName { get; set; }
+    public string? PosLiquidationStartPlaceName { get; set; }
+
+    // Stamped when the matching Status above is set to Completed, so the closed task's "Time on
+    // task" can be computed once as CompletedAt - StartedAt instead of showing 00:00 forever.
+    public DateTime? SpcmCompletedAt { get; set; }
+    public DateTime? SoilSampleCompletedAt { get; set; }
+    public DateTime? PosLiquidationCompletedAt { get; set; }
+
     public JmdoTaskAllocationStatus Status { get; set; } = JmdoTaskAllocationStatus.Pending;
 
     public string? ReviewedByUserId { get; set; }
@@ -64,14 +81,27 @@ public class JmdoTaskAllocation
 }
 
 /// <summary>One picked dealer task. Name/Code are a snapshot at submission time, independent of the
-/// live SubDealerRegistration row, so edits to the dealer master don't change what was submitted.</summary>
+/// live dealer-master row, so edits to the dealer master don't change what was submitted.</summary>
 public class JmdoTaskAllocationDealer
 {
     public int Id { get; set; }
     public int AllocationId { get; set; }
     public JmdoTaskAllocation? Allocation { get; set; }
 
+    /// <summary>LEGACY. SubDealerRegistration.Id, for every row created before the dealer source
+    /// switched to DealerRegistration - never written for new rows (left 0). Rows from before the
+    /// switch keep resolving through SubDealerRegistration exactly as they always did; a plain
+    /// rename of this column to "DealerRegistrationId" would have silently reinterpreted these old
+    /// values as DealerRegistration ids, which happen to be a completely different id space (same
+    /// number can be a real but different dealer in each table) - kept separate on purpose.</summary>
     public int SubDealerId { get; set; }
+
+    /// <summary>DealerRegistration.Id, for every row created after the switch - null on legacy
+    /// rows. EffectiveDealerId(d) = DealerRegistrationId ?? -SubDealerId is the one external id
+    /// used everywhere else (DTOs, TaskKey, status matching) - negated on the legacy side so a
+    /// legacy and a new-style id can never collide even if the same allocation somehow holds both.</summary>
+    public int? DealerRegistrationId { get; set; }
+
     public string DealerName { get; set; } = string.Empty;
     public string DealerCode { get; set; } = string.Empty;
 
@@ -83,12 +113,24 @@ public class JmdoTaskAllocationDealer
     /// picks a weekday (PlannedDay) at submission time; this is set later and separately.</summary>
     public DateTime? PlannedDate { get; set; }
 
+    /// <summary>Set by the MDO during review when this specific dealer needs priority - optional,
+    /// defaults to Normal.</summary>
+    public DealerTaskPriority Priority { get; set; } = DealerTaskPriority.Normal;
+
     /// <summary>The JMDO's field-work progress on this specific dealer visit (Start/Stop on TaskDetail).</summary>
     public AllocTaskStatus Status { get; set; } = AllocTaskStatus.YetToStart;
 
     /// <summary>Stamped when Status is set to InProgress - lets "Time on task" resume from the
     /// real elapsed time instead of 0 on every page load.</summary>
     public DateTime? StartedAt { get; set; }
+
+    /// <summary>Stamped when Status is set to Completed - lets "Time on task" be computed once as
+    /// CompletedAt - StartedAt instead of showing 00:00 after the task is closed.</summary>
+    public DateTime? CompletedAt { get; set; }
+
+    /// <summary>Reverse-geocoded from the GPS fix taken at StartedAt - cached here so it survives
+    /// navigating away and back without a repeat geocoding call.</summary>
+    public string? StartPlaceName { get; set; }
 }
 
 /// <summary>One picked MD/training program. Name/Budget are a snapshot at submission time, same
@@ -109,6 +151,14 @@ public class JmdoTaskAllocationProgram
     /// <summary>Stamped when Status is set to InProgress - lets "Time on task" resume from the
     /// real elapsed time instead of 0 on every page load.</summary>
     public DateTime? StartedAt { get; set; }
+
+    /// <summary>Stamped when Status is set to Completed - lets "Time on task" be computed once as
+    /// CompletedAt - StartedAt instead of showing 00:00 after the task is closed.</summary>
+    public DateTime? CompletedAt { get; set; }
+
+    /// <summary>Reverse-geocoded from the GPS fix taken at StartedAt - cached here so it survives
+    /// navigating away and back without a repeat geocoding call.</summary>
+    public string? StartPlaceName { get; set; }
 }
 
 /// <summary>Which kind of task a JmdoTaskCloseout record closes out - mirrors TaskDetail.razor's
@@ -126,7 +176,9 @@ public class JmdoTaskCloseout
 
     public JmdoCloseoutKind Kind { get; set; }
 
-    /// <summary>Which JmdoTaskAllocationDealer this closes out, for Kind == Dealer.</summary>
+    /// <summary>Which JmdoTaskAllocationDealer this closes out, for Kind == Dealer - matches
+    /// JmdoTaskAllocationDealer's EffectiveDealerId (DealerRegistrationId for new rows, negated
+    /// SubDealerId for legacy rows), not a live dealer-master id of its own.</summary>
     public int? SubDealerId { get; set; }
 
     /// <summary>Which JmdoTaskAllocationProgram this closes out, for Kind == MdProgram.</summary>

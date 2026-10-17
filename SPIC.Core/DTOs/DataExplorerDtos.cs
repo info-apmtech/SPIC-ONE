@@ -98,4 +98,41 @@ namespace SPIC.Core.DTOs
 		public string Sql { get; set; } = string.Empty;
 		public int AffectedRows { get; set; }
 	}
+
+	/// <summary>
+	/// Single shared authority for Data Explorer access rules across UI (NavMenu, MobileSidebar,
+	/// ShellNavigation, PageGuard, DataExplorer.razor) and server API (DataExplorerController).
+	/// </summary>
+	public static class DataExplorerAuthorization
+	{
+		/// <summary>
+		/// Determines whether a user with the given role and Identity UserId (ClaimTypes.NameIdentifier)
+		/// is permitted to view or access Data Explorer.
+		/// </summary>
+		public static bool IsAuthorized(Entities.AppRole? role, string? userId, string? configuredAuthorizedIds)
+		{
+			// SuperAdmin is always allowed, with or without designation
+			if (role == Entities.AppRole.SuperAdmin)
+				return true;
+
+			// Admin and all non-CorporateAdmin roles are strictly denied
+			if (role != Entities.AppRole.CorporateAdmin || string.IsNullOrWhiteSpace(userId))
+				return false;
+
+			var trimmedUserId = userId.Trim();
+
+			// Match against comma/semicolon/pipe separated configured authorized IDs only
+			if (string.IsNullOrWhiteSpace(configuredAuthorizedIds))
+				return false;
+
+			var parts = configuredAuthorizedIds.Split(new[] { ',', ';', '|', ' ' }, System.StringSplitOptions.RemoveEmptyEntries | System.StringSplitOptions.TrimEntries);
+			foreach (var part in parts)
+			{
+				if (string.Equals(trimmedUserId, part, System.StringComparison.OrdinalIgnoreCase))
+					return true;
+			}
+
+			return false;
+		}
+	}
 }

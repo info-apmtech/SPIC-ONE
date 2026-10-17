@@ -4,6 +4,7 @@
 @using SPIC.Core.DTOs
 
 @inject HttpClient Http
+@inject NavigationManager NavigationManager
 
 <div class="container-fluid py-4 px-0">
 
@@ -136,16 +137,19 @@
         <div class="csrm-filter-body">
             <div class="csrm-filter-grid">
 
-                <div class="csrm-form-group">
-                    <label class="csrm-form-label">Date Range</label>
-                    <div class="csrm-input-wrapper">
-                        <input type="text" class="csrm-form-control" placeholder="01 Apr 2025 - 28 Apr 2025" readonly style="padding-right: 36px;">
-                        <svg class="csrm-input-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="16" y1="2" x2="16" y2="6"></line>
-                            <line x1="8" y1="2" x2="8" y2="6"></line>
-                            <line x1="3" y1="10" x2="21" y2="10"></line>
-                        </svg>
+                <div class="csrm-form-group" style="grid-column: span 2;">
+                    <label class="csrm-form-label">Date Range (CSR-1 Date)</label>
+                    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+                        <div>
+                            <label class="csrm-form-label" for="csr1-from-date">From Date</label>
+                            <input id="csr1-from-date" type="date" class="csrm-form-control"
+                                   style="width: 100%;" @bind="selectedFromDate" />
+                        </div>
+                        <div>
+                            <label class="csrm-form-label" for="csr1-to-date">To Date</label>
+                            <input id="csr1-to-date" type="date" class="csrm-form-control"
+                                   style="width: 100%;" @bind="selectedToDate" />
+                        </div>
                     </div>
                 </div>
 
@@ -308,15 +312,27 @@
                                     <input type="checkbox" class="csrm-checkbox" />
                                 </td>
                                 <td data-label="Program Type">@item.ProgramType</td>
-                                <td data-label="Program Name">@item.ProgramName</td>
-                                <td data-label="Submitted Date">@item.CreatedAt.ToString("dd MMM yyyy")</td>
+                                <td data-label="Program Name">
+                                    <div style="display: inline-flex; align-items: center; gap: 8px;">
+                                        <span>@item.ProgramName</span>
+                                        @if (string.Equals(item.Scope, "State", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span style="font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 12px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe;">State</span>
+                                        }
+                                        else if (string.Equals(item.Scope, "HQ", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <span style="font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 12px; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0;">HQ</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td data-label="Submitted Date">@item.CSR1Date.ToString("dd MMM yyyy")</td>
                                 <td data-label="Total Budget">
                                     ₹@item.Budget.ToString("N2", CultureInfo.CreateSpecificCulture("en-IN"))
                                 </td>
                                 <td data-label="Status">
                                     <span class="@GetStatusClass(item.Status)">@GetStatusDisplay(item.Status)</span>
                                 </td>
-                                <td data-label="Sanction Number">--</td>
+                                <td data-label="Sanction Number">@item.SanctionNo</td>
                                 <td data-label="CSR-2 Eligibility">
                                     @if (string.Equals(item.Status, "Approved", StringComparison.OrdinalIgnoreCase))
                                     {
@@ -337,7 +353,7 @@
                                                 class="csrm-action-btn csrm-icon-view"
                                                 title="View"
                                                 @onclick="() => OpenCSR1Details(item.Id)">
-                                            <svg xmlns="http://www.w3.org/2000/svg"  width="18" height="18"   viewBox="0 0 24 24"   fill="none" stroke="currentColor"  stroke-width="2"  stroke-linecap="round" stroke-linejoin="round">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                 <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
                                                 <circle cx="12" cy="12" r="3"></circle>
                                             </svg>
@@ -350,7 +366,7 @@
                                         </button>
                                         <button type="button"
                                                 class="csrm-btn-csr2 @(string.Equals(item.Status, "Approved", StringComparison.OrdinalIgnoreCase) ? "" : "disabled")"
-                                                disabled="@(!string.Equals(item.Status, "Approved", StringComparison.OrdinalIgnoreCase))">
+                                                disabled="@(!string.Equals(item.Status, "Approved", StringComparison.OrdinalIgnoreCase))" @onclick="() => OpenCsr2(item.Id)">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                                             CSR-2
                                         </button>
@@ -402,20 +418,145 @@
     }
 </div>
 
+
+@if (showCSRPopup)
+{
+    <div class="csrm-toast-overlay">
+        <div class="csrm-toast-popup" role="alertdialog" aria-modal="true"
+             aria-labelledby="csrm-popup-title" aria-describedby="csrm-popup-message">
+            <div class="csrm-toast-icon @(csrPopupSuccess ? "success" : "error")" aria-hidden="true">
+                <i class="bi @(csrPopupSuccess ? "bi-check-circle-fill" : "bi-x-circle-fill")"></i>
+            </div>
+            <h3 id="csrm-popup-title">@(csrPopupSuccess ? "Success" : "Action Failed")</h3>
+            <p id="csrm-popup-message">@csrPopupMessage</p>
+            <button type="button" class="csrm-popup-confirm" @onclick="CloseCSRPopup">OK</button>
+        </div>
+    </div>
+}
+
+<style>
+    .csrm-toast-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(15, 23, 42, .48);
+    }
+
+    .csrm-toast-popup {
+        width: min(460px, 100%);
+        background: #fff;
+        border-radius: 18px;
+        padding: 38px 30px 30px;
+        text-align: center;
+        box-shadow: 0 24px 70px rgba(0,0,0,.22);
+        animation: csrmPopupIn .2s ease-out;
+    }
+
+    .csrm-toast-icon {
+        font-size: 60px;
+        margin-bottom: 14px;
+        line-height: 1.2;
+    }
+
+        .csrm-toast-icon.success {
+            color: #16a34a;
+        }
+
+        .csrm-toast-icon.error {
+            color: #dc2626;
+        }
+
+    .csrm-toast-popup h3 {
+        color: #0f172a;
+        font-size: 23px;
+        font-weight: 700;
+        margin: 0 0 12px;
+    }
+
+    .csrm-toast-popup p {
+        color: #475569;
+        font-size: 15px;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+        margin: 0 0 26px;
+    }
+
+    .csrm-popup-confirm {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 135px;
+        min-height: 40px;
+        border: none;
+        border-radius: 6px;
+        padding: 10px 20px;
+        background: #2563eb;
+        color: white;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .csrm-popup-confirm:hover {
+            background: #1d4ed8;
+        }
+
+    @@keyframes csrmPopupIn {
+        from {
+            opacity: 0;
+            transform: translateY(12px) scale(.97);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+</style>
+
 <CSR1ProgramDetailsDrawer @bind-IsOpen="isCSR1ProgramDetailsDrawerOpen"
-                          CSR1Id="@selectedCSR1Id" />
+                          CSR1Id="@selectedCSR1Id"
+                          OnStatusChanged="LoadCSR1" />
 @code {
+
+    private bool showCSRPopup;
+    private bool csrPopupSuccess = true;
+    private string csrPopupMessage = string.Empty;
+
+    private void ShowCSRPopup(string message, bool success = true)
+    {
+        csrPopupMessage = message;
+        csrPopupSuccess = success;
+        showCSRPopup = true;
+    }
+
+    private void CloseCSRPopup()
+    {
+        showCSRPopup = false;
+    }
+
+
     private bool isCSR1ProgramDetailsDrawerOpen = false;
     private int selectedCSR1Id = 0;
 
     private void OpenCSR1Details(int id)
-{
-    selectedCSR1Id = id;
-    isCSR1ProgramDetailsDrawerOpen = true;
-}
+    {
+        selectedCSR1Id = id;
+        isCSR1ProgramDetailsDrawerOpen = true;
+    }
 
     private List<CSR1ListDto> csr1List = new();
     private bool isLoading = false;
+
+    private DateTime? selectedFromDate;
+    private DateTime? selectedToDate;
+    private DateTime? appliedFromDate;
+    private DateTime? appliedToDate;
+    private string filterErrorMessage = "";
 
     private string selectedProgramType = "";
     private string selectedProgramName = "";
@@ -434,7 +575,8 @@
     private int PendingCount => csr1List.Count(x =>
         string.Equals(x.Status, "Pending", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(x.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(x.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase));
+        string.Equals(x.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(x.Status, "Validated", StringComparison.OrdinalIgnoreCase));
 
     private int RejectedCount => csr1List.Count(x =>
         string.Equals(x.Status, "Rejected", StringComparison.OrdinalIgnoreCase));
@@ -500,6 +642,14 @@
         {
             IEnumerable<CSR1ListDto> result = csr1List;
 
+            if (appliedFromDate.HasValue)
+                result = result.Where(x => x.CSR1Date != default &&
+                    x.CSR1Date.Date >= appliedFromDate.Value.Date);
+
+            if (appliedToDate.HasValue)
+                result = result.Where(x => x.CSR1Date != default &&
+                    x.CSR1Date.Date <= appliedToDate.Value.Date);
+
             if (!string.IsNullOrWhiteSpace(appliedProgramType))
             {
                 result = result.Where(x =>
@@ -540,6 +690,17 @@
 
     private void ApplyFilters()
     {
+        filterErrorMessage = "";
+        if (selectedFromDate.HasValue && selectedToDate.HasValue &&
+            selectedFromDate.Value.Date > selectedToDate.Value.Date)
+        {
+            filterErrorMessage = "From Date cannot be later than To Date.";
+            ShowCSRPopup(filterErrorMessage, false);
+            return;
+        }
+
+        appliedFromDate = selectedFromDate;
+        appliedToDate = selectedToDate;
         appliedProgramType = selectedProgramType;
         appliedProgramName = selectedProgramName;
         appliedStatus = selectedStatus;
@@ -547,6 +708,11 @@
 
     private void ClearFilters()
     {
+        selectedFromDate = null;
+        selectedToDate = null;
+        appliedFromDate = null;
+        appliedToDate = null;
+        filterErrorMessage = "";
         selectedProgramType = "";
         selectedProgramName = "";
         selectedStatus = "";
@@ -567,21 +733,27 @@
     {
         try
         {
-            var response = await Http.DeleteAsync($"api/CSR1/{id}");
+            using var response = await Http.DeleteAsync($"api/CSR1/{id}");
 
             if (response.IsSuccessStatusCode)
             {
                 await LoadCSR1();
+                ShowCSRPopup("CSR-1 deleted successfully.");
             }
             else
             {
                 var error = await response.Content.ReadAsStringAsync();
                 Console.WriteLine($"CSR1 Delete Error: {error}");
+                ShowCSRPopup(
+                    string.IsNullOrWhiteSpace(error)
+                        ? "Unable to delete CSR-1."
+                        : $"Unable to delete CSR-1. {error}", false);
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"CSR1 Delete Error: {ex.Message}");
+            ShowCSRPopup($"Unable to delete CSR-1. {ex.Message}", false);
         }
     }
 
@@ -603,8 +775,17 @@
     private static string GetStatusDisplay(string? status)
     {
         if (string.Equals(status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase))
-            return "Pending";
+            return "Submitted";
+        if (string.Equals(status, "Validated", StringComparison.OrdinalIgnoreCase))
+            return "Validated";
 
         return string.IsNullOrWhiteSpace(status) ? "--" : status;
     }
+
+    private void OpenCsr2(int csr1Id)
+    {
+        NavigationManager.NavigateTo(
+            $"/DealerManagementTrainingProgram?csr1Id={csr1Id}");
+    }
+
 }

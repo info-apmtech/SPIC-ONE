@@ -48,6 +48,10 @@ namespace SPIC.Core.DTOs
         // Workflow
         public string Status { get; set; } = "";
 
+        public string Scope { get; set; } = "HQ";
+
+        public string? CreatorRole { get; set; }
+
         public string? Remarks { get; set; }
 
         public string? CreatedBy { get; set; }
@@ -61,6 +65,16 @@ namespace SPIC.Core.DTOs
         public string? UpdatedById { get; set; }
 
         public DateTime? UpdatedAt { get; set; }
+
+        public DateTime CSR1Date { get; set; }
+        public string? ValidateBy { get; set; }
+
+        public DateTime? ValidateAt { get; set; }
+
+        public string? ApprovedBy { get; set; }
+
+        public DateTime? ApprovedAt { get; set; }
+        public string? SanctionNo { get; set; }
 
 
         // Focus Groups

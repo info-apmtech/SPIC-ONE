@@ -29,6 +29,12 @@
                     <i class="bi bi-plus-lg"></i> Register Employee
                 </NavLink>
             }
+            @if (_canUseLocationUpdate)
+            {
+                <button class="btn-outline-green emp-action-btn" @onclick="OpenLocationUpdateModal">
+                    <i class="bi bi-pencil-square"></i> Update Region / HQ
+                </button>
+            }
         </Actions>
     </PageHeader>
 
@@ -108,6 +114,115 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4" @onclick="CloseUploadModal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* Temporary SuperAdmin-only location update. Does not touch the existing Bulk Upload dialog. *@
+    @if (_canUseLocationUpdate && _showLocationUpdateModal)
+    {
+        <div class="modal-backdrop fade show"></div>
+        <div class="modal fade show d-block emp-modal" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-dialog-centered modal-xl" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="bi bi-geo-alt me-2"></i>Update Existing Employee Region / HQ</h5>
+                        <button type="button" class="btn-close" disabled="@_locationApplying" @onclick="CloseLocationUpdateModal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-2">
+                            This update changes only <strong>Region and HQ</strong> on an existing employee login.
+                            Excel columns: <strong>EmployeeID, UserName, Region, HQ</strong>.
+                            <strong>State remains unchanged</strong>; Region is validated under the existing State.
+                            EmployeeID + UserName must match an existing login. Blank Region/HQ clears
+                            those assignments where the employee role allows it. To keep an existing value, enter it in Excel.
+                        </p>
+                        <button type="button" class="btn btn-outline-success btn-sm mb-3" @onclick="DownloadLocationUpdateTemplate">
+                            <i class="bi bi-file-earmark-excel me-1"></i> Download Region / HQ Template
+                        </button>
+                        <div>
+                            <InputFile OnChange="OnLocationUpdateFileSelected" accept=".xlsx" disabled="@(_locationPreviewLoading || _locationApplying)" />
+                        </div>
+                        @if (_locationPreviewLoading)
+                        {
+                            <p class="mt-3 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Validating employee assignments...</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_locationResult))
+                        {
+                            <div class="mt-3 alert @(_locationSuccess ? "alert-success" : "alert-warning")" style="white-space:pre-line">
+                                @_locationResult
+                            </div>
+                        }
+                        @if (_locationPlan != null)
+                        {
+                            <div class="mt-3">
+                                <strong>Preview:</strong> @_locationPlan.Changed change(s), @_locationPlan.Unchanged unchanged
+                                @if (_locationPlan.Errors.Count > 0)
+                                {
+                                    <div class="alert alert-danger mt-2">
+                                        <strong>Nothing will be saved until all these errors are fixed:</strong>
+                                        <ul class="mb-0">
+                                            @foreach (var error in _locationPlan.Errors)
+                                            {
+                                                <li>@error</li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                                @if (_locationPlan.Rows.Count > 0)
+                                {
+                                    <div class="table-responsive mt-2" style="max-height:310px;overflow:auto;">
+                                        <table class="table table-sm table-striped table-bordered align-middle">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Excel row</th>
+                                                    <th>Employee ID</th>
+                                                    <th>User Name</th>
+                                                    <th>Role</th>
+                                                    <th>Existing State (unchanged)</th>
+                                                    <th>Old Region ID</th>
+                                                    <th>New Region</th>
+                                                    <th>Old HQ ID</th>
+                                                    <th>New HQ</th>
+                                                    <th>Result</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var row in _locationPlan.Rows)
+                                                {
+                                                    <tr>
+                                                        <td>@row.ExcelRow</td>
+                                                        <td>@row.EmployeeID</td>
+                                                        <td>@row.UserName</td>
+                                                        <td>@row.Role</td>
+                                                        <td>@GetStateName(row.StateId) (@row.StateId)</td>
+                                                        <td>@row.OldRegionId</td>
+                                                        <td>@row.NewRegionName (@row.NewRegionId)</td>
+                                                        <td>@row.OldHqId</td>
+                                                        <td>@row.NewHqName (@row.NewHqId)</td>
+                                                        <td>@row.Status</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm rounded-pill px-4" disabled="@_locationApplying" @onclick="CloseLocationUpdateModal">Close</button>
+                        <button type="button" class="btn btn-success btn-sm rounded-pill px-4"
+                                disabled="@(_locationApplying || _locationPreviewLoading || _locationPlan == null || !_locationPlan.Success || _locationPlan.Changed == 0 || _locationBytes == null)"
+                                @onclick="ApplyLocationUpdate">
+                            @if (_locationApplying)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1"></span>
+                            }
+                            Apply Region / HQ Updates
+                        </button>
                     </div>
                 </div>
             </div>
@@ -255,11 +370,23 @@
     private Dictionary<string, List<string>> _uploadGroupedErrors = new();
     private List<string> _uploadMissingMasters = new();
 
+    // Temporary SuperAdmin-only Region/HQ update flow; existing bulk upload stays unchanged.
+    private bool _canUseLocationUpdate;
+    private bool _showLocationUpdateModal;
+    private bool _locationPreviewLoading;
+    private bool _locationApplying;
+    private bool _locationSuccess;
+    private byte[]? _locationBytes;
+    private string _locationFilename = "";
+    private string _locationResult = "";
+    private LocationUpdatePreview? _locationPlan;
+
     private List<EmployeeGridItem> FilteredItems = new();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadData();
+        await CheckLocationUpdateAccess();
     }
 
     private async Task LoadData()
@@ -600,6 +727,200 @@
         {
             _isUploading = false;
         }
+    }
+
+    private async Task CheckLocationUpdateAccess()
+    {
+        // The new controller requires [Authorize(Roles = "SuperAdmin")].
+        // An authorization check avoids relying on undocumented LoginState properties.
+        _canUseLocationUpdate = false;
+        try
+        {
+            using var response = await Http.GetAsync("api/EmployeeLocationUpdate/access");
+            _canUseLocationUpdate = response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            // Access denied / network unavailable: hide the button, fail closed.
+        }
+    }
+
+    private void OpenLocationUpdateModal()
+    {
+        if (!_canUseLocationUpdate) return;
+        _showLocationUpdateModal = true;
+        _locationResult = "";
+        _locationSuccess = false;
+        _locationBytes = null;
+        _locationFilename = "";
+        _locationPlan = null;
+    }
+
+    private void CloseLocationUpdateModal()
+    {
+        if (_locationApplying) return;
+        _showLocationUpdateModal = false;
+        _locationBytes = null;
+        _locationFilename = "";
+        _locationResult = "";
+        _locationPlan = null;
+    }
+
+    private async Task DownloadLocationUpdateTemplate()
+    {
+        if (!_canUseLocationUpdate) return;
+        try
+        {
+            var bytes = await Http.GetByteArrayAsync("api/EmployeeLocationUpdate/sample-template");
+            await JSRuntime.InvokeVoidAsync("downloadFileFromBytes",
+                "Employee_Region_HQ_Update_Template.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            _locationSuccess = false;
+            _locationResult = "Template download failed: " + ex.Message;
+        }
+    }
+
+    private async Task OnLocationUpdateFileSelected(InputFileChangeEventArgs e)
+    {
+        if (!_canUseLocationUpdate || e.File == null) return;
+        _locationPreviewLoading = true;
+        _locationSuccess = false;
+        _locationResult = "";
+        _locationPlan = null;
+        _locationFilename = e.File.Name;
+        _locationBytes = null;
+        try
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(5 * 1024 * 1024).CopyToAsync(ms);
+            _locationBytes = ms.ToArray();
+            await PreviewLocationUpdate();
+        }
+        catch (Exception ex)
+        {
+            _locationSuccess = false;
+            _locationResult = "Could not read location update file: " + ex.Message;
+        }
+        finally
+        {
+            _locationPreviewLoading = false;
+        }
+    }
+
+    private MultipartFormDataContent LocationUploadContent(bool includeHash)
+    {
+        var content = new MultipartFormDataContent();
+        content.Add(new StreamContent(new MemoryStream(_locationBytes!)), "file", _locationFilename);
+        if (includeHash)
+            content.Add(new StringContent(_locationPlan!.PreviewHash), "previewHash");
+        return content;
+    }
+
+    private async Task PreviewLocationUpdate()
+    {
+        if (_locationBytes == null) return;
+        using var form = LocationUploadContent(includeHash: false);
+        using var response = await Http.PostAsync("api/EmployeeLocationUpdate/preview", form);
+        var body = await response.Content.ReadAsStringAsync();
+        var result = System.Text.Json.JsonSerializer.Deserialize<LocationUpdatePreview>(body,
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        _locationPlan = result;
+        if (result == null)
+        {
+            _locationResult = "Could not parse server response: " + body;
+            return;
+        }
+        _locationResult = result.Message ?? "";
+        _locationSuccess = response.IsSuccessStatusCode && result.Success;
+    }
+
+    private async Task ApplyLocationUpdate()
+    {
+        if (!_canUseLocationUpdate || _locationBytes == null || _locationPlan == null ||
+            !_locationPlan.Success || _locationPlan.Changed <= 0 || _locationApplying)
+            return;
+
+        var confirmed = await Toast.ConfirmAsync(
+            "Apply Region / HQ updates?",
+            $"This will update {_locationPlan.Changed} existing login(s). No employee or login will be created. Continue?",
+            "Apply Updates",
+            danger: true);
+        if (!confirmed) return;
+
+        _locationApplying = true;
+        _locationSuccess = false;
+        try
+        {
+            using var form = LocationUploadContent(includeHash: true);
+            using var response = await Http.PostAsync("api/EmployeeLocationUpdate/apply", form);
+            var body = await response.Content.ReadAsStringAsync();
+            var result = System.Text.Json.JsonSerializer.Deserialize<LocationUpdateApplyResult>(body,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (response.IsSuccessStatusCode && result?.Success == true)
+            {
+                _locationSuccess = true;
+                _locationResult = $"Updated: {result.Updated}, Unchanged: {result.Unchanged}. " + (result.Message ?? "");
+                _locationPlan = null;
+                _locationBytes = null; // prevent accidental repeated apply
+                await LoadData();
+                Toast.Success("Employee Region / HQ update completed.");
+            }
+            else
+            {
+                _locationResult = result?.Message ?? ("Update failed. Please preview again. " + body);
+                if (result?.Errors.Count > 0)
+                    _locationResult += "\n" + string.Join("\n", result.Errors);
+                _locationPlan = null; // every failed Apply requires a new Preview
+            }
+        }
+        catch (Exception ex)
+        {
+            _locationResult = "Could not confirm update: " + ex.Message + ". Verify the database before retrying.";
+        }
+        finally
+        {
+            _locationApplying = false;
+        }
+    }
+
+    private sealed class LocationUpdatePreview
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public List<string> Errors { get; set; } = new();
+        public List<LocationUpdateRow> Rows { get; set; } = new();
+        public int Changed { get; set; }
+        public int Unchanged { get; set; }
+        public string PreviewHash { get; set; } = "";
+    }
+
+    private sealed class LocationUpdateRow
+    {
+        public int ExcelRow { get; set; }
+        public string EmployeeID { get; set; } = "";
+        public string UserName { get; set; } = "";
+        public string Role { get; set; } = "";
+        public int StateId { get; set; }
+        public int OldRegionId { get; set; }
+        public int NewRegionId { get; set; }
+        public int OldHqId { get; set; }
+        public int NewHqId { get; set; }
+        public string NewRegionName { get; set; } = "";
+        public string NewHqName { get; set; } = "";
+        public string Status { get; set; } = "";
+    }
+
+    private sealed class LocationUpdateApplyResult
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public int Updated { get; set; }
+        public int Unchanged { get; set; }
+        public List<string> Errors { get; set; } = new();
     }
 
     // New DTO class strictly for holding flattened grid data

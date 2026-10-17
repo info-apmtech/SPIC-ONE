@@ -1,8 +1,12 @@
 @page "/AllocationRequests"
 @using System.Net.Http.Json
+@using SPIC.Core.Entities
+@using SPIC.MauiBlazorApp.Shared.Services
 @inject NavigationManager Navigation
 @inject HttpClient Http
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+@inject LookupCacheService LookupCache
 
 <div class="container-fluid py-4 px-0 alreq-page">
 
@@ -13,70 +17,107 @@
     {
         <div class="alreq-notice-banner">
             <i class="bi bi-info-circle-fill"></i>
-            <span>@Rows.Count JMDO(s) have submitted their allocation for your approval. Review and approve them one by one.</span>
+            @if (LoginState.UserRole == AppRole.Admin)
+            {
+                <span>@Rows.Count allocation(s) shown &mdash; pending ones need your approval, approved ones can still be edited (dealer, date, targets) if something needs correcting.</span>
+            }
+            else
+            {
+                <span>@Rows.Count JMDO(s) have submitted their allocation for your approval. Review and approve them one by one.</span>
+            }
         </div>
     }
 
-    <div class="alreq-card alreq-list-card">
-        @if (_isLoading)
-        {
-            <div class="p-3 text-muted">Loading allocation requests...</div>
-        }
-        else if (_loadFailed)
-        {
-            <div class="p-3 text-muted">Couldn't load allocation requests. Please try again in a moment.</div>
-        }
-        else if (!Rows.Any())
-        {
-            <div class="p-3 text-muted">No pending allocation requests right now.</div>
-        }
-        else
-        {
-            <div class="alreq-table-scroll">
-                <table class="alreq-table alreq-list-table">
-                    <thead>
-                        <tr>
-                            <th>JMDO</th>
-                            <th>Submitted</th>
-                            <th>Dealer Tasks</th>
-                            <th>SPCM Target</th>
-                            <th>Soil Target</th>
-                            <th>MD Programs</th>
-                            <th>Pos Liquidation</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in Rows)
+    @if (_loadFailed)
+    {
+        <div class="alreq-card p-3 text-muted">Couldn't load allocation requests. Please try again in a moment.</div>
+    }
+    else
+    {
+        <SpicDataTable Items="FilteredRows"
+                       IsLoading="_isLoading"
+                       Title="Allocation Requests"
+                       FileName="AllocationRequests"
+                       ExportColumns="GetExportColumns()"
+                       SearchText="@_searchText"
+                       EmptyTitle="@(Rows.Any() ? "No allocation requests match these filters" : "No pending allocation requests")">
+            <FilterControls>
+                <div class="alreq-filter-toolbar">
+                    <input type="text" class="alreq-filter-select alreq-filter-search"
+                           placeholder="Search..."
+                           @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+                    <select class="alreq-filter-select" @bind="selectedDistrictFilter" @bind:after="OnDistrictFilterChanged">
+                        <option value="0">All Districts</option>
+                        @foreach (var district in AvailableDistrictFilters)
                         {
-                            <tr>
-                                <td class="alreq-cell-header">
-                                    <div class="alreq-jmdo-cell">
-                                        <span class="alreq-avatar">@Initials(row.JmdoName)</span>
-                                        <div>
-                                            <div class="alreq-jmdo-name">@row.JmdoName</div>
-                                            <div class="alreq-jmdo-sub">@(row.JmdoCode ?? "Code Pending") &middot; @(row.Location ?? "—")</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td data-label="Submitted">@row.SubmittedAt.ToString("dd MMM yyyy")</td>
-                                <td data-label="Dealer Tasks">@row.DealerCount</td>
-                                <td data-label="SPCM Target">@(row.SpcmTarget ?? 0)</td>
-                                <td data-label="Soil Target">@(row.SoilSampleTarget ?? 0)</td>
-                                <td data-label="MD Programs">@row.ProgramCount</td>
-                                <td data-label="Pos Liquidation">@row.PosLiquidationFieldCount</td>
-                                <td class="alreq-cell-actions">
-                                    <button type="button" class="alreq-btn-review" @onclick='() => Navigation.NavigateTo($"/AllocationRequestReview?allocationId={row.AllocationId}")'>
-                                        Review <i class="bi bi-arrow-right"></i>
-                                    </button>
-                                </td>
-                            </tr>
+                            <option value="@district.Id">@district.DistrictName</option>
                         }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </div>
+                    </select>
+                    <select class="alreq-filter-select" @bind="selectedTalukFilter" @bind:after="OnTalukFilterChanged">
+                        <option value="">All Sub Districts</option>
+                        @foreach (var taluk in AvailableTalukFilters)
+                        {
+                            <option value="@taluk">@taluk</option>
+                        }
+                    </select>
+                    <select class="alreq-filter-select" @bind="selectedJmdoFilter">
+                        <option value="">All JMDOs</option>
+                        @foreach (var jmdo in AvailableJmdoFilters)
+                        {
+                            <option value="@jmdo">@jmdo</option>
+                        }
+                    </select>
+                </div>
+            </FilterControls>
+            <TableHeader>
+                <th class="alreq-th-jmdo">JMDO</th>
+                @if (LoginState.UserRole == AppRole.Admin)
+                {
+                    <th class="alreq-th-sm" style="@SmColumnWidthStyle">Status</th>
+                }
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">Submitted</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">Dealer Tasks</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">SPCM Target</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">Soil Target</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">MD Programs</th>
+                <th class="alreq-th-sm" style="@SmColumnWidthStyle">Pos Liquidation</th>
+                <th></th>
+            </TableHeader>
+            <TableRow Context="row">
+                <td class="alreq-cell-header">
+                    <div class="alreq-jmdo-cell">
+                        <span class="alreq-avatar">@Initials(row.JmdoName)</span>
+                        <div>
+                            <div class="alreq-jmdo-name">@row.JmdoName</div>
+                            <div class="alreq-jmdo-sub">@(row.JmdoCode ?? "Code Pending") &middot; @(row.Location ?? "—")</div>
+                        </div>
+                    </div>
+                </td>
+                @if (LoginState.UserRole == AppRole.Admin)
+                {
+                    <td data-label="Status">
+                        <span class="alreq-status-pill alreq-status-@(row.Status.ToLowerInvariant())">@row.Status</span>
+                    </td>
+                }
+                <td data-label="Submitted">@row.SubmittedAt.ToString("dd MMM yyyy")</td>
+                <td data-label="Dealer Tasks">@row.DealerCount</td>
+                <td data-label="SPCM Target">@(row.SpcmTarget ?? 0)</td>
+                <td data-label="Soil Target">@(row.SoilSampleTarget ?? 0)</td>
+                <td data-label="MD Programs">@row.ProgramCount</td>
+                <td data-label="Pos Liquidation">@row.PosLiquidationFieldCount</td>
+                <td class="alreq-cell-actions">
+                    <button type="button" class="alreq-btn-review" @onclick='() => Navigation.NavigateTo($"/AllocationRequestReview?allocationId={row.AllocationId}")'>
+                        @(row.Status == "Approved" ? "Edit" : "Review") <i class="bi bi-arrow-right"></i>
+                    </button>
+                </td>
+            </TableRow>
+            <CardActions Context="row">
+                <button type="button" class="alreq-btn-review" @onclick='() => Navigation.NavigateTo($"/AllocationRequestReview?allocationId={row.AllocationId}")'>
+                    @(row.Status == "Approved" ? "Edit" : "Review") <i class="bi bi-arrow-right"></i>
+                </button>
+            </CardActions>
+        </SpicDataTable>
+    }
 
 </div>
 
@@ -84,6 +125,7 @@
     private sealed class PendingAllocationRowDto
     {
         public int AllocationId { get; set; }
+        public string Status { get; set; } = "";
         public string JmdoName { get; set; } = "";
         public string? JmdoCode { get; set; }
         public string? Location { get; set; }
@@ -93,15 +135,99 @@
         public int? SoilSampleTarget { get; set; }
         public int ProgramCount { get; set; }
         public int PosLiquidationFieldCount { get; set; }
+        public List<PendingAllocationDealerFilterDto> Dealers { get; set; } = new();
+    }
+
+    private sealed class PendingAllocationDealerFilterDto
+    {
+        public int SubDealerId { get; set; }
+        public string DealerName { get; set; } = "";
+        public string DealerCode { get; set; } = "";
+        public int? DistrictId { get; set; }
+        public string? Taluk { get; set; }
     }
 
     private bool _isLoading = true;
     private bool _loadFailed;
     private List<PendingAllocationRowDto> Rows = new();
 
+    // District / Sub District (Taluk) / JMDO filters, same cascading pattern as
+    // TasksAllocation.razor's own Dealer tab filters - 0/"" mean "no filter". District/Taluk
+    // options still come from the dealers inside each allocation (an allocation can span several
+    // districts across its dealer tasks); JMDO narrows which of those allocations are shown.
+    private int selectedDistrictFilter = 0;
+    private string selectedTalukFilter = "";
+    private string selectedJmdoFilter = "";
+
+    private IEnumerable<PendingAllocationDealerFilterDto> AllDealers => Rows.SelectMany(r => r.Dealers);
+
+    private IEnumerable<PendingAllocationDealerFilterDto> DistrictFilteredDealers =>
+        selectedDistrictFilter > 0 ? AllDealers.Where(d => d.DistrictId == selectedDistrictFilter) : AllDealers;
+
+    private IEnumerable<LocationItemDto> AvailableDistrictFilters =>
+        LookupCache.Districts
+            .Where(dist => AllDealers.Any(d => d.DistrictId == dist.Id))
+            .OrderBy(dist => dist.DistrictName);
+
+    private IEnumerable<string> AvailableTalukFilters =>
+        DistrictFilteredDealers
+            .Select(d => d.Taluk)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t);
+
+    private IEnumerable<PendingAllocationRowDto> DistrictFilteredRows =>
+        selectedDistrictFilter > 0 ? Rows.Where(r => r.Dealers.Any(d => d.DistrictId == selectedDistrictFilter)) : Rows;
+
+    private IEnumerable<PendingAllocationRowDto> DistrictAndTalukFilteredRows =>
+        string.IsNullOrWhiteSpace(selectedTalukFilter)
+            ? DistrictFilteredRows
+            : DistrictFilteredRows.Where(r => r.Dealers.Any(d => string.Equals(d.Taluk, selectedTalukFilter, StringComparison.OrdinalIgnoreCase)));
+
+    private IEnumerable<string> AvailableJmdoFilters =>
+        DistrictAndTalukFilteredRows.Select(r => r.JmdoName).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n);
+
+    private void OnDistrictFilterChanged()
+    {
+        selectedTalukFilter = "";
+        selectedJmdoFilter = "";
+    }
+
+    private void OnTalukFilterChanged() => selectedJmdoFilter = "";
+
+    private IEnumerable<PendingAllocationRowDto> FilteredRows =>
+        DistrictAndTalukFilteredRows.Where(r =>
+            string.IsNullOrWhiteSpace(selectedJmdoFilter) || string.Equals(r.JmdoName, selectedJmdoFilter, StringComparison.OrdinalIgnoreCase));
+
+    // Free-text search - SpicDataTable matches this against every column below on its own,
+    // no extra filtering logic needed here.
+    private string _searchText = "";
+
+    // table-layout: fixed needs every column told its width explicitly, computed here rather
+    // than as a flat CSS percentage: the "Status" column only renders for Admin, so the number
+    // of .alreq-th-sm columns actually in the row is 7 for Admin and 6 for everyone else. A
+    // fixed per-column % sized for one count left the row short (and the extra space collapsed
+    // the other columns into each other) whenever the other count rendered instead. Dividing a
+    // constant 74% budget (JMDO gets 20%, actions gets a fixed 110px - see AllocationRequests.css)
+    // by however many columns are actually present keeps the row exactly full either way.
+    private int SmColumnCount => LoginState.UserRole == AppRole.Admin ? 7 : 6;
+    private string SmColumnWidthStyle => $"width:{74.0 / SmColumnCount:0.##}%;";
+
+    private List<ExportColumn<PendingAllocationRowDto>> GetExportColumns() => new()
+    {
+        new() { Header = "JMDO", ValueSelector = r => r.JmdoName },
+        new() { Header = "Status", ValueSelector = r => r.Status },
+        new() { Header = "Submitted", ValueSelector = r => r.SubmittedAt.ToString("dd MMM yyyy") },
+        new() { Header = "Dealer Tasks", ValueSelector = r => r.DealerCount.ToString() },
+        new() { Header = "SPCM Target", ValueSelector = r => (r.SpcmTarget ?? 0).ToString() },
+        new() { Header = "Soil Target", ValueSelector = r => (r.SoilSampleTarget ?? 0).ToString() },
+        new() { Header = "MD Programs", ValueSelector = r => r.ProgramCount.ToString() },
+        new() { Header = "Pos Liquidation", ValueSelector = r => r.PosLiquidationFieldCount.ToString() }
+    };
+
     protected override async Task OnInitializedAsync()
     {
-        await LoadPendingAsync();
+        await Task.WhenAll(LoadPendingAsync(), LookupCache.EnsureLoadedAsync());
     }
 
     // Scoped server-side to "same HQ as the signed-in MDO" - there's no literal

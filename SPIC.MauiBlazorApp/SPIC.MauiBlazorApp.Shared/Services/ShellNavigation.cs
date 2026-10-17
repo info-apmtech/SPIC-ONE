@@ -315,10 +315,8 @@ public static class ShellNavigation
         },
         new("DataExplorer", "Data Explorer", "bi-database-fill", "/DataExplorer", "DataExplorer")
         {
-            // Mirrors NavMenu.razor / MobileSidebar.razor: BOTH list Data Explorer for Admin or
-            // SuperAdmin, and PageGuard lets those two roles through the role bypass - so the shell
-            // rule must not be narrower than the sidebar or Admin loses the entry here.
-            Group = GroupAdminTools, Rule = s => s.UserRole is AppRole.Admin or AppRole.SuperAdmin
+            // Allowed for SuperAdmin or configured CorporateAdmin only; Admin is strictly denied.
+            Group = GroupAdminTools, Rule = s => SPIC.Core.DTOs.DataExplorerAuthorization.IsAuthorized(s.UserRole, s.UserId, s?.GetDataExplorerAuthorizedId())
         },
         new("IfmsLogins", "IFMS Logins", "bi-sim-fill", "/IfmsLogins", nameof(PagePermission.IfmsRelaySetup))
         {
@@ -350,7 +348,7 @@ public static class ShellNavigation
         new("BudgetSubmissions", "Budget Submissions", "bi-journal-text", "/BudgetSubmissions", nameof(PagePermission.BudgetSubmissions)) { Group = GroupMdPortal },
         new("AnnualBudgeting", "Annual Budgeting", "bi-wallet-fill", "/AnnualBudgeting", nameof(PagePermission.AnnualBudgeting)) { Group = GroupMdPortal },
         new("ProgramMaster", "Program Master", "bi-diagram-3", "/ProgramMaster", nameof(PagePermission.ProgramMaster)) { Group = GroupMdPortal },
-        new("CREATE-CSR-1Management", "CSR-1 Create", "bi-file-earmark-text", "/CREATE-CSR-1Management", nameof(PagePermission.CSR1Create)) { Group = GroupMdPortal },
+        new("CREATE-CSR-1Management", "CSR-1 Create", "bi-file-earmark-text", "/CREATE-CSR-1Management", nameof(PagePermission.CSR1Create)) { Group = GroupMdPortal, Rule = s => !s.IsAdmin },
         new("CSR-1List", "CSR-1 Management", "bi-kanban-fill", "/CSR-1List", nameof(PagePermission.CSR1Management)) { Group = GroupMdPortal },
         new("CSR2", "CSR-2", "bi-layout-text-window-reverse", "/CSR2", nameof(PagePermission.CSR2)) { Group = GroupMdPortal },
         new("FinalReportCSRView", "Final Report CSR", "bi-file-earmark-text", "/FinalReportCSRView", nameof(PagePermission.FinalReportCSRView)) { Group = GroupMdPortal },

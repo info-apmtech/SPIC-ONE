@@ -40,16 +40,23 @@ namespace SpicAPI.Controllers
             // Idempotent on purpose: a JMDO can only have one Active session at a time, so
             // returning the existing one (instead of creating another) is both the duplicate-
             // prevention rule and how the dashboard "resumes" an in-progress session on reload.
+            var today = DateTime.Today;
+
+            // An Active session left over from an earlier day (never stopped) must not be resumed -
+            // today's points would land on that day's attendance. Close it at its last recorded point.
+            await CloseStaleSessionsAsync(userId, today);
+
             var existing = await _db.JMDOTrackingSessions
                 .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == JMDOTrackingSessionStatus.Active);
             if (existing is not null)
                 return Ok(Map(existing));
 
-            var today = DateTime.Today;
             var attendance = await _db.JMDOAttendances
                 .FirstOrDefaultAsync(a => a.UserId == userId && a.Date == today);
             if (attendance is null)
                 return BadRequest(new { Success = false, Message = "Mark today's attendance before starting tracking." });
+            if (attendance.DutyStatus != JMDODutyStatus.OnDuty)
+                return BadRequest(new { Success = false, Message = "Tracking can only be started while you are On Duty (attendance marked Present or Half Day)." });
 
             if (dto == null || !IsValidCoordinate(dto.Latitude, dto.Longitude))
                 return BadRequest(new { Success = false, Message = "A valid current location (latitude/longitude) is required to start tracking." });
@@ -152,9 +159,51 @@ namespace SpicAPI.Controllers
             session.Status = JMDOTrackingSessionStatus.Completed;
             session.UpdatedAt = now;
 
+            // Stopping tracking takes the JMDO off duty in the database too (the client already
+            // treats it that way) - both the session's own attendance day and today, if different.
+            var today = DateTime.Today;
+            var actor = User.Identity?.Name;
+            var attendances = await _db.JMDOAttendances
+                .Where(a => a.UserId == userId && (a.Id == session.AttendanceId || a.Date == today))
+                .ToListAsync();
+            foreach (var attendance in attendances)
+            {
+                attendance.DutyStatus = JMDODutyStatus.OffDuty;
+                attendance.UpdatedBy = actor;
+                attendance.UpdatedAt = now;
+            }
+
             await _db.SaveChangesAsync();
 
             return Ok(Map(session));
+        }
+
+        // Completes the caller's Active sessions that started before today, ending each at its last
+        // recorded point (or its start, if it has none) rather than "now", so the abandoned gap isn't
+        // counted as working time.
+        private async Task CloseStaleSessionsAsync(string userId, DateTime today)
+        {
+            var stale = await _db.JMDOTrackingSessions
+                .Where(s => s.UserId == userId && s.Status == JMDOTrackingSessionStatus.Active && s.StartTime < today)
+                .Select(s => new
+                {
+                    Session = s,
+                    LastPointAt = s.Points.Max(p => (DateTime?)p.RecordedAt)
+                })
+                .ToListAsync();
+            if (stale.Count == 0) return;
+
+            var now = DateTime.Now;
+            foreach (var item in stale)
+            {
+                var end = item.LastPointAt is { } last && last > item.Session.StartTime ? last : item.Session.StartTime;
+                item.Session.EndTime = end;
+                item.Session.Duration = end - item.Session.StartTime;
+                item.Session.Status = JMDOTrackingSessionStatus.Completed;
+                item.Session.UpdatedAt = now;
+            }
+
+            await _db.SaveChangesAsync();
         }
 
         // ---------------------------------------------------------------- identity

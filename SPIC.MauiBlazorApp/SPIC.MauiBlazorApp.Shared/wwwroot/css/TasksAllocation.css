@@ -25,7 +25,7 @@
 .ta-subtitle {
     margin: 0;
     font-size: 0.92rem;
-    color: #6b7280;
+    color: #000;
 }
 
 .ta-content-card {
@@ -63,6 +63,51 @@
         border-bottom-color: #15803d;
     }
 
+/* ---------- Week navigator (All Allocations) ---------- */
+.ta-week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 1.25rem;
+    padding: 0.6rem 0.9rem;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.ta-week-nav-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 0.45rem 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+    .ta-week-nav-btn:hover:not(:disabled) {
+        background: #f3f4f6;
+    }
+
+    .ta-week-nav-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+.ta-week-nav-label {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #111827;
+    text-align: center;
+}
+
 /* ---------- Pending-approval status card (All Allocations) ---------- */
 .ta-status-card {
     text-align: center;
@@ -90,7 +135,7 @@
 
 .ta-status-summary {
     font-size: 0.88rem;
-    color: #6b7280;
+    color: #000;
 }
 
 /* ---------- Wizard shell ---------- */
@@ -111,6 +156,166 @@
     padding: 10px;
     margin-right: 14px;
     transition: flex-basis 0.15s ease;
+}
+
+/* "Today's Allocation" only: groups .ta-stepper (unchanged, still shared with the steps 1-5
+   wizard above) with the colour legend below it as one column, so the legend can never end up
+   squeezed inside .ta-stepper's own row/grid layouts at narrower widths - see the markup comment
+   in TasksAllocation.razor for why that happened. Takes over the fixed sidebar width/spacing
+   .ta-stepper used to own directly; .ta-stepper itself just resets to full width/height here.
+   The wizard's own .ta-stepper (no wrap ancestor) is completely untouched by any of this. */
+.ta-stepper-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 280px;
+    margin-right: 14px;
+    transition: flex-basis 0.15s ease;
+}
+
+    .ta-stepper-wrap .ta-stepper {
+        flex: 0 0 auto;
+        margin-right: 0;
+    }
+
+/* Colour key for the task cards on the right - same 3 stages as the filter buttons above, same
+   colours as each card's own theme (.ta-today-card / .ta-status-inprogress / .ta-status-completed
+   in this file), so the user can tell what a card's colour means without clicking into it. */
+.ta-status-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 2px;
+    padding: 10px 12px 2px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.ta-status-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #000;
+}
+
+.ta-status-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Matches .ta-today-card's own default (--ta-status-accent: #ea8c2e) - no .ta-status-* class is
+   added for Yet to Start, so this is the one card theme that only exists as a CSS default, not a
+   named class, hence hard-coding the same value here. */
+.ta-legend-yettostart {
+    background: #ea8c2e;
+}
+
+.ta-legend-inprogress {
+    background: #16a34a;
+}
+
+.ta-legend-completed {
+    background: #7c3aed;
+}
+
+/* ---------- Task Summary tab ---------- */
+.ta-summary-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 1.5rem;
+}
+
+.ta-summary-stat-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+}
+
+.ta-summary-stat-icon {
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.ta-summary-stat-icon-total {
+    background: #eef2ff;
+    color: #4f46e5;
+}
+
+.ta-summary-stat-icon-yettostart {
+    background: #fff7ed;
+    color: #ea8c2e;
+}
+
+.ta-summary-stat-icon-inprogress {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.ta-summary-stat-icon-completed {
+    background: #f5f3ff;
+    color: #7c3aed;
+}
+
+.ta-summary-stat-val {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #111827;
+    line-height: 1.15;
+}
+
+.ta-summary-stat-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #000;
+}
+
+.ta-summary-row-title {
+    font-weight: 700;
+    color: #111827;
+}
+
+.ta-summary-row-sub {
+    font-size: 0.8rem;
+    color: #000;
+    margin-top: 2px;
+}
+
+.ta-summary-status-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.ta-summary-status-yettostart {
+    background: #fff7ed;
+    color: #ea8c2e;
+}
+
+.ta-summary-status-inprogress {
+    background: #f0fdf4;
+    color: #16a34a;
+}
+
+.ta-summary-status-completed {
+    background: #f5f3ff;
+    color: #7c3aed;
 }
 
 .ta-stepper-collapsed {
@@ -135,7 +340,7 @@
     padding: 10px 12px;
     text-align: left;
     cursor: pointer;
-    color: #6b7280;
+    color: #000;
     font-weight: 600;
     font-size: 0.95rem;
 }
@@ -156,7 +361,7 @@
     height: 28px;
     border-radius: 50%;
     background: #e5e7eb;
-    color: #6b7280;
+    color: #000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -177,7 +382,7 @@
     background: #f3f4f6;
     border: 1px solid #e5e7eb;
     border-radius: 6px;
-    color: #6b7280;
+    color: #000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -247,14 +452,14 @@
 
 .ta-target-meta {
     font-size: 0.85rem;
-    color: #6b7280;
+    color: #000;
     margin: 0 0 1.25rem;
 }
 
 .ta-target-label {
     display: block;
     font-size: 0.85rem;
-    color: #6b7280;
+    color: #000;
     margin-bottom: 6px;
 }
 
@@ -340,7 +545,7 @@
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     padding: 0.6rem 0.9rem;
-    color: #9ca3af;
+    color: #000;
 }
 
     .ta-search-box input {
@@ -352,6 +557,49 @@
         color: #111827;
     }
 
+/* ---------- Completed Allocations tab: date/dealer filter row ---------- */
+.ta-completed-filters {
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+
+.ta-completed-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+    .ta-completed-filter-field .ta-field-label {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #374151;
+    }
+
+    /* .ta-filter-select's own "flex: 0 1 200px" is sized for a ROW flex parent (this page's
+       step-1 toolbar) - 200px there is a WIDTH basis. .ta-completed-filter-field is a COLUMN
+       flex container (label stacked above the input), so that same declaration was read as a
+       HEIGHT basis instead, stretching every input/select to 200px tall. Reset the flex sizing
+       and set width directly now that the axis is different. */
+    .ta-completed-filter-field .ta-filter-select {
+        flex: 0 0 auto;
+        width: 190px;
+        min-width: 0;
+    }
+
+.ta-filter-btn-primary {
+    background: #15803d;
+    border-color: #15803d;
+    color: #fff;
+}
+
+    .ta-filter-btn-primary:hover {
+        background: #166534;
+        border-color: #166534;
+    }
+
 .ta-filter-btn {
     flex-shrink: 0;
     display: inline-flex;
@@ -361,6 +609,19 @@
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     padding: 0.6rem 1rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+}
+
+.ta-filter-select {
+    flex: 0 1 180px;
+    min-width: 140px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
     font-size: 0.88rem;
     font-weight: 600;
     color: #374151;
@@ -392,6 +653,15 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 10px;
+}
+
+/* Groups the existing type pills together on the left so a status pill (Task Summary tab)
+   can sit on its own at the right instead of being spread out as a 3rd space-between item. */
+.ta-dealer-top-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 
 .ta-checkbox {
@@ -459,7 +729,7 @@
     align-items: center;
     gap: 6px;
     font-size: 0.82rem;
-    color: #6b7280;
+    color: #000;
     margin-bottom: 10px;
 }
 
@@ -472,7 +742,7 @@
     margin-left: auto;
     background: none;
     border: none;
-    color: #9ca3af;
+    color: #000;
     cursor: pointer;
     padding: 2px 4px;
 }
@@ -486,7 +756,7 @@
     align-items: center;
     justify-content: space-between;
     font-size: 0.82rem;
-    color: #6b7280;
+    color: #000;
     padding: 4px 0;
 }
 
@@ -499,6 +769,12 @@
     display: flex;
     gap: 10px;
     margin-top: 10px;
+}
+
+/* Only the Today's/Completed Allocation dealer cards (ta-start-btn sits right after this row
+   with margin-top:auto and no gap) - the Step 1 wizard's own dealer-stats-row is left alone. */
+.ta-today-card .ta-dealer-stats-row {
+    margin-bottom: 0.6rem;
 }
 
 /* Step 1's dealer cards only have Pending Ack. left (Dues was removed) - let
@@ -563,7 +839,7 @@
     .ta-mini-stat-val span {
         font-size: 0.72rem;
         font-weight: 500;
-        color: #6b7280;
+        color: #000;
     }
 
 .ta-step-footer {
@@ -581,7 +857,7 @@
 
 .ta-selected-summary {
     font-size: 0.82rem;
-    color: #6b7280;
+    color: #000;
     flex: 1 1 320px;
     min-width: 0;
 }
@@ -647,7 +923,7 @@
     position: relative;
     margin-left: auto;
     flex-shrink: 0;
-    color: #9ca3af;
+    color: #000;
     font-size: 1rem;
 }
 
@@ -734,7 +1010,7 @@
 
 .ta-type-pill-outline {
     background: #fff;
-    color: #6b7280;
+    color: #000;
     border: 1px solid #e5e7eb;
 }
 
@@ -905,6 +1181,10 @@
         flex-basis: 220px;
     }
 
+    .ta-stepper-wrap {
+        flex-basis: 220px;
+    }
+
     .ta-dealer-grid {
         grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     }
@@ -923,10 +1203,12 @@
     .ta-page {
         padding-top: 12px !important;
         padding-bottom: calc(16px + var(--safe-bottom, 0px)) !important;
+        overflow-x: hidden;
     }
 
     .ta-header-card {
         padding: 1rem 1.1rem;
+        margin-bottom: 12px;
     }
 
     .ta-title {
@@ -938,11 +1220,14 @@
     }
 
     .ta-content-card {
-        padding: 1rem 1rem 1.25rem;
+        padding: 1rem 0.85rem 1.1rem;
+        min-width: 0;
     }
 
+    /* ---- Top tabs ---- */
     .ta-tabs {
         gap: 16px;
+        margin-bottom: 1rem;
     }
 
     .ta-tab {
@@ -961,75 +1246,130 @@
         font-size: 1rem;
     }
 
-    /* Wizard: the 280px step sidebar can't sit beside content on a phone
-       screen, so it becomes a horizontal, scrollable step strip above the
-       content instead. The collapse toggle only makes sense for the
-       side-by-side desktop layout, so it's hidden here and labels are
-       forced back on regardless of the (irrelevant) collapsed state. */
+    /* ---- Wizard shell: stack and STRETCH to full width ---- */
     .ta-wizard {
         flex-direction: column;
+        align-items: stretch; /* was flex-start -> children sized to content */
+        width: 100%;
+        min-width: 0;
     }
 
-    .ta-stepper {
-        flex-direction: row;
-        flex-basis: auto;
-        margin-right: 0;
-        margin-bottom: 14px;
-        gap: 6px;
-        padding: 8px;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
+    .ta-wizard-content {
+        flex: 0 0 auto; /* was 1 1 0 -> acts on height in column mode */
+        width: 100%;
+        min-width: 0;
+        padding-left: 0;
     }
 
+    /* ---- Step strip: all steps visible, equal width, no clipping ---- */
+    .ta-stepper,
     .ta-stepper-collapsed {
-        flex-basis: auto;
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(0, 1fr);
+        flex: 0 0 auto;
+        width: 100%;
+        min-width: 0;
+        gap: 4px;
+        padding: 6px;
+        margin: 0 0 14px 0;
+        overflow: visible;
     }
 
-    .ta-step-item,
-    .ta-stepper-collapsed .ta-step-item {
-        flex: 0 0 auto;
-        flex-direction: column;
-        justify-content: center;
-        gap: 4px;
-        padding: 8px 12px;
-        min-height: 44px;
+        .ta-step-item,
+        .ta-stepper-collapsed .ta-step-item {
+            position: relative;
+            min-width: 0;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 2px;
+            min-height: 56px;
+            text-align: center;
+        }
+
+    .ta-step-num {
+        width: 24px;
+        height: 24px;
+        font-size: 0.78rem;
     }
 
     .ta-step-label,
     .ta-stepper-collapsed .ta-step-label {
         display: block !important;
-        font-size: 0.72rem;
-        white-space: nowrap;
+        font-size: 0.68rem;
+        line-height: 1.2;
+        white-space: normal; /* wrap "PoS liquidation" instead of overflowing */
+        word-break: break-word;
+    }
+
+    /* Today tab: bell sits in the corner instead of taking row space */
+    .ta-today-bell {
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        margin: 0;
+        font-size: 0.8rem;
     }
 
     .ta-stepper-toggle {
         display: none;
     }
 
-    .ta-wizard-content {
-        padding-left: 0;
+    .ta-step-instruction {
+        font-size: 0.88rem;
+        margin-bottom: 0.75rem;
     }
 
+    /* ---- Sun-Sat day tabs: horizontally scrollable ---- */
+    .ta-day-tabs {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x proximity;
+        padding-bottom: 6px;
+        margin-bottom: 0.75rem;
+        scrollbar-width: thin;
+    }
+
+    .ta-day-tab {
+        scroll-snap-align: start;
+        padding: 0.4rem 0.85rem;
+        font-size: 0.8rem;
+        min-height: 36px;
+    }
+
+    /* ---- Toolbar: compact search + filters ---- */
     .ta-step-toolbar {
         flex-direction: column;
         align-items: stretch;
+        gap: 8px;
+        margin-bottom: 1rem;
     }
 
-    .ta-search-box input {
-        font-size: 16px; /* prevents iOS zoom on focus */
+    .ta-search-box {
+        flex: 0 0 auto; /* was 1 1 320px -> 320px TALL in column mode */
+        width: 100%;
+        min-width: 0;
+        padding: 0.5rem 0.75rem;
     }
 
-    .ta-target-card {
-        max-width: none;
-        padding: 1rem 1.1rem;
-    }
+        .ta-search-box input {
+            min-width: 0;
+            width: 100%;
+            font-size: 16px; /* prevents iOS zoom on focus */
+        }
 
-    .ta-target-input-grid {
-        grid-template-columns: 1fr;
-        gap: 1rem;
-    }
-
-    .ta-target-input {
+    .ta-filter-select {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        padding: 0.5rem 0.75rem;
         font-size: 16px; /* prevents iOS zoom on focus */
     }
 
@@ -1038,22 +1378,75 @@
         min-height: 44px;
     }
 
+    /* Task History's From/To/Dealer/Status filter row - .ta-completed-filter-field
+       .ta-filter-select's own width:190px (set for the desktop row-of-fields layout) has higher
+       specificity than the generic .ta-filter-select width:100% above, so it was winning here
+       too and leaving every field stuck at a fixed ~190px box instead of filling the screen.
+       Stack each field (and the two buttons) full-width, one per row, like every other
+       mobile-first filter bar on this page. */
+    .ta-completed-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .ta-completed-filter-field,
+    .ta-completed-filter-field .ta-filter-select {
+        width: 100%;
+    }
+
+    .ta-completed-filters .ta-filter-btn {
+        width: 100%;
+    }
+
+    /* ---- Cards ---- */
     .ta-dealer-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        margin-bottom: 1rem;
+    }
+
+    .ta-dealer-card {
+        min-width: 0;
+    }
+
+    .ta-dealer-name {
+        word-break: break-word;
+    }
+
+    .ta-dealer-code-row {
+        flex-wrap: wrap;
+    }
+
+    .ta-target-card {
+        max-width: none;
+        padding: 1rem;
+    }
+
+    .ta-target-input-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 1rem;
+    }
+
+    .ta-target-input {
+        font-size: 16px; /* prevents iOS zoom on focus */
     }
 
     .ta-today-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
     }
 
+    .ta-today-card,
     .ta-today-card-wide,
     .ta-today-card-narrow {
         grid-column: span 1;
         max-width: none;
+        min-width: 0;
     }
 
     .ta-today-products-row {
         flex-direction: column;
+        gap: 8px;
     }
 
     .ta-start-btn {
@@ -1069,20 +1462,25 @@
         margin-top: 1rem;
     }
 
+    /* ---- Footer: no phantom height ---- */
     .ta-step-footer {
         flex-direction: column;
         align-items: stretch;
+        gap: 10px;
     }
 
     .ta-selected-summary {
+        flex: 0 0 auto; /* was 1 1 320px -> 320px of blank space */
         order: 2;
         text-align: center;
+        word-break: break-word;
     }
 
     .ta-step-footer-actions {
         flex-direction: column-reverse;
         width: 100%;
         margin-left: 0;
+        gap: 8px;
     }
 
     .ta-btn-next,
@@ -1097,5 +1495,297 @@
     .ta-step-footer-simple {
         flex-direction: column-reverse;
         gap: 10px;
+        margin-top: 1rem;
+    }
+    /* ---- Step strip: numbers only, active step expands with its label ---- */
+    .ta-stepper,
+    .ta-stepper-collapsed {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        flex: 0 0 auto;
+        width: 100%;
+        min-width: 0;
+        gap: 6px;
+        padding: 6px;
+        margin: 0 0 12px 0;
+        overflow: hidden;
+    }
+
+    /* "Today's Allocation" only (see the .ta-stepper-wrap desktop rule above for why) - the wrap
+       takes over the bottom margin that used to separate .ta-stepper from whatever follows it, so
+       the legend sits right under the step row with its own small gap instead of a double gap. */
+    .ta-stepper-wrap,
+    .ta-stepper-wrap.ta-stepper-collapsed {
+        width: 100%;
+        flex-basis: auto;
+        margin: 0 0 14px 0;
+    }
+
+        .ta-stepper-wrap .ta-stepper {
+            margin: 0;
+            width: 100%;
+        }
+
+    /* Full phone width easily fits all 3 labels side by side - stacking them in a column (the
+       desktop default, sized for the 280px sidebar) just wasted vertical space here. */
+    .ta-status-legend {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+    }
+
+    /* ---- Task Summary tab: 2 stat cards per row instead of 4 squeezed into one ---- */
+    .ta-summary-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+        .ta-step-item,
+        .ta-stepper-collapsed .ta-step-item {
+            position: relative;
+            flex: 0 0 auto;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-width: 44px;
+            min-height: 44px;
+            padding: 6px;
+            border-radius: 999px;
+        }
+
+            .ta-step-item.active,
+            .ta-stepper-collapsed .ta-step-item.active {
+                flex: 1 1 auto;
+                min-width: 0;
+                justify-content: flex-start;
+                padding: 6px 12px 6px 6px;
+            }
+
+    .ta-step-num {
+        width: 30px;
+        height: 30px;
+        font-size: 0.85rem;
+    }
+
+    /* hide labels on inactive steps */
+    .ta-step-label,
+    .ta-stepper-collapsed .ta-step-label {
+        display: none !important;
+    }
+
+    /* show label only on the active step, single line */
+    .ta-step-item.active .ta-step-label,
+    .ta-stepper-collapsed .ta-step-item.active .ta-step-label {
+        display: block !important;
+        min-width: 0;
+        font-size: 0.82rem;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Today tab: bell becomes a corner badge on the number */
+    .ta-today-bell {
+        position: absolute;
+        top: 0;
+        left: 26px;
+        margin: 0;
+        font-size: 0; /* hide bell icon, keep red count badge */
+    }
+
+        .ta-today-bell .ta-today-badge {
+            position: static;
+            display: inline-block;
+        }
+
+    .ta-stepper-toggle {
+        display: none;
+    }
+
+    /* ---- Top tabs: tighter so more fits at 320px ---- */
+    .ta-tabs {
+        gap: 14px;
+    }
+
+    .ta-tab {
+        font-size: 0.8rem;
+    }
+}
+
+/* ---------- Task Summary tab: per-week target vs achieved breakdown ---------- */
+.ta-week-summary-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.ta-week-summary-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1.1rem 1.25rem;
+}
+
+.ta-week-summary-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.ta-week-summary-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 6px;
+}
+
+.ta-week-summary-overall {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.ta-week-summary-overall-val {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #7c3aed;
+    line-height: 1.15;
+}
+
+.ta-week-summary-overall-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #000;
+}
+
+.ta-week-target-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.ta-week-target-tile {
+    background: #f8fafc;
+    border: 1px solid #eef2f7;
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+}
+
+.ta-week-target-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 8px;
+}
+
+.ta-week-target-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.ta-week-target-bar-fill {
+    height: 100%;
+    background: #7c3aed;
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+
+.ta-week-target-numbers {
+    font-size: 0.78rem;
+    color: #000;
+}
+
+    .ta-week-target-numbers strong {
+        color: #111827;
+    }
+
+.ta-week-day-breakdown {
+    margin-top: 16px;
+}
+
+.ta-week-day-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.ta-week-day-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.ta-week-day-tile {
+    flex: 1 1 90px;
+    min-width: 80px;
+    text-align: center;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 8px 6px;
+}
+
+.ta-week-day-tile-empty {
+    background: #f9fafb;
+    border-color: #e5e7eb;
+    opacity: 0.6;
+}
+
+.ta-week-day-tile-done {
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+}
+
+.ta-week-day-name {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #000;
+}
+
+.ta-week-day-count {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #111827;
+    margin: 2px 0;
+}
+
+.ta-week-day-status {
+    font-size: 0.65rem;
+    color: #000;
+    line-height: 1.2;
+}
+
+@media (max-width: 767.98px) {
+    .ta-week-summary-header {
+        flex-direction: column;
+    }
+
+    .ta-week-summary-overall {
+        text-align: left;
+    }
+
+    .ta-week-target-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ta-week-day-tile {
+        flex: 1 1 70px;
     }
 }

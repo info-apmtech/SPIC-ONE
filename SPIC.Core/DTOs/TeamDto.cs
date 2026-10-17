@@ -21,4 +21,26 @@ namespace SPIC.Core.DTOs
         // Approved allocations whose ReviewedAt falls today.
         public int ApprovedTodayCount { get; set; }
     }
+
+    // GET api/Team/yearly-targets row - one saved JmdoYearlyTarget for the current FY.
+    public class JmdoYearlyTargetDto
+    {
+        public int EmployeeLoginId { get; set; }
+        public string Name { get; set; } = "";
+        public string? EmployeeCode { get; set; }
+        public string? HeadquarterName { get; set; }
+        public int FinancialYearStart { get; set; }
+        public int SpcmTarget { get; set; }
+        public int SoilSampleTarget { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    // PUT api/Team/yearly-targets body. The financial year is decided server-side (current
+    // April-March FY), never taken from the client.
+    public class SaveJmdoYearlyTargetDto
+    {
+        public int EmployeeLoginId { get; set; }
+        public int? SpcmTarget { get; set; }
+        public int? SoilSampleTarget { get; set; }
+    }
 }

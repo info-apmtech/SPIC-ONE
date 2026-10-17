@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Text;
 using System.Threading.Tasks;
 using static SPIC.Core.Entities.EmployeeRegistration;
@@ -90,51 +91,6 @@ namespace Spic.Infrastructure.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-        // =====================================================================
-        //  Permission System Phase 1 - page catalog tables (ADDITIVE ONLY).
-        //
-        //  These two tables are a normalized compatibility mirror of the existing
-        //  PagePermission enum + Designation.RoleAccess. Nothing at runtime reads
-        //  them yet - login, LoginState, NavMenu, PageGuard, Designation.razor
-        //  and the server-side SDWA checks all continue to use RoleAccess exactly
-        //  as before. They exist only so a future Phase 2+ can become database
-        //  driven without a destructive rewrite.
-        // =====================================================================
-
-        builder.Entity<ApplicationPage>(entity =>
-        {
-            entity.HasKey(p => p.Id);
-            entity.Property(p => p.Key).IsRequired();
-            entity.HasIndex(p => p.Key).IsUnique();
-        });
-
-        builder.Entity<DesignationPermission>(entity =>
-        {
-            entity.HasKey(dp => new { dp.DesignationId, dp.PageId });
-
-            entity.HasOne(dp => dp.Designation)
-                .WithMany()
-                .HasForeignKey(dp => dp.DesignationId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(dp => dp.Page)
-                .WithMany()
-                .HasForeignKey(dp => dp.PageId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(dp => dp.PageId);
-        });
-
-        // Page catalogue seeding was intentionally removed. ApplicationPage
-        // ("Pages") is owned by the live database (created in
-        // V5j_PagePermissionCatalog and maintained through the Page Management
-        // UI). Keeping HasData here turned every PagePermission enum change into
-        // a model diff that would INSERT/UPDATE/DELETE Pages rows in future
-        // migrations, and its enum-index ids collided with ids already in use on
-        // the live site. The Pages table, DbSet, mapping and Designation
-        // permissions are unchanged.
-
-
         // ---------------------------------------------------------------- Digital Library
         builder.Entity<LibraryContent>(entity =>
         {
@@ -180,7 +136,12 @@ namespace Spic.Infrastructure.Data
         builder.Entity<SasFarmer>(entity =>
         {
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.Mobile);
+            // Mobile must be unique among active farmers - the controller already rejects a
+            // duplicate on create/update, but that check alone can't stop two concurrent
+            // requests from both passing it before either commits. The filtered index is the
+            // actual guarantee; soft-deleted rows (IsDeleted) are excluded so a freed number
+            // can be reused by a new farmer.
+            entity.HasIndex(x => x.Mobile).IsUnique().HasFilter("\"IsDeleted\" = false");
             entity.HasIndex(x => x.Name);
             entity.HasIndex(x => x.UserId);
         });
@@ -258,6 +219,15 @@ namespace Spic.Infrastructure.Data
         builder.Entity<JmdoTaskAllocationProgram>(entity =>
         {
             entity.Property(x => x.Budget).HasColumnType("numeric(12,2)");
+        });
+
+        // MDO -> JMDO yearly targets: table created manually (no migration). The unique index
+        // mirrors the one expected on the table so save is an update, never a duplicate row.
+        builder.Entity<JmdoYearlyTarget>(entity =>
+        {
+            entity.ToTable("JmdoYearlyTargets");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.EmployeeLoginId, x.FinancialYearStart }).IsUnique();
         });
 
         builder.Entity<SampleItem>(entity =>
@@ -738,39 +708,38 @@ namespace Spic.Infrastructure.Data
                 .HasForeignKey(x => x.StateId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
-        }
 
-        // Same prettification the existing Designation UI uses (Designation.razor
-        // DisplayFor): "AnnualSales" -> "Annual Sales". Lower-case keys such as
-        // "dealerreviewlist" are left as-is, matching that UI exactly.
-        private static string PageDisplayName(string key)
-        {
-            if (string.Equals(key, nameof(PagePermission.QRScanner), StringComparison.OrdinalIgnoreCase))
-                return "QR Scanner";
-
-            var sb = new System.Text.StringBuilder();
-            for (int i = 0; i < key.Length; i++)
+            builder.Entity<RMDHQMapping>(entity =>
             {
-                if (i > 0 && char.IsUpper(key[i]) && !char.IsUpper(key[i - 1]))
-                    sb.Append(' ');
-                sb.Append(key[i]);
-            }
-            return sb.ToString();
-        }
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => new { x.EmployeeId, x.StateId, x.RegionId }).IsUnique();
+                entity.Property(x => x.HeadquartersIds).IsRequired().HasMaxLength(4000);
+                entity.Property(x => x.CreatedAt).IsRequired();
+            });
 
-        // Module grouping from PageModuleAttribute (null = standalone page).
-        private static string? PageModuleName(string key)
-        {
-            var field = typeof(PagePermission).GetField(key);
-            return field?.GetCustomAttribute<PageModuleAttribute>()?.Module;
+            builder.Entity<CSR2>(e =>
+            {
+                // Exactly one CSR-2 report per CSR-1. Remove this index if multiple reports/events are permitted.
+                e.HasIndex(x => x.CSR1Id).IsUnique();
+                e.HasOne(x => x.CSR1).WithMany().HasForeignKey(x => x.CSR1Id).OnDelete(DeleteBehavior.Restrict);
+                e.HasMany(x => x.Participants).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Employees).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Activities).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Media).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Expenses).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<CSR2Employee>().HasIndex(x => new { x.CSR2Id, x.EmployeeInformationId }).IsUnique();
+            builder.Entity<CSR2Expense>(e =>
+            {
+                e.HasIndex(x => new { x.CSR2Id, x.CategoryKey }).IsUnique();
+                e.HasMany(x => x.Proofs).WithOne(x => x.CSR2Expense).HasForeignKey(x => x.CSR2ExpenseId).OnDelete(DeleteBehavior.Cascade);
+            });
+            builder.Entity<CSR2Activity>().HasIndex(x => new { x.CSR2Id, x.SortOrder });
+            builder.Entity<CSR2Media>().HasIndex(x => new { x.CSR2Id, x.MediaType });
         }
 
         // User related
         public DbSet<Designation> Designations { get; set; }
-
-        // Permission System Phase 1 (additive - not read by any runtime flow yet)
-        public DbSet<ApplicationPage> Pages { get; set; }
-        public DbSet<DesignationPermission> DesignationPermissions { get; set; }
 
         // Location
         public DbSet<Zone> Zones { get; set; }
@@ -919,6 +888,7 @@ namespace Spic.Infrastructure.Data
 		public DbSet<JmdoTaskAllocationProgram> JmdoTaskAllocationPrograms { get; set; }
 		public DbSet<JmdoTaskCloseout> JmdoTaskCloseouts { get; set; }
 		public DbSet<JmdoTaskCloseoutProduct> JmdoTaskCloseoutProducts { get; set; }
+		public DbSet<JmdoYearlyTarget> JmdoYearlyTargets { get; set; }
 
 		//// Knowledge Community
 		public DbSet<CommunityPost> CommunityPosts { get; set; }
@@ -978,5 +948,15 @@ namespace Spic.Infrastructure.Data
         public DbSet<StateBudgetSummaryHistory> StateBudgetSummaryHistories { get; set; }
         public DbSet<RegionBudgetSummaryHistory> RegionBudgetSummaryHistories { get; set; }
         public DbSet<HeadquarterBudgetSummaryHistory> HeadquarterBudgetSummaryHistories { get; set; }
+        public DbSet<RMDHQMapping> RMDHQMappings { get; set; }
+        public DbSet<SanctionNumberSequence> SanctionNumberSequences { get; set; }
+
+        public DbSet<CSR2> CSR2s => Set<CSR2>();
+        public DbSet<CSR2Participant> CSR2Participants => Set<CSR2Participant>();
+        public DbSet<CSR2Employee> CSR2Employees => Set<CSR2Employee>();
+        public DbSet<CSR2Activity> CSR2Activities => Set<CSR2Activity>();
+        public DbSet<CSR2Media> CSR2Media => Set<CSR2Media>();
+        public DbSet<CSR2Expense> CSR2Expenses => Set<CSR2Expense>();
+        public DbSet<CSR2ExpenseProof> CSR2ExpenseProofs => Set<CSR2ExpenseProof>();
     }
 }

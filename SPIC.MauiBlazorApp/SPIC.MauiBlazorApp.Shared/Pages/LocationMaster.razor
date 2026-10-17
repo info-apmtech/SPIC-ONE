@@ -558,11 +558,20 @@
 			}
 
 			<td>
-				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
-					  style="cursor:pointer"
-					  @onclick="() => ToggleStatus(item)">
-					@(item.IsActive ? "Active" : "Inactive")
-				</span>
+				@if (LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Update"))
+				{
+					<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+						  style="cursor:pointer"
+						  @onclick="() => ToggleStatus(item)">
+						@(item.IsActive ? "Active" : "Inactive")
+					</span>
+				}
+				else
+				{
+					<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+						@(item.IsActive ? "Active" : "Inactive")
+					</span>
+				}
 			</td>
 			<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
 			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Update") || LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Delete"))
@@ -583,9 +592,18 @@
 		</TableRow>
 
 		<CardActions Context="item">
-			<button type="button" class="btn btn-sm @(item.IsActive ? "btn-outline-success" : "btn-outline-secondary")" @onclick="() => ToggleStatus(item)">
-				<i class="bi @(item.IsActive ? "bi-toggle-on" : "bi-toggle-off")"></i> @(item.IsActive ? "Active" : "Inactive")
-			</button>
+			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Update"))
+			{
+				<button type="button" class="btn btn-sm @(item.IsActive ? "btn-outline-success" : "btn-outline-secondary")" @onclick="() => ToggleStatus(item)">
+					<i class="bi @(item.IsActive ? "bi-toggle-on" : "bi-toggle-off")"></i> @(item.IsActive ? "Active" : "Inactive")
+				</button>
+			}
+			else
+			{
+				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+					@(item.IsActive ? "Active" : "Inactive")
+				</span>
+			}
 			@if (LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Update"))
 			{
 				<button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
@@ -827,6 +845,8 @@
 	// Delete confirmation
 	private bool _showDeleteConfirm;
 	private bool _isDeleting;
+	private bool _isCheckingDependencies;
+	private string? _deleteApiBase;
 	private LocationItemDto? _deleteTarget;
 	private List<string> _dependencyWarnings = new();
 
@@ -905,6 +925,7 @@
 	{
 		if (ActiveTab == tabName) return;
 		ActiveTab = tabName;
+		CancelDelete();
 		_searchText = "";
 		_statusFilter = "All";
 		ResetForm();
@@ -1137,9 +1158,13 @@
 		catch { }
 	}
 
-	private void DeleteItem(LocationItemDto item)
+	private async Task DeleteItem(LocationItemDto item)
 	{
+		if (_isCheckingDependencies || _isDeleting) return;
+		_isCheckingDependencies = true;
 		_deleteTarget = item;
+		_deleteApiBase = CurrentApiBase;
+		var requestedApiBase = _deleteApiBase;
 		_dependencyWarnings.Clear();
 
 		switch (ActiveTab)
@@ -1173,20 +1198,60 @@
 				break;
 		}
 
-		_showDeleteConfirm = true;
+		try
+		{
+			// The API result is authoritative. Never hide known table names: the
+			// locally loaded lists may be stale, filtered, or incomplete.
+			var dependencies = await Http.GetFromJsonAsync<List<string>>(
+				$"{requestedApiBase}/{item.Id}/dependencies");
+			if (dependencies is null)
+				throw new InvalidOperationException("Dependency API returned no list.");
+
+			foreach (var table in dependencies
+				.Where(table => !string.IsNullOrWhiteSpace(table))
+				.Distinct(StringComparer.OrdinalIgnoreCase))
+			{
+				_dependencyWarnings.Add($"Database table: {table}");
+			}
+
+			// If the user switched tabs while the API call was running, do not
+			// show a delete confirmation for a record from the previous tab.
+			if (CurrentApiBase != requestedApiBase ||
+				_deleteApiBase != requestedApiBase ||
+				!ReferenceEquals(_deleteTarget, item))
+			{
+				CancelDelete();
+				return;
+			}
+
+			_showDeleteConfirm = true;
+		}
+		catch (Exception)
+		{
+			CancelDelete();
+			ShowMessage("Failed to check dependencies on the server. Please check your connection and try again.", true);
+		}
+		finally
+		{
+			_isCheckingDependencies = false;
+		}
 	}
 
 	private async Task ConfirmDelete()
 	{
-		if (_deleteTarget is null) return;
+		// The dialog must not be bypassable when references were discovered.
+		if (_deleteTarget is null || _isDeleting || _isCheckingDependencies ||
+			_dependencyWarnings.Count > 0 || string.IsNullOrWhiteSpace(_deleteApiBase)) return;
+		var target = _deleteTarget;
+		var apiBase = _deleteApiBase;
 
 		try
 		{
 			_isDeleting = true;
-			var response = await Http.DeleteAsync($"{CurrentApiBase}/{_deleteTarget.Id}");
+			var response = await Http.DeleteAsync($"{apiBase}/{target.Id}");
 			if (response.IsSuccessStatusCode)
 			{
-				ShowMessage($"'{_deleteTarget.Name}' deleted successfully.", false);
+				ShowMessage($"'{target.Name}' deleted successfully.", false);
 				await LoadTabData();
 			}
 			else
@@ -1210,11 +1275,18 @@
 	{
 		_showDeleteConfirm = false;
 		_deleteTarget = null;
+		_deleteApiBase = null;
 		_dependencyWarnings.Clear();
 	}
 
 	private async Task ToggleStatus(LocationItemDto item)
 	{
+		if (!LoginState.Can(SPIC.Core.Entities.PagePermission.LocationMaster, "Update"))
+		{
+			ShowMessage("You do not have permission to update location status.", true);
+			return;
+		}
+
 		try
 		{
 			var newStatus = !item.IsActive;

@@ -21,6 +21,10 @@ internal static class Program
 		PageAuthorizationTests.Run();
 		Console.WriteLine();
 
+		// Data Explorer access rule shared by the UI and the API.
+		DataExplorerAuthorizationTests.Run();
+		Console.WriteLine();
+
 		// Guest House single and multi-record inventory availability, holding windows,
 		// serialization detection, cancellations, check-in, check-out and allocations.
 		GuestHouseInventoryTests.Run();

@@ -1,5 +1,9 @@
 @page "/TargetAchievement"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
+@using SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject HttpClient Http
 
 <div class="container-fluid py-4 px-0 tga-page">
 
@@ -8,13 +12,29 @@
 
     <div class="tga-card tga-form-card">
         <h3 class="tga-card-title">Allocate target to a JMDO</h3>
-        <p class="tga-card-subtitle">Choose a JMDO, then set their target for the year.</p>
+        <p class="tga-card-subtitle">Choose a JMDO, then set their target for FY @AnalystText.FinancialYear(AnalystText.CurrentFinancialYear).</p>
 
         <label class="tga-field-label" for="tga-jmdo">JMDO<span class="tga-required">*</span></label>
-        <select id="tga-jmdo" class="tga-select" @bind="selectedJmdo" @bind:after="LoadSelectedJmdoTargets">
-            @foreach (var row in Targets)
+        <select id="tga-jmdo" class="tga-select" @bind="selectedJmdoId" @bind:after="LoadSelectedJmdoTargets" disabled="@(_isLoadingJmdos || _jmdos.Count == 0 || _saving)">
+            @if (_isLoadingJmdos)
             {
-                <option value="@row.Name">@row.Name &mdash; @row.Location</option>
+                <option value="0">Loading JMDOs...</option>
+            }
+            else if (_loadError)
+            {
+                <option value="0">Could not load JMDOs</option>
+            }
+            else if (_jmdos.Count == 0)
+            {
+                <option value="0">No JMDOs found for your HQ</option>
+            }
+            else
+            {
+                <option value="0">Select a JMDO</option>
+                @foreach (var jmdo in _jmdos)
+                {
+                    <option value="@jmdo.EmployeeLoginId">@jmdo.Name &mdash; @JmdoSubLabel(jmdo.EmployeeCode, jmdo.HeadquarterName)</option>
+                }
             }
         </select>
 
@@ -29,8 +49,8 @@
             </div>
         </div>
 
-        <button type="button" class="tga-btn-save" disabled="@(string.IsNullOrWhiteSpace(spcmTarget) || string.IsNullOrWhiteSpace(soilTarget))" @onclick="SaveTargetAllocation">
-            <i class="bi bi-check-lg"></i> Save Target Allocation
+        <button type="button" class="tga-btn-save" disabled="@(_saving || selectedJmdoId == 0 || string.IsNullOrWhiteSpace(spcmTarget) || string.IsNullOrWhiteSpace(soilTarget))" @onclick="SaveTargetAllocation">
+            <i class="bi bi-check-lg"></i> @(_saving ? "Saving..." : "Save Target Allocation")
         </button>
     </div>
 
@@ -38,90 +58,191 @@
         <h3 class="tga-card-title">Current yearly targets</h3>
         <p class="tga-card-subtitle">Across all JMDOs in your region.</p>
 
-        <div class="tga-table-scroll">
-            <table class="tga-table">
-                <thead>
-                    <tr>
-                        <th>JMDO</th>
-                        <th>SPCM Target</th>
-                        <th>Soil Sample Target</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in Targets)
-                    {
+        @if (_isLoadingTargets)
+        {
+            <EmptyState Icon="bi-hourglass-split" Title="Loading yearly targets..." Compact="true" />
+        }
+        else if (_targetsError)
+        {
+            <EmptyState Icon="bi-exclamation-triangle" Title="Could not load yearly targets" Message="Please refresh the page to try again." Compact="true" />
+        }
+        else if (_targets.Count == 0)
+        {
+            <EmptyState Icon="bi-bullseye" Title="No yearly targets allocated yet" Compact="true" />
+        }
+        else
+        {
+            <div class="tga-table-scroll">
+                <table class="tga-table">
+                    <thead>
                         <tr>
-                            <td class="tga-cell-header">
-                                <div class="tga-jmdo-name">@row.Name</div>
-                                <div class="tga-jmdo-sub">@row.Code &middot; @row.Location</div>
-                            </td>
-                            <td data-label="SPCM Target">@row.SpcmTarget</td>
-                            <td data-label="Soil Sample Target">@row.SoilTarget</td>
-                            <td class="tga-cell-actions">
-                                <button type="button" class="tga-icon-btn" title="Edit target" @onclick="() => EditTarget(row)">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                            </td>
+                            <th>JMDO</th>
+                            <th>Financial Year</th>
+                            <th>SPCM Target</th>
+                            <th>Soil Sample Target</th>
+                            <th></th>
                         </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _targets)
+                        {
+                            <tr>
+                                <td class="tga-cell-header">
+                                    <div class="tga-jmdo-name">@row.Name</div>
+                                    <div class="tga-jmdo-sub">@JmdoSubLabel(row.EmployeeCode, row.HeadquarterName)</div>
+                                </td>
+                                <td data-label="Financial Year">@AnalystText.FinancialYear(row.FinancialYearStart)</td>
+                                <td data-label="SPCM Target">@row.SpcmTarget</td>
+                                <td data-label="Soil Sample Target">@row.SoilSampleTarget</td>
+                                <td class="tga-cell-actions">
+                                    <button type="button" class="tga-icon-btn" title="Edit target" disabled="@_saving" @onclick="() => EditTarget(row)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 
 </div>
 
 @code {
-    // Static placeholder: no Target/Achievement API exists yet. Reuses the
-    // same 5 JMDOs/codes/locations from MdoDashboard's JMDO-wise summary
-    // table.
-    private sealed class JmdoTarget
+    // JMDO list comes from api/Team/jmdos - the same endpoint and HQ scoping MdoDashboard uses
+    // for "this MDO's team". Saved targets come from api/Team/yearly-targets, which applies the
+    // same team scope server-side and decides the financial year itself (current April-March FY).
+    private bool _isLoadingJmdos = true;
+    private bool _loadError;
+    private List<TeamJmdoDto> _jmdos = new();
+
+    private bool _isLoadingTargets = true;
+    private bool _targetsError;
+    private List<JmdoYearlyTargetDto> _targets = new();
+
+    private int selectedJmdoId;
+    private string spcmTarget = "";
+    private string soilTarget = "";
+    private bool _saving;
+
+    private static string JmdoSubLabel(string? employeeCode, string? headquarterName)
     {
-        public string Name { get; init; } = "";
-        public string Code { get; init; } = "";
-        public string Location { get; init; } = "";
-        public int SpcmTarget { get; set; }
-        public int SoilTarget { get; set; }
+        var code = string.IsNullOrWhiteSpace(employeeCode) ? "Code Pending" : employeeCode;
+        return string.IsNullOrWhiteSpace(headquarterName) ? code : $"{code} · {headquarterName}";
     }
 
-    private readonly List<JmdoTarget> Targets = new()
+    protected override async Task OnInitializedAsync()
     {
-        new() { Name = "Karthik Raja", Code = "JMDO-104", Location = "Coimbatore", SpcmTarget = 420, SoilTarget = 180 },
-        new() { Name = "Selvam M", Code = "JMDO-108", Location = "Pollachi", SpcmTarget = 360, SoilTarget = 150 },
-        new() { Name = "Priya Dharshini", Code = "JMDO-112", Location = "Udumalpet", SpcmTarget = 300, SoilTarget = 140 },
-        new() { Name = "Ganesh Kumar", Code = "JMDO-119", Location = "Mettupalayam", SpcmTarget = 280, SoilTarget = 120 },
-        new() { Name = "Lakshmi Narayanan", Code = "JMDO-121", Location = "Annur", SpcmTarget = 250, SoilTarget = 110 }
-    };
+        await Task.WhenAll(LoadJmdosAsync(), LoadTargetsAsync());
+    }
 
-    private string selectedJmdo = "Karthik Raja";
-    private string spcmTarget = "420";
-    private string soilTarget = "180";
+    private async Task LoadJmdosAsync()
+    {
+        _isLoadingJmdos = true;
+        try
+        {
+            _jmdos = await Http.GetFromJsonAsync<List<TeamJmdoDto>>("api/Team/jmdos") ?? new();
+        }
+        catch (Exception ex)
+        {
+            _loadError = true;
+            Console.WriteLine($"Error loading JMDO team: {ex.Message}");
+            Toast.Error("Could not load your JMDOs. Please try again.");
+        }
+        finally
+        {
+            _isLoadingJmdos = false;
+        }
+    }
 
+    private async Task LoadTargetsAsync()
+    {
+        _isLoadingTargets = true;
+        _targetsError = false;
+        try
+        {
+            _targets = await Http.GetFromJsonAsync<List<JmdoYearlyTargetDto>>("api/Team/yearly-targets") ?? new();
+        }
+        catch (Exception ex)
+        {
+            _targetsError = true;
+            Console.WriteLine($"Error loading yearly targets: {ex.Message}");
+            Toast.Error("Could not load yearly targets.");
+        }
+        finally
+        {
+            _isLoadingTargets = false;
+        }
+    }
+
+    // Prefills the form with the JMDO's saved target for this FY, or clears it if none exists yet.
     private void LoadSelectedJmdoTargets()
     {
-        var row = Targets.FirstOrDefault(t => t.Name == selectedJmdo);
-        if (row is null) return;
-
-        spcmTarget = row.SpcmTarget.ToString();
-        soilTarget = row.SoilTarget.ToString();
+        var saved = _targets.FirstOrDefault(t => t.EmployeeLoginId == selectedJmdoId);
+        spcmTarget = saved?.SpcmTarget.ToString() ?? "";
+        soilTarget = saved?.SoilSampleTarget.ToString() ?? "";
     }
 
-    private void EditTarget(JmdoTarget row)
+    private void EditTarget(JmdoYearlyTargetDto row)
     {
-        selectedJmdo = row.Name;
+        selectedJmdoId = row.EmployeeLoginId;
         spcmTarget = row.SpcmTarget.ToString();
-        soilTarget = row.SoilTarget.ToString();
+        soilTarget = row.SoilSampleTarget.ToString();
     }
 
-    private void SaveTargetAllocation()
+    private async Task SaveTargetAllocation()
     {
-        var row = Targets.FirstOrDefault(t => t.Name == selectedJmdo);
-        if (row is null) return;
-        if (!int.TryParse(spcmTarget, out var spcm) || !int.TryParse(soilTarget, out var soil)) return;
+        if (_saving) return;
 
-        row.SpcmTarget = spcm;
-        row.SoilTarget = soil;
-        Toast.Success($"{row.Name}'s yearly target saved.");
+        var jmdo = _jmdos.FirstOrDefault(j => j.EmployeeLoginId == selectedJmdoId);
+        if (jmdo is null)
+        {
+            Toast.Warning("Select a JMDO.");
+            return;
+        }
+        if (!int.TryParse(spcmTarget, out var spcm) || spcm < 0 || !int.TryParse(soilTarget, out var soil) || soil < 0)
+        {
+            Toast.Warning("Enter valid, non-negative SPCM and Soil Sample targets.");
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var response = await Http.PutAsJsonAsync("api/Team/yearly-targets",
+                new SaveJmdoYearlyTargetDto { EmployeeLoginId = jmdo.EmployeeLoginId, SpcmTarget = spcm, SoilSampleTarget = soil });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error(await ReadErrorAsync(response) ?? "Could not save the target allocation. Please try again.");
+                return;
+            }
+
+            Toast.Success($"{jmdo.Name}'s yearly target saved.");
+            await LoadTargetsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Saving yearly target failed: {ex.Message}");
+            Toast.Error("Could not reach the server to save the target allocation.");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static async Task<string?> ReadErrorAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            var body = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            return body.TryGetProperty("message", out var m) || body.TryGetProperty("Message", out m) ? m.GetString() : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }
