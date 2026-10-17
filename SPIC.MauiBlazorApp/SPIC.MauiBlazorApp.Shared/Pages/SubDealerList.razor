@@ -962,6 +962,17 @@
                 </button>
             }
 
+
+            @if (CanCorrectSubDealerCodes)
+            {
+                <button type="button"
+                        class="sd-btn import"
+                        @onclick="OpenCodeCorrectionModal">
+                    <i class="bi bi-pencil-square"></i>
+                    Correct Sub Dealer Codes
+                </button>
+            }
+
             @if (CanCreateSubDealer)
             {
                 <button type="button"
@@ -1488,6 +1499,117 @@
 </div>
 
 
+
+@if (_showCodeCorrectionModal && CanCorrectSubDealerCodes)
+{
+    <div class="subdealer-import-backdrop" @onclick="CloseCodeCorrectionModal">
+        <div class="subdealer-import-modal" style="width: min(950px, 100%);" @onclick:stopPropagation="true">
+            <div class="subdealer-import-modal-header">
+                <div>
+                    <h5 class="fw-bold mb-1">Correct Existing Sub Dealer Codes</h5>
+                    <div class="small text-muted">
+                        SuperAdmin only. Update <strong>SubDealerCode</strong> on existing records.
+                        All other fields and registration Ids remain unchanged.
+                    </div>
+                </div>
+                <button type="button" class="btn-close" aria-label="Close"
+                        disabled="@_codeCorrectionBusy" @onclick="CloseCodeCorrectionModal"></button>
+            </div>
+
+            <div class="subdealer-import-modal-body">
+                <div class="alert alert-light border small">
+                    <strong>Excel columns:</strong> Existing Sub-Dealer ID | New Sub-Dealer ID
+                    <div class="text-muted mt-1">
+                        The matching worksheet can be Sheet1 or any other sheet. Existing values are matched
+                        to the current SubDealerCode, not the database primary key.
+                    </div>
+                </div>
+                <div class="subdealer-excel-dropzone">
+                    <i class="bi bi-file-earmark-excel fs-2 text-success"></i>
+                    <div class="fw-semibold mt-2">Select correction Excel (.xlsx, max 10 MB)</div>
+                    <InputFile OnChange="SelectCodeCorrectionFile"
+                               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                    @if (_codeCorrectionFile != null)
+                    {
+                        <div class="small text-success mt-2">@_codeCorrectionFile.Name</div>
+                    }
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_codeCorrectionMessage))
+                {
+                    <div class="alert @(_codeCorrectionError ? "alert-danger" : "alert-info") py-2 mt-3 small">
+                        @_codeCorrectionMessage
+                    </div>
+                }
+
+                @if (_codeCorrectionPreview != null)
+                {
+                    <div class="mt-3">
+                        <div class="fw-semibold mb-2">Preview — no database changes yet</div>
+                        <div class="small mb-2">
+                            Total: @_codeCorrectionPreview.TotalRows |
+                            Ready: @_codeCorrectionPreview.Ready |
+                            Unchanged: @_codeCorrectionPreview.Unchanged |
+                            Errors: @_codeCorrectionPreview.Errors
+                        </div>
+                        <div class="table-responsive" style="max-height: 330px; overflow: auto;">
+                            <table class="table table-sm table-bordered align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Excel Row</th><th>Existing Code</th><th>New Code</th>
+                                        <th>Sub Dealer Name</th><th>Status</th><th>Explanation</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in _codeCorrectionPreview.Rows)
+                                    {
+                                        <tr>
+                                            <td>@item.ExcelRowNumber</td>
+                                            <td>@item.ExistingCode</td>
+                                            <td>@item.NewCode</td>
+                                            <td>@item.FirmName</td>
+                                            <td>
+                                                <span class="badge @(item.Status == "Error" ? "bg-danger" : item.Status == "Ready" ? "bg-success" : "bg-secondary")">
+                                                    @item.Status
+                                                </span>
+                                            </td>
+                                            <td>@item.Message</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+
+                @if (_codeCorrectionPreview?.Success == true && _codeCorrectionPreview.Ready > 0)
+                {
+                    <label class="form-check mt-3 small">
+                        <input class="form-check-input" type="checkbox" @bind="_codeCorrectionConfirmed" />
+                        <span class="form-check-label">
+                            I verified the old and new codes in the preview. Apply the changes to the database.
+                        </span>
+                    </label>
+                }
+            </div>
+            <div class="subdealer-import-modal-footer">
+                <button class="btn btn-outline-secondary" type="button" disabled="@_codeCorrectionBusy"
+                        @onclick="CloseCodeCorrectionModal">Cancel</button>
+                <button class="btn btn-outline-success" type="button"
+                        disabled="@(_codeCorrectionBusy || _codeCorrectionFile == null)"
+                        @onclick="PreviewCodeCorrectionsAsync">
+                    @(_codeCorrectionBusy ? "Please wait..." : "Preview Changes")
+                </button>
+                <button class="btn btn-success" type="button"
+                        disabled="@(_codeCorrectionBusy || _codeCorrectionPreview?.Success != true || _codeCorrectionPreview.Ready == 0 || !_codeCorrectionConfirmed)"
+                        @onclick="ApplyCodeCorrectionsAsync">
+                    Apply Code Updates
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_showImportModal && CanImportSubDealers)
 {
     <div class="subdealer-import-backdrop" @onclick="CloseImportModal">
@@ -1836,6 +1958,41 @@
 
     private bool CanCreateSubDealer =>
         IsMoRole || IsUnrestricted;
+
+
+    // Temporary, strictly SuperAdmin-only bulk SubDealerCode correction.
+    private bool CanCorrectSubDealerCodes =>
+        string.Equals(CurrentRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
+
+    private bool _showCodeCorrectionModal;
+    private bool _codeCorrectionBusy;
+    private IBrowserFile? _codeCorrectionFile;
+    private CodeCorrectionResponseDto? _codeCorrectionPreview;
+    private string? _codeCorrectionMessage;
+    private bool _codeCorrectionError;
+    private bool _codeCorrectionConfirmed;
+
+    private sealed class CodeCorrectionResponseDto
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int TotalRows { get; set; }
+        public int Ready { get; set; }
+        public int Unchanged { get; set; }
+        public int Errors { get; set; }
+        public int Updated { get; set; }
+        public List<CodeCorrectionRowDto> Rows { get; set; } = new();
+    }
+
+    private sealed class CodeCorrectionRowDto
+    {
+        public int ExcelRowNumber { get; set; }
+        public string ExistingCode { get; set; } = string.Empty;
+        public string NewCode { get; set; } = string.Empty;
+        public string FirmName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+    }
 
     private bool CanImportSubDealers =>
         LoginState?.UserRole == AppRole.Admin;
@@ -3172,6 +3329,160 @@
 
         _page = pageNo;
         await LoadListAsync();
+    }
+
+
+    private void OpenCodeCorrectionModal()
+    {
+        if (!CanCorrectSubDealerCodes || _codeCorrectionBusy) return;
+        _showCodeCorrectionModal = true;
+        _codeCorrectionFile = null;
+        _codeCorrectionPreview = null;
+        _codeCorrectionMessage = null;
+        _codeCorrectionError = false;
+        _codeCorrectionConfirmed = false;
+    }
+
+    private void CloseCodeCorrectionModal()
+    {
+        if (_codeCorrectionBusy) return;
+        _showCodeCorrectionModal = false;
+        _codeCorrectionFile = null;
+        _codeCorrectionPreview = null;
+        _codeCorrectionMessage = null;
+        _codeCorrectionError = false;
+        _codeCorrectionConfirmed = false;
+    }
+
+    private void SelectCodeCorrectionFile(InputFileChangeEventArgs e)
+    {
+        _codeCorrectionPreview = null;
+        _codeCorrectionConfirmed = false;
+        _codeCorrectionError = false;
+        _codeCorrectionMessage = null;
+        _codeCorrectionFile = null;
+
+        var file = e.File;
+        if (!string.Equals(Path.GetExtension(file.Name), ".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            file.Size == 0 || file.Size > MaxImportFileSize)
+        {
+            _codeCorrectionError = true;
+            _codeCorrectionMessage = "Select a nonempty .xlsx Excel file smaller than 10 MB.";
+            return;
+        }
+        _codeCorrectionFile = file;
+    }
+
+    private async Task<CodeCorrectionResponseDto> SendCodeCorrectionAsync(string action)
+    {
+        if (_codeCorrectionFile == null)
+            return new CodeCorrectionResponseDto { Message = "Choose an Excel file." };
+
+        using var content = new MultipartFormDataContent();
+        await using var stream = _codeCorrectionFile.OpenReadStream(MaxImportFileSize);
+        content.Add(new StreamContent(stream), "file", _codeCorrectionFile.Name);
+
+        using var response = await Http.PostAsync(
+            $"api/SubDealerRegistration/bulk-code-correction/{action}", content);
+        var json = await response.Content.ReadAsStringAsync();
+
+        CodeCorrectionResponseDto? result;
+        try
+        {
+            result = System.Text.Json.JsonSerializer.Deserialize<CodeCorrectionResponseDto>(
+                json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            result = null;
+        }
+
+        result ??= new CodeCorrectionResponseDto();
+        if (!response.IsSuccessStatusCode)
+        {
+            result.Success = false;
+            if (string.IsNullOrWhiteSpace(result.Message))
+                result.Message = $"Server returned HTTP {(int)response.StatusCode}. Check SuperAdmin permissions and API logs.";
+        }
+
+        return result;
+    }
+
+    private async Task PreviewCodeCorrectionsAsync()
+    {
+        if (!CanCorrectSubDealerCodes || _codeCorrectionFile == null || _codeCorrectionBusy) return;
+
+        _codeCorrectionBusy = true;
+        _codeCorrectionPreview = null;
+        _codeCorrectionConfirmed = false;
+        _codeCorrectionMessage = null;
+        try
+        {
+            var result = await SendCodeCorrectionAsync("preview");
+            _codeCorrectionPreview = result;
+            _codeCorrectionMessage = result.Message;
+            _codeCorrectionError = !result.Success;
+        }
+        catch (Exception ex)
+        {
+            _codeCorrectionError = true;
+            _codeCorrectionMessage = $"Preview failed: {ex.Message}";
+        }
+        finally
+        {
+            _codeCorrectionBusy = false;
+        }
+    }
+
+    private async Task ApplyCodeCorrectionsAsync()
+    {
+        if (!CanCorrectSubDealerCodes || _codeCorrectionFile == null || _codeCorrectionBusy ||
+            _codeCorrectionPreview?.Success != true || _codeCorrectionPreview.Ready == 0 ||
+            !_codeCorrectionConfirmed) return;
+
+        _codeCorrectionBusy = true;
+        _codeCorrectionConfirmed = false;
+        _codeCorrectionMessage = null;
+        try
+        {
+            // Apply re-reads the Excel and rechecks codes against the current DB.
+            // Stale previews are rejected; no partial updates are committed.
+            var result = await SendCodeCorrectionAsync("apply");
+            if (!result.Success)
+            {
+                _codeCorrectionPreview = result.Rows.Count > 0 ? result : null;
+                _codeCorrectionError = true;
+                _codeCorrectionMessage = result.Message;
+                return;
+            }
+
+            _showCodeCorrectionModal = false;
+            _codeCorrectionFile = null;
+            _codeCorrectionPreview = null;
+            _codeCorrectionError = false;
+            _pageMessageIsError = false;
+            _pageMessage = result.Message;
+
+            try
+            {
+                await RefreshAsync();
+            }
+            catch
+            {
+                _pageMessage += " Refresh the list to see the latest codes.";
+            }
+        }
+        catch (Exception ex)
+        {
+            // A broken HTTP response is NOT evidence that the DB transaction failed.
+            _codeCorrectionError = true;
+            _codeCorrectionMessage = $"Apply result not confirmed: {ex.Message}. Check the database before retrying.";
+        }
+        finally
+        {
+            _codeCorrectionBusy = false;
+        }
     }
 
     private void OpenImportModal()
