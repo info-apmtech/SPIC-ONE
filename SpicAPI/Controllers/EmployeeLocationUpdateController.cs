@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
@@ -108,7 +108,8 @@ namespace SpicAPI.Controllers
 
         [HttpPost("preview")]
         [RequestSizeLimit(MaxExcelBytes + 16 * 1024)]
-        public async Task<IActionResult> Preview([FromForm] IFormFile file, CancellationToken cancellationToken)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> Preview(IFormFile file, CancellationToken cancellationToken)
         {
             var error = CheckFile(file);
             if (error != null) return BadRequest(new { Success = false, Message = error });
@@ -156,11 +157,13 @@ namespace SpicAPI.Controllers
 
         [HttpPost("apply")]
         [RequestSizeLimit(MaxExcelBytes + 16 * 1024)]
+        [Consumes("multipart/form-data")]
         public async Task<IActionResult> Apply(
-            [FromForm] IFormFile file,
-            [FromForm] string previewHash,
+            [FromForm] EmployeeLocationUpdateApplyDto request,
             CancellationToken cancellationToken)
         {
+            var file = request.File;
+            var previewHash = request.PreviewHash;
             var error = CheckFile(file);
             if (error != null) return BadRequest(new { Success = false, Message = error });
             if (string.IsNullOrWhiteSpace(previewHash))
@@ -470,4 +473,11 @@ namespace SpicAPI.Controllers
             public bool HasChanges => OldRegionId != NewRegionId || OldHqId != NewHqId;
         }
     }
+
+    public class EmployeeLocationUpdateApplyDto
+    {
+        public IFormFile File { get; set; } = null!;
+        public string PreviewHash { get; set; } = string.Empty;
+    }
 }
+

@@ -506,16 +506,18 @@ public class SubDealerRegistrationController : ControllerBase
     [Authorize(Roles = "SuperAdmin")]
     [HttpPost("bulk-code-correction/preview")]
     [RequestSizeLimit(MaxExcelImportSize + 2 * 1024 * 1024)]
+    [Consumes("multipart/form-data")]
     public Task<IActionResult> PreviewSubDealerCodeCorrection(
-        [FromForm] IFormFile file,
+        IFormFile file,
         CancellationToken cancellationToken) =>
         ProcessSubDealerCodeCorrection(file, false, cancellationToken);
 
     [Authorize(Roles = "SuperAdmin")]
     [HttpPost("bulk-code-correction/apply")]
     [RequestSizeLimit(MaxExcelImportSize + 2 * 1024 * 1024)]
+    [Consumes("multipart/form-data")]
     public Task<IActionResult> ApplySubDealerCodeCorrection(
-        [FromForm] IFormFile file,
+        IFormFile file,
         CancellationToken cancellationToken) =>
         ProcessSubDealerCodeCorrection(file, true, cancellationToken);
 
