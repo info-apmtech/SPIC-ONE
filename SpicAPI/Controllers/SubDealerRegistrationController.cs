@@ -478,17 +478,26 @@ public class SubDealerRegistrationController : ControllerBase
         if (validationError != null)
             return BadRequest(validationError);
 
+        // SubDealerCode is strictly mandatory: must be explicitly supplied.
+        // Auto-generation (SD+Id or any fallback) is forbidden by business rule.
+        var suppliedCode = model.SubDealerCode?.Trim();
+        if (string.IsNullOrWhiteSpace(suppliedCode))
+            return BadRequest("Sub Dealer Code is required. Blank or auto-generated codes are not permitted.");
+
+        var normalizedCode = suppliedCode.ToUpperInvariant();
+        if (!Regex.IsMatch(normalizedCode, @"^[A-Z0-9][A-Z0-9/_-]{0,49}$"))
+            return BadRequest("Sub Dealer Code must be 1-50 characters containing only uppercase letters, numbers, hyphens, underscores, or slashes.");
+
+        // Duplicate code protection
+        var codeExists = await _db.SubDealerRegistrations
+            .AnyAsync(x => x.SubDealerCode != null && x.SubDealerCode.ToUpper() == normalizedCode, cancellationToken);
+        if (codeExists)
+            return BadRequest($"Sub Dealer Code '{normalizedCode}' already exists.");
+
         var entity = new SubDealerRegistration();
         ApplyModel(entity, model);
 
-        // Preserve any supplied/persisted Sub Dealer Code (e.g. imported master
-        // record being maintained). Only generate a code after insert when no
-        // valid code was supplied, so an existing persisted code is never
-        // overwritten with SD{Id}.
-        var suppliedCode = model.SubDealerCode?.Trim();
-        entity.SubDealerCode = string.IsNullOrWhiteSpace(suppliedCode)
-            ? null
-            : suppliedCode;
+        entity.SubDealerCode = normalizedCode;
         entity.CreatedAt = DateTime.Now;
         entity.UpdatedAt = DateTime.Now;
 
@@ -819,6 +828,9 @@ public class SubDealerRegistrationController : ControllerBase
         var originalStateId = entity.StateId;
         var originalRegionId = entity.Region;
         var originalHqId = entity.HQ;
+
+        if (string.IsNullOrWhiteSpace(originalSubDealerCode))
+            return BadRequest("Cannot update details for a Sub Dealer with a missing or blank Sub Dealer Code. The code must be corrected via SuperAdmin Code Correction before maintaining details.");
 
         model.SubDealerCode = originalSubDealerCode;
         model.StateId = originalStateId;

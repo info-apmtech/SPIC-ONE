@@ -1,4 +1,4 @@
-﻿@page "/SubDealerRegistration"
+@page "/SubDealerRegistration"
 @implements IDisposable
 @using System.Net.Http.Json
 @using System.Text.RegularExpressions
@@ -387,37 +387,63 @@
 
                 <div class="business-info-body">
                     <div class="row g-3">
-                        <div class="col-12 col-md-6">
-                            <label class="form-label-custom">Sub Dealer Code &amp; Name  <span class="text-danger">*</span></label>
-
-                            <div class="position-relative">
+                        @if (_isEditMode)
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Sub Dealer Code</label>
                                 <input type="text"
-                                       class="form-select-custom searchable-select-input w-100"
-                                       placeholder="-- New Entry --"
-                                       @bind="_subDealerSearchText"
-                                       @bind:event="oninput"
-                                       @onfocus="() => _showSubDealerDropdown = true"
-                                       @onblur="HideSubDealerDropdown" />
+                                       class="form-control-custom w-100"
+                                       value="@SelectedSubDealerDisplayText"
+                                       disabled />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Select Imported Sub Dealer</label>
 
-                                @if (_showSubDealerDropdown)
-                                {
-                                    <div class="searchable-dropdown-container">
-                                        <div class="searchable-dropdown-item"
-                                             @onmousedown='() => SelectSubDealer(0, "")'>
-                                            -- New Entry --
-                                        </div>
+                                <div class="position-relative">
+                                    <input type="text"
+                                           class="form-select-custom searchable-select-input w-100"
+                                           placeholder="-- New Entry --"
+                                           @bind="_subDealerSearchText"
+                                           @bind:event="oninput"
+                                           @onfocus="() => _showSubDealerDropdown = true"
+                                           @onblur="HideSubDealerDropdown" />
 
-                                        @foreach (var item in FilteredSubDealersForDropdown)
-                                        {
+                                    @if (_showSubDealerDropdown)
+                                    {
+                                        <div class="searchable-dropdown-container">
                                             <div class="searchable-dropdown-item"
-                                                 @onmousedown='() => SelectSubDealer(item.Id, $"{item.SubDealerCode} - {item.FirmName}")'>
-                                                @item.SubDealerCode - @item.FirmName
+                                                 @onmousedown='() => SelectSubDealer(0, "")'>
+                                                -- New Entry --
                                             </div>
-                                        }
-                                    </div>
+
+                                            @foreach (var item in FilteredSubDealersForDropdown)
+                                            {
+                                                <div class="searchable-dropdown-item"
+                                                     @onmousedown='() => SelectSubDealer(item.Id, $"{item.SubDealerCode} - {item.FirmName}")'>
+                                                    @item.SubDealerCode - @item.FirmName
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-md-6">
+                                <label class="form-label-custom">Sub Dealer Code <span class="text-danger">*</span></label>
+                                <input type="text"
+                                       class="form-control-custom w-100 @(_errors.ContainsKey("SubDealerCode") ? "is-invalid" : "")"
+                                       @bind="_model.SubDealerCode"
+                                       placeholder="Enter Explicit Sub Dealer Code"
+                                       maxlength="50" />
+                                @if (_errors.TryGetValue("SubDealerCode", out var codeError))
+                                {
+                                    <div class="field-error">@codeError</div>
                                 }
                             </div>
-                        </div>
+                        }
 
                         <div class="col-12 col-md-6">
                             <label class="form-label-custom">
@@ -1264,6 +1290,13 @@
     private string _subDealerSearchText = "";
     private bool _showSubDealerDropdown;
 
+    private string SelectedSubDealerDisplayText =>
+        !string.IsNullOrWhiteSpace(_model.SubDealerCode) && !string.IsNullOrWhiteSpace(_model.FirmName)
+            ? $"{_model.SubDealerCode} - {_model.FirmName}"
+            : (!string.IsNullOrWhiteSpace(_subDealerSearchText)
+                ? _subDealerSearchText
+                : (_model.SubDealerCode ?? string.Empty));
+
     private string _stateSearchText = "";
     private bool _showStateDropdown;
 
@@ -1807,7 +1840,8 @@
     {
         _model = new SubDealerFormModel
         {
-            Status = SubDealerStatus.Active
+            Status = SubDealerStatus.Active,
+            SubDealerCode = string.Empty
         };
 
         // Invalidate any in-flight detail load so a late response cannot
@@ -2542,6 +2576,10 @@
     {
         _errors.Clear();
 
+        // Sub Dealer Code is required when creating a new record
+        if (_intendedSubDealerId == 0 && string.IsNullOrWhiteSpace(_model.SubDealerCode))
+            _errors["SubDealerCode"] = "Sub Dealer Code is required";
+
         // These are the core Sub Dealer master fields and remain required
         // for both Active and Inactive records.
         if (_basicInfoStateId <= 0)
@@ -2781,17 +2819,13 @@
         }
         else
         {
-            // The searchable text box is only a filter/display field. Typing an
-            // existing code or firm name does not select that database record.
-            // Without this guard the form falls through to POST and creates a new
-            // SDxxxxxx record instead of updating the imported Sub Dealer.
             if (!_isEditMode &&
                 _subDealerId == 0 &&
-                !string.IsNullOrWhiteSpace(_subDealerSearchText))
+                !string.IsNullOrWhiteSpace(_subDealerSearchText) &&
+                string.IsNullOrWhiteSpace(_model.SubDealerCode))
             {
                 ShowMessage(
-                    "Please select the exact Sub Dealer Code from the dropdown. " +
-                    "Typing the code or firm name alone does not load the imported record.",
+                    "Please select an existing Sub Dealer from the dropdown to edit, or enter an explicit Sub Dealer Code to create a new entry.",
                     true);
                 return;
             }
