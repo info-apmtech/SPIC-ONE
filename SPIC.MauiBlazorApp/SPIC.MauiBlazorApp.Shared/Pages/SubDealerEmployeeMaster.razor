@@ -952,7 +952,7 @@
 				response = await Http.PutAsJsonAsync($"{CurrentApiBase}/{_editingId.Value}", payload);
 				if (!response.IsSuccessStatusCode)
 				{
-					var error = await response.Content.ReadAsStringAsync();
+					var error = await ReadErrorMessage(response);
 					ShowMessage($"Update failed: {error}", true);
 					return;
 				}
@@ -963,7 +963,7 @@
 				response = await Http.PostAsJsonAsync(CurrentApiBase, payload);
 				if (!response.IsSuccessStatusCode)
 				{
-					var error = await response.Content.ReadAsStringAsync();
+					var error = await ReadErrorMessage(response);
 					ShowMessage($"Create failed: {error}", true);
 					return;
 				}
@@ -981,6 +981,23 @@
 		{
 			_isSaving = false;
 		}
+	}
+
+	// The API's { message } / { Message } text (e.g. the duplicate-beneficiary 409), else the raw body.
+	private static async Task<string> ReadErrorMessage(HttpResponseMessage response)
+	{
+		var body = await response.Content.ReadAsStringAsync();
+		try
+		{
+			using var doc = JsonDocument.Parse(body);
+			if (doc.RootElement.ValueKind == JsonValueKind.Object)
+				foreach (var prop in doc.RootElement.EnumerateObject())
+					if (string.Equals(prop.Name, "message", StringComparison.OrdinalIgnoreCase)
+						&& prop.Value.ValueKind == JsonValueKind.String)
+						return prop.Value.GetString() ?? body;
+		}
+		catch (JsonException) { }
+		return body;
 	}
 
 	private void EditItem(SubDealerEmployeeItemDto item)
