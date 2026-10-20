@@ -56,21 +56,25 @@
 		</div>
 	</div>
 
-	@* The entire "Add New" card is admin-only. The .main-card wrapper stays inside
-	   the guard so other roles (MDO, SM, AVP) do not get an empty white card
+	@* The "Add New" / "Edit" card is shown only when the user may save it: Entry to add,
+	   Update to edit. The .main-card wrapper stays inside the guard so users without the
+	   permission (MDO, SM, AVP, view-only designations) do not get an empty white card
 	   between the tabs and the metric cards. *@
-	@if (IsAdmin)
+	@if (CanSave)
 	{
 	<div class="main-card">
 		<div class="section-header">
 			<h3 class="section-title">@(_isEditing ? $"Edit {(ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee")}" : $"Add New {(ActiveTab == TabSubDealer ? "Sub Dealer" : "Employee")}")</h3>
 			<div class="d-flex gap-2">
+				@if (CanAdd)
+				{
 				<button class="btn-outline-green" @onclick="DownloadSampleTemplate">
 					<i class="bi bi-file-earmark-excel"></i> Download Template
 				</button>
 				<button class="btn-outline-green" @onclick="() => _showUploadModal = true">
 					<i class="bi bi-cloud-arrow-up"></i> Upload File
 				</button>
+				}
 			</div>
 		</div>
 
@@ -354,7 +358,7 @@
 				</span>
 			</td>
 			<td>
-				@if (IsAdmin)
+				@if (CanUpdate)
 				{
 				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
 					  style="cursor:pointer"
@@ -370,14 +374,22 @@
 				}
 			</td>
 			<td>
-				@if (IsAdmin)
+				@* Edit / Delete follow their own Designation actions; SM / AVP approval buttons are
+				   independent of them so an approver never loses Approve / Reject. *@
+				@if (CanUpdate || CanDelete)
 				{
 				<div class="action-icons">
+					@if (CanDelete)
+					{
 					<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+					}
+					@if (CanUpdate)
+					{
 					<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+					}
 				</div>
 				}
-				else if (IsSMRole && item.SMApproved == null)
+				@if (IsSMRole && item.SMApproved == null)
 				{
 				<div class="action-icons">
 					<button class="btn btn-sm btn-success" title="Approve"
@@ -407,12 +419,15 @@
 		</TableRow>
 
 		<CardActions Context="item">
-			@if (IsAdmin)
+			@if (CanUpdate)
 			{
 				<button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+			}
+			@if (CanDelete)
+			{
 				<button type="button" class="btn btn-outline-danger btn-sm" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
 			}
-			else if (IsSMRole && item.SMApproved == null)
+			@if (IsSMRole && item.SMApproved == null)
 			{
 				<button type="button" class="btn btn-success btn-sm" @onclick="() => ShowApprovalModal(item, true, true)"><i class="bi bi-check-lg"></i> Approve</button>
 				<button type="button" class="btn btn-danger btn-sm" @onclick="() => ShowApprovalModal(item, false, true)"><i class="bi bi-x-lg"></i> Reject</button>
@@ -566,6 +581,13 @@
 
 	private bool IsAdmin => LoginState.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
 	private bool CanViewPage => LoginState.CanAccess(PagePermission.SubDealerEmployeeMaster);
+	// Action-level permissions come from the Designation's "SubDealerEmployeeMaster.<Action>" tokens
+	// (mirrors SubDealerEmployeeMasterAccessAttribute on the API). Admin / CorporateAdmin keep the
+	// access they always had. Upload File / Download Template create records, so they need Entry.
+	private bool CanAdd => IsAdmin || LoginState.Can(PagePermission.SubDealerEmployeeMaster, "Entry");
+	private bool CanUpdate => IsAdmin || LoginState.Can(PagePermission.SubDealerEmployeeMaster, "Update");
+	private bool CanDelete => IsAdmin || LoginState.Can(PagePermission.SubDealerEmployeeMaster, "Delete");
+	private bool CanSave => _isEditing ? CanUpdate : CanAdd;
 	private bool IsSMRole => LoginState.UserRole is AppRole.SMD or AppRole.SMM;
 	private bool IsAVPRole => LoginState.UserRole is AppRole.AVP;
 	private bool IsApproverRole => IsSMRole || IsAVPRole;
@@ -740,6 +762,7 @@
 
 	private async Task DownloadSampleTemplate()
 	{
+		if (!CanAdd) return;
 		try
 		{
 			var bytes = await Http.GetByteArrayAsync($"api/subdealeremployee/sample-template?type={CurrentUploadType}");
@@ -811,6 +834,12 @@
 
 	private async Task HandleSave()
 	{
+		if (!CanSave)
+		{
+			ShowMessage("You do not have permission to save this record.", true);
+			return;
+		}
+
 		object payload;
 		string emptyFieldError;
 
@@ -923,7 +952,7 @@
 				response = await Http.PutAsJsonAsync($"{CurrentApiBase}/{_editingId.Value}", payload);
 				if (!response.IsSuccessStatusCode)
 				{
-					var error = await response.Content.ReadAsStringAsync();
+					var error = await ReadErrorMessage(response);
 					ShowMessage($"Update failed: {error}", true);
 					return;
 				}
@@ -934,7 +963,7 @@
 				response = await Http.PostAsJsonAsync(CurrentApiBase, payload);
 				if (!response.IsSuccessStatusCode)
 				{
-					var error = await response.Content.ReadAsStringAsync();
+					var error = await ReadErrorMessage(response);
 					ShowMessage($"Create failed: {error}", true);
 					return;
 				}
@@ -954,8 +983,26 @@
 		}
 	}
 
+	// The API's { message } / { Message } text (e.g. the duplicate-beneficiary 409), else the raw body.
+	private static async Task<string> ReadErrorMessage(HttpResponseMessage response)
+	{
+		var body = await response.Content.ReadAsStringAsync();
+		try
+		{
+			using var doc = JsonDocument.Parse(body);
+			if (doc.RootElement.ValueKind == JsonValueKind.Object)
+				foreach (var prop in doc.RootElement.EnumerateObject())
+					if (string.Equals(prop.Name, "message", StringComparison.OrdinalIgnoreCase)
+						&& prop.Value.ValueKind == JsonValueKind.String)
+						return prop.Value.GetString() ?? body;
+		}
+		catch (JsonException) { }
+		return body;
+	}
+
 	private void EditItem(SubDealerEmployeeItemDto item)
 	{
+		if (!CanUpdate) return;
 		_isEditing = true;
 		_editingId = item.Id;
 
@@ -1003,6 +1050,7 @@
 
 	private void DeleteItem(SubDealerEmployeeItemDto item)
 	{
+		if (!CanDelete) return;
 		_deleteTarget = item;
 		_showDeleteConfirm = true;
 	}
@@ -1045,6 +1093,7 @@
 
 	private async Task ToggleStatus(SubDealerEmployeeItemDto item)
 	{
+		if (!CanUpdate) return;
 		try
 		{
 			var newStatus = !item.IsActive;
@@ -1142,7 +1191,7 @@
 	private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
 	{
 		var file = e.File;
-		if (file == null) return;
+		if (file == null || !CanAdd) return;
 
 		using var content = new MultipartFormDataContent();
 		var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);

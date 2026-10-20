@@ -724,7 +724,6 @@ namespace Spic.Infrastructure.Data
                 e.HasOne(x => x.CSR1).WithMany().HasForeignKey(x => x.CSR1Id).OnDelete(DeleteBehavior.Restrict);
                 e.HasMany(x => x.Participants).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(x => x.Employees).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
-                e.HasMany(x => x.Activities).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(x => x.Media).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(x => x.Expenses).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
             });
@@ -734,7 +733,6 @@ namespace Spic.Infrastructure.Data
                 e.HasIndex(x => new { x.CSR2Id, x.CategoryKey }).IsUnique();
                 e.HasMany(x => x.Proofs).WithOne(x => x.CSR2Expense).HasForeignKey(x => x.CSR2ExpenseId).OnDelete(DeleteBehavior.Cascade);
             });
-            builder.Entity<CSR2Activity>().HasIndex(x => new { x.CSR2Id, x.SortOrder });
             builder.Entity<CSR2Media>().HasIndex(x => new { x.CSR2Id, x.MediaType });
         }
 
@@ -954,7 +952,6 @@ namespace Spic.Infrastructure.Data
         public DbSet<CSR2> CSR2s => Set<CSR2>();
         public DbSet<CSR2Participant> CSR2Participants => Set<CSR2Participant>();
         public DbSet<CSR2Employee> CSR2Employees => Set<CSR2Employee>();
-        public DbSet<CSR2Activity> CSR2Activities => Set<CSR2Activity>();
         public DbSet<CSR2Media> CSR2Media => Set<CSR2Media>();
         public DbSet<CSR2Expense> CSR2Expenses => Set<CSR2Expense>();
         public DbSet<CSR2ExpenseProof> CSR2ExpenseProofs => Set<CSR2ExpenseProof>();

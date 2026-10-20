@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @using System.Globalization
 @using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 
 @inject HttpClient Http
 @inject NavigationManager NavigationManager
@@ -334,7 +335,7 @@
                                 </td>
                                 <td data-label="Sanction Number">@item.SanctionNo</td>
                                 <td data-label="CSR-2 Eligibility">
-                                    @if (string.Equals(item.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                                    @if (HasCSR1Status(item.Status, CSR1Status.Approved))
                                     {
                                         <div class="csrm-badge-outline-green">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -365,8 +366,8 @@
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                                         </button>
                                         <button type="button"
-                                                class="csrm-btn-csr2 @(string.Equals(item.Status, "Approved", StringComparison.OrdinalIgnoreCase) ? "" : "disabled")"
-                                                disabled="@(!string.Equals(item.Status, "Approved", StringComparison.OrdinalIgnoreCase))" @onclick="() => OpenCsr2(item.Id)">
+                                                class="csrm-btn-csr2 @(HasCSR1Status(item.Status, CSR1Status.Approved) ? "" : "disabled")"
+                                                disabled="@(!HasCSR1Status(item.Status, CSR1Status.Approved))" @onclick="() => OpenCsr2(item.Id)">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                                             CSR-2
                                         </button>
@@ -570,22 +571,22 @@
     private int TotalCSR1 => csr1List.Count;
 
     private int ApprovedCount => csr1List.Count(x =>
-        string.Equals(x.Status, "Approved", StringComparison.OrdinalIgnoreCase));
+        HasCSR1Status(x.Status, CSR1Status.Approved));
 
     private int PendingCount => csr1List.Count(x =>
-        string.Equals(x.Status, "Pending", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(x.Status, "Submitted", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(x.Status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(x.Status, "Validated", StringComparison.OrdinalIgnoreCase));
+        HasCSR1Status(x.Status, CSR1Status.Pending) ||
+        HasCSR1Status(x.Status, CSR1Status.Submitted) ||
+        HasCSR1Status(x.Status, CSR1Status.SubmittedForValidation) ||
+        HasCSR1Status(x.Status, CSR1Status.Validated));
 
     private int RejectedCount => csr1List.Count(x =>
-        string.Equals(x.Status, "Rejected", StringComparison.OrdinalIgnoreCase));
+        HasCSR1Status(x.Status, CSR1Status.Rejected));
 
     private int DraftCount => csr1List.Count(x =>
-        string.Equals(x.Status, "Draft", StringComparison.OrdinalIgnoreCase));
+        HasCSR1Status(x.Status, CSR1Status.Draft));
 
     private IEnumerable<CSR1ListDto> RejectedItems => csr1List.Where(x =>
-        string.Equals(x.Status, "Rejected", StringComparison.OrdinalIgnoreCase));
+        HasCSR1Status(x.Status, CSR1Status.Rejected));
 
     private List<string> ProgramTypes => csr1List
         .Where(x => !string.IsNullOrWhiteSpace(x.ProgramType))
@@ -606,7 +607,7 @@
 
     private List<string> Statuses => csr1List
         .Where(x => !string.IsNullOrWhiteSpace(x.Status))
-        .Select(x => x.Status.Trim())
+        .Select(x => NormalizeStatus(x.Status))
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .OrderBy(x => x)
         .ToList();
@@ -665,7 +666,7 @@
             if (!string.IsNullOrWhiteSpace(appliedStatus))
             {
                 result = result.Where(x =>
-                    string.Equals(x.Status, appliedStatus, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(NormalizeStatus(x.Status), NormalizeStatus(appliedStatus), StringComparison.OrdinalIgnoreCase));
             }
 
             if (!string.IsNullOrWhiteSpace(searchText))
@@ -676,7 +677,7 @@
                     (!string.IsNullOrWhiteSpace(x.ProgramName) &&
                      x.ProgramName.Contains(searchText, StringComparison.OrdinalIgnoreCase)) ||
                     (!string.IsNullOrWhiteSpace(x.Status) &&
-                     x.Status.Contains(searchText, StringComparison.OrdinalIgnoreCase)));
+                     NormalizeStatus(x.Status).Contains(searchText, StringComparison.OrdinalIgnoreCase)));
             }
 
             return result.ToList();
@@ -757,29 +758,47 @@
         }
     }
 
+    // The list DTO intentionally uses a string status. Resolve its enum meaning
+    // here, so the page handles both enum names and numeric enum values.
+    private static bool TryGetCSR1Status(string? raw, out CSR1Status status)
+    {
+        status = default;
+        if (string.IsNullOrWhiteSpace(raw) ||
+            !Enum.TryParse(raw.Trim(), true, out status) ||
+            !Enum.IsDefined(typeof(CSR1Status), status))
+            return false;
+        return true;
+    }
+
+    private static bool HasCSR1Status(string? raw, CSR1Status expected) =>
+        TryGetCSR1Status(raw, out var actual) && actual == expected;
+
+    private static string NormalizeStatus(string? raw) =>
+        TryGetCSR1Status(raw, out var status)
+            ? status.ToString()
+            : raw?.Trim() ?? string.Empty;
+
     private static string GetStatusClass(string? status)
     {
-        return status?.Trim().ToLowerInvariant() switch
+        if (!TryGetCSR1Status(status, out var current))
+            return "csrm-badge csrm-badge-submitted";
+        return current switch
         {
-            "approved" => "csrm-badge csrm-badge-approved",
-            "validated" => "csrm-badge csrm-badge-validated",
-            "rejected" => "csrm-badge csrm-badge-rejected",
-            "draft" => "csrm-badge csrm-badge-draft",
-            "pending" => "csrm-badge csrm-badge-submitted",
-            "submitted" => "csrm-badge csrm-badge-submitted",
-            "submittedforvalidation" => "csrm-badge csrm-badge-submitted",
+            CSR1Status.Approved => "csrm-badge csrm-badge-approved",
+            CSR1Status.Validated => "csrm-badge csrm-badge-validated",
+            CSR1Status.Rejected => "csrm-badge csrm-badge-rejected",
+            CSR1Status.Draft => "csrm-badge csrm-badge-draft",
             _ => "csrm-badge csrm-badge-submitted"
         };
     }
 
     private static string GetStatusDisplay(string? status)
     {
-        if (string.Equals(status, "SubmittedForValidation", StringComparison.OrdinalIgnoreCase))
-            return "Submitted";
-        if (string.Equals(status, "Validated", StringComparison.OrdinalIgnoreCase))
-            return "Validated";
-
-        return string.IsNullOrWhiteSpace(status) ? "--" : status;
+        if (!TryGetCSR1Status(status, out var current))
+            return string.IsNullOrWhiteSpace(status) ? "--" : status.Trim();
+        return current == CSR1Status.SubmittedForValidation
+            ? "Submitted"
+            : current.ToString();
     }
 
     private void OpenCsr2(int csr1Id)
