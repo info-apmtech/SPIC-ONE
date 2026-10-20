@@ -1,6 +1,7 @@
 ﻿using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
@@ -15,9 +16,11 @@ namespace SpicAPI.Controllers
 {
 	/// <summary>
 	/// CRUD endpoints for the Sub Dealer beneficiary master.
-	/// Admin only - non-admin users must never reach this master.
+	/// Admin / CorporateAdmin, or a Designation granting the matching
+	/// PagePermission.SubDealerEmployeeMaster action (see <see cref="SubDealerEmployeeMasterAccessAttribute"/>).
 	/// </summary>
-	[Authorize(Roles = "Admin,CorporateAdmin")]
+	[Authorize]
+	[SubDealerEmployeeMasterAccess]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class SubDealerBeneficiaryController(IGenericRepository<SubDealerBeneficiary> repo)
@@ -25,9 +28,11 @@ namespace SpicAPI.Controllers
 
 	/// <summary>
 	/// CRUD endpoints for the Approved Employee beneficiary master.
-	/// Admin only - non-admin users must never reach this master.
+	/// Admin / CorporateAdmin, or a Designation granting the matching
+	/// PagePermission.SubDealerEmployeeMaster action (see <see cref="SubDealerEmployeeMasterAccessAttribute"/>).
 	/// </summary>
-	[Authorize(Roles = "Admin,CorporateAdmin")]
+	[Authorize]
+	[SubDealerEmployeeMasterAccess]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class EmployeeBeneficiaryController(IGenericRepository<EmployeeBeneficiary> repo)
@@ -57,7 +62,7 @@ namespace SpicAPI.Controllers
 		// =====================================================================
 
 		// POST /api/subdealeremployee/bulk-upload?type=subdealer|employee
-		[Authorize(Roles = "Admin,CorporateAdmin")]
+		[SubDealerEmployeeMasterAccess("Entry")]
 		[HttpPost("bulk-upload")]
 		public async Task<IActionResult> BulkUpload([FromQuery] string type, IFormFile file)
 		{
@@ -271,7 +276,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET /api/subdealeremployee/sample-template?type=subdealer|employee
-		[Authorize(Roles = "Admin,CorporateAdmin")]
+		[SubDealerEmployeeMasterAccess("Entry")]
 		[HttpGet("sample-template")]
 		public IActionResult SampleTemplate([FromQuery] string type)
 		{
@@ -916,5 +921,66 @@ namespace SpicAPI.Controllers
 			"educationalqualification" => "EducationalQualification",
 			_ => h
 		};
+	}
+
+	/// <summary>
+	/// Authorization gate for the Sub Dealer &amp; Employee master (SubDealerBeneficiary /
+	/// EmployeeBeneficiary CRUD, bulk upload, sample template).
+	/// <para>
+	/// WHY THIS EXISTS: these endpoints used to carry <c>[Authorize(Roles = "Admin,CorporateAdmin")]</c>,
+	/// which only reads the JWT role claim, so a Designation-driven user (e.g. an SDWA Admin
+	/// designation) whose RoleAccess grants <c>SubDealerEmployeeMaster.Entry</c> was rejected even
+	/// though the permission was assigned.
+	/// </para>
+	/// Allowed: Admin / CorporateAdmin (the existing role rule, verbatim), or a Designation granting
+	/// the required action on <c>PagePermission.SubDealerEmployeeMaster</c>. With an explicit action
+	/// that action is required; otherwise it is derived from the HTTP method (GET = any grant on the
+	/// page, POST = Entry, PUT / PATCH = Update, DELETE = Delete). A View-only grant never writes.
+	/// Resolved from Designation.RoleAccess, never the Designation name.
+	/// </summary>
+	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
+	internal sealed class SubDealerEmployeeMasterAccessAttribute : Attribute, IAsyncAuthorizationFilter
+	{
+		private readonly string? _action;
+
+		public SubDealerEmployeeMasterAccessAttribute() { }
+
+		public SubDealerEmployeeMasterAccessAttribute(string action) => _action = action;
+
+		public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+		{
+			var user = context.HttpContext.User;
+			if (user?.Identity?.IsAuthenticated != true)
+			{
+				context.Result = new UnauthorizedObjectResult(new { Success = false, Message = "Authentication required." });
+				return;
+			}
+
+			// Existing role rule, verbatim from [Authorize(Roles = "Admin,CorporateAdmin")].
+			if (user.IsInRole(nameof(AppRole.Admin)) || user.IsInRole(nameof(AppRole.CorporateAdmin)))
+				return;
+
+			var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(db, user);
+
+			var action = _action ?? ActionFor(context.HttpContext.Request.Method);
+			var allowed = action == null
+				? designation != null && RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SubDealerEmployeeMaster)
+				: GuestHouseReceptionistScope.HasAction(designation, PagePermission.SubDealerEmployeeMaster, action);
+			if (allowed)
+				return;
+
+			context.Result = new ObjectResult(new { Success = false, Message = "You do not have permission to perform this action on the Sub Dealer & Employee master." })
+			{
+				StatusCode = StatusCodes.Status403Forbidden
+			};
+		}
+
+		// null = a read: any grant on the page is enough.
+		private static string? ActionFor(string method) =>
+			HttpMethods.IsPost(method) ? "Entry"
+			: HttpMethods.IsPut(method) || HttpMethods.IsPatch(method) ? "Update"
+			: HttpMethods.IsDelete(method) ? "Delete"
+			: null;
 	}
 }
