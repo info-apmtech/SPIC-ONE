@@ -25,7 +25,7 @@ namespace SpicAPI.Controllers
         private IQueryable<CSR1> VisibleApprovedCSR1()
         {
             var query = _db.Set<CSR1>().AsNoTracking()
-                .Where(x => x.IsActive && x.Status == "Approved");
+                .Where(x => x.IsActive && x.Status == CSR1Status.Approved);
             if (!User.IsInRole("Admin") && !User.IsInRole("SuperAdmin"))
             {
                 var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -77,7 +77,7 @@ namespace SpicAPI.Controllers
                     x.LocationId,
                     x.HeadquarterId,
                     x.ResponsiblePersonId,
-                    x.CSR1Status,
+                    CSR1Status = x.CSR1Status.ToString(),
                     ProgramName = master?.ProgramName ?? "",
                     ProgramType = master?.ProgramType ?? ""
                 };
@@ -118,7 +118,7 @@ namespace SpicAPI.Controllers
                 csr1.HeadquarterId,
                 csr1.LocationId,
                 csr1.ResponsiblePersonId,
-                csr1.Status,
+                Status = csr1.Status.ToString(),
                 Expenses = new
                 {
                     csr1.PrintingAndStationery,
@@ -195,8 +195,8 @@ namespace SpicAPI.Controllers
         {
             if (await ApprovedCsr1Async(csr1Id) == null) return NotFound("Approved CSR1 not available or access denied.");
             var report = await _db.Set<CSR2>().AsNoTracking()
-                .Include(x => x.Participants).Include(x => x.Employees).Include(x => x.Activities)
-                .Include(x => x.Media).Include(x => x.Expenses).ThenInclude(x => x.Proofs)
+                .Include(x => x.Participants).Include(x => x.Employees)
+                .Include(x => x.Media).Include(x => x.FocusProducts).Include(x => x.Expenses).ThenInclude(x => x.Proofs)
                 .AsSplitQuery() // Avoid a large Cartesian product across child collections.
                 .FirstOrDefaultAsync(x => x.CSR1Id == csr1Id, HttpContext.RequestAborted);
             if (report == null) return NotFound();
@@ -204,7 +204,7 @@ namespace SpicAPI.Controllers
             {
                 Id = report.Id,
                 CSR1Id = report.CSR1Id,
-                Status = report.Status,
+                Status = report.Status.ToString(),
                 ActualEventDate = report.ActualEventDate,
                 StartTime = report.StartTime,
                 EndTime = report.EndTime,
@@ -214,8 +214,8 @@ namespace SpicAPI.Controllers
                 IsOrganized = report.IsOrganized,
                 Participants = report.Participants.Select(x => new CSR2ParticipantDto { Name = x.Name, PhoneNumber = x.PhoneNumber, Role = x.Role }).ToList(),
                 Employees = report.Employees.Select(x => new CSR2EmployeeDto { EmployeeInformationId = x.EmployeeInformationId, EmployeeName = x.EmployeeName, PhoneNumber = x.PhoneNumber, RoleName = x.RoleName }).ToList(),
-                Activities = report.Activities.OrderBy(x => x.SortOrder).Select(x => new CSR2ActivityDto { ActivityName = x.ActivityName, StartTime = x.StartTime, EndTime = x.EndTime, ParticipantsCount = x.ParticipantsCount, Description = x.Description, Remarks = x.Remarks, SortOrder = x.SortOrder }).ToList(),
-                Expenses = report.Expenses.Select(x => new CSR2ExpenseDto { CategoryKey = x.CategoryKey, CategoryName = x.CategoryName, PlannedAmount = x.PlannedAmount, ActualAmount = x.ActualAmount, ExpenseDate = x.ExpenseDate, ProofId = x.Proofs.Select(p => (int?)p.Id).FirstOrDefault(), ProofFileName = x.Proofs.Select(p => p.OriginalFileName).FirstOrDefault() }).ToList(),
+                FocusProducts = report.FocusProducts.Select(x => new CSR2FocusProductDto { GroupNumber = x.GroupNumber, CropId = x.CropId, ProductId = x.ProductId }).ToList(),
+                Expenses = report.Expenses.Select(x => new CSR2ExpenseDto { CategoryKey = x.CategoryKey, CategoryName = x.CategoryName, PlannedAmount = x.PlannedAmount, ActualAmount = x.ActualAmount, ExpenseDate = x.ExpenseDate, BillNo = x.BillNo, ProofId = x.Proofs.Select(p => (int?)p.Id).FirstOrDefault(), ProofFileName = x.Proofs.Select(p => p.OriginalFileName).FirstOrDefault() }).ToList(),
                 Media = report.Media.Select(x => new CSR2MediaDto { Id = x.Id, MediaType = x.MediaType, OriginalFileName = x.OriginalFileName, Caption = x.Caption, UseInDigitalLibrary = x.UseInDigitalLibrary, FileSizeBytes = x.FileSizeBytes }).ToList()
             });
         }
@@ -227,25 +227,29 @@ namespace SpicAPI.Controllers
             if (csr1 == null) return NotFound("Approved CSR1 not available or access denied.");
             if (dto.EndTime.HasValue && dto.StartTime.HasValue && dto.EndTime <= dto.StartTime)
                 return BadRequest("Event end time must be later than start time.");
-            if (dto.ExpectedParticipantsCount < 0 || dto.Expenses.Any(x => x.ActualAmount < 0) || dto.Activities.Any(x => x.ParticipantsCount < 0 || x.EndTime <= x.StartTime))
-                return BadRequest("Invalid amounts, counts or activity times.");
+            if (dto.ExpectedParticipantsCount < 0 || dto.Expenses.Any(x => x.ActualAmount < 0))
+                return BadRequest("Invalid expense amounts or participant counts.");
+            if (dto.FocusProducts.Any(x => x.GroupNumber is < 1 or > 3 || x.CropId <= 0 || x.ProductId <= 0) ||
+                dto.FocusProducts.GroupBy(x => x.GroupNumber).Any(g => g.Count() > 3) ||
+                dto.FocusProducts.GroupBy(x => new { x.GroupNumber, x.ProductId }).Any(g => g.Count() > 1) ||
+                (dto.FocusProducts.Count > 0 && !dto.FocusProducts.Any(x => x.GroupNumber == 1)))
+                return BadRequest("Invalid focus selections. Group 1 is mandatory; maximum three products per group.");
             if (dto.Expenses.Select(x => x.CategoryKey).Distinct().Count() != dto.Expenses.Count || dto.Expenses.Any(x => !CategoryKeys.Contains(x.CategoryKey)))
                 return BadRequest("Invalid or duplicate expense category.");
             if (dto.Participants.Any(x => string.IsNullOrWhiteSpace(x.Name) || string.IsNullOrWhiteSpace(x.Role)) ||
-                dto.Employees.Any(x => x.EmployeeInformationId <= 0 || string.IsNullOrWhiteSpace(x.RoleName)) ||
-                dto.Activities.Any(x => string.IsNullOrWhiteSpace(x.ActivityName) || string.IsNullOrWhiteSpace(x.Description)))
-                return BadRequest("Required participant, employee or activity data is missing.");
+                dto.Employees.Any(x => x.EmployeeInformationId <= 0 || string.IsNullOrWhiteSpace(x.RoleName)))
+                return BadRequest("Required participant or employee data is missing.");
             var report = await _db.Set<CSR2>().Include(x => x.Participants).Include(x => x.Employees)
-                .Include(x => x.Activities).Include(x => x.Expenses).AsSplitQuery()
+                .Include(x => x.Expenses).Include(x => x.FocusProducts).AsSplitQuery()
                 .FirstOrDefaultAsync(x => x.CSR1Id == dto.CSR1Id, HttpContext.RequestAborted);
             if (report != null && dto.Id.HasValue && dto.Id != report.Id) return Conflict("Report ID mismatch.");
-            if (report != null && report.Status != "Draft") return Conflict("Submitted reports are read-only.");
+            if (report != null && report.Status != CSR2Status.Draft) return Conflict("Submitted reports are read-only.");
             if (report == null)
             {
                 report = new CSR2 { CSR1Id = dto.CSR1Id, CreatedBy = Actor, CreatedAt = DateTime.UtcNow };
                 _db.Set<CSR2>().Add(report);
             }
-            report.ActualEventDate = dto.ActualEventDate;
+            report.ActualEventDate = csr1.CSR1Date;
             report.StartTime = dto.StartTime; report.EndTime = dto.EndTime;
             report.EventCoordinatorEmployeeId = dto.EventCoordinatorEmployeeId;
             report.ActualLocation = dto.ActualLocation?.Trim();
@@ -257,10 +261,10 @@ namespace SpicAPI.Controllers
             await using var tx = await _db.Database.BeginTransactionAsync();
             _db.Set<CSR2Participant>().RemoveRange(report.Participants);
             _db.Set<CSR2Employee>().RemoveRange(report.Employees);
-            _db.Set<CSR2Activity>().RemoveRange(report.Activities);
+            _db.Set<CSR2FocusProduct>().RemoveRange(report.FocusProducts);
             report.Participants = dto.Participants.Select(x => new CSR2Participant { Name = x.Name.Trim(), PhoneNumber = x.PhoneNumber, Role = x.Role.Trim() }).ToList();
+            report.FocusProducts = dto.FocusProducts.Select(x => new CSR2FocusProduct { GroupNumber = x.GroupNumber, CropId = x.CropId, ProductId = x.ProductId }).ToList();
             report.Employees = dto.Employees.GroupBy(x => x.EmployeeInformationId).Select(g => g.First()).Select(x => new CSR2Employee { EmployeeInformationId = x.EmployeeInformationId, EmployeeName = x.EmployeeName, PhoneNumber = x.PhoneNumber, RoleName = x.RoleName }).ToList();
-            report.Activities = dto.Activities.Select((x, i) => new CSR2Activity { ActivityName = x.ActivityName.Trim(), StartTime = x.StartTime, EndTime = x.EndTime, ParticipantsCount = x.ParticipantsCount, Description = x.Description.Trim(), Remarks = x.Remarks, SortOrder = i + 1 }).ToList();
             // Do not delete/recreate expense rows: uploaded proofs are attached to expense IDs.
             foreach (var item in dto.Expenses)
             {
@@ -268,10 +272,10 @@ namespace SpicAPI.Controllers
                 if (expense == null) { expense = new CSR2Expense { CategoryKey = item.CategoryKey }; report.Expenses.Add(expense); }
                 expense.CategoryName = item.CategoryName;
                 expense.PlannedAmount = PlannedAmount(csr1, item.CategoryKey); // never trust client planned amount
-                expense.ActualAmount = item.ActualAmount; expense.ExpenseDate = item.ExpenseDate;
+                expense.ActualAmount = item.ActualAmount; expense.ExpenseDate = item.ExpenseDate; expense.BillNo = item.BillNo?.Trim();
             }
             await _db.SaveChangesAsync(); await tx.CommitAsync();
-            return Ok(new { id = report.Id, report.CSR1Id, report.Status });
+            return Ok(new { id = report.Id, report.CSR1Id, Status = report.Status.ToString() });
         }
 
         [HttpPost("{id:int}/submit")]
@@ -279,13 +283,13 @@ namespace SpicAPI.Controllers
         {
             var report = await _db.Set<CSR2>().Include(x => x.Expenses).FirstOrDefaultAsync(x => x.Id == id);
             if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != "Draft") return Conflict("Already submitted.");
+            if (report.Status != CSR2Status.Draft) return Conflict("Already submitted.");
             if (!report.ActualEventDate.HasValue || !report.StartTime.HasValue || !report.EndTime.HasValue ||
                 report.EndTime <= report.StartTime || report.EventCoordinatorEmployeeId is null or <= 0 ||
                 string.IsNullOrWhiteSpace(report.ActualLocation)) return BadRequest("Complete actual event details.");
             if (report.Expenses.Any(x => x.ActualAmount > 0 && !x.ExpenseDate.HasValue)) return BadRequest("Expense dates are required for amounts entered.");
-            report.Status = "Submitted"; report.SubmittedAt = DateTime.UtcNow; report.SubmittedBy = Actor;
-            await _db.SaveChangesAsync(); return Ok(new { report.Id, report.Status });
+            report.Status = CSR2Status.Submitted; report.SubmittedAt = DateTime.UtcNow; report.SubmittedBy = Actor;
+            await _db.SaveChangesAsync(); return Ok(new { report.Id, Status = report.Status.ToString() });
         }
 
         [HttpPost("{id:int}/media")]
@@ -300,7 +304,7 @@ namespace SpicAPI.Controllers
             var useInDigitalLibrary = form.UseInDigitalLibrary;
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == id);
             if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != "Draft") return Conflict("Only draft reports accept uploads.");
+            if (report.Status != CSR2Status.Draft) return Conflict("Only draft reports accept uploads.");
             var isPhoto = mediaType == "Photo"; var isVideo = mediaType == "Video";
             if (!isPhoto && !isVideo) return BadRequest("MediaType must be Photo or Video.");
             var max = isPhoto ? 20L * 1024 * 1024 : 200L * 1024 * 1024;
@@ -320,7 +324,7 @@ namespace SpicAPI.Controllers
         {
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == id);
             if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != "Draft") return Conflict("Only draft reports accept uploads.");
+            if (report.Status != CSR2Status.Draft) return Conflict("Only draft reports accept uploads.");
             var expense = await _db.Set<CSR2Expense>().Include(x => x.Proofs).FirstOrDefaultAsync(x => x.CSR2Id == id && x.CategoryKey == categoryKey);
             if (expense == null) return NotFound("Save the expense row first.");
             var extensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" };
@@ -359,7 +363,7 @@ namespace SpicAPI.Controllers
             if (media == null) return NotFound();
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == media.CSR2Id);
             if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != "Draft") return Conflict();
+            if (report.Status != CSR2Status.Draft) return Conflict();
             _db.Remove(media); await _db.SaveChangesAsync();
             System.IO.File.Delete(ResolveStoragePath(media.StorageKey)); return NoContent();
         }
@@ -370,7 +374,7 @@ namespace SpicAPI.Controllers
             if (proof?.CSR2Expense == null) return NotFound();
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == proof.CSR2Expense.CSR2Id);
             if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != "Draft") return Conflict();
+            if (report.Status != CSR2Status.Draft) return Conflict();
             _db.Remove(proof); await _db.SaveChangesAsync();
             System.IO.File.Delete(ResolveStoragePath(proof.StorageKey)); return NoContent();
         }
@@ -381,7 +385,7 @@ namespace SpicAPI.Controllers
             if (media == null) return NotFound();
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == media.CSR2Id);
             if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != "Draft") return Conflict();
+            if (report.Status != CSR2Status.Draft) return Conflict();
             media.Caption = patch.Caption; media.UseInDigitalLibrary = patch.UseInDigitalLibrary;
             await _db.SaveChangesAsync(); return NoContent();
         }
