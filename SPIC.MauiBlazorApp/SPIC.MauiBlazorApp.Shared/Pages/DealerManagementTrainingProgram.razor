@@ -21,7 +21,7 @@ else if (csr1Plan != null)
         <div class="dmtp-wrapper">
 
             <!-- Header -->
-            @if (currentStep == 5)
+            @if (currentStep == 4)
             {
                 <div class="dmtp-header dmtp-header-review">
                     <div>
@@ -52,7 +52,7 @@ else if (csr1Plan != null)
             }
 
             <!-- Budget Summary (Expense & Proof step) -->
-            @if (currentStep == 4)
+            @if (currentStep == 3)
             {
                 <div class="dmtp-budget-summary-grid">
                     <div class="dmtp-budget-card dmtp-budget-green">
@@ -102,7 +102,7 @@ else if (csr1Plan != null)
             </div>
 
             <!-- Review Banner (Review & Submit step) -->
-            @if (currentStep == 5)
+            @if (currentStep == 4)
             {
                 <div class="dmtp-review-banner">
                     <div class="dmtp-review-pills">
@@ -208,31 +208,45 @@ else if (csr1Plan != null)
                     </div>
                 </div>
 
-                <!-- Focus Details from CSR1Products1, CSR1Products2, CSR1Products3 -->
+                <!-- Editable CSR-2 focus details: prefilled from approved CSR-1 -->
                 <div class="dmtp-card">
                     <h3 class="dmtp-card-title">Focus Details</h3>
                     <div class="dmtp-focus-grid">
-                        @foreach (var focus in CSR1FocusGroups)
+                        @foreach (var focus in csr2FocusGroups)
                         {
-                            <div class="dmtp-focus-box">
+                            <div class="dmtp-focus-box" @key="focus.GroupNumber">
                                 <div class="dmtp-form-group">
-                                    <label class="dmtp-form-label">Focused Crop - @focus.Number</label>
-                                    <select class="dmtp-form-select" disabled>
-                                        <option>@(focus.Items.Count > 0 ? Display(focus.Items[0].CropName) : "Not selected")</option>
+                                    <label class="dmtp-form-label">Focused Crop @focus.GroupNumber @(focus.GroupNumber == 1 ? "*" : "(Optional)")</label>
+                                    <select class="dmtp-form-select" value="@focus.CropId" @onchange="e => ChangeFocusCrop(focus, e.Value?.ToString())" disabled="@(csr2Status != "Draft")">
+                                        <option value="0">Select Crop</option>
+                                        @foreach (var crop in availableCrops)
+                                        {
+                                            <option value="@crop.Id">@crop.Name</option>
+                                        }
                                     </select>
                                 </div>
                                 <div class="dmtp-form-group">
-                                    <label class="dmtp-form-label">Focused Products</label>
-                                    <div class="d-flex flex-wrap gap-2">
-                                        @foreach (var product in focus.Items)
+                                    <label class="dmtp-form-label">Focused Products (up to 3)</label>
+                                    <div class="d-flex flex-wrap gap-2 mb-2">
+                                        @foreach (var pid in focus.ProductIds)
                                         {
-                                            <span class="dmtp-tag">@product.ProductName</span>
-                                        }
-                                        @if (focus.Items.Count == 0)
-                                        {
-                                            <span class="text-muted">No products selected</span>
+                                            var product = availableProducts.FirstOrDefault(x => x.Id == pid);
+                                            <span class="dmtp-tag" @key="pid">
+                                                @(product?.Name ?? pid.ToString())
+                                                @if (csr2Status == "Draft")
+                                                {
+                                                    <button type="button" class="btn btn-sm p-0 ms-1" title="Remove product" @onclick="() => RemoveFocusProduct(focus, pid)">×</button>
+                                                }
+                                            </span>
                                         }
                                     </div>
+                                    <select class="dmtp-form-select" value="0" @onchange="e => AddFocusProduct(focus, e.Value?.ToString())" disabled="@(csr2Status != "Draft" || focus.CropId == 0 || focus.ProductIds.Count >= 3)">
+                                        <option value="0">Select Product</option>
+                                        @foreach (var product in availableProducts.Where(p => !focus.ProductIds.Contains(p.Id)))
+                                        {
+                                            <option value="@product.Id">@product.Name</option>
+                                        }
+                                    </select>
                                 </div>
                             </div>
                         }
@@ -245,7 +259,7 @@ else if (csr1Plan != null)
                     <div class="dmtp-event-grid">
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Actual Event Date <span class="text-danger">*</span></label>
-                            <input type="date" class="dmtp-form-control" @bind="actualEventDate" />
+                            <input type="date" class="dmtp-form-control" @bind="actualEventDate" disabled />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Start Time <span class="text-danger">*</span></label>
@@ -272,6 +286,156 @@ else if (csr1Plan != null)
                     </div>
                 </div>
 
+                <!-- Event Photos: dynamic local previews; saved by CSR-2 API in a later step -->
+                <div class="dmtp-card">
+                    <div class="dmtp-list-header">
+                        <h3 class="dmtp-card-title dmtp-no-margin">Event Photos (@eventPhotos.Count)</h3>
+                        <label for="dmtp-photos-header" class="dmtp-btn-add" style="cursor:pointer;">
+                            <i class="bi bi-plus-lg"></i> Upload Photos
+                        </label>
+                        <InputFile id="dmtp-photos-header" OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple style="display:none" />
+                    </div>
+
+                    <div class="dmtp-dropzone" style="position:relative;">
+                        <InputFile OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
+                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
+                        <div class="dmtp-dropzone-icon">
+                            <i class="bi bi-image"></i>
+                        </div>
+                        <p class="dmtp-dropzone-title">Drag and drop photos here, or click to browse</p>
+                        <p class="dmtp-dropzone-sub">JPG, PNG up to 20MB each</p>
+                        <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
+                            <label for="dmtp-photos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                <i class="bi bi-folder2-open"></i> Browse Files
+                            </label>
+                            @* On mobile this opens the gallery/file picker; it does not force the camera. *@
+                            <InputFile id="dmtp-photos-browse" OnChange="OnPhotosSelected"
+                                       accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
+                                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
+                            <label for="dmtp-photos-camera" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                <i class="bi bi-camera"></i> Take Photo
+                            </label>
+                            @* Mobile camera: rear-facing camera where supported; browsers may offer a chooser. *@
+                            <InputFile id="dmtp-photos-camera" OnChange="OnPhotosSelected"
+                                       accept="image/jpeg,image/png,image/*" capture="environment"
+                                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
+                        </div>
+                        <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile: Take Photo opens the camera when supported; Browse Files opens your gallery or files.</p>
+                    </div>
+                    @if (isReadingPhotos)
+                    {
+                        <div class="text-muted small mt-2">Loading selected photos...</div>
+                    }
+
+                    @if (eventPhotos.Count == 0)
+                    {
+                        <p class="text-muted mt-3">No event photos added yet.</p>
+                    }
+                    <div class="dmtp-photo-grid">
+                        @foreach (var photo in eventPhotos)
+                        {
+                            <div class="dmtp-photo-card" @key="photo.Id">
+                                <div class="dmtp-photo-thumb" style="overflow:hidden;">
+                                    @if (!string.IsNullOrWhiteSpace(photo.PreviewUrl))
+                                    {
+                                        <img src="@photo.PreviewUrl" alt="@photo.FileName" loading="lazy" style="width:100%;height:100%;object-fit:cover;" />
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted small text-center p-3">@(photo.PreviewError ?? "Loading saved photo...")</div>
+                                    }
+                                </div>
+                                <span class="dmtp-photo-filename" title="@photo.FileName">@photo.FileName</span>
+                                <input type="text" class="dmtp-form-control" placeholder="Add caption" @bind="photo.Caption" />
+                                <div class="dmtp-photo-footer">
+                                    <label class="dmtp-toggle-switch" style="cursor:pointer;">
+                                        <input type="checkbox" @bind="photo.UseInLibrary" style="position:absolute;opacity:0;width:1px;height:1px;" />
+                                        <span class="dmtp-toggle @(photo.UseInLibrary ? "on" : "")"></span>
+                                        Use in Digital Library
+                                    </label>
+                                    <button type="button" class="dmtp-link-remove" @onclick="() => RemovePhoto(photo.Id)">
+                                        <i class="bi bi-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Event Videos: streamed directly to CSR-2 API to reduce memory usage -->
+                <div class="dmtp-card">
+                    <div class="dmtp-list-header">
+                        <h3 class="dmtp-card-title dmtp-no-margin">Event Videos (@eventVideos.Count)</h3>
+                        <label for="dmtp-videos-header" class="dmtp-btn-add" style="cursor:pointer;">
+                            <i class="bi bi-plus-lg"></i> Upload Videos
+                        </label>
+                        <InputFile id="dmtp-videos-header" OnChange="OnVideosSelected" accept="video/mp4,video/quicktime,.mp4,.mov" multiple
+                                   style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+                    </div>
+                    <div class="dmtp-dropzone" style="position:relative;">
+                        <InputFile OnChange="OnVideosSelected" accept="video/mp4,video/quicktime,.mp4,.mov" multiple
+                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
+                        <div class="dmtp-dropzone-icon"><i class="bi bi-camera-video"></i></div>
+                        <p class="dmtp-dropzone-title">Drag and Drop Videos here, or choose an option</p>
+                        <p class="dmtp-dropzone-sub">MP4, MOV up to 700MB each</p>
+                        <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
+                            <label for="dmtp-videos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                <i class="bi bi-folder2-open"></i> Browse Files
+                            </label>
+                            <InputFile id="dmtp-videos-browse" OnChange="OnVideosSelected"
+                                       accept="video/mp4,video/quicktime,.mp4,.mov" multiple
+                                       style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+                            <label for="dmtp-videos-record" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                <i class="bi bi-camera-video"></i> Record Video
+                            </label>
+                            <InputFile id="dmtp-videos-record" OnChange="OnVideosSelected"
+                                       accept="video/*" capture="environment"
+                                       style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+                        </div>
+                        <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile, Record Video requests the camera. Browse Files selects a saved video.</p>
+                    </div>
+                    @if (isReadingVideos)
+                    {
+                        <div class="text-muted small mt-2">Uploading videos directly to server...</div>
+                    }
+
+                    @if (eventVideos.Count == 0)
+                    {
+                        <p class="text-muted mt-3">No event videos added yet.</p>
+                    }
+                    <div class="dmtp-photo-grid">
+                        @foreach (var video in eventVideos)
+                        {
+                            <div class="dmtp-photo-card" @key="video.Id">
+                                <div class="dmtp-photo-thumb" style="height:auto;min-height:140px;overflow:hidden;background:#152633;">
+                                    @if (!string.IsNullOrEmpty(video.PreviewUrl))
+                                    {
+                                        <video controls playsinline preload="metadata" src="@video.PreviewUrl" style="width:100%;max-height:220px;display:block;"></video>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-white text-center p-4">Preview unavailable for large video; select a shorter clip or save via server upload.</div>
+                                    }
+                                </div>
+                                <span class="dmtp-photo-filename" title="@video.FileName">@video.FileName (@FormatVideoSize(video.Bytes.LongLength > 0 ? video.Bytes.LongLength : video.SavedFileSize))</span>
+                                <input type="text" class="dmtp-form-control" placeholder="Add video caption" @bind="video.Caption" />
+                                <div class="dmtp-photo-footer">
+                                    <label class="dmtp-toggle-switch" style="cursor:pointer;">
+                                        <input type="checkbox" @bind="video.UseInLibrary" style="position:absolute;opacity:0;width:1px;height:1px;" />
+                                        <span class="dmtp-toggle @(video.UseInLibrary ? "on" : "")"></span>
+                                        Use in Digital Library
+                                    </label>
+                                    <button type="button" class="dmtp-link-remove" @onclick="() => RemoveVideo(video.Id)">
+                                        <i class="bi bi-trash"></i> Remove
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+            else if (currentStep == 2)
+            {
                 <!-- Participants Summary -->
                 <div class="dmtp-participants-heading">
                     <h3>Participants</h3>
@@ -465,238 +629,7 @@ else if (csr1Plan != null)
                     <input type="number" min="0" class="dmtp-form-control dmtp-expected-input" placeholder="e.g. 150" @bind="expectedParticipantsCount" />
                 </div>
             }
-            else if (currentStep == 2)
-            {
-                <!-- Event Photos: dynamic local previews; saved by CSR-2 API in a later step -->
-                <div class="dmtp-card">
-                    <div class="dmtp-list-header">
-                        <h3 class="dmtp-card-title dmtp-no-margin">Event Photos (@eventPhotos.Count)</h3>
-                        <label for="dmtp-photos-header" class="dmtp-btn-add" style="cursor:pointer;">
-                            <i class="bi bi-plus-lg"></i> Upload Photos
-                        </label>
-                        <InputFile id="dmtp-photos-header" OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple style="display:none" />
-                    </div>
-
-                    <div class="dmtp-dropzone" style="position:relative;">
-                        <InputFile OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
-                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
-                        <div class="dmtp-dropzone-icon">
-                            <i class="bi bi-image"></i>
-                        </div>
-                        <p class="dmtp-dropzone-title">Drag and drop photos here, or click to browse</p>
-                        <p class="dmtp-dropzone-sub">JPG, PNG up to 20MB each</p>
-                        <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
-                            <label for="dmtp-photos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
-                                <i class="bi bi-folder2-open"></i> Browse Files
-                            </label>
-                            @* On mobile this opens the gallery/file picker; it does not force the camera. *@
-                            <InputFile id="dmtp-photos-browse" OnChange="OnPhotosSelected"
-                                       accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
-                                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
-                            <label for="dmtp-photos-camera" class="dmtp-btn-outline-plain" style="cursor:pointer;">
-                                <i class="bi bi-camera"></i> Take Photo
-                            </label>
-                            @* Mobile camera: rear-facing camera where supported; browsers may offer a chooser. *@
-                            <InputFile id="dmtp-photos-camera" OnChange="OnPhotosSelected"
-                                       accept="image/jpeg,image/png,image/*" capture="environment"
-                                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
-                        </div>
-                        <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile: Take Photo opens the camera when supported; Browse Files opens your gallery or files.</p>
-                    </div>
-                    @if (isReadingPhotos)
-                    {
-                        <div class="text-muted small mt-2">Loading selected photos...</div>
-                    }
-
-                    @if (eventPhotos.Count == 0)
-                    {
-                        <p class="text-muted mt-3">No event photos added yet.</p>
-                    }
-                    <div class="dmtp-photo-grid">
-                        @foreach (var photo in eventPhotos)
-                        {
-                            <div class="dmtp-photo-card" @key="photo.Id">
-                                <div class="dmtp-photo-thumb" style="overflow:hidden;">
-                                    @if (!string.IsNullOrWhiteSpace(photo.PreviewUrl))
-                                    {
-                                        <img src="@photo.PreviewUrl" alt="@photo.FileName" loading="lazy" style="width:100%;height:100%;object-fit:cover;" />
-                                    }
-                                    else
-                                    {
-                                        <div class="text-muted small text-center p-3">@(photo.PreviewError ?? "Loading saved photo...")</div>
-                                    }
-                                </div>
-                                <span class="dmtp-photo-filename" title="@photo.FileName">@photo.FileName</span>
-                                <input type="text" class="dmtp-form-control" placeholder="Add caption" @bind="photo.Caption" />
-                                <div class="dmtp-photo-footer">
-                                    <label class="dmtp-toggle-switch" style="cursor:pointer;">
-                                        <input type="checkbox" @bind="photo.UseInLibrary" style="position:absolute;opacity:0;width:1px;height:1px;" />
-                                        <span class="dmtp-toggle @(photo.UseInLibrary ? "on" : "")"></span>
-                                        Use in Digital Library
-                                    </label>
-                                    <button type="button" class="dmtp-link-remove" @onclick="() => RemovePhoto(photo.Id)">
-                                        <i class="bi bi-trash"></i> Remove
-                                    </button>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <!-- Event Videos: streamed directly to CSR-2 API to reduce memory usage -->
-                <div class="dmtp-card">
-                    <div class="dmtp-list-header">
-                        <h3 class="dmtp-card-title dmtp-no-margin">Event Videos (@eventVideos.Count)</h3>
-                        <label for="dmtp-videos-header" class="dmtp-btn-add" style="cursor:pointer;">
-                            <i class="bi bi-plus-lg"></i> Upload Videos
-                        </label>
-                        <InputFile id="dmtp-videos-header" OnChange="OnVideosSelected" accept="video/mp4,video/quicktime,.mp4,.mov" multiple
-                                   style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
-                    </div>
-                    <div class="dmtp-dropzone" style="position:relative;">
-                        <InputFile OnChange="OnVideosSelected" accept="video/mp4,video/quicktime,.mp4,.mov" multiple
-                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
-                        <div class="dmtp-dropzone-icon"><i class="bi bi-camera-video"></i></div>
-                        <p class="dmtp-dropzone-title">Drag and Drop Videos here, or choose an option</p>
-                        <p class="dmtp-dropzone-sub">MP4, MOV up to 200MB each</p>
-                        <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
-                            <label for="dmtp-videos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
-                                <i class="bi bi-folder2-open"></i> Browse Files
-                            </label>
-                            <InputFile id="dmtp-videos-browse" OnChange="OnVideosSelected"
-                                       accept="video/mp4,video/quicktime,.mp4,.mov" multiple
-                                       style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
-                            <label for="dmtp-videos-record" class="dmtp-btn-outline-plain" style="cursor:pointer;">
-                                <i class="bi bi-camera-video"></i> Record Video
-                            </label>
-                            <InputFile id="dmtp-videos-record" OnChange="OnVideosSelected"
-                                       accept="video/*" capture="environment"
-                                       style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
-                        </div>
-                        <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile, Record Video requests the camera. Browse Files selects a saved video.</p>
-                    </div>
-                    @if (isReadingVideos)
-                    {
-                        <div class="text-muted small mt-2">Uploading videos directly to server...</div>
-                    }
-
-                    @if (eventVideos.Count == 0)
-                    {
-                        <p class="text-muted mt-3">No event videos added yet.</p>
-                    }
-                    <div class="dmtp-photo-grid">
-                        @foreach (var video in eventVideos)
-                        {
-                            <div class="dmtp-photo-card" @key="video.Id">
-                                <div class="dmtp-photo-thumb" style="height:auto;min-height:140px;overflow:hidden;background:#152633;">
-                                    @if (!string.IsNullOrEmpty(video.PreviewUrl))
-                                    {
-                                        <video controls playsinline preload="metadata" src="@video.PreviewUrl" style="width:100%;max-height:220px;display:block;"></video>
-                                    }
-                                    else
-                                    {
-                                        <div class="text-white text-center p-4">Preview unavailable for large video; select a shorter clip or save via server upload.</div>
-                                    }
-                                </div>
-                                <span class="dmtp-photo-filename" title="@video.FileName">@video.FileName (@FormatVideoSize(video.Bytes.LongLength > 0 ? video.Bytes.LongLength : video.SavedFileSize))</span>
-                                <input type="text" class="dmtp-form-control" placeholder="Add video caption" @bind="video.Caption" />
-                                <div class="dmtp-photo-footer">
-                                    <label class="dmtp-toggle-switch" style="cursor:pointer;">
-                                        <input type="checkbox" @bind="video.UseInLibrary" style="position:absolute;opacity:0;width:1px;height:1px;" />
-                                        <span class="dmtp-toggle @(video.UseInLibrary ? "on" : "")"></span>
-                                        Use in Digital Library
-                                    </label>
-                                    <button type="button" class="dmtp-link-remove" @onclick="() => RemoveVideo(video.Id)">
-                                        <i class="bi bi-trash"></i> Remove
-                                    </button>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
             else if (currentStep == 3)
-            {
-                <!-- Dynamic Event Activities -->
-                <div class="dmtp-card">
-                    <div class="dmtp-list-header">
-                        <div>
-                            <h3 class="dmtp-card-title dmtp-no-margin">Event Activities</h3>
-                            <p class="dmtp-card-subtitle">Record activities actually conducted during the event</p>
-                        </div>
-                        <span class="dmtp-count-pill">@activities.Count Activities</span>
-                    </div>
-                    <div class="dmtp-new-activity-box">
-                        <h4>@(editingActivityId.HasValue ? "Edit Activity" : "New Activity")</h4>
-                        <div class="dmtp-quickfill-row">
-                            <span class="dmtp-quickfill-label">Quick fill:</span>
-                            <button type="button" class="dmtp-quickfill-chip" @onclick='() => FillActivityName("Farmer Awareness Session")'>Farmer Awareness Session</button>
-                            <button type="button" class="dmtp-quickfill-chip" @onclick='() => FillActivityName("Product Demonstration")'>Product Demonstration</button>
-                            <button type="button" class="dmtp-quickfill-chip" @onclick='() => FillActivityName("Crop Guidance Session")'>Crop Guidance Session</button>
-                        </div>
-                        <div class="dmtp-activity-grid">
-                            <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">Activity Name *</label>
-                                <input type="text" class="dmtp-form-control" placeholder="Enter activity name" @bind="activityName" />
-                            </div>
-                            <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">Start Time *</label>
-                                <input type="time" class="dmtp-form-control" @bind="activityStartTime" />
-                            </div>
-                            <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">End Time *</label>
-                                <input type="time" class="dmtp-form-control" @bind="activityEndTime" />
-                            </div>
-                            <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">Participants (optional)</label>
-                                <input type="number" min="0" class="dmtp-form-control" placeholder="Number attending this activity" @bind="activityParticipants" />
-                            </div>
-                            <div class="dmtp-form-group dmtp-span-2">
-                                <label class="dmtp-form-label">Activity Description *</label>
-                                <input type="text" class="dmtp-form-control" placeholder="What happened during this activity?" @bind="activityDescription" />
-                            </div>
-                            <div class="dmtp-form-group">
-                                <label class="dmtp-form-label">Remarks (optional)</label>
-                                <input type="text" class="dmtp-form-control" placeholder="Additional remarks" @bind="activityRemarks" />
-                            </div>
-                        </div>
-
-                        <div class="dmtp-new-activity-actions">
-                            <button type="button" class="dmtp-btn-cancel-neutral" @onclick="ClearActivityForm">Cancel</button>
-                            <button type="button" class="dmtp-btn-start-event" @onclick="SaveActivity">@(editingActivityId.HasValue ? "Update Activity" : "Add Activity")</button>
-                        </div>
-                    </div>
-                    @if (activities.Count == 0)
-                    {
-                        <p class="text-muted mt-3">No activities added yet.</p>
-                    }
-                    <div class="dmtp-activity-list">
-                        @foreach (var activity in activities)
-                        {
-                            <div class="dmtp-activity-card" @key="activity.Id">
-                                <div class="dmtp-activity-avatar">@GetInitials(activity.Title)</div>
-                                <div class="dmtp-activity-info">
-                                    <span class="dmtp-activity-title">@activity.Title <span class="dmtp-activity-number">#@(activities.IndexOf(activity) + 1)</span></span>
-                                    <span class="dmtp-activity-desc">@activity.Description</span>
-                                    <div class="dmtp-activity-meta">
-                                        <span>@activity.StartTime - @activity.EndTime</span>
-                                        <span>@activity.Participants Participants</span>
-                                        @if (!string.IsNullOrWhiteSpace(activity.Remarks))
-                                        {
-                                            <span>Remarks: @activity.Remarks</span>
-                                        }
-                                    </div>
-                                </div>
-                                <div class="dmtp-activity-icons">
-                                    <button type="button" class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit" @onclick="() => EditActivity(activity.Id)"><i class="bi bi-pencil-square"></i></button>
-                                    <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => DeleteActivity(activity.Id)"><i class="bi bi-trash"></i></button>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-            else if (currentStep == 4)
             {
                 <!-- Expense & Proof: CSR-1 planned amounts with CSR-2 actual amounts -->
                 <div class="dmtp-card">
@@ -716,6 +649,10 @@ else if (csr1Plan != null)
                                         <div class="dmtp-form-group">
                                             <label class="dmtp-form-label">Actual amount (₹)</label>
                                             <input type="number" step="0.01" min="0" class="dmtp-form-control" placeholder="₹ 0" @bind="item.ActualAmount" disabled="@(csr2Status != "Draft")" />
+                                        </div>
+                                        <div class="dmtp-form-group">
+                                            <label class="dmtp-form-label">Bill No.</label>
+                                            <input type="text" maxlength="100" class="dmtp-form-control" placeholder="Enter bill number" @bind="item.BillNo" disabled="@(csr2Status != "Draft")" />
                                         </div>
                                         <div class="dmtp-form-group">
                                             <label class="dmtp-form-label">Date</label>
@@ -746,7 +683,7 @@ else if (csr1Plan != null)
                     </div>
                 </div>
             }
-            else if (currentStep == 5)
+            else if (currentStep == 4)
             {
                 <!-- Program Overview -->
                 <div class="dmtp-card">
@@ -829,7 +766,7 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin dmtp-center-title">Attendance Summary</h3>
-                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
+                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(2)">Edit</button>
                     </div>
                     <div class="dmtp-attendance-grid">
                         <div class="dmtp-attendance-card dmtp-attendance-green">
@@ -857,7 +794,7 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Photos and Videos</h3>
-                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(2)">Edit</button>
+                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
                     </div>
                     <div class="dmtp-review-photo-grid">
                         @foreach (var photo in eventPhotos)
@@ -907,51 +844,18 @@ else if (csr1Plan != null)
                     </div>
                 </div>
 
-                <!-- Activities Conducted -->
-                <div class="dmtp-card">
-                    <div class="dmtp-list-header">
-                        <h3 class="dmtp-card-title dmtp-no-margin">Activities Conducted</h3>
-                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(3)">Edit</button>
-                    </div>
-                    <div class="dmtp-table-wrap">
-                        <table class="dmtp-table">
-                            <thead>
-                                <tr>
-                                    <th>S:NO</th>
-                                    <th>Activities</th>
-                                    <th>Start Time</th>
-                                    <th>End Time</th>
-                                    <th>Participants</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var row in activities)
-                                {
-                                    <tr>
-                                        <td>@(activities.IndexOf(row) + 1)</td>
-                                        <td>@row.Title</td>
-                                        <td>@row.StartTime</td>
-                                        <td>@row.EndTime</td>
-                                        <td>@(row.Participants?.ToString() ?? "-")</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
                 <!-- Approved CSR-1 Planned Expense Breakdown -->
                 <div class="dmtp-card">
                     <h3 class="dmtp-card-title">Planned Expense Breakdown (CSR-1)</h3>
                     <div class="dmtp-table-wrap">
                         <table class="dmtp-table">
-                            <thead><tr><th>Expense Category</th><th>Planned (CSR-1)</th><th>Actual (CSR-2)</th></tr></thead>
+                            <thead><tr><th>Expense Category</th><th>Bill No.</th><th>Planned (CSR-1)</th><th>Actual (CSR-2)</th></tr></thead>
                             <tbody>
                                 @foreach (var item in CSR1PlannedExpenses)
                                 {
-                                    <tr><td>@item.Label</td><td>@Money(item.Amount)</td><td>@Money(expenseItems.FirstOrDefault(x => x.Label == item.Label)?.ActualAmount ?? 0m)</td></tr>
+                                    <tr><td>@item.Label</td><td>@Display(expenseItems.FirstOrDefault(x => x.Label == item.Label)?.BillNo)</td><td>@Money(item.Amount)</td><td>@Money(expenseItems.FirstOrDefault(x => x.Label == item.Label)?.ActualAmount ?? 0m)</td></tr>
                                 }
-                                <tr class="dmtp-table-total-row"><td>Total</td><td>@Money(CSR1PlannedExpenses.Sum(x => x.Amount))</td><td>@Money(ActualExpenseTotal)</td></tr>
+                                <tr class="dmtp-table-total-row"><td>Total</td><td></td><td>@Money(CSR1PlannedExpenses.Sum(x => x.Amount))</td><td>@Money(ActualExpenseTotal)</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -976,7 +880,7 @@ else if (csr1Plan != null)
                     </div>
                 </div>
             }
-            else if (currentStep >= 2 && currentStep <= 4)
+            else if (currentStep >= 2 && currentStep <= 3)
             {
                 <div class="dmtp-action-bar">
                     <button type="button" class="dmtp-btn-previous" @onclick="GoPrevious">
@@ -995,7 +899,7 @@ else if (csr1Plan != null)
                     </div>
                 </div>
             }
-            else if (currentStep == 5)
+            else if (currentStep == 4)
             {
                 <div class="dmtp-action-bar">
                     <span class="dmtp-action-note dmtp-action-note-success">Review all details before submitting CSR-2.</span>
@@ -1195,7 +1099,7 @@ else if (csr1Plan != null)
 
     .dmtp-expense-color-fields {
         display: grid;
-        grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto;
+        grid-template-columns: repeat(3,minmax(0,1fr)) auto;
         gap: 8px;
         align-items: end
     }
@@ -1417,6 +1321,7 @@ else if (csr1Plan != null)
         {
             var planTask = Http.GetAsync($"api/CSR1/details/{csr1Id}");
             var employeeTask = LoadEmployees();
+            var cropsTask = LoadFocusLookups();
             var draftTask = Http.GetAsync($"api/CSR2/by-csr1/{csr1Id}");
 
             using var response = await planTask;
@@ -1424,6 +1329,7 @@ else if (csr1Plan != null)
             {
                 csr1Error = $"Unable to load CSR-1 #{csr1Id}. HTTP {(int)response.StatusCode}.";
                 await employeeTask;
+                await cropsTask;
                 using var ignoredDraft = await draftTask;
                 return;
             }
@@ -1442,10 +1348,14 @@ else if (csr1Plan != null)
                 // Prevent old report data carrying over when a different CSR-1 is opened.
                 expenseItems.Clear();
                 InitializeExpensesFromCSR1();
+                actualEventDate = csr1Plan.CSR1Date;
+                eventCoordinatorId = csr1Plan.ResponsiblePersonId ?? 0;
+                PrefillFocusFromCSR1();
             }
 
             // Employee and draft responses were already downloading alongside CSR-1.
             await employeeTask;
+            await cropsTask;
             using var draftResponse = await draftTask;
             if (csr1Plan != null)
             {
@@ -1501,10 +1411,9 @@ else if (csr1Plan != null)
     private readonly List<StepInfo> steps = new()
     {
         new StepInfo { Number = 1, Label = "Plan & Start" },
-        new StepInfo { Number = 2, Label = "Photos & Videos" },
-        new StepInfo { Number = 3, Label = "Activities" },
-        new StepInfo { Number = 4, Label = "Expense & Proof" },
-        new StepInfo { Number = 5, Label = "Review & Submit" },
+        new StepInfo { Number = 2, Label = "Participants & Employees" },
+        new StepInfo { Number = 3, Label = "Expense & Proof" },
+        new StepInfo { Number = 4, Label = "Review & Submit" },
     };
 
     // Local component state only. Persist event and participant entries through your CSR-2 API when ready.
@@ -1683,7 +1592,7 @@ else if (csr1Plan != null)
 
     private void RemovePhoto(Guid id) { var media = eventPhotos.FirstOrDefault(x => x.Id == id); if (media?.ServerId > 0) removedMediaIds.Add(media.ServerId); eventPhotos.RemoveAll(x => x.Id == id); }
 
-    private const long MaxVideoBytes = 200L * 1024 * 1024;
+    private const long MaxVideoBytes = 700L * 1024 * 1024;
     // Videos are streamed to CSR2Controller on selection, not buffered in page state.
     private readonly List<VideoItem> eventVideos = new();
     private bool isReadingVideos;
@@ -1728,7 +1637,7 @@ else if (csr1Plan != null)
                 }
                 if (file.Size <= 0 || file.Size > MaxVideoBytes)
                 {
-                    rejected.Add($"{file.Name}: must be under 200MB");
+                    rejected.Add($"{file.Name}: must be under 700MB");
                     continue;
                 }
                 try
@@ -1775,98 +1684,6 @@ else if (csr1Plan != null)
 
     private void RemoveVideo(Guid id) { var media = eventVideos.FirstOrDefault(x => x.Id == id); if (media?.ServerId > 0) removedMediaIds.Add(media.ServerId); eventVideos.RemoveAll(v => v.Id == id); }
 
-    private class ActivityItem
-    {
-        public Guid Id { get; set; } = Guid.NewGuid();
-        public string Title { get; set; } = "";
-        public string StartTime { get; set; } = "";
-        public string EndTime { get; set; } = "";
-        public int? Participants { get; set; }
-        public string Description { get; set; } = "";
-        public string Remarks { get; set; } = "";
-    }
-
-    private readonly List<ActivityItem> activities = new();
-    private Guid? editingActivityId;
-    private string activityName = "";
-    private TimeOnly? activityStartTime;
-    private TimeOnly? activityEndTime;
-    private int? activityParticipants;
-    private string activityDescription = "";
-    private string activityRemarks = "";
-    private string activityError = "";
-
-    private void FillActivityName(string name) => activityName = name;
-
-    private void ClearActivityForm()
-    {
-        editingActivityId = null;
-        activityName = activityDescription = activityRemarks = activityError = "";
-        activityStartTime = null;
-        activityEndTime = null;
-        activityParticipants = null;
-    }
-
-    private void SaveActivity()
-    {
-        activityError = "";
-        if (string.IsNullOrWhiteSpace(activityName) ||
-            !activityStartTime.HasValue ||
-            !activityEndTime.HasValue ||
-            string.IsNullOrWhiteSpace(activityDescription))
-        {
-            activityError = "Enter activity name, start time, end time and description.";
-            ShowCsr2Alert(activityError);
-            return;
-        }
-        if (activityEndTime.Value <= activityStartTime.Value)
-        {
-            activityError = "End time must be later than start time.";
-            ShowCsr2Alert(activityError);
-            return;
-        }
-        if (activityParticipants < 0)
-        {
-            activityError = "Participants cannot be negative.";
-            ShowCsr2Alert(activityError);
-            return;
-        }
-        ActivityItem? item = editingActivityId.HasValue
-            ? activities.FirstOrDefault(x => x.Id == editingActivityId.Value) : null;
-        if (item is null)
-        {
-            item = new ActivityItem();
-            activities.Add(item);
-        }
-        item.Title = activityName.Trim();
-        item.StartTime = activityStartTime.Value.ToString("HH:mm", CultureInfo.InvariantCulture);
-        item.EndTime = activityEndTime.Value.ToString("HH:mm", CultureInfo.InvariantCulture);
-        item.Participants = activityParticipants;
-        item.Description = activityDescription.Trim();
-        item.Remarks = activityRemarks.Trim();
-        ClearActivityForm();
-    }
-
-    private void EditActivity(Guid id)
-    {
-        var item = activities.FirstOrDefault(x => x.Id == id);
-        if (item is null) return;
-        editingActivityId = id;
-        activityName = item.Title;
-        activityStartTime = TimeOnly.TryParseExact(item.StartTime, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedStart) ? parsedStart : null;
-        activityEndTime = TimeOnly.TryParseExact(item.EndTime, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedEnd) ? parsedEnd : null;
-        activityParticipants = item.Participants;
-        activityDescription = item.Description;
-        activityRemarks = item.Remarks;
-        activityError = "";
-    }
-
-    private void DeleteActivity(Guid id)
-    {
-        activities.RemoveAll(x => x.Id == id);
-        if (editingActivityId == id) ClearActivityForm();
-    }
-
     private const long MaxExpenseProofBytes = 10L * 1024 * 1024;
     private sealed class ExpenseItem
     {
@@ -1877,6 +1694,7 @@ else if (csr1Plan != null)
         public decimal PlannedAmount { get; set; }
         public decimal? ActualAmount { get; set; }
         public DateTime? ExpenseDate { get; set; }
+        public string BillNo { get; set; } = "";
         public string ProofFileName { get; set; } = "";
         public string ProofContentType { get; set; } = "";
         public byte[] ProofBytes { get; set; } = Array.Empty<byte>();
@@ -2093,6 +1911,54 @@ else if (csr1Plan != null)
     private bool csr2SaveError;
     private string csr2SaveMessage = "";
 
+    private sealed class FocusLookup { public int Id { get; set; } public string Name { get; set; } = ""; }
+    private sealed class EditableFocusGroup
+    {
+        public int GroupNumber { get; set; }
+        public int CropId { get; set; }
+        public List<int> ProductIds { get; } = new();
+    }
+    private readonly List<EditableFocusGroup> csr2FocusGroups = new() { new() { GroupNumber = 1 }, new() { GroupNumber = 2 }, new() { GroupNumber = 3 } };
+    private List<FocusLookup> availableCrops = new();
+    private List<FocusLookup> availableProducts = new();
+    private async Task LoadFocusLookups()
+    {
+        try
+        {
+            var cropsTask = Http.GetFromJsonAsync<List<FocusLookup>>("api/Budget/crops");
+            var productsTask = Http.GetFromJsonAsync<List<FocusLookup>>("api/Budget/products");
+            availableCrops = await cropsTask ?? new();
+            availableProducts = await productsTask ?? new();
+        }
+        catch (Exception ex) { ShowCsr2Alert($"Unable to load crop/product choices: {ex.Message}"); }
+    }
+    private void PrefillFocusFromCSR1()
+    {
+        if (csr1Plan == null) return;
+        var groups = new[] { csr1Plan.Focus1, csr1Plan.Focus2, csr1Plan.Focus3 };
+        for (var i = 0; i < 3; i++)
+        {
+            var target = csr2FocusGroups[i]; target.CropId = 0; target.ProductIds.Clear();
+            var source = groups[i];
+            if (source?.Count > 0)
+            {
+                target.CropId = source[0].CropId;
+                target.ProductIds.AddRange(source.Select(x => x.ProductId).Where(id => id > 0).Distinct().Take(3));
+            }
+        }
+    }
+    private void ChangeFocusCrop(EditableFocusGroup group, string? value)
+    {
+        group.CropId = int.TryParse(value, out var id) ? id : 0;
+        group.ProductIds.Clear();
+    }
+    private void AddFocusProduct(EditableFocusGroup group, string? value)
+    {
+        if (group.CropId <= 0 || !int.TryParse(value, out var id) || id <= 0 || group.ProductIds.Contains(id) || group.ProductIds.Count >= 3) return;
+        group.ProductIds.Add(id);
+    }
+    private void RemoveFocusProduct(EditableFocusGroup group, int id) => group.ProductIds.Remove(id);
+
     private CSR2SaveDto BuildCSR2SaveDto() => new()
     {
         Id = csr2DbId,
@@ -2103,25 +1969,17 @@ else if (csr1Plan != null)
         EventCoordinatorEmployeeId = eventCoordinatorId > 0 ? eventCoordinatorId : null,
         ActualLocation = actualLocation,
         ExpectedParticipantsCount = expectedParticipantsCount,
+        FocusProducts = csr2FocusGroups.SelectMany(g => g.ProductIds.Select(p => new CSR2FocusProductDto { GroupNumber = g.GroupNumber, CropId = g.CropId, ProductId = p })).ToList(),
         Participants = participants.Select(x => new CSR2ParticipantDto { Name = x.Name, PhoneNumber = x.Phone, Role = x.Role }).ToList(),
         Employees = employees.Select(x => new CSR2EmployeeDto { EmployeeInformationId = x.Id, EmployeeName = x.Name, PhoneNumber = x.Phone, RoleName = x.Role }).ToList(),
-        Activities = activities.Select((x, i) => new CSR2ActivityDto
-        {
-            ActivityName = x.Title,
-            StartTime = TimeOnly.ParseExact(x.StartTime, "HH:mm", CultureInfo.InvariantCulture),
-            EndTime = TimeOnly.ParseExact(x.EndTime, "HH:mm", CultureInfo.InvariantCulture),
-            ParticipantsCount = x.Participants,
-            Description = x.Description,
-            Remarks = x.Remarks,
-            SortOrder = i + 1
-        }).ToList(),
         Expenses = expenseItems.Select(x => new CSR2ExpenseDto
         {
             CategoryKey = x.Key,
             CategoryName = x.Label,
             PlannedAmount = x.PlannedAmount,
             ActualAmount = x.ActualAmount,
-            ExpenseDate = x.ExpenseDate
+            ExpenseDate = x.ExpenseDate,
+            BillNo = x.BillNo?.Trim() ?? ""
         }).ToList()
     };
 
@@ -2134,27 +1992,29 @@ else if (csr1Plan != null)
         csr2DbId = saved.Id;
         csr2Status = saved.Status;
         expectedParticipantsCount = saved.ExpectedParticipantsCount;
-        actualEventDate = saved.ActualEventDate; startTime = saved.StartTime; endTime = saved.EndTime;
-        eventCoordinatorId = saved.EventCoordinatorEmployeeId ?? 0; actualLocation = saved.ActualLocation ?? "";
+        // CSR-1 date is authoritative and read-only in CSR-2.
+        actualEventDate = csr1Plan?.CSR1Date; startTime = saved.StartTime; endTime = saved.EndTime;
+        eventCoordinatorId = saved.EventCoordinatorEmployeeId ?? csr1Plan?.ResponsiblePersonId ?? 0; actualLocation = saved.ActualLocation ?? "";
+        if (saved.FocusProducts.Count > 0)
+        {
+            foreach (var focus in csr2FocusGroups) { focus.CropId = 0; focus.ProductIds.Clear(); }
+            foreach (var group in saved.FocusProducts.GroupBy(x => x.GroupNumber))
+            {
+                var target = csr2FocusGroups.FirstOrDefault(x => x.GroupNumber == group.Key);
+                if (target == null) continue;
+                target.CropId = group.First().CropId;
+                target.ProductIds.AddRange(group.Select(x => x.ProductId).Distinct().Take(3));
+            }
+        }
         participants.Clear();
         foreach (var item in saved.Participants) participants.Add(new PersonInfo { Id = nextParticipantId++, Name = item.Name, Phone = item.PhoneNumber ?? "", Role = item.Role, Initials = GetInitials(item.Name) });
         employees.Clear();
         foreach (var item in saved.Employees) employees.Add(new PersonInfo { Id = item.EmployeeInformationId, Name = item.EmployeeName, Phone = item.PhoneNumber ?? "", Role = item.RoleName, Initials = GetInitials(item.EmployeeName) });
-        activities.Clear();
-        foreach (var item in saved.Activities.OrderBy(x => x.SortOrder)) activities.Add(new ActivityItem
-        {
-            Title = item.ActivityName,
-            StartTime = item.StartTime.ToString("HH:mm", CultureInfo.InvariantCulture),
-            EndTime = item.EndTime.ToString("HH:mm", CultureInfo.InvariantCulture),
-            Participants = item.ParticipantsCount,
-            Description = item.Description,
-            Remarks = item.Remarks ?? ""
-        });
         foreach (var item in saved.Expenses)
         {
             var row = expenseItems.FirstOrDefault(x => x.Key == item.CategoryKey);
             if (row is null) continue;
-            row.ActualAmount = item.ActualAmount; row.ExpenseDate = item.ExpenseDate;
+            row.ActualAmount = item.ActualAmount; row.ExpenseDate = item.ExpenseDate; row.BillNo = item.BillNo ?? "";
             row.ProofId = item.ProofId; row.ProofFileName = item.ProofFileName ?? "";
         }
         eventPhotos.Clear(); eventVideos.Clear();
@@ -2177,7 +2037,7 @@ else if (csr1Plan != null)
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (currentStep != 2 && currentStep != 5) return;
+        if (currentStep != 1 && currentStep != 4) return;
         if (loadingSavedPhotoPreviews) return;
         var pending = eventPhotos.Where(p => p.ServerId > 0 &&
             string.IsNullOrWhiteSpace(p.PreviewUrl) && !triedSavedPhotoPreviews.Contains(p.ServerId)).ToList();
