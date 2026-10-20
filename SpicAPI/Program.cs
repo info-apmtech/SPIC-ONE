@@ -95,6 +95,7 @@ builder.Services.AddScoped<IIfmsAlertSettingsStore, IfmsAlertSettingsStore>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IStockReportService, StockReportService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();
+builder.Services.AddScoped<IDealerInsightService, DealerInsightService>();
 builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
 // SAS Lab portal (docs/sas-lab-portal-plan.md): each workstream registers inside its own extension.
 builder.Services.AddSasLab();

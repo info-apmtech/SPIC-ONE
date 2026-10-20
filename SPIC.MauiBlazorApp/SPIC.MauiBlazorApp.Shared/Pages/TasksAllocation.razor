@@ -201,20 +201,20 @@
 
                                                 <div class="ta-dealer-info-row">
                                                     <span>iFMS ID</span>
-                                                    <strong>@(dealer.IfmsId ?? "—")</strong>
+                                                    <strong>@(dealer.IfmsId?.ToString() ?? "—")</strong>
                                                 </div>
                                                 <div class="ta-dealer-info-row">
                                                     <span>PoS Liquidation</span>
-                                                    <strong>@(dealer.PosLiquidation ?? "—")</strong>
+                                                    <strong>@(dealer.PosLiquidationQty?.ToString("N2") ?? "—")</strong>
                                                 </div>
 
                                                 <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                                     <div class="ta-mini-stat ta-mini-stat-pending">
                                                         <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
                                                         <div class="ta-mini-stat-val">
-                                                            @if (dealer.PendingAckMt is int ack)
+                                                            @if (dealer.PendingAckQty is decimal ack)
                                                             {
-                                                                @ack <span>mT</span>
+                                                                @ack.ToString("N2") <span>mT</span>
                                                             }
                                                             else
                                                             {
@@ -524,17 +524,17 @@
 
                                             <div class="ta-dealer-info-row">
                                                 <span>iFMS ID</span>
-                                                <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.IfmsId ?? "—")</strong>
+                                                <strong>@(assignment.IfmsId?.ToString() ?? "—")</strong>
                                             </div>
                                             <div class="ta-dealer-info-row">
                                                 <span>PoS Liquidation</span>
-                                                <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
+                                                <strong>@(assignment.PosLiquidationQty?.ToString("N2") ?? "—")</strong>
                                             </div>
 
                                             <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                                 <div class="ta-mini-stat ta-mini-stat-pending">
                                                     <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
-                                                    <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
+                                                    <div class="ta-mini-stat-val">@(assignment.PendingAckQty?.ToString("N2") ?? "—")</div>
                                                 </div>
                                             </div>
 
@@ -761,17 +761,17 @@
 
                             <div class="ta-dealer-info-row">
                                 <span>iFMS ID</span>
-                                <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.IfmsId ?? "—")</strong>
+                                <strong>@(assignment.IfmsId?.ToString() ?? "—")</strong>
                             </div>
                             <div class="ta-dealer-info-row">
                                 <span>PoS Liquidation</span>
-                                <strong>@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PosLiquidation ?? "—")</strong>
+                                <strong>@(assignment.PosLiquidationQty?.ToString("N2") ?? "—")</strong>
                             </div>
 
                             <div class="ta-dealer-stats-row ta-dealer-stats-row-single">
                                 <div class="ta-mini-stat ta-mini-stat-pending">
                                     <div class="ta-mini-stat-label"><i class="bi bi-clipboard-check"></i> Pending Ack.</div>
-                                    <div class="ta-mini-stat-val">@(Dealers.FirstOrDefault(x => x.Id == assignment.DealerId)?.PendingAckMt?.ToString() ?? "—")</div>
+                                    <div class="ta-mini-stat-val">@(assignment.PendingAckQty?.ToString("N2") ?? "—")</div>
                                 </div>
                             </div>
 
@@ -2066,9 +2066,9 @@
         public int Id { get; init; }
         public string Name { get; init; } = "";
         public string DealerCode { get; init; } = "";
-        public string? IfmsId { get; init; }
-        public string? PosLiquidation { get; init; }
-        public int? PendingAckMt { get; init; }
+        public int? IfmsId { get; init; }
+        public decimal? PosLiquidationQty { get; init; }
+        public decimal? PendingAckQty { get; init; }
         public string TypeLabel { get; init; } = "Dealer";
         public int? DistrictId { get; init; }
         public string? Taluk { get; init; }
@@ -2102,8 +2102,13 @@
     private readonly List<DealerOption> Dealers = new();
 
     // Real dealer list, scoped to the signed-in JMDO/MDO/MO's HQ (falling
-    // back to region/state) - same endpoint and scope-derivation pattern as
-    // SubDealerList.razor's ApplyLoggedInRoleScope/LoadListAsync.
+    // back to region/state) - same scope-derivation pattern as
+    // SubDealerList.razor's ApplyLoggedInRoleScope/LoadListAsync, now sourced from
+    // DealerRegistration (api/DealerRegistration/list) instead of SubDealerRegistration: it's
+    // the same dealer master the Excel-uploaded sales/stock data is keyed to
+    // (DealerRegistrationId), so a dealer picked here resolves to real iFMS ID/PoS
+    // Liquidation/Pending Ack on the allocation cards below - SubDealerRegistration had no
+    // relationship to that data at all.
     private async Task LoadDealersAsync()
     {
         isLoadingDealers = true;
@@ -2111,38 +2116,27 @@
 
         try
         {
-            // GetList's `status` query param binds to SubDealerRegistrationController's own
-            // int? SubDealerStatus, not the string "Active" - see SubDealerRegistrationController.cs.
-            var query = new List<string> { "page=1", "pageSize=100", $"status={(int)SubDealerStatus.Active}" };
+            var query = new List<string> { "page=1", "pageSize=100" };
 
             if (LoginState.HQId > 0) query.Add($"hqId={LoginState.HQId}");
             else if (LoginState.RegionId > 0) query.Add($"regionId={LoginState.RegionId}");
             else if (LoginState.StateId > 0) query.Add($"stateId={LoginState.StateId}");
 
-            var url = "api/SubDealerRegistration/list?" + string.Join("&", query);
-            var result = await Http.GetFromJsonAsync<SubDealerPagedListResponse>(url);
+            var url = "api/DealerRegistration/list?" + string.Join("&", query);
+            var result = await Http.GetFromJsonAsync<DealerPagedListResponse>(url);
 
             Dealers.Clear();
             Dealers.AddRange((result?.Items ?? new()).Select(item => new DealerOption
             {
                 Id = item.Id,
                 Name = item.FirmName,
-                DealerCode = item.SubDealerCode,
-                // SubDealerRegistration carries both a wholesale and a
-                // retail mFMS id slot per dealer, but never both at once
-                // in practice - whichever is populated is this dealer's
-                // real type (replaces the old generic "Dealer" badge).
-                TypeLabel = !string.IsNullOrWhiteSpace(item.WholesaleMFMSId) ? "Wholesaler"
-                    : !string.IsNullOrWhiteSpace(item.RetailMFMSId) ? "Retailer"
-                    : "Dealer",
+                DealerCode = item.DealerCode ?? "",
+                TypeLabel = item.TypeLabel,
                 DistrictId = item.DistrictId,
-                Taluk = item.Taluk
-                // IfmsId/PosLiquidation/PendingAckMt stay null ("—"):
-                // SubDealerRegistration, the Pending Ack./LiquidationCycle
-                // dealer records, and IfmsDealer are three separate identity
-                // systems with no shared code or FK between them (confirmed
-                // by tracing PendingAckService/LiquidationCycleService/
-                // IfmsDealer) - there's no real join to fetch these from.
+                Taluk = item.Taluk,
+                IfmsId = item.IfmsId,
+                PosLiquidationQty = item.PosLiquidationQty,
+                PendingAckQty = item.PendingAckQty
             }));
         }
         catch (Exception ex)

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Hosting;
@@ -295,9 +295,13 @@ namespace SpicAPI.Controllers
         [HttpPost("{id:int}/media")]
         [RequestSizeLimit(220L * 1024 * 1024)]
         [RequestFormLimits(MultipartBodyLengthLimit = 220L * 1024 * 1024)]
-        public async Task<IActionResult> UploadMedia(int id, [FromForm] IFormFile file, [FromForm] string mediaType,
-            [FromForm] string? caption, [FromForm] bool useInDigitalLibrary = true)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadMedia(int id, [FromForm] CSR2UploadMediaDto form)
         {
+            var file = form.File;
+            var mediaType = form.MediaType;
+            var caption = form.Caption;
+            var useInDigitalLibrary = form.UseInDigitalLibrary;
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == id);
             if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
             if (report.Status != CSR2Status.Draft) return Conflict("Only draft reports accept uploads.");
@@ -315,7 +319,8 @@ namespace SpicAPI.Controllers
 
         [HttpPost("{id:int}/expenses/{categoryKey}/proof")]
         [RequestSizeLimit(12L * 1024 * 1024)]
-        public async Task<IActionResult> UploadExpenseProof(int id, string categoryKey, [FromForm] IFormFile file)
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadExpenseProof(int id, string categoryKey, IFormFile file)
         {
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == id);
             if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
@@ -405,6 +410,14 @@ namespace SpicAPI.Controllers
             if (!path.StartsWith(root, StringComparison.Ordinal)) throw new InvalidOperationException("Invalid storage key.");
             return path;
         }
+    }
 
+    public class CSR2UploadMediaDto
+    {
+        public IFormFile File { get; set; } = null!;
+        public string MediaType { get; set; } = string.Empty;
+        public string? Caption { get; set; }
+        public bool UseInDigitalLibrary { get; set; } = true;
     }
 }
+

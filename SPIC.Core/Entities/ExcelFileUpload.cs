@@ -16,6 +16,7 @@ namespace SPIC.Core.Entities
 
         public int? DealerRegistrationId { get; set; }
         public int? IfmsDealerId { get; set; }
+        public int? IfmsId { get; set; }//Dealer Id in Excel
 
         public string? AgencyName { get; set; }
         public int? DealerTypeId { get; set; }
@@ -47,7 +48,8 @@ namespace SPIC.Core.Entities
         public int? MarketerId { get; set; }
         public int? ManufacturerId { get; set; }
         public int? PlantId { get; set; }
-
+        public int? IfmsWholesalerSalesId { get; set; }//WHOLESALER ID in Excel
+        public int? IfmsDealerSalesId { get; set; }//DEALER ID in Excel
         public int? WholesalerId { get; set; }
         public int? IfmsWholesalerId { get; set; }
         public string? WholesalerAgencyName { get; set; }
@@ -128,6 +130,7 @@ namespace SPIC.Core.Entities
 
         public int? DealerRegistrationId { get; set; }
         public int? IfmsDealerId { get; set; }
+        public int? IfmsId { get; set; }//DEALER ID in Excel
 
         public decimal OpeningBalance { get; set; }
 
@@ -182,6 +185,7 @@ namespace SPIC.Core.Entities
 
         public int? DealerRegistrationId { get; set; }
         public int? IfmsDealerId { get; set; }
+        public int? IfmsId { get; set; }//DEALER ID in Excel
 
         public int? StateId { get; set; }
 
@@ -240,6 +244,7 @@ namespace SPIC.Core.Entities
 
         public int? DealerRegistrationId { get; set; }
         public int? IfmsDealerId { get; set; }
+        public int? IfmsId { get; set; }//RETAILER ID in excel
 
         public string? MobileNo { get; set; }
         public int? DealershipNatureId { get; set; }

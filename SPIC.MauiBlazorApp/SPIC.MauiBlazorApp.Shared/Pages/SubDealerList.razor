@@ -962,6 +962,17 @@
                 </button>
             }
 
+
+            @if (CanCorrectSubDealerCodes)
+            {
+                <button type="button"
+                        class="sd-btn import"
+                        @onclick="OpenCodeCorrectionModal">
+                    <i class="bi bi-pencil-square"></i>
+                    Correct Sub Dealer Codes
+                </button>
+            }
+
             @if (CanCreateSubDealer)
             {
                 <button type="button"
@@ -1488,6 +1499,117 @@
 </div>
 
 
+
+@if (_showCodeCorrectionModal && CanCorrectSubDealerCodes)
+{
+    <div class="subdealer-import-backdrop" @onclick="CloseCodeCorrectionModal">
+        <div class="subdealer-import-modal" style="width: min(950px, 100%);" @onclick:stopPropagation="true">
+            <div class="subdealer-import-modal-header">
+                <div>
+                    <h5 class="fw-bold mb-1">Correct Existing Sub Dealer Codes</h5>
+                    <div class="small text-muted">
+                        SuperAdmin only. Update <strong>SubDealerCode</strong> on existing records.
+                        All other fields and registration Ids remain unchanged.
+                    </div>
+                </div>
+                <button type="button" class="btn-close" aria-label="Close"
+                        disabled="@_codeCorrectionBusy" @onclick="CloseCodeCorrectionModal"></button>
+            </div>
+
+            <div class="subdealer-import-modal-body">
+                <div class="alert alert-light border small">
+                    <strong>Excel columns:</strong> Existing Sub-Dealer ID | New Sub-Dealer ID
+                    <div class="text-muted mt-1">
+                        The matching worksheet can be Sheet1 or any other sheet. Existing values are matched
+                        to the current SubDealerCode, not the database primary key.
+                    </div>
+                </div>
+                <div class="subdealer-excel-dropzone">
+                    <i class="bi bi-file-earmark-excel fs-2 text-success"></i>
+                    <div class="fw-semibold mt-2">Select correction Excel (.xlsx, max 10 MB)</div>
+                    <InputFile OnChange="SelectCodeCorrectionFile"
+                               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                    @if (_codeCorrectionFile != null)
+                    {
+                        <div class="small text-success mt-2">@_codeCorrectionFile.Name</div>
+                    }
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_codeCorrectionMessage))
+                {
+                    <div class="alert @(_codeCorrectionError ? "alert-danger" : "alert-info") py-2 mt-3 small">
+                        @_codeCorrectionMessage
+                    </div>
+                }
+
+                @if (_codeCorrectionPreview != null)
+                {
+                    <div class="mt-3">
+                        <div class="fw-semibold mb-2">Preview — no database changes yet</div>
+                        <div class="small mb-2">
+                            Total: @_codeCorrectionPreview.TotalRows |
+                            Ready: @_codeCorrectionPreview.Ready |
+                            Unchanged: @_codeCorrectionPreview.Unchanged |
+                            Errors: @_codeCorrectionPreview.Errors
+                        </div>
+                        <div class="table-responsive" style="max-height: 330px; overflow: auto;">
+                            <table class="table table-sm table-bordered align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Excel Row</th><th>Existing Code</th><th>New Code</th>
+                                        <th>Sub Dealer Name</th><th>Status</th><th>Explanation</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in _codeCorrectionPreview.Rows)
+                                    {
+                                        <tr>
+                                            <td>@item.ExcelRowNumber</td>
+                                            <td>@item.ExistingCode</td>
+                                            <td>@item.NewCode</td>
+                                            <td>@item.FirmName</td>
+                                            <td>
+                                                <span class="badge @(item.Status == "Error" ? "bg-danger" : item.Status == "Ready" ? "bg-success" : "bg-secondary")">
+                                                    @item.Status
+                                                </span>
+                                            </td>
+                                            <td>@item.Message</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+
+                @if (_codeCorrectionPreview?.Success == true && _codeCorrectionPreview.Ready > 0)
+                {
+                    <label class="form-check mt-3 small">
+                        <input class="form-check-input" type="checkbox" @bind="_codeCorrectionConfirmed" />
+                        <span class="form-check-label">
+                            I verified the old and new codes in the preview. Apply the changes to the database.
+                        </span>
+                    </label>
+                }
+            </div>
+            <div class="subdealer-import-modal-footer">
+                <button class="btn btn-outline-secondary" type="button" disabled="@_codeCorrectionBusy"
+                        @onclick="CloseCodeCorrectionModal">Cancel</button>
+                <button class="btn btn-outline-success" type="button"
+                        disabled="@(_codeCorrectionBusy || _codeCorrectionFile == null)"
+                        @onclick="PreviewCodeCorrectionsAsync">
+                    @(_codeCorrectionBusy ? "Please wait..." : "Preview Changes")
+                </button>
+                <button class="btn btn-success" type="button"
+                        disabled="@(_codeCorrectionBusy || _codeCorrectionPreview?.Success != true || _codeCorrectionPreview.Ready == 0 || !_codeCorrectionConfirmed)"
+                        @onclick="ApplyCodeCorrectionsAsync">
+                    Apply Code Updates
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_showImportModal && CanImportSubDealers)
 {
     <div class="subdealer-import-backdrop" @onclick="CloseImportModal">
@@ -1551,14 +1673,66 @@
 
                 @if (!string.IsNullOrWhiteSpace(_importMessage))
                 {
-                    <div class="alert @(_importHasError ? "alert-danger" : "alert-success") py-2 mt-3 mb-0 small">
+                    <div class="alert @(_importPartialSuccess ? "alert-warning border-warning text-warning-emphasis" : _importHasError ? "alert-danger" : "alert-success") py-2 mt-3 mb-0 small">
                         @_importMessage
+                    </div>
+                }
+
+                @if (_importSummaryVisible)
+                {
+                    <div class="alert alert-light border small mt-3 mb-0">
+                        <div class="fw-semibold mb-2">Import summary</div>
+                        <div class="d-flex flex-wrap gap-3">
+                            <span>Total data rows: <strong>@_importTotalRows</strong></span>
+                            @if (_importUnconfirmedRows > 0)
+                            {
+                                <span class="text-warning">Saved: <strong>not confirmed</strong>
+                                    (@_importUnconfirmedRows row(s) were sent; the result was not received)</span>
+                            }
+                            else
+                            {
+                                <span class="text-success">Saved: <strong>@(_importInserted + _importUpdated)</strong>
+                                    (Inserted @_importInserted, Updated @_importUpdated)</span>
+                            }
+                            <span class="text-danger">Rejected: <strong>@_importRejected.Count</strong></span>
+                        </div>
+
+                        @if (_importRejected.Count > 0)
+                        {
+                            <div class="table-responsive mt-2" style="max-height: 260px; overflow-y: auto;">
+                                <table class="table table-sm table-bordered align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Excel Row</th>
+                                            <th>Sub Dealer Code</th>
+                                            <th>Sub Dealer Name</th>
+                                            <th>Type</th>
+                                            <th>Reason</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var rejected in _importRejected.OrderBy(x => x.ExcelRowNumber))
+                                        {
+                                            <tr>
+                                                <td>@rejected.ExcelRowNumber</td>
+                                                <td>@rejected.SubDealerCode</td>
+                                                <td>@rejected.SubDealerName</td>
+                                                <td>
+                                                    <span class="badge @(rejected.Category == SubDealerImportRejectCategory.Duplicate ? "bg-warning text-dark" : rejected.Category == SubDealerImportRejectCategory.DatabaseError ? "bg-danger" : "bg-secondary")">@rejected.Category</span>
+                                                </td>
+                                                <td>@rejected.Reason</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
                     </div>
                 }
 
                 @if (_importErrors.Count > 0)
                 {
-                    <div class="subdealer-import-errors alert alert-danger mb-0">
+                    <div class="subdealer-import-errors alert alert-danger mt-3 mb-0">
                         <div class="fw-semibold mb-1">Import validation errors</div>
                         <ul class="mb-0 ps-3">
                             @foreach (var error in _importErrors)
@@ -1725,6 +1899,30 @@
     private string? _importMessage;
     private bool _importHasError;
     private readonly List<string> _importErrors = new();
+    private readonly List<SubDealerImportRejectedRowDto> _importRejected = new();
+    private bool _importSummaryVisible;
+    private int _importTotalRows;
+    private int _importInserted;
+    private int _importUpdated;
+
+    // Rows sent to the save API whose outcome the API never confirmed (null response
+    // or an exception before a result arrived). 0 = the saved counts are confirmed.
+    private int _importUnconfirmedRows;
+
+    // True only for the "completed with rejected rows" result, so it renders as a warning.
+    private bool _importPartialSuccess;
+
+    private void ClearImportResults()
+    {
+        _importPartialSuccess = false;
+        _importUnconfirmedRows = 0;
+        _importErrors.Clear();
+        _importRejected.Clear();
+        _importSummaryVisible = false;
+        _importTotalRows = 0;
+        _importInserted = 0;
+        _importUpdated = 0;
+    }
     private const long MaxImportFileSize = 10 * 1024 * 1024;
 
     private string? _pageMessage;
@@ -1760,6 +1958,41 @@
 
     private bool CanCreateSubDealer =>
         IsMoRole || IsUnrestricted;
+
+
+    // Temporary, strictly SuperAdmin-only bulk SubDealerCode correction.
+    private bool CanCorrectSubDealerCodes =>
+        string.Equals(CurrentRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase);
+
+    private bool _showCodeCorrectionModal;
+    private bool _codeCorrectionBusy;
+    private IBrowserFile? _codeCorrectionFile;
+    private CodeCorrectionResponseDto? _codeCorrectionPreview;
+    private string? _codeCorrectionMessage;
+    private bool _codeCorrectionError;
+    private bool _codeCorrectionConfirmed;
+
+    private sealed class CodeCorrectionResponseDto
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int TotalRows { get; set; }
+        public int Ready { get; set; }
+        public int Unchanged { get; set; }
+        public int Errors { get; set; }
+        public int Updated { get; set; }
+        public List<CodeCorrectionRowDto> Rows { get; set; } = new();
+    }
+
+    private sealed class CodeCorrectionRowDto
+    {
+        public int ExcelRowNumber { get; set; }
+        public string ExistingCode { get; set; } = string.Empty;
+        public string NewCode { get; set; } = string.Empty;
+        public string FirmName { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+    }
 
     private bool CanImportSubDealers =>
         LoginState?.UserRole == AppRole.Admin;
@@ -3098,6 +3331,160 @@
         await LoadListAsync();
     }
 
+
+    private void OpenCodeCorrectionModal()
+    {
+        if (!CanCorrectSubDealerCodes || _codeCorrectionBusy) return;
+        _showCodeCorrectionModal = true;
+        _codeCorrectionFile = null;
+        _codeCorrectionPreview = null;
+        _codeCorrectionMessage = null;
+        _codeCorrectionError = false;
+        _codeCorrectionConfirmed = false;
+    }
+
+    private void CloseCodeCorrectionModal()
+    {
+        if (_codeCorrectionBusy) return;
+        _showCodeCorrectionModal = false;
+        _codeCorrectionFile = null;
+        _codeCorrectionPreview = null;
+        _codeCorrectionMessage = null;
+        _codeCorrectionError = false;
+        _codeCorrectionConfirmed = false;
+    }
+
+    private void SelectCodeCorrectionFile(InputFileChangeEventArgs e)
+    {
+        _codeCorrectionPreview = null;
+        _codeCorrectionConfirmed = false;
+        _codeCorrectionError = false;
+        _codeCorrectionMessage = null;
+        _codeCorrectionFile = null;
+
+        var file = e.File;
+        if (!string.Equals(Path.GetExtension(file.Name), ".xlsx", StringComparison.OrdinalIgnoreCase) ||
+            file.Size == 0 || file.Size > MaxImportFileSize)
+        {
+            _codeCorrectionError = true;
+            _codeCorrectionMessage = "Select a nonempty .xlsx Excel file smaller than 10 MB.";
+            return;
+        }
+        _codeCorrectionFile = file;
+    }
+
+    private async Task<CodeCorrectionResponseDto> SendCodeCorrectionAsync(string action)
+    {
+        if (_codeCorrectionFile == null)
+            return new CodeCorrectionResponseDto { Message = "Choose an Excel file." };
+
+        using var content = new MultipartFormDataContent();
+        await using var stream = _codeCorrectionFile.OpenReadStream(MaxImportFileSize);
+        content.Add(new StreamContent(stream), "file", _codeCorrectionFile.Name);
+
+        using var response = await Http.PostAsync(
+            $"api/SubDealerRegistration/bulk-code-correction/{action}", content);
+        var json = await response.Content.ReadAsStringAsync();
+
+        CodeCorrectionResponseDto? result;
+        try
+        {
+            result = System.Text.Json.JsonSerializer.Deserialize<CodeCorrectionResponseDto>(
+                json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            result = null;
+        }
+
+        result ??= new CodeCorrectionResponseDto();
+        if (!response.IsSuccessStatusCode)
+        {
+            result.Success = false;
+            if (string.IsNullOrWhiteSpace(result.Message))
+                result.Message = $"Server returned HTTP {(int)response.StatusCode}. Check SuperAdmin permissions and API logs.";
+        }
+
+        return result;
+    }
+
+    private async Task PreviewCodeCorrectionsAsync()
+    {
+        if (!CanCorrectSubDealerCodes || _codeCorrectionFile == null || _codeCorrectionBusy) return;
+
+        _codeCorrectionBusy = true;
+        _codeCorrectionPreview = null;
+        _codeCorrectionConfirmed = false;
+        _codeCorrectionMessage = null;
+        try
+        {
+            var result = await SendCodeCorrectionAsync("preview");
+            _codeCorrectionPreview = result;
+            _codeCorrectionMessage = result.Message;
+            _codeCorrectionError = !result.Success;
+        }
+        catch (Exception ex)
+        {
+            _codeCorrectionError = true;
+            _codeCorrectionMessage = $"Preview failed: {ex.Message}";
+        }
+        finally
+        {
+            _codeCorrectionBusy = false;
+        }
+    }
+
+    private async Task ApplyCodeCorrectionsAsync()
+    {
+        if (!CanCorrectSubDealerCodes || _codeCorrectionFile == null || _codeCorrectionBusy ||
+            _codeCorrectionPreview?.Success != true || _codeCorrectionPreview.Ready == 0 ||
+            !_codeCorrectionConfirmed) return;
+
+        _codeCorrectionBusy = true;
+        _codeCorrectionConfirmed = false;
+        _codeCorrectionMessage = null;
+        try
+        {
+            // Apply re-reads the Excel and rechecks codes against the current DB.
+            // Stale previews are rejected; no partial updates are committed.
+            var result = await SendCodeCorrectionAsync("apply");
+            if (!result.Success)
+            {
+                _codeCorrectionPreview = result.Rows.Count > 0 ? result : null;
+                _codeCorrectionError = true;
+                _codeCorrectionMessage = result.Message;
+                return;
+            }
+
+            _showCodeCorrectionModal = false;
+            _codeCorrectionFile = null;
+            _codeCorrectionPreview = null;
+            _codeCorrectionError = false;
+            _pageMessageIsError = false;
+            _pageMessage = result.Message;
+
+            try
+            {
+                await RefreshAsync();
+            }
+            catch
+            {
+                _pageMessage += " Refresh the list to see the latest codes.";
+            }
+        }
+        catch (Exception ex)
+        {
+            // A broken HTTP response is NOT evidence that the DB transaction failed.
+            _codeCorrectionError = true;
+            _codeCorrectionMessage = $"Apply result not confirmed: {ex.Message}. Check the database before retrying.";
+        }
+        finally
+        {
+            _codeCorrectionBusy = false;
+        }
+    }
+
     private void OpenImportModal()
     {
         if (!CanImportSubDealers)
@@ -3107,7 +3494,7 @@
         _importFile = null;
         _importMessage = null;
         _importHasError = false;
-        _importErrors.Clear();
+        ClearImportResults();
     }
 
     private void CloseImportModal()
@@ -3119,14 +3506,14 @@
         _importFile = null;
         _importMessage = null;
         _importHasError = false;
-        _importErrors.Clear();
+        ClearImportResults();
     }
 
     private void HandleImportFileSelected(InputFileChangeEventArgs e)
     {
         _importMessage = null;
         _importHasError = false;
-        _importErrors.Clear();
+        ClearImportResults();
         _importFile = null;
 
         var file = e.File;
@@ -3172,7 +3559,12 @@
         _isImporting = true;
         _importHasError = false;
         _importMessage = null;
-        _importErrors.Clear();
+        ClearImportResults();
+
+        // Tracked outside the try so the catch block knows whether the save request
+        // was sent and whether the API ever confirmed its result.
+        var sentRowCount = 0;
+        var saveConfirmed = false;
 
         try
         {
@@ -3181,7 +3573,7 @@
             fileContent.Add(new StreamContent(stream), "file", _importFile.Name);
 
             var parseResponse = await Http.PostAsync(
-                "api/SubDealerRegistration/parse-import-excel",
+                "api/SubDealerRegistration/parse-import-excel?partial=true",
                 fileContent);
 
             if (!parseResponse.IsSuccessStatusCode)
@@ -3216,6 +3608,8 @@
                 _importMessage = "No Sub Dealer rows were found in the Excel file.";
                 return;
             }
+
+            _importTotalRows = parsed.Rows.Count;
 
             var statesByName = _states
                 .Where(x => !string.IsNullOrWhiteSpace(x.StateName))
@@ -3256,29 +3650,52 @@
                 var code = row.SubDealerCode?.Trim() ?? string.Empty;
                 var name = row.SubDealerName?.Trim() ?? string.Empty;
 
+                void Reject(string category, string reason) =>
+                    _importRejected.Add(new SubDealerImportRejectedRowDto
+                    {
+                        ExcelRowNumber = row.RowNumber,
+                        SubDealerCode = code,
+                        SubDealerName = name,
+                        Category = category,
+                        Reason = reason
+                    });
+
                 if (string.IsNullOrWhiteSpace(code))
                 {
-                    _importErrors.Add($"Excel row {row.RowNumber}: Sub Dealer Code is empty.");
+                    Reject(SubDealerImportRejectCategory.Validation, "Sub Dealer Code is empty.");
                     continue;
                 }
 
                 if (string.IsNullOrWhiteSpace(name))
                 {
-                    _importErrors.Add($"Excel row {row.RowNumber}: Sub Dealer Name is empty.");
+                    Reject(SubDealerImportRejectCategory.Validation, "Sub Dealer Name is empty.");
                     continue;
                 }
 
-                if (!seenCodes.Add(code))
+                if (string.IsNullOrWhiteSpace(row.HQ) ||
+                    string.IsNullOrWhiteSpace(row.Region) ||
+                    string.IsNullOrWhiteSpace(row.State))
                 {
-                    _importErrors.Add($"Excel row {row.RowNumber}: duplicate Sub Dealer Code '{code}'.");
+                    Reject(SubDealerImportRejectCategory.Validation, "HQ, Region and State are required.");
+                    continue;
+                }
+
+                // Only a fully mapped row claims its code (added to seenCodes below),
+                // so the first valid occurrence is kept and later ones are rejected.
+                if (seenCodes.Contains(code))
+                {
+                    Reject(
+                        SubDealerImportRejectCategory.Duplicate,
+                        $"Duplicate Sub Dealer Code '{code}' in the uploaded file; an earlier row with this code was used.");
                     continue;
                 }
 
                 var normalizedState = NormalizeMasterValue(row.State);
                 if (!statesByName.TryGetValue(normalizedState, out var stateItem))
                 {
-                    _importErrors.Add(
-                        $"Excel row {row.RowNumber}: State '{row.State}' was not found in State master.");
+                    Reject(
+                        SubDealerImportRejectCategory.Validation,
+                        $"State '{row.State}' was not found in State master.");
                     continue;
                 }
 
@@ -3321,18 +3738,21 @@
 
                 if (resolvedRegion == null)
                 {
-                    _importErrors.Add(
-                        $"Excel row {row.RowNumber}: Region '{row.Region}' could not be matched to the application master.");
+                    Reject(
+                        SubDealerImportRejectCategory.Validation,
+                        $"Region '{row.Region}' could not be matched to the application master.");
                     continue;
                 }
 
                 if (resolvedHq == null)
                 {
-                    _importErrors.Add(
-                        $"Excel row {row.RowNumber}: HQ '{row.HQ}' could not be matched to the application master.");
+                    Reject(
+                        SubDealerImportRejectCategory.Validation,
+                        $"HQ '{row.HQ}' could not be matched to the application master.");
                     continue;
                 }
 
+                seenCodes.Add(code);
                 mappedRows.Add(new SubDealerBulkImportRowDto
                 {
                     ExcelRowNumber = row.RowNumber,
@@ -3344,13 +3764,12 @@
                 });
             }
 
-            var skippedCount = _importErrors.Count;
-
             if (mappedRows.Count == 0)
             {
                 _importHasError = true;
                 _importMessage =
-                    $"No rows could be mapped. Skipped: {skippedCount}. Nothing was saved.";
+                    $"No rows could be imported. Rejected: {_importRejected.Count}. Nothing was saved.";
+                _importSummaryVisible = true;
                 return;
             }
 
@@ -3360,15 +3779,32 @@
                 Rows = mappedRows
             };
 
+            sentRowCount = mappedRows.Count;
+
             var saveResponse = await Http.PostAsJsonAsync(
-                "api/SubDealerRegistration/bulk-import",
+                "api/SubDealerRegistration/bulk-import?partial=true",
                 request);
 
             if (!saveResponse.IsSuccessStatusCode)
             {
+                // Request-level failure (e.g. authorization / MO HQ mapping): nothing was
+                // committed, so every row that reached the save step is reported as rejected.
                 var responseBody = await saveResponse.Content.ReadAsStringAsync();
+                foreach (var mapped in mappedRows)
+                {
+                    _importRejected.Add(new SubDealerImportRejectedRowDto
+                    {
+                        ExcelRowNumber = mapped.ExcelRowNumber,
+                        SubDealerCode = mapped.SubDealerCode,
+                        SubDealerName = mapped.FirmName,
+                        Category = SubDealerImportRejectCategory.DatabaseError,
+                        Reason = $"Not saved - the import request failed: {responseBody}"
+                    });
+                }
+
                 _importHasError = true;
-                _importMessage = $"Excel import failed: {responseBody}";
+                _importSummaryVisible = true;
+                _importMessage = $"Excel import failed: {responseBody}. Nothing was saved.";
                 return;
             }
 
@@ -3377,37 +3813,52 @@
 
             if (result == null)
             {
+                // The save outcome is unknown, so no saved counts are claimed. Rows already
+                // rejected during validation stay visible in the summary.
                 _importHasError = true;
-                _importMessage = "Excel import completed but the API response was empty.";
+                _importUnconfirmedRows = sentRowCount;
+                _importSummaryVisible = _importRejected.Count > 0;
+                _importMessage =
+                    "Excel import completed but the API response was empty, so it could not be confirmed whether the valid rows were saved.";
                 return;
             }
 
-            if (result.Errors.Count > 0)
-            {
-                _importErrors.AddRange(result.Errors);
-                _importHasError = true;
-                _importMessage = "Excel import failed during database save.";
-                return;
-            }
+            saveConfirmed = true;
+
+            // Server-side rejections (validation, duplicates, database failure).
+            _importRejected.AddRange(result.Rejected);
+            _importInserted = result.Inserted;
+            _importUpdated = result.Updated;
+            _importSummaryVisible = true;
+
+            // Failures not tied to a specific row (e.g. "Database import failed: ...").
+            var rowLevelReasons = result.Rejected.Select(x => x.Reason).ToHashSet();
+            _importErrors.AddRange(result.Errors.Where(x => !rowLevelReasons.Contains(x)));
 
             // Refresh the maintained list. Untouched imported master rows remain
             // hidden by the existing list endpoint visibility rule.
-            _page = 1;
-            await Task.WhenAll(
-                LoadListAsync(),
-                LoadStateWiseSummaryAsync());
+            if (_importInserted + _importUpdated > 0)
+            {
+                _page = 1;
+                await Task.WhenAll(
+                    LoadListAsync(),
+                    LoadStateWiseSummaryAsync());
+            }
+
             _importFile = null;
 
-            if (skippedCount > 0)
+            if (_importRejected.Count > 0 || result.Errors.Count > 0)
             {
                 _importHasError = true;
-                _importMessage =
-                    $"Import completed. Inserted: {result.Inserted}, Updated: {result.Updated}, Skipped: {skippedCount}. " +
-                    "Valid rows were saved. Review the skipped rows below.";
+                _importPartialSuccess = _importInserted + _importUpdated > 0;
+                _importMessage = _importInserted + _importUpdated > 0
+                    ? "Import completed with rejected rows. Valid rows were saved; review the rejected rows below."
+                    : "No rows were saved. Review the rejected rows below.";
             }
             else
             {
                 _showImportModal = false;
+                _importSummaryVisible = false;
                 _importHasError = false;
                 _importMessage = null;
                 _pageMessageIsError = false;
@@ -3418,7 +3869,20 @@
         catch (Exception ex)
         {
             _importHasError = true;
-            _importMessage = $"Import error: {ex.Message}";
+
+            // Keep rows already rejected during validation visible. If the save request was
+            // sent but its result never arrived, the saved counts are reported as unconfirmed.
+            if (!saveConfirmed)
+            {
+                _importUnconfirmedRows = sentRowCount;
+                _importSummaryVisible = _importRejected.Count > 0;
+            }
+
+            _importMessage = saveConfirmed
+                ? $"Import error after the save completed: {ex.Message}. The summary shows the result returned by the server."
+                : sentRowCount > 0
+                    ? $"Import error: {ex.Message}. It could not be confirmed whether the valid rows were saved."
+                    : $"Import error: {ex.Message}";
         }
         finally
         {

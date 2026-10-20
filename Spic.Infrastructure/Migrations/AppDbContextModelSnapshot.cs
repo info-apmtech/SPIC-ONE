@@ -3058,6 +3058,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("IfmsDealerId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("IfmsId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("IfmsProductId")
                         .HasColumnType("integer");
 
@@ -4852,6 +4855,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("DealerName")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("DealerRegistrationId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("PlannedDate")
                         .HasColumnType("timestamp without time zone");
@@ -7751,6 +7757,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("IfmsDealerId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("IfmsId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("IfmsProductId")
                         .HasColumnType("integer");
 
@@ -7847,6 +7856,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("IfmsProductId")
@@ -8074,10 +8086,16 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("IfmsDealerId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("IfmsDealerSalesId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("IfmsProductId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("IfmsWholesalerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsWholesalerSalesId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("InvoiceDate")
@@ -10509,6 +10527,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int?>("IfmsDealerId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("IfmsId")
                         .HasColumnType("integer");
 
                     b.Property<int?>("IfmsProductId")

@@ -163,4 +163,62 @@ namespace SPIC.Core.DTOs
 		/// <summary>DealerStatus value to row count, for any caller that wants the raw map.</summary>
 		public Dictionary<int, int> ByStatus { get; set; } = new();
 	}
+
+	/// <summary>
+	/// One row for a territory-scoped dealer picker (e.g. the JMDO Tasks Allocation wizard),
+	/// modeled on SubDealerListItemDto - deliberately trimmed to just what a picker needs, not
+	/// the full DealerRegistration shape the Dashboard pages use.
+	/// </summary>
+	public class DealerListItemDto
+	{
+		public int Id { get; set; }
+		public string FirmName { get; set; } = string.Empty;
+		public string? DealerCode { get; set; }
+
+		public int? DistrictId { get; set; }
+		public string? Taluk { get; set; }
+		public double? Latitude { get; set; }
+		public double? Longitude { get; set; }
+
+		/// <summary>"Wholesaler" when the wholesale license block is filled in, "Retailer" when
+		/// only the retail block is, "Dealer" otherwise - same derivation SubDealerRegistration's
+		/// own picker already uses (presence of its WholesaleMFMSId/RetailMFMSId pair), since
+		/// neither entity has a real discrete Wholesaler/Retailer flag.</summary>
+		public string TypeLabel { get; set; } = "Dealer";
+
+		public int? IfmsId { get; set; }
+		public decimal? PosLiquidationQty { get; set; }
+		public decimal? PendingAckQty { get; set; }
+	}
+
+	public class DealerPagedListResponse
+	{
+		public List<DealerListItemDto> Items { get; set; } = new();
+
+		public int Page { get; set; }
+		public int PageSize { get; set; }
+		public int TotalCount { get; set; }
+	}
+
+	/// <summary>Minimal dealer detail for TaskDetail.razor's location fallback chain - not the
+	/// full DealerRegistration shape, just what that one page needs.</summary>
+	public class DealerBriefDto
+	{
+		public string FirmName { get; set; } = string.Empty;
+		public string? Village { get; set; }
+		public string? Taluk { get; set; }
+		public int? DistrictId { get; set; }
+	}
+
+	/// <summary>Resolved from a dealer's own Excel-upload transaction history, keyed by
+	/// DealerRegistrationId - deliberately NOT a fuzzy IfmsDealer name/location match, since that
+	/// would risk attaching another dealer's figures to a card. A dealer with no matching upload
+	/// row yet simply has every field null, which callers render as "—".</summary>
+	public class DealerInsightDto
+	{
+		public int? IfmsId { get; set; }
+		public decimal? PosLiquidationQty { get; set; }
+		public DateTime? PosLiquidationDate { get; set; }
+		public decimal? PendingAckQty { get; set; }
+	}
 }

@@ -81,14 +81,27 @@ public class JmdoTaskAllocation
 }
 
 /// <summary>One picked dealer task. Name/Code are a snapshot at submission time, independent of the
-/// live SubDealerRegistration row, so edits to the dealer master don't change what was submitted.</summary>
+/// live dealer-master row, so edits to the dealer master don't change what was submitted.</summary>
 public class JmdoTaskAllocationDealer
 {
     public int Id { get; set; }
     public int AllocationId { get; set; }
     public JmdoTaskAllocation? Allocation { get; set; }
 
+    /// <summary>LEGACY. SubDealerRegistration.Id, for every row created before the dealer source
+    /// switched to DealerRegistration - never written for new rows (left 0). Rows from before the
+    /// switch keep resolving through SubDealerRegistration exactly as they always did; a plain
+    /// rename of this column to "DealerRegistrationId" would have silently reinterpreted these old
+    /// values as DealerRegistration ids, which happen to be a completely different id space (same
+    /// number can be a real but different dealer in each table) - kept separate on purpose.</summary>
     public int SubDealerId { get; set; }
+
+    /// <summary>DealerRegistration.Id, for every row created after the switch - null on legacy
+    /// rows. EffectiveDealerId(d) = DealerRegistrationId ?? -SubDealerId is the one external id
+    /// used everywhere else (DTOs, TaskKey, status matching) - negated on the legacy side so a
+    /// legacy and a new-style id can never collide even if the same allocation somehow holds both.</summary>
+    public int? DealerRegistrationId { get; set; }
+
     public string DealerName { get; set; } = string.Empty;
     public string DealerCode { get; set; } = string.Empty;
 
@@ -163,7 +176,9 @@ public class JmdoTaskCloseout
 
     public JmdoCloseoutKind Kind { get; set; }
 
-    /// <summary>Which JmdoTaskAllocationDealer this closes out, for Kind == Dealer.</summary>
+    /// <summary>Which JmdoTaskAllocationDealer this closes out, for Kind == Dealer - matches
+    /// JmdoTaskAllocationDealer's EffectiveDealerId (DealerRegistrationId for new rows, negated
+    /// SubDealerId for legacy rows), not a live dealer-master id of its own.</summary>
     public int? SubDealerId { get; set; }
 
     /// <summary>Which JmdoTaskAllocationProgram this closes out, for Kind == MdProgram.</summary>

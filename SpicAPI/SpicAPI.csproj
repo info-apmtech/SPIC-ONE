@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -66,5 +66,10 @@
     <ProjectReference Include="..\SPIC.Core\SPIC.Core.csproj" />
     <ProjectReference Include="..\Spic.Infrastructure\Spic.Infrastructure.csproj" />
   </ItemGroup>
+
+  <!-- Prevent MSB3021/MSB3027 file locking: stop running local debug API process before building -->
+  <Target Name="StopRunningSpicApi" BeforeTargets="BeforeBuild" Condition="'$(Configuration)' == 'Debug' and '$(OS)' == 'Windows_NT'">
+    <Exec Command="cmd.exe /c &quot;taskkill /F /IM SpicAPI.exe 2&gt;nul || exit 0&quot;" ContinueOnError="true" IgnoreExitCode="true" />
+  </Target>
 
 </Project>

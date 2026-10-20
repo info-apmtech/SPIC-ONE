@@ -40,6 +40,7 @@ namespace SpicAPI.Controllers
 		private readonly UserManager<UserInfo> _userManager;
 		private readonly RoleManager<IdentityRole> _roleManager;
 		private readonly AppDbContext _db;
+		private readonly IDealerInsightService _dealerInsightService;
 		// Single constructor: optional repositories are injected when registered. Defaults to null to avoid breaking DI.
 		public DealerRegistrationController(
 			IGenericRepository<DealerRegistration> repo,
@@ -47,6 +48,7 @@ namespace SpicAPI.Controllers
 			UserManager<UserInfo> userManager,
 			RoleManager<IdentityRole> roleManager,
 			AppDbContext db,
+			IDealerInsightService dealerInsightService,
 			IGenericRepository<DealerApprovalHistory>? historyRepo = null,
 			IGenericRepository<DealerExperience>? expRepo = null,
 			IGenericRepository<AnnualSaleDataLastFYofDealerRegistration>? annualRepo = null,
@@ -73,6 +75,7 @@ namespace SpicAPI.Controllers
 			_userManager = userManager;
 			_roleManager = roleManager;
 			_db = db;
+			_dealerInsightService = dealerInsightService;
 			_expRepo = expRepo;
 			_annualRepo = annualRepo;
 			_whRepo = whRepo;
@@ -226,6 +229,139 @@ namespace SpicAPI.Controllers
 				.ToListAsync();
 
 			return Ok(lookup);
+		}
+
+		/// <summary>
+		/// Territory-scoped, filterable flat list of active dealers for a picker (e.g. the JMDO
+		/// Tasks Allocation wizard) - none of this controller's other GET endpoints return this
+		/// shape: "all"/"lookup"/"submitted" have no district/taluk/coordinate fields or district
+		/// filter, and "dashboard/page" is the approval-workflow grid (paged by RegionId only, no
+		/// StateId/DistrictId filter, and includes Draft/Pending rows a picker shouldn't offer).
+		/// Same hqId/regionId/stateId query-param convention as SubDealerRegistrationController's
+		/// own "list" endpoint, so TasksAllocation.razor's existing LoginState-based call needs no
+		/// other change than the URL.
+		/// </summary>
+		[HttpGet("list")]
+		public async Task<IActionResult> GetDealerList(
+			[FromQuery] int? stateId,
+			[FromQuery] int? regionId,
+			[FromQuery] int? hqId,
+			[FromQuery] int? districtId,
+			[FromQuery] string? search,
+			[FromQuery] int page = 1,
+			[FromQuery] int pageSize = 100,
+			CancellationToken cancellationToken = default)
+		{
+			page = page < 1 ? 1 : page;
+			pageSize = pageSize < 1 ? 100 : Math.Min(pageSize, 1000);
+
+			var query = _db.DealerRegistrations.AsNoTracking()
+				.Where(x => x.Status == DealerStatus.Active);
+
+			var role = User.FindFirst(ClaimTypes.Role)?.Value;
+			var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			var regionClaim = User.FindFirst("spic:region_id")?.Value;
+			var stateClaim = User.FindFirst("spic:state_id")?.Value;
+
+			if (role != "Admin" && role != "CorporateAdmin")
+			{
+				if (SpecialAdminScope.IsSpecialAdmin(User))
+					query = query.Where(x => SpecialAdminScope.AssignedStateIds(User).Contains(x.StateId));
+				else if (role == "RM" && int.TryParse(regionClaim, out var claimRegionId))
+					query = query.Where(x => x.Region == claimRegionId);
+				else if (role == "SM" && int.TryParse(stateClaim, out var claimStateId))
+					query = query.Where(x => x.StateId == claimStateId);
+				else if ((role == "MDO" || role == "JMDO" || role == "MO") && int.TryParse(stateClaim, out var moStateId))
+					query = query.Where(x => x.StateId == moStateId);
+				else if (!string.IsNullOrWhiteSpace(role))
+					query = query.Where(x => x.CreatedBy == userId);
+			}
+
+			// UI filters can only narrow the already role-scoped query, same convention as
+			// SubDealerRegistrationController's own "list" endpoint.
+			if (stateId is > 0) query = query.Where(x => x.StateId == stateId.Value);
+			if (regionId is > 0) query = query.Where(x => x.Region == regionId.Value);
+			if (hqId is > 0) query = query.Where(x => x.HQ == hqId.Value);
+			if (districtId is > 0) query = query.Where(x => x.DistrictId == districtId.Value);
+
+			if (!string.IsNullOrWhiteSpace(search))
+			{
+				var term = search.Trim().ToLower();
+				query = query.Where(x =>
+					x.FirmName.ToLower().Contains(term) ||
+					(x.DealerCode != null && x.DealerCode.ToLower().Contains(term)));
+			}
+
+			var totalCount = await query.CountAsync(cancellationToken);
+
+			var rows = await query
+				.OrderBy(x => x.FirmName)
+				.Skip((page - 1) * pageSize)
+				.Take(pageSize)
+				.Select(x => new
+				{
+					x.Id,
+					x.FirmName,
+					x.DealerCode,
+					x.DistrictId,
+					x.Taluk,
+					x.Latitude,
+					x.Longitude,
+					x.WholeSaleFertilizerLicenseNumber,
+					x.RetailFertilizerLicenseNumber
+				})
+				.ToListAsync(cancellationToken);
+
+			var items = rows.Select(x => new DealerListItemDto
+			{
+				Id = x.Id,
+				FirmName = x.FirmName,
+				DealerCode = x.DealerCode,
+				DistrictId = x.DistrictId,
+				Taluk = x.Taluk,
+				Latitude = x.Latitude,
+				Longitude = x.Longitude,
+				TypeLabel = !string.IsNullOrWhiteSpace(x.WholeSaleFertilizerLicenseNumber) ? "Wholesaler"
+					: !string.IsNullOrWhiteSpace(x.RetailFertilizerLicenseNumber) ? "Retailer"
+					: "Dealer"
+			}).ToList();
+
+			// One batched query set for the whole page (not one call per dealer) - see
+			// DealerInsightService's own doc comment for why this is a separate, direct-query
+			// service rather than calling into LiquidationCycleService/PendingAckService per dealer.
+			var insights = await _dealerInsightService.GetInsightsAsync(items.Select(i => i.Id), cancellationToken);
+			foreach (var item in items)
+			{
+				if (!insights.TryGetValue(item.Id, out var insight)) continue;
+				item.IfmsId = insight.IfmsId;
+				item.PosLiquidationQty = insight.PosLiquidationQty;
+				item.PendingAckQty = insight.PendingAckQty;
+			}
+
+			return Ok(new DealerPagedListResponse
+			{
+				Items = items,
+				Page = page,
+				PageSize = pageSize,
+				TotalCount = totalCount
+			});
+		}
+
+		/// <summary>Minimal single-dealer lookup for TaskDetail.razor's location fallback chain -
+		/// no plain GET {id} exists on this controller (GenericCrudController's own GetById
+		/// returns the full DealerRegistration shape, heavier than this page needs).</summary>
+		[HttpGet("{id:int}/brief")]
+		public async Task<IActionResult> GetBrief(int id)
+		{
+			var dealer = await _db.DealerRegistrations.AsNoTracking()
+				.Where(x => x.Id == id)
+				.Select(x => new DealerBriefDto { FirmName = x.FirmName, Village = x.Village, Taluk = x.Taluk, DistrictId = x.DistrictId })
+				.FirstOrDefaultAsync();
+
+			if (dealer == null)
+				return NotFound();
+
+			return Ok(dealer);
 		}
 
 		/// <summary>
