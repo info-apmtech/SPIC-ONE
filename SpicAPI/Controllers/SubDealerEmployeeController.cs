@@ -124,17 +124,6 @@ namespace SpicAPI.Controllers
 			var rows = worksheet.RowsUsed().Skip(1).ToList();
 
 			// â”€â”€ Pre-load phase: reference data in memory before the loop â”€â”€
-			// Existing business keys ("dealerCode|key") so DB duplicates are skipped
-			var existingSubDealerKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			foreach (var sd in _db.SubDealerBeneficiaries
-				.Select(s => new { s.DealerCode, s.SubDealerCode }).AsEnumerable())
-				existingSubDealerKeys.Add($"{sd.DealerCode}|{sd.SubDealerCode}");
-
-			var existingEmployeeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			foreach (var e in _db.EmployeeBeneficiaries
-				.Select(e => new { e.DealerCode, e.EmployeeName }).AsEnumerable())
-				existingEmployeeKeys.Add($"{e.DealerCode}|{e.EmployeeName}");
-
 			// Valid dealer codes (same resolution used across the app: SPICCode ?? DealerCode)
 			var validDealerCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			foreach (var d in _db.DealerRegistrations
@@ -145,10 +134,8 @@ namespace SpicAPI.Controllers
 				if (!string.IsNullOrWhiteSpace(d.DealerCode)) validDealerCodes.Add(d.DealerCode.Trim());
 			}
 
-			// In-batch duplicate tracking (distinct error group from DB-existing duplicates)
-			var batchSubDealerKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			var batchEmployeeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
+			// No duplicate detection: one Sub Dealer / Employee can have several beneficiaries, so every
+			// valid row is inserted as its own record (re-uploading a file inserts its rows again).
 			var now = DateTime.UtcNow;
 			int insertedCount = 0;
 
@@ -199,18 +186,6 @@ namespace SpicAPI.Controllers
 								continue;
 							}
 
-							var key = $"{dealerCode}|{subDealerCode}";
-							if (existingSubDealerKeys.Contains(key))
-							{
-								AddGrouped("Already exists in database", $"'{subDealerCode}' of dealer '{dealerCode}' (Row {row.RowNumber()})");
-								continue;
-							}
-							if (!batchSubDealerKeys.Add(key))
-							{
-								AddGrouped("Duplicated in this file", $"'{subDealerCode}' of dealer '{dealerCode}' (Row {row.RowNumber()})");
-								continue;
-							}
-
 							_db.SubDealerBeneficiaries.Add(new SubDealerBeneficiary
 							{
 								BeneficiaryId = beneficiaryId,
@@ -245,18 +220,6 @@ namespace SpicAPI.Controllers
 							if (!validDealerCodes.Contains(dealerCode))
 							{
 								AddGrouped($"DealerCode '{dealerCode}' not found in database", $"Row {row.RowNumber()}");
-								continue;
-							}
-
-							var key = $"{dealerCode}|{employeeName}";
-							if (existingEmployeeKeys.Contains(key))
-							{
-								AddGrouped("Already exists in database", $"'{employeeName}' of dealer '{dealerCode}' (Row {row.RowNumber()})");
-								continue;
-							}
-							if (!batchEmployeeKeys.Add(key))
-							{
-								AddGrouped("Duplicated in this file", $"'{employeeName}' of dealer '{dealerCode}' (Row {row.RowNumber()})");
 								continue;
 							}
 
