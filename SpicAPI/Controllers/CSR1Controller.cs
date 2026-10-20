@@ -333,7 +333,7 @@ namespace SpicAPI.Controllers
                     true;
 
                 model.Status =
-                    "SubmittedForValidation";
+                    CSR1Status.SubmittedForValidation;
 
                 // NEW: Post-26th application rules only. Keep legacy validation workflow.
                 // Server date determines which approval workflow this record uses.
@@ -750,10 +750,7 @@ namespace SpicAPI.Controllers
 
                 if (Csr1WorkflowRules.IsThreeLevelApplication(existing.CreatedAt))
                 {
-                    if (!string.Equals(
-                        existing.Status,
-                        "Draft",
-                        StringComparison.OrdinalIgnoreCase))
+                    if (existing.Status != CSR1Status.Draft)
                     {
                         return BadRequest(new
                         {
@@ -1143,7 +1140,7 @@ namespace SpicAPI.Controllers
                             LocationId = csr.LocationId,
                             ResponsiblePersonId = csr.ResponsiblePersonId,
 
-                            Status = csr.Status,
+                            Status = csr.Status.ToString(),
                             Scope = scope,
                             CreatorRole = creatorRole,
                             CreatedBy = createdByName,
@@ -1419,7 +1416,7 @@ namespace SpicAPI.Controllers
 
 
                         Status =
-                            csr1.Status,
+                            csr1.Status.ToString(),
 
                         Scope =
                             scope,
@@ -1555,16 +1552,16 @@ namespace SpicAPI.Controllers
                 }
 
                 if (Csr1WorkflowRules.IsThreeLevelApplication(csr1.CreatedAt) &&
-                    !new[] { "SubmittedForValidation", "Submitted", "Pending" }
-                        .Contains(csr1.Status, StringComparer.OrdinalIgnoreCase))
+                    !new[] { CSR1Status.SubmittedForValidation, CSR1Status.Submitted, CSR1Status.Pending }
+                        .Contains(csr1.Status))
                     return BadRequest(new { message = "This CSR-1 is not awaiting validation." });
 
-                if (string.Equals(csr1.Status, "Validated", StringComparison.OrdinalIgnoreCase))
+                if (csr1.Status == CSR1Status.Validated)
                 {
                     return BadRequest(new { message = "CSR-1 is already validated." });
                 }
 
-                if (string.Equals(csr1.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                if (csr1.Status == CSR1Status.Approved)
                 {
                     return BadRequest(new { message = "CSR-1 is already approved." });
                 }
@@ -1605,7 +1602,7 @@ namespace SpicAPI.Controllers
                     }
                 }
 
-                csr1.Status = "Validated";
+                csr1.Status = CSR1Status.Validated;
                 csr1.UpdatedBy = CurrentUserId;
                 csr1.UpdatedAt = DateTime.Now;
                 csr1.ValidateBy = CurrentUserId;
@@ -1783,10 +1780,7 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                if (string.Equals(
-                    csr1.Status,
-                    "Approved",
-                    StringComparison.OrdinalIgnoreCase))
+                if (csr1.Status == CSR1Status.Approved)
                 {
                     return BadRequest(new
                     {
@@ -1794,10 +1788,8 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                if (string.Equals(csr1.Status, "Rejected",
-                        StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(csr1.Status, "Draft",
-                        StringComparison.OrdinalIgnoreCase))
+                if (csr1.Status == CSR1Status.Rejected ||
+                    csr1.Status == CSR1Status.Draft)
                 {
                     return BadRequest(new
                     {
@@ -1874,10 +1866,7 @@ namespace SpicAPI.Controllers
                 if (!requiresThreeLevelApproval)
                 {
                     if (!isAdmin &&
-                        !string.Equals(
-                            csr1.Status,
-                            "Validated",
-                            StringComparison.OrdinalIgnoreCase))
+                        csr1.Status != CSR1Status.Validated)
                     {
                         return BadRequest(new
                         {
@@ -1916,7 +1905,7 @@ namespace SpicAPI.Controllers
                                 scope);
                     }
 
-                    csr1.Status = "Approved";
+                    csr1.Status = CSR1Status.Approved;
                     csr1.ApprovedBy = CurrentUserId;
                     csr1.ApprovedAt = DateTime.UtcNow;
 
@@ -1939,7 +1928,7 @@ namespace SpicAPI.Controllers
                 // 5. Three-level approval. Validation is mandatory FIRST.
                 //     Validated -> Level1Approved -> Level2Approved -> Approved.
                 // --------------------------------------------------
-                var next = Csr1WorkflowRules.NextStatus(true, csr1.Status,
+                var next = Csr1WorkflowRules.NextStatus(true, csr1.Status.ToString(),
                     isStateScope ? (HasRole("SMM") ? "SMM" : GetHighestNewRole(roles))
                                  : (HasRole("RMM") ? "RMM" : GetHighestNewRole(roles)),
                     scope);
@@ -1972,7 +1961,10 @@ namespace SpicAPI.Controllers
                     csr1.ApprovedBy = CurrentUserId;
                     csr1.ApprovedAt = now;
                 }
-                csr1.Status = next;
+                if (!Enum.TryParse<CSR1Status>(next, ignoreCase: true, out var nextStatus) ||
+                    !Enum.IsDefined(typeof(CSR1Status), nextStatus))
+                    return BadRequest(new { message = $"Unknown CSR-1 workflow status: {next}." });
+                csr1.Status = nextStatus;
                 csr1.UpdatedBy = CurrentUserId;
                 csr1.UpdatedAt = now;
                 await SaveReviewAndWorkflowAsync(csr1, request);
@@ -2264,7 +2256,7 @@ namespace SpicAPI.Controllers
                     return NotFound(new { message = $"CSR-1 #{id} not found." });
                 }
 
-                if (string.Equals(csr1.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+                if (csr1.Status == CSR1Status.Approved)
                 {
                     return BadRequest(new { message = "Approved CSR-1 cannot be rejected." });
                 }
@@ -2308,7 +2300,7 @@ namespace SpicAPI.Controllers
                     }
                 }
 
-                csr1.Status = "Rejected";
+                csr1.Status = CSR1Status.Rejected;
                 csr1.Remarks = request.Remarks.Trim();
                 csr1.UpdatedBy = CurrentUserId;
                 csr1.UpdatedAt = DateTime.Now;
@@ -2340,18 +2332,18 @@ namespace SpicAPI.Controllers
             var (scope, _) = await ResolveCSR1ScopeAsync(csr1);
             var roles = User.FindAll(ClaimTypes.Role)
                 .Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var next = three ? Csr1WorkflowRules.NextStatus(true, csr1.Status,
+            var next = three ? Csr1WorkflowRules.NextStatus(true, csr1.Status.ToString(),
                 scope.Equals("State", StringComparison.OrdinalIgnoreCase)
                   ? (roles.Contains("SMM") ? "SMM" : GetHighestNewRole(roles))
                   : (roles.Contains("RMM") ? "RMM" : GetHighestNewRole(roles)), scope) : null;
-            var validated = string.Equals(csr1.Status, "Validated", StringComparison.OrdinalIgnoreCase);
-            var pending = new[] { "Submitted", "SubmittedForValidation", "Pending" }
-                .Contains(csr1.Status, StringComparer.OrdinalIgnoreCase);
+            var validated = csr1.Status == CSR1Status.Validated;
+            var pending = new[] { CSR1Status.Submitted, CSR1Status.SubmittedForValidation, CSR1Status.Pending }
+                .Contains(csr1.Status);
             var firstRole = scope.Equals("State", StringComparison.OrdinalIgnoreCase) ? "SMM" : "RMM";
             var awaiting = !three ? "" : pending ? (scope == "State" ? "Awaiting SMDO validation" : "Awaiting MO validation")
                 : validated ? $"Awaiting {firstRole} approval" :
-                csr1.Status == "Level1Approved" ? "Awaiting MDAdmin approval" :
-                csr1.Status == "Level2Approved" ? "Awaiting MDHOD approval" : "";
+                csr1.Status == CSR1Status.Level1Approved ? "Awaiting MDAdmin approval" :
+                csr1.Status == CSR1Status.Level2Approved ? "Awaiting MDHOD approval" : "";
             return Ok(new
             {
                 isThreeLevelWorkflow = three,

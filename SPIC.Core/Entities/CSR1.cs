@@ -88,8 +88,7 @@ namespace SPIC.Core.Entities
         // Workflow
         // -------------------------
 
-        [MaxLength(50)]
-        public string Status { get; set; } = "Draft";
+        public CSR1Status Status { get; set; } = CSR1Status.Draft;
 
         public string? Remarks { get; set; }
 
@@ -196,5 +195,18 @@ namespace SPIC.Core.Entities
         public int ProductId { get; set; }
 
         public bool IsActive { get; set; } = true;
+    }
+
+    public enum CSR1Status
+    {
+        Draft = 0,
+        SubmittedForValidation = 1,
+        Submitted = 2,
+        Pending = 3,
+        Validated = 4,
+        Approved = 5,
+        Rejected = 6,
+        Level1Approved = 7,
+        Level2Approved = 8
     }
 }
