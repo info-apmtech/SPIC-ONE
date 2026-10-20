@@ -3,6 +3,7 @@
 @using System.IO.Compression
 @using System.Net.Http.Json
 @using System.Text
+@using System.Globalization
 @using System.Xml
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
@@ -973,6 +974,16 @@
                 </button>
             }
 
+            @if (CanCorrectSubDealerCodes)
+            {
+                <button type="button"
+                        class="sd-btn import"
+                        @onclick="OpenMissingCodeRepairModal">
+                    <i class="bi bi-shield-check"></i>
+                    Repair Missing Codes
+                </button>
+            }
+
             @if (CanCreateSubDealer)
             {
                 <button type="button"
@@ -1610,6 +1621,86 @@
     </div>
 }
 
+@if (_showMissingCodeRepairModal && CanCorrectSubDealerCodes)
+{
+    <div class="subdealer-import-backdrop" @onclick="CloseMissingCodeRepairModal">
+        <div class="subdealer-import-modal" style="width: min(760px, 100%);" @onclick:stopPropagation="true">
+            <div class="subdealer-import-modal-header">
+                <div>
+                    <h5 class="fw-bold mb-1">Repair a Missing Sub Dealer Code</h5>
+                    <div class="small text-muted">
+                        SuperAdmin only. Use the existing <strong>database record Id</strong> and
+                        its <strong>verified actual Sub Dealer Code</strong>. No SD+Id generation.
+                    </div>
+                </div>
+                <button type="button" class="btn-close" aria-label="Close"
+                        disabled="@_missingCodeRepairBusy" @onclick="CloseMissingCodeRepairModal"></button>
+            </div>
+            <div class="subdealer-import-modal-body">
+                <div class="alert alert-warning small">
+                    Only legacy records with a missing/blank code may be repaired here.
+                    Verify the original code using the approved master Excel first.
+                    The original code correction Excel workflow is unchanged.
+                </div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label class="sd-label">Database Sub Dealer Id</label>
+                        <input class="sd-input" type="number" min="1"
+                               placeholder="e.g. 123"
+                               @bind="_missingCodeRecordId"
+                               @bind:after="InvalidateMissingCodePreview" />
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <label class="sd-label">Verified Actual Sub Dealer Code</label>
+                        <input class="sd-input" type="text" maxlength="50"
+                               placeholder="Enter the original real code (not SD + Id)"
+                               @bind="_missingCodeActualCode"
+                               @bind:after="InvalidateMissingCodePreview" />
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_missingCodeRepairMessage))
+                {
+                    <div class="alert @(_missingCodeRepairError ? "alert-danger" : "alert-info") small mt-3 mb-0">
+                        @_missingCodeRepairMessage
+                    </div>
+                }
+
+                @if (_missingCodePreview?.Success == true && _missingCodePreview.Ready)
+                {
+                    <div class="table-responsive mt-3">
+                        <table class="table table-bordered table-sm align-middle">
+                            <tbody>
+                                <tr><th scope="row">Database Id</th><td>@_missingCodePreview.Id</td></tr>
+                                <tr><th scope="row">Firm Name (from DB)</th><td>@_missingCodePreview.FirmName</td></tr>
+                                <tr><th scope="row">Existing Code</th><td class="text-danger">Missing / Blank</td></tr>
+                                <tr><th scope="row">Verified Actual Code to save</th><td>@_missingCodePreview.ActualCode</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <label class="form-check small mt-2">
+                        <input type="checkbox" class="form-check-input" @bind="_missingCodeRepairConfirmed" />
+                        <span class="form-check-label">
+                            I checked this Id and Firm Name against the approved master,
+                            and confirm that the new code is genuine.
+                        </span>
+                    </label>
+                }
+            </div>
+            <div class="subdealer-import-modal-footer">
+                <button type="button" class="btn btn-outline-secondary"
+                        disabled="@_missingCodeRepairBusy" @onclick="CloseMissingCodeRepairModal">Cancel</button>
+                <button type="button" class="btn btn-outline-success"
+                        disabled="@(_missingCodeRepairBusy || !_missingCodeRecordId.HasValue || _missingCodeRecordId <= 0 || string.IsNullOrWhiteSpace(_missingCodeActualCode))"
+                        @onclick="PreviewMissingCodeRepairAsync">Preview (no save)</button>
+                <button type="button" class="btn btn-success"
+                        disabled="@(_missingCodeRepairBusy || _missingCodePreview?.Success != true || _missingCodePreview.Ready != true || !_missingCodeRepairConfirmed)"
+                        @onclick="ApplyMissingCodeRepairAsync">Apply Actual Code</button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_showImportModal && CanImportSubDealers)
 {
     <div class="subdealer-import-backdrop" @onclick="CloseImportModal">
@@ -1675,6 +1766,18 @@
                 {
                     <div class="alert @(_importPartialSuccess ? "alert-warning border-warning text-warning-emphasis" : _importHasError ? "alert-danger" : "alert-success") py-2 mt-3 mb-0 small">
                         @_importMessage
+                    </div>
+                }
+
+                @if (_importRejected.Any(x =>
+                    x.Reason.Contains("Sub Dealer Code is required", StringComparison.OrdinalIgnoreCase) ||
+                    x.Reason.Contains("invisible characters", StringComparison.OrdinalIgnoreCase) ||
+                    x.Reason.Contains("visually empty", StringComparison.OrdinalIgnoreCase)))
+                {
+                    <div class="alert alert-warning py-2 mt-3 mb-0 small" role="alert">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <strong>Warning:</strong> Some Excel rows have empty or invisible Sub Dealer Codes.
+                        Those rows were rejected and NOT saved. Check the Excel row numbers below.
                     </div>
                 }
 
@@ -1992,6 +2095,28 @@
         public string FirmName { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
+    }
+
+    // Separate NULL/blank legacy code correction - never overwrites existing codes.
+    private bool _showMissingCodeRepairModal;
+    private bool _missingCodeRepairBusy;
+    private int? _missingCodeRecordId;
+    private string _missingCodeActualCode = string.Empty;
+    private MissingCodeRepairResponseDto? _missingCodePreview;
+    private string? _missingCodeRepairMessage;
+    private bool _missingCodeRepairError;
+    private bool _missingCodeRepairConfirmed;
+
+    private sealed class MissingCodeRepairResponseDto
+    {
+        public bool Success { get; set; }
+        public bool Ready { get; set; }
+        public bool Updated { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int Id { get; set; }
+        public string FirmName { get; set; } = string.Empty;
+        public string ExistingCode { get; set; } = string.Empty;
+        public string ActualCode { get; set; } = string.Empty;
     }
 
     private bool CanImportSubDealers =>
@@ -3485,6 +3610,138 @@
         }
     }
 
+    private void OpenMissingCodeRepairModal()
+    {
+        if (!CanCorrectSubDealerCodes || _missingCodeRepairBusy) return;
+        _showMissingCodeRepairModal = true;
+        _missingCodeRecordId = null;
+        _missingCodeActualCode = string.Empty;
+        InvalidateMissingCodePreview();
+        _missingCodeRepairMessage = null;
+        _missingCodeRepairError = false;
+    }
+
+    private void CloseMissingCodeRepairModal()
+    {
+        if (_missingCodeRepairBusy) return;
+        _showMissingCodeRepairModal = false;
+        _missingCodeRecordId = null;
+        _missingCodeActualCode = string.Empty;
+        InvalidateMissingCodePreview();
+        _missingCodeRepairMessage = null;
+        _missingCodeRepairError = false;
+    }
+
+    private void InvalidateMissingCodePreview()
+    {
+        _missingCodePreview = null;
+        _missingCodeRepairConfirmed = false;
+    }
+
+    private async Task<MissingCodeRepairResponseDto> SendMissingCodeRepairAsync(string action)
+    {
+        using var response = await Http.PostAsJsonAsync(
+            $"api/SubDealerRegistration/missing-code-repair/{action}",
+            new
+            {
+                Id = _missingCodeRecordId ?? 0,
+                ActualCode = _missingCodeActualCode,
+                ExpectedFirmName = action == "apply" ? _missingCodePreview?.FirmName : null
+            });
+        var json = await response.Content.ReadAsStringAsync();
+        MissingCodeRepairResponseDto? result;
+        try
+        {
+            result = System.Text.Json.JsonSerializer.Deserialize<MissingCodeRepairResponseDto>(
+                json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            result = null;
+        }
+
+        result ??= new MissingCodeRepairResponseDto();
+        if (!response.IsSuccessStatusCode)
+        {
+            result.Success = false;
+            if (string.IsNullOrWhiteSpace(result.Message))
+                result.Message = $"HTTP {(int)response.StatusCode}. Check SuperAdmin permissions and API logs.";
+        }
+        return result;
+    }
+
+    private async Task PreviewMissingCodeRepairAsync()
+    {
+        if (!CanCorrectSubDealerCodes || _missingCodeRepairBusy ||
+            !_missingCodeRecordId.HasValue || _missingCodeRecordId <= 0) return;
+
+        _missingCodeRepairBusy = true;
+        InvalidateMissingCodePreview();
+        _missingCodeRepairMessage = null;
+        try
+        {
+            var result = await SendMissingCodeRepairAsync("preview");
+            _missingCodePreview = result.Success && result.Ready ? result : null;
+            _missingCodeRepairMessage = result.Message;
+            _missingCodeRepairError = !result.Success;
+        }
+        catch (Exception ex)
+        {
+            _missingCodeRepairError = true;
+            _missingCodeRepairMessage = $"Preview failed: {ex.Message}";
+        }
+        finally
+        {
+            _missingCodeRepairBusy = false;
+        }
+    }
+
+    private async Task ApplyMissingCodeRepairAsync()
+    {
+        if (!CanCorrectSubDealerCodes || _missingCodeRepairBusy ||
+            _missingCodePreview?.Success != true || !_missingCodePreview.Ready ||
+            !_missingCodeRepairConfirmed) return;
+
+        _missingCodeRepairBusy = true;
+        _missingCodeRepairConfirmed = false;
+        try
+        {
+            // API revalidates DB Id, Firm Name, NULL state, and code uniqueness.
+            var result = await SendMissingCodeRepairAsync("apply");
+            if (!result.Success || !result.Updated)
+            {
+                _missingCodeRepairError = true;
+                _missingCodeRepairMessage = result.Message;
+                _missingCodePreview = null;
+                return;
+            }
+
+            _showMissingCodeRepairModal = false;
+            _missingCodePreview = null;
+            _missingCodeRepairError = false;
+            _pageMessageIsError = false;
+            _pageMessage = result.Message;
+            try
+            {
+                await RefreshAsync();
+            }
+            catch
+            {
+                _pageMessage += " Refresh the list to see the latest code.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _missingCodeRepairError = true;
+            _missingCodeRepairMessage = $"Apply outcome not confirmed: {ex.Message}. Check database before retrying.";
+        }
+        finally
+        {
+            _missingCodeRepairBusy = false;
+        }
+    }
+
     private void OpenImportModal()
     {
         if (!CanImportSubDealers)
@@ -3542,6 +3799,39 @@
 
         _importFile = file;
         _importMessage = $"Ready to import {file.Name}";
+    }
+
+    // Excel code guard: reject empty, visually blank, and hidden-character codes.
+    // Do not replace missing codes with SD+Id or silently remove hidden characters.
+    // Existing genuine master codes may use punctuation, so avoid the Create API regex here.
+    private static string? GetExcelCodeError(string? rawCode)
+    {
+        if (string.IsNullOrWhiteSpace(rawCode))
+            return "Sub Dealer Code is required. Enter the actual code in Excel; this row was not saved.";
+
+        var code = rawCode.Trim();
+        foreach (var ch in code)
+        {
+            var category = char.GetUnicodeCategory(ch);
+            if (char.IsControl(ch) || category == UnicodeCategory.Format ||
+                ch is '\u115F' or '\u1160' or '\u3164' or '\uFFA0' or '\u2800')
+            {
+                return "Sub Dealer Code contains hidden/invisible characters. Enter the actual code in Excel; this row was not saved.";
+            }
+        }
+
+        var hasVisibleBaseCharacter = code.Any(ch =>
+        {
+            var category = char.GetUnicodeCategory(ch);
+            return !char.IsWhiteSpace(ch) &&
+                   category is not (UnicodeCategory.NonSpacingMark or
+                                    UnicodeCategory.SpacingCombiningMark or
+                                    UnicodeCategory.EnclosingMark);
+        });
+
+        return hasVisibleBaseCharacter
+            ? null
+            : "Sub Dealer Code is visually empty. Enter the actual code in Excel; this row was not saved.";
     }
 
     private async Task ImportSubDealersFromExcel()
@@ -3660,9 +3950,10 @@
                         Reason = reason
                     });
 
-                if (string.IsNullOrWhiteSpace(code))
+                var codeError = GetExcelCodeError(code);
+                if (codeError != null)
                 {
-                    Reject(SubDealerImportRejectCategory.Validation, "Sub Dealer Code is empty.");
+                    Reject(SubDealerImportRejectCategory.Validation, codeError);
                     continue;
                 }
 

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Globalization;
 using System.Security.Claims;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
@@ -806,6 +807,163 @@ public class SubDealerRegistrationController : ControllerBase
             });
         }
     }
+    // LEGACY MISSING-CODE REPAIR (SuperAdmin only, separate from existing code-to-code Excel correction).
+    // A genuine externally verified code is supplied with the DATABASE record Id.
+    // Preview is read-only; Apply rechecks the code, record identity, and collisions.
+    public sealed class MissingCodeRepairRequest
+    {
+        public int Id { get; set; }
+        public string? ActualCode { get; set; }
+        public string? ExpectedFirmName { get; set; }
+    }
+
+    public sealed class MissingCodeRepairResult
+    {
+        public bool Success { get; set; }
+        public bool Ready { get; set; }
+        public bool Updated { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int Id { get; set; }
+        public string FirmName { get; set; } = string.Empty;
+        public string ExistingCode { get; set; } = string.Empty;
+        public string ActualCode { get; set; } = string.Empty;
+    }
+
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpPost("missing-code-repair/preview")]
+    public Task<ActionResult<MissingCodeRepairResult>> PreviewMissingCodeRepair(
+        [FromBody] MissingCodeRepairRequest request,
+        CancellationToken cancellationToken) =>
+        ProcessMissingCodeRepair(request, false, cancellationToken);
+
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpPost("missing-code-repair/apply")]
+    public Task<ActionResult<MissingCodeRepairResult>> ApplyMissingCodeRepair(
+        [FromBody] MissingCodeRepairRequest request,
+        CancellationToken cancellationToken) =>
+        ProcessMissingCodeRepair(request, true, cancellationToken);
+
+    private async Task<ActionResult<MissingCodeRepairResult>> ProcessMissingCodeRepair(
+        MissingCodeRepairRequest request,
+        bool apply,
+        CancellationToken cancellationToken)
+    {
+        var result = new MissingCodeRepairResult
+        {
+            Id = request?.Id ?? 0,
+            ActualCode = NormalizeCode(request?.ActualCode)
+        };
+
+        if (request == null || request.Id <= 0)
+        {
+            result.Message = "A valid existing database Sub Dealer Id is required.";
+            return BadRequest(result);
+        }
+
+        var codeError = GetExcelCodeError(request.ActualCode);
+        if (codeError != null)
+        {
+            result.Message = codeError;
+            return BadRequest(result);
+        }
+
+        if (result.ActualCode.Length > 50)
+        {
+            result.Message = "Actual Sub Dealer Code must be 50 characters or fewer.";
+            return BadRequest(result);
+        }
+
+        // An Apply must have the expected firm name from a successful preview.
+        // This prevents correcting an unrelated Id if the record changed in between.
+        if (apply && string.IsNullOrWhiteSpace(request.ExpectedFirmName))
+        {
+            result.Message = "Preview the exact record and verify its Firm Name before applying.";
+            return BadRequest(result);
+        }
+
+        try
+        {
+            await using var transaction = apply
+                ? await _db.Database.BeginTransactionAsync(
+                    System.Data.IsolationLevel.Serializable, cancellationToken)
+                : null;
+
+            IQueryable<SubDealerRegistration> query = _db.SubDealerRegistrations;
+            if (!apply) query = query.AsNoTracking();
+
+            var entity = await query.SingleOrDefaultAsync(x => x.Id == request.Id, cancellationToken);
+            if (entity == null)
+            {
+                result.Message = "Sub Dealer record Id was not found. Nothing changed.";
+                return NotFound(result);
+            }
+
+            result.FirmName = entity.FirmName ?? string.Empty;
+            result.ExistingCode = entity.SubDealerCode ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(entity.SubDealerCode))
+            {
+                result.Message = "This record already has a Sub Dealer Code. Existing genuine codes cannot be replaced using Missing Code Repair.";
+                return Conflict(result);
+            }
+
+            if (apply && !string.Equals(
+                    request.ExpectedFirmName?.Trim(),
+                    result.FirmName.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                result.Message = "Firm Name changed since preview. Nothing changed; preview again.";
+                return Conflict(result);
+            }
+
+            var duplicate = await _db.SubDealerRegistrations.AsNoTracking().AnyAsync(
+                x => x.Id != request.Id &&
+                     x.SubDealerCode != null &&
+                     x.SubDealerCode.Trim().ToUpper() == result.ActualCode,
+                cancellationToken);
+
+            if (duplicate)
+            {
+                result.Message = "This actual Sub Dealer Code already belongs to a different record. Nothing changed.";
+                return Conflict(result);
+            }
+
+            if (!apply)
+            {
+                result.Success = true;
+                result.Ready = true;
+                result.Message = "Ready. Verify the database Id, Firm Name and genuine Sub Dealer Code, then confirm Apply.";
+                return Ok(result);
+            }
+
+            // Exactly ONE business field is corrected. Never generate SD+Id or
+            // change FirmName, hierarchy, contact, timestamps, or other details.
+            entity.SubDealerCode = result.ActualCode;
+            await _db.SaveChangesAsync(cancellationToken);
+            if (transaction != null)
+                await transaction.CommitAsync(cancellationToken);
+
+            result.Success = true;
+            result.Updated = true;
+            result.Message = $"Actual Sub Dealer Code saved for database record {request.Id}. Other fields were preserved.";
+            return Ok(result);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (DbUpdateException)
+        {
+            result.Message = "Database rejected the correction. No change confirmed; verify the record before retrying.";
+            return Conflict(result);
+        }
+        catch (Exception)
+        {
+            result.Message = "Correction could not be confirmed. Check database state before retrying.";
+            return StatusCode(500, result);
+        }
+    }
+
     [HttpPut("{id:int}")]
     public async Task<ActionResult<SubDealerFormModel>> Update(
         int id,
@@ -853,6 +1011,39 @@ public class SubDealerRegistrationController : ControllerBase
 
         await _db.SaveChangesAsync(cancellationToken);
         return Ok(ToModel(entity));
+    }
+
+    // Excel code guard: reject empty, visually blank, and hidden-character codes.
+    // Do not replace missing codes with SD+Id or silently remove hidden characters.
+    // Existing genuine master codes may use punctuation, so avoid the Create API regex here.
+    private static string? GetExcelCodeError(string? rawCode)
+    {
+        if (string.IsNullOrWhiteSpace(rawCode))
+            return "Sub Dealer Code is required. Enter the actual code in Excel; this row was not saved.";
+
+        var code = rawCode.Trim();
+        foreach (var ch in code)
+        {
+            var category = char.GetUnicodeCategory(ch);
+            if (char.IsControl(ch) || category == UnicodeCategory.Format ||
+                ch is '\u115F' or '\u1160' or '\u3164' or '\uFFA0' or '\u2800')
+            {
+                return "Sub Dealer Code contains hidden/invisible characters. Enter the actual code in Excel; this row was not saved.";
+            }
+        }
+
+        var hasVisibleBaseCharacter = code.Any(ch =>
+        {
+            var category = char.GetUnicodeCategory(ch);
+            return !char.IsWhiteSpace(ch) &&
+                   category is not (UnicodeCategory.NonSpacingMark or
+                                    UnicodeCategory.SpacingCombiningMark or
+                                    UnicodeCategory.EnclosingMark);
+        });
+
+        return hasVisibleBaseCharacter
+            ? null
+            : "Sub Dealer Code is visually empty. Enter the actual code in Excel; this row was not saved.";
     }
 
     /// <summary>
@@ -963,8 +1154,9 @@ public class SubDealerRegistrationController : ControllerBase
 
                 if (!partial)
                 {
-                    if (string.IsNullOrWhiteSpace(code))
-                        result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Code is required.");
+                    var codeError = GetExcelCodeError(code);
+                    if (codeError != null)
+                        result.Errors.Add($"Excel row {rowNumber}: {codeError}");
 
                     if (string.IsNullOrWhiteSpace(name))
                         result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Name is required.");
@@ -1040,8 +1232,9 @@ public class SubDealerRegistrationController : ControllerBase
             var name = row.FirmName?.Trim() ?? string.Empty;
             var reasons = new List<string>();
 
-            if (string.IsNullOrWhiteSpace(code))
-                reasons.Add("Sub Dealer Code is required.");
+            var codeError = GetExcelCodeError(code);
+            if (codeError != null)
+                reasons.Add(codeError);
 
             if (string.IsNullOrWhiteSpace(name))
                 reasons.Add("Sub Dealer Name is required.");
@@ -1104,30 +1297,65 @@ public class SubDealerRegistrationController : ControllerBase
             return Ok(result);
         }
 
+        // Exact code identity = trim outer whitespace + uppercase. Preserve punctuation.
+        // Use the SAME normalization for incoming rows, database rows and the save loop.
         var codes = rows
-            .Select(x => x.SubDealerCode.Trim().ToUpperInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(x => NormalizeCode(x.SubDealerCode))
+            .Distinct(StringComparer.Ordinal)
             .ToList();
 
         var existingList = await _db.SubDealerRegistrations
-            .Where(x => x.SubDealerCode != null && codes.Contains(x.SubDealerCode.ToUpper()))
+            .Where(x => x.SubDealerCode != null &&
+                        codes.Contains(x.SubDealerCode.Trim().ToUpper()))
             .ToListAsync(cancellationToken);
 
-        // GroupBy(...).First() rather than ToDictionary: a duplicate SubDealerCode in the
-        // master table used to throw "An item with the same key has already been added" and
-        // fail the whole registration import. Canonical normalization also means a code with
-        // stray surrounding whitespace now matches the same registration.
-        var existingByCode = existingList
+        // Existing duplicate codes are ambiguous: NEVER silently select First()
+        // or create another record. Reject only affected Excel rows.
+        var existingGroups = existingList
             .Where(x => !string.IsNullOrWhiteSpace(x.SubDealerCode))
-            .GroupBy(x => MasterNormalizer.Normalize(x.SubDealerCode))
-            .Where(g => g.Key.Length > 0)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+            .GroupBy(x => NormalizeCode(x.SubDealerCode))
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var ambiguousCodes = existingGroups
+            .Where(g => g.Value.Count > 1)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (ambiguousCodes.Count > 0)
+        {
+            foreach (var row in rows.ToList())
+            {
+                var code = NormalizeCode(row.SubDealerCode);
+                if (!ambiguousCodes.Contains(code)) continue;
+
+                var reason = $"Code '{code}' belongs to multiple existing Sub Dealers. Resolve duplicate records first; no record was selected automatically.";
+                if (partial)
+                {
+                    result.Rejected.Add(ToRejected(row, SubDealerImportRejectCategory.Duplicate, reason));
+                    rows.Remove(row);
+                }
+                else
+                {
+                    result.Errors.Add($"Excel row {row.ExcelRowNumber}: {reason}");
+                }
+            }
+
+            if (!partial && result.Errors.Count > 0)
+                return BadRequest(result);
+
+            if (partial && rows.Count == 0)
+                return Ok(result);
+        }
+
+        var existingByCode = existingGroups
+            .Where(g => g.Value.Count == 1)
+            .ToDictionary(g => g.Key, g => g.Value[0], StringComparer.Ordinal);
 
         if (isMoImport && currentHqId.HasValue)
         {
             foreach (var row in rows.ToList())
             {
-                var code = MasterNormalizer.Normalize(row.SubDealerCode);
+                var code = NormalizeCode(row.SubDealerCode);
                 if (existingByCode.TryGetValue(code, out var existing) &&
                     existing.HQ != currentHqId.Value)
                 {
@@ -1166,7 +1394,7 @@ public class SubDealerRegistrationController : ControllerBase
 
             foreach (var row in rows)
             {
-                var code = row.SubDealerCode.Trim().ToUpperInvariant();
+                var code = NormalizeCode(row.SubDealerCode);
                 var firmName = row.FirmName.Trim().ToUpperInvariant();
 
                 if (existingByCode.TryGetValue(code, out var existing))
@@ -1285,6 +1513,9 @@ public class SubDealerRegistrationController : ControllerBase
 
         if (entity == null)
             return NotFound($"Sub Dealer with Id {id} was not found.");
+
+        if (string.IsNullOrWhiteSpace(entity.SubDealerCode))
+            return BadRequest("Saved details cannot be cleared while Sub Dealer Code is missing. A SuperAdmin must assign the verified actual code to this database Id first.");
 
         // Preserve the master-row identity and location hierarchy.
         var preservedCode = entity.SubDealerCode;
