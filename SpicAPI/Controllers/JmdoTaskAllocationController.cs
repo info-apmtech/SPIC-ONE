@@ -409,12 +409,94 @@ public class JmdoTaskAllocationController : ControllerBase
         return EarthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 
-    // GET api/JmdoTaskAllocation/mine/all
-    // Every allocation the signed-in user has ever submitted (any week, any status), newest
-    // first. GetMineToday only ever returns ONE allocation (the current week's, or the latest as
-    // a fallback) - the "Completed Allocations" tab needs to show completed tasks from ANY past
-    // week now that a JMDO can submit for a week other than the current one (see Create's
-    // WeekStart), not just whatever happens to be "current" today.
+    [Authorize(Roles = "JMDO")]
+    [HttpGet("mine/reports")]
+    public async Task<ActionResult<JmdoFieldReportsDto>> GetMyReports()
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var monthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        var allocations = await _db.JmdoTaskAllocations
+            .Include(a => a.Dealers)
+            .Include(a => a.Programs)
+            .Include(a => a.Closeouts)
+            .AsNoTracking()
+            .Where(a => a.SubmittedByUserId == userId)
+            .ToListAsync();
+
+        var rows = new List<JmdoFieldReportRowDto>();
+        var closeDurationsHours = new List<double>();
+
+        string LatestOutcome(JmdoTaskAllocation a, JmdoCloseoutKind kind, int? subId) =>
+            a.Closeouts
+                .Where(c => c.Kind == kind && (subId == null || (kind == JmdoCloseoutKind.Dealer ? c.SubDealerId == subId : c.Csr1Id == subId)))
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefault()?.Outcome is { Length: > 0 } outcome ? outcome : "Completed";
+
+        void AddRow(DateTime completedAt, DateTime? startedAt, string task, string type, string outcome)
+        {
+            if (completedAt < monthStart || completedAt >= monthEnd) return;
+            rows.Add(new JmdoFieldReportRowDto { Date = completedAt, Task = task, Type = type, Outcome = outcome });
+            if (startedAt.HasValue && completedAt > startedAt.Value)
+                closeDurationsHours.Add((completedAt - startedAt.Value).TotalHours);
+        }
+
+        foreach (var a in allocations)
+        {
+            foreach (var d in a.Dealers.Where(x => x.Status == AllocTaskStatus.Completed && x.CompletedAt.HasValue))
+            {
+                AddRow(d.CompletedAt!.Value, d.StartedAt, $"{d.DealerName} - Dealer Code : {d.DealerCode}", "Dealer",
+                    LatestOutcome(a, JmdoCloseoutKind.Dealer, EffectiveDealerId(d)));
+            }
+
+            foreach (var p in a.Programs.Where(x => x.Status == AllocTaskStatus.Completed && x.CompletedAt.HasValue))
+            {
+                AddRow(p.CompletedAt!.Value, p.StartedAt, $"{p.ProgramName} - 1 Program", "MD Programs",
+                    LatestOutcome(a, JmdoCloseoutKind.MdProgram, p.Csr1Id));
+            }
+
+            if (a.SpcmTarget is > 0 && a.SpcmStatus == AllocTaskStatus.Completed && a.SpcmCompletedAt.HasValue)
+            {
+                AddRow(a.SpcmCompletedAt.Value, a.SpcmStartedAt, $"Today's Target - {a.SpcmTarget}", "SPCM",
+                    LatestOutcome(a, JmdoCloseoutKind.Spcm, null));
+            }
+
+            if (a.SoilSampleTarget is > 0 && a.SoilSampleStatus == AllocTaskStatus.Completed && a.SoilSampleCompletedAt.HasValue)
+            {
+                AddRow(a.SoilSampleCompletedAt.Value, null, $"Today's Target - {a.SoilSampleTarget}", "Soil Sample Collection", "Completed");
+            }
+
+            if ((a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0)
+                && a.PosLiquidationStatus == AllocTaskStatus.Completed && a.PosLiquidationCompletedAt.HasValue)
+            {
+                AddRow(a.PosLiquidationCompletedAt.Value, a.PosLiquidationStartedAt, "PoS Liquidation", "PoS Liquidation",
+                    LatestOutcome(a, JmdoCloseoutKind.PosLiquidation, null));
+            }
+        }
+
+        var soilSamplesLogged = await _db.SampleCollections.AsNoTracking()
+            .Where(c => c.CollectedByUserId == userId && !c.IsDeleted && c.CreatedAt >= monthStart && c.CreatedAt < monthEnd)
+            .CountAsync();
+
+        var farmersAdded = await _db.SasFarmers.AsNoTracking()
+            .Where(f => f.CreatedByUserId == userId && !f.IsDeleted && f.CreatedAt >= monthStart && f.CreatedAt < monthEnd)
+            .CountAsync();
+
+        return Ok(new JmdoFieldReportsDto
+        {
+            CompletedThisMonth = rows.Count,
+            AvgCloseTimeHours = closeDurationsHours.Count > 0 ? Math.Round(closeDurationsHours.Average(), 1) : null,
+            SoilSamplesLoggedThisMonth = soilSamplesLogged,
+            FarmersAddedThisMonth = farmersAdded,
+            Rows = rows.OrderByDescending(r => r.Date).ToList()
+        });
+    }
+
+    
     [Authorize(Roles = "Admin,MO,MDO,JMDO")]
     [HttpGet("mine/all")]
     public async Task<ActionResult<List<JmdoTaskAllocationResponseDto>>> GetMineAll()
@@ -474,12 +556,7 @@ public class JmdoTaskAllocationController : ControllerBase
         {
             alloc = new JmdoTaskAllocation
             {
-                // The week's Sunday, same convention as Create's WeekStartFor(...) - using the
-                // literal DateTime.Today here (as this used to) stores a non-Sunday date whenever
-                // this auto-provisioning path fires on anything but a Sunday, which then silently
-                // breaks every later "which week does this belong to" comparison that assumes
-                // AllocationDate is already week-aligned (e.g. TasksAllocation.razor's Task
-                // History/Task Summary date filters).
+                
                 AllocationDate = CurrentWeekStart(),
                 SubmittedByUserId = userId,
                 SubmittedByRole = CurrentRole(),
@@ -611,12 +688,6 @@ public class JmdoTaskAllocationController : ControllerBase
         return Ok(rows);
     }
 
-    // GET api/JmdoTaskAllocation/monitoring
-    // Task Monitoring report: one row per individual task (a dealer visit, an MD program, or one
-    // of the Spcm/SoilSample/PosLiquidation targets), flattened across every in-scope allocation -
-    // same HQ scoping as GetPending, but GetPending shows one row per whole-week submission while
-    // this needs one row per task. Rejected allocations are left out entirely: once an MDO rejects
-    // a week's submission, nothing inside it is a live task worth monitoring any more.
     [Authorize(Roles = "Admin,MO,MDO")]
     [HttpGet("monitoring")]
     public async Task<ActionResult<List<TaskMonitoringRowDto>>> GetMonitoring()
