@@ -1,5 +1,8 @@
 @page "/MdoReports"
+@using System.Net.Http.Json
+@using SPIC.Core.DTOs
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject HttpClient Http
 
 <div class="container-fluid py-4 px-0 mdr-page">
 
@@ -10,11 +13,8 @@
         </div>
 
         <div class="mdr-header-actions">
-            <button type="button" class="mdr-btn mdr-btn-outline" @onclick='() => ExportAs("Excel")'>
-                <i class="bi bi-download"></i> Excel
-            </button>
-            <button type="button" class="mdr-btn mdr-btn-outline" @onclick='() => ExportAs("PDF")'>
-                <i class="bi bi-download"></i> PDF
+            <button type="button" class="mdr-btn mdr-btn-outline" @onclick="Refresh" disabled="@_isLoading">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
             </button>
         </div>
     </div>
@@ -43,7 +43,7 @@
                 </select>
             </div>
             <div class="mdr-filter-field">
-                <label class="mdr-field-label" for="mdr-date-range">Date Range</label>
+                <label class="mdr-field-label" for="mdr-date-range">On or after</label>
                 <input id="mdr-date-range" type="date" class="mdr-select" @bind="dateRange" />
             </div>
         </div>
@@ -61,7 +61,7 @@
                 <span class="mdr-stat-label">Tasks Closed</span>
                 <span class="mdr-stat-icon"><i class="bi bi-clipboard"></i></span>
             </div>
-            <div class="mdr-stat-number">96</div>
+            <div class="mdr-stat-number">@(_report?.TasksClosedThisMonth ?? 0)</div>
             <div class="mdr-stat-desc">This month</div>
         </div>
 
@@ -70,7 +70,7 @@
                 <span class="mdr-stat-label">Avg. Turnaround</span>
                 <span class="mdr-stat-icon"><i class="bi bi-clock"></i></span>
             </div>
-            <div class="mdr-stat-number">1.8 days</div>
+            <div class="mdr-stat-number">@AvgTurnaroundText</div>
             <div class="mdr-stat-desc">Assign to close</div>
         </div>
 
@@ -79,108 +79,201 @@
                 <span class="mdr-stat-label">Soil Samples</span>
                 <span class="mdr-stat-icon"><i class="bi bi-eyedropper"></i></span>
             </div>
-            <div class="mdr-stat-number">200</div>
-            <div class="mdr-stat-desc">Free + paid</div>
+            <div class="mdr-stat-number">@(_report?.SoilSamplesThisMonth ?? 0)</div>
+            <div class="mdr-stat-desc">Free + paid, this month</div>
         </div>
 
         <div class="mdr-stat-card mdr-stat-farmers">
             <div class="mdr-stat-top">
                 <span class="mdr-stat-label">Farmers Covered</span>
-                <span class="mdr-stat-icon"><i class="bi bi-leaf"></i></span>
+                <span class="mdr-stat-icon"><i class="bi bi-person-plus"></i></span>
             </div>
-            <div class="mdr-stat-number">412</div>
+            <div class="mdr-stat-number">@(_report?.FarmersCoveredAllTime ?? 0)</div>
             <div class="mdr-stat-desc">Region-wide</div>
         </div>
     </div>
 
-    <div class="mdr-table-card">
-        <div class="mdr-table-scroll">
-            <table class="mdr-table">
-                <thead>
-                    <tr>
-                        <th>JMDO</th>
-                        <th>Tasks Closed</th>
-                        <th>On-time %</th>
-                        <th>Soil Samples</th>
-                        <th>Farmers Added</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var jmdo in JmdoNames)
-                    {
-                        <tr>
-                            <td class="mdr-jmdo-name mdr-cell-header">@jmdo</td>
-                            <td data-label="Tasks Closed">8</td>
-                            <td data-label="On-time %">82%</td>
-                            <td data-label="Soil Samples">23</td>
-                            <td data-label="Farmers Added">38</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <SpicDataTable Items="FilteredJmdoSummaries"
+                   IsLoading="_isLoading"
+                   Title="JMDO-wise summary"
+                   FileName="JmdoSummary"
+                   ExportColumns="GetSummaryExportColumns()"
+                   SearchText="@_summarySearchText"
+                   EmptyTitle="@(AllJmdoSummaries.Count == 0 ? "No JMDOs found for your headquarters" : null)">
+        <FilterControls>
+            <input type="text" class="mdr-select mdr-quick-search"
+                   placeholder="Search..."
+                   @bind="_summarySearchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+        </FilterControls>
+        <TableHeader>
+            <th>JMDO</th>
+            <th>Tasks Closed</th>
+            <th>On-time %</th>
+            <th>Soil Samples</th>
+            <th>Farmers Added</th>
+        </TableHeader>
+        <TableRow Context="row">
+            <td class="mdr-jmdo-name mdr-cell-header">@row.JmdoName</td>
+            <td data-label="Tasks Closed">@row.TasksClosedThisMonth</td>
+            <td data-label="On-time %">@(row.OnTimePercent is { } pct ? $"{pct:0}%" : "—")</td>
+            <td data-label="Soil Samples">@row.SoilSamplesThisMonth</td>
+            <td data-label="Farmers Added">@row.FarmersAddedThisMonth</td>
+        </TableRow>
+    </SpicDataTable>
 
-    <div class="mdr-table-card">
-        <h3 class="mdr-table-title">Detailed Task Report</h3>
-        <p class="mdr-table-subtitle">Every task worked on this period, broken down by JMDO &mdash; what it was about, the resolution, and hours taken.</p>
-
-        <div class="mdr-table-scroll">
-            <table class="mdr-table">
-                <thead>
-                    <tr>
-                        <th>JMDO</th>
-                        <th>Type</th>
-                        <th>Task Summary</th>
-                        <th>Resolution</th>
-                        <th>Status</th>
-                        <th>Hours Taken</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in DetailedTasks)
-                    {
-                        <tr>
-                            <td class="mdr-jmdo-name mdr-cell-header">@row.Jmdo</td>
-                            <td data-label="Type"><span class="mdr-type-pill @row.TypeClass">@row.Type</span></td>
-                            <td data-label="Task Summary">@row.Summary</td>
-                            <td class="mdr-resolution" data-label="Resolution">@row.Resolution</td>
-                            <td data-label="Status"><span class="mdr-status @row.StatusClass"><span class="mdr-status-dot"></span>@row.Status</span></td>
-                            <td data-label="Hours Taken">@row.HoursTaken</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+    @if (reportType is "Farmer Coverage" or "Sales Report")
+    {
+        <div class="mdr-table-card">
+            <h3 class="mdr-table-title">Detailed Task Report</h3>
+            <p class="mdr-table-subtitle">
+                @(reportType == "Farmer Coverage"
+                    ? "Farmer coverage is summarized above (Farmers Covered / Farmers Added) - there's no per-task breakdown to show here."
+                    : "Sales data isn't part of the JMDO task system yet, so there's nothing to show here.")
+            </p>
         </div>
-    </div>
+    }
+    else
+    {
+        <SpicDataTable Items="FilteredDetailedTasks"
+                       IsLoading="_isLoading"
+                       Title="Detailed Task Report"
+                       FileName="DetailedTaskReport"
+                       ExportColumns="GetDetailExportColumns()"
+                       SearchText="@_detailSearchText"
+                       EmptyTitle="@(AllDetailedTasks.Count == 0 ? "No tasks closed out this month yet" : null)">
+            <FilterControls>
+                <input type="text" class="mdr-select mdr-quick-search"
+                       placeholder="Search..."
+                       @bind="_detailSearchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+            </FilterControls>
+            <TableHeader>
+                <th>JMDO</th>
+                <th>Type</th>
+                <th>Task Summary</th>
+                <th>Resolution</th>
+                <th>Status</th>
+                <th>Hours Taken</th>
+            </TableHeader>
+            <TableRow Context="row">
+                <td class="mdr-jmdo-name mdr-cell-header">@row.JmdoName</td>
+                <td data-label="Type"><span class="mdr-type-pill @TypeClassFor(row.Type)">@row.Type</span></td>
+                <td data-label="Task Summary">@row.Summary</td>
+                <td class="mdr-resolution" data-label="Resolution">@row.Resolution</td>
+                <td data-label="Status"><span class="mdr-status @StatusClassFor(row.Status)"><span class="mdr-status-dot"></span>@row.Status</span></td>
+                <td data-label="Hours Taken">@(row.HoursTaken is { } h ? h.ToString("0.#") : "—")</td>
+            </TableRow>
+        </SpicDataTable>
+    }
 
 </div>
 
 @code {
-    // Static placeholder: no Reports API exists yet. JMDO names reuse the
-    // same 5 field officers from MdoDashboard's JMDO-wise summary table.
-    private static readonly string[] JmdoNames =
-    {
-        "Karthik Raja", "Selvam M", "Priya Dharshini", "Ganesh Kumar", "Lakshmi Narayanan"
-    };
+    private bool _isLoading = true;
+    private MdoTeamReportsDto? _report;
 
+    // ---- Filters: staged values bound to the inputs, only applied to the tables when
+    // "Generate Report" is clicked - same "edit freely, only apply on demand" convention
+    // TasksAllocation/TaskMonitoring's own filter bars use. ----
     private string reportType = "Task Summary";
     private string jmdoFilter = "All JMDOs";
     private DateTime? dateRange;
 
-    private void ExportAs(string format) => Toast.Info($"{format} export isn't built yet.");
+    private string appliedJmdo = "All JMDOs";
+    private DateTime? appliedDateRange;
 
-    private void GenerateReport() => Toast.Success("Report generated.");
+    private string _summarySearchText = "";
+    private string _detailSearchText = "";
 
-    private sealed record DetailedTaskRow(string Jmdo, string Type, string TypeClass, string Summary, string Resolution, string Status, string StatusClass, string HoursTaken);
+    private List<MdoReportJmdoSummaryRowDto> AllJmdoSummaries => _report?.JmdoSummaries ?? new();
+    private List<MdoReportDetailRowDto> AllDetailedTasks => _report?.DetailedTasks ?? new();
 
-    private static readonly List<DetailedTaskRow> DetailedTasks = new()
+    private IEnumerable<string> JmdoNames =>
+        AllJmdoSummaries.Select(s => s.JmdoName).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(n => n);
+
+    private string AvgTurnaroundText => _report?.AvgTurnaroundDays is { } d ? $"{d:0.#} days" : "—";
+
+    private List<MdoReportJmdoSummaryRowDto> FilteredJmdoSummaries =>
+        AllJmdoSummaries.Where(r => appliedJmdo == "All JMDOs" || string.Equals(r.JmdoName, appliedJmdo, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    // Report Type narrows the detailed table by task Type - "Task Summary" (the default) shows
+    // every kind; Farmer Coverage/Sales Report have no per-task breakdown at all (see the markup
+    // above, which skips this table entirely for those two).
+    private List<MdoReportDetailRowDto> FilteredDetailedTasks =>
+        AllDetailedTasks.Where(r =>
+            (appliedJmdo == "All JMDOs" || string.Equals(r.JmdoName, appliedJmdo, StringComparison.OrdinalIgnoreCase)) &&
+            (appliedDateRange == null || r.TaskDate.Date >= appliedDateRange.Value.Date) &&
+            (reportType != "Soil Sample Report" || r.Type == "Soil Sample"))
+        .ToList();
+
+    private static string TypeClassFor(string type) => type switch
     {
-        new("Ganesh Kumar", "SPCM", "mdr-type-blue", "Target - 100", "Discrepancy found and escalated before closing task.", "Completed", "mdr-status-completed", "5.0"),
-        new("Ganesh Kumar", "Dealer", "mdr-type-green", "Hanumesh Trading Co", "Collection completed in full; receipt shared with dealer.", "Partially Completed", "mdr-status-partial", "5.0"),
-        new("Karthik Raja", "MD Program", "mdr-type-blue", "Crop Protection Workshop", "Work started — remarks and closure pending.", "In Progress", "mdr-status-progress", "1.5"),
-        new("Karthik Raja", "Soil Sample", "mdr-type-orange", "Today's target - 100", "Not yet taken up.", "Not Started", "mdr-status-notstarted", "—"),
-        new("Karthik Raja", "SPCM", "mdr-type-blue", "Target - 120", "Work started — remarks and closure pending.", "In Progress", "mdr-status-progress", "1.0"),
-        new("Selvam M", "MD Program", "mdr-type-blue", "Farmer Awareness Training", "Partial payment collected — balance follow-up scheduled next visit.", "Completed", "mdr-status-completed", "5.5")
+        "Dealer" => "mdr-type-green",
+        "SPCM" => "mdr-type-blue",
+        "MD Program" => "mdr-type-blue",
+        "Soil Sample" => "mdr-type-orange",
+        "PoS Liquidation" => "mdr-type-grey",
+        _ => "mdr-type-blue"
     };
+
+    private static string StatusClassFor(string status) => status switch
+    {
+        "In Progress" => "mdr-status-progress",
+        "Not Started" => "mdr-status-notstarted",
+        _ when status.Contains("Partially", StringComparison.OrdinalIgnoreCase) => "mdr-status-partial",
+        _ when status.Contains("Not Completed", StringComparison.OrdinalIgnoreCase) => "mdr-status-partial",
+        _ => "mdr-status-completed"
+    };
+
+    private List<ExportColumn<MdoReportJmdoSummaryRowDto>> GetSummaryExportColumns() => new()
+    {
+        new() { Header = "JMDO", ValueSelector = r => r.JmdoName },
+        new() { Header = "Tasks Closed", ValueSelector = r => r.TasksClosedThisMonth.ToString() },
+        new() { Header = "On-time %", ValueSelector = r => r.OnTimePercent is { } pct ? $"{pct:0}%" : "" },
+        new() { Header = "Soil Samples", ValueSelector = r => r.SoilSamplesThisMonth.ToString() },
+        new() { Header = "Farmers Added", ValueSelector = r => r.FarmersAddedThisMonth.ToString() }
+    };
+
+    private List<ExportColumn<MdoReportDetailRowDto>> GetDetailExportColumns() => new()
+    {
+        new() { Header = "JMDO", ValueSelector = r => r.JmdoName },
+        new() { Header = "Type", ValueSelector = r => r.Type },
+        new() { Header = "Task Summary", ValueSelector = r => r.Summary },
+        new() { Header = "Resolution", ValueSelector = r => r.Resolution },
+        new() { Header = "Status", ValueSelector = r => r.Status },
+        new() { Header = "Hours Taken", ValueSelector = r => r.HoursTaken is { } h ? h.ToString("0.#") : "" }
+    };
+
+    private void Refresh() => _ = LoadReportAsync();
+
+    private void GenerateReport()
+    {
+        appliedJmdo = jmdoFilter;
+        appliedDateRange = dateRange;
+
+        if (reportType == "Sales Report")
+            Toast.Info("Sales data isn't part of the JMDO task system yet - showing the other reports only.");
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReportAsync();
+    }
+
+    private async Task LoadReportAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _report = await Http.GetFromJsonAsync<MdoTeamReportsDto>("api/Team/reports");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"MdoReports load failed: {ex.Message}");
+            Toast.Error("Could not load reports. Please try again.");
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
 }
