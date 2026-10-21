@@ -46,42 +46,31 @@
         </div>
     </div>
 
-    <div class="fr-table-card">
-        @if (_isLoading)
-        {
-            <EmptyState Icon="bi-hourglass-split" Title="Loading your reports..." Compact="true" />
-        }
-        else if (Rows.Count == 0)
-        {
-            <EmptyState Icon="bi-clipboard-check" Title="Nothing closed out this month yet" Compact="true" />
-        }
-        else
-        {
-            <div class="fr-table-scroll">
-                <table class="fr-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Task</th>
-                            <th>Type</th>
-                            <th>Outcome</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in Rows)
-                        {
-                            <tr>
-                                <td class="fr-cell-date" data-label="Date">@row.Date</td>
-                                <td class="fr-cell-task fr-cell-header">@row.Task</td>
-                                <td data-label="Type"><span class="fr-type-pill @row.TypeClass">@row.Type</span></td>
-                                <td data-label="Outcome"><span class="fr-outcome @row.OutcomeClass"><span class="fr-outcome-dot"></span>@row.Outcome</span></td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </div>
+    <SpicDataTable Items="Rows"
+                   IsLoading="_isLoading"
+                   Title="Task closures"
+                   FileName="MyReports"
+                   ExportColumns="GetExportColumns()"
+                   SearchText="@_searchText"
+                   EmptyTitle="@(Rows.Count == 0 ? "Nothing closed out this month yet" : null)">
+        <FilterControls>
+            <input type="text" class="fr-quick-search"
+                   placeholder="Search..."
+                   @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+        </FilterControls>
+        <TableHeader>
+            <th>Date</th>
+            <th>Task</th>
+            <th>Type</th>
+            <th>Outcome</th>
+        </TableHeader>
+        <TableRow Context="row">
+            <td class="fr-cell-date" data-label="Date">@row.Date</td>
+            <td class="fr-cell-task fr-cell-header">@row.Task</td>
+            <td data-label="Type"><span class="fr-type-pill @row.TypeClass">@row.Type</span></td>
+            <td data-label="Outcome"><span class="fr-outcome @row.OutcomeClass"><span class="fr-outcome-dot"></span>@row.Outcome</span></td>
+        </TableRow>
+    </SpicDataTable>
 
 </div>
 
@@ -90,6 +79,18 @@
 
     private JmdoFieldReportsDto? _report;
     private bool _isLoading = true;
+
+    // Quick free-text box inside the table toolbar - SpicDataTable matches this against every
+    // export column on its own, same pattern as TaskMonitoring.razor/TargetAchievement.razor.
+    private string _searchText = "";
+
+    private List<ExportColumn<ReportRow>> GetExportColumns() => new()
+    {
+        new() { Header = "Date", ValueSelector = r => r.Date },
+        new() { Header = "Task", ValueSelector = r => r.Task },
+        new() { Header = "Type", ValueSelector = r => r.Type },
+        new() { Header = "Outcome", ValueSelector = r => r.Outcome }
+    };
 
     private string AvgCloseTimeText => _report?.AvgCloseTimeHours is { } hrs ? $"{hrs:0.#} hrs" : "—";
 
