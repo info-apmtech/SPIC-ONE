@@ -108,6 +108,12 @@ namespace SpicAPI.Controllers
 		[SdwaCompanyWriteAccess("Entry")]
 		public async Task<IActionResult> Create([FromBody] SdwaCompanyCreateRequest request)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never the
+			// username or a request value. A token without one cannot perform a company write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (string.IsNullOrWhiteSpace(request.CompanyName))
 				return BadRequest(new { Success = false, Message = "Company Name is required." });
 
@@ -129,9 +135,9 @@ namespace SpicAPI.Controllers
 				ShortCode = request.ShortCode?.Trim(),
 				GSTIN = request.GSTIN.Trim(),
 				IsActive = request.IsActive,
-				CreatedBy = User.Identity?.Name,
+				CreatedBy = actorId,
 				CreatedAt = DateTime.Now,
-				UpdatedBy = User.Identity?.Name,
+				UpdatedBy = actorId,
 				UpdatedAt = DateTime.Now
 			};
 
@@ -158,6 +164,12 @@ namespace SpicAPI.Controllers
 		[SdwaCompanyWriteAccess("Update")]
 		public async Task<IActionResult> Update(int id, [FromBody] SdwaCompanyCreateRequest request)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never the
+			// username or a request value. A token without one cannot perform a company write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (string.IsNullOrWhiteSpace(request.CompanyName))
 				return BadRequest(new { Success = false, Message = "Company Name is required." });
 
@@ -184,7 +196,7 @@ namespace SpicAPI.Controllers
 			company.ShortCode = request.ShortCode?.Trim();
 			company.GSTIN = request.GSTIN.Trim();
 			company.IsActive = request.IsActive;
-			company.UpdatedBy = User.Identity?.Name;
+			company.UpdatedBy = actorId;
 			company.UpdatedAt = DateTime.Now;
 
 			// Replace guest house mappings
@@ -209,6 +221,12 @@ namespace SpicAPI.Controllers
 		[SdwaCompanyWriteAccess("Delete")]
 		public async Task<IActionResult> Delete(int id)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never the
+			// username or a request value. A token without one cannot perform a company write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			var company = await _db.SdwaCompanies
 				.Include(c => c.CompanyGuestHouses)
 				.FirstOrDefaultAsync(c => c.Id == id);
@@ -233,13 +251,19 @@ namespace SpicAPI.Controllers
 		[SdwaCompanyWriteAccess("Update")]
 		public async Task<IActionResult> ChangeStatus(int id, [FromQuery] bool isActive)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never the
+			// username or a request value. A token without one cannot perform a company write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			var company = await _db.SdwaCompanies.FindAsync(id);
 			if (company == null)
 				return NotFound();
 
 			company.IsActive = isActive;
 			company.UpdatedAt = DateTime.Now;
-			company.UpdatedBy = User.Identity?.Name;
+			company.UpdatedBy = actorId;
 			await _db.SaveChangesAsync();
 
 			return Ok(new { Success = true, Message = isActive ? "Company activated." : "Company deactivated." });
