@@ -29,8 +29,12 @@ public class JMDOAttendance
     public double? AttendanceLatitude { get; set; }
     public double? AttendanceLongitude { get; set; }
     public string? CreatedBy { get; set; }
+    /// <summary>AspNetUsers/UserInfo id of the actor from CreatedBy - CreatedBy itself stays a
+    /// display-name snapshot; this is the durable id to join/query on.</summary>
+    public string? CreatedByUserId { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public string? UpdatedBy { get; set; }
+    public string? UpdatedByUserId { get; set; }
     public DateTime UpdatedAt { get; set; } = DateTime.Now;
 
     public ICollection<JMDOTrackingSession> TrackingSessions { get; set; } = new List<JMDOTrackingSession>();
