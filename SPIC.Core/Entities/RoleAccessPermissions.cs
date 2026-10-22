@@ -21,10 +21,14 @@ namespace SPIC.Core.Entities
             return dot < 0 ? token : token.Substring(0, dot);
         }
 
-        public static string NormalizePageKey(string pageKey) =>
-            string.Equals(pageKey, nameof(PagePermission.QRScanner), StringComparison.OrdinalIgnoreCase)
-                ? "qr-scanner"
-                : pageKey;
+        public static string NormalizePageKey(string pageKey)
+        {
+            if (string.Equals(pageKey, nameof(PagePermission.QRScanner), StringComparison.OrdinalIgnoreCase))
+                return "qr-scanner";
+            if (string.Equals(pageKey, "GuestHouseMaster", StringComparison.OrdinalIgnoreCase))
+                return nameof(PagePermission.GuestHouse);
+            return pageKey;
+        }
 
         public static string KeyFor(PagePermission page) => NormalizePageKey(page.ToString());
 
