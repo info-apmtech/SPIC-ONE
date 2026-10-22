@@ -335,6 +335,7 @@ public static class ShellNavigation
         new("TopRankingWholesalers", "Top Ranking Wholesaler", "bi-award-fill", "/TopRankingWholesalers", nameof(PagePermission.TopRankingWholesalers)) { Group = GroupSubsidy },
         new("TopRankingRetailers", "Top Ranking Retailers", "bi-shop", "/TopRankingRetailers", nameof(PagePermission.TopRankingRetailers)) { Group = GroupSubsidy },
         new("ProductWiseStockAvailability", "Productwise Stock Availability", "bi-columns-gap", "/ProductWiseStockAvailability", nameof(PagePermission.ProductWiseStockAvailability)) { Group = GroupSubsidy },
+        new("StateWiseGlobalStockReconciliation", "State-wise Stock Reconciliation", "bi-table", "/StateWiseGlobalStockReconciliation", nameof(PagePermission.ProductWiseStockAvailability)) { Group = GroupSubsidy },
         new("StockDetails", "Stock Details", "bi-inboxes-fill", "/StockDetails", nameof(PagePermission.StockDetails)) { Group = GroupSubsidy },
         // Admin-only tool: no PagePermission exists for it on purpose (it is not a Designation page).
         new("ExcelFormatFileUpload", "File Upload", "bi-file-earmark-arrow-up-fill", "/ExcelFormatFileUpload", "ExcelFormatFileUpload")
