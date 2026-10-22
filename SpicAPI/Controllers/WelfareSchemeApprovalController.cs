@@ -719,6 +719,10 @@ namespace SpicAPI.Controllers
                     return BadRequest(new { Message = "A valid comment is mandatory when approving at the MO stage." });
             }
 
+            // actorName ("Name (stage)") is DISPLAY text only: it feeds ApprovedBy and ActionLog.ActorName,
+            // which the approval screens, the dealer's status view and the PDF print as stored. The audit
+            // columns (CreatedBy / UpdatedBy on the step, the application and the log) hold the acting
+            // officer's AspNetUsers.Id, taken from the validated NameIdentifier claim in GetActorAsync.
             var actorName = BuildActorName(user, actingRole.Value);
             var now = DateTime.Now;
 
@@ -730,7 +734,7 @@ namespace SpicAPI.Controllers
                 {
                     WelfareApplicationId = application.Id,
                     ApprovalLevel = actingRole.Value,
-                    CreatedBy = actorName,
+                    CreatedBy = user.Id,
                     CreatedAt = now
                 };
                 application.Approvals.Add(step);
@@ -749,7 +753,7 @@ namespace SpicAPI.Controllers
             // stale value from an earlier approve cycle never lingers.
             step.Recommendation = isApproval ? recommendation : null;
             step.Comment = isApproval ? comment : null;
-            step.UpdatedBy = actorName;
+            step.UpdatedBy = user.Id;
             step.UpdatedAt = now;
 
             if (isApproval)
@@ -763,7 +767,7 @@ namespace SpicAPI.Controllers
                 application.Status = PreviousStage[actingRole.Value];
             }
 
-            application.UpdatedBy = actorName;
+            application.UpdatedBy = user.Id;
             application.UpdatedAt = now;
 
             // Immutable audit entry so the complete approval/rejection/resubmission history is preserved
@@ -774,7 +778,7 @@ namespace SpicAPI.Controllers
                 Action = isApproval ? "Approved" : "Rejected",
                 Remarks = step.Remarks,
                 ActorName = actorName,
-                CreatedBy = actorName,
+                CreatedBy = user.Id,
                 CreatedAt = now
             });
 
@@ -860,6 +864,7 @@ namespace SpicAPI.Controllers
             if (isRejection && string.IsNullOrWhiteSpace(remarks))
                 return BadRequest(new { Message = "Remarks are mandatory when recording a Director rejection." });
 
+            // Display name for ApprovedBy / ActorName; the audit columns below hold user.Id (see ProcessAction).
             var actorName = BuildActorName(user, AppRole.Director);
             var now = DateTime.Now;
 
@@ -873,7 +878,7 @@ namespace SpicAPI.Controllers
                 {
                     WelfareApplicationId = application.Id,
                     ApprovalLevel = AppRole.Director,
-                    CreatedBy = actorName,
+                    CreatedBy = user.Id,
                     CreatedAt = now
                 };
                 application.Approvals.Add(step);
@@ -884,7 +889,7 @@ namespace SpicAPI.Controllers
             step.ApprovedBy = actorName;
             step.ApprovedAt = now;
             step.Remarks = remarks;
-            step.UpdatedBy = actorName;
+            step.UpdatedBy = user.Id;
             step.UpdatedAt = now;
 
             _db.WelfareApplicationActionLogs.Add(new WelfareApplicationActionLog
@@ -894,7 +899,7 @@ namespace SpicAPI.Controllers
                 Action = isApproval ? "DirectorReviewed" : "DirectorReviewRejected",
                 Remarks = remarks,
                 ActorName = actorName,
-                CreatedBy = actorName,
+                CreatedBy = user.Id,
                 CreatedAt = now
             });
 

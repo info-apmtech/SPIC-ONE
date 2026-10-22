@@ -333,6 +333,11 @@ namespace SpicAPI.Controllers
 		[HttpPost("checkin")]
 		public async Task<IActionResult> CheckIn([FromBody] CheckInRequest request)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id, never a name or anything from the request.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (request == null || request.BookingId <= 0)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
 
@@ -473,7 +478,7 @@ namespace SpicAPI.Controllers
 			booking.BookingStatus = GuestHouseBookingStatus.CheckedIn;
 			booking.ActualCheckInAt = DateTime.Now;
 			booking.UpdatedAt = DateTime.Now;
-			booking.UpdatedBy = User.Identity?.Name;
+			booking.UpdatedBy = actorId;
 
 			// Make the check-in idempotent: replace any earlier allocations of this booking
 			// with the freshly selected room numbers.
@@ -482,7 +487,7 @@ namespace SpicAPI.Controllers
 				.ToListAsync();
 			_db.GuestHouseRoomAllocations.RemoveRange(existingAllocations);
 
-			var assignedBy = User.Identity?.Name;
+			var assignedBy = actorId;
 			var checkInDate = booking.CheckInDate.Value.Date;
 			var checkOutDate = booking.CheckOutDate.Value.Date;
 			foreach (var number in selected)
@@ -566,6 +571,10 @@ namespace SpicAPI.Controllers
 		[HttpPost("pay")]
 		public async Task<IActionResult> RecordPayment([FromBody] RecordPaymentRequest request)
 		{
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (request == null || request.BookingId <= 0)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
 
@@ -581,7 +590,7 @@ namespace SpicAPI.Controllers
 
 			booking.PaymentStatus = GuestHousePaymentStatus.Paid;
 			booking.UpdatedAt = DateTime.Now;
-			booking.UpdatedBy = User.Identity?.Name;
+			booking.UpdatedBy = actorId;
 
 			var payment = booking.Payments.FirstOrDefault();
 			if (payment != null)
@@ -617,6 +626,10 @@ namespace SpicAPI.Controllers
 		[HttpPost("checkout")]
 		public async Task<IActionResult> CheckOut([FromBody] CheckOutRequest request)
 		{
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (request == null || request.BookingId <= 0)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
 
@@ -635,7 +648,7 @@ namespace SpicAPI.Controllers
 			booking.BookingStatus = GuestHouseBookingStatus.Completed;
 			booking.ActualCheckOutAt = DateTime.Now;
 			booking.UpdatedAt = DateTime.Now;
-			booking.UpdatedBy = User.Identity?.Name;
+			booking.UpdatedBy = actorId;
 
 			// Snapshot the exact physical room number(s) BEFORE the allocation rows are
 			// removed below - this is the only place the true assigned room is recorded,
@@ -707,12 +720,25 @@ namespace SpicAPI.Controllers
 				.Where(r => bookingIds.Contains(r.GuestHouseBookingId))
 				.ToDictionaryAsync(r => r.GuestHouseBookingId);
 
+			// AdminDecisionBy and CancelledBy (the requester) hold the acting user's AspNetUsers.Id for actions made now and the login
+			// username for earlier ones. The Cancellations page prints them as stored, so resolve an id to
+			// that user's username (what the page has always shown) and pass any other value through.
+			var decisionKeys = rows.SelectMany(c => new[] { c.AdminDecisionBy, c.CancelledBy }).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v!).Distinct().ToList();
+			var decisionNames = decisionKeys.Count == 0
+				? new Dictionary<string, string?>()
+				: await _db.Users.AsNoTracking()
+					.Where(u => decisionKeys.Contains(u.Id))
+					.ToDictionaryAsync(u => u.Id, u => u.UserName);
+
 			var items = rows.Select(c =>
 			{
 				var b = c.GuestHouseBooking!;
 				var guest = b.Guests.FirstOrDefault();
 				var payment = b.Payments.FirstOrDefault();
 				refunds.TryGetValue(c.GuestHouseBookingId, out var refund);
+				var decisionBy = c.AdminDecisionBy != null && decisionNames.TryGetValue(c.AdminDecisionBy, out var decisionUser) && !string.IsNullOrWhiteSpace(decisionUser)
+					? decisionUser
+					: c.AdminDecisionBy;
 				return new CancellationRequestListItemDto
 				{
 					CancellationId = c.Id,
@@ -734,11 +760,11 @@ namespace SpicAPI.Controllers
 					TaxAdjustment = c.TaxAdjustment ?? 0,
 					RefundAmount = c.RefundAmount ?? 0,
 					CancellationReason = c.CancellationReason,
-					RequestedBy = c.CancelledBy,
+					RequestedBy = c.CancelledBy != null && decisionNames.TryGetValue(c.CancelledBy, out var requesterUser) && !string.IsNullOrWhiteSpace(requesterUser) ? requesterUser : c.CancelledBy,
 					RequestedAt = c.CancelledAt,
 					ApprovalStatus = c.ApprovalStatus.ToString(),
 					RefundStatus = c.RefundStatus.ToString(),
-					AdminDecisionBy = c.AdminDecisionBy,
+					AdminDecisionBy = decisionBy,
 					AdminDecisionAt = c.AdminDecisionAt,
 					RejectionReason = c.RejectionReason,
 					Remarks = c.Remarks,
@@ -764,7 +790,9 @@ namespace SpicAPI.Controllers
 		[HttpPost("cancellations/{id:int}/approve")]
 		public async Task<IActionResult> ApproveCancellation(int id)
 		{
-			var adminName = User.Identity?.Name;
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			var scope = await GetGuestHouseScopeAsync();
 			var cancellation = await _db.Set<GuestHouseBookingCancellation>()
@@ -804,7 +832,7 @@ namespace SpicAPI.Controllers
 			GuestHouseRefundStatusSync.FinalizeOutcome finalized;
 			try
 			{
-				finalized = await GuestHouseRefundStatusSync.FinalizeApprovalAsync(_db, cancellation.Id, adminName);
+				finalized = await GuestHouseRefundStatusSync.FinalizeApprovalAsync(_db, cancellation.Id, actorId);
 			}
 			catch (Exception ex)
 			{
@@ -852,7 +880,9 @@ namespace SpicAPI.Controllers
 			if (string.IsNullOrWhiteSpace(reason))
 				return BadRequest(new { Success = false, Message = "Please enter a reason for rejection." });
 
-			var adminName = User.Identity?.Name;
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
 			var now = DateTime.Now;
 
 			// Receptionist state scope: another state's cancellation is "not found".
@@ -869,7 +899,7 @@ namespace SpicAPI.Controllers
 				.ExecuteUpdateAsync(s => s
 					.SetProperty(c => c.ApprovalStatus, GuestHouseCancellationApprovalStatus.Rejected)
 					.SetProperty(c => c.RejectionReason, reason)
-					.SetProperty(c => c.AdminDecisionBy, adminName)
+					.SetProperty(c => c.AdminDecisionBy, actorId)
 					.SetProperty(c => c.AdminDecisionAt, now));
 
 			if (updated == 1)
@@ -1064,6 +1094,10 @@ namespace SpicAPI.Controllers
 		[HttpPost("generate-bill")]
 		public async Task<IActionResult> GenerateBill([FromBody] GenerateBillRequest request)
 		{
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (request == null || request.BookingId <= 0)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
 
@@ -1210,9 +1244,9 @@ namespace SpicAPI.Controllers
 				Remarks = request.Remarks,
 				PaymentMethod = (GuestHousePaymentMethod)request.PaymentMethod,
 				PaymentStatus = request.PaymentReceived ? GuestHousePaymentStatus.Paid : GuestHousePaymentStatus.Pending,
-				CreatedBy = User.Identity?.Name,
+				CreatedBy = actorId,
 				CreatedAt = DateTime.Now,
-				UpdatedBy = User.Identity?.Name,
+				UpdatedBy = actorId,
 				UpdatedAt = DateTime.Now,
 				LineItems = lineItems
 			};
@@ -1222,7 +1256,7 @@ namespace SpicAPI.Controllers
 			{
 				booking.PaymentStatus = GuestHousePaymentStatus.Paid;
 				booking.UpdatedAt = DateTime.Now;
-				booking.UpdatedBy = User.Identity?.Name;
+				booking.UpdatedBy = actorId;
 				if (payment != null)
 				{
 					payment.PaymentStatus = GuestHousePaymentStatus.Paid;
@@ -1958,6 +1992,16 @@ namespace SpicAPI.Controllers
 		public const string ReceptionistDesignation = "Receptionist";
 
 		public sealed record UserDesignation(string Name, string? RoleAccess);
+
+		// The signed-in user's AspNetUsers.Id: the validated JWT NameIdentifier claim (the same claim
+		// GetDesignationAsync below reads), or null when the token carries none. This is the value stored
+		// in the Front Office audit columns (UpdatedBy / AssignedBy / bill CreatedBy / AdminDecisionBy);
+		// never User.Identity.Name and never a request value.
+		public static string? ActorId(ClaimsPrincipal user)
+		{
+			var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
+			return string.IsNullOrWhiteSpace(id) ? null : id;
+		}
 
 		// The signed-in user's active Designation (name + RoleAccess), or null when none.
 		public static async Task<UserDesignation?> GetDesignationAsync(AppDbContext db, ClaimsPrincipal user)
