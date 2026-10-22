@@ -199,13 +199,16 @@ public class JmdoTaskAllocationController : ControllerBase
     }
 
     // GET api/JmdoTaskAllocation/mine/today
-    // weekStart is optional and purely additive: omitted (the only way TaskDetail.razor calls
-    // this), behaviour is byte-for-byte what it always was - current week, falling back to the
-    // user's latest-ever allocation so there's always something to show. TasksAllocation.razor's
-    // "All Allocations" planning tab passes an explicit weekStart when the JMDO navigates to a
-    // week other than the current one - in that case the fallback is skipped, since silently
-    // substituting an unrelated week's old allocation would make it impossible to ever see (or
-    // start) a fresh, empty week.
+    // weekStart is optional: omitted (TaskDetail.razor and TasksAllocation.razor's Today's
+    // Allocation/Task History tabs), it resolves to the real current week. Previously this fell
+    // back to the user's latest-ever allocation (any past week) when the current week had nothing
+    // submitted yet, so Today's Allocation/Task History kept showing an older week's stale targets
+    // as if they were assigned for today, while the "All Allocations" tab (which always passes an
+    // explicit weekStart) correctly reported nothing assigned for the current week - the two tabs
+    // openly disagreed. Both paths now return NoContent alike when nothing has been submitted for
+    // that week, and both exclude Rejected the same way Create treats it elsewhere ("Rejected
+    // doesn't count as already submitted") so a rejected current-week allocation doesn't keep
+    // reading back as live, actionable tasks either.
     [Authorize(Roles = "Admin,MO,MDO,JMDO")]
     [HttpGet("mine/today")]
     public async Task<ActionResult<JmdoTaskAllocationResponseDto>> GetMineToday([FromQuery] DateTime? weekStart = null)
@@ -216,34 +219,15 @@ public class JmdoTaskAllocationController : ControllerBase
 
         var targetWeekStart = weekStart.HasValue ? WeekStartFor(weekStart.Value) : CurrentWeekStart();
 
-        var weekQuery = _db.JmdoTaskAllocations
+        var allocation = await _db.JmdoTaskAllocations
             .Include(a => a.Dealers)
             .Include(a => a.Programs)
             .Include(a => a.Closeouts).ThenInclude(c => c.Products)
             .AsNoTracking()
             .Where(a => a.SubmittedByUserId == userId
-                && a.AllocationDate >= targetWeekStart && a.AllocationDate < targetWeekStart.AddDays(7));
-
-        // Only for the explicit-week case (the planning tab): a Rejected allocation shouldn't
-        // read back as "already submitted" for that week, or the JMDO could never see (or
-        // start) a fresh wizard for a week the MDO rejected. The default/no-weekStart case below
-        // keeps its original behaviour untouched, since that one feeds TaskDetail.razor's "what
-        // am I actively working on" view, not the resubmission flow.
-        if (weekStart.HasValue)
-            weekQuery = weekQuery.Where(a => a.Status != JmdoTaskAllocationStatus.Rejected);
-
-        var allocation = await weekQuery.FirstOrDefaultAsync();
-
-        if (allocation == null && !weekStart.HasValue)
-        {
-            allocation = await _db.JmdoTaskAllocations
-                .Include(a => a.Dealers)
-                .Include(a => a.Programs)
-                .Include(a => a.Closeouts).ThenInclude(c => c.Products)
-                .AsNoTracking()
-                .OrderByDescending(a => a.AllocationDate)
-                .FirstOrDefaultAsync(a => a.SubmittedByUserId == userId);
-        }
+                && a.AllocationDate >= targetWeekStart && a.AllocationDate < targetWeekStart.AddDays(7)
+                && a.Status != JmdoTaskAllocationStatus.Rejected)
+            .FirstOrDefaultAsync();
 
         if (allocation == null)
             return NoContent();
@@ -425,12 +409,94 @@ public class JmdoTaskAllocationController : ControllerBase
         return EarthRadiusKm * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
     }
 
-    // GET api/JmdoTaskAllocation/mine/all
-    // Every allocation the signed-in user has ever submitted (any week, any status), newest
-    // first. GetMineToday only ever returns ONE allocation (the current week's, or the latest as
-    // a fallback) - the "Completed Allocations" tab needs to show completed tasks from ANY past
-    // week now that a JMDO can submit for a week other than the current one (see Create's
-    // WeekStart), not just whatever happens to be "current" today.
+    [Authorize(Roles = "JMDO")]
+    [HttpGet("mine/reports")]
+    public async Task<ActionResult<JmdoFieldReportsDto>> GetMyReports()
+    {
+        var userId = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(userId))
+            return Unauthorized(new { Success = false, Message = "Could not identify the signed-in user." });
+
+        var monthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        var allocations = await _db.JmdoTaskAllocations
+            .Include(a => a.Dealers)
+            .Include(a => a.Programs)
+            .Include(a => a.Closeouts)
+            .AsNoTracking()
+            .Where(a => a.SubmittedByUserId == userId)
+            .ToListAsync();
+
+        var rows = new List<JmdoFieldReportRowDto>();
+        var closeDurationsHours = new List<double>();
+
+        string LatestOutcome(JmdoTaskAllocation a, JmdoCloseoutKind kind, int? subId) =>
+            a.Closeouts
+                .Where(c => c.Kind == kind && (subId == null || (kind == JmdoCloseoutKind.Dealer ? c.SubDealerId == subId : c.Csr1Id == subId)))
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefault()?.Outcome is { Length: > 0 } outcome ? outcome : "Completed";
+
+        void AddRow(DateTime completedAt, DateTime? startedAt, string task, string type, string outcome)
+        {
+            if (completedAt < monthStart || completedAt >= monthEnd) return;
+            rows.Add(new JmdoFieldReportRowDto { Date = completedAt, Task = task, Type = type, Outcome = outcome });
+            if (startedAt.HasValue && completedAt > startedAt.Value)
+                closeDurationsHours.Add((completedAt - startedAt.Value).TotalHours);
+        }
+
+        foreach (var a in allocations)
+        {
+            foreach (var d in a.Dealers.Where(x => x.Status == AllocTaskStatus.Completed && x.CompletedAt.HasValue))
+            {
+                AddRow(d.CompletedAt!.Value, d.StartedAt, $"{d.DealerName} - Dealer Code : {d.DealerCode}", "Dealer",
+                    LatestOutcome(a, JmdoCloseoutKind.Dealer, EffectiveDealerId(d)));
+            }
+
+            foreach (var p in a.Programs.Where(x => x.Status == AllocTaskStatus.Completed && x.CompletedAt.HasValue))
+            {
+                AddRow(p.CompletedAt!.Value, p.StartedAt, $"{p.ProgramName} - 1 Program", "MD Programs",
+                    LatestOutcome(a, JmdoCloseoutKind.MdProgram, p.Csr1Id));
+            }
+
+            if (a.SpcmTarget is > 0 && a.SpcmStatus == AllocTaskStatus.Completed && a.SpcmCompletedAt.HasValue)
+            {
+                AddRow(a.SpcmCompletedAt.Value, a.SpcmStartedAt, $"Today's Target - {a.SpcmTarget}", "SPCM",
+                    LatestOutcome(a, JmdoCloseoutKind.Spcm, null));
+            }
+
+            if (a.SoilSampleTarget is > 0 && a.SoilSampleStatus == AllocTaskStatus.Completed && a.SoilSampleCompletedAt.HasValue)
+            {
+                AddRow(a.SoilSampleCompletedAt.Value, null, $"Today's Target - {a.SoilSampleTarget}", "Soil Sample Collection", "Completed");
+            }
+
+            if ((a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0)
+                && a.PosLiquidationStatus == AllocTaskStatus.Completed && a.PosLiquidationCompletedAt.HasValue)
+            {
+                AddRow(a.PosLiquidationCompletedAt.Value, a.PosLiquidationStartedAt, "PoS Liquidation", "PoS Liquidation",
+                    LatestOutcome(a, JmdoCloseoutKind.PosLiquidation, null));
+            }
+        }
+
+        var soilSamplesLogged = await _db.SampleCollections.AsNoTracking()
+            .Where(c => c.CollectedByUserId == userId && !c.IsDeleted && c.CreatedAt >= monthStart && c.CreatedAt < monthEnd)
+            .CountAsync();
+
+        var farmersAdded = await _db.SasFarmers.AsNoTracking()
+            .Where(f => f.CreatedByUserId == userId && !f.IsDeleted && f.CreatedAt >= monthStart && f.CreatedAt < monthEnd)
+            .CountAsync();
+
+        return Ok(new JmdoFieldReportsDto
+        {
+            CompletedThisMonth = rows.Count,
+            AvgCloseTimeHours = closeDurationsHours.Count > 0 ? Math.Round(closeDurationsHours.Average(), 1) : null,
+            SoilSamplesLoggedThisMonth = soilSamplesLogged,
+            FarmersAddedThisMonth = farmersAdded,
+            Rows = rows.OrderByDescending(r => r.Date).ToList()
+        });
+    }
+
+    
     [Authorize(Roles = "Admin,MO,MDO,JMDO")]
     [HttpGet("mine/all")]
     public async Task<ActionResult<List<JmdoTaskAllocationResponseDto>>> GetMineAll()
@@ -490,12 +556,7 @@ public class JmdoTaskAllocationController : ControllerBase
         {
             alloc = new JmdoTaskAllocation
             {
-                // The week's Sunday, same convention as Create's WeekStartFor(...) - using the
-                // literal DateTime.Today here (as this used to) stores a non-Sunday date whenever
-                // this auto-provisioning path fires on anything but a Sunday, which then silently
-                // breaks every later "which week does this belong to" comparison that assumes
-                // AllocationDate is already week-aligned (e.g. TasksAllocation.razor's Task
-                // History/Task Summary date filters).
+                
                 AllocationDate = CurrentWeekStart(),
                 SubmittedByUserId = userId,
                 SubmittedByRole = CurrentRole(),
@@ -627,12 +688,6 @@ public class JmdoTaskAllocationController : ControllerBase
         return Ok(rows);
     }
 
-    // GET api/JmdoTaskAllocation/monitoring
-    // Task Monitoring report: one row per individual task (a dealer visit, an MD program, or one
-    // of the Spcm/SoilSample/PosLiquidation targets), flattened across every in-scope allocation -
-    // same HQ scoping as GetPending, but GetPending shows one row per whole-week submission while
-    // this needs one row per task. Rejected allocations are left out entirely: once an MDO rejects
-    // a week's submission, nothing inside it is a live task worth monitoring any more.
     [Authorize(Roles = "Admin,MO,MDO")]
     [HttpGet("monitoring")]
     public async Task<ActionResult<List<TaskMonitoringRowDto>>> GetMonitoring()
@@ -1044,6 +1099,28 @@ public class JmdoTaskAllocationController : ControllerBase
         var allocation = await GetMyCurrentAllocationAsync(userId);
         if (allocation == null)
             return NotFound(new { Success = false, Message = "No current allocation found." });
+
+        // Server-side enforcement, not just the client's redirect-to-MarkAttendance UX (TaskDetail.
+        // razor/TasksAllocation.razor check first and redirect for a friendly experience, but a
+        // client-only check can be bypassed by calling this endpoint directly) - a JMDO cannot start
+        // a task without today's attendance on record.
+        //
+        // Gated on the task's CURRENT stored status, not just the requested one: only a genuine
+        // YetToStart -> InProgress transition counts as "starting" a task. A task that's already
+        // InProgress being PUT to InProgress again is never a fresh start - it's TaskDetail.razor's
+        // own StartedAt backfill (ApplyStatusFromAllocationAsync, for a legacy row that went
+        // InProgress before StartedAt existed) resending the same status to fill in a missing
+        // timestamp. Gating that resend too would permanently 400 that backfill on any day the
+        // JMDO hasn't (yet) marked attendance, even though nothing is actually "starting".
+        if (dto.Status == AllocTaskStatus.InProgress
+            && CurrentTaskStatus(allocation, dto.TaskKey) == AllocTaskStatus.YetToStart
+            && string.Equals(CurrentRole(), "JMDO", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasAttendanceToday = await _db.JMDOAttendances
+                .AnyAsync(a => a.UserId == userId && a.Date == DateTime.Today);
+            if (!hasAttendanceToday)
+                return BadRequest(new { Success = false, Message = "Mark today's attendance before starting a task." });
+        }
 
         // Stamped the first time a task goes InProgress (never overwritten on later calls)
         // so "Time on task" can be computed as DateTime.Now - StartedAt on every page load
@@ -1470,6 +1547,36 @@ public class JmdoTaskAllocationController : ControllerBase
     // real but completely different dealer in each table). See JmdoTaskAllocationDealer's own doc
     // comment for why these were kept as two separate columns instead of one reinterpreted column.
     private static int EffectiveDealerId(JmdoTaskAllocationDealer d) => d.DealerRegistrationId ?? -d.SubDealerId;
+
+    // Read-only lookup mirroring UpdateMyTaskStatus's own TaskKey dispatch (dealer_/prog_/spcm/
+    // soil/pos), used only to tell a genuine YetToStart -> InProgress transition apart from a
+    // resend of an already-InProgress status (see UpdateMyTaskStatus's attendance-gate comment).
+    // Defaults to YetToStart for an unrecognized/not-found key - the same, already-existing
+    // NotFound response further down in UpdateMyTaskStatus is what actually surfaces that case to
+    // the caller; this only decides whether the attendance gate applies before getting there.
+    private static AllocTaskStatus CurrentTaskStatus(JmdoTaskAllocation allocation, string? taskKey)
+    {
+        var key = taskKey?.Trim() ?? string.Empty;
+
+        if (key.StartsWith("dealer_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(key.AsSpan("dealer_".Length), out var dealerId))
+        {
+            return allocation.Dealers.FirstOrDefault(d => EffectiveDealerId(d) == dealerId)?.Status ?? AllocTaskStatus.YetToStart;
+        }
+        if (key.StartsWith("prog_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(key.AsSpan("prog_".Length), out var csr1Id))
+        {
+            return allocation.Programs.FirstOrDefault(p => p.Csr1Id == csr1Id)?.Status ?? AllocTaskStatus.YetToStart;
+        }
+
+        return key.ToLowerInvariant() switch
+        {
+            "spcm" => allocation.SpcmStatus,
+            "soil" or "soilsample" => allocation.SoilSampleStatus,
+            "pos" or "posliquidation" => allocation.PosLiquidationStatus,
+            _ => AllocTaskStatus.YetToStart
+        };
+    }
 
     // District/Taluk aren't snapshotted on JmdoTaskAllocationDealer (only DealerName/DealerCode
     // are) - resolved from the live dealer-master row, DealerRegistration for a new-style row or

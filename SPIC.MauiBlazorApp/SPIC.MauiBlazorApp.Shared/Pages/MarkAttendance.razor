@@ -9,6 +9,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi Api
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
+@inject SPIC.MauiBlazorApp.Shared.Services.IFormFactor FormFactor
 @inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 ma-page">
@@ -16,7 +17,15 @@
     <h2 class="ma-title">Mark Attendance</h2>
     <p class="ma-subtitle">Today's visited area &amp; attendance status.</p>
 
-    @if (showTrackingState)
+    @if (!IsNativeApp)
+    {
+        <div class="ma-card">
+            <EmptyState Icon="bi-phone"
+                        Title="Attendance can only be marked from the SPIC mobile app"
+                        Message="Please open SPIC ONE on your phone to mark today's attendance, start a task, or use live tracking." />
+        </div>
+    }
+    else if (showTrackingState)
     {
         <div class="ma-tracking-card">
             <div class="ma-tracking-header">
@@ -229,6 +238,15 @@
     private const string FieldExecRegion = "COIMBATORE";
     private const string FieldExecJmdoHq = "COIMBATORE";
 
+    // IFormFactor already distinguishes the two hosts for us: "Web" on the Blazor Web host
+    // (any browser, desktop or mobile), the real device idiom (Phone/Tablet/...) on the native
+    // MAUI app - see SPIC.MauiBlazorApp.Shared/Services/IFormFactor.cs. Attendance, task-start and
+    // live tracking are mobile-app-only by design (see TaskDetail.StartTask/TasksAllocation.
+    // StartSoilSampleTask's own attendance-redirect gate, and JMDOTrackingController's class doc
+    // comment) - a desktop OR mobile-browser visit here only ever sees the blocking message below,
+    // never the form.
+    private bool IsNativeApp => FormFactor.GetFormFactor() != "Web";
+
     // Three states behind one route/title: the usual mark-attendance form,
     // the post-stop confirmation summary (reached from FieldDashboard's
     // "Stop Tracking" confirm), and the full tracking map (reached from the
@@ -253,6 +271,8 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        if (!IsNativeApp) return; // nothing to load - the whole page is just the blocking message
+
         showStoppedState = string.Equals(ViewQuery, "stopped", StringComparison.OrdinalIgnoreCase);
         showTrackingState = string.Equals(ViewQuery, "tracking", StringComparison.OrdinalIgnoreCase);
 
@@ -415,7 +435,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender && IsNativeApp)
         {
             await CaptureLocationAsync();
             await ResolveAddressAsync();

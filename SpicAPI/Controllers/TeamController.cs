@@ -119,6 +119,212 @@ public class TeamController : ControllerBase
     private IQueryable<Employeelogin> TeamJmdoLogins(int hqId) =>
         _db.Employeelogins.Where(l => l.Role == AppRole.JMDO && l.HeadquartersId == hqId && l.IsActive);
 
+    // Same rule as JmdoTaskAllocationController.EffectiveDealerId - DealerRegistrationId for
+    // rows created after the dealer source switched to DealerRegistration, negated SubDealerId
+    // for legacy rows, so a legacy and a new-style id can never collide.
+    private static int EffectiveDealerId(JmdoTaskAllocationDealer d) => d.DealerRegistrationId ?? -d.SubDealerId;
+
+    // One flattened task row, built once in GetTeamReports and read from both the JMDO-wise
+    // summary table (grouped per JMDO) and the Detailed Task Report (shown as-is).
+    private sealed record TeamTaskRow(
+        string JmdoUserId,
+        string Type,
+        string Summary,
+        string Resolution,
+        string Status,
+        DateTime TaskDate,
+        double? HoursTaken,
+        bool IsCompletedThisMonth,
+        DateTime? CompletedAt,
+        DateTime AssignedAt,
+        bool? IsOnTime);
+
+    
+    [Authorize(Roles = "Admin,MO,MDO")]
+    [HttpGet("reports")]
+    public async Task<ActionResult<MdoTeamReportsDto>> GetTeamReports()
+    {
+        var hqId = CurrentHqId();
+        if (hqId is not > 0)
+            return Ok(new MdoTeamReportsDto());
+
+        var team = await (
+            from login in TeamJmdoLogins(hqId.Value)
+            join info in _db.EmployeeInformation on login.EmployeeInformationID equals info.Id
+            select new { login.UserId, info.Name }
+            ).ToListAsync();
+
+        if (team.Count == 0)
+            return Ok(new MdoTeamReportsDto());
+
+        var nameByUserId = team.ToDictionary(t => t.UserId, t => t.Name);
+        var userIds = team.Select(t => t.UserId).ToList();
+
+        var monthStart = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        var monthEnd = monthStart.AddMonths(1);
+
+        var allocations = await _db.JmdoTaskAllocations
+            .Include(a => a.Dealers)
+            .Include(a => a.Programs)
+            .Include(a => a.Closeouts)
+            .AsNoTracking()
+            .Where(a => userIds.Contains(a.SubmittedByUserId))
+            .ToListAsync();
+
+        JmdoTaskCloseout? LatestCloseout(JmdoTaskAllocation a, JmdoCloseoutKind kind, int? subId) =>
+            a.Closeouts
+                .Where(c => c.Kind == kind && (subId == null || (kind == JmdoCloseoutKind.Dealer ? c.SubDealerId == subId : c.Csr1Id == subId)))
+                .OrderByDescending(c => c.CreatedAt)
+                .FirstOrDefault();
+
+        static string OutcomeOrDefault(JmdoTaskCloseout? closeout) =>
+            closeout?.Outcome is { Length: > 0 } outcome ? outcome : "Completed";
+
+        static string RemarksOrDash(JmdoTaskCloseout? closeout) =>
+            string.IsNullOrWhiteSpace(closeout?.Remarks) ? "—" : closeout!.Remarks!;
+
+        static string StatusLabel(AllocTaskStatus status, string outcomeIfCompleted) => status switch
+        {
+            AllocTaskStatus.Completed => outcomeIfCompleted,
+            AllocTaskStatus.InProgress => "In Progress",
+            _ => "Not Started"
+        };
+
+        static double? HoursBetween(DateTime? started, DateTime? completed) =>
+            started.HasValue && completed.HasValue && completed > started
+                ? Math.Round((completed.Value - started.Value).TotalHours, 1)
+                : (double?)null;
+
+        var rows = new List<TeamTaskRow>();
+
+        foreach (var a in allocations)
+        {
+            if (!nameByUserId.ContainsKey(a.SubmittedByUserId)) continue;
+            var assignedAt = a.ReviewedAt ?? a.SubmittedAt;
+
+            foreach (var d in a.Dealers)
+            {
+                var taskDate = d.PlannedDate ?? a.AllocationDate;
+                if (taskDate < monthStart || taskDate >= monthEnd) continue;
+
+                var closeout = LatestCloseout(a, JmdoCloseoutKind.Dealer, EffectiveDealerId(d));
+                var isCompleted = d.Status == AllocTaskStatus.Completed && d.CompletedAt.HasValue;
+                bool? onTime = isCompleted && d.PlannedDate.HasValue
+                    ? d.CompletedAt!.Value.Date <= d.PlannedDate.Value.Date
+                    : null;
+
+                rows.Add(new TeamTaskRow(a.SubmittedByUserId, "Dealer", d.DealerName, RemarksOrDash(closeout),
+                    StatusLabel(d.Status, OutcomeOrDefault(closeout)), taskDate, HoursBetween(d.StartedAt, d.CompletedAt),
+                    isCompleted, d.CompletedAt, assignedAt, onTime));
+            }
+
+            foreach (var p in a.Programs)
+            {
+                var taskDate = a.AllocationDate;
+                if (taskDate < monthStart || taskDate >= monthEnd) continue;
+
+                var closeout = LatestCloseout(a, JmdoCloseoutKind.MdProgram, p.Csr1Id);
+                var isCompleted = p.Status == AllocTaskStatus.Completed && p.CompletedAt.HasValue;
+
+                rows.Add(new TeamTaskRow(a.SubmittedByUserId, "MD Program", p.ProgramName, RemarksOrDash(closeout),
+                    StatusLabel(p.Status, OutcomeOrDefault(closeout)), taskDate, HoursBetween(p.StartedAt, p.CompletedAt),
+                    isCompleted, p.CompletedAt, assignedAt, null));
+            }
+
+            if (a.SpcmTarget is > 0 && a.AllocationDate >= monthStart && a.AllocationDate < monthEnd)
+            {
+                var closeout = LatestCloseout(a, JmdoCloseoutKind.Spcm, null);
+                var isCompleted = a.SpcmStatus == AllocTaskStatus.Completed && a.SpcmCompletedAt.HasValue;
+
+                rows.Add(new TeamTaskRow(a.SubmittedByUserId, "SPCM", $"Target - {a.SpcmTarget}", RemarksOrDash(closeout),
+                    StatusLabel(a.SpcmStatus, OutcomeOrDefault(closeout)), a.AllocationDate, HoursBetween(a.SpcmStartedAt, a.SpcmCompletedAt),
+                    isCompleted, a.SpcmCompletedAt, assignedAt, null));
+            }
+
+            // Soil Sample never has a JmdoTaskCloseout of its own (its Start button goes straight
+            // to the SAS Sample Collection wizard, never TaskDetail's close-out form) - so it has
+            // no Resolution/Outcome and never contributes an hours-taken figure.
+            if (a.SoilSampleTarget is > 0 && a.AllocationDate >= monthStart && a.AllocationDate < monthEnd)
+            {
+                var isCompleted = a.SoilSampleStatus == AllocTaskStatus.Completed;
+
+                rows.Add(new TeamTaskRow(a.SubmittedByUserId, "Soil Sample", $"Today's target - {a.SoilSampleTarget}", "—",
+                    StatusLabel(a.SoilSampleStatus, "Completed"), a.AllocationDate, null,
+                    isCompleted, a.SoilSampleCompletedAt, assignedAt, null));
+            }
+
+            if ((a.UreaTarget > 0 || a.NpsTarget > 0 || a.DapTarget > 0 || a.OthersTarget > 0)
+                && a.AllocationDate >= monthStart && a.AllocationDate < monthEnd)
+            {
+                var closeout = LatestCloseout(a, JmdoCloseoutKind.PosLiquidation, null);
+                var isCompleted = a.PosLiquidationStatus == AllocTaskStatus.Completed && a.PosLiquidationCompletedAt.HasValue;
+
+                rows.Add(new TeamTaskRow(a.SubmittedByUserId, "PoS Liquidation", "PoS Liquidation", RemarksOrDash(closeout),
+                    StatusLabel(a.PosLiquidationStatus, OutcomeOrDefault(closeout)), a.AllocationDate, HoursBetween(a.PosLiquidationStartedAt, a.PosLiquidationCompletedAt),
+                    isCompleted, a.PosLiquidationCompletedAt, assignedAt, null));
+            }
+        }
+
+        var soilCollections = await _db.SampleCollections.AsNoTracking()
+            .Where(c => userIds.Contains(c.CollectedByUserId) && !c.IsDeleted && c.CreatedAt >= monthStart && c.CreatedAt < monthEnd)
+            .Select(c => c.CollectedByUserId)
+            .ToListAsync();
+
+        var farmersThisMonth = await _db.SasFarmers.AsNoTracking()
+            .Where(f => f.CreatedByUserId != null && userIds.Contains(f.CreatedByUserId) && !f.IsDeleted
+                && f.CreatedAt >= monthStart && f.CreatedAt < monthEnd)
+            .Select(f => f.CreatedByUserId!)
+            .ToListAsync();
+
+        var farmersAllTime = await _db.SasFarmers.AsNoTracking()
+            .CountAsync(f => f.CreatedByUserId != null && userIds.Contains(f.CreatedByUserId) && !f.IsDeleted);
+
+        var jmdoSummaries = team.Select(t =>
+        {
+            var jmdoRows = rows.Where(r => r.JmdoUserId == t.UserId).ToList();
+            var onTimeEvaluable = jmdoRows.Where(r => r.IsOnTime.HasValue).ToList();
+
+            return new MdoReportJmdoSummaryRowDto
+            {
+                JmdoName = t.Name,
+                TasksClosedThisMonth = jmdoRows.Count(r => r.IsCompletedThisMonth),
+                OnTimePercent = onTimeEvaluable.Count > 0
+                    ? Math.Round(100.0 * onTimeEvaluable.Count(r => r.IsOnTime == true) / onTimeEvaluable.Count, 0)
+                    : (double?)null,
+                SoilSamplesThisMonth = soilCollections.Count(u => u == t.UserId),
+                FarmersAddedThisMonth = farmersThisMonth.Count(u => u == t.UserId)
+            };
+        }).ToList();
+
+        var completedRows = rows.Where(r => r.IsCompletedThisMonth).ToList();
+        var turnaroundDays = completedRows
+            .Where(r => r.CompletedAt.HasValue)
+            .Select(r => (r.CompletedAt!.Value - r.AssignedAt).TotalDays)
+            .Where(d => d >= 0)
+            .ToList();
+
+        return Ok(new MdoTeamReportsDto
+        {
+            TasksClosedThisMonth = completedRows.Count,
+            AvgTurnaroundDays = turnaroundDays.Count > 0 ? Math.Round(turnaroundDays.Average(), 1) : (double?)null,
+            SoilSamplesThisMonth = soilCollections.Count,
+            FarmersCoveredAllTime = farmersAllTime,
+            JmdoSummaries = jmdoSummaries,
+            DetailedTasks = rows
+                .OrderByDescending(r => r.TaskDate)
+                .Select(r => new MdoReportDetailRowDto
+                {
+                    JmdoName = nameByUserId[r.JmdoUserId],
+                    Type = r.Type,
+                    Summary = r.Summary,
+                    Resolution = r.Resolution,
+                    Status = r.Status,
+                    TaskDate = r.TaskDate,
+                    HoursTaken = r.HoursTaken
+                }).ToList()
+        });
+    }
+
     // GET api/Team/yearly-targets
     // Current-FY (April-March) yearly targets for the caller's own team only.
     [Authorize(Roles = "Admin,MO,MDO")]

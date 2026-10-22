@@ -130,7 +130,11 @@ namespace SPIC.Core.Entities
         // Plant / Dealer Nature master (2026-10-16): these two lookup tables had no admin UI at
         // all, so Excel bulk-upload rows referencing a new Plant/Dealer Nature could never be
         // entered ahead of time. Appended at the END on purpose - see the comment above.
-        PlantDealerNatureMaster
+        PlantDealerNatureMaster,
+
+        // JMDO live tracking supervisor visibility (2026-10-21). Appended at the END on purpose -
+        // see the comment above (ApplicationPage seed ids are enum-index based).
+        TeamTracking
 
     }
 }

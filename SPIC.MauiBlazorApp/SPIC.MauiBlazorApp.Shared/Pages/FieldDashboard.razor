@@ -1,5 +1,6 @@
 @page "/FieldDashboard"
 @implements IDisposable
+@using System.Net.Http.Json
 @using SPIC.Core.DTOs
 @using SPIC.Core.Entities
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
@@ -7,6 +8,9 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi AttendanceApi
+@inject SPIC.MauiBlazorApp.Shared.Services.LookupCacheService LookupCache
+@inject SPIC.MauiBlazorApp.Shared.Services.IFormFactor FormFactor
+@inject HttpClient Http
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -15,14 +19,14 @@
     <!-- Profile header -->
     <div class="fd-profile-header">
         <div class="fd-profile-left">
-            <div class="fd-avatar">KR</div>
+            <div class="fd-avatar">@Initials</div>
             <div class="fd-profile-info">
                 <div class="fd-name-row">
-                    <h2 class="fd-name">Karthik Raja</h2>
+                    <h2 class="fd-name">@DisplayName</h2>
                     <span class="fd-status-badge @(IsOnDuty ? "fd-status-onduty" : "fd-status-offduty")">@(IsOnDuty ? "On Duty" : "Off Duty")</span>
                 </div>
-                <p class="fd-role-line">JMDO &middot; Coimbatore Region</p>
-                <p class="fd-title-line">Field Executive</p>
+                <p class="fd-role-line">@RoleRegionLine</p>
+                <p class="fd-title-line">@TitleLine</p>
             </div>
         </div>
 
@@ -39,8 +43,8 @@
                 <span class="fd-stat-label">Today's Tasks</span>
                 <span class="fd-stat-icon"><i class="bi bi-clipboard-check"></i></span>
             </div>
-            <div class="fd-stat-number">3</div>
-            <div class="fd-stat-desc">Approved for today</div>
+            <div class="fd-stat-number">@TodayCounts.Allocated</div>
+            <div class="fd-stat-desc">Allocated for today</div>
         </div>
 
         <div class="fd-stat-card fd-stat-pending">
@@ -48,7 +52,7 @@
                 <span class="fd-stat-label">Yet to Start</span>
                 <span class="fd-stat-icon"><i class="bi bi-clock"></i></span>
             </div>
-            <div class="fd-stat-number">1</div>
+            <div class="fd-stat-number">@TodayCounts.Pending</div>
             <div class="fd-stat-desc">Not started yet</div>
         </div>
 
@@ -57,7 +61,7 @@
                 <span class="fd-stat-label">In Progress</span>
                 <span class="fd-stat-icon"><i class="bi bi-play-circle"></i></span>
             </div>
-            <div class="fd-stat-number">2</div>
+            <div class="fd-stat-number">@TodayCounts.InProgress</div>
             <div class="fd-stat-desc">Currently working</div>
         </div>
 
@@ -66,27 +70,53 @@
                 <span class="fd-stat-label">Completed</span>
                 <span class="fd-stat-icon"><i class="bi bi-check-circle"></i></span>
             </div>
-            <div class="fd-stat-number">0</div>
+            <div class="fd-stat-number">@TodayCounts.Completed</div>
             <div class="fd-stat-desc">Closed today</div>
         </div>
 
     </div>
 
-    <!-- Tracking -->
-    @if (!IsOnDuty)
+    <!-- Live Tracking: fully independent of attendance/task status now - see
+         JMDOTrackingController's class doc comment. Only ever started/stopped by the JMDO
+         explicitly pressing the buttons below. -->
+    @if (_isLoadingTracking)
+    {
+        <div class="fd-tracking-banner">
+            <div class="fd-tracking-left">
+                <span class="fd-tracking-icon"><i class="bi bi-hourglass-split"></i></span>
+                <div class="fd-tracking-text">
+                    <div class="fd-tracking-title">Checking tracking status...</div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (_activeSession is null)
     {
         <div class="fd-tracking-banner">
             <div class="fd-tracking-left">
                 <span class="fd-tracking-icon"><i class="bi bi-geo-alt-fill"></i></span>
                 <div class="fd-tracking-text">
-                    <div class="fd-tracking-title">Tracking In-active <span class="fd-tracking-dot"></span></div>
-                    <div class="fd-tracking-sub">Update Attendance to Start Tracking</div>
+                    <div class="fd-tracking-title">Live Tracking is off <span class="fd-tracking-dot"></span></div>
+                    <div class="fd-tracking-sub">
+                        @(_hasAttendanceToday
+                            ? "Starts only when you press Start Live Tracking - independent of attendance or tasks."
+                            : "Mark today's attendance first to enable Start Live Tracking.")
+                    </div>
                 </div>
             </div>
 
-            <button type="button" class="fd-btn fd-btn-outline fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
-                <i class="bi bi-upload"></i> UPDATE
-            </button>
+            @if (_hasAttendanceToday)
+            {
+                <button type="button" class="fd-btn fd-btn-primary fd-update-btn" disabled="@_startingTracking" @onclick="StartLiveTracking">
+                    <i class="bi bi-play-circle-fill"></i> @(_startingTracking ? "Starting..." : "Start Live Tracking")
+                </button>
+            }
+            else
+            {
+                <button type="button" class="fd-btn fd-btn-outline fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
+                    <i class="bi bi-upload"></i> MARK ATTENDANCE
+                </button>
+            }
         </div>
     }
     else
@@ -94,10 +124,10 @@
         <div class="fd-tracking-card">
             <div class="fd-tracking-header-row">
                 <div class="fd-tracking-left">
-                    <span class="fd-tracking-icon fd-tracking-icon-active"><i class="bi bi-geo-alt-fill"></i></span>
+                    <span class="fd-tracking-icon @TrackingStatusIconClass"><i class="bi bi-geo-alt-fill"></i></span>
                     <div class="fd-tracking-text">
-                        <div class="fd-tracking-title">Tracking Active <span class="fd-tracking-dot fd-tracking-dot-active"></span></div>
-                        <div class="fd-tracking-sub">Your location being tracked in real-time</div>
+                        <div class="fd-tracking-title">@TrackingStatusLabel <span class="fd-tracking-dot @TrackingStatusDotClass"></span></div>
+                        <div class="fd-tracking-sub">@TrackingStatusSub</div>
                     </div>
                 </div>
 
@@ -110,42 +140,32 @@
             </div>
 
             <div class="fd-tracking-body">
-                <div class="fd-map-placeholder" role="img" aria-label="Map showing today's tracked route">
-                    <svg class="fd-map-route-svg" viewBox="0 0 400 220" preserveAspectRatio="none">
-                        <path d="M70,175 C150,160 170,70 320,45" />
-                    </svg>
-                    <span class="fd-map-pin fd-map-pin-end"><i class="bi bi-geo-alt-fill"></i></span>
-                    <span class="fd-map-pin fd-map-pin-current"><i class="bi bi-person-fill"></i></span>
-                </div>
-
                 <div class="fd-tracking-details">
                     <div class="fd-detail-row">
-                        <span class="fd-detail-key"><i class="bi bi-calendar3"></i> This week</span>
-                        <span class="fd-detail-val">16 Sep 2026 - 22 Sep 2026</span>
+                        <span class="fd-detail-key"><i class="bi bi-calendar3"></i> Started</span>
+                        <span class="fd-detail-val">@_activeSession.StartTime.ToString("ddd, dd MMM yyyy, hh:mm tt")</span>
                     </div>
                     <div class="fd-detail-row">
-                        <span class="fd-detail-key"><i class="bi bi-person-check"></i> Current Status</span>
-                        <span class="fd-detail-val fd-detail-val-inline"><span class="fd-tracking-dot fd-tracking-dot-active"></span> On Duty</span>
+                        <span class="fd-detail-key"><i class="bi bi-person-check"></i> Status</span>
+                        <span class="fd-detail-val fd-detail-val-inline"><span class="fd-tracking-dot @TrackingStatusDotClass"></span> @TrackingStatusLabel</span>
                     </div>
                     <div class="fd-detail-row">
-                        <span class="fd-detail-key"><i class="bi bi-person"></i> Current Location</span>
+                        <span class="fd-detail-key"><i class="bi bi-person"></i> Last known location</span>
                         <span class="fd-detail-val fd-detail-val-stack">
-                            <span class="fd-detail-val-main">Near Coimbatore, Tamil Nadu</span>
-                            <span class="fd-detail-val-sub">(22 Sep 2026, 10:42 AM)</span>
+                            @if (_activeSession.LastLatitude is { } lat && _activeSession.LastLongitude is { } lng)
+                            {
+                                <span class="fd-detail-val-main">@lat.ToString("0.####"), @lng.ToString("0.####")</span>
+                            }
+                            else
+                            {
+                                <span class="fd-detail-val-main">No location received yet</span>
+                            }
+                            @if (_activeSession.LastPointAt is { } lastAt)
+                            {
+                                <span class="fd-detail-val-sub">(@lastAt.ToString("dd MMM yyyy, hh:mm tt"))</span>
+                            }
                         </span>
                     </div>
-                </div>
-            </div>
-
-            <div class="fd-attendance-section">
-                <h4 class="fd-attendance-title">Attendance</h4>
-                <div class="fd-attendance-box">
-                    <div class="fd-attendance-status">
-                        <i class="bi bi-check-circle-fill"></i> Marked present today at 9:14 AM &middot; Anaimalai
-                    </div>
-                    <button type="button" class="fd-btn fd-btn-primary fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
-                        <i class="bi bi-upload"></i> UPDATE
-                    </button>
                 </div>
             </div>
         </div>
@@ -162,42 +182,53 @@
         </div>
 
         <div class="fd-task-list">
-            @foreach (var task in Tasks)
+            @if (_isLoadingTasks)
             {
-                <div class="fd-task-row">
-                    <div class="fd-task-main">
-                        <span class="fd-cat @task.CategoryClass">@task.Category</span>
-                        <div class="fd-task-title">@task.Title</div>
-                        @if (!string.IsNullOrEmpty(task.SubtitleLine1))
-                        {
-                            <div class="fd-task-sub fd-task-sub-muted">@task.SubtitleLine1</div>
-                        }
-                        @if (!string.IsNullOrEmpty(task.SubtitleLine2))
-                        {
-                            <div class="fd-task-sub">@task.SubtitleLine2</div>
-                        }
-                    </div>
-
-                    @if (!string.IsNullOrEmpty(task.Badge) || !string.IsNullOrEmpty(task.InfoLine1) || !string.IsNullOrEmpty(task.InfoLine2))
-                    {
-                        <div class="fd-task-info">
-                            @if (!string.IsNullOrEmpty(task.Badge))
+                <EmptyState Icon="bi-hourglass-split" Title="Loading your tasks..." Compact="true" />
+            }
+            else if (InProgressTasks.Count == 0)
+            {
+                <EmptyState Icon="bi-inbox" Title="Nothing in progress right now" Compact="true" />
+            }
+            else
+            {
+                @foreach (var task in InProgressTasks)
+                {
+                    <div class="fd-task-row">
+                        <div class="fd-task-main">
+                            <span class="fd-cat @task.CategoryClass">@task.Category</span>
+                            <div class="fd-task-title">@task.Title</div>
+                            @if (!string.IsNullOrEmpty(task.SubtitleLine1))
                             {
-                                <span class="fd-task-badge">@task.Badge</span>
+                                <div class="fd-task-sub fd-task-sub-muted">@task.SubtitleLine1</div>
                             }
-                            @if (!string.IsNullOrEmpty(task.InfoLine1))
+                            @if (!string.IsNullOrEmpty(task.SubtitleLine2))
                             {
-                                <div class="fd-task-info-line">@task.InfoLine1</div>
-                            }
-                            @if (!string.IsNullOrEmpty(task.InfoLine2))
-                            {
-                                <div class="fd-task-info-line">@task.InfoLine2</div>
+                                <div class="fd-task-sub">@task.SubtitleLine2</div>
                             }
                         </div>
-                    }
 
-                    <button type="button" class="fd-btn fd-btn-view"><i class="bi bi-arrow-right"></i> view</button>
-                </div>
+                        @if (!string.IsNullOrEmpty(task.Badge) || !string.IsNullOrEmpty(task.InfoLine1) || !string.IsNullOrEmpty(task.InfoLine2))
+                        {
+                            <div class="fd-task-info">
+                                @if (!string.IsNullOrEmpty(task.Badge))
+                                {
+                                    <span class="fd-task-badge">@task.Badge</span>
+                                }
+                                @if (!string.IsNullOrEmpty(task.InfoLine1))
+                                {
+                                    <div class="fd-task-info-line">@task.InfoLine1</div>
+                                }
+                                @if (!string.IsNullOrEmpty(task.InfoLine2))
+                                {
+                                    <div class="fd-task-info-line">@task.InfoLine2</div>
+                                }
+                            </div>
+                        }
+
+                        <button type="button" class="fd-btn fd-btn-view" @onclick="() => Navigation.NavigateTo(task.ViewRoute)"><i class="bi bi-arrow-right"></i> view</button>
+                    </div>
+                }
             }
         </div>
     </div>
@@ -241,116 +272,300 @@
 </div>
 
 @code {
-    // Static placeholder state: no Attendance/Tracking API exists yet (see
-    // FieldDashboard's original implementation notes), so this just flips
-    // the page between the two Figma states instead of calling a backend.
-    // Lives in the shared AttendanceState service (not a local field) so it
-    // survives the round trip to MarkAttendance and back - each navigation
-    // creates a fresh FieldDashboard instance, which would otherwise reset
-    // IsOnDuty to false every time.
     private bool IsOnDuty => AttendanceState.IsOnDuty;
     private bool ShowStopConfirm { get; set; }
-    private const string TrackingDuration = "00:12:34";
+
+    [Inject]
+    private JmdoTrackingClientLoop TrackingLoop { get; set; } = default!;
+
+    // Same IFormFactor-based check MarkAttendance.razor uses - "Web" on the Web host (any browser),
+    // the real device idiom on the native MAUI app. The native background bridge
+    // (window.startBackgroundTracking/stopBackgroundTracking) only exists on that host's own JS
+    // (maui-interop.js) - the Web host's js/location.js never defines it, so this check also
+    // doubles as "is it even safe to call that JS function".
+    private bool IsNativeApp => FormFactor.GetFormFactor() != "Web";
 
     // ---------------------------------------------------------------------------------------
-    // Start Tracking: fires once, automatically, the first time this dashboard renders while
-    // the JMDO is On Duty (there is no separate "Start Tracking" button - marking attendance is
-    // what starts tracking, per the existing "Update Attendance to Start Tracking" copy above).
-    // The server call is idempotent (JMDOTrackingController.Start returns the caller's existing
-    // Active session instead of creating a second one), so reloading this page, or a fresh
-    // component instance after navigating back from MarkAttendance, safely resumes the same
-    // session rather than duplicating it.
-    //
-    // Stop Tracking, duration and View Tracking Details are a later step - this only creates the
-    // session and begins periodic point capture while it stays Active.
+    // Live Tracking: fully independent of attendance/task status (see JMDOTrackingController's
+    // class doc comment) - only ever started/stopped by the JMDO pressing the buttons below, never
+    // auto-started on page load. mine/active (read-only, no side effect) reflects whatever's
+    // actually true server-side, so a reload or a fresh component instance after navigating away
+    // and back shows the real current session instead of resetting to "off".
     // ---------------------------------------------------------------------------------------
-    private const int TrackingPointIntervalSeconds = 60;
+    private JMDOTrackingSessionDto? _activeSession;
+    private bool _isLoadingTracking = true;
+    private bool _startingTracking;
+    private bool _hasAttendanceToday;
 
-    private JMDOTrackingSessionDto? _session;
-    private CancellationTokenSource? _trackingCts;
+    // Pure UI ticker so TrackingDuration (computed from _activeSession.StartTime) visibly counts
+    // up - the loop service posting points on its own 60s cadence wouldn't otherwise trigger a
+    // re-render in between ticks.
+    private System.Threading.Timer? _durationTicker;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private string TrackingDuration =>
+        _activeSession is null ? "00:00:00" : FormatDuration(DateTime.Now - _activeSession.StartTime);
+
+    private static string FormatDuration(TimeSpan d)
     {
-        if (firstRender)
-        {
-            // Today's duty status from the database first, so opening this page straight after
-            // login shows (and starts tracking for) the real status, not the in-memory default.
-            if (LoginState.UserRole == AppRole.JMDO)
-            {
-                var (loaded, today) = await AttendanceApi.LoadTodayAsync();
-                if (loaded)
-                {
-                    AttendanceState.IsOnDuty = today?.DutyStatus == JMDODutyStatus.OnDuty;
-                    StateHasChanged();
-                }
-            }
+        if (d < TimeSpan.Zero) d = TimeSpan.Zero;
+        return $"{(int)d.TotalHours:00}:{d.Minutes:00}:{d.Seconds:00}";
+    }
 
-            await StartTrackingIfNeededAsync();
+    private string TrackingStatusLabel => _activeSession?.LiveStatus switch
+    {
+        JmdoTrackingLiveStatus.Live => "Tracking Active",
+        JmdoTrackingLiveStatus.Stale => "Tracking Active (delayed)",
+        JmdoTrackingLiveStatus.Offline => "Tracking Active (no signal)",
+        _ => "Tracking Active"
+    };
+
+    private string TrackingStatusSub => _activeSession?.LiveStatus switch
+    {
+        JmdoTrackingLiveStatus.Live => "Your location is being tracked in real time.",
+        JmdoTrackingLiveStatus.Stale => "No new location in a few minutes - still trying.",
+        JmdoTrackingLiveStatus.Offline => "No location received in over 15 minutes - check signal/connection.",
+        _ => "Your location is being tracked."
+    };
+
+    private string TrackingStatusDotClass => _activeSession?.LiveStatus switch
+    {
+        JmdoTrackingLiveStatus.Live => "fd-tracking-dot-active",
+        JmdoTrackingLiveStatus.Stale => "fd-tracking-dot-stale",
+        JmdoTrackingLiveStatus.Offline => "fd-tracking-dot-offline",
+        _ => ""
+    };
+
+    private string TrackingStatusIconClass => _activeSession?.LiveStatus switch
+    {
+        JmdoTrackingLiveStatus.Live => "fd-tracking-icon-live",
+        JmdoTrackingLiveStatus.Stale => "fd-tracking-icon-stale",
+        JmdoTrackingLiveStatus.Offline => "fd-tracking-icon-offline",
+        _ => "fd-tracking-icon-live"
+    };
+
+    private async Task LoadTrackingStateAsync()
+    {
+        _isLoadingTracking = true;
+        try
+        {
+            _activeSession = await TrackingApi.GetMineActiveAsync();
+            if (_activeSession is not null)
+            {
+                // Idempotent - safe whether or not the loop/native service were already running for
+                // this exact session (e.g. a fresh component instance after navigating within the
+                // app, or reopening the app after the OS fully killed it and its foreground service
+                // along with it - this re-arms both).
+                TrackingLoop.Start(_activeSession.Id);
+                await StartNativeBackgroundTrackingAsync(_activeSession.Id);
+            }
+        }
+        finally
+        {
+            _isLoadingTracking = false;
         }
     }
 
-    private async Task StartTrackingIfNeededAsync()
+    private async Task StartLiveTracking()
     {
-        if (!IsOnDuty || _session is not null) return;
+        if (_startingTracking) return;
+        _startingTracking = true;
+        StateHasChanged();
 
-        GeoResult? position;
         try
         {
-            position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
-        }
-        catch (Exception)
-        {
-            position = null;
-        }
+            GeoResult? position;
+            try
+            {
+                position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+            }
+            catch (Exception)
+            {
+                position = null;
+            }
 
-        if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+            if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+            {
+                Toast.Error(string.IsNullOrWhiteSpace(position?.Error)
+                    ? "Could not get your current location. Live tracking was not started."
+                    : position!.Error!);
+                return;
+            }
+
+            var session = await TrackingApi.StartAsync(position.Latitude, position.Longitude);
+            if (session is null) return; // TrackingApi already raised an error toast
+
+            _activeSession = session;
+            TrackingLoop.Start(session.Id);
+            await StartNativeBackgroundTrackingAsync(session.Id);
+
+            _durationTicker?.Dispose();
+            _durationTicker = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        }
+        finally
         {
-            Toast.Error(string.IsNullOrWhiteSpace(position?.Error)
-                ? "Could not get your current location. Tracking was not started."
-                : position!.Error!);
+            _startingTracking = false;
+        }
+    }
+
+    // Belt-and-suspenders: JmdoTrackingClientLoop (above) already keeps posting points as long as
+    // the app process is alive and foregrounded, on every platform - this additionally asks the
+    // native host to keep going once the app is backgrounded/locked, to the extent the OS allows
+    // (see JmdoTrackingForegroundService's own honesty note). A no-op, not an error, on the Web
+    // host - window.startBackgroundTracking/stopBackgroundTracking are native-only (maui-interop.js),
+    // so these are never even attempted there.
+    private async Task StartNativeBackgroundTrackingAsync(int sessionId)
+    {
+        if (!IsNativeApp) return;
+        try
+        {
+            await JS.InvokeAsync<bool>("startBackgroundTracking", sessionId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Native background tracking could not be started: {ex.Message}");
+        }
+    }
+
+    private async Task StopNativeBackgroundTrackingAsync()
+    {
+        if (!IsNativeApp) return;
+        try
+        {
+            await JS.InvokeAsync<bool>("stopBackgroundTracking");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Native background tracking could not be stopped: {ex.Message}");
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Profile header: resolved from the signed-in user's own claims/designation (LoginState) and
+    // the shared HQ/Region lookup (LookupCacheService) - same source TasksAllocation.razor's own
+    // FieldExecRegion/FieldExecJmdoHq use - instead of the page's old hardcoded "Karthik Raja" /
+    // "Coimbatore Region" placeholder. "—" when a piece genuinely isn't available yet (not
+    // loaded, or the signed-in user has no HQ/designation), same fallback convention used for
+    // iFMS ID / PoS Liquidation / Pending Ack elsewhere in this app, rather than a fake default.
+    // ---------------------------------------------------------------------------------------
+    private string DisplayName => string.IsNullOrWhiteSpace(LoginState.UserName) ? "—" : LoginState.UserName!;
+
+    private string Initials => GetInitials(LoginState.UserName);
+
+    private static string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 1) return parts[0].Substring(0, Math.Min(2, parts[0].Length)).ToUpperInvariant();
+        return $"{parts[0][0]}{parts[^1][0]}".ToUpperInvariant();
+    }
+
+    private string RoleRegionLine
+    {
+        get
+        {
+            var role = LoginState.UserRole?.ToString() ?? "—";
+            var region = LookupCache.Headquarters.FirstOrDefault(h => h.Id == LoginState.HQId)?.RegionName;
+            return $"{role} · {(string.IsNullOrWhiteSpace(region) ? "—" : region)} Region";
+        }
+    }
+
+    private string TitleLine => string.IsNullOrWhiteSpace(LoginState.DesignationName) ? "—" : LoginState.DesignationName!;
+
+    // ---------------------------------------------------------------------------------------
+    // Stat cards + "Continue where you left off": the same two endpoints TasksAllocation.razor's
+    // Today's Allocation / MarkAttendance's task card already use (api/JmdoTaskAllocation/mine/
+    // summary and mine/today), not a new data source - keeps this dashboard's numbers always in
+    // sync with what those two pages show for the same JMDO. Both are JMDO-only self-service
+    // endpoints (GetMySummary is [Authorize(Roles="JMDO")] specifically), so they're only called
+    // when the signed-in user actually is one - FieldDashboard's menu entry is also reachable by
+    // other HQ roles via a designation grant, and the stat cards/task list simply stay at zero/
+    // empty for those, same as before this change.
+    // ---------------------------------------------------------------------------------------
+    private JmdoTaskSummaryDto? _summary;
+    private JmdoTaskAllocationResponseDto? _todayAllocation;
+    private bool _isLoadingTasks = true;
+
+    // Today's Tasks / Yet to Start / In Progress / Completed - the day's own dealer-visit bucket
+    // plus the not-day-specific weekly bucket (MD Program/SPCM/Soil/PoS), the same two buckets
+    // Today's Allocation's cards are built from (a dealer scheduled for today, alongside the
+    // weekly targets shown every day until done).
+    private JmdoTaskCountsDto TodayCounts
+    {
+        get
+        {
+            var today = _summary?.Days.FirstOrDefault(d => d.Date.Date == DateTime.Today);
+            var weekly = _summary?.WeeklyTasks;
+            return new JmdoTaskCountsDto
+            {
+                Allocated = (today?.Allocated ?? 0) + (weekly?.Allocated ?? 0),
+                Completed = (today?.Completed ?? 0) + (weekly?.Completed ?? 0),
+                InProgress = (today?.InProgress ?? 0) + (weekly?.InProgress ?? 0),
+                Pending = (today?.Pending ?? 0) + (weekly?.Pending ?? 0)
+            };
+        }
+    }
+
+    private async Task LoadDashboardDataAsync()
+    {
+        if (LoginState.UserRole != AppRole.JMDO)
+        {
+            _isLoadingTasks = false;
             return;
         }
 
-        _session = await TrackingApi.StartAsync(position.Latitude, position.Longitude);
-        if (_session is null) return; // TrackingApi already raised an error toast
-
-        if (_session.Status == JMDOTrackingSessionStatus.Active)
+        _isLoadingTasks = true;
+        try
         {
-            _trackingCts = new CancellationTokenSource();
-            _ = RunPointLoopAsync(_session.Id, _trackingCts.Token);
+            var summaryTask = Http.GetFromJsonAsync<JmdoTaskSummaryDto>("api/JmdoTaskAllocation/mine/summary");
+            var todayTask = Http.GetAsync("api/JmdoTaskAllocation/mine/today");
+            await Task.WhenAll(summaryTask, todayTask);
+
+            _summary = await summaryTask;
+
+            var todayResponse = await todayTask;
+            if (todayResponse.IsSuccessStatusCode && todayResponse.StatusCode != System.Net.HttpStatusCode.NoContent)
+            {
+                _todayAllocation = await todayResponse.Content.ReadFromJsonAsync<JmdoTaskAllocationResponseDto>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"FieldDashboard data load failed: {ex.Message}");
+        }
+        finally
+        {
+            _isLoadingTasks = false;
         }
     }
 
-    // Periodic GPS capture: reuses the same single-shot window.getCurrentPosition bridge (no new
-    // location mechanism) on a timer instead of a continuous "watch" API, which is enough to
-    // produce a point trail for the map (Stop Tracking / duration / the map itself come later).
-    private async Task RunPointLoopAsync(int sessionId, CancellationToken ct)
+    protected override async Task OnInitializedAsync()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(TrackingPointIntervalSeconds));
-        try
+        await Task.WhenAll(LookupCache.EnsureLoadedAsync(), LoadDashboardDataAsync(), LoadAttendanceAndTrackingAsync());
+    }
+
+    private async Task LoadAttendanceAndTrackingAsync()
+    {
+        if (LoginState.UserRole != AppRole.JMDO)
         {
-            while (await timer.WaitForNextTickAsync(ct))
-            {
-                if (_session is null || _session.Status != JMDOTrackingSessionStatus.Active) break;
-
-                GeoResult? position;
-                try
-                {
-                    position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
-                }
-                catch (Exception)
-                {
-                    continue; // a transient failure just skips this interval's point
-                }
-
-                if (position is null || !string.IsNullOrWhiteSpace(position.Error)) continue;
-
-                await TrackingApi.AddPointAsync(sessionId, position.Latitude, position.Longitude, null, ct);
-            }
+            _isLoadingTracking = false;
+            return;
         }
-        catch (OperationCanceledException)
+
+        var attendanceTask = AttendanceApi.LoadTodayAsync();
+        var trackingTask = LoadTrackingStateAsync();
+
+        var (loaded, today) = await attendanceTask;
+        if (loaded)
         {
-            // expected when the component is disposed (navigated away)
+            AttendanceState.IsOnDuty = today?.DutyStatus == JMDODutyStatus.OnDuty;
+            _hasAttendanceToday = today is not null;
+        }
+
+        await trackingTask;
+
+        if (_activeSession is not null)
+        {
+            _durationTicker = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         }
     }
 
@@ -363,8 +578,10 @@
 
     public void Dispose()
     {
-        _trackingCts?.Cancel();
-        _trackingCts?.Dispose();
+        // Deliberately does NOT stop TrackingLoop - that's the whole point (see the loop's own doc
+        // comment): it must keep running past this one component's lifecycle, until the JMDO
+        // explicitly presses Stop Live Tracking. Only this page's own UI ticker is torn down here.
+        _durationTicker?.Dispose();
     }
 
     private bool _stopping;
@@ -384,7 +601,7 @@
         try
         {
             // A fresh fix at the moment tracking is stopped - the same bridge the periodic loop
-            // and Start Tracking use, not a new location mechanism.
+            // and Start Live Tracking use, not a new location mechanism.
             GeoResult? position;
             try
             {
@@ -406,17 +623,16 @@
             var stopped = await TrackingApi.StopAsync(position.Latitude, position.Longitude);
             if (stopped is null) return; // TrackingApi already raised an error toast; session stays Active
 
-            _session = stopped;
-
-            // Only now is the periodic loop cancelled - no point is sent after Status=Completed.
-            _trackingCts?.Cancel();
-            _trackingCts?.Dispose();
-            _trackingCts = null;
+            // Only now is the loop stopped - no point is sent after Status=Completed. Attendance's
+            // DutyStatus is deliberately left untouched (tracking and attendance are independent).
+            TrackingLoop.Stop();
+            await StopNativeBackgroundTrackingAsync();
+            _durationTicker?.Dispose();
+            _durationTicker = null;
+            _activeSession = null;
 
             ShowStopConfirm = false;
-            AttendanceState.IsOnDuty = false;
-            Toast.Success("Location tracking stopped successfully.");
-            Navigation.NavigateTo("/MarkAttendance?view=stopped");
+            Toast.Success("Live tracking stopped.");
         }
         finally
         {
@@ -434,51 +650,94 @@
         public string? Badge { get; init; }
         public string? InfoLine1 { get; init; }
         public string? InfoLine2 { get; init; }
+        public string ViewRoute { get; init; } = "/TasksAllocation?tab=today";
     }
 
-    private static readonly List<FdTask> Tasks = new()
+    // "Continue where you left off": only the In Progress tasks from today's real allocation (the
+    // same allocation/status data Today's Allocation's own In Progress filter reads), not a static
+    // example list - a dealer scheduled for today, every MD Program, and the SPCM/Soil/PoS weekly
+    // targets, exactly the same 5 task kinds and "is it actually for today" rules TasksAllocation.
+    // razor's Today tab uses. The view button's route matches what each card's own Start/Continue
+    // button there navigates to, so "Continue" here lands on the same page Continuing from Today's
+    // Allocation would.
+    private List<FdTask> InProgressTasks
     {
-        new FdTask
+        get
         {
-            Category = "DEALER",
-            CategoryClass = "fd-cat-dealer",
-            Title = "Hanumesh Trading CO",
-            SubtitleLine1 = "Dues 99 Lakhs",
-            SubtitleLine2 = "Pending Ack. 10 mT",
-            Badge = "Dealer Code : 41051099",
-            InfoLine1 = "IFMS ID : 215361",
-            InfoLine2 = "Pos Liquidation : 12.5 mT - 160 days"
-        },
-        new FdTask
-        {
-            Category = "MD Program",
-            CategoryClass = "fd-cat-mdprogram",
-            Title = "Crop Protection Workshop",
-            SubtitleLine1 = "Training",
-            SubtitleLine2 = "1 Program",
-            Badge = "Sanction No : CSR!-2026-045",
-            InfoLine1 = "Total Budget : 50,000",
-            InfoLine2 = "Sanction Date : 01 May 2026"
-        },
-        new FdTask
-        {
-            Category = "SPCM",
-            CategoryClass = "fd-cat-spcm fd-cat-pill",
-            Title = "Today's Target : 100"
-        },
-        new FdTask
-        {
-            Category = "Soil Sample",
-            CategoryClass = "fd-cat-soil-orange fd-cat-pill",
-            Title = "Today's Target : 100"
-        },
-        new FdTask
-        {
-            Category = "Soil Sample",
-            CategoryClass = "fd-cat-soil-grey fd-cat-pill",
-            Title = "Urea : 100",
-            InfoLine1 = "NSP : 1000",
-            InfoLine2 = "DAP : 200"
+            var result = new List<FdTask>();
+            var alloc = _todayAllocation;
+            if (alloc is null) return result;
+
+            foreach (var d in alloc.DealerAssignments.Where(x => x.Day == DateTime.Today.DayOfWeek && x.Status == AllocTaskStatus.InProgress))
+            {
+                result.Add(new FdTask
+                {
+                    Category = "DEALER",
+                    CategoryClass = "fd-cat-dealer",
+                    Title = d.DealerName,
+                    SubtitleLine2 = d.PendingAckQty is { } ack ? $"Pending Ack. {ack:N2} mT" : null,
+                    Badge = $"Dealer Code : {d.DealerCode}",
+                    InfoLine1 = d.IfmsId is { } ifms ? $"IFMS ID : {ifms}" : null,
+                    InfoLine2 = d.PosLiquidationQty is { } pos
+                        ? $"Pos Liquidation : {pos:N2} mT" + (d.PosLiquidationDate is { } posDate ? $" - {(DateTime.Today - posDate.Date).Days} days" : "")
+                        : null,
+                    ViewRoute = $"/TaskDetail?type=dealer&id=dealer_{d.DealerId}"
+                });
+            }
+
+            foreach (var p in alloc.Programs.Where(x => x.Status == AllocTaskStatus.InProgress))
+            {
+                result.Add(new FdTask
+                {
+                    Category = "MD Program",
+                    CategoryClass = "fd-cat-mdprogram",
+                    Title = p.ProgramName,
+                    SubtitleLine1 = "Training",
+                    SubtitleLine2 = "1 Program",
+                    Badge = $"Sanction No : {(string.IsNullOrWhiteSpace(p.SanctionNo) ? $"MD-{p.Csr1Id}" : p.SanctionNo)}",
+                    InfoLine1 = $"Total Budget : {p.Budget:N0}",
+                    InfoLine2 = p.SanctionDate is { } sanctionDate ? $"Sanction Date : {sanctionDate:dd MMM yyyy}" : null,
+                    ViewRoute = $"/TaskDetail?type=mdprogram&id=prog_{p.Csr1Id}"
+                });
+            }
+
+            if (alloc.SpcmTarget is > 0 && alloc.SpcmStatus == AllocTaskStatus.InProgress)
+            {
+                result.Add(new FdTask
+                {
+                    Category = "SPCM",
+                    CategoryClass = "fd-cat-spcm fd-cat-pill",
+                    Title = $"Today's Target : {alloc.SpcmTarget}",
+                    ViewRoute = "/TaskDetail?type=spcm"
+                });
+            }
+
+            if (alloc.SoilSampleTarget is > 0 && alloc.SoilSampleStatus == AllocTaskStatus.InProgress)
+            {
+                result.Add(new FdTask
+                {
+                    Category = "Soil Sample",
+                    CategoryClass = "fd-cat-soil-orange fd-cat-pill",
+                    Title = $"Today's Target : {alloc.SoilSampleTarget}",
+                    ViewRoute = "/SampleCollection/new"
+                });
+            }
+
+            if ((alloc.UreaTarget > 0 || alloc.NpsTarget > 0 || alloc.DapTarget > 0 || alloc.OthersTarget > 0)
+                && alloc.PosLiquidationStatus == AllocTaskStatus.InProgress)
+            {
+                result.Add(new FdTask
+                {
+                    Category = "PoS Liquidation",
+                    CategoryClass = "fd-cat-soil-grey fd-cat-pill",
+                    Title = alloc.UreaTarget > 0 ? $"Urea : {alloc.UreaTarget}" : $"NPKS : {alloc.NpsTarget}",
+                    InfoLine1 = alloc.NpsTarget > 0 && alloc.UreaTarget > 0 ? $"NPKS : {alloc.NpsTarget}" : null,
+                    InfoLine2 = alloc.DapTarget > 0 ? $"DAP : {alloc.DapTarget}" : null,
+                    ViewRoute = "/TaskDetail?type=posliquidation"
+                });
+            }
+
+            return result;
         }
-    };
+    }
 }

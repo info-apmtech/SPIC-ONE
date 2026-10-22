@@ -1142,6 +1142,33 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("CSR2ExpenseProofs");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2FocusProduct", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CropId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GroupNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.ToTable("CSR2FocusProduct");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.CSR2Media", b =>
                 {
                     b.Property<int>("Id")
@@ -4648,6 +4675,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<DateTime>("DeviceCapturedAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<double>("Latitude")
                         .HasColumnType("double precision");
 
@@ -7397,6 +7427,42 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("RakePointMasters");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ReplacedByTokenHash")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Region", b =>
@@ -10712,6 +10778,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("CSR2Expense");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2FocusProduct", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("FocusProducts")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.CSR2Media", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
@@ -11607,6 +11684,8 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("Employees");
 
                     b.Navigation("Expenses");
+
+                    b.Navigation("FocusProducts");
 
                     b.Navigation("Media");
 

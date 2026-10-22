@@ -56,6 +56,66 @@ public sealed class JMDOTrackingApi
     }
 
     /// <summary>
+    /// The caller's current Active session (with its computed LiveStatus), or null if they don't
+    /// have one. Read-only - unlike <see cref="StartAsync"/> this never creates a session, so it's
+    /// safe to call on every page load just to reflect real state. Silent on failure (null), same
+    /// reasoning as <see cref="AddPointAsync"/> - a page falling back to "no active session" on a
+    /// transient error is better than a toast on every load.
+    /// </summary>
+    public async Task<JMDOTrackingSessionDto?> GetMineActiveAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await _http.GetAsync($"{Root}/mine/active", ct);
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+                return null;
+            return await response.Content.ReadFromJsonAsync<JMDOTrackingSessionDto>(Json, ct);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Supervisor visibility (Admin/MO/MDO only): every JMDO on the caller's own HQ team with their
+    /// current tracking status. Silent on failure (empty list) - same reasoning as
+    /// <see cref="GetMineActiveAsync"/>.
+    /// </summary>
+    public async Task<List<JMDOTrackingTeamRowDto>> GetTeamAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await _http.GetFromJsonAsync<List<JMDOTrackingTeamRowDto>>($"{Root}/team", Json, ct);
+            return result ?? new();
+        }
+        catch (Exception)
+        {
+            return new();
+        }
+    }
+
+    /// <summary>
+    /// Flushes a batch of offline-queued points (capped at 500 server-side) against the given
+    /// session in one call, preserving each point's own DeviceCapturedAt. Returns false on failure
+    /// without raising a toast, same reasoning as <see cref="AddPointAsync"/> - the caller (the
+    /// offline queue drain loop) is expected to retry later, not interrupt the user.
+    /// </summary>
+    public async Task<bool> AddPointsBatchAsync(int sessionId, IReadOnlyList<JMDOTrackingPointUpsertDto> points, CancellationToken ct = default)
+    {
+        if (points.Count == 0) return true;
+        try
+        {
+            var response = await _http.PostAsJsonAsync($"{Root}/sessions/{sessionId}/points/batch", points, Json, ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Saves one GPS fix against the given session. Returns false on failure without raising a
     /// toast - a momentary network blip on a periodic background call shouldn't interrupt the
     /// field user every interval.
