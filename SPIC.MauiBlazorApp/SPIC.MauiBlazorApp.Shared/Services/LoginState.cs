@@ -27,6 +27,12 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         public DateTime Expiration { get; set; }
         public bool IsTokenExpired => Expiration != default && DateTime.UtcNow >= Expiration.ToUniversalTime();
 
+        // The opaque refresh token issued alongside the JWT (see RefreshTokenDtos.cs) - kept here
+        // purely as an in-memory mirror of what's in ISessionStore, same reasoning as Token/
+        // Expiration themselves, so AuthHttpMessageHandler's silent-refresh attempt doesn't need
+        // its own separate storage round-trip just to find the current value.
+        public string? RefreshToken { get; set; }
+
         /// <summary>Where a signed-in user lands: used after login and when a stored session is restored.</summary>
         public string LandingPage
         {
@@ -167,6 +173,7 @@ namespace SPIC.MauiBlazorApp.Shared.Services
         {
             ClearAllowedPages();
             SetDesignationName(null);
+            RefreshToken = null;
             Token = null; // triggers ParseClaims(null) + OnChange
         }
 

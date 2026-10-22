@@ -861,6 +861,8 @@ namespace Spic.Infrastructure.Data
 		public DbSet<JMDOTrackingSession> JMDOTrackingSessions { get; set; }
 		public DbSet<JMDOTrackingPoint> JMDOTrackingPoints { get; set; }
 
+		public DbSet<RefreshToken> RefreshTokens { get; set; }
+
 		//// SAS: sample collection
 		public DbSet<SasFarmer> SasFarmers { get; set; }
 		public DbSet<SampleCollection> SampleCollections { get; set; }

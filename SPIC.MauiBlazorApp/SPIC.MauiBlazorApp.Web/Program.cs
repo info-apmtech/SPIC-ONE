@@ -69,6 +69,7 @@ builder.Services.AddScoped<LabApi>();
 builder.Services.AddScoped<MetricsApi>();
 builder.Services.AddScoped<JMDOAttendanceApi>();
 builder.Services.AddScoped<JMDOTrackingApi>();
+builder.Services.AddScoped<JmdoTrackingClientLoop>();
 
 // Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on every API
 // call, page views and client errors per circuit, and anything this host logs at Error or above.
@@ -182,5 +183,5 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddAdditionalAssemblies(
         typeof(SPIC.MauiBlazorApp.Shared._Imports).Assembly);
-
+    
 app.Run();

@@ -29,6 +29,12 @@ namespace SPIC.Core.DTOs
             // never changes based on their Designation.
             public string? DesignationName { get; set; }
 
+            // Opaque, single-use refresh token (raw value - only ever returned here and from
+            // /refresh, never persisted server-side in raw form, see RefreshToken entity).
+            // Client stores it next to the JWT and trades it in for a new JWT+refresh pair via
+            // POST api/Authentication/refresh once the short-lived JWT expires, instead of
+            // forcing a full re-login.
+            public required string RefreshToken { get; set; }
         }
     }
 

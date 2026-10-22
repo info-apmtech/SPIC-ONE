@@ -77,10 +77,12 @@
 		</div>
 	}
 
-	<div class="main-card">
-		<div class="section-header">
-			<h3 class="section-title">@(_isEditing ? "Edit Company" : "Add New Company")</h3>
-		</div>
+	@if (CanSave)
+	{
+		<div class="main-card">
+			<div class="section-header">
+				<h3 class="section-title">@(_isEditing ? "Edit Company" : "Add New Company")</h3>
+			</div>
 
 		<div class="row g-3 mb-4">
 			<div class="col-md-4">
@@ -162,8 +164,7 @@
 					<button class="btn-cancel mt-3" @onclick="ResetForm"><i class="bi bi-x"></i> Cancel</button>
 				</Secondary>
 				<ChildContent>
-					@if ((!_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.SDWADashboard, "Entry"))
-						|| (_isEditing && LoginState.Can(SPIC.Core.Entities.PagePermission.SDWADashboard, "Update")))
+					@if ((!_isEditing && CanAdd) || (_isEditing && CanUpdate))
 					{
 						<button class="btn-save mt-3" @onclick="HandleSave" disabled="@_isSaving">
 							<i class="bi bi-save"></i> @(_isSaving ? "Saving..." : "Save")
@@ -173,6 +174,7 @@
 			</ActionBar>
 		</div>
 	</div>
+	}
 
 	<div class="row g-3 mb-4">
 		<div class="col-md-4">
@@ -245,28 +247,55 @@
 				}
 			</td>
 			<td>
-				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
-					  style="cursor:pointer"
-					  @onclick="() => ToggleStatus(item)">
-					@(item.IsActive ? "Active" : "Inactive")
-				</span>
+				@if (CanUpdate)
+				{
+					<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+						  style="cursor:pointer"
+						  @onclick="() => ToggleStatus(item)">
+						@(item.IsActive ? "Active" : "Inactive")
+					</span>
+				}
+				else
+				{
+					<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+						@(item.IsActive ? "Active" : "Inactive")
+					</span>
+				}
 			</td>
 			<td>@item.CreatedAt.ToString("yyyy-MM-dd")</td>
 			<td>
 				<div class="action-icons">
-					<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-					<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+					@if (CanDelete)
+					{
+						<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+					}
+					@if (CanUpdate)
+					{
+						<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+					}
 				</div>
 			</td>
 		</TableRow>
 
 		<CardActions Context="item">
 			<div class="scm-card-actions d-flex gap-2 w-100 flex-wrap">
-				<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
-					@(item.IsActive ? "Active" : "Inactive")
-				</span>
-				<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
-				<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+				@if (CanUpdate)
+				{
+					<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
+						@(item.IsActive ? "Active" : "Inactive")
+					</span>
+					<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+				}
+				else
+				{
+					<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+						@(item.IsActive ? "Active" : "Inactive")
+					</span>
+				}
+				@if (CanDelete)
+				{
+					<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+				}
 			</div>
 		</CardActions>
 	</SpicDataTable>
@@ -313,6 +342,11 @@
 }
 
 @code {
+	private bool CanAdd => LoginState.Can(SPIC.Core.Entities.PagePermission.SdwaCompanyMaster, "Entry");
+	private bool CanUpdate => LoginState.Can(SPIC.Core.Entities.PagePermission.SdwaCompanyMaster, "Update");
+	private bool CanDelete => LoginState.Can(SPIC.Core.Entities.PagePermission.SdwaCompanyMaster, "Delete");
+	private bool CanSave => _isEditing ? CanUpdate : CanAdd;
+
 	private ElementReference _firstInputRef;
 
 	// Data
@@ -421,6 +455,7 @@
 
 	private async Task HandleSave()
 	{
+		if (!CanSave) return;
 		if (string.IsNullOrWhiteSpace(_form.CompanyName))
 		{
 			ShowMessage("Company Name is required.", true);
@@ -485,6 +520,7 @@
 
 	private void EditItem(SdwaCompanyDto item)
 	{
+		if (!CanUpdate) return;
 		_isEditing = true;
 		_editingId = item.Id;
 		_form = new CompanyFormModel
@@ -500,6 +536,7 @@
 
 	private void DeleteItem(SdwaCompanyDto item)
 	{
+		if (!CanDelete) return;
 		_deleteTarget = item;
 		_hasLinkedBookings = false;
 		_showDeleteConfirm = true;
@@ -507,6 +544,7 @@
 
 	private async Task ConfirmDelete()
 	{
+		if (!CanDelete) return;
 		if (_deleteTarget == null) return;
 
 		_isDeleting = true;
@@ -550,6 +588,7 @@
 
 	private async Task ToggleStatus(SdwaCompanyDto item)
 	{
+		if (!CanUpdate) return;
 		try
 		{
 			var response = await Http.PatchAsync($"api/SdwaCompany/{item.Id}/status?isActive={!item.IsActive}", null);

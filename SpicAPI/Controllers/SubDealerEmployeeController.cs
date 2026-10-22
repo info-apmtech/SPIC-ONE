@@ -30,20 +30,62 @@ namespace SpicAPI.Controllers
 			"A beneficiary with the same Dealer Code, Sub Dealer Code, Beneficiary Name and DOB already exists.";
 
 		// Same duplicate rule as the bulk upload (SubDealerEmployeeController.SubDealerBeneficiaryKey).
+		// Audit identity is server-derived: UpdatedBy is the authenticated AspNetUsers.Id (the
+		// NameIdentifier claim, resolved like SubDealerRegistrationController.Actor). Whatever the
+		// client sends for UpdatedBy / CreatedAt / the SM-AVP approval fields is ignored. This entity
+		// has no CreatedBy column, so only UpdatedBy is stamped.
 		[HttpPost]
 		public override async Task<IActionResult> Create([FromBody] SubDealerBeneficiary entity)
 		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
 			if (await SubDealerEmployeeController.SubDealerBeneficiaryExistsAsync(_repo.GetAllWithInactive(), entity, excludeId: null))
 				return Conflict(new { message = DuplicateMessage });
+
+			var now = DateTime.Now;
+			entity.UpdatedBy = actor;
+			entity.CreatedAt = now;
+			entity.UpdatedAt = now;
+			// A new row always starts pending: approvals are only set by the SM / AVP approval endpoints.
+			entity.SMApproved = null; entity.SMApprovedBy = null; entity.SMApprovedAt = null; entity.SMApprovalRemarks = null;
+			entity.AVPApproved = null; entity.AVPApprovedBy = null; entity.AVPApprovedAt = null; entity.AVPApprovalRemarks = null;
 			return await base.Create(entity);
 		}
 
 		[HttpPut("{id}")]
 		public override async Task<IActionResult> Update(int id, [FromBody] SubDealerBeneficiary entity)
 		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
 			if (await SubDealerEmployeeController.SubDealerBeneficiaryExistsAsync(_repo.GetAllWithInactive(), entity, excludeId: id))
 				return Conflict(new { message = DuplicateMessage });
+
+			var existing = await _repo.GetByIdAsync(id);
+			if (existing == null) return NotFound();
+
+			// PatchAsync copies every scalar from the request body, so pin the protected values first:
+			// the editor becomes UpdatedBy, CreatedAt is kept, and an ordinary edit never resets or
+			// forges the SM / AVP approval state or its approver / timestamp / remarks.
+			entity.UpdatedBy = actor;
+			entity.CreatedAt = existing.CreatedAt;
+			entity.SMApproved = existing.SMApproved; entity.SMApprovedBy = existing.SMApprovedBy;
+			entity.SMApprovedAt = existing.SMApprovedAt; entity.SMApprovalRemarks = existing.SMApprovalRemarks;
+			entity.AVPApproved = existing.AVPApproved; entity.AVPApprovedBy = existing.AVPApprovedBy;
+			entity.AVPApprovedAt = existing.AVPApprovedAt; entity.AVPApprovalRemarks = existing.AVPApprovalRemarks;
 			return await base.Update(id, entity);
+		}
+
+		[HttpPatch("{id}/status")]
+		public override async Task<IActionResult> ChangeStatus(int id, [FromQuery] bool isActive)
+		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+
+			// Same tracked instance the repository's ChangeStatusAsync saves.
+			var existing = await _repo.GetByIdAsync(id);
+			if (existing == null) return NotFound();
+			existing.UpdatedBy = actor;
+			return await base.ChangeStatus(id, isActive);
 		}
 	}
 
@@ -63,20 +105,55 @@ namespace SpicAPI.Controllers
 			"An employee with the same Dealer Code, Employee Name and DOB already exists.";
 
 		// Same duplicate rule as the bulk upload (SubDealerEmployeeController.EmployeeBeneficiaryKey).
+		// Audit handling mirrors SubDealerBeneficiaryController: server-stamped UpdatedBy (authenticated
+		// AspNetUsers.Id), server timestamps, approvals not client-controlled. No CreatedBy column exists.
 		[HttpPost]
 		public override async Task<IActionResult> Create([FromBody] EmployeeBeneficiary entity)
 		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
 			if (await SubDealerEmployeeController.EmployeeBeneficiaryExistsAsync(_repo.GetAllWithInactive(), entity, excludeId: null))
 				return Conflict(new { message = DuplicateMessage });
+
+			var now = DateTime.Now;
+			entity.UpdatedBy = actor;
+			entity.CreatedAt = now;
+			entity.UpdatedAt = now;
+			entity.SMApproved = null; entity.SMApprovedBy = null; entity.SMApprovedAt = null; entity.SMApprovalRemarks = null;
+			entity.AVPApproved = null; entity.AVPApprovedBy = null; entity.AVPApprovedAt = null; entity.AVPApprovalRemarks = null;
 			return await base.Create(entity);
 		}
 
 		[HttpPut("{id}")]
 		public override async Task<IActionResult> Update(int id, [FromBody] EmployeeBeneficiary entity)
 		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
 			if (await SubDealerEmployeeController.EmployeeBeneficiaryExistsAsync(_repo.GetAllWithInactive(), entity, excludeId: id))
 				return Conflict(new { message = DuplicateMessage });
+
+			var existing = await _repo.GetByIdAsync(id);
+			if (existing == null) return NotFound();
+
+			entity.UpdatedBy = actor;
+			entity.CreatedAt = existing.CreatedAt;
+			entity.SMApproved = existing.SMApproved; entity.SMApprovedBy = existing.SMApprovedBy;
+			entity.SMApprovedAt = existing.SMApprovedAt; entity.SMApprovalRemarks = existing.SMApprovalRemarks;
+			entity.AVPApproved = existing.AVPApproved; entity.AVPApprovedBy = existing.AVPApprovedBy;
+			entity.AVPApprovedAt = existing.AVPApprovedAt; entity.AVPApprovalRemarks = existing.AVPApprovalRemarks;
 			return await base.Update(id, entity);
+		}
+
+		[HttpPatch("{id}/status")]
+		public override async Task<IActionResult> ChangeStatus(int id, [FromQuery] bool isActive)
+		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+
+			var existing = await _repo.GetByIdAsync(id);
+			if (existing == null) return NotFound();
+			existing.UpdatedBy = actor;
+			return await base.ChangeStatus(id, isActive);
 		}
 	}
 
@@ -108,6 +185,10 @@ namespace SpicAPI.Controllers
 		[HttpPost("bulk-upload")]
 		public async Task<IActionResult> BulkUpload([FromQuery] string type, IFormFile file)
 		{
+			// The importing user's AspNetUsers.Id is the audit actor of every inserted row.
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+
 			if (file == null || file.Length == 0)
 				return BadRequest(new { Success = false, Message = "No file uploaded" });
 
@@ -288,7 +369,7 @@ namespace SpicAPI.Controllers
 								IsActive = true,
 								CreatedAt = now,
 								UpdatedAt = now,
-								UpdatedBy = "bulk-upload"
+								UpdatedBy = actor
 							});
 							insertedCount++;
 						}
@@ -336,7 +417,7 @@ namespace SpicAPI.Controllers
 								IsActive = true,
 								CreatedAt = now,
 								UpdatedAt = now,
-								UpdatedBy = "bulk-upload"
+								UpdatedBy = actor
 							});
 							insertedCount++;
 						}
@@ -790,10 +871,12 @@ namespace SpicAPI.Controllers
 			if (t != "subdealer" && t != "employee")
 				return BadRequest(new { Success = false, Message = "type must be 'subdealer' or 'employee'" });
 
-			var actorName =
-				User.FindFirst("name")?.Value
-				?? User.FindFirst(ClaimTypes.Name)?.Value
-				?? "Unknown";
+			// The approver is recorded as the authenticated user's AspNetUsers.Id (the same server-side actor as the
+			// master's UpdatedBy). Nothing in the SDWA screens reads SMApprovedBy / AVPApprovedBy, so no display name
+			// is needed here; the old username fallback ("Unknown") could not tell two approvers apart.
+			var actorId = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			bool? smResult = null;
 			bool? avpResult = null;
@@ -810,7 +893,7 @@ namespace SpicAPI.Controllers
 						return Conflict(new { Success = false, Message = "This Sub Dealer has already been processed at SM level" });
 
 					item.SMApproved = isApproval;
-					item.SMApprovedBy = actorName;
+					item.SMApprovedBy = actorId;
 					item.SMApprovedAt = DateTime.UtcNow;
 					item.SMApprovalRemarks = remarks;
 					smResult = isApproval;
@@ -824,7 +907,7 @@ namespace SpicAPI.Controllers
 						return Conflict(new { Success = false, Message = "This Sub Dealer has already been processed at AVP level" });
 
 					item.AVPApproved = isApproval;
-					item.AVPApprovedBy = actorName;
+					item.AVPApprovedBy = actorId;
 					item.AVPApprovedAt = DateTime.UtcNow;
 					item.AVPApprovalRemarks = remarks;
 					smResult = item.SMApproved;
@@ -842,7 +925,7 @@ namespace SpicAPI.Controllers
 						return Conflict(new { Success = false, Message = "This Employee has already been processed at SM level" });
 
 					item.SMApproved = isApproval;
-					item.SMApprovedBy = actorName;
+					item.SMApprovedBy = actorId;
 					item.SMApprovedAt = DateTime.UtcNow;
 					item.SMApprovalRemarks = remarks;
 					smResult = isApproval;
@@ -856,7 +939,7 @@ namespace SpicAPI.Controllers
 						return Conflict(new { Success = false, Message = "This Employee has already been processed at AVP level" });
 
 					item.AVPApproved = isApproval;
-					item.AVPApprovedBy = actorName;
+					item.AVPApprovedBy = actorId;
 					item.AVPApprovedAt = DateTime.UtcNow;
 					item.AVPApprovalRemarks = remarks;
 					smResult = item.SMApproved;
@@ -877,7 +960,7 @@ namespace SpicAPI.Controllers
 			var action = isApproval ? "Approved" : "Rejected";
 			var level = isSM ? "SM" : "AVP";
 
-			_logger.LogInformation("{Actor} {Action} {Type} {Id} at {Level} level", actorName, action, singularType, id, level);
+			_logger.LogInformation("{Actor} {Action} {Type} {Id} at {Level} level", actorId, action, singularType, id, level);
 
 			return Ok(new ApprovalActionResponse
 			{

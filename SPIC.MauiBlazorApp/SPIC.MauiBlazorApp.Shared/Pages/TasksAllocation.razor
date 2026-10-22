@@ -9,6 +9,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.LookupCacheService LookupCache
+@inject SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi AttendanceApi
 
 <div class="container-fluid py-4 px-0 ta-page">
 
@@ -1820,6 +1821,17 @@
     // only renders for YetToStart/InProgress status, never Completed.
     private async Task StartSoilSampleTask()
     {
+        // Same friendly-redirect gate as TaskDetail.StartTask - server-enforced too
+        // (JmdoTaskAllocationController.UpdateMyTaskStatus), this just avoids sending the JMDO into
+        // the Sample Collection wizard when the status flip below is about to be rejected anyway.
+        var (loaded, todayAttendance) = await AttendanceApi.LoadTodayAsync();
+        if (loaded && todayAttendance is null)
+        {
+            Toast.Warning("Mark today's attendance before starting a task.");
+            Navigation.NavigateTo("/MarkAttendance");
+            return;
+        }
+
         try
         {
             await Http.PutAsJsonAsync("api/JmdoTaskAllocation/mine/task-status",

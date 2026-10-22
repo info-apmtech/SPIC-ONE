@@ -133,21 +133,29 @@
 	   rule (GuestHouseMasterAccessAttribute); this only decides what is VIEWED. *@
 	@if (CanViewPage)
 	{
-		<div class="main-card">
-			<div class="section-header">
-				<h3 class="section-title">@(_isEditing ? $"Edit {(ActiveTab == TabHouse ? "Guest House" : ActiveTab == TabRoomType ? "Room Type" : "Room")}" : $"Add New {(ActiveTab == TabHouse ? "Guest House" : ActiveTab == TabRoomType ? "Room Type" : "Room")}")</h3>
-				<div class="d-flex gap-2">
-					@if (ActiveTab != TabRoomType)
-					{
-						<button class="btn-outline-green" @onclick="DownloadSampleTemplate">
-							<i class="bi bi-file-earmark-excel"></i> Download Template
-						</button>
-						<button class="btn-outline-green" @onclick="() => _showUploadModal = true">
-							<i class="bi bi-cloud-arrow-up"></i> Upload File
-						</button>
-					}
+		@if (CanSave)
+		{
+			<div class="main-card">
+				<div class="section-header">
+					<h3 class="section-title">@(_isEditing ? $"Edit {(ActiveTab == TabHouse ? "Guest House" : ActiveTab == TabRoomType ? "Room Type" : "Room")}" : $"Add New {(ActiveTab == TabHouse ? "Guest House" : ActiveTab == TabRoomType ? "Room Type" : "Room")}")</h3>
+					<div class="d-flex gap-2">
+						@if (ActiveTab != TabRoomType)
+						{
+							@if (CanAdd || CanUpdate)
+							{
+								<button class="btn-outline-green" @onclick="DownloadSampleTemplate">
+									<i class="bi bi-file-earmark-excel"></i> Download Template
+								</button>
+							}
+							@if (CanAdd && CanUpdate)
+							{
+								<button class="btn-outline-green" @onclick="() => _showUploadModal = true">
+									<i class="bi bi-cloud-arrow-up"></i> Upload File
+								</button>
+							}
+						}
+					</div>
 				</div>
-			</div>
 
 			<div class="row g-3 mb-4">
 				@if (ActiveTab == TabHouse)
@@ -299,6 +307,7 @@
 				</ActionBar>
 			</div>
 		</div>
+	}
 
 		<div class="row g-3 mb-4 mt-1">
 			<div class="col-md-4">
@@ -377,28 +386,55 @@
 					<td>@(item.Description ?? "-")</td>
 					<td>@item.RoomCount</td>
 					<td>
-						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
-							  style="cursor:pointer" title="Click to toggle"
-							  @onclick="() => ToggleStatus(item)">
-							@(item.IsActive ? "Active" : "Inactive")
-						</span>
+						@if (CanUpdate)
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+								  style="cursor:pointer" title="Click to toggle"
+								  @onclick="() => ToggleStatus(item)">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
+						else
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
 					</td>
 					<td>@item.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
 					<td>
 						<div class="action-icons">
-							<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-							<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+							@if (CanDelete)
+							{
+								<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+							}
+							@if (CanUpdate)
+							{
+								<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+							}
 						</div>
 					</td>
 				</TableRow>
 
 				<CardActions Context="item">
 					<div class="ghm-card-actions d-flex gap-2 w-100 flex-wrap">
-						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
-							@(item.IsActive ? "Active" : "Inactive")
-						</span>
-						<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
-						<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+						@if (CanUpdate)
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+							<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+						}
+						else
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
+						@if (CanDelete)
+						{
+							<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+						}
 					</div>
 				</CardActions>
 			</SpicDataTable>
@@ -437,28 +473,55 @@
 					<td>@item.Name</td>
 					<td>@item.RoomCount</td>
 					<td>
-						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
-							  style="cursor:pointer" title="Click to toggle"
-							  @onclick="() => ToggleStatus(item)">
-							@(item.IsActive ? "Active" : "Inactive")
-						</span>
+						@if (CanUpdate)
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+								  style="cursor:pointer" title="Click to toggle"
+								  @onclick="() => ToggleStatus(item)">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
+						else
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
 					</td>
 					<td>@item.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
 					<td>
 						<div class="action-icons">
-							<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-							<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+							@if (CanDelete)
+							{
+								<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+							}
+							@if (CanUpdate)
+							{
+								<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+							}
 						</div>
 					</td>
 				</TableRow>
 
 				<CardActions Context="item">
 					<div class="ghm-card-actions d-flex gap-2 w-100 flex-wrap">
-						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
-							@(item.IsActive ? "Active" : "Inactive")
-						</span>
-						<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
-						<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+						@if (CanUpdate)
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+							<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+						}
+						else
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
+						@if (CanDelete)
+						{
+							<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+						}
 					</div>
 				</CardActions>
 			</SpicDataTable>
@@ -503,28 +566,55 @@
 					<td>@item.PricePerNight.ToString("N0")</td>
 					<td>@item.AvailableQuantity</td>
 					<td>
-						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
-							  style="cursor:pointer" title="Click to toggle"
-							  @onclick="() => ToggleStatus(item)">
-							@(item.IsActive ? "Active" : "Inactive")
-						</span>
+						@if (CanUpdate)
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+								  style="cursor:pointer" title="Click to toggle"
+								  @onclick="() => ToggleStatus(item)">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
+						else
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
 					</td>
 					<td>@item.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
 					<td>
 						<div class="action-icons">
-							<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
-							<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+							@if (CanDelete)
+							{
+								<i class="bi bi-trash icon-del" @onclick="() => DeleteItem(item)"></i>
+							}
+							@if (CanUpdate)
+							{
+								<i class="bi bi-pencil-square icon-edit" @onclick="() => EditItem(item)"></i>
+							}
 						</div>
 					</td>
 				</TableRow>
 
 				<CardActions Context="item">
 					<div class="ghm-card-actions d-flex gap-2 w-100 flex-wrap">
-						<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
-							@(item.IsActive ? "Active" : "Inactive")
-						</span>
-						<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
-						<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+						@if (CanUpdate)
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")" role="button" @onclick="() => ToggleStatus(item)">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+							<button class="btn-outline-green" @onclick="() => EditItem(item)"><i class="bi bi-pencil-square"></i> Edit</button>
+						}
+						else
+						{
+							<span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")">
+								@(item.IsActive ? "Active" : "Inactive")
+							</span>
+						}
+						@if (CanDelete)
+						{
+							<button class="btn-cancel" @onclick="() => DeleteItem(item)"><i class="bi bi-trash"></i> Delete</button>
+						}
 					</div>
 				</CardActions>
 			</SpicDataTable>
@@ -661,6 +751,11 @@
 	// IsAdmin alone bounced every designation holder off this page to /Dashboard, which PageGuard
 	// then bounced to the landing page - so the visible menu item could never be opened.
 	private bool CanViewPage => IsAdmin || LoginState.CanAccess(PagePermission.GuestHouse) || LoginState.HasGuestHouseAdminPermission;
+
+	private bool CanAdd => IsAdmin || LoginState.Can(PagePermission.GuestHouse, "Entry");
+	private bool CanUpdate => IsAdmin || LoginState.Can(PagePermission.GuestHouse, "Update");
+	private bool CanDelete => IsAdmin || LoginState.Can(PagePermission.GuestHouse, "Delete");
+	private bool CanSave => _isEditing ? CanUpdate : CanAdd;
 
 	// Upload modal state
 	private bool _showUploadModal = false;
@@ -943,6 +1038,7 @@
 
 	private async Task HandleSave()
 	{
+		if (!CanSave) return;
 		string emptyFieldError;
 		object payload;
 
@@ -1065,6 +1161,7 @@
 
 	private void EditItem(object item)
 	{
+		if (!CanUpdate) return;
 		_isEditing = true;
 
 		if (ActiveTab == TabHouse && item is GuestHouseGridDto house)
@@ -1119,12 +1216,14 @@
 
 	private void DeleteItem(object item)
 	{
+		if (!CanDelete) return;
 		_deleteTarget = item;
 		_showDeleteConfirm = true;
 	}
 
 	private async Task ConfirmDelete()
 	{
+		if (!CanDelete) return;
 		if (_deleteTarget is null) return;
 
 		try
@@ -1170,6 +1269,7 @@
 
 	private async Task ToggleStatus(object item)
 	{
+		if (!CanUpdate) return;
 		try
 		{
 			var id = 0;
@@ -1231,6 +1331,7 @@
 
 	private async Task OnBulkFileSelected(InputFileChangeEventArgs e)
 	{
+		if (!CanAdd || !CanUpdate) return;
 		var file = e.File;
 		if (file == null) return;
 

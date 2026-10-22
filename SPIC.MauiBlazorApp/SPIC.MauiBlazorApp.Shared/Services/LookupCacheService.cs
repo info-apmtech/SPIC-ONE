@@ -41,6 +41,16 @@ namespace SPIC.MauiBlazorApp.Shared.Services
 			Headquarters   = hqTask.Result        ?? new();
 			Banks          = banksTask.Result     ?? new();
 			FinancialYears = fyTask.Result        ?? new();   // ← add
+
+			
+			foreach (var hq in Headquarters)
+			{
+				var region = Regions.FirstOrDefault(r => r.Id == hq.RegionId);
+				if (region == null) continue;
+				hq.RegionName = region.RegionName;
+				hq.StateId = region.StateId;
+			}
+
 			_loaded = true;
 		}
 
