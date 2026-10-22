@@ -76,6 +76,7 @@ namespace SpicAPI.Controllers
                     UserName = actor,
                     Date = date,
                     CreatedBy = actor,
+                    CreatedByUserId = userId,
                     CreatedAt = now
                 };
                 _db.JMDOAttendances.Add(attendance);
@@ -88,6 +89,7 @@ namespace SpicAPI.Controllers
             attendance.AttendanceLatitude = dto.Latitude;
             attendance.AttendanceLongitude = dto.Longitude;
             attendance.UpdatedBy = actor;
+            attendance.UpdatedByUserId = userId;
             attendance.UpdatedAt = now;
 
             await _db.SaveChangesAsync();

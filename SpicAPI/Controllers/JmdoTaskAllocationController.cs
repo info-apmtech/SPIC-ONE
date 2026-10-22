@@ -175,6 +175,7 @@ public class JmdoTaskAllocationController : ControllerBase
             {
                 AllocationId = allocation.Id,
                 Csr1Id = program.Id,
+                ProgramMasterId = program.ProgramId,
                 ProgramName = programNamesById.GetValueOrDefault(program.ProgramId, "Unnamed Program"),
                 Budget = program.Budget
             });
@@ -840,6 +841,7 @@ public class JmdoTaskAllocationController : ControllerBase
                 {
                     RowId = p.Id,
                     Csr1Id = p.Csr1Id,
+                    ProgramMasterId = p.ProgramMasterId,
                     ProgramName = p.ProgramName,
                     Budget = p.Budget,
                     Status = p.Status,
@@ -1017,6 +1019,7 @@ public class JmdoTaskAllocationController : ControllerBase
         {
             AllocationId = id,
             Csr1Id = program.Id,
+            ProgramMasterId = program.ProgramId,
             ProgramName = programName,
             Budget = program.Budget
         };
@@ -1027,6 +1030,7 @@ public class JmdoTaskAllocationController : ControllerBase
         {
             RowId = row.Id,
             Csr1Id = row.Csr1Id,
+            ProgramMasterId = row.ProgramMasterId,
             ProgramName = row.ProgramName,
             Budget = row.Budget,
             SanctionNo = program.SanctionNo,
@@ -1295,6 +1299,8 @@ public class JmdoTaskAllocationController : ControllerBase
         {
             closeout.Products.Add(new JmdoTaskCloseoutProduct
             {
+                ProductGroupId = product.ProductGroupId,
+                ProductId = product.ProductId,
                 ProductGroupName = product.ProductGroupName,
                 ProductName = product.ProductName,
                 StockText = product.StockText
@@ -1343,6 +1349,8 @@ public class JmdoTaskAllocationController : ControllerBase
             CreatedAt = closeout.CreatedAt,
             Products = closeout.Products.Select(p => new ProductLineDto
             {
+                ProductGroupId = p.ProductGroupId,
+                ProductId = p.ProductId,
                 ProductGroupName = p.ProductGroupName,
                 ProductName = p.ProductName,
                 StockText = p.StockText
@@ -1662,6 +1670,7 @@ public class JmdoTaskAllocationController : ControllerBase
             {
                 RowId = p.Id,
                 Csr1Id = p.Csr1Id,
+                ProgramMasterId = p.ProgramMasterId,
                 ProgramName = p.ProgramName,
                 Budget = p.Budget,
                 Status = p.Status,
@@ -1708,6 +1717,8 @@ public class JmdoTaskAllocationController : ControllerBase
             CreatedAt = c.CreatedAt,
             Products = c.Products.Select(p => new ProductLineDto
             {
+                ProductGroupId = p.ProductGroupId,
+                ProductId = p.ProductId,
                 ProductGroupName = p.ProductGroupName,
                 ProductName = p.ProductName,
                 StockText = p.StockText
