@@ -1042,13 +1042,15 @@ namespace SpicAPI.Controllers
 
 			if (!string.Equals(context.HttpContext.Request.Method, "GET", StringComparison.OrdinalIgnoreCase))
 			{
-				// Writes: the Designation must grant EVERY action the route needs on GHAdmin or
-				// SDWAAdmin (Entry / Update / Delete - a View-only grant never writes). Nobody else writes.
+				// Writes: the Designation must grant EVERY action the route needs on PagePermission.GuestHouse
+				// (Entry / Update / Delete - a View-only grant never writes).
+				// Unrelated permissions (SDWAAdmin, GHAdmin, Rooms, GuestDetails, etc.) do not grant write access.
 				// The master data is not state-scoped, so a state-restricted user (Receptionist) never
 				// writes it, whatever their designation grants.
 				var requiredActions = WriteActionsFor(context.HttpContext.Request);
 				if (requiredActions.Length > 0
-					&& requiredActions.All(a => GuestHouseReceptionistScope.HasGuestHouseAdminAction(designation, a))
+					&& designation != null
+					&& requiredActions.All(a => GuestHouseReceptionistScope.HasAction(designation, PagePermission.GuestHouse, a))
 					&& await GuestHouseReceptionistScope.GetAllowedGuestHouseIdsAsync(db, user) == null)
 					return;
 

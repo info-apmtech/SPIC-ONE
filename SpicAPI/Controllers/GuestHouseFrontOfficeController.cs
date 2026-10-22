@@ -12,6 +12,8 @@ using System.Data;
 using System.Globalization;
 using System.Security.Claims;
 
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("SPIC.RegressionHarness")]
+
 namespace SpicAPI.Controllers
 {
 	/// <summary>
@@ -1872,18 +1874,28 @@ namespace SpicAPI.Controllers
 			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(db, user);
 			if (designation != null)
 			{
-				var hasAdminPermission = GuestHouseReceptionistScope.HasGuestHouseAdminPermission(designation);
+				if (isGet)
+				{
+					var hasAdminPermission = GuestHouseReceptionistScope.HasGuestHouseAdminPermission(designation);
+					var hasEndpointPermission = RoleAccessPermissions.HasPage(designation.RoleAccess, requiredPermission.Value);
 
-				var hasEndpointPermission = RoleAccessPermissions.HasPage(designation.RoleAccess, requiredPermission.Value);
+					if (hasAdminPermission || hasEndpointPermission)
+						return;
+				}
+				else
+				{
+					var writeActions = RequiredWriteActionsFor(path);
+					var hasAdminWrite = writeActions.Any(a => GuestHouseReceptionistScope.HasGuestHouseAdminAction(designation, a));
+					var hasEndpointWrite = writeActions.Any(a => GuestHouseReceptionistScope.HasAction(designation, requiredPermission.Value, a));
 
-				var isAllowed = isGet
-					? (hasAdminPermission || hasEndpointPermission)
-					: (hasAdminPermission
-						|| (GuestHouseReceptionistScope.IsReceptionist(designation.Name) && hasEndpointPermission)
-						|| (requiredPermission == PagePermission.GuestHouseCancellations && hasEndpointPermission));
+					var isAllowed = hasAdminWrite
+						|| (GuestHouseReceptionistScope.IsReceptionist(designation.Name) && hasEndpointWrite)
+						|| (requiredPermission == PagePermission.GuestHouseCancellations && hasEndpointWrite)
+						|| hasEndpointWrite;
 
-				if (isAllowed)
-					return;
+					if (isAllowed)
+						return;
+				}
 			}
 
 			context.Result = Forbidden();
@@ -1899,6 +1911,19 @@ namespace SpicAPI.Controllers
 				&& (path.EndsWith("/approve", StringComparison.OrdinalIgnoreCase) || path.EndsWith("/reject", StringComparison.OrdinalIgnoreCase)))
 				? PagePermission.GuestHouseCancellations
 			: null;
+
+		// Action route -> the Designation actions needed to perform it (Update, Entry). View-only grants never write.
+		private static string[] RequiredWriteActionsFor(string path) =>
+			path.EndsWith("/generate-bill", StringComparison.OrdinalIgnoreCase)
+				? new[] { "Entry", "Update" }
+			: path.EndsWith("/checkin", StringComparison.OrdinalIgnoreCase)
+				|| path.EndsWith("/pay", StringComparison.OrdinalIgnoreCase)
+				? new[] { "Update", "Entry" }
+			: path.EndsWith("/checkout", StringComparison.OrdinalIgnoreCase)
+				|| path.EndsWith("/approve", StringComparison.OrdinalIgnoreCase)
+				|| path.EndsWith("/reject", StringComparison.OrdinalIgnoreCase)
+				? new[] { "Update" }
+			: new[] { "Update" };
 
 		// Route -> the PagePermission of the SDWA page that reads it. Unmapped GETs stay closed.
 		private static PagePermission? RequiredReadPermission(string path) =>
