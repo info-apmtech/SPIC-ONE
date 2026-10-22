@@ -140,6 +140,9 @@ builder.Services.Configure<ContactUsMailOptions>(
     builder.Configuration.GetSection(ContactUsMailOptions.SectionName));
 builder.Services.AddScoped<IContactUsMailService, ContactUsMailService>();
 
+// Daily cleanup of JMDO location history beyond JmdoTracking:RetentionDays (appsettings.json).
+builder.Services.AddHostedService<SpicAPI.Services.TrackingRetentionCleanupService>();
+
 // SDWA Guest House online payment. KeySecret comes from the Razorpay__KeySecret
 // environment variable in Azure (never from appsettings.json) - see RazorpayOptions.
 builder.Services.Configure<RazorpayOptions>(

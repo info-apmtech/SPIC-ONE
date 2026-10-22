@@ -1100,6 +1100,28 @@ public class JmdoTaskAllocationController : ControllerBase
         if (allocation == null)
             return NotFound(new { Success = false, Message = "No current allocation found." });
 
+        // Server-side enforcement, not just the client's redirect-to-MarkAttendance UX (TaskDetail.
+        // razor/TasksAllocation.razor check first and redirect for a friendly experience, but a
+        // client-only check can be bypassed by calling this endpoint directly) - a JMDO cannot start
+        // a task without today's attendance on record.
+        //
+        // Gated on the task's CURRENT stored status, not just the requested one: only a genuine
+        // YetToStart -> InProgress transition counts as "starting" a task. A task that's already
+        // InProgress being PUT to InProgress again is never a fresh start - it's TaskDetail.razor's
+        // own StartedAt backfill (ApplyStatusFromAllocationAsync, for a legacy row that went
+        // InProgress before StartedAt existed) resending the same status to fill in a missing
+        // timestamp. Gating that resend too would permanently 400 that backfill on any day the
+        // JMDO hasn't (yet) marked attendance, even though nothing is actually "starting".
+        if (dto.Status == AllocTaskStatus.InProgress
+            && CurrentTaskStatus(allocation, dto.TaskKey) == AllocTaskStatus.YetToStart
+            && string.Equals(CurrentRole(), "JMDO", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasAttendanceToday = await _db.JMDOAttendances
+                .AnyAsync(a => a.UserId == userId && a.Date == DateTime.Today);
+            if (!hasAttendanceToday)
+                return BadRequest(new { Success = false, Message = "Mark today's attendance before starting a task." });
+        }
+
         // Stamped the first time a task goes InProgress (never overwritten on later calls)
         // so "Time on task" can be computed as DateTime.Now - StartedAt on every page load
         // instead of resetting to 0 each time the circuit/session is re-established.
@@ -1525,6 +1547,36 @@ public class JmdoTaskAllocationController : ControllerBase
     // real but completely different dealer in each table). See JmdoTaskAllocationDealer's own doc
     // comment for why these were kept as two separate columns instead of one reinterpreted column.
     private static int EffectiveDealerId(JmdoTaskAllocationDealer d) => d.DealerRegistrationId ?? -d.SubDealerId;
+
+    // Read-only lookup mirroring UpdateMyTaskStatus's own TaskKey dispatch (dealer_/prog_/spcm/
+    // soil/pos), used only to tell a genuine YetToStart -> InProgress transition apart from a
+    // resend of an already-InProgress status (see UpdateMyTaskStatus's attendance-gate comment).
+    // Defaults to YetToStart for an unrecognized/not-found key - the same, already-existing
+    // NotFound response further down in UpdateMyTaskStatus is what actually surfaces that case to
+    // the caller; this only decides whether the attendance gate applies before getting there.
+    private static AllocTaskStatus CurrentTaskStatus(JmdoTaskAllocation allocation, string? taskKey)
+    {
+        var key = taskKey?.Trim() ?? string.Empty;
+
+        if (key.StartsWith("dealer_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(key.AsSpan("dealer_".Length), out var dealerId))
+        {
+            return allocation.Dealers.FirstOrDefault(d => EffectiveDealerId(d) == dealerId)?.Status ?? AllocTaskStatus.YetToStart;
+        }
+        if (key.StartsWith("prog_", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(key.AsSpan("prog_".Length), out var csr1Id))
+        {
+            return allocation.Programs.FirstOrDefault(p => p.Csr1Id == csr1Id)?.Status ?? AllocTaskStatus.YetToStart;
+        }
+
+        return key.ToLowerInvariant() switch
+        {
+            "spcm" => allocation.SpcmStatus,
+            "soil" or "soilsample" => allocation.SoilSampleStatus,
+            "pos" or "posliquidation" => allocation.PosLiquidationStatus,
+            _ => AllocTaskStatus.YetToStart
+        };
+    }
 
     // District/Taluk aren't snapshotted on JmdoTaskAllocationDealer (only DealerName/DealerCode
     // are) - resolved from the live dealer-master row, DealerRegistration for a new-style row or

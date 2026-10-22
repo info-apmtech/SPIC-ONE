@@ -135,6 +135,7 @@
 			await SessionStore.SetAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
 			await SessionStore.SetAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
 			await SessionStore.SetAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
+			await SessionStore.SetAsync(SessionKeys.RefreshToken, result.RefreshToken ?? "");
 
 			if (_model.RememberMe)
 			{
@@ -142,6 +143,7 @@
 				await SessionStore.SetPersistentAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
 				await SessionStore.SetPersistentAsync(SessionKeys.RoleAccess, result.RoleAccess ?? "");
 				await SessionStore.SetPersistentAsync(SessionKeys.DesignationName, result.DesignationName ?? "");
+				await SessionStore.SetPersistentAsync(SessionKeys.RefreshToken, result.RefreshToken ?? "");
 			}
 			else
 			{
@@ -149,11 +151,13 @@
 				await SessionStore.RemovePersistentAsync(SessionKeys.Expiration);
 				await SessionStore.RemovePersistentAsync(SessionKeys.RoleAccess);
 				await SessionStore.RemovePersistentAsync(SessionKeys.DesignationName);
+				await SessionStore.RemovePersistentAsync(SessionKeys.RefreshToken);
 			}
 
 			// Persist token + page permissions for refreshes and other pages
 			LoginState.Token = rawToken;
 			LoginState.Expiration = result.Expiration;
+			LoginState.RefreshToken = result.RefreshToken;
 			LoginState.SetAllowedPages(result.RoleAccess);
 			LoginState.SetDesignationName(result.DesignationName);
 
@@ -201,5 +205,6 @@
 		public DateTime Expiration { get; set; }
 		public string? RoleAccess { get; set; }
 		public string? DesignationName { get; set; }
+		public string? RefreshToken { get; set; }
 	}
 }

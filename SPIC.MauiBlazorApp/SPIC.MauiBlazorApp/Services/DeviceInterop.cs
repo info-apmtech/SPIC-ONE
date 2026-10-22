@@ -156,5 +156,93 @@ namespace SPIC.MauiBlazorApp.Services
         }
 
         public sealed record GeoPosition(double Latitude, double Longitude, string? Error);
+
+        /// <summary>
+        /// Starts native background tracking for the given session - window.startBackgroundTracking
+        /// in the WebView, called right after JMDOTrackingApi.StartAsync succeeds (FieldDashboard.
+        /// razor). Requests background location ("Allow all the time" on Android, "Always" on iOS)
+        /// and, on Android, the notification permission the persistent status notification needs -
+        /// both with the OS's own prompt, so the JMDO is explicitly asked and informed, never
+        /// enabled silently. Returns false (never throws) if a permission was declined or the
+        /// platform-specific service failed to start - Live Tracking itself (the server-side
+        /// session) is unaffected either way; this only controls whether it can keep running once
+        /// the app is backgrounded.
+        /// </summary>
+        [JSInvokable]
+        public static async Task<bool> StartBackgroundTracking(int sessionId)
+        {
+            if (sessionId <= 0) return false;
+
+            try
+            {
+                return await MainThread.InvokeOnMainThreadAsync(async () =>
+                {
+                    // LocationAlways covers both platforms' "background location" concept -
+                    // Android's ACCESS_BACKGROUND_LOCATION (requested as the required separate,
+                    // later step after foreground location) and iOS's "Always" authorization.
+                    var status = await Permissions.CheckStatusAsync<Permissions.LocationAlways>();
+                    if (status != PermissionStatus.Granted)
+                    {
+                        status = await Permissions.RequestAsync<Permissions.LocationAlways>();
+                    }
+
+                    if (status != PermissionStatus.Granted)
+                    {
+                        // Live Tracking still works in the foreground (the client-side loop in
+                        // JmdoTrackingClientLoop keeps posting points while the app is open) - it
+                        // just won't survive backgrounding without this permission.
+                        return false;
+                    }
+
+#if ANDROID
+                    var notifStatus = await Permissions.CheckStatusAsync<Permissions.PostNotifications>();
+                    if (notifStatus != PermissionStatus.Granted)
+                    {
+                        notifStatus = await Permissions.RequestAsync<Permissions.PostNotifications>();
+                    }
+                    // Notification permission is for the persistent status indicator only - Android
+                    // 13+ will simply run the foreground service without a visible notification if
+                    // declined, which still works but is less transparent to the JMDO, so this is
+                    // requested but not required to proceed.
+
+                    SPIC.MauiBlazorApp.Platforms.Android.JmdoTrackingForegroundService.EnsureRunning(
+                        global::Android.App.Application.Context, sessionId);
+                    return true;
+#elif IOS
+                    SPIC.MauiBlazorApp.Platforms.iOS.JmdoLocationManager.Start(sessionId);
+                    return true;
+#else
+                    return false;
+#endif
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"StartBackgroundTracking failed: {ex}");
+                return false;
+            }
+        }
+
+        /// <summary>Stops native background tracking - window.stopBackgroundTracking, called right
+        /// after JMDOTrackingApi.StopAsync succeeds. Safe to call even if background tracking was
+        /// never started (e.g. the permission was declined).</summary>
+        [JSInvokable]
+        public static Task<bool> StopBackgroundTracking()
+        {
+            try
+            {
+#if ANDROID
+                SPIC.MauiBlazorApp.Platforms.Android.JmdoTrackingForegroundService.Stop(global::Android.App.Application.Context);
+#elif IOS
+                SPIC.MauiBlazorApp.Platforms.iOS.JmdoLocationManager.Stop();
+#endif
+                return Task.FromResult(true);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"StopBackgroundTracking failed: {ex}");
+                return Task.FromResult(false);
+            }
+        }
     }
 }

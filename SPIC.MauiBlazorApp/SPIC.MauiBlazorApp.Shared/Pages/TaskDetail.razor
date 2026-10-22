@@ -753,6 +753,9 @@
     [Inject]
     private HttpClient Http { get; set; } = default!;
 
+    [Inject]
+    private SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi AttendanceApi { get; set; } = default!;
+
     private TaskKind kind;
     private string dynamicTitle = "Loading...";
     private string dynamicCode = "";
@@ -1270,6 +1273,20 @@
     private async Task StartTask()
     {
         if (isStarted || isLocationCapturing) return;
+
+        // Friendly redirect before even touching the GPS/network work below - the server (PUT
+        // mine/task-status) enforces this too (JmdoTaskAllocationController.UpdateMyTaskStatus), so
+        // this is purely UX: a JMDO who hasn't marked attendance today lands on MarkAttendance
+        // instead of a raw 400. "Loaded" false (a network hiccup on this check itself) falls through
+        // to the normal flow below rather than blocking on an inconclusive answer - the server-side
+        // check is still authoritative either way.
+        var (loaded, todayAttendance) = await AttendanceApi.LoadTodayAsync();
+        if (loaded && todayAttendance is null)
+        {
+            Toast.Warning("Mark today's attendance before starting a task.");
+            Navigation.NavigateTo("/MarkAttendance");
+            return;
+        }
 
         isLocationCapturing = true;
         StateHasChanged();

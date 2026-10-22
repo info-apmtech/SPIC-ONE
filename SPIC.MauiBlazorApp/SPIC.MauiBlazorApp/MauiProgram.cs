@@ -52,6 +52,7 @@ namespace SPIC.MauiBlazorApp
 			builder.Services.AddScoped<MetricsApi>();
 			builder.Services.AddScoped<JMDOAttendanceApi>();
 			builder.Services.AddScoped<JMDOTrackingApi>();
+			builder.Services.AddScoped<JmdoTrackingClientLoop>();
 
 			// Usage + error telemetry (docs/metrics-telemetry-plan.md): the app / version header on
 			// every API call, page views and client errors, and anything the app logs at Error+.

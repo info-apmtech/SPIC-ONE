@@ -10,6 +10,7 @@ using Spic.Infrastructure.Data;
 using SpicAPI.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using static SPIC.Core.DTOs.AdminViewModel;
 
@@ -76,6 +77,8 @@ namespace SpicAPI.Controllers
                 }
             }
 
+            var refreshToken = await IssueRefreshTokenAsync(user.Id);
+
             var responseData = new LoginResponseModel
             {
                 Token = $"Bearer {token}",
@@ -92,17 +95,110 @@ namespace SpicAPI.Controllers
                 },
                 Expiration = jwtToken?.ValidTo ?? DateTime.UtcNow.AddHours(1),
                 RoleAccess = roleAccess,
-                DesignationName = designationName
+                DesignationName = designationName,
+                RefreshToken = refreshToken
             };
 
             return Ok(responseData);
         }
 
-        [HttpPost("logout")]
-        public IActionResult Logout()
+        // POST api/Authentication/refresh
+        // Trades a still-valid refresh token for a new JWT + a new, rotated refresh token -
+        // lets a client (in particular the JMDO native background tracking service, which can
+        // easily outlive a single 60-minute JWT) keep working past token expiry without a full
+        // re-login. AuthHttpMessageHandler also calls this once on any 401 before forcing logout.
+        [AllowAnonymous]
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequestDto dto)
         {
+            if (string.IsNullOrWhiteSpace(dto?.RefreshToken))
+                return BadRequest(new { message = "Refresh token is required." });
+
+            var hash = HashToken(dto.RefreshToken);
+            var now = DateTime.Now;
+
+            var existing = await _db.RefreshTokens
+                .FirstOrDefaultAsync(t => t.TokenHash == hash);
+
+            // Same response for "doesn't exist", "revoked" and "expired" - no information leak
+            // about which specific reason a given raw value failed for.
+            if (existing == null || existing.IsRevoked || existing.ExpiresAt <= now)
+                return Unauthorized(new { message = "Refresh token is invalid or expired. Please sign in again." });
+
+            var user = await _userManager.FindByIdAsync(existing.UserId);
+            if (user == null || !user.IsActive)
+                return Unauthorized(new { message = "This account is no longer active." });
+
+            // Rotate: the redeemed token is revoked immediately and linked to its replacement, so
+            // a replayed copy of this same raw value can never be redeemed a second time.
+            var newRefreshToken = await IssueRefreshTokenAsync(user.Id);
+            existing.IsRevoked = true;
+            existing.RevokedAt = now;
+            existing.ReplacedByTokenHash = HashToken(newRefreshToken);
+            await _db.SaveChangesAsync();
+
+            var token = await GenerateJwtToken(user);
+            var jwtToken = new JwtSecurityTokenHandler().ReadToken(token) as JwtSecurityToken;
+
+            return Ok(new RefreshTokenResponseDto
+            {
+                Token = $"Bearer {token}",
+                Expiration = jwtToken?.ValidTo ?? DateTime.UtcNow.AddHours(1),
+                RefreshToken = newRefreshToken
+            });
+        }
+
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            // Revokes every still-active refresh token for the caller (resolved from the JWT, not
+            // the request body - a logout can't be used to revoke someone else's tokens). Previously
+            // a complete no-op; a refresh token issued at login would otherwise remain redeemable
+            // forever after "logging out".
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                var now = DateTime.Now;
+                var activeTokens = await _db.RefreshTokens
+                    .Where(t => t.UserId == userId && !t.IsRevoked && t.ExpiresAt > now)
+                    .ToListAsync();
+
+                foreach (var t in activeTokens)
+                {
+                    t.IsRevoked = true;
+                    t.RevokedAt = now;
+                }
+
+                if (activeTokens.Count > 0)
+                    await _db.SaveChangesAsync();
+            }
+
             return Ok(new { message = "Logged out successfully" });
         }
+
+        // Issues and persists a new refresh token for the given user, returning the raw value
+        // (the only time it's ever available in plaintext - only TokenHash is stored).
+        private async Task<string> IssueRefreshTokenAsync(string userId)
+        {
+            var raw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                .Replace('+', '-').Replace('/', '_').TrimEnd('='); // URL-safe
+
+            var refreshExpiryDays = _config.GetValue<double?>("Jwt:RefreshExpiryDays") ?? 2;
+
+            _db.RefreshTokens.Add(new RefreshToken
+            {
+                UserId = userId,
+                TokenHash = HashToken(raw),
+                ExpiresAt = DateTime.Now.AddDays(refreshExpiryDays),
+                CreatedAt = DateTime.Now
+            });
+            await _db.SaveChangesAsync();
+
+            return raw;
+        }
+
+        private static string HashToken(string rawToken) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
 
         /// <summary>
         /// The signed-in user's Designation.RoleAccess, re-read from the database.

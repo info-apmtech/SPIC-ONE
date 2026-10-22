@@ -9,6 +9,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi AttendanceApi
 @inject SPIC.MauiBlazorApp.Shared.Services.LookupCacheService LookupCache
+@inject SPIC.MauiBlazorApp.Shared.Services.IFormFactor FormFactor
 @inject HttpClient Http
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -75,21 +76,47 @@
 
     </div>
 
-    <!-- Tracking -->
-    @if (!IsOnDuty)
+    <!-- Live Tracking: fully independent of attendance/task status now - see
+         JMDOTrackingController's class doc comment. Only ever started/stopped by the JMDO
+         explicitly pressing the buttons below. -->
+    @if (_isLoadingTracking)
+    {
+        <div class="fd-tracking-banner">
+            <div class="fd-tracking-left">
+                <span class="fd-tracking-icon"><i class="bi bi-hourglass-split"></i></span>
+                <div class="fd-tracking-text">
+                    <div class="fd-tracking-title">Checking tracking status...</div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (_activeSession is null)
     {
         <div class="fd-tracking-banner">
             <div class="fd-tracking-left">
                 <span class="fd-tracking-icon"><i class="bi bi-geo-alt-fill"></i></span>
                 <div class="fd-tracking-text">
-                    <div class="fd-tracking-title">Tracking In-active <span class="fd-tracking-dot"></span></div>
-                    <div class="fd-tracking-sub">Update Attendance to Start Tracking</div>
+                    <div class="fd-tracking-title">Live Tracking is off <span class="fd-tracking-dot"></span></div>
+                    <div class="fd-tracking-sub">
+                        @(_hasAttendanceToday
+                            ? "Starts only when you press Start Live Tracking - independent of attendance or tasks."
+                            : "Mark today's attendance first to enable Start Live Tracking.")
+                    </div>
                 </div>
             </div>
 
-            <button type="button" class="fd-btn fd-btn-outline fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
-                <i class="bi bi-upload"></i> UPDATE
-            </button>
+            @if (_hasAttendanceToday)
+            {
+                <button type="button" class="fd-btn fd-btn-primary fd-update-btn" disabled="@_startingTracking" @onclick="StartLiveTracking">
+                    <i class="bi bi-play-circle-fill"></i> @(_startingTracking ? "Starting..." : "Start Live Tracking")
+                </button>
+            }
+            else
+            {
+                <button type="button" class="fd-btn fd-btn-outline fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
+                    <i class="bi bi-upload"></i> MARK ATTENDANCE
+                </button>
+            }
         </div>
     }
     else
@@ -97,10 +124,10 @@
         <div class="fd-tracking-card">
             <div class="fd-tracking-header-row">
                 <div class="fd-tracking-left">
-                    <span class="fd-tracking-icon fd-tracking-icon-active"><i class="bi bi-geo-alt-fill"></i></span>
+                    <span class="fd-tracking-icon @TrackingStatusIconClass"><i class="bi bi-geo-alt-fill"></i></span>
                     <div class="fd-tracking-text">
-                        <div class="fd-tracking-title">Tracking Active <span class="fd-tracking-dot fd-tracking-dot-active"></span></div>
-                        <div class="fd-tracking-sub">Your location being tracked in real-time</div>
+                        <div class="fd-tracking-title">@TrackingStatusLabel <span class="fd-tracking-dot @TrackingStatusDotClass"></span></div>
+                        <div class="fd-tracking-sub">@TrackingStatusSub</div>
                     </div>
                 </div>
 
@@ -113,42 +140,32 @@
             </div>
 
             <div class="fd-tracking-body">
-                <div class="fd-map-placeholder" role="img" aria-label="Map showing today's tracked route">
-                    <svg class="fd-map-route-svg" viewBox="0 0 400 220" preserveAspectRatio="none">
-                        <path d="M70,175 C150,160 170,70 320,45" />
-                    </svg>
-                    <span class="fd-map-pin fd-map-pin-end"><i class="bi bi-geo-alt-fill"></i></span>
-                    <span class="fd-map-pin fd-map-pin-current"><i class="bi bi-person-fill"></i></span>
-                </div>
-
                 <div class="fd-tracking-details">
                     <div class="fd-detail-row">
-                        <span class="fd-detail-key"><i class="bi bi-calendar3"></i> This week</span>
-                        <span class="fd-detail-val">16 Sep 2026 - 22 Sep 2026</span>
+                        <span class="fd-detail-key"><i class="bi bi-calendar3"></i> Started</span>
+                        <span class="fd-detail-val">@_activeSession.StartTime.ToString("ddd, dd MMM yyyy, hh:mm tt")</span>
                     </div>
                     <div class="fd-detail-row">
-                        <span class="fd-detail-key"><i class="bi bi-person-check"></i> Current Status</span>
-                        <span class="fd-detail-val fd-detail-val-inline"><span class="fd-tracking-dot fd-tracking-dot-active"></span> On Duty</span>
+                        <span class="fd-detail-key"><i class="bi bi-person-check"></i> Status</span>
+                        <span class="fd-detail-val fd-detail-val-inline"><span class="fd-tracking-dot @TrackingStatusDotClass"></span> @TrackingStatusLabel</span>
                     </div>
                     <div class="fd-detail-row">
-                        <span class="fd-detail-key"><i class="bi bi-person"></i> Current Location</span>
+                        <span class="fd-detail-key"><i class="bi bi-person"></i> Last known location</span>
                         <span class="fd-detail-val fd-detail-val-stack">
-                            <span class="fd-detail-val-main">Near Coimbatore, Tamil Nadu</span>
-                            <span class="fd-detail-val-sub">(22 Sep 2026, 10:42 AM)</span>
+                            @if (_activeSession.LastLatitude is { } lat && _activeSession.LastLongitude is { } lng)
+                            {
+                                <span class="fd-detail-val-main">@lat.ToString("0.####"), @lng.ToString("0.####")</span>
+                            }
+                            else
+                            {
+                                <span class="fd-detail-val-main">No location received yet</span>
+                            }
+                            @if (_activeSession.LastPointAt is { } lastAt)
+                            {
+                                <span class="fd-detail-val-sub">(@lastAt.ToString("dd MMM yyyy, hh:mm tt"))</span>
+                            }
                         </span>
                     </div>
-                </div>
-            </div>
-
-            <div class="fd-attendance-section">
-                <h4 class="fd-attendance-title">Attendance</h4>
-                <div class="fd-attendance-box">
-                    <div class="fd-attendance-status">
-                        <i class="bi bi-check-circle-fill"></i> Marked present today at 9:14 AM &middot; Anaimalai
-                    </div>
-                    <button type="button" class="fd-btn fd-btn-primary fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
-                        <i class="bi bi-upload"></i> UPDATE
-                    </button>
                 </div>
             </div>
         </div>
@@ -255,33 +272,172 @@
 </div>
 
 @code {
-    // Static placeholder state: no Attendance/Tracking API exists yet (see
-    // FieldDashboard's original implementation notes), so this just flips
-    // the page between the two Figma states instead of calling a backend.
-    // Lives in the shared AttendanceState service (not a local field) so it
-    // survives the round trip to MarkAttendance and back - each navigation
-    // creates a fresh FieldDashboard instance, which would otherwise reset
-    // IsOnDuty to false every time.
     private bool IsOnDuty => AttendanceState.IsOnDuty;
     private bool ShowStopConfirm { get; set; }
-    private const string TrackingDuration = "00:12:34";
+
+    [Inject]
+    private JmdoTrackingClientLoop TrackingLoop { get; set; } = default!;
+
+    // Same IFormFactor-based check MarkAttendance.razor uses - "Web" on the Web host (any browser),
+    // the real device idiom on the native MAUI app. The native background bridge
+    // (window.startBackgroundTracking/stopBackgroundTracking) only exists on that host's own JS
+    // (maui-interop.js) - the Web host's js/location.js never defines it, so this check also
+    // doubles as "is it even safe to call that JS function".
+    private bool IsNativeApp => FormFactor.GetFormFactor() != "Web";
 
     // ---------------------------------------------------------------------------------------
-    // Start Tracking: fires once, automatically, the first time this dashboard renders while
-    // the JMDO is On Duty (there is no separate "Start Tracking" button - marking attendance is
-    // what starts tracking, per the existing "Update Attendance to Start Tracking" copy above).
-    // The server call is idempotent (JMDOTrackingController.Start returns the caller's existing
-    // Active session instead of creating a second one), so reloading this page, or a fresh
-    // component instance after navigating back from MarkAttendance, safely resumes the same
-    // session rather than duplicating it.
-    //
-    // Stop Tracking, duration and View Tracking Details are a later step - this only creates the
-    // session and begins periodic point capture while it stays Active.
+    // Live Tracking: fully independent of attendance/task status (see JMDOTrackingController's
+    // class doc comment) - only ever started/stopped by the JMDO pressing the buttons below, never
+    // auto-started on page load. mine/active (read-only, no side effect) reflects whatever's
+    // actually true server-side, so a reload or a fresh component instance after navigating away
+    // and back shows the real current session instead of resetting to "off".
     // ---------------------------------------------------------------------------------------
-    private const int TrackingPointIntervalSeconds = 60;
+    private JMDOTrackingSessionDto? _activeSession;
+    private bool _isLoadingTracking = true;
+    private bool _startingTracking;
+    private bool _hasAttendanceToday;
 
-    private JMDOTrackingSessionDto? _session;
-    private CancellationTokenSource? _trackingCts;
+    // Pure UI ticker so TrackingDuration (computed from _activeSession.StartTime) visibly counts
+    // up - the loop service posting points on its own 60s cadence wouldn't otherwise trigger a
+    // re-render in between ticks.
+    private System.Threading.Timer? _durationTicker;
+
+    private string TrackingDuration =>
+        _activeSession is null ? "00:00:00" : FormatDuration(DateTime.Now - _activeSession.StartTime);
+
+    private static string FormatDuration(TimeSpan d)
+    {
+        if (d < TimeSpan.Zero) d = TimeSpan.Zero;
+        return $"{(int)d.TotalHours:00}:{d.Minutes:00}:{d.Seconds:00}";
+    }
+
+    private string TrackingStatusLabel => _activeSession?.LiveStatus switch
+    {
+        JmdoTrackingLiveStatus.Live => "Tracking Active",
+        JmdoTrackingLiveStatus.Stale => "Tracking Active (delayed)",
+        JmdoTrackingLiveStatus.Offline => "Tracking Active (no signal)",
+        _ => "Tracking Active"
+    };
+
+    private string TrackingStatusSub => _activeSession?.LiveStatus switch
+    {
+        JmdoTrackingLiveStatus.Live => "Your location is being tracked in real time.",
+        JmdoTrackingLiveStatus.Stale => "No new location in a few minutes - still trying.",
+        JmdoTrackingLiveStatus.Offline => "No location received in over 15 minutes - check signal/connection.",
+        _ => "Your location is being tracked."
+    };
+
+    private string TrackingStatusDotClass => _activeSession?.LiveStatus switch
+    {
+        JmdoTrackingLiveStatus.Live => "fd-tracking-dot-active",
+        JmdoTrackingLiveStatus.Stale => "fd-tracking-dot-stale",
+        JmdoTrackingLiveStatus.Offline => "fd-tracking-dot-offline",
+        _ => ""
+    };
+
+    private string TrackingStatusIconClass => _activeSession?.LiveStatus switch
+    {
+        JmdoTrackingLiveStatus.Live => "fd-tracking-icon-live",
+        JmdoTrackingLiveStatus.Stale => "fd-tracking-icon-stale",
+        JmdoTrackingLiveStatus.Offline => "fd-tracking-icon-offline",
+        _ => "fd-tracking-icon-live"
+    };
+
+    private async Task LoadTrackingStateAsync()
+    {
+        _isLoadingTracking = true;
+        try
+        {
+            _activeSession = await TrackingApi.GetMineActiveAsync();
+            if (_activeSession is not null)
+            {
+                // Idempotent - safe whether or not the loop/native service were already running for
+                // this exact session (e.g. a fresh component instance after navigating within the
+                // app, or reopening the app after the OS fully killed it and its foreground service
+                // along with it - this re-arms both).
+                TrackingLoop.Start(_activeSession.Id);
+                await StartNativeBackgroundTrackingAsync(_activeSession.Id);
+            }
+        }
+        finally
+        {
+            _isLoadingTracking = false;
+        }
+    }
+
+    private async Task StartLiveTracking()
+    {
+        if (_startingTracking) return;
+        _startingTracking = true;
+        StateHasChanged();
+
+        try
+        {
+            GeoResult? position;
+            try
+            {
+                position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
+            }
+            catch (Exception)
+            {
+                position = null;
+            }
+
+            if (position is null || !string.IsNullOrWhiteSpace(position.Error))
+            {
+                Toast.Error(string.IsNullOrWhiteSpace(position?.Error)
+                    ? "Could not get your current location. Live tracking was not started."
+                    : position!.Error!);
+                return;
+            }
+
+            var session = await TrackingApi.StartAsync(position.Latitude, position.Longitude);
+            if (session is null) return; // TrackingApi already raised an error toast
+
+            _activeSession = session;
+            TrackingLoop.Start(session.Id);
+            await StartNativeBackgroundTrackingAsync(session.Id);
+
+            _durationTicker?.Dispose();
+            _durationTicker = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        }
+        finally
+        {
+            _startingTracking = false;
+        }
+    }
+
+    // Belt-and-suspenders: JmdoTrackingClientLoop (above) already keeps posting points as long as
+    // the app process is alive and foregrounded, on every platform - this additionally asks the
+    // native host to keep going once the app is backgrounded/locked, to the extent the OS allows
+    // (see JmdoTrackingForegroundService's own honesty note). A no-op, not an error, on the Web
+    // host - window.startBackgroundTracking/stopBackgroundTracking are native-only (maui-interop.js),
+    // so these are never even attempted there.
+    private async Task StartNativeBackgroundTrackingAsync(int sessionId)
+    {
+        if (!IsNativeApp) return;
+        try
+        {
+            await JS.InvokeAsync<bool>("startBackgroundTracking", sessionId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Native background tracking could not be started: {ex.Message}");
+        }
+    }
+
+    private async Task StopNativeBackgroundTrackingAsync()
+    {
+        if (!IsNativeApp) return;
+        try
+        {
+            await JS.InvokeAsync<bool>("stopBackgroundTracking");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Native background tracking could not be stopped: {ex.Message}");
+        }
+    }
 
     // ---------------------------------------------------------------------------------------
     // Profile header: resolved from the signed-in user's own claims/designation (LoginState) and
@@ -384,91 +540,32 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Task.WhenAll(LookupCache.EnsureLoadedAsync(), LoadDashboardDataAsync());
+        await Task.WhenAll(LookupCache.EnsureLoadedAsync(), LoadDashboardDataAsync(), LoadAttendanceAndTrackingAsync());
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task LoadAttendanceAndTrackingAsync()
     {
-        if (firstRender)
+        if (LoginState.UserRole != AppRole.JMDO)
         {
-            // Today's duty status from the database first, so opening this page straight after
-            // login shows (and starts tracking for) the real status, not the in-memory default.
-            if (LoginState.UserRole == AppRole.JMDO)
-            {
-                var (loaded, today) = await AttendanceApi.LoadTodayAsync();
-                if (loaded)
-                {
-                    AttendanceState.IsOnDuty = today?.DutyStatus == JMDODutyStatus.OnDuty;
-                    StateHasChanged();
-                }
-            }
-
-            await StartTrackingIfNeededAsync();
-        }
-    }
-
-    private async Task StartTrackingIfNeededAsync()
-    {
-        if (!IsOnDuty || _session is not null) return;
-
-        GeoResult? position;
-        try
-        {
-            position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
-        }
-        catch (Exception)
-        {
-            position = null;
-        }
-
-        if (position is null || !string.IsNullOrWhiteSpace(position.Error))
-        {
-            Toast.Error(string.IsNullOrWhiteSpace(position?.Error)
-                ? "Could not get your current location. Tracking was not started."
-                : position!.Error!);
+            _isLoadingTracking = false;
             return;
         }
 
-        _session = await TrackingApi.StartAsync(position.Latitude, position.Longitude);
-        if (_session is null) return; // TrackingApi already raised an error toast
+        var attendanceTask = AttendanceApi.LoadTodayAsync();
+        var trackingTask = LoadTrackingStateAsync();
 
-        if (_session.Status == JMDOTrackingSessionStatus.Active)
+        var (loaded, today) = await attendanceTask;
+        if (loaded)
         {
-            _trackingCts = new CancellationTokenSource();
-            _ = RunPointLoopAsync(_session.Id, _trackingCts.Token);
+            AttendanceState.IsOnDuty = today?.DutyStatus == JMDODutyStatus.OnDuty;
+            _hasAttendanceToday = today is not null;
         }
-    }
 
-    // Periodic GPS capture: reuses the same single-shot window.getCurrentPosition bridge (no new
-    // location mechanism) on a timer instead of a continuous "watch" API, which is enough to
-    // produce a point trail for the map (Stop Tracking / duration / the map itself come later).
-    private async Task RunPointLoopAsync(int sessionId, CancellationToken ct)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(TrackingPointIntervalSeconds));
-        try
+        await trackingTask;
+
+        if (_activeSession is not null)
         {
-            while (await timer.WaitForNextTickAsync(ct))
-            {
-                if (_session is null || _session.Status != JMDOTrackingSessionStatus.Active) break;
-
-                GeoResult? position;
-                try
-                {
-                    position = await JS.InvokeAsync<GeoResult?>("getCurrentPosition");
-                }
-                catch (Exception)
-                {
-                    continue; // a transient failure just skips this interval's point
-                }
-
-                if (position is null || !string.IsNullOrWhiteSpace(position.Error)) continue;
-
-                await TrackingApi.AddPointAsync(sessionId, position.Latitude, position.Longitude, null, ct);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // expected when the component is disposed (navigated away)
+            _durationTicker = new System.Threading.Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
         }
     }
 
@@ -481,8 +578,10 @@
 
     public void Dispose()
     {
-        _trackingCts?.Cancel();
-        _trackingCts?.Dispose();
+        // Deliberately does NOT stop TrackingLoop - that's the whole point (see the loop's own doc
+        // comment): it must keep running past this one component's lifecycle, until the JMDO
+        // explicitly presses Stop Live Tracking. Only this page's own UI ticker is torn down here.
+        _durationTicker?.Dispose();
     }
 
     private bool _stopping;
@@ -502,7 +601,7 @@
         try
         {
             // A fresh fix at the moment tracking is stopped - the same bridge the periodic loop
-            // and Start Tracking use, not a new location mechanism.
+            // and Start Live Tracking use, not a new location mechanism.
             GeoResult? position;
             try
             {
@@ -524,17 +623,16 @@
             var stopped = await TrackingApi.StopAsync(position.Latitude, position.Longitude);
             if (stopped is null) return; // TrackingApi already raised an error toast; session stays Active
 
-            _session = stopped;
-
-            // Only now is the periodic loop cancelled - no point is sent after Status=Completed.
-            _trackingCts?.Cancel();
-            _trackingCts?.Dispose();
-            _trackingCts = null;
+            // Only now is the loop stopped - no point is sent after Status=Completed. Attendance's
+            // DutyStatus is deliberately left untouched (tracking and attendance are independent).
+            TrackingLoop.Stop();
+            await StopNativeBackgroundTrackingAsync();
+            _durationTicker?.Dispose();
+            _durationTicker = null;
+            _activeSession = null;
 
             ShowStopConfirm = false;
-            AttendanceState.IsOnDuty = false;
-            Toast.Success("Location tracking stopped successfully.");
-            Navigation.NavigateTo("/MarkAttendance?view=stopped");
+            Toast.Success("Live tracking stopped.");
         }
         finally
         {

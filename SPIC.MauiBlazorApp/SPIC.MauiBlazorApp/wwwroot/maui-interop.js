@@ -59,6 +59,19 @@
     window.getCurrentPosition = function () {
         return invoke('GetCurrentPosition');
     };
+
+    // JMDO Live Tracking: native-only, so the Web host's own js/location.js never defines these -
+    // Blazor code only calls them when running on this (native) host (see FieldDashboard.razor's
+    // IsNativeApp check, same IFormFactor pattern MarkAttendance.razor uses). Keeps posting location
+    // while the app is backgrounded/locked, to the extent the OS allows - see
+    // JmdoTrackingForegroundService's own honesty note.
+    window.startBackgroundTracking = function (sessionId) {
+        return invoke('StartBackgroundTracking', sessionId);
+    };
+
+    window.stopBackgroundTracking = function () {
+        return invoke('StopBackgroundTracking');
+    };
 })();
 
 // Native share sheet (Android / iOS / Windows) instead of the Web Share API, which the
