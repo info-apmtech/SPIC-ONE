@@ -237,11 +237,21 @@ namespace SpicAPI.Controllers
 			// Check if company is used in any bookings
 			var hasBookings = await _db.GuestHouseBookingGuests.AnyAsync(g => g.SdwaCompanyId == id);
 			if (hasBookings)
-				return BadRequest(new { Success = false, Message = "This company cannot be deleted because it is linked to existing bookings." });
+				return Conflict(new { Success = false, Message = "This company cannot be deleted because it is linked to existing bookings." });
 
+			// Guest-house mappings are the company's own configuration (the update flow replaces them wholesale),
+			// so they go with the company in the same SaveChanges: either everything is removed or nothing is.
 			_db.SdwaCompanyGuestHouses.RemoveRange(company.CompanyGuestHouses);
 			_db.SdwaCompanies.Remove(company);
-			await _db.SaveChangesAsync();
+			try
+			{
+				await _db.SaveChangesAsync();
+			}
+			catch (DbUpdateException)
+			{
+				// A booking guest picked this company between the check above and the save (FK violation).
+				return Conflict(new { Success = false, Message = "This company cannot be deleted because it is linked to existing bookings." });
+			}
 
 			return Ok(new { Success = true, Message = "Company deleted successfully." });
 		}
