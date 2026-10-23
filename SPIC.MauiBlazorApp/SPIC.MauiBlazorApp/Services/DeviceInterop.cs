@@ -9,7 +9,7 @@ namespace SPIC.MauiBlazorApp.Services
     /// 150+ shared pages needs to know it is running inside a WebView.
     ///
     /// Static [JSInvokable] methods are reachable from JS as
-    /// DotNet.invokeMethodAsync('SPIC.MauiBlazorApp', '<MethodName>', ...).
+    /// DotNet.invokeMethodAsync('SPIC.MauiBlazorApp', '&lt;MethodName&gt;', ...).
     /// </summary>
     public static class DeviceInterop
     {
@@ -88,6 +88,12 @@ namespace SPIC.MauiBlazorApp.Services
         public static async Task<bool> OpenExternal(string url)
         {
             if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            {
+                return false;
+            }
+
+            // Internal payment gateway URLs or checkout frames should not open external browser
+            if (uri.Host.Contains("razorpay.com", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
@@ -177,9 +183,28 @@ namespace SPIC.MauiBlazorApp.Services
             {
                 return await MainThread.InvokeOnMainThreadAsync(async () =>
                 {
-                    // LocationAlways covers both platforms' "background location" concept -
-                    // Android's ACCESS_BACKGROUND_LOCATION (requested as the required separate,
-                    // later step after foreground location) and iOS's "Always" authorization.
+#if IOS
+                    // Prime the token cache while device is unlocked and in foreground
+                    await JmdoTrackingBackgroundClient.PrimeTokenCacheAsync();
+
+                    // On iOS, background location is fully supported under "When In Use"
+                    // with AllowsBackgroundLocationUpdates = true and ShowsBackgroundLocationIndicator = true.
+                    // Requesting only LocationWhenInUse gives a single, clear permission prompt to the user
+                    // without confusing back-to-back system dialogs.
+                    var whenInUse = await Permissions.CheckStatusAsync<Permissions.LocationWhenInUse>();
+                    if (whenInUse != PermissionStatus.Granted)
+                    {
+                        whenInUse = await Permissions.RequestAsync<Permissions.LocationWhenInUse>();
+                    }
+
+                    if (whenInUse != PermissionStatus.Granted)
+                    {
+                        return false;
+                    }
+
+                    SPIC.MauiBlazorApp.Platforms.iOS.JmdoLocationManager.Start(sessionId);
+                    return true;
+#elif ANDROID
                     var status = await Permissions.CheckStatusAsync<Permissions.LocationAlways>();
                     if (status != PermissionStatus.Granted)
                     {
@@ -194,7 +219,6 @@ namespace SPIC.MauiBlazorApp.Services
                         return false;
                     }
 
-#if ANDROID
                     var notifStatus = await Permissions.CheckStatusAsync<Permissions.PostNotifications>();
                     if (notifStatus != PermissionStatus.Granted)
                     {
@@ -207,9 +231,6 @@ namespace SPIC.MauiBlazorApp.Services
 
                     SPIC.MauiBlazorApp.Platforms.Android.JmdoTrackingForegroundService.EnsureRunning(
                         global::Android.App.Application.Context, sessionId);
-                    return true;
-#elif IOS
-                    SPIC.MauiBlazorApp.Platforms.iOS.JmdoLocationManager.Start(sessionId);
                     return true;
 #else
                     return false;

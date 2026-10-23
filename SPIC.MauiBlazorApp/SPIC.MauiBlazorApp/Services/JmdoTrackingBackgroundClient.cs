@@ -20,6 +20,22 @@ namespace SPIC.MauiBlazorApp.Services
     public static class JmdoTrackingBackgroundClient
     {
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+        private static string? _cachedToken;
+        private static string? _cachedRefreshToken;
+
+        /// <summary>Caches credentials in memory while app is foregrounded and device is unlocked,
+        /// ensuring background requests succeed even if iOS locks the Keychain.</summary>
+        public static async Task PrimeTokenCacheAsync()
+        {
+            try
+            {
+                var token = await SecureStorage.Default.GetAsync(SessionKeys.Token);
+                if (!string.IsNullOrWhiteSpace(token)) _cachedToken = token;
+                var refresh = await SecureStorage.Default.GetAsync(SessionKeys.RefreshToken);
+                if (!string.IsNullOrWhiteSpace(refresh)) _cachedRefreshToken = refresh;
+            }
+            catch { }
+        }
 
         /// <summary>Captures one fix and tries to upload it (plus flushing anything already queued
         /// for this session) - on any failure the fix is queued locally instead of lost.</summary>
@@ -90,7 +106,13 @@ namespace SPIC.MauiBlazorApp.Services
         {
             try
             {
-                var token = await SecureStorage.Default.GetAsync(SessionKeys.Token);
+                var token = _cachedToken;
+                if (string.IsNullOrWhiteSpace(token))
+                {
+                    try { token = await SecureStorage.Default.GetAsync(SessionKeys.Token); } catch { }
+                    if (!string.IsNullOrWhiteSpace(token)) _cachedToken = token;
+                }
+
                 if (string.IsNullOrWhiteSpace(token)) return false;
 
                 Http.BaseAddress ??= new Uri(SPIC.MauiBlazorApp.MauiProgram.ApiBaseUrl);
@@ -104,10 +126,15 @@ namespace SPIC.MauiBlazorApp.Services
                 var refreshed = await RefreshAccessTokenAsync(ct);
                 if (!refreshed) return false;
 
-                var newToken = await SecureStorage.Default.GetAsync(SessionKeys.Token);
-                if (string.IsNullOrWhiteSpace(newToken)) return false;
+                token = _cachedToken;
+                if (string.IsNullOrWhiteSpace(token))
+                {
+                    try { token = await SecureStorage.Default.GetAsync(SessionKeys.Token); } catch { }
+                }
 
-                Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", newToken);
+                if (string.IsNullOrWhiteSpace(token)) return false;
+
+                Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 var retry = await send(Http);
                 return retry.IsSuccessStatusCode;
             }
@@ -125,7 +152,13 @@ namespace SPIC.MauiBlazorApp.Services
         {
             try
             {
-                var refreshToken = await SecureStorage.Default.GetAsync(SessionKeys.RefreshToken);
+                var refreshToken = _cachedRefreshToken;
+                if (string.IsNullOrWhiteSpace(refreshToken))
+                {
+                    try { refreshToken = await SecureStorage.Default.GetAsync(SessionKeys.RefreshToken); } catch { }
+                    if (!string.IsNullOrWhiteSpace(refreshToken)) _cachedRefreshToken = refreshToken;
+                }
+
                 if (string.IsNullOrWhiteSpace(refreshToken)) return false;
 
                 Http.BaseAddress ??= new Uri(SPIC.MauiBlazorApp.MauiProgram.ApiBaseUrl);
@@ -145,9 +178,19 @@ namespace SPIC.MauiBlazorApp.Services
                     ? result.Token["Bearer ".Length..]
                     : result.Token;
 
-                await SecureStorage.Default.SetAsync(SessionKeys.Token, rawToken);
-                await SecureStorage.Default.SetAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
-                await SecureStorage.Default.SetAsync(SessionKeys.RefreshToken, result.RefreshToken);
+                _cachedToken = rawToken;
+                _cachedRefreshToken = result.RefreshToken;
+
+                try
+                {
+                    await SecureStorage.Default.SetAsync(SessionKeys.Token, rawToken);
+                    await SecureStorage.Default.SetAsync(SessionKeys.Expiration, result.Expiration.ToString("O"));
+                    await SecureStorage.Default.SetAsync(SessionKeys.RefreshToken, result.RefreshToken);
+                }
+                catch
+                {
+                    // Keychain may be locked while backgrounded; memory cache ensures session continuity
+                }
 
                 return true;
             }

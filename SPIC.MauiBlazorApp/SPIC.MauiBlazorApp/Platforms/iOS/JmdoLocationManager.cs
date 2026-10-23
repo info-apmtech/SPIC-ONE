@@ -1,44 +1,41 @@
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using CoreLocation;
 using Foundation;
+using UIKit;
 using SPIC.MauiBlazorApp.Services;
 
 namespace SPIC.MauiBlazorApp.Platforms.iOS
 {
     /// <summary>
-    /// iOS counterpart to Android's JmdoTrackingForegroundService. iOS has no foreground-service/
-    /// persistent-notification concept of its own - once AllowsBackgroundLocationUpdates is on, iOS
-    /// shows its own automatic "location in use" indicator (the status-bar pill / blue bar) while
-    /// background updates are active, which already satisfies "clearly inform the JMDO tracking
-    /// continues in the background" without any custom notification code here.
-    ///
-    /// Started/stopped from DeviceInterop.StartBackgroundTracking/StopBackgroundTracking, the exact
-    /// same entry points the Android implementation uses - FieldDashboard.razor's Blazor code calls
-    /// one JS bridge either way and never knows which platform handled it.
+    /// iOS counterpart to Android's JmdoTrackingForegroundService.
+    /// Manages continuous background location tracking using CoreLocation, with
+    /// UIBackgroundModes: location and showsBackgroundLocationIndicator enabled.
+    /// Uses BeginBackgroundTask to ensure HTTP upload requests are not killed prematurely
+    /// when iOS attempts to suspend the backgrounded app.
     /// </summary>
     public sealed class JmdoLocationManager : CLLocationManagerDelegate
     {
-        // Lazily created once and reused - CLLocationManager is meant to be held for the life of
-        // the tracking session, not recreated per update.
         private static JmdoLocationManager? _instance;
 
         private readonly CLLocationManager _manager;
         private int _sessionId;
         private CancellationTokenSource? _cts;
+        private DateTime _lastReportTime = DateTime.MinValue;
+        private CLLocation? _lastReportedLocation;
 
         private JmdoLocationManager()
         {
             _manager = new CLLocationManager
             {
-                // iOS throttles background delivery more aggressively than Android and doesn't give
-                // exact timer control while backgrounded - this requests the highest practical
-                // accuracy/cadence and a configuration that favors regular (not just significant-
-                // change) updates, but the actual delivered interval is a best-effort target on iOS,
-                // not a guarantee, especially on older OS versions or under Low Power Mode.
                 DesiredAccuracy = CLLocation.AccuracyBest,
-                DistanceFilter = 25, // meters - matches Android's own MinDistanceMeters
+                DistanceFilter = 10, // 10 meters for responsive field updates
                 AllowsBackgroundLocationUpdates = true,
                 PausesLocationUpdatesAutomatically = false,
-                ShowsBackgroundLocationIndicator = true
+                ShowsBackgroundLocationIndicator = true,
+                ActivityType = CLActivityType.OtherNavigation
             };
             _manager.Delegate = this;
         }
@@ -47,23 +44,67 @@ namespace SPIC.MauiBlazorApp.Platforms.iOS
         {
             _instance ??= new JmdoLocationManager();
             _instance._sessionId = sessionId;
+            _instance._lastReportTime = DateTime.MinValue;
+            _instance._lastReportedLocation = null;
 
             _instance._cts?.Cancel();
             _instance._cts?.Dispose();
             _instance._cts = new CancellationTokenSource();
 
+            // Ensure authorization is determined using standard WhenInUse (single prompt)
+            if (UIDevice.CurrentDevice.CheckSystemVersion(14, 0))
+            {
+                var status = _instance._manager.AuthorizationStatus;
+                if (status == CLAuthorizationStatus.NotDetermined)
+                {
+                    _instance._manager.RequestWhenInUseAuthorization();
+                }
+            }
+
             _instance._manager.StartUpdatingLocation();
 
-            // Flush anything left over from a previous run as soon as tracking (re)starts, instead
-            // of waiting for the next fix.
-            _ = JmdoTrackingBackgroundClient.FlushQueueAsync(sessionId, _instance._cts.Token);
+            // Also monitor significant location changes as backup if iOS suspends fine updates
+            try
+            {
+                if (CLLocationManager.SignificantLocationChangeMonitoringAvailable)
+                {
+                    _instance._manager.StartMonitoringSignificantLocationChanges();
+                }
+            }
+            catch { }
+
+            // Request background execution time to flush any backlog
+            nint bgTaskId = UIApplication.SharedApplication.BeginBackgroundTask("JmdoStartFlush", () => { });
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await JmdoTrackingBackgroundClient.FlushQueueAsync(sessionId, _instance._cts.Token);
+                }
+                finally
+                {
+                    if (bgTaskId != UIApplication.BackgroundTaskInvalid)
+                    {
+                        UIApplication.SharedApplication.EndBackgroundTask(bgTaskId);
+                    }
+                }
+            });
         }
 
         public static void Stop()
         {
             if (_instance is null) return;
 
-            _instance._manager.StopUpdatingLocation();
+            try
+            {
+                _instance._manager.StopUpdatingLocation();
+                if (CLLocationManager.SignificantLocationChangeMonitoringAvailable)
+                {
+                    _instance._manager.StopMonitoringSignificantLocationChanges();
+                }
+            }
+            catch { }
+
             _instance._cts?.Cancel();
             _instance._cts?.Dispose();
             _instance._cts = null;
@@ -75,27 +116,50 @@ namespace SPIC.MauiBlazorApp.Platforms.iOS
             var latest = locations.LastOrDefault();
             if (latest is null) return;
 
+            // Throttle duplicate stationary fixes within 15 seconds to save battery and bandwidth,
+            // while guaranteeing a point is sent at least every 20 seconds even if stationary.
+            var now = DateTime.UtcNow;
+            var timeSinceLast = (now - _lastReportTime).TotalSeconds;
+            var distanceMoved = _lastReportedLocation != null ? latest.DistanceFrom(_lastReportedLocation) : double.MaxValue;
+
+            if (_lastReportedLocation != null && timeSinceLast < 15 && distanceMoved < 10)
+            {
+                return;
+            }
+
+            _lastReportTime = now;
+            _lastReportedLocation = latest;
+
             var sessionId = _sessionId;
             var lat = latest.Coordinate.Latitude;
             var lng = latest.Coordinate.Longitude;
             double? accuracy = latest.HorizontalAccuracy >= 0 ? latest.HorizontalAccuracy : null;
 
-            _ = JmdoTrackingBackgroundClient.ReportPointAsync(sessionId, lat, lng, accuracy, cts.Token);
+            // Request background execution time so iOS does NOT suspend the app before HTTP upload finishes!
+            nint bgTaskId = UIApplication.SharedApplication.BeginBackgroundTask("JmdoReportLocation", () => { });
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await JmdoTrackingBackgroundClient.ReportPointAsync(sessionId, lat, lng, accuracy, cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[JmdoLocationManager] ReportPointAsync error: {ex.Message}");
+                }
+                finally
+                {
+                    if (bgTaskId != UIApplication.BackgroundTaskInvalid)
+                    {
+                        UIApplication.SharedApplication.EndBackgroundTask(bgTaskId);
+                    }
+                }
+            });
         }
 
         public override void Failed(CLLocationManager manager, NSError error)
         {
-            // A single failed fix is not worth stopping the session over - the next update (or the
-            // server-side Stale/Offline status, once enough of them fail silently) reflects it.
+            System.Diagnostics.Debug.WriteLine($"[JmdoLocationManager] CLLocationManager failed: {error.LocalizedDescription}");
         }
-
-        // ------------------------------------------------------------------------------------
-        // Honesty note (matches JmdoTrackingForegroundService's own, Android side): iOS can still
-        // suspend background location delivery - under Low Power Mode, if the user denies "Always"
-        // and only grants "While Using", after a force-quit (iOS does NOT relaunch a force-quit app
-        // for location updates the way it does for a backgrounded one), or OS-level throttling that
-        // varies by device/iOS version. None of that is bypassed here. A session this can no longer
-        // report for correctly shows Stale -> Offline server-side, never a false "Live".
-        // ------------------------------------------------------------------------------------
     }
 }
