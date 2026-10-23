@@ -4631,6 +4631,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("Date")
                         .HasColumnType("timestamp without time zone");
 
@@ -4641,6 +4644,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UpdatedByUserId")
                         .HasColumnType("text");
 
                     b.Property<string>("UserId")
@@ -4937,6 +4943,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("Csr1Id")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ProgramMasterId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ProgramName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -5030,9 +5039,15 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("CloseoutId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ProductGroupId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ProductGroupName")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ProductName")
                         .IsRequired()

@@ -24,6 +24,7 @@ namespace SpicAPI.Controllers
 	/// Availability is computed from the existing GuestHouseRoomAvailability records for the
 	/// selected stay period; per-date availability overrides the master inventory when present.
 	/// </summary>
+	[Authorize]
 	[ApiController]
 	[Route("api/[controller]")]
 	public class GuestHouseBookingController : ControllerBase
@@ -240,6 +241,32 @@ namespace SpicAPI.Controllers
 			return isGuestHouseAdmin;
 		}
 
+		// The authenticated user's AspNetUsers.Id (the NameIdentifier claim the login issues). This is the
+		// actor stored in CreatedBy / UpdatedBy / AssignedBy / UploadedBy. Never User.Identity.Name and
+		// never anything from the request body.
+		private string? ActorId()
+		{
+			var id = User.FindFirstValue(ClaimTypes.NameIdentifier);
+			return string.IsNullOrWhiteSpace(id) ? null : id;
+		}
+
+		// Booking ownership. CreatedBy holds the booker's AspNetUsers.Id for bookings made now, and the
+		// login username (User.Identity.Name) for bookings made before audit ids were introduced, so a
+		// legacy booking stays reachable by its owner without rewriting any stored value.
+		private bool IsBookingOwner(string? createdBy)
+		{
+			if (string.IsNullOrWhiteSpace(createdBy))
+				return false;
+
+			var id = ActorId();
+			if (id != null && string.Equals(createdBy, id, StringComparison.OrdinalIgnoreCase))
+				return true;
+
+			var legacyName = User.Identity?.Name;
+			return !string.IsNullOrWhiteSpace(legacyName)
+				&& string.Equals(createdBy, legacyName, StringComparison.OrdinalIgnoreCase);
+		}
+
 		// Shared authorization + file-serving for both View and Download.
 		// Authorization: the booking's owner (CreatedBy) OR Front Office staff (CanFrontOfficeReadBookingAsync).
 		// A mismatch returns 404 (not 403) so a guessed BookingId/DocumentId cannot even
@@ -248,7 +275,7 @@ namespace SpicAPI.Controllers
 		private async Task<IActionResult> ServeDocumentAsync(int documentId, bool download)
 		{
 			var userName = User.Identity?.Name;
-			if (string.IsNullOrWhiteSpace(userName))
+			if (string.IsNullOrWhiteSpace(userName) || ActorId() is null)
 				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			var doc = await _db.Set<GuestHouseBookingDocument>()
@@ -259,7 +286,7 @@ namespace SpicAPI.Controllers
 			if (doc?.GuestHouseBooking == null || string.IsNullOrWhiteSpace(doc.FilePath))
 				return NotFound(new { Success = false, Message = "Document not found." });
 
-			var isOwner = string.Equals(doc.GuestHouseBooking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase);
+			var isOwner = IsBookingOwner(doc.GuestHouseBooking.CreatedBy);
 			if (!isOwner && !await CanFrontOfficeReadBookingAsync(doc.GuestHouseBooking.GuestHouseId))
 				return NotFound(new { Success = false, Message = "Document not found." });
 
@@ -418,7 +445,12 @@ namespace SpicAPI.Controllers
             if (request == null)
                 return BadRequest(new { Success = false, Message = "Invalid request." });
 
-            var userId = User.Identity?.Name ?? request.EmployeeOrDealerCode;
+            // The actor (booker) is the authenticated AspNetUsers.Id from the validated JWT - never the
+            // request. EmployeeOrDealerCode stays the guest's own business field (a Dealer books on behalf
+            // of employees / sub dealers who have no login), saved separately on the guest row below.
+            var userId = ActorId();
+            if (userId is null)
+                return Unauthorized(new { Success = false, Message = "Authentication required." });
 
             // Validate guest house and room.
             if (request.GuestHouseId <= 0 || request.RoomTypeId <= 0)
@@ -688,12 +720,13 @@ namespace SpicAPI.Controllers
             if (booking == null)
                 return NotFound(new { Success = false, Message = "Booking not found." });
 
-            var userName = User.Identity?.Name;
-            if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(booking.CreatedBy)
-                && !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
-            {
+            // Only the booking's owner may create an order / verify / fail its payment. The caller
+            // must be authenticated with a user id; a booking with no recorded owner is not payable.
+            var actorId = ActorId();
+            if (actorId is null)
+                return Unauthorized(new { Success = false, Message = "Authentication required." });
+            if (!IsBookingOwner(booking.CreatedBy))
                 return Forbid();
-            }
 
             if (booking.PaymentStatus == GuestHousePaymentStatus.Paid)
                 return BadRequest(new { Success = false, Message = "This booking has already been paid for." });
@@ -774,12 +807,13 @@ namespace SpicAPI.Controllers
             if (booking == null)
                 return NotFound(new { Success = false, Message = "Booking not found." });
 
-            var userName = User.Identity?.Name;
-            if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(booking.CreatedBy)
-                && !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
-            {
+            // Only the booking's owner may create an order / verify / fail its payment. The caller
+            // must be authenticated with a user id; a booking with no recorded owner is not payable.
+            var actorId = ActorId();
+            if (actorId is null)
+                return Unauthorized(new { Success = false, Message = "Authentication required." });
+            if (!IsBookingOwner(booking.CreatedBy))
                 return Forbid();
-            }
 
             var payment = booking.Payments.FirstOrDefault();
             if (payment == null || !string.Equals(payment.PaymentReference, request.RazorpayOrderId, StringComparison.Ordinal))
@@ -879,7 +913,7 @@ namespace SpicAPI.Controllers
                 booking.BookingStatus = GuestHouseBookingStatus.Confirmed;
             }
             booking.UpdatedAt = DateTime.Now;
-            booking.UpdatedBy = userName ?? booking.UpdatedBy;
+            booking.UpdatedBy = actorId;
 
             try
             {
@@ -931,12 +965,13 @@ namespace SpicAPI.Controllers
             if (booking == null)
                 return NotFound(new { Success = false, Message = "Booking not found." });
 
-            var userName = User.Identity?.Name;
-            if (!string.IsNullOrWhiteSpace(userName) && !string.IsNullOrWhiteSpace(booking.CreatedBy)
-                && !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
-            {
+            // Only the booking's owner may create an order / verify / fail its payment. The caller
+            // must be authenticated with a user id; a booking with no recorded owner is not payable.
+            var actorId = ActorId();
+            if (actorId is null)
+                return Unauthorized(new { Success = false, Message = "Authentication required." });
+            if (!IsBookingOwner(booking.CreatedBy))
                 return Forbid();
-            }
 
             var isAwaitingPayment = booking.BookingStatus is GuestHouseBookingStatus.Draft or GuestHouseBookingStatus.PendingPayment;
             if (!isAwaitingPayment || booking.PaymentStatus == GuestHousePaymentStatus.Paid)
@@ -990,7 +1025,7 @@ namespace SpicAPI.Controllers
                     .SetProperty(b => b.BookingStatus, GuestHouseBookingStatus.Cancelled)
                     .SetProperty(b => b.PaymentStatus, GuestHousePaymentStatus.Failed)
                     .SetProperty(b => b.UpdatedAt, now)
-                    .SetProperty(b => b.UpdatedBy, userName ?? booking.UpdatedBy));
+                    .SetProperty(b => b.UpdatedBy, actorId));
 
             if (failed == 0)
             {
@@ -1036,12 +1071,15 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> GetMyBookings()
 		{
 			var userName = User.Identity?.Name;
-			if (string.IsNullOrWhiteSpace(userName))
+			if (string.IsNullOrWhiteSpace(userName) || ActorId() is null)
 				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
+			// New bookings store the booker's AspNetUsers.Id in CreatedBy; bookings created before that
+			// store the login username, so both identities of the caller match.
+			var actorId = ActorId();
 			var bookings = await _db.GuestHouseBookings
 				.AsNoTracking()
-				.Where(b => b.CreatedBy == userName)
+				.Where(b => b.CreatedBy == actorId || b.CreatedBy == userName)
 				.Include(b => b.GuestHouse)
 				.Include(b => b.GuestHouseRoom)
 				.Include(b => b.RoomAllocations)
@@ -1122,7 +1160,7 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> GetBookingDetails(int id)
 		{
 			var userName = User.Identity?.Name;
-			if (string.IsNullOrWhiteSpace(userName))
+			if (string.IsNullOrWhiteSpace(userName) || ActorId() is null)
 				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			var booking = await _db.GuestHouseBookings
@@ -1136,7 +1174,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.Documents)
 				.FirstOrDefaultAsync(b => b.Id == id);
 
-			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+			if (booking == null || !IsBookingOwner(booking.CreatedBy))
 				return NotFound(new { Success = false, Message = "Booking not found." });
 
 			var cover = booking.GuestHouse?.Images
@@ -1223,7 +1261,7 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> DownloadInvoice(int id)
 		{
 			var userName = User.Identity?.Name;
-			if (string.IsNullOrWhiteSpace(userName))
+			if (string.IsNullOrWhiteSpace(userName) || ActorId() is null)
 				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			var booking = await _db.GuestHouseBookings
@@ -1233,7 +1271,7 @@ namespace SpicAPI.Controllers
 			// Ownership: only the user who created the booking may download its invoice. We
 			// return NotFound (same as GetBookingDetails) so a bookingId belonging to another
 			// customer never reveals that the booking/invoice exists.
-			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+			if (booking == null || !IsBookingOwner(booking.CreatedBy))
 				return NotFound(new { Success = false, Message = "Booking not found." });
 
 			// Payment: a final Tax Invoice is only downloadable once the payment is actually
@@ -1286,7 +1324,7 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> GetCancellationPreview(int id)
 		{
 			var userName = User.Identity?.Name;
-			if (string.IsNullOrWhiteSpace(userName))
+			if (string.IsNullOrWhiteSpace(userName) || ActorId() is null)
 				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			var booking = await _db.GuestHouseBookings
@@ -1298,7 +1336,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.Payments)
 				.FirstOrDefaultAsync(b => b.Id == id);
 
-			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+			if (booking == null || !IsBookingOwner(booking.CreatedBy))
 				return NotFound(new { Success = false, Message = "Booking not found." });
 
 			if (booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
@@ -1371,11 +1409,11 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> RequestCancellation(int id, [FromBody] CreateCancellationRequest? request)
 		{
 			var userName = User.Identity?.Name;
-			if (string.IsNullOrWhiteSpace(userName))
+			if (string.IsNullOrWhiteSpace(userName) || ActorId() is null)
 				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			var booking = await _db.GuestHouseBookings.FirstOrDefaultAsync(b => b.Id == id);
-			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+			if (booking == null || !IsBookingOwner(booking.CreatedBy))
 				return NotFound(new { Success = false, Message = "Booking not found." });
 
 			if (booking.BookingStatus == GuestHouseBookingStatus.Cancelled)
@@ -1409,7 +1447,7 @@ namespace SpicAPI.Controllers
 				CancellationReference = GenerateCancellationReference(),
 				GuestHouseBookingId = booking.Id,
 				CancellationReason = request.Reason,
-				CancelledBy = userName,
+				CancelledBy = ActorId(),
 				CancelledAt = DateTime.Now,
 				CancellationCharge = calc.CancellationCharge,
 				TaxAdjustment = calc.TaxAdjustment,
@@ -1463,7 +1501,7 @@ namespace SpicAPI.Controllers
 		public async Task<IActionResult> GetRefundStatus(int id)
 		{
 			var userName = User.Identity?.Name;
-			if (string.IsNullOrWhiteSpace(userName))
+			if (string.IsNullOrWhiteSpace(userName) || ActorId() is null)
 				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			var booking = await _db.GuestHouseBookings
@@ -1473,7 +1511,7 @@ namespace SpicAPI.Controllers
 				.Include(b => b.Payments)
 				.FirstOrDefaultAsync(b => b.Id == id);
 
-			if (booking == null || !string.Equals(booking.CreatedBy, userName, StringComparison.OrdinalIgnoreCase))
+			if (booking == null || !IsBookingOwner(booking.CreatedBy))
 				return NotFound(new { Success = false, Message = "Booking not found." });
 
 			var cancellation = await _db.Set<GuestHouseBookingCancellation>()

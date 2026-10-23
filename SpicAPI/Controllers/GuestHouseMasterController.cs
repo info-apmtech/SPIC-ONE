@@ -57,6 +57,12 @@ namespace SpicAPI.Controllers
 		[HttpPost("bulk-upload")]
 		public async Task<IActionResult> BulkUpload([FromQuery] string type, IFormFile file)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (file == null || file.Length == 0)
 				return BadRequest(new { Success = false, Message = "No file uploaded" });
 
@@ -118,13 +124,13 @@ namespace SpicAPI.Controllers
 			{
 				if (t == "house")
 				{
-					var result = await BulkUpsertHousesAsync(rows, headerMap, AddGrouped, now);
+					var result = await BulkUpsertHousesAsync(rows, headerMap, AddGrouped, now, actorId);
 					insertedCount = result.Inserted;
 					updatedCount = result.Updated;
 				}
 				else
 				{
-					var result = await BulkUpsertRoomsAsync(rows, headerMap, AddGrouped, now);
+					var result = await BulkUpsertRoomsAsync(rows, headerMap, AddGrouped, now, actorId);
 					insertedCount = result.Inserted;
 					updatedCount = result.Updated;
 				}
@@ -304,6 +310,12 @@ namespace SpicAPI.Controllers
 		[HttpPost("houses")]
 		public async Task<IActionResult> CreateHouse([FromBody] GuestHousePayload? payload)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (payload is null || string.IsNullOrWhiteSpace(payload.Name))
 				return BadRequest(new { Success = false, Message = "Guest House Name is required." });
 
@@ -323,9 +335,9 @@ namespace SpicAPI.Controllers
 				Description = NullIfEmpty(payload.Description),
 				StateId = payload.StateId > 0 ? payload.StateId : null,
 				IsActive = payload.IsActive,
-				CreatedBy = "current-user",
+				CreatedBy = actorId,
 				CreatedAt = now,
-				UpdatedBy = "current-user",
+				UpdatedBy = actorId,
 				UpdatedAt = now
 			};
 			_db.GuestHouses.Add(house);
@@ -337,6 +349,12 @@ namespace SpicAPI.Controllers
 		[HttpPut("houses/{id:int}")]
 		public async Task<IActionResult> UpdateHouse(int id, [FromBody] GuestHousePayload? payload)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (payload is null || string.IsNullOrWhiteSpace(payload.Name))
 				return BadRequest(new { Success = false, Message = "Guest House Name is required." });
 
@@ -359,7 +377,7 @@ namespace SpicAPI.Controllers
 			house.Description = NullIfEmpty(payload.Description);
 			house.StateId = payload.StateId > 0 ? payload.StateId : null;
 			house.IsActive = payload.IsActive;
-			house.UpdatedBy = "current-user";
+			house.UpdatedBy = actorId;
 			house.UpdatedAt = DateTime.UtcNow;
 
 			await _db.SaveChangesAsync();
@@ -369,6 +387,12 @@ namespace SpicAPI.Controllers
 		[HttpDelete("houses/{id:int}")]
 		public async Task<IActionResult> DeleteHouse(int id)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			var house = await _db.GuestHouses.FindAsync(id);
 			if (house == null)
 				return NotFound(new { Success = false, Message = "Guest House not found." });
@@ -384,11 +408,18 @@ namespace SpicAPI.Controllers
 		[HttpPatch("houses/{id:int}/status")]
 		public async Task<IActionResult> ToggleHouseStatus(int id, [FromQuery] bool isActive)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			var house = await _db.GuestHouses.FindAsync(id);
 			if (house == null)
 				return NotFound(new { Success = false, Message = "Guest House not found." });
 
 			house.IsActive = isActive;
+			house.UpdatedBy = actorId;
 			house.UpdatedAt = DateTime.UtcNow;
 			await _db.SaveChangesAsync();
 			return Ok(new { Success = true, Message = "Guest House status updated." });
@@ -401,6 +432,12 @@ namespace SpicAPI.Controllers
 		[RequestSizeLimit(6 * 1024 * 1024)]
 		public async Task<IActionResult> UploadHouseImage(int id, IFormFile? file)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (file == null || file.Length == 0)
 				return BadRequest(new { Success = false, Message = "No file uploaded." });
 
@@ -449,7 +486,7 @@ namespace SpicAPI.Controllers
 				IsPrimary = true,
 				DisplayOrder = 0,
 				IsActive = true,
-				CreatedBy = "current-user",
+				CreatedBy = actorId,
 				CreatedAt = DateTime.UtcNow
 			});
 			await _db.SaveChangesAsync();
@@ -464,6 +501,12 @@ namespace SpicAPI.Controllers
 		[HttpPost("room-types")]
 		public async Task<IActionResult> CreateRoomType([FromBody] GuestHouseRoomTypePayload? payload)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (payload is null || string.IsNullOrWhiteSpace(payload.Name))
 				return BadRequest(new { Success = false, Message = "Room Type Name is required." });
 
@@ -476,9 +519,9 @@ namespace SpicAPI.Controllers
 			{
 				Name = name,
 				IsActive = payload.IsActive,
-				CreatedBy = "current-user",
+				CreatedBy = actorId,
 				CreatedAt = now,
-				UpdatedBy = "current-user",
+				UpdatedBy = actorId,
 				UpdatedAt = now
 			};
 			_db.GuestHouseRoomTypes.Add(roomType);
@@ -490,6 +533,12 @@ namespace SpicAPI.Controllers
 		[HttpPut("room-types/{id:int}")]
 		public async Task<IActionResult> UpdateRoomType(int id, [FromBody] GuestHouseRoomTypePayload? payload)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (payload is null || string.IsNullOrWhiteSpace(payload.Name))
 				return BadRequest(new { Success = false, Message = "Room Type Name is required." });
 
@@ -505,7 +554,7 @@ namespace SpicAPI.Controllers
 
 			roomType.Name = name;
 			roomType.IsActive = payload.IsActive;
-			roomType.UpdatedBy = "current-user";
+			roomType.UpdatedBy = actorId;
 			roomType.UpdatedAt = DateTime.UtcNow;
 
 			await _db.SaveChangesAsync();
@@ -515,6 +564,12 @@ namespace SpicAPI.Controllers
 		[HttpDelete("room-types/{id:int}")]
 		public async Task<IActionResult> DeleteRoomType(int id)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			var roomType = await _db.GuestHouseRoomTypes.FindAsync(id);
 			if (roomType == null)
 				return NotFound(new { Success = false, Message = "Room Type not found." });
@@ -530,11 +585,18 @@ namespace SpicAPI.Controllers
 		[HttpPatch("room-types/{id:int}/status")]
 		public async Task<IActionResult> ToggleRoomTypeStatus(int id, [FromQuery] bool isActive)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			var roomType = await _db.GuestHouseRoomTypes.FindAsync(id);
 			if (roomType == null)
 				return NotFound(new { Success = false, Message = "Room Type not found." });
 
 			roomType.IsActive = isActive;
+			roomType.UpdatedBy = actorId;
 			roomType.UpdatedAt = DateTime.UtcNow;
 			await _db.SaveChangesAsync();
 			return Ok(new { Success = true, Message = "Room Type status updated." });
@@ -547,6 +609,12 @@ namespace SpicAPI.Controllers
 		[HttpPost("rooms")]
 		public async Task<IActionResult> CreateRoom([FromBody] GuestHouseRoomPayload? payload)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (payload is null)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
 
@@ -576,9 +644,9 @@ namespace SpicAPI.Controllers
 				PricePerNight = payload.PricePerNight,
 				AvailableQuantity = payload.AvailableQuantity < 1 ? 1 : payload.AvailableQuantity,
 				IsActive = payload.IsActive,
-				CreatedBy = "current-user",
+				CreatedBy = actorId,
 				CreatedAt = now,
-				UpdatedBy = "current-user",
+				UpdatedBy = actorId,
 				UpdatedAt = now
 			};
 			_db.GuestHouseRooms.Add(room);
@@ -590,6 +658,12 @@ namespace SpicAPI.Controllers
 		[HttpPut("rooms/{id:int}")]
 		public async Task<IActionResult> UpdateRoom(int id, [FromBody] GuestHouseRoomPayload? payload)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			if (payload is null)
 				return BadRequest(new { Success = false, Message = "Invalid request." });
 
@@ -620,7 +694,7 @@ namespace SpicAPI.Controllers
 			room.PricePerNight = payload.PricePerNight;
 			room.AvailableQuantity = payload.AvailableQuantity < 1 ? 1 : payload.AvailableQuantity;
 			room.IsActive = payload.IsActive;
-			room.UpdatedBy = "current-user";
+			room.UpdatedBy = actorId;
 			room.UpdatedAt = DateTime.UtcNow;
 
 			await _db.SaveChangesAsync();
@@ -630,6 +704,12 @@ namespace SpicAPI.Controllers
 		[HttpDelete("rooms/{id:int}")]
 		public async Task<IActionResult> DeleteRoom(int id)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			var room = await _db.GuestHouseRooms.FindAsync(id);
 			if (room == null)
 				return NotFound(new { Success = false, Message = "Room not found." });
@@ -642,11 +722,18 @@ namespace SpicAPI.Controllers
 		[HttpPatch("rooms/{id:int}/status")]
 		public async Task<IActionResult> ToggleRoomStatus(int id, [FromQuery] bool isActive)
 		{
+			// Audit actor: the authenticated user's AspNetUsers.Id (validated NameIdentifier claim), never a
+			// placeholder or a request value. A token without one cannot perform a master-data write.
+			var actorId = GuestHouseReceptionistScope.ActorId(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
+
 			var room = await _db.GuestHouseRooms.FindAsync(id);
 			if (room == null)
 				return NotFound(new { Success = false, Message = "Room not found." });
 
 			room.IsActive = isActive;
+			room.UpdatedBy = actorId;
 			room.UpdatedAt = DateTime.UtcNow;
 			await _db.SaveChangesAsync();
 			return Ok(new { Success = true, Message = "Room status updated." });
@@ -660,7 +747,8 @@ namespace SpicAPI.Controllers
 			List<IXLRow> rows,
 			Dictionary<string, int> headerMap,
 			Action<string, string> AddGrouped,
-			DateTime now)
+			DateTime now,
+			string actorId)
 		{
 			var houses = await _db.GuestHouses
 				.AsNoTracking()
@@ -701,7 +789,7 @@ namespace SpicAPI.Controllers
 						existing.Address = NullIfEmpty(GetCellString(row, headerMap, "address"));
 						existing.PhoneNumber = NullIfEmpty(GetCellString(row, headerMap, "phonenumber"));
 						existing.Description = NullIfEmpty(GetCellString(row, headerMap, "description"));
-						existing.UpdatedBy = "bulk-upload";
+						existing.UpdatedBy = actorId;
 						existing.UpdatedAt = now;
 						_db.GuestHouses.Update(existing);
 						updatedCount++;
@@ -715,9 +803,9 @@ namespace SpicAPI.Controllers
 							PhoneNumber = NullIfEmpty(GetCellString(row, headerMap, "phonenumber")),
 							Description = NullIfEmpty(GetCellString(row, headerMap, "description")),
 							IsActive = true,
-							CreatedBy = "bulk-upload",
+							CreatedBy = actorId,
 							CreatedAt = now,
-							UpdatedBy = "bulk-upload",
+							UpdatedBy = actorId,
 							UpdatedAt = now
 						});
 						insertedCount++;
@@ -737,7 +825,8 @@ namespace SpicAPI.Controllers
 			List<IXLRow> rows,
 			Dictionary<string, int> headerMap,
 			Action<string, string> AddGrouped,
-			DateTime now)
+			DateTime now,
+			string actorId)
 		{
 			// Guest houses must exist first (created on the Guest House tab).
 			var houses = await _db.GuestHouses
@@ -834,7 +923,7 @@ namespace SpicAPI.Controllers
 						existing.PricePerNight = rate;
 						existing.AvailableQuantity = noOfRooms;
 						existing.IsActive = true;
-						existing.UpdatedBy = "bulk-upload";
+						existing.UpdatedBy = actorId;
 						existing.UpdatedAt = now;
 						_db.GuestHouseRooms.Update(existing);
 						updatedCount++;
@@ -849,9 +938,9 @@ namespace SpicAPI.Controllers
 							PricePerNight = rate,
 							AvailableQuantity = noOfRooms,
 							IsActive = true,
-							CreatedBy = "bulk-upload",
+							CreatedBy = actorId,
 							CreatedAt = now,
-							UpdatedBy = "bulk-upload",
+							UpdatedBy = actorId,
 							UpdatedAt = now
 						});
 						insertedCount++;

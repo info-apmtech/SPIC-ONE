@@ -176,6 +176,7 @@ namespace SPIC.Core.DTOs
     {
         public int RowId { get; set; }
         public int Csr1Id { get; set; }
+        public int ProgramMasterId { get; set; }
         public string ProgramName { get; set; } = "";
         public decimal Budget { get; set; }
         public AllocTaskStatus Status { get; set; }
@@ -234,6 +235,8 @@ namespace SPIC.Core.DTOs
 
     public class ProductLineDto
     {
+        public int? ProductGroupId { get; set; }
+        public int? ProductId { get; set; }
         public string ProductGroupName { get; set; } = "";
         public string ProductName { get; set; } = "";
         public string StockText { get; set; } = "";
