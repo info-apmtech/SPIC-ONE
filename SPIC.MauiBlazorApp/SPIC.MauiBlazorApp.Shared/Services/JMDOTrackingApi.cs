@@ -78,6 +78,26 @@ public sealed class JMDOTrackingApi
     }
 
     /// <summary>
+    /// The caller's most recent session today, regardless of status - unlike
+    /// <see cref="GetMineActiveAsync"/> this also returns an already-Completed/AutoEnded session, so
+    /// a page reached right after Stop can still show the route that was just recorded.
+    /// </summary>
+    public async Task<JMDOTrackingSessionDto?> GetMineLatestAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await _http.GetAsync($"{Root}/mine/latest", ct);
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
+                return null;
+            return await response.Content.ReadFromJsonAsync<JMDOTrackingSessionDto>(Json, ct);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Supervisor visibility (Admin/MO/MDO only): every JMDO on the caller's own HQ team with their
     /// current tracking status. Silent on failure (empty list) - same reasoning as
     /// <see cref="GetMineActiveAsync"/>.
@@ -156,6 +176,24 @@ public sealed class JMDOTrackingApi
         {
             _toast.Error("Could not reach the server to stop tracking.");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Oldest-first GPS points for the given session, for drawing its route on a map. Silent on
+    /// failure (empty list), same reasoning as <see cref="GetMineActiveAsync"/> - a map that just
+    /// shows no route on a transient error is better than a toast.
+    /// </summary>
+    public async Task<List<JMDOTrackingPointDto>> GetSessionPointsAsync(int sessionId, CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await _http.GetFromJsonAsync<List<JMDOTrackingPointDto>>($"{Root}/sessions/{sessionId}/points", Json, ct);
+            return result ?? new();
+        }
+        catch (Exception)
+        {
+            return new();
         }
     }
 

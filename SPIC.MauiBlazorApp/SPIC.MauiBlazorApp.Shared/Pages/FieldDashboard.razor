@@ -98,14 +98,20 @@
                 <div class="fd-tracking-text">
                     <div class="fd-tracking-title">Live Tracking is off <span class="fd-tracking-dot"></span></div>
                     <div class="fd-tracking-sub">
-                        @(_hasAttendanceToday
-                            ? "Starts only when you press Start Live Tracking - independent of attendance or tasks."
-                            : "Mark today's attendance first to enable Start Live Tracking.")
+                        @(!IsNativeApp
+                            ? "Live tracking can only be started from the SPIC mobile app."
+                            : _hasAttendanceToday
+                                ? "Starts only when you press Start Live Tracking - independent of attendance or tasks."
+                                : "Mark today's attendance first to enable Start Live Tracking.")
                     </div>
                 </div>
             </div>
 
-            @if (_hasAttendanceToday)
+            @if (!IsNativeApp)
+            {
+                <span class="fd-tracking-mobile-only"><i class="bi bi-phone"></i> Mobile app only</span>
+            }
+            else if (_hasAttendanceToday)
             {
                 <button type="button" class="fd-btn fd-btn-primary fd-update-btn" disabled="@_startingTracking" @onclick="StartLiveTracking">
                     <i class="bi bi-play-circle-fill"></i> @(_startingTracking ? "Starting..." : "Start Live Tracking")
@@ -132,6 +138,9 @@
                 </div>
 
                 <div class="fd-tracking-actions">
+                    <button type="button" class="fd-btn fd-btn-outline fd-btn-view" @onclick='() => Navigation.NavigateTo("/MarkAttendance?view=tracking")'>
+                        <i class="bi bi-map"></i> View Route
+                    </button>
                     <button type="button" class="fd-btn fd-btn-stop" @onclick="RequestStopTracking">
                         <i class="bi bi-stop-circle-fill"></i> Stop Tracking
                     </button>
@@ -367,6 +376,11 @@
 
     private async Task StartLiveTracking()
     {
+        if (!IsNativeApp)
+        {
+            Toast.Error("Live tracking can only be started from the SPIC mobile app.");
+            return;
+        }
         if (_startingTracking) return;
         _startingTracking = true;
         StateHasChanged();
