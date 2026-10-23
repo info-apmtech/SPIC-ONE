@@ -23,7 +23,7 @@ namespace SpicAPI.Controllers
 	[SubDealerEmployeeMasterAccess]
 	[ApiController]
 	[Route("api/[controller]")]
-	public class SubDealerBeneficiaryController(IGenericRepository<SubDealerBeneficiary> repo)
+	public class SubDealerBeneficiaryController(IGenericRepository<SubDealerBeneficiary> repo, AppDbContext db)
 		: GenericCrudController<SubDealerBeneficiary>(repo)
 	{
 		private const string DuplicateMessage =
@@ -87,6 +87,24 @@ namespace SpicAPI.Controllers
 			existing.UpdatedBy = actor;
 			return await base.ChangeStatus(id, isActive);
 		}
+
+		// Welfare applications keep the picked sub dealer's id (my-sub-dealers returns this table's Id) with
+		// no database FK, so nothing else would stop the delete and the application would point at nothing.
+		[HttpDelete("{id}")]
+		public override async Task<IActionResult> Delete(int id)
+		{
+			if (await db.WelfareApplications.AsNoTracking().AnyAsync(a => a.SubDealerId == id))
+				return Conflict(new { message = "Cannot delete this Sub Dealer because welfare applications reference it. Deactivate it instead." });
+
+			try
+			{
+				return await base.Delete(id);
+			}
+			catch (DbUpdateException)
+			{
+				return Conflict(new { message = "Cannot delete this Sub Dealer because other records still depend on it. Deactivate it instead." });
+			}
+		}
 	}
 
 	/// <summary>
@@ -98,7 +116,7 @@ namespace SpicAPI.Controllers
 	[SubDealerEmployeeMasterAccess]
 	[ApiController]
 	[Route("api/[controller]")]
-	public class EmployeeBeneficiaryController(IGenericRepository<EmployeeBeneficiary> repo)
+	public class EmployeeBeneficiaryController(IGenericRepository<EmployeeBeneficiary> repo, AppDbContext db)
 		: GenericCrudController<EmployeeBeneficiary>(repo)
 	{
 		private const string DuplicateMessage =
@@ -154,6 +172,23 @@ namespace SpicAPI.Controllers
 			if (existing == null) return NotFound();
 			existing.UpdatedBy = actor;
 			return await base.ChangeStatus(id, isActive);
+		}
+
+		// See SubDealerBeneficiaryController.Delete: welfare applications reference the employee id softly.
+		[HttpDelete("{id}")]
+		public override async Task<IActionResult> Delete(int id)
+		{
+			if (await db.WelfareApplications.AsNoTracking().AnyAsync(a => a.EmployeeId == id))
+				return Conflict(new { message = "Cannot delete this Employee because welfare applications reference it. Deactivate it instead." });
+
+			try
+			{
+				return await base.Delete(id);
+			}
+			catch (DbUpdateException)
+			{
+				return Conflict(new { message = "Cannot delete this Employee because other records still depend on it. Deactivate it instead." });
+			}
 		}
 	}
 
