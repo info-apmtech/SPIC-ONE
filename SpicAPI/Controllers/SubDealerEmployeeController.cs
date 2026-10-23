@@ -1,6 +1,7 @@
 ﻿using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
 using SPIC.Core.DTOs;
@@ -15,23 +16,181 @@ namespace SpicAPI.Controllers
 {
 	/// <summary>
 	/// CRUD endpoints for the Sub Dealer beneficiary master.
-	/// Admin only - non-admin users must never reach this master.
+	/// Admin / CorporateAdmin, or a Designation granting the matching
+	/// PagePermission.SubDealerEmployeeMaster action (see <see cref="SubDealerEmployeeMasterAccessAttribute"/>).
 	/// </summary>
-	[Authorize(Roles = "Admin,CorporateAdmin")]
+	[Authorize]
+	[SubDealerEmployeeMasterAccess]
 	[ApiController]
 	[Route("api/[controller]")]
-	public class SubDealerBeneficiaryController(IGenericRepository<SubDealerBeneficiary> repo)
-		: GenericCrudController<SubDealerBeneficiary>(repo);
+	public class SubDealerBeneficiaryController(IGenericRepository<SubDealerBeneficiary> repo, AppDbContext db)
+		: GenericCrudController<SubDealerBeneficiary>(repo)
+	{
+		private const string DuplicateMessage =
+			"A beneficiary with the same Dealer Code, Sub Dealer Code, Beneficiary Name and DOB already exists.";
+
+		// Same duplicate rule as the bulk upload (SubDealerEmployeeController.SubDealerBeneficiaryKey).
+		// Audit identity is server-derived: UpdatedBy is the authenticated AspNetUsers.Id (the
+		// NameIdentifier claim, resolved like SubDealerRegistrationController.Actor). Whatever the
+		// client sends for UpdatedBy / CreatedAt / the SM-AVP approval fields is ignored. This entity
+		// has no CreatedBy column, so only UpdatedBy is stamped.
+		[HttpPost]
+		public override async Task<IActionResult> Create([FromBody] SubDealerBeneficiary entity)
+		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+			if (await SubDealerEmployeeController.SubDealerBeneficiaryExistsAsync(_repo.GetAllWithInactive(), entity, excludeId: null))
+				return Conflict(new { message = DuplicateMessage });
+
+			var now = DateTime.Now;
+			entity.UpdatedBy = actor;
+			entity.CreatedAt = now;
+			entity.UpdatedAt = now;
+			// A new row always starts pending: approvals are only set by the SM / AVP approval endpoints.
+			entity.SMApproved = null; entity.SMApprovedBy = null; entity.SMApprovedAt = null; entity.SMApprovalRemarks = null;
+			entity.AVPApproved = null; entity.AVPApprovedBy = null; entity.AVPApprovedAt = null; entity.AVPApprovalRemarks = null;
+			return await base.Create(entity);
+		}
+
+		[HttpPut("{id}")]
+		public override async Task<IActionResult> Update(int id, [FromBody] SubDealerBeneficiary entity)
+		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+			if (await SubDealerEmployeeController.SubDealerBeneficiaryExistsAsync(_repo.GetAllWithInactive(), entity, excludeId: id))
+				return Conflict(new { message = DuplicateMessage });
+
+			var existing = await _repo.GetByIdAsync(id);
+			if (existing == null) return NotFound();
+
+			// PatchAsync copies every scalar from the request body, so pin the protected values first:
+			// the editor becomes UpdatedBy, CreatedAt is kept, and an ordinary edit never resets or
+			// forges the SM / AVP approval state or its approver / timestamp / remarks.
+			entity.UpdatedBy = actor;
+			entity.CreatedAt = existing.CreatedAt;
+			entity.SMApproved = existing.SMApproved; entity.SMApprovedBy = existing.SMApprovedBy;
+			entity.SMApprovedAt = existing.SMApprovedAt; entity.SMApprovalRemarks = existing.SMApprovalRemarks;
+			entity.AVPApproved = existing.AVPApproved; entity.AVPApprovedBy = existing.AVPApprovedBy;
+			entity.AVPApprovedAt = existing.AVPApprovedAt; entity.AVPApprovalRemarks = existing.AVPApprovalRemarks;
+			return await base.Update(id, entity);
+		}
+
+		[HttpPatch("{id}/status")]
+		public override async Task<IActionResult> ChangeStatus(int id, [FromQuery] bool isActive)
+		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+
+			// Same tracked instance the repository's ChangeStatusAsync saves.
+			var existing = await _repo.GetByIdAsync(id);
+			if (existing == null) return NotFound();
+			existing.UpdatedBy = actor;
+			return await base.ChangeStatus(id, isActive);
+		}
+
+		// Welfare applications keep the picked sub dealer's id (my-sub-dealers returns this table's Id) with
+		// no database FK, so nothing else would stop the delete and the application would point at nothing.
+		[HttpDelete("{id}")]
+		public override async Task<IActionResult> Delete(int id)
+		{
+			if (await db.WelfareApplications.AsNoTracking().AnyAsync(a => a.SubDealerId == id))
+				return Conflict(new { message = "Cannot delete this Sub Dealer because welfare applications reference it. Deactivate it instead." });
+
+			try
+			{
+				return await base.Delete(id);
+			}
+			catch (DbUpdateException)
+			{
+				return Conflict(new { message = "Cannot delete this Sub Dealer because other records still depend on it. Deactivate it instead." });
+			}
+		}
+	}
 
 	/// <summary>
 	/// CRUD endpoints for the Approved Employee beneficiary master.
-	/// Admin only - non-admin users must never reach this master.
+	/// Admin / CorporateAdmin, or a Designation granting the matching
+	/// PagePermission.SubDealerEmployeeMaster action (see <see cref="SubDealerEmployeeMasterAccessAttribute"/>).
 	/// </summary>
-	[Authorize(Roles = "Admin,CorporateAdmin")]
+	[Authorize]
+	[SubDealerEmployeeMasterAccess]
 	[ApiController]
 	[Route("api/[controller]")]
-	public class EmployeeBeneficiaryController(IGenericRepository<EmployeeBeneficiary> repo)
-		: GenericCrudController<EmployeeBeneficiary>(repo);
+	public class EmployeeBeneficiaryController(IGenericRepository<EmployeeBeneficiary> repo, AppDbContext db)
+		: GenericCrudController<EmployeeBeneficiary>(repo)
+	{
+		private const string DuplicateMessage =
+			"An employee with the same Dealer Code, Employee Name and DOB already exists.";
+
+		// Same duplicate rule as the bulk upload (SubDealerEmployeeController.EmployeeBeneficiaryKey).
+		// Audit handling mirrors SubDealerBeneficiaryController: server-stamped UpdatedBy (authenticated
+		// AspNetUsers.Id), server timestamps, approvals not client-controlled. No CreatedBy column exists.
+		[HttpPost]
+		public override async Task<IActionResult> Create([FromBody] EmployeeBeneficiary entity)
+		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+			if (await SubDealerEmployeeController.EmployeeBeneficiaryExistsAsync(_repo.GetAllWithInactive(), entity, excludeId: null))
+				return Conflict(new { message = DuplicateMessage });
+
+			var now = DateTime.Now;
+			entity.UpdatedBy = actor;
+			entity.CreatedAt = now;
+			entity.UpdatedAt = now;
+			entity.SMApproved = null; entity.SMApprovedBy = null; entity.SMApprovedAt = null; entity.SMApprovalRemarks = null;
+			entity.AVPApproved = null; entity.AVPApprovedBy = null; entity.AVPApprovedAt = null; entity.AVPApprovalRemarks = null;
+			return await base.Create(entity);
+		}
+
+		[HttpPut("{id}")]
+		public override async Task<IActionResult> Update(int id, [FromBody] EmployeeBeneficiary entity)
+		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+			if (await SubDealerEmployeeController.EmployeeBeneficiaryExistsAsync(_repo.GetAllWithInactive(), entity, excludeId: id))
+				return Conflict(new { message = DuplicateMessage });
+
+			var existing = await _repo.GetByIdAsync(id);
+			if (existing == null) return NotFound();
+
+			entity.UpdatedBy = actor;
+			entity.CreatedAt = existing.CreatedAt;
+			entity.SMApproved = existing.SMApproved; entity.SMApprovedBy = existing.SMApprovedBy;
+			entity.SMApprovedAt = existing.SMApprovedAt; entity.SMApprovalRemarks = existing.SMApprovalRemarks;
+			entity.AVPApproved = existing.AVPApproved; entity.AVPApprovedBy = existing.AVPApprovedBy;
+			entity.AVPApprovedAt = existing.AVPApprovedAt; entity.AVPApprovalRemarks = existing.AVPApprovalRemarks;
+			return await base.Update(id, entity);
+		}
+
+		[HttpPatch("{id}/status")]
+		public override async Task<IActionResult> ChangeStatus(int id, [FromQuery] bool isActive)
+		{
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+
+			var existing = await _repo.GetByIdAsync(id);
+			if (existing == null) return NotFound();
+			existing.UpdatedBy = actor;
+			return await base.ChangeStatus(id, isActive);
+		}
+
+		// See SubDealerBeneficiaryController.Delete: welfare applications reference the employee id softly.
+		[HttpDelete("{id}")]
+		public override async Task<IActionResult> Delete(int id)
+		{
+			if (await db.WelfareApplications.AsNoTracking().AnyAsync(a => a.EmployeeId == id))
+				return Conflict(new { message = "Cannot delete this Employee because welfare applications reference it. Deactivate it instead." });
+
+			try
+			{
+				return await base.Delete(id);
+			}
+			catch (DbUpdateException)
+			{
+				return Conflict(new { message = "Cannot delete this Employee because other records still depend on it. Deactivate it instead." });
+			}
+		}
+	}
 
 	/// <summary>
 	/// Bulk upload / template download for the Sub Dealer and Employee masters,
@@ -57,10 +216,14 @@ namespace SpicAPI.Controllers
 		// =====================================================================
 
 		// POST /api/subdealeremployee/bulk-upload?type=subdealer|employee
-		[Authorize(Roles = "Admin,CorporateAdmin")]
+		[SubDealerEmployeeMasterAccess("Entry")]
 		[HttpPost("bulk-upload")]
 		public async Task<IActionResult> BulkUpload([FromQuery] string type, IFormFile file)
 		{
+			// The importing user's AspNetUsers.Id is the audit actor of every inserted row.
+			var actor = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actor is null) return Unauthorized();
+
 			if (file == null || file.Length == 0)
 				return BadRequest(new { Success = false, Message = "No file uploaded" });
 
@@ -124,17 +287,6 @@ namespace SpicAPI.Controllers
 			var rows = worksheet.RowsUsed().Skip(1).ToList();
 
 			// â”€â”€ Pre-load phase: reference data in memory before the loop â”€â”€
-			// Existing business keys ("dealerCode|key") so DB duplicates are skipped
-			var existingSubDealerKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			foreach (var sd in _db.SubDealerBeneficiaries
-				.Select(s => new { s.DealerCode, s.SubDealerCode }).AsEnumerable())
-				existingSubDealerKeys.Add($"{sd.DealerCode}|{sd.SubDealerCode}");
-
-			var existingEmployeeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			foreach (var e in _db.EmployeeBeneficiaries
-				.Select(e => new { e.DealerCode, e.EmployeeName }).AsEnumerable())
-				existingEmployeeKeys.Add($"{e.DealerCode}|{e.EmployeeName}");
-
 			// Valid dealer codes (same resolution used across the app: SPICCode ?? DealerCode)
 			var validDealerCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 			foreach (var d in _db.DealerRegistrations
@@ -145,9 +297,30 @@ namespace SpicAPI.Controllers
 				if (!string.IsNullOrWhiteSpace(d.DealerCode)) validDealerCodes.Add(d.DealerCode.Trim());
 			}
 
-			// In-batch duplicate tracking (distinct error group from DB-existing duplicates)
-			var batchSubDealerKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			var batchEmployeeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			// Duplicate beneficiary keys. One Sub Dealer / Employee may have several beneficiaries, so the
+			// key is the full beneficiary identity, never the business key alone:
+			//   Sub Dealer: DealerCode + SubDealerCode + BeneficiaryName + DOB
+			//   Employee:   DealerCode + EmployeeName + DOB
+			// Loaded once (only the key columns) so large files never query per row. Rows without a DOB
+			// are never treated as duplicates.
+			var isSubDealerUpload = t is "subdealer" or "sub-dealer" or "sub_dealer";
+			var existingBeneficiaryKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			if (isSubDealerUpload)
+			{
+				foreach (var sd in _db.SubDealerBeneficiaries.AsNoTracking()
+					.Where(s => s.DOB != null)
+					.Select(s => new { s.DealerCode, s.SubDealerCode, s.BeneficiaryName, s.DOB }).AsEnumerable())
+					existingBeneficiaryKeys.Add(SubDealerBeneficiaryKey(sd.DealerCode, sd.SubDealerCode, sd.BeneficiaryName, sd.DOB!.Value));
+			}
+			else
+			{
+				foreach (var e in _db.EmployeeBeneficiaries.AsNoTracking()
+					.Where(e => e.DOB != null)
+					.Select(e => new { e.DealerCode, e.EmployeeName, e.DOB }).AsEnumerable())
+					existingBeneficiaryKeys.Add(EmployeeBeneficiaryKey(e.DealerCode, e.EmployeeName, e.DOB!.Value));
+			}
+			// Keys of rows already accepted from this file.
+			var batchBeneficiaryKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 			var now = DateTime.UtcNow;
 			int insertedCount = 0;
@@ -199,16 +372,19 @@ namespace SpicAPI.Controllers
 								continue;
 							}
 
-							var key = $"{dealerCode}|{subDealerCode}";
-							if (existingSubDealerKeys.Contains(key))
+							if (dobValue.HasValue)
 							{
-								AddGrouped("Already exists in database", $"'{subDealerCode}' of dealer '{dealerCode}' (Row {row.RowNumber()})");
-								continue;
-							}
-							if (!batchSubDealerKeys.Add(key))
-							{
-								AddGrouped("Duplicated in this file", $"'{subDealerCode}' of dealer '{dealerCode}' (Row {row.RowNumber()})");
-								continue;
+								var key = SubDealerBeneficiaryKey(dealerCode, subDealerCode, beneficiaryName, dobValue.Value);
+								if (existingBeneficiaryKeys.Contains(key))
+								{
+									AddGrouped("Already exists in database", $"Row {row.RowNumber()}: beneficiary '{beneficiaryName}' (DOB {dobValue.Value:dd-MM-yyyy}) of sub dealer '{subDealerCode}', dealer '{dealerCode}'");
+									continue;
+								}
+								if (!batchBeneficiaryKeys.Add(key))
+								{
+									AddGrouped("Duplicated in this file", $"Row {row.RowNumber()}: beneficiary '{beneficiaryName}' (DOB {dobValue.Value:dd-MM-yyyy}) of sub dealer '{subDealerCode}', dealer '{dealerCode}'");
+									continue;
+								}
 							}
 
 							_db.SubDealerBeneficiaries.Add(new SubDealerBeneficiary
@@ -228,7 +404,7 @@ namespace SpicAPI.Controllers
 								IsActive = true,
 								CreatedAt = now,
 								UpdatedAt = now,
-								UpdatedBy = "bulk-upload"
+								UpdatedBy = actor
 							});
 							insertedCount++;
 						}
@@ -248,16 +424,19 @@ namespace SpicAPI.Controllers
 								continue;
 							}
 
-							var key = $"{dealerCode}|{employeeName}";
-							if (existingEmployeeKeys.Contains(key))
+							if (dobValue.HasValue)
 							{
-								AddGrouped("Already exists in database", $"'{employeeName}' of dealer '{dealerCode}' (Row {row.RowNumber()})");
-								continue;
-							}
-							if (!batchEmployeeKeys.Add(key))
-							{
-								AddGrouped("Duplicated in this file", $"'{employeeName}' of dealer '{dealerCode}' (Row {row.RowNumber()})");
-								continue;
+								var key = EmployeeBeneficiaryKey(dealerCode, employeeName, dobValue.Value);
+								if (existingBeneficiaryKeys.Contains(key))
+								{
+									AddGrouped("Already exists in database", $"Row {row.RowNumber()}: employee '{employeeName}' (DOB {dobValue.Value:dd-MM-yyyy}) of dealer '{dealerCode}'");
+									continue;
+								}
+								if (!batchBeneficiaryKeys.Add(key))
+								{
+									AddGrouped("Duplicated in this file", $"Row {row.RowNumber()}: employee '{employeeName}' (DOB {dobValue.Value:dd-MM-yyyy}) of dealer '{dealerCode}'");
+									continue;
+								}
 							}
 
 							_db.EmployeeBeneficiaries.Add(new EmployeeBeneficiary
@@ -273,7 +452,7 @@ namespace SpicAPI.Controllers
 								IsActive = true,
 								CreatedAt = now,
 								UpdatedAt = now,
-								UpdatedBy = "bulk-upload"
+								UpdatedBy = actor
 							});
 							insertedCount++;
 						}
@@ -308,7 +487,7 @@ namespace SpicAPI.Controllers
 		}
 
 		// GET /api/subdealeremployee/sample-template?type=subdealer|employee
-		[Authorize(Roles = "Admin,CorporateAdmin")]
+		[SubDealerEmployeeMasterAccess("Entry")]
 		[HttpGet("sample-template")]
 		public IActionResult SampleTemplate([FromQuery] string type)
 		{
@@ -727,10 +906,12 @@ namespace SpicAPI.Controllers
 			if (t != "subdealer" && t != "employee")
 				return BadRequest(new { Success = false, Message = "type must be 'subdealer' or 'employee'" });
 
-			var actorName =
-				User.FindFirst("name")?.Value
-				?? User.FindFirst(ClaimTypes.Name)?.Value
-				?? "Unknown";
+			// The approver is recorded as the authenticated user's AspNetUsers.Id (the same server-side actor as the
+			// master's UpdatedBy). Nothing in the SDWA screens reads SMApprovedBy / AVPApprovedBy, so no display name
+			// is needed here; the old username fallback ("Unknown") could not tell two approvers apart.
+			var actorId = SPIC.Api.Controllers.SubDealerRegistrationController.Actor(User);
+			if (actorId is null)
+				return Unauthorized(new { Success = false, Message = "Authentication required." });
 
 			bool? smResult = null;
 			bool? avpResult = null;
@@ -747,7 +928,7 @@ namespace SpicAPI.Controllers
 						return Conflict(new { Success = false, Message = "This Sub Dealer has already been processed at SM level" });
 
 					item.SMApproved = isApproval;
-					item.SMApprovedBy = actorName;
+					item.SMApprovedBy = actorId;
 					item.SMApprovedAt = DateTime.UtcNow;
 					item.SMApprovalRemarks = remarks;
 					smResult = isApproval;
@@ -761,7 +942,7 @@ namespace SpicAPI.Controllers
 						return Conflict(new { Success = false, Message = "This Sub Dealer has already been processed at AVP level" });
 
 					item.AVPApproved = isApproval;
-					item.AVPApprovedBy = actorName;
+					item.AVPApprovedBy = actorId;
 					item.AVPApprovedAt = DateTime.UtcNow;
 					item.AVPApprovalRemarks = remarks;
 					smResult = item.SMApproved;
@@ -779,7 +960,7 @@ namespace SpicAPI.Controllers
 						return Conflict(new { Success = false, Message = "This Employee has already been processed at SM level" });
 
 					item.SMApproved = isApproval;
-					item.SMApprovedBy = actorName;
+					item.SMApprovedBy = actorId;
 					item.SMApprovedAt = DateTime.UtcNow;
 					item.SMApprovalRemarks = remarks;
 					smResult = isApproval;
@@ -793,7 +974,7 @@ namespace SpicAPI.Controllers
 						return Conflict(new { Success = false, Message = "This Employee has already been processed at AVP level" });
 
 					item.AVPApproved = isApproval;
-					item.AVPApprovedBy = actorName;
+					item.AVPApprovedBy = actorId;
 					item.AVPApprovedAt = DateTime.UtcNow;
 					item.AVPApprovalRemarks = remarks;
 					smResult = item.SMApproved;
@@ -814,7 +995,7 @@ namespace SpicAPI.Controllers
 			var action = isApproval ? "Approved" : "Rejected";
 			var level = isSM ? "SM" : "AVP";
 
-			_logger.LogInformation("{Actor} {Action} {Type} {Id} at {Level} level", actorName, action, singularType, id, level);
+			_logger.LogInformation("{Actor} {Action} {Type} {Id} at {Level} level", actorId, action, singularType, id, level);
 
 			return Ok(new ApprovalActionResponse
 			{
@@ -932,6 +1113,50 @@ namespace SpicAPI.Controllers
 			return string.Empty;
 		}
 
+		// Duplicate-beneficiary keys for bulk upload. Codes and names are trimmed, DOB is date-only;
+		// callers compare with OrdinalIgnoreCase so names/codes match case-insensitively. \u001F (unit
+		// separator) cannot appear in a typed cell, so adjacent fields never run together.
+		internal static string SubDealerBeneficiaryKey(string? dealerCode, string? subDealerCode, string? beneficiaryName, DateTime dob) =>
+			$"{dealerCode?.Trim()}\u001F{subDealerCode?.Trim()}\u001F{beneficiaryName?.Trim()}\u001F{dob.Date:yyyy-MM-dd}";
+
+		internal static string EmployeeBeneficiaryKey(string? dealerCode, string? employeeName, DateTime dob) =>
+			$"{dealerCode?.Trim()}\u001F{employeeName?.Trim()}\u001F{dob.Date:yyyy-MM-dd}";
+
+		// Manual Add / Edit duplicate checks (SubDealerBeneficiary / EmployeeBeneficiary controllers),
+		// using the same keys as the bulk upload. No DOB => never a duplicate. Only records born on the
+		// same date are loaded, then compared by key; excludeId skips the record being updated.
+		internal static async Task<bool> SubDealerBeneficiaryExistsAsync(
+			IQueryable<SubDealerBeneficiary> source, SubDealerBeneficiary candidate, int? excludeId)
+		{
+			if (candidate?.DOB is not DateTime dob) return false;
+			var day = dob.Date;
+			var nextDay = day.AddDays(1);
+			var key = SubDealerBeneficiaryKey(candidate.DealerCode, candidate.SubDealerCode, candidate.BeneficiaryName, dob);
+
+			var sameDay = await source.AsNoTracking()
+				.Where(s => s.DOB >= day && s.DOB < nextDay && (excludeId == null || s.Id != excludeId))
+				.Select(s => new { s.DealerCode, s.SubDealerCode, s.BeneficiaryName, s.DOB })
+				.ToListAsync();
+			return sameDay.Any(s => string.Equals(
+				SubDealerBeneficiaryKey(s.DealerCode, s.SubDealerCode, s.BeneficiaryName, s.DOB!.Value), key, StringComparison.OrdinalIgnoreCase));
+		}
+
+		internal static async Task<bool> EmployeeBeneficiaryExistsAsync(
+			IQueryable<EmployeeBeneficiary> source, EmployeeBeneficiary candidate, int? excludeId)
+		{
+			if (candidate?.DOB is not DateTime dob) return false;
+			var day = dob.Date;
+			var nextDay = day.AddDays(1);
+			var key = EmployeeBeneficiaryKey(candidate.DealerCode, candidate.EmployeeName, dob);
+
+			var sameDay = await source.AsNoTracking()
+				.Where(e => e.DOB >= day && e.DOB < nextDay && (excludeId == null || e.Id != excludeId))
+				.Select(e => new { e.DealerCode, e.EmployeeName, e.DOB })
+				.ToListAsync();
+			return sameDay.Any(e => string.Equals(
+				EmployeeBeneficiaryKey(e.DealerCode, e.EmployeeName, e.DOB!.Value), key, StringComparison.OrdinalIgnoreCase));
+		}
+
 		private static string NormalizeHeader(string h) => (h ?? string.Empty).Trim().Replace(" ", "").Replace("_", "").Replace("&", "").ToLowerInvariant();
 
 		private static string PrettyHeader(string h) => h switch
@@ -953,5 +1178,66 @@ namespace SpicAPI.Controllers
 			"educationalqualification" => "EducationalQualification",
 			_ => h
 		};
+	}
+
+	/// <summary>
+	/// Authorization gate for the Sub Dealer &amp; Employee master (SubDealerBeneficiary /
+	/// EmployeeBeneficiary CRUD, bulk upload, sample template).
+	/// <para>
+	/// WHY THIS EXISTS: these endpoints used to carry <c>[Authorize(Roles = "Admin,CorporateAdmin")]</c>,
+	/// which only reads the JWT role claim, so a Designation-driven user (e.g. an SDWA Admin
+	/// designation) whose RoleAccess grants <c>SubDealerEmployeeMaster.Entry</c> was rejected even
+	/// though the permission was assigned.
+	/// </para>
+	/// Allowed: Admin / CorporateAdmin (the existing role rule, verbatim), or a Designation granting
+	/// the required action on <c>PagePermission.SubDealerEmployeeMaster</c>. With an explicit action
+	/// that action is required; otherwise it is derived from the HTTP method (GET = any grant on the
+	/// page, POST = Entry, PUT / PATCH = Update, DELETE = Delete). A View-only grant never writes.
+	/// Resolved from Designation.RoleAccess, never the Designation name.
+	/// </summary>
+	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
+	internal sealed class SubDealerEmployeeMasterAccessAttribute : Attribute, IAsyncAuthorizationFilter
+	{
+		private readonly string? _action;
+
+		public SubDealerEmployeeMasterAccessAttribute() { }
+
+		public SubDealerEmployeeMasterAccessAttribute(string action) => _action = action;
+
+		public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
+		{
+			var user = context.HttpContext.User;
+			if (user?.Identity?.IsAuthenticated != true)
+			{
+				context.Result = new UnauthorizedObjectResult(new { Success = false, Message = "Authentication required." });
+				return;
+			}
+
+			// Existing role rule, verbatim from [Authorize(Roles = "Admin,CorporateAdmin")].
+			if (user.IsInRole(nameof(AppRole.Admin)) || user.IsInRole(nameof(AppRole.CorporateAdmin)))
+				return;
+
+			var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+			var designation = await GuestHouseReceptionistScope.GetDesignationAsync(db, user);
+
+			var action = _action ?? ActionFor(context.HttpContext.Request.Method);
+			var allowed = action == null
+				? designation != null && RoleAccessPermissions.HasPage(designation.RoleAccess, PagePermission.SubDealerEmployeeMaster)
+				: GuestHouseReceptionistScope.HasAction(designation, PagePermission.SubDealerEmployeeMaster, action);
+			if (allowed)
+				return;
+
+			context.Result = new ObjectResult(new { Success = false, Message = "You do not have permission to perform this action on the Sub Dealer & Employee master." })
+			{
+				StatusCode = StatusCodes.Status403Forbidden
+			};
+		}
+
+		// null = a read: any grant on the page is enough.
+		private static string? ActionFor(string method) =>
+			HttpMethods.IsPost(method) ? "Entry"
+			: HttpMethods.IsPut(method) || HttpMethods.IsPatch(method) ? "Update"
+			: HttpMethods.IsDelete(method) ? "Delete"
+			: null;
 	}
 }

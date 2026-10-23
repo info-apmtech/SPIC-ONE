@@ -1,16 +1,30 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
 using System.Text.RegularExpressions;
+using System.Globalization;
 using System.Security.Claims;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Spic.Infrastructure.Data;
-using Spic.Infrastructure.Services.MasterData;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using System.Data;
+using System.Linq.Expressions;
+using System.ComponentModel.DataAnnotations;
 using SPIC.Core.DTOs;
 using SPIC.Core.Entities;
 
 namespace SPIC.Api.Controllers;
 
+[Authorize]
 [ApiController]
 [Route("api/[controller]")]
 public class SubDealerRegistrationController : ControllerBase
@@ -18,10 +32,24 @@ public class SubDealerRegistrationController : ControllerBase
     private const long MaxExcelImportSize = 10 * 1024 * 1024;
 
     private readonly AppDbContext _db;
+    private readonly IWebHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<SubDealerRegistrationController> _logger;
 
-    public SubDealerRegistrationController(AppDbContext db)
+    public SubDealerRegistrationController(AppDbContext db, IWebHostEnvironment environment,
+        IConfiguration configuration, ILogger<SubDealerRegistrationController> logger)
     {
         _db = db;
+        _environment = environment;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    private string? CurrentUserId() => Actor(User);
+    private IQueryable<SubDealerRegistration> Scoped(bool tracking = false)
+    {
+        var source = tracking ? _db.SubDealerRegistrations.AsQueryable() : _db.SubDealerRegistrations.AsNoTracking();
+        return Scope(source, _db, User);
     }
 
     [HttpGet("lookup")]
@@ -31,83 +59,11 @@ public class SubDealerRegistrationController : ControllerBase
         [FromQuery] int? hqId,
         CancellationToken cancellationToken)
     {
-        // Keep this query server-side. Role/location conditions are applied
-        // before ToListAsync so MO users do not download the entire master.
-        var query = _db.SubDealerRegistrations
-            .AsNoTracking()
-            .AsQueryable();
-
-        var role = CurrentRole();
-        var userId = CurrentUserId();
-
-        var isUnrestrictedRole =
-            IsUnrestrictedRole(role);
-
-        if (!isUnrestrictedRole && IsMoRole(role))
-        {
-            // MO/MDO/JMDO must be HQ-scoped.
-            // Prefer authenticated claim; use the page query parameter as a
-            // local/dev fallback. Never return all rows for an MO.
-            var effectiveHqId = CurrentHqId() ?? hqId;
-
-            if (!effectiveHqId.HasValue || effectiveHqId.Value <= 0)
-                return Ok(new List<SubDealerLookupDto>());
-
-            query = query.Where(x => x.HQ == effectiveHqId.Value);
-        }
-        else if (!isUnrestrictedRole && IsRegionRole(role))
-        {
-            var effectiveRegionId = CurrentRegionId() ?? regionId;
-
-            if (!effectiveRegionId.HasValue || effectiveRegionId.Value <= 0)
-                return Ok(new List<SubDealerLookupDto>());
-
-            query = query.Where(x => x.Region == effectiveRegionId.Value);
-        }
-        else if (!isUnrestrictedRole && IsStateRole(role))
-        {
-            var effectiveStateId = CurrentStateId() ?? stateId;
-
-            if (!effectiveStateId.HasValue || effectiveStateId.Value <= 0)
-                return Ok(new List<SubDealerLookupDto>());
-
-            query = query.Where(x => x.StateId == effectiveStateId.Value);
-        }
-        else if (IsAvpRole(role))
-        {
-            // AVP sees only Sub Dealers belonging to the Zone assigned to the logged-in AVP.
-            var zoneId = CurrentZoneId();
-
-            if (!zoneId.HasValue || zoneId.Value <= 0)
-                return Ok(new List<SubDealerLookupDto>());
-
-            var stateIdsInZone = await _db.States
-                .AsNoTracking()
-                .Where(s => s.ZoneId == zoneId.Value)
-                .Select(s => s.Id)
-                .ToListAsync(cancellationToken);
-
-            query = query.Where(x => stateIdsInZone.Contains(x.StateId));
-        }
-        else if (!isUnrestrictedRole && !string.IsNullOrWhiteSpace(role))
-        {
-            // Preserve existing fallback for other restricted/custom roles.
-            if (string.IsNullOrWhiteSpace(userId))
-                return Ok(new List<SubDealerLookupDto>());
-
-            query = query.Where(x => x.CreatedBy == userId);
-        }
-        else
-        {
-            // Local/dev fallback when the request has no role claim.
-            // The Blazor page sends only the logged-in user's correct scope.
-            if (hqId.HasValue && hqId.Value > 0)
-                query = query.Where(x => x.HQ == hqId.Value);
-            else if (regionId.HasValue && regionId.Value > 0)
-                query = query.Where(x => x.Region == regionId.Value);
-            else if (stateId.HasValue && stateId.Value > 0)
-                query = query.Where(x => x.StateId == stateId.Value);
-        }
+        var query = Scoped();
+        // Query parameters narrow the authenticated scope; they never grant access.
+        if (stateId.GetValueOrDefault() > 0) query = query.Where(x => x.StateId == stateId!.Value);
+        if (regionId.GetValueOrDefault() > 0) query = query.Where(x => x.Region == regionId!.Value);
+        if (hqId.GetValueOrDefault() > 0) query = query.Where(x => x.HQ == hqId!.Value);
 
         var items = await query
             .OrderBy(x => x.SubDealerCode)
@@ -125,63 +81,6 @@ public class SubDealerRegistrationController : ControllerBase
         return Ok(items);
     }
 
-    private string CurrentRole() =>
-        User.FindFirst(ClaimTypes.Role)?.Value ??
-        User.FindFirst("Role")?.Value ??
-        string.Empty;
-
-    private string? CurrentUserId() =>
-        User.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
-        User.FindFirst("sub")?.Value ??
-        User.FindFirst("spic:user_id")?.Value;
-
-    private int? CurrentStateId() =>
-        ReadIntClaim("spic:state_id", "StateId");
-
-    private int? CurrentRegionId() =>
-        ReadIntClaim("spic:region_id", "RegionId");
-
-    private int? CurrentHqId() =>
-        ReadIntClaim("spic:hq_id", "HQId", "HqId");
-
-    private int? CurrentZoneId() =>
-        ReadIntClaim("spic:zone_id", "ZoneId");
-
-    private int? ReadIntClaim(params string[] names)
-    {
-        foreach (var name in names)
-        {
-            var value = User.FindFirst(name)?.Value;
-            if (int.TryParse(value, out var id) && id > 0)
-                return id;
-        }
-
-        return null;
-    }
-
-    private static bool IsMoRole(string role) =>
-        role.Equals("MO", StringComparison.OrdinalIgnoreCase) ||
-        role.Equals("MDO", StringComparison.OrdinalIgnoreCase) ||
-        role.Equals("JMDO", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsRegionRole(string role) =>
-        role.Equals("RM", StringComparison.OrdinalIgnoreCase) ||
-        role.Equals("RMD", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsStateRole(string role) =>
-        role.Equals("SMM", StringComparison.OrdinalIgnoreCase) ||
-        role.Equals("SMD", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsAvpRole(string role) =>
-        role.Equals("AVP", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsUnrestrictedRole(string role) =>
-        role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
-        role.Equals("CorporateAdmin", StringComparison.OrdinalIgnoreCase) ||
-        role.Equals("Director", StringComparison.OrdinalIgnoreCase) ||
-        role.Equals("AVP", StringComparison.OrdinalIgnoreCase);
-
-
     [HttpGet("list")]
     public async Task<ActionResult<SubDealerPagedListResponse>> GetList(
         [FromQuery] string? search,
@@ -196,118 +95,9 @@ public class SubDealerRegistrationController : ControllerBase
         page = page < 1 ? 1 : page;
         pageSize = pageSize < 10 ? 10 : pageSize > 1000 ? 1000 : pageSize;
 
-        var query = _db.SubDealerRegistrations
-            .AsNoTracking()
-            .AsQueryable();
+        await using var snapshot = await _db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var query = Scoped().Where(HasMaintainedDetails);
 
-        var role = CurrentRole();
-        var userId = CurrentUserId();
-        var unrestricted = IsUnrestrictedRole(role);
-
-        // --------------------------------------------------------------
-        // LIST VISIBILITY - NO NEW DB PROPERTY
-        // --------------------------------------------------------------
-        // Bulk import creates Active rows with Code/Name/State/Region/HQ
-        // while the Sub Dealer form details remain empty.
-        //
-        // A record becomes list-visible after it is maintained from the
-        // Sub Dealer form:
-        // - Active records: save requires location/contact/GST/PAN/mFMS data.
-        // - Inactive records: those details are optional, so Inactive itself
-        //   is enough to represent a submitted/updated record.
-        query = query.Where(x =>
-            x.Status == SubDealerStatus.InActive ||
-
-            x.Latitude.HasValue ||
-            x.Longitude.HasValue ||
-            x.DistrictId.HasValue ||
-            x.DealerStateId.HasValue ||
-
-            !string.IsNullOrEmpty(x.ShopNoORRoomNoOrBlockNo) ||
-            !string.IsNullOrEmpty(x.Village) ||
-            !string.IsNullOrEmpty(x.PinCode) ||
-
-            !string.IsNullOrEmpty(x.OfficialContactNumber) ||
-            !string.IsNullOrEmpty(x.WhatsAppNumber) ||
-            !string.IsNullOrEmpty(x.AlternativeNumber) ||
-
-            !string.IsNullOrEmpty(x.GSTNumber) ||
-            !string.IsNullOrEmpty(x.GSTFilePath) ||
-            !string.IsNullOrEmpty(x.PANNo) ||
-
-            !string.IsNullOrEmpty(x.WholesaleMFMSId) ||
-            !string.IsNullOrEmpty(x.RetailMFMSId));
-
-        // --------------------------------------------------------------
-        // SECURITY / DATA SCOPE
-        // Apply role scope BEFORE search, count and paging.
-        // --------------------------------------------------------------
-        if (!unrestricted && IsMoRole(role))
-        {
-            var effectiveHqId = CurrentHqId() ?? hqId;
-
-            if (!effectiveHqId.HasValue || effectiveHqId.Value <= 0)
-                return Ok(EmptyPagedResult(page, pageSize));
-
-            // MO/MDO/JMDO: all saved/updated Sub Dealers in logged-in HQ.
-            query = query.Where(x => x.HQ == effectiveHqId.Value);
-        }
-        else if (!unrestricted && IsRegionRole(role))
-        {
-            // RM/RMD: all saved/updated Sub Dealers in logged-in Region.
-            var effectiveRegionId = CurrentRegionId() ?? regionId;
-
-            if (!effectiveRegionId.HasValue || effectiveRegionId.Value <= 0)
-                return Ok(EmptyPagedResult(page, pageSize));
-
-            query = query.Where(x => x.Region == effectiveRegionId.Value);
-        }
-        else if (!unrestricted && IsStateRole(role))
-        {
-            // SMM/SMD: all saved/updated Sub Dealers in logged-in State.
-            var effectiveStateId = CurrentStateId() ?? stateId;
-
-            if (!effectiveStateId.HasValue || effectiveStateId.Value <= 0)
-                return Ok(EmptyPagedResult(page, pageSize));
-
-            query = query.Where(x => x.StateId == effectiveStateId.Value);
-        }
-        else if (IsAvpRole(role))
-        {
-            // AVP sees only Sub Dealers belonging to the Zone assigned to the logged-in AVP.
-            var zoneId = CurrentZoneId();
-
-            if (!zoneId.HasValue || zoneId.Value <= 0)
-                return Ok(EmptyPagedResult(page, pageSize));
-
-            var stateIdsInZone = await _db.States
-                .AsNoTracking()
-                .Where(s => s.ZoneId == zoneId.Value)
-                .Select(s => s.Id)
-                .ToListAsync(cancellationToken);
-
-            query = query.Where(x => stateIdsInZone.Contains(x.StateId));
-        }
-        else if (!unrestricted && !string.IsNullOrWhiteSpace(role))
-        {
-            // Preserve existing fallback behavior for custom restricted roles.
-            if (string.IsNullOrWhiteSpace(userId))
-                return Ok(EmptyPagedResult(page, pageSize));
-
-            query = query.Where(x => x.CreatedBy == userId);
-        }
-        else
-        {
-            // Local/dev fallback when auth claims are unavailable.
-            if (hqId.HasValue && hqId.Value > 0)
-                query = query.Where(x => x.HQ == hqId.Value);
-            else if (regionId.HasValue && regionId.Value > 0)
-                query = query.Where(x => x.Region == regionId.Value);
-            else if (stateId.HasValue && stateId.Value > 0)
-                query = query.Where(x => x.StateId == stateId.Value);
-        }
-
-        // --------------------------------------------------------------
         // UI filters can only NARROW the already role-scoped query.
         // --------------------------------------------------------------
         if (stateId.HasValue && stateId.Value > 0)
@@ -364,8 +154,7 @@ public class SubDealerRegistrationController : ControllerBase
             ? 0
             : (int)Math.Ceiling(totalCount / (double)pageSize);
 
-        if (totalPages > 0 && page > totalPages)
-            page = totalPages;
+        page = totalPages == 0 ? 1 : Math.Min(page, totalPages);
 
         var skip = (page - 1) * pageSize;
 
@@ -413,6 +202,7 @@ public class SubDealerRegistrationController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
+        await snapshot.CommitAsync(cancellationToken);
         return Ok(new SubDealerPagedListResponse
         {
             Items = items,
@@ -425,31 +215,56 @@ public class SubDealerRegistrationController : ControllerBase
         });
     }
 
-    private static SubDealerPagedListResponse EmptyPagedResult(
-        int page,
-        int pageSize)
+    public sealed class SubDealerStateSummaryDto
     {
-        return new SubDealerPagedListResponse
-        {
-            Items = new List<SubDealerListItemDto>(),
-            Page = page,
-            PageSize = pageSize,
-            TotalCount = 0,
-            TotalPages = 0,
-            ActiveCount = 0,
-            InactiveCount = 0
-        };
+        public int StateId { get; set; }
+        public string StateName { get; set; } = string.Empty;
+        public int TotalSubDealers { get; set; }
+        public int SavedSubDealers { get; set; }
+        public int ActiveSubDealers { get; set; }
+        public int InactiveSubDealers { get; set; }
     }
 
+    [HttpGet("state-summary")]
+    public async Task<ActionResult<List<SubDealerStateSummaryDto>>> StateSummary(CancellationToken cancellationToken)
+    {
+        // A repeatable snapshot prevents master/saved counters from describing different moments.
+        await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var master = await Scoped().GroupBy(x => x.StateId)
+            .Select(g => new { StateId = g.Key, Total = g.Count() }).ToListAsync(cancellationToken);
+        var maintained = await Scoped().Where(HasMaintainedDetails).GroupBy(x => x.StateId)
+            .Select(g => new {
+                StateId = g.Key,
+                Active = g.Count(x => x.Status == SubDealerStatus.Active),
+                Inactive = g.Count(x => x.Status == SubDealerStatus.InActive)
+            }).ToListAsync(cancellationToken);
+        var ids = master.Select(x => x.StateId).ToList();
+        var names = await _db.States.AsNoTracking().Where(x => ids.Contains(x.Id))
+            .Select(x => new { x.Id, x.StateName }).ToDictionaryAsync(x => x.Id, x => x.StateName, cancellationToken);
+        var savedByState = maintained.ToDictionary(x => x.StateId);
+        var rows = master.Select(x =>
+        {
+            savedByState.TryGetValue(x.StateId, out var saved);
+            return new SubDealerStateSummaryDto
+            {
+                StateId = x.StateId,
+                StateName = names.GetValueOrDefault(x.StateId, $"State {x.StateId}"),
+                TotalSubDealers = x.Total,
+                ActiveSubDealers = saved?.Active ?? 0,
+                InactiveSubDealers = saved?.Inactive ?? 0,
+                SavedSubDealers = (saved?.Active ?? 0) + (saved?.Inactive ?? 0)
+            };
+        }).OrderBy(x => x.StateName).ToList();
+        await transaction.CommitAsync(cancellationToken);
+        return Ok(rows);
+    }
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<SubDealerFormModel>> GetById(
         int id,
         CancellationToken cancellationToken)
     {
-        var entity = await _db.SubDealerRegistrations
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var entity = await Scoped().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (entity == null)
             return NotFound($"Sub Dealer with Id {id} was not found.");
@@ -458,60 +273,18 @@ public class SubDealerRegistrationController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<SubDealerFormModel>> Create(
-        [FromBody] SubDealerFormModel model,
-        CancellationToken cancellationToken)
+    public Task<ActionResult<SubDealerFormModel>> Create(
+        [FromBody] SubDealerFormModel model, CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid)
-        {
-            var msErrors = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
-            if (!string.IsNullOrWhiteSpace(msErrors))
-                return BadRequest(msErrors);
-        }
-
-        // A Create must never carry an existing id: edits go through PUT, and
-        // an accidental POST of an edit would insert a duplicate record.
-        if (model.Id != 0)
-            return BadRequest("A new Sub Dealer cannot be created with an existing Id. Use PUT api/SubDealerRegistration/{id} to update an existing record.");
-
-        var validationError = ValidateModel(model);
-        if (validationError != null)
-            return BadRequest(validationError);
-
-        // SubDealerCode is strictly mandatory: must be explicitly supplied.
-        // Auto-generation (SD+Id or any fallback) is forbidden by business rule.
-        var suppliedCode = model.SubDealerCode?.Trim();
-        if (string.IsNullOrWhiteSpace(suppliedCode))
-            return BadRequest("Sub Dealer Code is required. Blank or auto-generated codes are not permitted.");
-
-        var normalizedCode = suppliedCode.ToUpperInvariant();
-        if (!Regex.IsMatch(normalizedCode, @"^[A-Z0-9][A-Z0-9/_-]{0,49}$"))
-            return BadRequest("Sub Dealer Code must be 1-50 characters containing only uppercase letters, numbers, hyphens, underscores, or slashes.");
-
-        // Duplicate code protection
-        var codeExists = await _db.SubDealerRegistrations
-            .AnyAsync(x => x.SubDealerCode != null && x.SubDealerCode.ToUpper() == normalizedCode, cancellationToken);
-        if (codeExists)
-            return BadRequest($"Sub Dealer Code '{normalizedCode}' already exists.");
-
-        var entity = new SubDealerRegistration();
-        ApplyModel(entity, model);
-
-        entity.SubDealerCode = normalizedCode;
-        entity.CreatedAt = DateTime.Now;
-        entity.UpdatedAt = DateTime.Now;
-
-        _db.SubDealerRegistrations.Add(entity);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return Ok(ToModel(entity));
+        // Keep the route/signature for existing clients, but never insert from the profile form.
+        return Task.FromResult<ActionResult<SubDealerFormModel>>(BadRequest(
+            "Sub Dealer masters must be created by Admin Excel import. Select the imported Sub Dealer and save its details using the edit screen."));
     }
 
-
     // ONE-TIME SUPERADMIN MAINTENANCE: Excel maps an existing code to a new code.
-    // Normal Create, Update and bulk-import actions remain unchanged.
-    // This action changes SubDealerCode only: not Id, FirmName, Status, hierarchy,
-    // contact information, or even UpdatedAt / UpdatedBy.
+    // This remains separate from normal master import and profile maintenance.
+    // Correct only SubDealerCode and server-managed modification audit fields.
+    // Id, original creation audit, FirmName, Status, hierarchy and contact information are preserved.
     [Authorize(Roles = "SuperAdmin")]
     [HttpPost("bulk-code-correction/preview")]
     [RequestSizeLimit(MaxExcelImportSize + 2 * 1024 * 1024)]
@@ -552,14 +325,15 @@ public class SubDealerRegistrationController : ControllerBase
         public List<SubDealerCodeCorrectionRow> Rows { get; set; } = new();
     }
 
-    private static string NormalizeCode(string? code) =>
-        (code ?? string.Empty).Trim().ToUpperInvariant();
+    private static string NormalizeCode(string? code) => SubDealerFormModel.CodeKey(code);
 
     private async Task<IActionResult> ProcessSubDealerCodeCorrection(
         IFormFile file,
         bool apply,
         CancellationToken cancellationToken)
     {
+        if (!HasRole(User, "SuperAdmin")) return Forbid();
+        if (string.IsNullOrWhiteSpace(CurrentUserId())) return Unauthorized();
         if (file == null || file.Length == 0)
             return BadRequest(new { Success = false, Message = "Select an Excel file." });
 
@@ -631,7 +405,7 @@ public class SubDealerRegistrationController : ControllerBase
                 {
                     ExcelRowNumber = rowNumber,
                     ExistingCode = existingCode,
-                    NewCode = NormalizeCode(newCode)
+                    NewCode = SubDealerFormModel.CodeValue(newCode)
                 });
 
                 if (rows.Count > 2000)
@@ -668,7 +442,7 @@ public class SubDealerRegistrationController : ControllerBase
             .Select(g => g.Key)
             .ToHashSet(StringComparer.Ordinal);
 
-        var neededCodes = rows.SelectMany(r => new[] { NormalizeCode(r.ExistingCode), r.NewCode })
+        var neededCodes = rows.SelectMany(r => new[] { NormalizeCode(r.ExistingCode), NormalizeCode(r.NewCode) })
             .Where(c => c.Length > 0)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
@@ -709,8 +483,8 @@ public class SubDealerRegistrationController : ControllerBase
                     error = "Existing code is repeated in the Excel file.";
                 else if (duplicateNewCodes.Contains(newKey))
                     error = "New code is repeated in the Excel file.";
-                else if (!Regex.IsMatch(newKey, @"^[A-Z0-9][A-Z0-9/_-]{0,49}$"))
-                    error = "New code must be 1-50 characters (letters, numbers, /, _, or -).";
+                else if (GetExcelCodeError(row.NewCode) is string newCodeError)
+                    error = newCodeError;
                 else if (!byCode.TryGetValue(oldKey, out var found) || found.Count == 0)
                     error = "Existing code not found in SubDealerRegistrations.";
                 else if (found.Count != 1)
@@ -731,7 +505,7 @@ public class SubDealerRegistrationController : ControllerBase
                     else
                     {
                         row.Status = "Ready";
-                        row.Message = "Only SubDealerCode will change.";
+                        row.Message = "SubDealerCode and modification audit will change; creation history and other business fields are preserved.";
                         updates.Add((row, entity));
                     }
                 }
@@ -766,7 +540,8 @@ public class SubDealerRegistrationController : ControllerBase
             foreach (var (row, entity) in updates)
             {
                 entity.SubDealerCode = row.NewCode;
-                // Intentionally NO changes to any other entity field.
+                StampModified(_db, _configuration, entity, CurrentUserId()!);
+                // All other business fields and CreatedAt/CreatedBy remain unchanged.
             }
 
             if (updates.Count > 0)
@@ -806,63 +581,236 @@ public class SubDealerRegistrationController : ControllerBase
             });
         }
     }
-    [HttpPut("{id:int}")]
-    public async Task<ActionResult<SubDealerFormModel>> Update(
-        int id,
-        [FromBody] SubDealerFormModel model,
-        CancellationToken cancellationToken)
+    // LEGACY MISSING-CODE REPAIR (SuperAdmin only, separate from existing code-to-code Excel correction).
+    // A genuine externally verified code is supplied with the DATABASE record Id.
+    // Preview is read-only; Apply rechecks the code, record identity, and collisions.
+    public sealed class MissingCodeRepairRequest
     {
-        if (id <= 0 || id != model.Id)
-            return BadRequest("Route Id and model Id do not match.");
-
-        var entity = await _db.SubDealerRegistrations
-            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-        if (entity == null)
-            return NotFound($"Sub Dealer with Id {id} was not found.");
-
-        // Sub Dealer Code and master hierarchy are immutable from the normal
-        // edit screen. Use the database values even if the client sends stale,
-        // default or mismatched State/Region/HQ values.
-        var originalSubDealerCode = entity.SubDealerCode;
-        var originalStateId = entity.StateId;
-        var originalRegionId = entity.Region;
-        var originalHqId = entity.HQ;
-
-        if (string.IsNullOrWhiteSpace(originalSubDealerCode))
-            return BadRequest("Cannot update details for a Sub Dealer with a missing or blank Sub Dealer Code. The code must be corrected via SuperAdmin Code Correction before maintaining details.");
-
-        model.SubDealerCode = originalSubDealerCode;
-        model.StateId = originalStateId;
-        model.Region = originalRegionId;
-        model.HQ = originalHqId;
-
-        var validationError = ValidateModel(model);
-        if (validationError != null)
-            return BadRequest(validationError);
-
-        ApplyModel(entity, model, applyMasterHierarchy: false);
-
-        // Explicitly restore the immutable fields so a future mapping change
-        // cannot accidentally replace an imported code or hierarchy.
-        entity.SubDealerCode = originalSubDealerCode;
-        entity.StateId = originalStateId;
-        entity.Region = originalRegionId;
-        entity.HQ = originalHqId;
-        entity.UpdatedAt = DateTime.Now;
-
-        await _db.SaveChangesAsync(cancellationToken);
-        return Ok(ToModel(entity));
+        public int Id { get; set; }
+        public string? ActualCode { get; set; }
+        public string? ExpectedFirmName { get; set; }
     }
 
+    public sealed class MissingCodeRepairResult
+    {
+        public bool Success { get; set; }
+        public bool Ready { get; set; }
+        public bool Updated { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int Id { get; set; }
+        public string FirmName { get; set; } = string.Empty;
+        public string ExistingCode { get; set; } = string.Empty;
+        public string ActualCode { get; set; } = string.Empty;
+    }
+
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpPost("missing-code-repair/preview")]
+    public Task<ActionResult<MissingCodeRepairResult>> PreviewMissingCodeRepair(
+        [FromBody] MissingCodeRepairRequest request,
+        CancellationToken cancellationToken) =>
+        ProcessMissingCodeRepair(request, false, cancellationToken);
+
+    [Authorize(Roles = "SuperAdmin")]
+    [HttpPost("missing-code-repair/apply")]
+    public Task<ActionResult<MissingCodeRepairResult>> ApplyMissingCodeRepair(
+        [FromBody] MissingCodeRepairRequest request,
+        CancellationToken cancellationToken) =>
+        ProcessMissingCodeRepair(request, true, cancellationToken);
+
+    private async Task<ActionResult<MissingCodeRepairResult>> ProcessMissingCodeRepair(
+        MissingCodeRepairRequest request,
+        bool apply,
+        CancellationToken cancellationToken)
+    {
+        var result = new MissingCodeRepairResult
+        {
+            Id = request?.Id ?? 0,
+            ActualCode = SubDealerFormModel.CodeValue(request?.ActualCode)
+        };
+
+        if (request == null || request.Id <= 0)
+        {
+            result.Message = "A valid existing database Sub Dealer Id is required.";
+            return BadRequest(result);
+        }
+
+        if (!HasRole(User, "SuperAdmin")) return Forbid();
+        if (string.IsNullOrWhiteSpace(CurrentUserId())) return Unauthorized();
+        var codeError = GetExcelCodeError(request.ActualCode);
+        if (codeError != null)
+        {
+            result.Message = codeError;
+            return BadRequest(result);
+        }
+
+        if (result.ActualCode.Length > 50)
+        {
+            result.Message = "Actual Sub Dealer Code must be 50 characters or fewer.";
+            return BadRequest(result);
+        }
+
+        // An Apply must have the expected firm name from a successful preview.
+        // This prevents correcting an unrelated Id if the record changed in between.
+        if (apply && string.IsNullOrWhiteSpace(request.ExpectedFirmName))
+        {
+            result.Message = "Preview the exact record and verify its Firm Name before applying.";
+            return BadRequest(result);
+        }
+
+        try
+        {
+            await using var transaction = apply
+                ? await _db.Database.BeginTransactionAsync(
+                    System.Data.IsolationLevel.Serializable, cancellationToken)
+                : null;
+
+            IQueryable<SubDealerRegistration> query = _db.SubDealerRegistrations;
+            if (!apply) query = query.AsNoTracking();
+
+            var entity = await query.SingleOrDefaultAsync(x => x.Id == request.Id, cancellationToken);
+            if (entity == null)
+            {
+                result.Message = "Sub Dealer record Id was not found. Nothing changed.";
+                return NotFound(result);
+            }
+
+            result.FirmName = entity.FirmName ?? string.Empty;
+            result.ExistingCode = entity.SubDealerCode ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(entity.SubDealerCode))
+            {
+                result.Message = "This record already has a Sub Dealer Code. Existing genuine codes cannot be replaced using Missing Code Repair.";
+                return Conflict(result);
+            }
+
+            if (apply && !string.Equals(
+                    request.ExpectedFirmName?.Trim(),
+                    result.FirmName.Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                result.Message = "Firm Name changed since preview. Nothing changed; preview again.";
+                return Conflict(result);
+            }
+
+            var actualKey = NormalizeCode(result.ActualCode);
+            var duplicate = await _db.SubDealerRegistrations.AsNoTracking().AnyAsync(
+                x => x.Id != request.Id &&
+                     x.SubDealerCode != null &&
+                     x.SubDealerCode.Trim().ToUpper() == actualKey,
+                cancellationToken);
+
+            if (duplicate)
+            {
+                result.Message = "This actual Sub Dealer Code already belongs to a different record. Nothing changed.";
+                return Conflict(result);
+            }
+
+            if (!apply)
+            {
+                result.Success = true;
+                result.Ready = true;
+                result.Message = "Ready. Verify the database Id, Firm Name and genuine Sub Dealer Code, then confirm Apply.";
+                return Ok(result);
+            }
+
+            // Correct one business field; record the real modifier/time without rewriting creation history.
+            entity.SubDealerCode = result.ActualCode;
+            StampModified(_db, _configuration, entity, CurrentUserId()!);
+            await _db.SaveChangesAsync(cancellationToken);
+            if (transaction != null)
+                await transaction.CommitAsync(cancellationToken);
+
+            result.Success = true;
+            result.Updated = true;
+            result.Message = $"Actual Sub Dealer Code saved for database record {request.Id}. Other business fields and creation history were preserved; modification audit was recorded.";
+            return Ok(result);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (DbUpdateException)
+        {
+            result.Message = "Database rejected the correction. No change confirmed; verify the record before retrying.";
+            return Conflict(result);
+        }
+        catch (Exception)
+        {
+            result.Message = "Correction could not be confirmed. Check database state before retrying.";
+            return StatusCode(500, result);
+        }
+    }
+
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<SubDealerFormModel>> Update(
+        int id, [FromBody] SubDealerFormModel model, CancellationToken cancellationToken)
+    {
+        if (!CanMaintain(User)) return Forbid();
+        var actor = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(actor)) return Unauthorized();
+        if (model == null || id <= 0 || model.Id != id) return BadRequest("Route Id and model Id do not match.");
+        var commitStarted = false;
+        try
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var entity = await Scoped(tracking: true).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+            if (entity == null) return NotFound("Sub Dealer not found in your permitted scope.");
+            if (GetExcelCodeError(entity.SubDealerCode) is string codeError)
+                return BadRequest($"{codeError} A SuperAdmin must correct this master before profile maintenance.");
+
+            // Compare the version loaded by the page. Do not accept stale full-form overwrites.
+            if (model.UpdatedAt == default || model.UpdatedAt != entity.UpdatedAt)
+                return Conflict("This record changed after you loaded it. Reload it and reapply your edits; nothing was saved.");
+
+            // The server owns master identity/hierarchy and creation/modification audit.
+            model.SubDealerCode = entity.SubDealerCode;
+            model.StateId = entity.StateId;
+            model.Region = entity.Region;
+            model.HQ = entity.HQ;
+            NormalizeProfile(model);
+            var validationError = ValidateModel(model);
+            if (validationError != null) return BadRequest(validationError);
+            var locationError = await ValidatePrimaryLocationAsync(model, cancellationToken);
+            if (locationError != null) return BadRequest(locationError);
+            if (!string.IsNullOrWhiteSpace(model.GSTFilePath))
+            {
+                var physical = SubDealerFileController.FindExisting(_environment, _configuration, model.GSTFilePath, id);
+                if (physical == null)
+                    return BadRequest("Upload a GST PDF for this Sub Dealer before saving. The supplied file reference is invalid or no longer exists.");
+                SubDealerFileController.TryParse(model.GSTFilePath, out _, out var fileName);
+                model.GSTFilePath = SubDealerFileController.LogicalPath(id, fileName);
+            }
+
+            ApplyModel(entity, model, applyMasterHierarchy: false);
+            StampModified(_db, _configuration, entity, actor);
+            await _db.SaveChangesAsync(cancellationToken);
+            // Return the database's actual timestamp precision to the next edit request.
+            await _db.Entry(entity).ReloadAsync(cancellationToken);
+            commitStarted = true;
+            await transaction.CommitAsync(cancellationToken);
+            return Ok(ToModel(entity));
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sub Dealer profile save failed for Id {SubDealerId}", id);
+            return commitStarted
+                ? StatusCode(503, "The save outcome could not be confirmed. Reload the record before retrying.")
+                : Conflict("The record could not be saved, possibly due to a concurrent change. Reload and retry; this transaction was not committed.");
+        }
+    }
+
+    private static string? GetExcelCodeError(string? rawCode) => SubDealerFormModel.CodeError(rawCode);
+
     /// <summary>
-    /// Admin / MO roles: reads the Excel master and returns the five required text columns.
+    /// Admin roles only: reads the Excel master and returns the five required text columns.
     /// State/Region/HQ names are mapped to IDs by the UI using the same LookupCache
     /// already used by the Register page.
     /// </summary>
-    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [Authorize(Roles = AdminRoles)]
     [HttpPost("parse-import-excel")]
-    [RequestSizeLimit(MaxExcelImportSize)]
+    [RequestSizeLimit(MaxExcelImportSize + 2 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxExcelImportSize + 2 * 1024 * 1024)]
     public async Task<ActionResult<SubDealerExcelParseResponse>> ParseImportExcel(
         IFormFile file,
         CancellationToken cancellationToken,
@@ -871,6 +819,7 @@ public class SubDealerRegistrationController : ControllerBase
         // partial=true: row-level problems (missing values, duplicate codes) are NOT
         // reported as file-level errors. Every non-blank row is returned and the
         // caller validates each row so valid rows can still be imported.
+        if (!CanImport(User)) return Forbid();
         var result = new SubDealerExcelParseResponse();
 
         if (file == null || file.Length == 0)
@@ -912,8 +861,8 @@ public class SubDealerRegistrationController : ControllerBase
             foreach (var cell in firstRow.CellsUsed())
             {
                 var header = NormalizeHeader(cell.GetString());
-                if (!string.IsNullOrWhiteSpace(header))
-                    headerMap[header] = cell.Address.ColumnNumber;
+                if (!string.IsNullOrWhiteSpace(header) && !headerMap.TryAdd(header, cell.Address.ColumnNumber))
+                    return BadRequest($"Duplicate Excel header '{header}'. Keep each master column once; nothing was saved.");
             }
 
             var requiredHeaders = new[]
@@ -945,7 +894,10 @@ public class SubDealerRegistrationController : ControllerBase
             {
                 var row = worksheet.Row(rowNumber);
 
-                var code = row.Cell(headerMap["SUBDEALERCODE"]).GetString().Trim();
+                var codeCell = row.Cell(headerMap["SUBDEALERCODE"]);
+                if (codeCell.HasFormula)
+                    return BadRequest($"Excel row {rowNumber}: Sub Dealer Code must be literal text, not a formula. Nothing was saved.");
+                var code = codeCell.GetString().Trim();
                 var name = row.Cell(headerMap["SUBDEALERNAME"]).GetString().Trim();
                 var hq = row.Cell(headerMap["HQ"]).GetString().Trim();
                 var region = row.Cell(headerMap["REGION"]).GetString().Trim();
@@ -963,8 +915,9 @@ public class SubDealerRegistrationController : ControllerBase
 
                 if (!partial)
                 {
-                    if (string.IsNullOrWhiteSpace(code))
-                        result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Code is required.");
+                    var codeError = GetExcelCodeError(code);
+                    if (codeError != null)
+                        result.Errors.Add($"Excel row {rowNumber}: {codeError}");
 
                     if (string.IsNullOrWhiteSpace(name))
                         result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Name is required.");
@@ -998,244 +951,256 @@ public class SubDealerRegistrationController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest($"Unable to read Excel file: {ex.Message}");
+            _logger.LogWarning(ex, "Sub Dealer Excel parsing failed");
+            return BadRequest("Unable to read Excel file. Check the .xlsx format, text codes and required headers; nothing was saved.");
         }
     }
 
     /// <summary>
-    /// Admin / MO atomic upsert. Existing code => update name + State/Region/HQ only.
-    /// New code => insert a new Active Sub Dealer with empty detail fields.
+    /// Admin-only master import. Every UI import is previewed first; no database row is
+    /// changed until the caller explicitly confirms. Existing rows with identical master
+    /// values are counted as Unchanged and are not written again, preserving UpdatedAt.
     /// </summary>
-    [Authorize(Roles = "Admin,MO,MDO,JMDO")]
+    [Authorize(Roles = AdminRoles)]
     [HttpPost("bulk-import")]
     public async Task<ActionResult<SubDealerBulkImportResponse>> BulkImport(
         [FromBody] SubDealerBulkImportRequest request,
         CancellationToken cancellationToken,
-        [FromQuery] bool partial = false)
+        [FromQuery] bool partial = false,
+        [FromQuery] bool previewOnly = false,
+        [FromQuery] bool confirm = false)
     {
-        var result = new SubDealerBulkImportResponse();
-
-        var role = CurrentRole();
-        var isMoImport = IsMoRole(role);
-        var currentHqId = CurrentHqId();
-
-        if (isMoImport && (!currentHqId.HasValue || currentHqId.Value <= 0))
-        {
-            result.Errors.Add("Your login does not have a valid HQ mapping. Excel import is not allowed.");
-            return BadRequest(result);
-        }
-
-        if (request.Rows == null || request.Rows.Count == 0)
+        if (!CanImport(User)) return Forbid();
+        var actor = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(actor)) return Unauthorized();
+        if (request?.Rows == null || request.Rows.Count == 0)
             return BadRequest("No Sub Dealer rows were supplied for import.");
+        if (request.Rows.Any(x => x == null))
+            return BadRequest("The import request contains an invalid null row.");
 
-        // partial=false (legacy): any row problem rejects the whole request.
-        // partial=true: problem rows are reported in result.Rejected and every
-        // other row is still imported (first occurrence of a duplicate code wins).
-        var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // A save request must always be explicit. This prevents a caller from accidentally
+        // bypassing the preview/Proceed step and changing the master immediately.
+        if (!previewOnly && !confirm)
+            return BadRequest("Import confirmation is required. Preview the Excel first, then proceed explicitly.");
+
+        var result = new SubDealerBulkImportResponse
+        {
+            PreviewOnly = previewOnly
+        };
+
         var rows = new List<SubDealerBulkImportRowDto>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        void Reject(SubDealerBulkImportRowDto row, string category, string reason)
+        {
+            if (partial) result.Rejected.Add(ToRejected(row, category, reason));
+            else result.Errors.Add($"Excel row {row.ExcelRowNumber}: {reason}");
+        }
 
         foreach (var row in request.Rows)
         {
-            var code = row.SubDealerCode?.Trim() ?? string.Empty;
-            var name = row.FirmName?.Trim() ?? string.Empty;
             var reasons = new List<string>();
-
-            if (string.IsNullOrWhiteSpace(code))
-                reasons.Add("Sub Dealer Code is required.");
-
-            if (string.IsNullOrWhiteSpace(name))
-                reasons.Add("Sub Dealer Name is required.");
-
-            if (row.StateId <= 0)
-                reasons.Add("State mapping is invalid.");
-
-            if (row.RegionId <= 0)
-                reasons.Add("Region mapping is invalid.");
-
-            if (row.HQId <= 0)
-                reasons.Add("HQ mapping is invalid.");
-
-            if (isMoImport && currentHqId.HasValue && row.HQId != currentHqId.Value)
-            {
-                reasons.Add(
-                    $"HQ is outside your assigned MO HQ. Import is allowed only for HQ Id {currentHqId.Value}.");
-            }
-
-            if (!partial)
-            {
-                if (!string.IsNullOrWhiteSpace(code) && !seenCodes.Add(code))
-                    reasons.Add($"duplicate Sub Dealer Code '{code}'.");
-
-                foreach (var reason in reasons)
-                    result.Errors.Add($"Excel row {row.ExcelRowNumber}: {reason}");
-
-                continue;
-            }
+            if (GetExcelCodeError(row.SubDealerCode) is string error) reasons.Add(error);
+            if (string.IsNullOrWhiteSpace(row.FirmName)) reasons.Add("Sub Dealer Name is required.");
+            if (row.StateId <= 0 || row.RegionId <= 0 || row.HQId <= 0)
+                reasons.Add("State, Region and HQ mappings are required.");
 
             if (reasons.Count > 0)
             {
-                result.Rejected.Add(ToRejected(row, SubDealerImportRejectCategory.Validation, string.Join(" ", reasons)));
-                continue;
-            }
-
-            // Only a fully valid row claims its code, so the "first valid occurrence" is kept.
-            if (!seenCodes.Add(code))
-            {
-                result.Rejected.Add(ToRejected(
-                    row,
-                    SubDealerImportRejectCategory.Duplicate,
-                    $"Duplicate Sub Dealer Code '{code}' in the uploaded file; an earlier row with this code was used."));
+                Reject(row, SubDealerImportRejectCategory.Validation, string.Join(" ", reasons));
                 continue;
             }
 
             rows.Add(row);
         }
 
-        if (!partial)
-        {
-            if (result.Errors.Count > 0)
-                return BadRequest(result);
+        if (!partial && result.Errors.Count > 0) return BadRequest(result);
+        if (rows.Count == 0) return Ok(result);
 
-            rows = request.Rows;
-        }
-        else if (rows.Count == 0)
-        {
-            // Every row was rejected: nothing to save, still report the rejections.
-            return Ok(result);
-        }
-
-        var codes = rows
-            .Select(x => x.SubDealerCode.Trim().ToUpperInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var existingList = await _db.SubDealerRegistrations
-            .Where(x => x.SubDealerCode != null && codes.Contains(x.SubDealerCode.ToUpper()))
-            .ToListAsync(cancellationToken);
-
-        // GroupBy(...).First() rather than ToDictionary: a duplicate SubDealerCode in the
-        // master table used to throw "An item with the same key has already been added" and
-        // fail the whole registration import. Canonical normalization also means a code with
-        // stray surrounding whitespace now matches the same registration.
-        var existingByCode = existingList
-            .Where(x => !string.IsNullOrWhiteSpace(x.SubDealerCode))
-            .GroupBy(x => MasterNormalizer.Normalize(x.SubDealerCode))
-            .Where(g => g.Key.Length > 0)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-
-        if (isMoImport && currentHqId.HasValue)
-        {
-            foreach (var row in rows.ToList())
-            {
-                var code = MasterNormalizer.Normalize(row.SubDealerCode);
-                if (existingByCode.TryGetValue(code, out var existing) &&
-                    existing.HQ != currentHqId.Value)
-                {
-                    var reason = $"Sub Dealer Code '{code}' belongs to another HQ and cannot be updated by this MO.";
-
-                    if (partial)
-                    {
-                        result.Rejected.Add(ToRejected(row, SubDealerImportRejectCategory.Validation, reason));
-                        rows.Remove(row);
-                    }
-                    else
-                    {
-                        result.Errors.Add($"Excel row {row.ExcelRowNumber}: {reason}");
-                    }
-                }
-            }
-
-            if (!partial && result.Errors.Count > 0)
-                return BadRequest(result);
-
-            if (partial && rows.Count == 0)
-                return Ok(result);
-        }
-
-        await using var transaction =
-            await _db.Database.BeginTransactionAsync(cancellationToken);
-
+        var commitStarted = false;
         try
         {
-            var now = DateTime.Now;
-            var importedBy = string.IsNullOrWhiteSpace(request.ImportedBy)
-                ? (isMoImport
-                    ? CurrentUserId() ?? "MO Excel Import"
-                    : "Admin Excel Import")
-                : request.ImportedBy.Trim();
+            // Preview and save both use the same validation path. Save repeats all checks in
+            // a fresh serializable transaction, so a stale preview cannot silently overwrite
+            // a concurrent master change.
+            await using var transaction = await _db.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable,
+                cancellationToken);
 
+            var hqIds = rows.Select(x => x.HQId).Distinct().ToList();
+            var hierarchy = await (from h in _db.Headquarters.AsNoTracking()
+                                   join r in _db.Regions.AsNoTracking() on h.RegionId equals r.Id
+                                   join st in _db.States.AsNoTracking() on r.StateId equals st.Id
+                                   where hqIds.Contains(h.Id)
+                                   select new { HqId = h.Id, RegionId = r.Id, StateId = st.Id })
+                                  .ToDictionaryAsync(x => x.HqId, cancellationToken);
+
+            var valid = new List<SubDealerBulkImportRowDto>();
             foreach (var row in rows)
             {
-                var code = row.SubDealerCode.Trim().ToUpperInvariant();
-                var firmName = row.FirmName.Trim().ToUpperInvariant();
-
-                if (existingByCode.TryGetValue(code, out var existing))
+                if (!hierarchy.TryGetValue(row.HQId, out var master) ||
+                    master.RegionId != row.RegionId ||
+                    master.StateId != row.StateId)
                 {
-                    // Preserve contact/GST/location/trade-deposit/status data already
-                    // maintained in the form. Excel master controls only these fields.
-                    existing.FirmName = firmName;
-                    existing.StateId = row.StateId;
-                    existing.Region = row.RegionId;
-                    existing.HQ = row.HQId;
-                    existing.UpdatedBy = importedBy;
-                    existing.UpdatedAt = now;
-                    result.Updated++;
+                    Reject(
+                        row,
+                        SubDealerImportRejectCategory.Validation,
+                        "HQ does not belong to the supplied Region and State. Correct the Excel hierarchy; it was not reassigned automatically.");
+                    continue;
+                }
+
+                if (!seen.Add(NormalizeCode(row.SubDealerCode)))
+                {
+                    Reject(
+                        row,
+                        SubDealerImportRejectCategory.Duplicate,
+                        "Duplicate Sub Dealer Code in Excel; an earlier valid row has this code.");
+                    continue;
+                }
+
+                valid.Add(row);
+            }
+
+            if (!partial && result.Errors.Count > 0) return BadRequest(result);
+            rows = valid;
+            if (rows.Count == 0) return Ok(result);
+
+            var codes = rows
+                .Select(x => NormalizeCode(x.SubDealerCode))
+                .Distinct()
+                .ToList();
+
+            var existing = await _db.SubDealerRegistrations
+                .Where(x => x.SubDealerCode != null &&
+                            codes.Contains(x.SubDealerCode.Trim().ToUpper()))
+                .ToListAsync(cancellationToken);
+
+            var byCode = existing
+                .GroupBy(x => NormalizeCode(x.SubDealerCode))
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+            valid = new List<SubDealerBulkImportRowDto>();
+            foreach (var row in rows)
+            {
+                if (byCode.TryGetValue(NormalizeCode(row.SubDealerCode), out var matches) &&
+                    matches.Count != 1)
+                {
+                    Reject(
+                        row,
+                        SubDealerImportRejectCategory.Duplicate,
+                        "Multiple existing masters have this code. Resolve the ambiguity; no record was chosen automatically.");
                 }
                 else
                 {
+                    valid.Add(row);
+                }
+            }
+
+            if (!partial && result.Errors.Count > 0) return BadRequest(result);
+            rows = valid;
+            if (rows.Count == 0) return Ok(result);
+
+            foreach (var row in rows)
+            {
+                var key = NormalizeCode(row.SubDealerCode);
+                var targetFirmName = row.FirmName.Trim().ToUpperInvariant();
+
+                if (byCode.TryGetValue(key, out var matches))
+                {
+                    var entity = matches[0]; // uniqueness was explicitly verified above
+                    var unchanged =
+                        string.Equals(
+                            (entity.FirmName ?? string.Empty).Trim(),
+                            targetFirmName,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        entity.StateId == row.StateId &&
+                        entity.Region == row.RegionId &&
+                        entity.HQ == row.HQId;
+
+                    if (unchanged)
+                    {
+                        result.Unchanged++;
+                        continue;
+                    }
+
+                    result.Updated++;
+                    if (previewOnly)
+                        continue;
+
+                    entity.FirmName = targetFirmName;
+                    entity.StateId = row.StateId;
+                    entity.Region = row.RegionId;
+                    entity.HQ = row.HQId;
+                    // Do NOT replace stored code, status, GST/contact/location data or creation audit.
+                    StampModified(_db, _configuration, entity, actor);
+                }
+                else
+                {
+                    result.Inserted++;
+                    if (previewOnly)
+                        continue;
+
                     var entity = new SubDealerRegistration
                     {
-                        SubDealerCode = code,
-                        FirmName = firmName,
+                        SubDealerCode = SubDealerFormModel.CodeValue(row.SubDealerCode),
+                        FirmName = targetFirmName,
                         StateId = row.StateId,
                         Region = row.RegionId,
                         HQ = row.HQId,
                         Status = SubDealerStatus.Active,
-
-                        // Remaining details will be maintained from the Sub Dealer page.
                         ShopNoORRoomNoOrBlockNo = string.Empty,
                         Village = string.Empty,
                         PinCode = string.Empty,
                         OfficialContactNumber = string.Empty,
-                        WhatsAppNumber = string.Empty,
-
-                        CreatedBy = importedBy,
-                        CreatedAt = now,
-                        UpdatedBy = importedBy,
-                        UpdatedAt = now
+                        WhatsAppNumber = string.Empty
                     };
 
+                    StampCreated(_db, _configuration, entity, actor);
                     _db.SubDealerRegistrations.Add(entity);
-                    existingByCode[code] = entity;
-                    result.Inserted++;
+                    byCode[key] = new List<SubDealerRegistration> { entity };
                 }
             }
 
-            await _db.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
+            if (previewOnly)
+            {
+                result.RequiresConfirmation = result.Inserted + result.Updated + result.Unchanged > 0;
+                await transaction.RollbackAsync(cancellationToken);
+                return Ok(result);
+            }
 
+            await _db.SaveChangesAsync(cancellationToken);
+            commitStarted = true;
+            await transaction.CommitAsync(cancellationToken);
             return Ok(result);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            result.Errors.Add($"Database import failed: {ex.Message}");
+            _logger.LogError(ex, previewOnly
+                ? "Sub Dealer master import preview failed"
+                : "Sub Dealer master import failed");
 
-            if (!partial)
-                return BadRequest(result);
-
-            // The valid batch is one atomic transaction: on failure nothing from it
-            // was committed, so report zero saved and every batch row as rejected.
             result.Inserted = 0;
             result.Updated = 0;
-            foreach (var row in rows)
-            {
-                result.Rejected.Add(ToRejected(
-                    row,
-                    SubDealerImportRejectCategory.DatabaseError,
-                    $"Not saved - the database transaction was rolled back: {ex.Message}"));
-            }
+            result.Unchanged = 0;
+            result.RequiresConfirmation = false;
 
+            if (commitStarted)
+                return StatusCode(
+                    503,
+                    "Import commit outcome is unknown. Verify the master before retrying; no saved count is being claimed.");
+
+            var reason = previewOnly
+                ? "Import preview failed. Nothing was saved. Check the hierarchy, duplicate-code constraints and database connection, then retry."
+                : "The import transaction was not committed. Check the hierarchy, duplicate-code constraints and concurrent imports, then retry.";
+
+            result.Errors.Add(reason);
+            if (!partial) return BadRequest(result);
+            foreach (var row in rows)
+                result.Rejected.Add(ToRejected(row, SubDealerImportRejectCategory.DatabaseError, reason));
             return Ok(result);
         }
     }
@@ -1253,59 +1218,45 @@ public class SubDealerRegistrationController : ControllerBase
         };
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(
-        int id,
-        CancellationToken cancellationToken)
-    {
-        var entity = await _db.SubDealerRegistrations
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+    public Task<IActionResult> Delete(int id, CancellationToken cancellationToken) =>
+        Task.FromResult<IActionResult>(BadRequest(
+            "Physical master deletion is disabled. Use the list's Delete Details action; the Id, actual code and master geography must remain."));
 
-        if (entity == null)
-            return NotFound();
-
-        _db.SubDealerRegistrations.Remove(entity);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Deletes only the saved/maintained Sub Dealer details for the given Id.
-    /// Unlike the physical Delete, this keeps the same record Id, SubDealerCode,
-    /// StateId, Region and HQ so the row returns to an untouched master Sub Dealer
-    /// that is again hidden from the maintained list by the existing list rule.
-    /// </summary>
     [HttpDelete("{id:int}/details")]
-    public async Task<IActionResult> DeleteSavedDetails(
-        int id,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteSavedDetails(int id, CancellationToken cancellationToken,
+        [FromQuery] DateTime? expectedUpdatedAt = null)
     {
-        var entity = await _db.SubDealerRegistrations
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (!CanMaintain(User)) return Forbid();
+        var actor = CurrentUserId();
+        if (string.IsNullOrWhiteSpace(actor)) return Unauthorized();
+        if (!expectedUpdatedAt.HasValue) return BadRequest("Refresh the list before clearing details; the record version is required.");
+        var commitStarted = false;
+        try
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var entity = await Scoped(tracking: true).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+            if (entity == null) return NotFound("Sub Dealer not found in your permitted scope.");
+            if (GetExcelCodeError(entity.SubDealerCode) != null)
+                return BadRequest("A SuperAdmin must repair the invalid master code before details can be cleared.");
+            if (entity.UpdatedAt != expectedUpdatedAt.Value)
+                return Conflict("This record changed. Refresh the list before confirming Delete Details.");
 
-        if (entity == null)
-            return NotFound($"Sub Dealer with Id {id} was not found.");
-
-        // Preserve the master-row identity and location hierarchy.
-        var preservedCode = entity.SubDealerCode;
-        var preservedStateId = entity.StateId;
-        var preservedRegionId = entity.Region;
-        var preservedHqId = entity.HQ;
-        var preservedFirmName = entity.FirmName;
-
-        ClearMaintainedDetails(entity);
-
-        // Restore the preserved master/location fields.
-        entity.SubDealerCode = preservedCode;
-        entity.StateId = preservedStateId;
-        entity.Region = preservedRegionId;
-        entity.HQ = preservedHqId;
-        entity.UpdatedBy = CurrentUserId();
-        entity.UpdatedAt = DateTime.Now;
-        entity.FirmName = preservedFirmName;
-
-        await _db.SaveChangesAsync(cancellationToken);
-        return NoContent();
+            // Clear only fields maintained by this form. Keep Id, code, master name,
+            // State/Region/HQ, CreatedAt and CreatedBy. Detached PDFs are retained for safe recovery.
+            ClearMaintainedDetails(entity);
+            StampModified(_db, _configuration, entity, actor);
+            await _db.SaveChangesAsync(cancellationToken);
+            commitStarted = true;
+            await transaction.CommitAsync(cancellationToken);
+            return NoContent();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sub Dealer details reset failed for Id {SubDealerId}", id);
+            return commitStarted ? StatusCode(503, "Reset outcome is unknown. Refresh the record before retrying.")
+                : Conflict("Details were not cleared by this transaction. Refresh and retry.");
+        }
     }
 
     private static void ClearMaintainedDetails(SubDealerRegistration entity)
@@ -1366,140 +1317,30 @@ public class SubDealerRegistrationController : ControllerBase
         };
     }
 
-    private static string? ValidateModel(SubDealerFormModel model)
+    private static void NormalizeProfile(SubDealerFormModel model)
     {
-        if (model.StateId <= 0)
-            return "State is required.";
-        if (model.Region <= 0)
-            return "Region is required.";
-        if (model.HQ <= 0)
-            return "HQ is required.";
-        if (string.IsNullOrWhiteSpace(model.FirmName))
-            return "Firm Name is required.";
-        if (model.Status is not SubDealerStatus.Active and not SubDealerStatus.InActive)
-            return "Only Active or Inactive status is allowed.";
+        model.FirmName = (model.FirmName ?? string.Empty).Trim();
+        model.PinCode = (model.PinCode ?? string.Empty).Trim();
+        model.OfficialContactNumber = (model.OfficialContactNumber ?? string.Empty).Trim();
+        model.WhatsAppNumber = (model.WhatsAppNumber ?? string.Empty).Trim();
+        model.AlternativeNumber = model.AlternativeNumber?.Trim();
+        model.PANNo = model.PANNo?.Trim().ToUpperInvariant();
+        model.GSTNumber = model.GSTNumber?.Trim().ToUpperInvariant();
+    }
 
-        if (model.Status == SubDealerStatus.Active)
-        {
-            // Enforce the same Active-only required fields as the UI so backend
-            // validation matches frontend behavior.
-            if (string.IsNullOrWhiteSpace(model.ShopNoORRoomNoOrBlockNo))
-                return "Shop No / Room No / Block No is required.";
-
-            if (string.IsNullOrWhiteSpace(model.Village))
-                return "Village is required.";
-
-            if (!model.Latitude.HasValue)
-                return "Latitude is required (click the map or use current location).";
-
-            if (!model.Longitude.HasValue)
-                return "Longitude is required (click the map or use current location).";
-
-            if (string.IsNullOrWhiteSpace(model.PinCode))
-                return "Pincode is required.";
-
-            if (model.PinCode.Length != 6)
-                return "Pincode must be 6 digits.";
-
-            if ((model.DistrictId ?? 0) <= 0)
-                return "District is required in Primary Location.";
-
-            if ((model.DealerStateId ?? 0) <= 0)
-                return "State is required in Primary Location.";
-
-            if (string.IsNullOrWhiteSpace(model.OfficialContactNumber))
-                return "Official Contact Number is required.";
-
-            if (model.OfficialContactNumber.Length != 10)
-                return "Official Contact Number must be 10 digits.";
-
-            if (string.IsNullOrWhiteSpace(model.WhatsAppNumber))
-                return "WhatsApp Number is required.";
-
-            if (model.WhatsAppNumber.Length != 10)
-                return "WhatsApp Number must be 10 digits.";
-
-            if (string.IsNullOrWhiteSpace(model.RetailMFMSId))
-                return "Retail mFMS ID is required for Active Sub Dealer.";
-
-            if (string.IsNullOrWhiteSpace(model.PANNo))
-                return "PAN No is required for Active Sub Dealer.";
-            if (string.IsNullOrWhiteSpace(model.AlternativeNumber))
-                return "Alternative Number is required for Active Sub Dealer.";
-            if (string.IsNullOrWhiteSpace(model.GoogleMapURL))
-                return "Google Map URL is required for Active Sub Dealer.";
-            if (string.IsNullOrWhiteSpace(model.Street))
-                return "Street is required for Active Sub Dealer.";
-            if (string.IsNullOrWhiteSpace(model.SubVillage))
-                return "Sub Village is required for Active Sub Dealer.";
-            if (string.IsNullOrWhiteSpace(model.Block))
-                return "Block is required for Active Sub Dealer.";
-            if (string.IsNullOrWhiteSpace(model.Taluk))
-                return "Taluk is required for Active Sub Dealer.";
-        }
-
-        // PAN is optional for Inactive, but if entered the format is still validated.
-        if (!string.IsNullOrWhiteSpace(model.PANNo) &&
-            !Regex.IsMatch(
-                model.PANNo.Trim().ToUpperInvariant(),
-                @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
-        {
-            return "Invalid PAN format (e.g., ABCDE1234F).";
-        }
-
-        // Additional Active-only checks for GST and uploaded file
-        if (model.Status == SubDealerStatus.Active)
-        {
-            if (string.IsNullOrWhiteSpace(model.GSTNumber))
-                return "GST Number is required.";
-
-            if (!Regex.IsMatch(
-                model.GSTNumber ?? string.Empty,
-                @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
-                return "Invalid GST format (e.g., 22AAAAA0000A1Z5).";
-
-            if (string.IsNullOrWhiteSpace(model.GSTFilePath))
-                return "GST Certificate PDF is required.";
-        }
-
-        // Inactive: validate formats if present and coordinate pairs
-        if (model.Status == SubDealerStatus.InActive)
-        {
-            if (!string.IsNullOrWhiteSpace(model.PinCode) && model.PinCode.Length != 6)
-                return "Pincode must be 6 digits.";
-
-            if (!string.IsNullOrWhiteSpace(model.OfficialContactNumber) &&
-                model.OfficialContactNumber.Length != 10)
-                return "Official Contact Number must be 10 digits.";
-
-            if (!string.IsNullOrWhiteSpace(model.WhatsAppNumber) && model.WhatsAppNumber.Length != 10)
-                return "WhatsApp Number must be 10 digits.";
-
-            if (!string.IsNullOrWhiteSpace(model.AlternativeNumber) &&
-                model.AlternativeNumber.Length != 10)
-                return "Alternative Number must be 10 digits.";
-
-            if (!string.IsNullOrWhiteSpace(model.GSTNumber) &&
-                !Regex.IsMatch(
-                    model.GSTNumber,
-                    @"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"))
-                return "Invalid GST format (e.g., 22AAAAA0000A1Z5).";
-
-            if (!string.IsNullOrWhiteSpace(model.PANNo) &&
-                !Regex.IsMatch(
-                    model.PANNo.Trim().ToUpperInvariant(),
-                    @"^[A-Z]{5}[0-9]{4}[A-Z]$"))
-                return "Invalid PAN format (e.g., ABCDE1234F).";
-
-            if (model.Latitude.HasValue && !model.Longitude.HasValue)
-                return "Longitude is required when Latitude is entered.";
-
-            if (model.Longitude.HasValue && !model.Latitude.HasValue)
-                return "Latitude is required when Longitude is entered.";
-        }
-
+    private async Task<string?> ValidatePrimaryLocationAsync(SubDealerFormModel model, CancellationToken cancellationToken)
+    {
+        if (model.DealerStateId.GetValueOrDefault() > 0 &&
+            !await _db.States.AsNoTracking().AnyAsync(x => x.Id == model.DealerStateId, cancellationToken))
+            return "Primary Location State is not in the master.";
+        if (model.DistrictId.GetValueOrDefault() > 0 &&
+            !await _db.Districts.AsNoTracking().AnyAsync(x => x.Id == model.DistrictId && x.StateId == model.DealerStateId, cancellationToken))
+            return "Primary Location District does not belong to the selected State.";
         return null;
     }
+
+    private static string? ValidateModel(SubDealerFormModel model) =>
+        model.Validate(new ValidationContext(model)).FirstOrDefault()?.ErrorMessage;
 
     private static void ApplyModel(
         SubDealerRegistration entity,
@@ -1551,8 +1392,7 @@ public class SubDealerRegistrationController : ControllerBase
         entity.GSTConstitutionofBusiness = model.GSTConstitutionofBusiness;
         entity.GSTFilePath = model.GSTFilePath;
 
-        entity.CreatedBy ??= model.CreatedBy;
-        entity.UpdatedBy = model.UpdatedBy;
+        // Audit is assigned only by the authenticated server action, never from the client DTO.
     }
 
     private static SubDealerFormModel ToModel(SubDealerRegistration entity)
@@ -1600,5 +1440,116 @@ public class SubDealerRegistrationController : ControllerBase
             UpdatedBy = entity.UpdatedBy,
             UpdatedAt = entity.UpdatedAt
         };
+    }
+
+    // Shared scope and audit methods remain in this ORIGINAL controller file.
+    internal const string AdminRoles = "Admin,SuperAdmin,CorporateAdmin";
+
+    internal static bool HasRole(ClaimsPrincipal user, params string[] roles) =>
+        user.Identity?.IsAuthenticated == true &&
+        user.Claims.Where(c => c.Type == ClaimTypes.Role || c.Type == "Role" || c.Type == "role")
+            .Any(c => roles.Any(r => string.Equals(r, c.Value.Trim(), StringComparison.OrdinalIgnoreCase)));
+
+    internal static bool IsAdmin(ClaimsPrincipal user) => HasRole(user, "Admin", "SuperAdmin", "CorporateAdmin");
+    internal static bool CanImport(ClaimsPrincipal user) => IsAdmin(user);
+
+    // Retain existing Director/AVP maintenance permissions; AVP remains zone-scoped.
+    internal static bool CanMaintain(ClaimsPrincipal user) =>
+        IsAdmin(user) || HasRole(user, "MO", "MDO", "JMDO", "Director", "AVP");
+
+    internal static string? Actor(ClaimsPrincipal user) =>
+        new[] { ClaimTypes.NameIdentifier, "sub", "spic:user_id" }
+            .Select(t => user.FindFirst(t)?.Value)
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
+    private static int ClaimId(ClaimsPrincipal user, params string[] names)
+    {
+        foreach (var name in names)
+            if (int.TryParse(user.FindFirst(name)?.Value, out var id) && id > 0) return id;
+        return 0;
+    }
+
+    internal static IQueryable<SubDealerRegistration> Scope(
+        IQueryable<SubDealerRegistration> query, AppDbContext db, ClaimsPrincipal user)
+    {
+        if (user.Identity?.IsAuthenticated != true) return query.Where(x => false);
+        if (IsAdmin(user) || HasRole(user, "Director")) return query;
+
+        if (HasRole(user, "AVP"))
+        {
+            var zoneId = ClaimId(user, "spic:zone_id", "ZoneId");
+            if (zoneId == 0) return query.Where(x => false);
+            var states = db.States.Where(s => s.ZoneId == zoneId).Select(s => s.Id);
+            return query.Where(x => states.Contains(x.StateId));
+        }
+
+        var stateId = ClaimId(user, "spic:state_id", "StateId");
+        var regionId = ClaimId(user, "spic:region_id", "RegionId");
+        var hqId = ClaimId(user, "spic:hq_id", "HQId", "HqId", "HeadquartersId");
+        if (HasRole(user, "MO", "MDO", "JMDO"))
+        {
+            if (hqId == 0) return query.Where(x => false);
+            query = query.Where(x => x.HQ == hqId);
+            if (regionId > 0) query = query.Where(x => x.Region == regionId);
+            if (stateId > 0) query = query.Where(x => x.StateId == stateId);
+            return query;
+        }
+        if (HasRole(user, "SMM", "SMD"))
+            return stateId > 0 ? query.Where(x => x.StateId == stateId) : query.Where(x => false);
+        if (HasRole(user, "RM", "RMD"))
+        {
+            if (regionId == 0) return query.Where(x => false);
+            query = query.Where(x => x.Region == regionId);
+            return stateId > 0 ? query.Where(x => x.StateId == stateId) : query;
+        }
+        // Unknown roles/missing claims must not fall through to unrestricted data.
+        return query.Where(x => false);
+    }
+
+    // Preserve the supplied list's maintained-record definition, and reuse it for counts.
+    // File upload itself does not set GSTFilePath in the database: only a successful profile save does.
+    internal static readonly Expression<Func<SubDealerRegistration, bool>> HasMaintainedDetails = x =>
+        x.Status == SubDealerStatus.InActive ||
+        x.Latitude.HasValue || x.Longitude.HasValue || x.DistrictId.HasValue || x.DealerStateId.HasValue ||
+        !string.IsNullOrEmpty(x.ShopNoORRoomNoOrBlockNo) || !string.IsNullOrEmpty(x.Village) ||
+        !string.IsNullOrEmpty(x.PinCode) || !string.IsNullOrEmpty(x.OfficialContactNumber) ||
+        !string.IsNullOrEmpty(x.WhatsAppNumber) || !string.IsNullOrEmpty(x.AlternativeNumber) ||
+        !string.IsNullOrEmpty(x.GSTNumber) || !string.IsNullOrEmpty(x.GSTFilePath) ||
+        !string.IsNullOrEmpty(x.PANNo) || !string.IsNullOrEmpty(x.WholesaleMFMSId) ||
+        !string.IsNullOrEmpty(x.RetailMFMSId);
+
+    private static DateTime AuditAt(AppDbContext db, IConfiguration config, string property, DateTime utc)
+    {
+        var mapped = db.Model.FindEntityType(typeof(SubDealerRegistration))?.FindProperty(property);
+        if (mapped == null) throw new InvalidOperationException("SubDealer audit property mapping is missing.");
+        var storeType = mapped.GetColumnType() ?? mapped.GetRelationalTypeMapping().StoreType;
+        if (storeType.Contains("with time zone", StringComparison.OrdinalIgnoreCase) ||
+            storeType.StartsWith("timestamptz", StringComparison.OrdinalIgnoreCase))
+            return new DateTime(utc.Ticks / 10 * 10, DateTimeKind.Utc);
+
+        // The supplied historical model uses timestamp WITHOUT time zone.
+        // Default to the existing server timezone, rather than silently shifting historical wall times.
+        var zoneId = config["SubDealer:AuditTimeZoneId"];
+        var zone = string.IsNullOrWhiteSpace(zoneId) ? TimeZoneInfo.Local : TimeZoneInfo.FindSystemTimeZoneById(zoneId);
+        var local = TimeZoneInfo.ConvertTimeFromUtc(utc, zone);
+        return new DateTime(local.Ticks / 10 * 10, DateTimeKind.Unspecified);
+    }
+
+    private static void StampCreated(AppDbContext db, IConfiguration config, SubDealerRegistration entity, string actor)
+    {
+        var utc = DateTime.UtcNow;
+        entity.CreatedBy = actor;
+        entity.CreatedAt = AuditAt(db, config, nameof(entity.CreatedAt), utc);
+        entity.UpdatedBy = actor;
+        entity.UpdatedAt = AuditAt(db, config, nameof(entity.UpdatedAt), utc);
+    }
+
+    private static void StampModified(AppDbContext db, IConfiguration config, SubDealerRegistration entity, string actor)
+    {
+        // CreatedAt and CreatedBy are deliberately never assigned during updates.
+        entity.UpdatedBy = actor;
+        var next = AuditAt(db, config, nameof(entity.UpdatedAt), DateTime.UtcNow);
+        // Make two operations in the same microsecond distinguishable without changing historical dates.
+        entity.UpdatedAt = next == entity.UpdatedAt ? next.AddTicks(10) : next;
     }
 }

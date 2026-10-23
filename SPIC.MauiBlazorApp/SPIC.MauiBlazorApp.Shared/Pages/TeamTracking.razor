@@ -1,0 +1,99 @@
+@page "/TeamTracking"
+@using SPIC.Core.DTOs
+@inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
+
+<div class="container-fluid py-4 px-0 tt-page">
+
+    <div class="tt-header-row">
+        <div>
+            <h2 class="tt-title">Team Tracking</h2>
+            <p class="tt-subtitle">Live location status for the JMDOs at your headquarters.</p>
+        </div>
+
+        <button type="button" class="tt-btn tt-btn-outline" @onclick="LoadAsync" disabled="@_isLoading">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+
+    <SpicDataTable Items="_rows"
+                   IsLoading="_isLoading"
+                   Title="JMDO tracking status"
+                   FileName="TeamTracking"
+                   ExportColumns="GetExportColumns()"
+                   SearchText="@_searchText"
+                   EmptyTitle="@(_rows.Count == 0 ? "No JMDOs found for your headquarters" : null)">
+        <FilterControls>
+            <input type="text" class="tt-quick-search"
+                   placeholder="Search..."
+                   @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+        </FilterControls>
+        <TableHeader>
+            <th>JMDO</th>
+            <th>Status</th>
+            <th>Last Seen</th>
+            <th>Last Location</th>
+            <th>Session Started</th>
+        </TableHeader>
+        <TableRow Context="row">
+            <td class="tt-jmdo-name">@row.JmdoName</td>
+            <td data-label="Status"><span class="tt-status @StatusClass(row.LiveStatus)"><span class="tt-status-dot"></span>@StatusLabel(row.LiveStatus)</span></td>
+            <td data-label="Last Seen">@(row.LastPointAt?.ToString("dd MMM yyyy, hh:mm tt") ?? "—")</td>
+            <td data-label="Last Location">@(row.LastLatitude is { } lat && row.LastLongitude is { } lng ? $"{lat:0.####}, {lng:0.####}" : "—")</td>
+            <td data-label="Session Started">@(row.SessionStartTime?.ToString("dd MMM yyyy, hh:mm tt") ?? "—")</td>
+        </TableRow>
+    </SpicDataTable>
+
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private List<JMDOTrackingTeamRowDto> _rows = new();
+    private string _searchText = "";
+
+    private static string StatusLabel(JmdoTrackingLiveStatus status) => status switch
+    {
+        JmdoTrackingLiveStatus.Live => "Live",
+        JmdoTrackingLiveStatus.Stale => "Stale",
+        JmdoTrackingLiveStatus.Offline => "Offline",
+        JmdoTrackingLiveStatus.AutoEnded => "Ended automatically",
+        JmdoTrackingLiveStatus.Stopped => "Stopped",
+        _ => "Never started"
+    };
+
+    private static string StatusClass(JmdoTrackingLiveStatus status) => status switch
+    {
+        JmdoTrackingLiveStatus.Live => "tt-status-live",
+        JmdoTrackingLiveStatus.Stale => "tt-status-stale",
+        JmdoTrackingLiveStatus.Offline => "tt-status-offline",
+        JmdoTrackingLiveStatus.AutoEnded => "tt-status-autoended",
+        JmdoTrackingLiveStatus.Stopped => "tt-status-stopped",
+        _ => "tt-status-notstarted"
+    };
+
+    private List<ExportColumn<JMDOTrackingTeamRowDto>> GetExportColumns() => new()
+    {
+        new() { Header = "JMDO", ValueSelector = r => r.JmdoName },
+        new() { Header = "Status", ValueSelector = r => StatusLabel(r.LiveStatus) },
+        new() { Header = "Last Seen", ValueSelector = r => r.LastPointAt?.ToString("dd MMM yyyy, hh:mm tt") ?? "" },
+        new() { Header = "Last Location", ValueSelector = r => r.LastLatitude is { } lat && r.LastLongitude is { } lng ? $"{lat:0.####}, {lng:0.####}" : "" },
+        new() { Header = "Session Started", ValueSelector = r => r.SessionStartTime?.ToString("dd MMM yyyy, hh:mm tt") ?? "" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            _rows = await TrackingApi.GetTeamAsync();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}

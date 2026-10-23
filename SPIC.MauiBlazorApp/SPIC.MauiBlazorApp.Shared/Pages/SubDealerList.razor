@@ -3,6 +3,7 @@
 @using System.IO.Compression
 @using System.Net.Http.Json
 @using System.Text
+@using System.Globalization
 @using System.Xml
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
@@ -973,13 +974,23 @@
                 </button>
             }
 
+            @if (CanCorrectSubDealerCodes)
+            {
+                <button type="button"
+                        class="sd-btn import"
+                        @onclick="OpenMissingCodeRepairModal">
+                    <i class="bi bi-shield-check"></i>
+                    Repair Missing Codes
+                </button>
+            }
+
             @if (CanCreateSubDealer)
             {
                 <button type="button"
                         class="sd-btn primary"
                         @onclick="CreateSubDealer">
                     <i class="bi bi-plus-lg"></i>
-                    Create Sub Dealer
+                    Maintain Sub Dealer
                 </button>
             }
         </div>
@@ -1243,13 +1254,15 @@
                                         <button type="button"
                                                 class="sd-action-btn"
                                                 title="Edit"
+                                                disabled="@(!CanEditSubDealer)"
                                                 @onclick="() => EditSubDealer(item.Id)">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
 
                                         <button type="button"
                                                 class="sd-action-btn"
-                                                title="Delete"
+                                                title="Delete Details"
+                                                disabled="@(!CanEditSubDealer)"
                                                 @onclick="() => RequestDelete(item)">
                                             <i class="bi bi-trash"></i>
                                         </button>
@@ -1509,7 +1522,7 @@
                     <h5 class="fw-bold mb-1">Correct Existing Sub Dealer Codes</h5>
                     <div class="small text-muted">
                         SuperAdmin only. Update <strong>SubDealerCode</strong> on existing records.
-                        All other fields and registration Ids remain unchanged.
+                        Registration Ids, original creation history and other business fields remain unchanged. Modification time and user are recorded.
                     </div>
                 </div>
                 <button type="button" class="btn-close" aria-label="Close"
@@ -1610,6 +1623,86 @@
     </div>
 }
 
+@if (_showMissingCodeRepairModal && CanCorrectSubDealerCodes)
+{
+    <div class="subdealer-import-backdrop" @onclick="CloseMissingCodeRepairModal">
+        <div class="subdealer-import-modal" style="width: min(760px, 100%);" @onclick:stopPropagation="true">
+            <div class="subdealer-import-modal-header">
+                <div>
+                    <h5 class="fw-bold mb-1">Repair a Missing Sub Dealer Code</h5>
+                    <div class="small text-muted">
+                        SuperAdmin only. Use the existing <strong>database record Id</strong> and
+                        its <strong>verified actual Sub Dealer Code</strong>. No SD+Id generation.
+                    </div>
+                </div>
+                <button type="button" class="btn-close" aria-label="Close"
+                        disabled="@_missingCodeRepairBusy" @onclick="CloseMissingCodeRepairModal"></button>
+            </div>
+            <div class="subdealer-import-modal-body">
+                <div class="alert alert-warning small">
+                    Only legacy records with a missing/blank code may be repaired here.
+                    Verify the original code using the approved master Excel first.
+                    The original code correction Excel workflow is unchanged.
+                </div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-4">
+                        <label class="sd-label">Database Sub Dealer Id</label>
+                        <input class="sd-input" type="number" min="1"
+                               placeholder="e.g. 123"
+                               @bind="_missingCodeRecordId"
+                               @bind:after="InvalidateMissingCodePreview" />
+                    </div>
+                    <div class="col-12 col-md-8">
+                        <label class="sd-label">Verified Actual Sub Dealer Code</label>
+                        <input class="sd-input" type="text" maxlength="50"
+                               placeholder="Enter the original real code (not SD + Id)"
+                               @bind="_missingCodeActualCode"
+                               @bind:after="InvalidateMissingCodePreview" />
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_missingCodeRepairMessage))
+                {
+                    <div class="alert @(_missingCodeRepairError ? "alert-danger" : "alert-info") small mt-3 mb-0">
+                        @_missingCodeRepairMessage
+                    </div>
+                }
+
+                @if (_missingCodePreview?.Success == true && _missingCodePreview.Ready)
+                {
+                    <div class="table-responsive mt-3">
+                        <table class="table table-bordered table-sm align-middle">
+                            <tbody>
+                                <tr><th scope="row">Database Id</th><td>@_missingCodePreview.Id</td></tr>
+                                <tr><th scope="row">Firm Name (from DB)</th><td>@_missingCodePreview.FirmName</td></tr>
+                                <tr><th scope="row">Existing Code</th><td class="text-danger">Missing / Blank</td></tr>
+                                <tr><th scope="row">Verified Actual Code to save</th><td>@_missingCodePreview.ActualCode</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <label class="form-check small mt-2">
+                        <input type="checkbox" class="form-check-input" @bind="_missingCodeRepairConfirmed" />
+                        <span class="form-check-label">
+                            I checked this Id and Firm Name against the approved master,
+                            and confirm that the new code is genuine.
+                        </span>
+                    </label>
+                }
+            </div>
+            <div class="subdealer-import-modal-footer">
+                <button type="button" class="btn btn-outline-secondary"
+                        disabled="@_missingCodeRepairBusy" @onclick="CloseMissingCodeRepairModal">Cancel</button>
+                <button type="button" class="btn btn-outline-success"
+                        disabled="@(_missingCodeRepairBusy || !_missingCodeRecordId.HasValue || _missingCodeRecordId <= 0 || string.IsNullOrWhiteSpace(_missingCodeActualCode))"
+                        @onclick="PreviewMissingCodeRepairAsync">Preview (no save)</button>
+                <button type="button" class="btn btn-success"
+                        disabled="@(_missingCodeRepairBusy || _missingCodePreview?.Success != true || _missingCodePreview.Ready != true || !_missingCodeRepairConfirmed)"
+                        @onclick="ApplyMissingCodeRepairAsync">Apply Actual Code</button>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_showImportModal && CanImportSubDealers)
 {
     <div class="subdealer-import-backdrop" @onclick="CloseImportModal">
@@ -1618,7 +1711,7 @@
                 <div>
                     <h5 class="fw-bold mb-1">Import Sub Dealer Master</h5>
                     <div class="small text-muted">
-                        Upload the approved Excel master. Admin can import all mapped locations; MO roles can import only their assigned HQ. Untouched imported rows remain hidden from the maintained Sub Dealer list.
+                        Admin uploads the approved Excel master. MO maintains existing imported records. Untouched master rows remain hidden from the maintained list.
                     </div>
                 </div>
 
@@ -1673,8 +1766,20 @@
 
                 @if (!string.IsNullOrWhiteSpace(_importMessage))
                 {
-                    <div class="alert @(_importPartialSuccess ? "alert-warning border-warning text-warning-emphasis" : _importHasError ? "alert-danger" : "alert-success") py-2 mt-3 mb-0 small">
+                    <div class="alert @(_importAwaitingConfirmation || _importPartialSuccess ? "alert-warning border-warning text-warning-emphasis" : _importHasError ? "alert-danger" : "alert-success") py-2 mt-3 mb-0 small">
                         @_importMessage
+                    </div>
+                }
+
+                @if (_importRejected.Any(x =>
+                    x.Reason.Contains("Sub Dealer Code is required", StringComparison.OrdinalIgnoreCase) ||
+                    x.Reason.Contains("invisible characters", StringComparison.OrdinalIgnoreCase) ||
+                    x.Reason.Contains("visually empty", StringComparison.OrdinalIgnoreCase)))
+                {
+                    <div class="alert alert-warning py-2 mt-3 mb-0 small" role="alert">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <strong>Warning:</strong> Some Excel rows have empty or invisible Sub Dealer Codes.
+                        Those rows were rejected and NOT saved. Check the Excel row numbers below.
                     </div>
                 }
 
@@ -1684,15 +1789,22 @@
                         <div class="fw-semibold mb-2">Import summary</div>
                         <div class="d-flex flex-wrap gap-3">
                             <span>Total data rows: <strong>@_importTotalRows</strong></span>
-                            @if (_importUnconfirmedRows > 0)
+                            @if (_importAwaitingConfirmation)
+                            {
+                                <span class="text-warning"><strong>Preview only - nothing saved yet.</strong></span>
+                                <span>New: <strong>@_importInserted</strong></span>
+                                <span>Changed: <strong>@_importUpdated</strong></span>
+                                <span>Already same: <strong>@_importUnchanged</strong></span>
+                            }
+                            else if (_importUnconfirmedRows > 0)
                             {
                                 <span class="text-warning">Saved: <strong>not confirmed</strong>
                                     (@_importUnconfirmedRows row(s) were sent; the result was not received)</span>
                             }
                             else
                             {
-                                <span class="text-success">Saved: <strong>@(_importInserted + _importUpdated)</strong>
-                                    (Inserted @_importInserted, Updated @_importUpdated)</span>
+                                <span class="text-success">Saved changes: <strong>@(_importInserted + _importUpdated)</strong>
+                                    (Inserted @_importInserted, Updated @_importUpdated, Unchanged @_importUnchanged)</span>
                             }
                             <span class="text-danger">Rejected: <strong>@_importRejected.Count</strong></span>
                         </div>
@@ -1752,23 +1864,42 @@
                     Cancel
                 </button>
 
-                <button type="button"
-                        class="btn btn-success px-4"
-                        disabled="@(_isImporting || _importFile == null)"
-                        @onclick="ImportSubDealersFromExcel">
-                    @if (_isImporting)
-                    {
-                        <span class="spinner-border spinner-border-sm me-2"
-                              role="status"
-                              aria-hidden="true"></span>
-                        <span>Importing...</span>
-                    }
-                    else
-                    {
-                        <i class="bi bi-upload me-2"></i>
-                        <span>Upload &amp; Import</span>
-                    }
-                </button>
+                @if (_importAwaitingConfirmation)
+                {
+                    <button type="button"
+                            class="btn btn-success px-4"
+                            disabled="@(_isImporting || _pendingImportRequest == null)"
+                            @onclick="ProceedImportAsync">
+                        @if (_isImporting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-check2-circle me-2"></i>
+                            <span>Proceed Import</span>
+                        }
+                    </button>
+                }
+                else
+                {
+                    <button type="button"
+                            class="btn btn-success px-4"
+                            disabled="@(_isImporting || _importFile == null)"
+                            @onclick="ImportSubDealersFromExcel">
+                        @if (_isImporting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Checking...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-search me-2"></i>
+                            <span>Check Import</span>
+                        }
+                    </button>
+                }
             </div>
         </div>
     </div>
@@ -1865,7 +1996,6 @@
     private int _stateSummaryPage = 1;
     private int _stateSummaryPageSize = 10;
 
-    private const int StateSummaryMaxConcurrentRequests = 4;
 
     private string _searchText = string.Empty;
     private string _statusFilter = string.Empty;
@@ -1904,6 +2034,9 @@
     private int _importTotalRows;
     private int _importInserted;
     private int _importUpdated;
+    private int _importUnchanged;
+    private bool _importAwaitingConfirmation;
+    private SubDealerBulkImportRequest? _pendingImportRequest;
 
     // Rows sent to the save API whose outcome the API never confirmed (null response
     // or an exception before a result arrived). 0 = the saved counts are confirmed.
@@ -1922,6 +2055,9 @@
         _importTotalRows = 0;
         _importInserted = 0;
         _importUpdated = 0;
+        _importUnchanged = 0;
+        _importAwaitingConfirmation = false;
+        _pendingImportRequest = null;
     }
     private const long MaxImportFileSize = 10 * 1024 * 1024;
 
@@ -1951,10 +2087,13 @@
         string.Equals(CurrentRole, "SMD", StringComparison.OrdinalIgnoreCase) ||
         (LoginState?.IsStateRole ?? false);
 
-    private bool IsUnrestricted =>
-        LoginState == null ||
-        LoginState.IsAdmin ||
-        LoginState.IsDirectorOrAVP;
+    private bool IsAdminMaster =>
+        string.Equals(CurrentRole, "Admin", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentRole, "SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(CurrentRole, "CorporateAdmin", StringComparison.OrdinalIgnoreCase);
+
+    // This governs dropdown options only. The API independently restricts AVP to its zone.
+    private bool IsUnrestricted => LoginState != null && (IsAdminMaster || LoginState.IsDirectorOrAVP);
 
     private bool CanCreateSubDealer =>
         IsMoRole || IsUnrestricted;
@@ -1994,8 +2133,29 @@
         public string Message { get; set; } = string.Empty;
     }
 
-    private bool CanImportSubDealers =>
-        LoginState?.UserRole == AppRole.Admin;
+    // Separate NULL/blank legacy code correction - never overwrites existing codes.
+    private bool _showMissingCodeRepairModal;
+    private bool _missingCodeRepairBusy;
+    private int? _missingCodeRecordId;
+    private string _missingCodeActualCode = string.Empty;
+    private MissingCodeRepairResponseDto? _missingCodePreview;
+    private string? _missingCodeRepairMessage;
+    private bool _missingCodeRepairError;
+    private bool _missingCodeRepairConfirmed;
+
+    private sealed class MissingCodeRepairResponseDto
+    {
+        public bool Success { get; set; }
+        public bool Ready { get; set; }
+        public bool Updated { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public int Id { get; set; }
+        public string FirmName { get; set; } = string.Empty;
+        public string ExistingCode { get; set; } = string.Empty;
+        public string ActualCode { get; set; } = string.Empty;
+    }
+
+    private bool CanImportSubDealers => IsAdminMaster;
 
     private bool CanEditSubDealer =>
         IsMoRole || IsUnrestricted;
@@ -2305,142 +2465,42 @@
 
     private async Task LoadStateWiseSummaryAsync()
     {
-        if (_isStateSummaryLoading || _isDisposed)
-            return;
-
+        if (_isDisposed) return;
+        _stateSummaryLoadCts?.Cancel();
         var requestCts = new CancellationTokenSource();
         _stateSummaryLoadCts = requestCts;
         _isStateSummaryLoading = true;
         _stateSummaryError = null;
-
         try
         {
-            var masterRows =
-                await Http.GetFromJsonAsync<List<SubDealerLookupDto>>(
-                    BuildRoleScopedSubDealerLookupUrl(),
-                    requestCts.Token) ?? new();
-
-            var masterCountByState = new Dictionary<int, int>();
-            foreach (var row in masterRows)
-            {
-                masterCountByState.TryGetValue(row.StateId, out var count);
-                masterCountByState[row.StateId] = count + 1;
-            }
-
-            var summaryStates = AllowedStates
-                .Where(x => !IsUnrestricted || masterCountByState.ContainsKey(x.Id))
-                .OrderBy(x => x.StateName)
-                .ToList();
-
-            using var requestGate =
-                new SemaphoreSlim(StateSummaryMaxConcurrentRequests);
-
-            var stateTasks = summaryStates.Select(async state =>
-            {
-                await requestGate.WaitAsync(requestCts.Token);
-
-                try
-                {
-                    var savedResponse =
-                        await Http.GetFromJsonAsync<SubDealerPagedListResponse>(
-                            BuildStateSummaryListUrl(state.Id),
-                            requestCts.Token) ?? new();
-
-                    var activeCount = savedResponse.ActiveCount;
-                    var inactiveCount = savedResponse.InactiveCount;
-
-                    return new StateWiseSubDealerSummaryRow
-                    {
-                        StateId = state.Id,
-                        StateName = state.StateName,
-                        TotalSubDealers = masterCountByState.GetValueOrDefault(state.Id),
-                        SavedSubDealers = activeCount + inactiveCount,
-                        ActiveSubDealers = activeCount,
-                        InactiveSubDealers = inactiveCount
-                    };
-                }
-                finally
-                {
-                    requestGate.Release();
-                }
-            });
-
-            _stateWiseSummary = (await Task.WhenAll(stateTasks)).ToList();
+            var rows = await Http.GetFromJsonAsync<List<StateWiseSubDealerSummaryRow>>(
+                "api/SubDealerRegistration/state-summary", requestCts.Token) ?? new();
+            if (_isDisposed || !ReferenceEquals(_stateSummaryLoadCts, requestCts)) return;
+            _stateWiseSummary = rows;
             _stateSummaryPage = 1;
             UpdateStateSummaryView();
         }
-        catch (OperationCanceledException) when (requestCts.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (requestCts.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            Console.WriteLine($"State-wise Sub Dealer summary load failed: {ex.Message}");
-            _stateWiseSummary.Clear();
-            _filteredStateWiseSummary.Clear();
-            _pagedStateWiseSummary.Clear();
-            _stateSummaryError =
-                "Could not load the state-wise Sub Dealer summary. Please refresh and try again.";
+            if (!_isDisposed && ReferenceEquals(_stateSummaryLoadCts, requestCts))
+            {
+                Console.WriteLine($"State summary load failed: {ex.Message}");
+                _stateWiseSummary.Clear();
+                _filteredStateWiseSummary.Clear();
+                _pagedStateWiseSummary.Clear();
+                _stateSummaryError = "Could not load state-wise counts. Refresh and try again.";
+            }
         }
         finally
         {
-            _isStateSummaryLoading = false;
-
             if (ReferenceEquals(_stateSummaryLoadCts, requestCts))
+            {
+                _isStateSummaryLoading = false;
                 _stateSummaryLoadCts = null;
-
+            }
             requestCts.Dispose();
         }
-    }
-
-    private string BuildRoleScopedSubDealerLookupUrl()
-    {
-        const string baseUrl = "api/SubDealerRegistration/lookup";
-
-        if (IsUnrestricted)
-            return baseUrl;
-
-        if (IsMoRole && LoginState.HQId > 0)
-            return $"{baseUrl}?hqId={LoginState.HQId}";
-
-        if (IsRmRole && LoginState.RegionId > 0)
-            return $"{baseUrl}?regionId={LoginState.RegionId}";
-
-        if (IsSmmRole && LoginState.StateId > 0)
-            return $"{baseUrl}?stateId={LoginState.StateId}";
-
-        return baseUrl;
-    }
-
-    private string BuildStateSummaryListUrl(int stateId)
-    {
-        var query = new List<string>
-        {
-            "page=1",
-            "pageSize=1",
-            $"stateId={stateId}"
-        };
-
-        if (!IsUnrestricted)
-        {
-            if (IsMoRole && LoginState.HQId > 0)
-            {
-                query.Add($"hqId={LoginState.HQId}");
-            }
-            else if (IsRmRole && LoginState.RegionId > 0)
-            {
-                query.Add($"regionId={LoginState.RegionId}");
-            }
-            else if (!IsSmmRole)
-            {
-                if (LoginState.RegionId > 0)
-                    query.Add($"regionId={LoginState.RegionId}");
-
-                if (LoginState.HQId > 0)
-                    query.Add($"hqId={LoginState.HQId}");
-            }
-        }
-
-        return "api/SubDealerRegistration/list?" + string.Join("&", query);
     }
 
     private void UpdateStateSummaryView()
@@ -3485,6 +3545,138 @@
         }
     }
 
+    private void OpenMissingCodeRepairModal()
+    {
+        if (!CanCorrectSubDealerCodes || _missingCodeRepairBusy) return;
+        _showMissingCodeRepairModal = true;
+        _missingCodeRecordId = null;
+        _missingCodeActualCode = string.Empty;
+        InvalidateMissingCodePreview();
+        _missingCodeRepairMessage = null;
+        _missingCodeRepairError = false;
+    }
+
+    private void CloseMissingCodeRepairModal()
+    {
+        if (_missingCodeRepairBusy) return;
+        _showMissingCodeRepairModal = false;
+        _missingCodeRecordId = null;
+        _missingCodeActualCode = string.Empty;
+        InvalidateMissingCodePreview();
+        _missingCodeRepairMessage = null;
+        _missingCodeRepairError = false;
+    }
+
+    private void InvalidateMissingCodePreview()
+    {
+        _missingCodePreview = null;
+        _missingCodeRepairConfirmed = false;
+    }
+
+    private async Task<MissingCodeRepairResponseDto> SendMissingCodeRepairAsync(string action)
+    {
+        using var response = await Http.PostAsJsonAsync(
+            $"api/SubDealerRegistration/missing-code-repair/{action}",
+            new
+            {
+                Id = _missingCodeRecordId ?? 0,
+                ActualCode = _missingCodeActualCode,
+                ExpectedFirmName = action == "apply" ? _missingCodePreview?.FirmName : null
+            });
+        var json = await response.Content.ReadAsStringAsync();
+        MissingCodeRepairResponseDto? result;
+        try
+        {
+            result = System.Text.Json.JsonSerializer.Deserialize<MissingCodeRepairResponseDto>(
+                json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            result = null;
+        }
+
+        result ??= new MissingCodeRepairResponseDto();
+        if (!response.IsSuccessStatusCode)
+        {
+            result.Success = false;
+            if (string.IsNullOrWhiteSpace(result.Message))
+                result.Message = $"HTTP {(int)response.StatusCode}. Check SuperAdmin permissions and API logs.";
+        }
+        return result;
+    }
+
+    private async Task PreviewMissingCodeRepairAsync()
+    {
+        if (!CanCorrectSubDealerCodes || _missingCodeRepairBusy ||
+            !_missingCodeRecordId.HasValue || _missingCodeRecordId <= 0) return;
+
+        _missingCodeRepairBusy = true;
+        InvalidateMissingCodePreview();
+        _missingCodeRepairMessage = null;
+        try
+        {
+            var result = await SendMissingCodeRepairAsync("preview");
+            _missingCodePreview = result.Success && result.Ready ? result : null;
+            _missingCodeRepairMessage = result.Message;
+            _missingCodeRepairError = !result.Success;
+        }
+        catch (Exception ex)
+        {
+            _missingCodeRepairError = true;
+            _missingCodeRepairMessage = $"Preview failed: {ex.Message}";
+        }
+        finally
+        {
+            _missingCodeRepairBusy = false;
+        }
+    }
+
+    private async Task ApplyMissingCodeRepairAsync()
+    {
+        if (!CanCorrectSubDealerCodes || _missingCodeRepairBusy ||
+            _missingCodePreview?.Success != true || !_missingCodePreview.Ready ||
+            !_missingCodeRepairConfirmed) return;
+
+        _missingCodeRepairBusy = true;
+        _missingCodeRepairConfirmed = false;
+        try
+        {
+            // API revalidates DB Id, Firm Name, NULL state, and code uniqueness.
+            var result = await SendMissingCodeRepairAsync("apply");
+            if (!result.Success || !result.Updated)
+            {
+                _missingCodeRepairError = true;
+                _missingCodeRepairMessage = result.Message;
+                _missingCodePreview = null;
+                return;
+            }
+
+            _showMissingCodeRepairModal = false;
+            _missingCodePreview = null;
+            _missingCodeRepairError = false;
+            _pageMessageIsError = false;
+            _pageMessage = result.Message;
+            try
+            {
+                await RefreshAsync();
+            }
+            catch
+            {
+                _pageMessage += " Refresh the list to see the latest code.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _missingCodeRepairError = true;
+            _missingCodeRepairMessage = $"Apply outcome not confirmed: {ex.Message}. Check database before retrying.";
+        }
+        finally
+        {
+            _missingCodeRepairBusy = false;
+        }
+    }
+
     private void OpenImportModal()
     {
         if (!CanImportSubDealers)
@@ -3544,12 +3736,14 @@
         _importMessage = $"Ready to import {file.Name}";
     }
 
+    private static string? GetExcelCodeError(string? rawCode) => SubDealerFormModel.CodeError(rawCode);
+
     private async Task ImportSubDealersFromExcel()
     {
         if (!CanImportSubDealers)
         {
             _importHasError = true;
-            _importMessage = "Only Admin or MO roles can import the Sub Dealer master.";
+            _importMessage = "Only Admin roles can import the Sub Dealer master.";
             return;
         }
 
@@ -3614,33 +3808,20 @@
             var statesByName = _states
                 .Where(x => !string.IsNullOrWhiteSpace(x.StateName))
                 .GroupBy(x => NormalizeMasterValue(x.StateName))
+                .Where(g => g.Select(x => x.Id).Distinct().Count() == 1)
                 .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
-
-            var statesById = _statesById;
 
             var regionsByStateAndName = _regions
                 .Where(x => !string.IsNullOrWhiteSpace(x.RegionName))
                 .GroupBy(x => $"{x.StateId}|{NormalizeMasterValue(x.RegionName)}")
-                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
-
-            var regionsById = _regionsById;
-
-            var uniqueRegionsByName = _regions
-                .Where(x => !string.IsNullOrWhiteSpace(x.RegionName))
-                .GroupBy(x => NormalizeMasterValue(x.RegionName), StringComparer.OrdinalIgnoreCase)
                 .Where(g => g.Select(x => x.Id).Distinct().Count() == 1)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
             var hqsByRegionAndName = _hqs
                 .Where(x => !string.IsNullOrWhiteSpace(x.HeadquarterName))
                 .GroupBy(x => $"{x.RegionId}|{NormalizeMasterValue(x.HeadquarterName)}")
-                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
-
-            var uniqueHqsByName = _hqs
-                .Where(x => !string.IsNullOrWhiteSpace(x.HeadquarterName))
-                .GroupBy(x => NormalizeMasterValue(x.HeadquarterName), StringComparer.OrdinalIgnoreCase)
                 .Where(g => g.Select(x => x.Id).Distinct().Count() == 1)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
             var mappedRows = new List<SubDealerBulkImportRowDto>();
             var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -3660,9 +3841,10 @@
                         Reason = reason
                     });
 
-                if (string.IsNullOrWhiteSpace(code))
+                var codeError = GetExcelCodeError(code);
+                if (codeError != null)
                 {
-                    Reject(SubDealerImportRejectCategory.Validation, "Sub Dealer Code is empty.");
+                    Reject(SubDealerImportRejectCategory.Validation, codeError);
                     continue;
                 }
 
@@ -3715,27 +3897,7 @@
                     hqsByRegionAndName.TryGetValue(exactHqKey, out resolvedHq);
                 }
 
-                if (resolvedHq == null &&
-                    uniqueHqsByName.TryGetValue(normalizedHq, out var uniqueHq) &&
-                    regionsById.TryGetValue(uniqueHq.RegionId, out var hqRegion) &&
-                    statesById.TryGetValue(hqRegion.StateId, out var hqState))
-                {
-                    resolvedHq = uniqueHq;
-                    resolvedRegion = hqRegion;
-                    resolvedState = hqState;
-                }
-
-                if (resolvedRegion == null &&
-                    uniqueRegionsByName.TryGetValue(normalizedRegion, out var uniqueRegion) &&
-                    statesById.TryGetValue(uniqueRegion.StateId, out var regionState))
-                {
-                    resolvedRegion = uniqueRegion;
-                    resolvedState = regionState;
-
-                    var hqKey = $"{resolvedRegion.Id}|{normalizedHq}";
-                    hqsByRegionAndName.TryGetValue(hqKey, out resolvedHq);
-                }
-
+                // Only the exact Excel State/Region/HQ hierarchy is accepted.
                 if (resolvedRegion == null)
                 {
                     Reject(
@@ -3756,7 +3918,7 @@
                 mappedRows.Add(new SubDealerBulkImportRowDto
                 {
                     ExcelRowNumber = row.RowNumber,
-                    SubDealerCode = code.ToUpperInvariant(),
+                    SubDealerCode = code,
                     FirmName = name.ToUpperInvariant(),
                     StateId = resolvedState.Id,
                     RegionId = resolvedRegion.Id,
@@ -3782,11 +3944,20 @@
             sentRowCount = mappedRows.Count;
 
             var saveResponse = await Http.PostAsJsonAsync(
-                "api/SubDealerRegistration/bulk-import?partial=true",
+                "api/SubDealerRegistration/bulk-import?partial=true&previewOnly=true",
                 request);
 
             if (!saveResponse.IsSuccessStatusCode)
             {
+                if ((int)saveResponse.StatusCode >= 500)
+                {
+                    _importHasError = true;
+                    _importUnconfirmedRows = sentRowCount;
+                    _importSummaryVisible = true;
+                    _importMessage = "The server did not confirm the import outcome. Verify the master before retrying. " +
+                        await saveResponse.Content.ReadAsStringAsync();
+                    return;
+                }
                 // Request-level failure (e.g. authorization / MO HQ mapping): nothing was
                 // committed, so every row that reached the save step is reported as rejected.
                 var responseBody = await saveResponse.Content.ReadAsStringAsync();
@@ -3823,48 +3994,37 @@
                 return;
             }
 
-            saveConfirmed = true;
+            saveConfirmed = true; // Preview response was confirmed; no database save has happened yet.
 
-            // Server-side rejections (validation, duplicates, database failure).
             _importRejected.AddRange(result.Rejected);
             _importInserted = result.Inserted;
             _importUpdated = result.Updated;
+            _importUnchanged = result.Unchanged;
             _importSummaryVisible = true;
 
-            // Failures not tied to a specific row (e.g. "Database import failed: ...").
             var rowLevelReasons = result.Rejected.Select(x => x.Reason).ToHashSet();
             _importErrors.AddRange(result.Errors.Where(x => !rowLevelReasons.Contains(x)));
 
-            // Refresh the maintained list. Untouched imported master rows remain
-            // hidden by the existing list endpoint visibility rule.
-            if (_importInserted + _importUpdated > 0)
-            {
-                _page = 1;
-                await Task.WhenAll(
-                    LoadListAsync(),
-                    LoadStateWiseSummaryAsync());
-            }
-
-            _importFile = null;
-
-            if (_importRejected.Count > 0 || result.Errors.Count > 0)
+            if (!result.RequiresConfirmation)
             {
                 _importHasError = true;
-                _importPartialSuccess = _importInserted + _importUpdated > 0;
-                _importMessage = _importInserted + _importUpdated > 0
-                    ? "Import completed with rejected rows. Valid rows were saved; review the rejected rows below."
-                    : "No rows were saved. Review the rejected rows below.";
+                _importAwaitingConfirmation = false;
+                _pendingImportRequest = null;
+                _importMessage = "No valid rows are available to import. Nothing was saved.";
+                return;
             }
-            else
-            {
-                _showImportModal = false;
-                _importSummaryVisible = false;
-                _importHasError = false;
-                _importMessage = null;
-                _pageMessageIsError = false;
-                _pageMessage =
-                    $"Sub Dealer master imported successfully. Inserted: {result.Inserted}, Updated: {result.Updated}.";
-            }
+
+            // Keep the mapped request in memory only for the explicit Proceed click.
+            // Until that click the database remains unchanged.
+            _pendingImportRequest = request;
+            _importAwaitingConfirmation = true;
+            _importHasError = false;
+            _importPartialSuccess = result.Rejected.Count > 0 || result.Errors.Count > 0;
+
+            _importMessage = result.Unchanged > 0
+                ? $"Warning: {result.Unchanged} row(s) already have the same Sub Dealer Code, Firm Name, State, Region and HQ. " +
+                  $"Planned new: {result.Inserted}, planned changes: {result.Updated}. Nothing has been saved yet. Click Proceed Import to continue, or Cancel to save nothing."
+                : $"Import preview ready. New: {result.Inserted}, changes: {result.Updated}. Nothing has been saved yet. Click Proceed Import to continue.";
         }
         catch (Exception ex)
         {
@@ -3879,10 +4039,104 @@
             }
 
             _importMessage = saveConfirmed
-                ? $"Import error after the save completed: {ex.Message}. The summary shows the result returned by the server."
+                ? $"Import preview error: {ex.Message}. Nothing was saved."
                 : sentRowCount > 0
-                    ? $"Import error: {ex.Message}. It could not be confirmed whether the valid rows were saved."
+                    ? $"Import preview error: {ex.Message}. Nothing was saved."
                     : $"Import error: {ex.Message}";
+        }
+        finally
+        {
+            _isImporting = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ProceedImportAsync()
+    {
+        if (_isImporting || !_importAwaitingConfirmation || _pendingImportRequest == null)
+            return;
+
+        _isImporting = true;
+        _importHasError = false;
+        _importMessage = "Saving confirmed import...";
+        _importUnconfirmedRows = 0;
+
+        var request = _pendingImportRequest;
+        var sentRowCount = request.Rows.Count;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync(
+                "api/SubDealerRegistration/bulk-import?partial=true&confirm=true",
+                request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                if ((int)response.StatusCode >= 500)
+                {
+                    _importUnconfirmedRows = sentRowCount;
+                    _importMessage = "The server did not confirm the import outcome. Verify the master before retrying. " + body;
+                }
+                else
+                {
+                    _importMessage = $"Import was not saved: {body}";
+                }
+
+                _importHasError = true;
+                return;
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<SubDealerBulkImportResponse>();
+            if (result == null)
+            {
+                _importHasError = true;
+                _importUnconfirmedRows = sentRowCount;
+                _importMessage = "The API returned an empty response after Proceed. Verify the master before retrying.";
+                return;
+            }
+
+            _importRejected.Clear();
+            _importRejected.AddRange(result.Rejected);
+            _importErrors.Clear();
+            _importErrors.AddRange(result.Errors);
+            _importInserted = result.Inserted;
+            _importUpdated = result.Updated;
+            _importUnchanged = result.Unchanged;
+            _importSummaryVisible = true;
+            _importAwaitingConfirmation = false;
+            _pendingImportRequest = null;
+            _importFile = null;
+
+            if (_importInserted + _importUpdated > 0)
+            {
+                _page = 1;
+                await Task.WhenAll(LoadListAsync(), LoadStateWiseSummaryAsync());
+            }
+
+            if (_importRejected.Count > 0 || _importErrors.Count > 0)
+            {
+                _importHasError = true;
+                _importPartialSuccess = _importInserted + _importUpdated > 0;
+                _importMessage = _importInserted + _importUpdated > 0
+                    ? $"Import completed with some rejected rows. Inserted: {_importInserted}, Updated: {_importUpdated}, Unchanged: {_importUnchanged}."
+                    : $"No database changes were made. Unchanged: {_importUnchanged}. Review the rejected rows below.";
+                return;
+            }
+
+            _showImportModal = false;
+            _importHasError = false;
+            _importPartialSuccess = false;
+            _pageMessageIsError = false;
+            _pageMessage = _importInserted + _importUpdated > 0
+                ? $"Sub Dealer master imported successfully. Inserted: {_importInserted}, Updated: {_importUpdated}, Unchanged: {_importUnchanged}."
+                : $"Import checked and confirmed. {_importUnchanged} row(s) already matched the database; no update was required.";
+        }
+        catch (Exception ex)
+        {
+            _importHasError = true;
+            _importUnconfirmedRows = sentRowCount;
+            _importMessage = $"Import outcome could not be confirmed: {ex.Message}. Verify the master before retrying.";
         }
         finally
         {
@@ -3931,12 +4185,14 @@
 
     private void EditSubDealer(int id)
     {
+        if (!CanEditSubDealer) return;
         Nav.NavigateTo(
             $"/SubDealerRegistration?subDealerId={id}");
     }
 
     private void RequestDelete(SubDealerListItemDto item)
     {
+        if (!CanEditSubDealer) return;
         _deleteTarget = item;
         _showDeleteConfirm = true;
     }
@@ -3949,7 +4205,7 @@
 
     private async Task ConfirmDelete()
     {
-        if (_deleteTarget is null || _isDeleting)
+        if (!CanEditSubDealer || _deleteTarget is null || _isDeleting)
             return;
 
         var id = _deleteTarget.Id;
@@ -3958,7 +4214,8 @@
 
         try
         {
-            var response = await Http.DeleteAsync($"api/SubDealerRegistration/{id}/details");
+            var expected = Uri.EscapeDataString(_deleteTarget.UpdatedAt.ToString("O", CultureInfo.InvariantCulture));
+            var response = await Http.DeleteAsync($"api/SubDealerRegistration/{id}/details?expectedUpdatedAt={expected}");
 
             CancelDelete();
 

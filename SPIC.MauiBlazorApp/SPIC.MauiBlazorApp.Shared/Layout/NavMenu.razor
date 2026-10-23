@@ -323,6 +323,12 @@
                             <NavLink href="/ProductWiseStockAvailability" class="@SubmenuLinkClass("Productwise Stock Availability")" Match="NavLinkMatch.All">Productwise Stock Availability</NavLink>
                         </li>
                     }
+                    @if (loginState.CanSeeMenu(PagePermission.ProductWiseStockAvailability))
+                    {
+                        <li class="submenu-item">
+                            <NavLink href="/StateWiseGlobalStockReconciliation" class="@SubmenuLinkClass("State-wise Stock Reconciliation")" Match="NavLinkMatch.All">State-wise Stock Reconciliation</NavLink>
+                        </li>
+                    }
                     @if (loginState.CanSeeMenu(PagePermission.StockDetails))
                     {
                         <li class="submenu-item">
@@ -778,22 +784,6 @@
         }
     }
 
-    @if (loginState.CanSeeMenu(PagePermission.SalesAudit))
-    {
-        <NavLink class="@NavLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
-            Sales Audit
-        </NavLink>
-    }
-
-    @if (loginState.CanSeeMenu(PagePermission.ExtensionRequests))
-    {
-        <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
-            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
-            Extension Requests
-        </NavLink>
-    }
-
     @* The stray comment block below used to leave the guard disabled (the @if line was commented
        out while the braces stayed live), so Farm Operations rendered for every signed-in user.
        It is a normal Designation-controlled page now (PagePermission.FarmDashboard). *@
@@ -819,6 +809,25 @@
         <NavLink class="@NavLinkClass("ContactUs")" href="/ContactUs">
             <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/ProfileIcon.svg" class="SideBariconimg" />
             Contact Us
+        </NavLink>
+    }
+
+    @* ================= BOTTOM-LEVEL MENUS =================
+       Sales Audit and Extension Requests live here only (removed from the JMDO
+       submenu). Add/reorder future bottom-level menus in this block. *@
+    @if (loginState.CanSeeMenu(PagePermission.SalesAudit))
+    {
+        <NavLink class="@NavLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/StockReport.svg" class="SideBariconimg" />
+            Sales Audit
+        </NavLink>
+    }
+
+    @if (loginState.CanSeeMenu(PagePermission.ExtensionRequests))
+    {
+        <NavLink class="@NavLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.Prefix">
+            <img src="_content/SPIC.MauiBlazorApp.Shared/Images/LayoutImages/PendingAcknowledgment.svg" class="SideBariconimg" />
+            Extension Requests
         </NavLink>
     }
    
@@ -1010,21 +1019,12 @@
                 </NavLink>
             </li>
         }
-        @if (loginState.CanSeeMenu(PagePermission.ExtensionRequests))
+        @if (loginState.CanSeeMenu(PagePermission.TeamTracking))
         {
             <li class="submenu-item">
-                <NavLink class="@SubmenuLinkClass("Extension Requests")" href="/ExtensionRequests" Match="NavLinkMatch.All">
-                    <i class="bi bi-calendar-plus SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                    Extension Requests
-                </NavLink>
-            </li>
-        }
-        @if (loginState.CanSeeMenu(PagePermission.SalesAudit))
-        {
-            <li class="submenu-item">
-                <NavLink class="@SubmenuLinkClass("Sales Audit")" href="/SalesAudit" Match="NavLinkMatch.All">
-                    <i class="bi bi-clipboard-check SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
-                    Sales Audit
+                <NavLink class="@SubmenuLinkClass("Team Tracking")" href="/TeamTracking" Match="NavLinkMatch.All">
+                    <i class="bi bi-geo-alt SideBariconimg" style="font-size:18px;display:inline-flex;align-items:center;justify-content:center;"></i>
+                    Team Tracking
                 </NavLink>
             </li>
         }
@@ -1041,9 +1041,8 @@
         || loginState.CanSeeMenu(PagePermission.FarmerData)
         || loginState.CanSeeMenu(PagePermission.TasksAllocation)
         || loginState.CanSeeMenu(PagePermission.MarkAttendance)
-        || loginState.CanSeeMenu(PagePermission.ExtensionRequests)
-        || loginState.CanSeeMenu(PagePermission.SalesAudit)
-        || loginState.CanSeeMenu(PagePermission.MdoReports);
+        || loginState.CanSeeMenu(PagePermission.MdoReports)
+        || loginState.CanSeeMenu(PagePermission.TeamTracking);
 
     private bool AnyJmdoItemMatches =>
         SearchState.Matches("My Dashboard")
@@ -1057,8 +1056,7 @@
         || SearchState.Matches("Reports")
         || SearchState.Matches("Tasks Allocation")
         || SearchState.Matches("Mark Attendance")
-        || SearchState.Matches("Extension Requests")
-        || SearchState.Matches("Sales Audit")
+        || SearchState.Matches("Team Tracking")
         || SearchState.Matches("JMDO");
 
     private bool ShowJmdoExpanded => isJmdoOpen || AnyJmdoItemMatches;
@@ -1074,7 +1072,7 @@
         var uri = NavManager.ToBaseRelativePath(NavManager.Uri).ToLower();
         return uri == "fielddashboard" || uri == "fieldreports" || uri == "mdodashboard" || uri == "allocationrequests"
             || uri == "taskmonitoring" || uri == "performancetracker" || uri == "targetachievement"
-            || uri == "farmerdata" || uri == "mdoreports" || uri == "tasksallocation" || uri == "markattendance" || uri == "extensionrequests" || uri == "salesaudit";
+            || uri == "farmerdata" || uri == "mdoreports" || uri == "tasksallocation" || uri == "markattendance";
     }
 
     private bool AnySettingsAccessible =>
@@ -1157,6 +1155,7 @@
             || uri == "acknowledgement" || uri == "liquidationcycle"
             || uri == "toprankingdistrict" || uri == "toprankingwholesalers"
             || uri == "toprankingretailers" || uri == "productwisestockavailability"
+            || uri == "statewiseglobalstockreconciliation"
             || uri == "stockdetails" || uri == "excelformatfileupload";
     }
 

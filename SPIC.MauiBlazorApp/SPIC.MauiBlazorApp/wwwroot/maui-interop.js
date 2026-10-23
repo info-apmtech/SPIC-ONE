@@ -47,17 +47,43 @@
         return invoke('SaveAndOpenFile', nameFor('text/html'), 'text/html', base64);
     };
 
-    // window.open: WebViews have no popup window, so route everything to the OS.
-    // tel:, sms:, wa.me and http(s) all end up in the right app.
-    window.open = function (url) {
-        if (url) { invoke('OpenExternal', String(url)); }
+    // window.open: WebViews have no popup window, so route external user navigation to the OS.
+    // tel:, sms:, wa.me and external http(s) all end up in the right app.
+    // Probes, blank URLs, and payment gateway frames are filtered out so they don't launch the browser.
+    window.open = function (url, target, features) {
+        if (!url || typeof url !== 'string') {
+            return null;
+        }
+        var trimmed = url.trim();
+        if (!trimmed || trimmed === 'about:blank' || trimmed === 'javascript:void(0);' || trimmed === '#' || trimmed.startsWith('#')) {
+            return null;
+        }
+        // Do not redirect internal payment gateway / checkout iframe URLs to external browser
+        if (trimmed.indexOf('razorpay.com') !== -1) {
+            return null;
+        }
+        invoke('OpenExternal', trimmed);
         return null;
     };
+
 
     // navigator.geolocation needs a WebView permission bridge per platform;
     // the native API asks for the permission itself.
     window.getCurrentPosition = function () {
         return invoke('GetCurrentPosition');
+    };
+
+    // JMDO Live Tracking: native-only, so the Web host's own js/location.js never defines these -
+    // Blazor code only calls them when running on this (native) host (see FieldDashboard.razor's
+    // IsNativeApp check, same IFormFactor pattern MarkAttendance.razor uses). Keeps posting location
+    // while the app is backgrounded/locked, to the extent the OS allows - see
+    // JmdoTrackingForegroundService's own honesty note.
+    window.startBackgroundTracking = function (sessionId) {
+        return invoke('StartBackgroundTracking', sessionId);
+    };
+
+    window.stopBackgroundTracking = function () {
+        return invoke('StopBackgroundTracking');
     };
 })();
 

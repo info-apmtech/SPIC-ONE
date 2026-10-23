@@ -1,9 +1,12 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
     <TargetFrameworks>net10.0-android</TargetFrameworks>
     <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+
+    <!-- Allow building with newer Xcode versions than current .NET workload target -->
+    <ValidateXcodeVersion>false</ValidateXcodeVersion>
 
     <!-- Note for MacCatalyst:
       The default runtime is maccatalyst-x64, except in Release config, in which case the default is maccatalyst-x64;maccatalyst-arm64.
@@ -83,13 +86,18 @@
   <!-- API address. Override per environment at build time:
          dotnet publish ... -p:SpicApiBaseUrl=https://previewspicapi.apmiot.com/
        MauiProgram reads it back from the AssemblyMetadata attribute below. -->
-  <PropertyGroup>
+  <!--<PropertyGroup>
     <SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://api.spicone.in/</SpicApiBaseUrl>
-  </PropertyGroup>
-	<!--BELOW SpicApiBaseUrl IS LOCAL API FOR LIVE DEPLOYMENT PLEASE COMMENT BELOW--> 
-	<!--<PropertyGroup>
-		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://w0flfdgb-7032.inc1.devtunnels.ms/</SpicApiBaseUrl>
-	</PropertyGroup>-->
+  </PropertyGroup>-->
+	<!--BELOW SpicApiBaseUrl IS LOCAL API FOR LIVE DEPLOYMENT PLEASE COMMENT BELOW-->
+	<!-- Local testing over "adb reverse tcp:5034 tcp:5034" (ADB-over-WiFi or USB) - the phone's own
+	     localhost:5034 is forwarded straight to this dev machine's localhost:5034 (SpicAPI's HTTP
+	     profile, launchSettings.json), no tunnel/account needed. network_security_config.xml already
+	     allows cleartext for "localhost" specifically for this. Re-run the adb reverse command after
+	     every phone reboot or adb disconnect/reconnect - it doesn't persist. -->
+	<PropertyGroup>
+		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">http://localhost:5034/</SpicApiBaseUrl>
+	</PropertyGroup>
   <ItemGroup>
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
       <_Parameter1>SpicApiBaseUrl</_Parameter1>
@@ -117,6 +125,8 @@
   <!-- iOS: SecureStorage uses the Keychain, which needs the keychain-access-groups entitlement. -->
   <PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
     <CodesignEntitlements>Platforms/iOS/Entitlements.plist</CodesignEntitlements>
+    <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
+    <_MlaunchWaitForExit Condition="'$(_MlaunchWaitForExit)' == ''">false</_MlaunchWaitForExit>
   </PropertyGroup>
 
 </Project>

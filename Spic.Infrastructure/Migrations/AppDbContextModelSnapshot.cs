@@ -4701,6 +4701,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("text");
 
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("Date")
                         .HasColumnType("timestamp without time zone");
 
@@ -4711,6 +4714,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("UpdatedByUserId")
                         .HasColumnType("text");
 
                     b.Property<string>("UserId")
@@ -4743,6 +4749,9 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("double precision");
 
                     b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("DeviceCapturedAt")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<double>("Latitude")
@@ -5004,6 +5013,9 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("Csr1Id")
                         .HasColumnType("integer");
 
+                    b.Property<int>("ProgramMasterId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ProgramName")
                         .IsRequired()
                         .HasColumnType("text");
@@ -5097,9 +5109,15 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("CloseoutId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("ProductGroupId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ProductGroupName")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("ProductId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("ProductName")
                         .IsRequired()
@@ -7507,6 +7525,42 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("RakePointMasters");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsRevoked")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ReplacedByTokenHash")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.Region", b =>

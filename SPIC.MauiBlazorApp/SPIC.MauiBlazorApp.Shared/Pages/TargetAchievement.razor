@@ -54,58 +54,56 @@
         </button>
     </div>
 
-    <div class="tga-card">
-        <h3 class="tga-card-title">Current yearly targets</h3>
-        <p class="tga-card-subtitle">Across all JMDOs in your region.</p>
-
-        @if (_isLoadingTargets)
-        {
-            <EmptyState Icon="bi-hourglass-split" Title="Loading yearly targets..." Compact="true" />
-        }
-        else if (_targetsError)
-        {
+    @if (_targetsError)
+    {
+        <div class="tga-card">
+            <h3 class="tga-card-title">Current yearly targets</h3>
+            <p class="tga-card-subtitle">Across all JMDOs in your region.</p>
             <EmptyState Icon="bi-exclamation-triangle" Title="Could not load yearly targets" Message="Please refresh the page to try again." Compact="true" />
-        }
-        else if (_targets.Count == 0)
-        {
-            <EmptyState Icon="bi-bullseye" Title="No yearly targets allocated yet" Compact="true" />
-        }
-        else
-        {
-            <div class="tga-table-scroll">
-                <table class="tga-table">
-                    <thead>
-                        <tr>
-                            <th>JMDO</th>
-                            <th>Financial Year</th>
-                            <th>SPCM Target</th>
-                            <th>Soil Sample Target</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in _targets)
-                        {
-                            <tr>
-                                <td class="tga-cell-header">
-                                    <div class="tga-jmdo-name">@row.Name</div>
-                                    <div class="tga-jmdo-sub">@JmdoSubLabel(row.EmployeeCode, row.HeadquarterName)</div>
-                                </td>
-                                <td data-label="Financial Year">@AnalystText.FinancialYear(row.FinancialYearStart)</td>
-                                <td data-label="SPCM Target">@row.SpcmTarget</td>
-                                <td data-label="Soil Sample Target">@row.SoilSampleTarget</td>
-                                <td class="tga-cell-actions">
-                                    <button type="button" class="tga-icon-btn" title="Edit target" disabled="@_saving" @onclick="() => EditTarget(row)">
-                                        <i class="bi bi-pencil"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        }
-    </div>
+        </div>
+    }
+    else
+    {
+        <SpicDataTable Items="_targets"
+                       IsLoading="_isLoadingTargets"
+                       Title="Current yearly targets"
+                       FileName="YearlyTargets"
+                       ExportColumns="GetExportColumns()"
+                       SearchText="@_searchText"
+                       EmptyTitle="@(_targets.Count == 0 ? "No yearly targets allocated yet" : null)">
+            <FilterControls>
+                <input type="text" class="tga-select tga-quick-search"
+                       placeholder="Search..."
+                       @bind="_searchText" @bind:event="oninput" @bind:after="StateHasChanged" />
+            </FilterControls>
+            <TableHeader>
+                <th>JMDO</th>
+                <th>Financial Year</th>
+                <th>SPCM Target</th>
+                <th>Soil Sample Target</th>
+                <th></th>
+            </TableHeader>
+            <TableRow Context="row">
+                <td class="tga-cell-header">
+                    <div class="tga-jmdo-name">@row.Name</div>
+                    <div class="tga-jmdo-sub">@JmdoSubLabel(row.EmployeeCode, row.HeadquarterName)</div>
+                </td>
+                <td data-label="Financial Year">@AnalystText.FinancialYear(row.FinancialYearStart)</td>
+                <td data-label="SPCM Target">@row.SpcmTarget</td>
+                <td data-label="Soil Sample Target">@row.SoilSampleTarget</td>
+                <td class="tga-cell-actions">
+                    <button type="button" class="tga-icon-btn" title="Edit target" disabled="@_saving" @onclick="() => EditTarget(row)">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                </td>
+            </TableRow>
+            <CardActions Context="row">
+                <button type="button" class="tga-icon-btn" title="Edit target" disabled="@_saving" @onclick="() => EditTarget(row)">
+                    <i class="bi bi-pencil"></i>
+                </button>
+            </CardActions>
+        </SpicDataTable>
+    }
 
 </div>
 
@@ -125,6 +123,20 @@
     private string spcmTarget = "";
     private string soilTarget = "";
     private bool _saving;
+
+    // Quick free-text box inside the table toolbar - SpicDataTable matches this against every
+    // export column on its own, same pattern as TaskMonitoring.razor/AllocationRequests.razor.
+    private string _searchText = "";
+
+    private List<ExportColumn<JmdoYearlyTargetDto>> GetExportColumns() => new()
+    {
+        new() { Header = "JMDO", ValueSelector = r => r.Name },
+        new() { Header = "Employee Code", ValueSelector = r => r.EmployeeCode ?? "" },
+        new() { Header = "Headquarter", ValueSelector = r => r.HeadquarterName ?? "" },
+        new() { Header = "Financial Year", ValueSelector = r => AnalystText.FinancialYear(r.FinancialYearStart) },
+        new() { Header = "SPCM Target", ValueSelector = r => r.SpcmTarget.ToString() },
+        new() { Header = "Soil Sample Target", ValueSelector = r => r.SoilSampleTarget.ToString() }
+    };
 
     private static string JmdoSubLabel(string? employeeCode, string? headquarterName)
     {

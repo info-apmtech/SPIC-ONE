@@ -142,6 +142,11 @@ public class JmdoTaskAllocationProgram
     public JmdoTaskAllocation? Allocation { get; set; }
 
     public int Csr1Id { get; set; }
+
+    /// <summary>ProgramMaster.Id - the real FK behind ProgramName, same value as the CSR1 row's own
+    /// ProgramId at submission time. ProgramName stays as a display snapshot; this is what queries
+    /// and joins back to ProgramMasters should use instead of matching on the string.</summary>
+    public int ProgramMasterId { get; set; }
     public string ProgramName { get; set; } = string.Empty;
     public decimal Budget { get; set; }
 
@@ -215,6 +220,12 @@ public class JmdoTaskCloseoutProduct
     public int Id { get; set; }
     public int CloseoutId { get; set; }
     public JmdoTaskCloseout? Closeout { get; set; }
+
+    /// <summary>ProductGroup.Id / Product.Id - the real FKs behind the names below, taken from the
+    /// dropdown selection in TaskDetail's "Add another Product" popup. Null only for rows saved
+    /// before this field existed; ProductGroupName/ProductName stay as the display snapshot.</summary>
+    public int? ProductGroupId { get; set; }
+    public int? ProductId { get; set; }
 
     public string ProductGroupName { get; set; } = string.Empty;
     public string ProductName { get; set; } = string.Empty;

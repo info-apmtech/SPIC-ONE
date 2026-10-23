@@ -1,4 +1,5 @@
 @page "/MarkAttendance"
+@implements IAsyncDisposable
 @using SPIC.Core.Entities
 @using SPIC.Core.DTOs
 @using System.Net.Http.Json
@@ -9,6 +10,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi Api
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
+@inject SPIC.MauiBlazorApp.Shared.Services.IFormFactor FormFactor
 @inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 ma-page">
@@ -16,41 +18,86 @@
     <h2 class="ma-title">Mark Attendance</h2>
     <p class="ma-subtitle">Today's visited area &amp; attendance status.</p>
 
-    @if (showTrackingState)
+    @if (!IsNativeApp)
+    {
+        <div class="ma-card">
+            <EmptyState Icon="bi-phone"
+                        Title="Attendance can only be marked from the SPIC mobile app"
+                        Message="Please open SPIC ONE on your phone to mark today's attendance, start a task, or use live tracking." />
+        </div>
+    }
+    else if (showTrackingState)
     {
         <div class="ma-tracking-card">
             <div class="ma-tracking-header">
                 <div class="ma-tracking-left">
                     <span class="ma-tracking-icon"><i class="bi bi-geo-alt-fill"></i></span>
                     <div>
-                        <div class="ma-tracking-title">Tracking Active <span class="ma-tracking-dot"></span></div>
-                        <div class="ma-tracking-sub">Your location and team members are being tracked in real-time</div>
+                        <div class="ma-tracking-title">
+                            @(_trackSession?.Status == JMDOTrackingSessionStatus.Active ? "Tracking Active" : "Tracking Stopped")
+                            @if (_trackSession?.Status == JMDOTrackingSessionStatus.Active)
+                            {
+                                <span class="ma-tracking-dot"></span>
+                            }
+                        </div>
+                        <div class="ma-tracking-sub">
+                            @(_trackSession?.Status == JMDOTrackingSessionStatus.Active
+                                ? "Your location is being tracked in real-time"
+                                : "Route recorded for this session")
+                        </div>
                     </div>
                 </div>
 
                 <div class="ma-tracking-actions">
-                    <button type="button" class="ma-btn-stop" disabled="@_stopping" @onclick="StopTracking">
-                        <i class="bi bi-stop-circle-fill"></i> Stop Tracking
-                    </button>
-                    <span class="ma-timer-badge"><i class="bi bi-stopwatch"></i> 00:12:34</span>
+                    @if (_trackSession?.Status == JMDOTrackingSessionStatus.Active)
+                    {
+                        <button type="button" class="ma-btn-stop" disabled="@_stopping" @onclick="StopTracking">
+                            <i class="bi bi-stop-circle-fill"></i> Stop Tracking
+                        </button>
+                    }
+                    <span class="ma-timer-badge"><i class="bi bi-stopwatch"></i> @FormatElapsed(_trackElapsed)</span>
                 </div>
             </div>
 
-            <div class="ma-map" role="img" aria-label="Map showing today's tracked route">
-                <svg class="ma-map-route-svg" viewBox="0 0 1000 400" preserveAspectRatio="none">
-                    <path d="M120,330 L120,260 Q120,230 150,215 L430,215 Q460,215 460,185 L460,120 Q460,90 490,80 L760,80" />
-                </svg>
-
-                <span class="ma-map-pin-start"><i class="bi bi-person-fill"></i></span>
-                <span class="ma-map-label">JMDO<br />Karthik Raja</span>
-                <span class="ma-map-pin-end"><i class="bi bi-geo-alt-fill"></i></span>
-
-                <div class="ma-map-zoom">
-                    <button type="button" aria-label="Zoom in"><i class="bi bi-plus-lg"></i></button>
-                    <button type="button" aria-label="Zoom out"><i class="bi bi-dash-lg"></i></button>
+            @if (_trackLoading)
+            {
+                <EmptyState Icon="bi-hourglass-split" Title="Loading today's route..." Compact="true" />
+            }
+            else if (_trackSession is null)
+            {
+                <EmptyState Icon="bi-geo-alt"
+                            Title="No tracking session for today yet"
+                            Message="Start live tracking from the Field Dashboard to record your route."
+                            Compact="true" />
+            }
+            else
+            {
+                <div class="ma-map">
+                    <div id="ma-tracking-map" class="ma-map-canvas"></div>
                 </div>
-                <button type="button" class="ma-map-locate" aria-label="Center on my location"><i class="bi bi-cursor-fill"></i></button>
-            </div>
+
+                @if (_trackPoints.Count >= 2)
+                {
+                    <div class="ma-playback-bar">
+                        <button type="button" class="ma-playback-btn" @onclick="TogglePlayback" aria-label="@(_playbackPlaying ? "Pause" : "Play")">
+                            <i class="bi @(_playbackPlaying ? "bi-pause-fill" : "bi-play-fill")"></i>
+                        </button>
+
+                        <input type="range" class="ma-playback-scrubber"
+                               min="0" max="@(_trackPoints.Count - 1)" value="@_playbackIndex"
+                               @oninput="OnScrubberInput" />
+
+                        <span class="ma-playback-time">@PlaybackTimeLabel</span>
+
+                        <div class="ma-playback-speed">
+                            @foreach (var speed in PlaybackSpeeds)
+                            {
+                                <button type="button" class="@(speed == _playbackSpeed ? "active" : "")" @onclick="() => SetPlaybackSpeed(speed)">@speed.ToString("0.#")x</button>
+                            }
+                        </div>
+                    </div>
+                }
+            }
         </div>
     }
     else
@@ -229,6 +276,15 @@
     private const string FieldExecRegion = "COIMBATORE";
     private const string FieldExecJmdoHq = "COIMBATORE";
 
+    // IFormFactor already distinguishes the two hosts for us: "Web" on the Blazor Web host
+    // (any browser, desktop or mobile), the real device idiom (Phone/Tablet/...) on the native
+    // MAUI app - see SPIC.MauiBlazorApp.Shared/Services/IFormFactor.cs. Attendance, task-start and
+    // live tracking are mobile-app-only by design (see TaskDetail.StartTask/TasksAllocation.
+    // StartSoilSampleTask's own attendance-redirect gate, and JMDOTrackingController's class doc
+    // comment) - a desktop OR mobile-browser visit here only ever sees the blocking message below,
+    // never the form.
+    private bool IsNativeApp => FormFactor.GetFormFactor() != "Web";
+
     // Three states behind one route/title: the usual mark-attendance form,
     // the post-stop confirmation summary (reached from FieldDashboard's
     // "Stop Tracking" confirm), and the full tracking map (reached from the
@@ -253,8 +309,14 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        if (!IsNativeApp) return; // nothing to load - the whole page is just the blocking message
+
+        var wasTrackingView = showTrackingState;
         showStoppedState = string.Equals(ViewQuery, "stopped", StringComparison.OrdinalIgnoreCase);
         showTrackingState = string.Equals(ViewQuery, "tracking", StringComparison.OrdinalIgnoreCase);
+
+        if (wasTrackingView && !showTrackingState)
+            await StopTrackingViewLiveUpdatesAsync();
 
         if (_loadedOnce && string.Equals(_loadedView, ViewQuery, StringComparison.OrdinalIgnoreCase))
             return;
@@ -262,7 +324,10 @@
 
         var prefillForm = !_loadedOnce;
         _loadedOnce = true;
-        await Task.WhenAll(RefreshTodayStatusAsync(prefillForm), RefreshWeekAsync(), RefreshTaskSummaryAsync());
+
+        var tasks = new List<Task> { RefreshTodayStatusAsync(prefillForm), RefreshWeekAsync(), RefreshTaskSummaryAsync() };
+        if (showTrackingState) tasks.Add(LoadTrackingViewAsync());
+        await Task.WhenAll(tasks);
     }
 
     // ---- Daily task counts (Weekly Summary rows): api/JmdoTaskAllocation/mine/summary, loaded
@@ -415,11 +480,258 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (firstRender && IsNativeApp)
         {
             await CaptureLocationAsync();
             await ResolveAddressAsync();
         }
+
+        if (showTrackingState && !_trackLoading && _trackSession is not null)
+            await RenderTrackingMapAsync();
+    }
+
+    // ---- Tracking view (view=tracking): a real route map (tracking-map.js, Leaflet) for the
+    // session that's either still Active or was most recently stopped today - see LoadTrackingViewAsync.
+    private JMDOTrackingSessionDto? _trackSession;
+    private List<JMDOTrackingPointDto> _trackPoints = new();
+    private bool _trackLoading = true;
+    private TimeSpan _trackElapsed;
+    private System.Threading.Timer? _trackElapsedTimer;
+    private CancellationTokenSource? _trackRefreshCts;
+    private int? _mapInitializedForSessionId;
+    private bool _mapPointsDirty;
+
+    // ---- Route playback: steps a "playhead" through _trackPoints over time (tracking-map.js's
+    // setPlaybackPosition draws the amber trail/marker; all timing lives here, same split of
+    // responsibility as the live elapsed-timer badge). Compressed time, not real-world-accurate -
+    // watching a multi-hour session back at real speed would be useless for a quick review.
+    private static readonly double[] PlaybackSpeeds = { 1, 2, 4 };
+    private const int BasePlaybackTickMs = 400;
+
+    private int _playbackIndex;
+    private bool _playbackPlaying;
+    private double _playbackSpeed = 1;
+    private System.Threading.Timer? _playbackTimer;
+
+    private string PlaybackTimeLabel =>
+        _trackPoints.Count == 0 ? "--:--:--"
+        : _trackPoints[Math.Clamp(_playbackIndex, 0, _trackPoints.Count - 1)].RecordedAt.ToString("hh:mm:ss tt");
+
+    private void TogglePlayback()
+    {
+        if (_playbackPlaying)
+        {
+            PausePlayback();
+            return;
+        }
+
+        if (_trackPoints.Count < 2) return;
+        if (_playbackIndex >= _trackPoints.Count - 1) _playbackIndex = 0; // replay from the start
+
+        _playbackPlaying = true;
+        _playbackTimer?.Dispose();
+        _playbackTimer = new System.Threading.Timer(PlaybackTick, null,
+            (int)(BasePlaybackTickMs / _playbackSpeed), (int)(BasePlaybackTickMs / _playbackSpeed));
+    }
+
+    private void PausePlayback()
+    {
+        _playbackPlaying = false;
+        _playbackTimer?.Dispose();
+        _playbackTimer = null;
+    }
+
+    private void PlaybackTick(object? _)
+    {
+        if (_playbackIndex >= _trackPoints.Count - 1)
+        {
+            InvokeAsync(PausePlayback);
+            return;
+        }
+
+        _playbackIndex++;
+        _ = InvokeAsync(async () =>
+        {
+            await RenderPlaybackPositionAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task OnScrubberInput(ChangeEventArgs e)
+    {
+        PausePlayback(); // manual scrubbing takes over from auto-play
+        if (int.TryParse(e.Value?.ToString(), out var index))
+        {
+            _playbackIndex = Math.Clamp(index, 0, Math.Max(0, _trackPoints.Count - 1));
+            await RenderPlaybackPositionAsync();
+        }
+    }
+
+    private void SetPlaybackSpeed(double speed)
+    {
+        _playbackSpeed = speed;
+        if (_playbackPlaying)
+        {
+            // Restart at the new cadence rather than letting the old interval finish one more tick.
+            _playbackTimer?.Dispose();
+            _playbackTimer = new System.Threading.Timer(PlaybackTick, null,
+                (int)(BasePlaybackTickMs / _playbackSpeed), (int)(BasePlaybackTickMs / _playbackSpeed));
+        }
+    }
+
+    private async Task RenderPlaybackPositionAsync()
+    {
+        if (_trackPoints.Count == 0) return;
+        var points = _trackPoints.Select(p => new { latitude = p.Latitude, longitude = p.Longitude });
+        try { await JS.InvokeVoidAsync("setPlaybackPosition", "ma-tracking-map", points, _playbackIndex); }
+        catch (Exception) { /* map not ready yet - next render/tick will retry */ }
+    }
+
+    private static string FormatElapsed(TimeSpan ts) =>
+        $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+
+    // Prefers the caller's live Active session; falls back to today's most recently stopped one so
+    // a page reached via "View Tracking Details" (right after Stop) still shows the route just
+    // recorded instead of an empty state.
+    private async Task LoadTrackingViewAsync()
+    {
+        _trackLoading = true;
+        StateHasChanged();
+
+        _trackSession = await TrackingApi.GetMineActiveAsync() ?? await TrackingApi.GetMineLatestAsync();
+        _trackPoints = _trackSession is null ? new() : await TrackingApi.GetSessionPointsAsync(_trackSession.Id);
+        _mapPointsDirty = true;
+
+        _trackLoading = false;
+        StateHasChanged();
+
+        StartElapsedTimer();
+        StartRefreshLoopIfActive();
+    }
+
+    private void StartElapsedTimer()
+    {
+        _trackElapsedTimer?.Dispose();
+        _trackElapsedTimer = null;
+        if (_trackSession is null) return;
+
+        void Tick(object? _)
+        {
+            _trackElapsed = _trackSession.Status == JMDOTrackingSessionStatus.Active
+                ? DateTime.Now - _trackSession.StartTime
+                : (_trackSession.Duration ?? TimeSpan.Zero);
+            _ = InvokeAsync(StateHasChanged);
+        }
+
+        Tick(null);
+        _trackElapsedTimer = new System.Threading.Timer(Tick, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    // Polls for new points only while the session is genuinely still Active - stops itself the
+    // moment it sees the session end (stopped from here, auto-ended server-side, or from another
+    // device), so this never keeps polling a finished session forever.
+    private void StartRefreshLoopIfActive()
+    {
+        _trackRefreshCts?.Cancel();
+        _trackRefreshCts = null;
+        if (_trackSession?.Status != JMDOTrackingSessionStatus.Active) return;
+
+        var cts = new CancellationTokenSource();
+        _trackRefreshCts = cts;
+        _ = RefreshLoopAsync(cts.Token);
+    }
+
+    private async Task RefreshLoopAsync(CancellationToken ct)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(15));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                var latest = await TrackingApi.GetMineActiveAsync();
+                if (ct.IsCancellationRequested) return;
+
+                _trackSession = latest ?? await TrackingApi.GetMineLatestAsync();
+                if (ct.IsCancellationRequested) return;
+
+                if (_trackSession is not null)
+                {
+                    _trackPoints = await TrackingApi.GetSessionPointsAsync(_trackSession.Id, ct);
+                    _mapPointsDirty = true;
+                }
+                if (ct.IsCancellationRequested) return;
+
+                StartElapsedTimer(); // reflects a status change (e.g. now Stopped) in the ticking badge
+                await InvokeAsync(StateHasChanged);
+
+                if (_trackSession?.Status != JMDOTrackingSessionStatus.Active)
+                    return; // session ended - nothing left to keep polling for
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when the view changes away from "tracking" - see StopTrackingViewLiveUpdatesAsync.
+        }
+    }
+
+    private async Task StopTrackingViewLiveUpdatesAsync()
+    {
+        _trackElapsedTimer?.Dispose();
+        _trackElapsedTimer = null;
+        _trackRefreshCts?.Cancel();
+        _trackRefreshCts = null;
+        PausePlayback();
+
+        if (_mapInitializedForSessionId is not null)
+        {
+            _mapInitializedForSessionId = null;
+            try { await JS.InvokeVoidAsync("destroyTrackingRouteMap", "ma-tracking-map"); }
+            catch (Exception) { /* page/circuit may already be gone */ }
+        }
+    }
+
+    private async Task RenderTrackingMapAsync()
+    {
+        var freshSession = false;
+
+        if (_mapInitializedForSessionId != _trackSession!.Id)
+        {
+            var startLat = _trackSession.StartLatitude ?? _trackPoints.FirstOrDefault()?.Latitude ?? 0;
+            var startLng = _trackSession.StartLongitude ?? _trackPoints.FirstOrDefault()?.Longitude ?? 0;
+            try
+            {
+                await JS.InvokeVoidAsync("initTrackingRouteMap", "ma-tracking-map", startLat, startLng);
+                _mapInitializedForSessionId = _trackSession.Id;
+                _mapPointsDirty = true; // force the first draw right after init
+                freshSession = true;
+
+                // Fresh/changed session - reset the playhead instead of carrying over a previous
+                // session's playback position.
+                PausePlayback();
+                _playbackIndex = 0;
+                try { await JS.InvokeVoidAsync("clearPlayback", "ma-tracking-map"); }
+                catch (Exception) { /* nothing to clear yet on a brand-new map instance */ }
+            }
+            catch (Exception)
+            {
+                return; // map element not in the DOM yet - OnAfterRenderAsync will retry next render
+            }
+        }
+
+        if (_mapPointsDirty && _trackPoints.Count > 0)
+        {
+            var points = _trackPoints.Select(p => new { latitude = p.Latitude, longitude = p.Longitude });
+            await JS.InvokeVoidAsync("updateTrackingRouteMap", "ma-tracking-map", points);
+            _mapPointsDirty = false;
+
+            if (freshSession)
+                await RenderPlaybackPositionAsync(); // shows the playhead at the start, before Play is pressed
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopTrackingViewLiveUpdatesAsync();
     }
 
     // Same reverse-geocoding call as TaskDetail.ResolvePlaceNameAsync (OpenStreetMap Nominatim,

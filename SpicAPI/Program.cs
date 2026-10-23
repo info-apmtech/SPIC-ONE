@@ -94,6 +94,9 @@ builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
 builder.Services.AddScoped<IIfmsAlertSettingsStore, IfmsAlertSettingsStore>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IStockReportService, StockReportService>();
+// State-wise Global Stock Reconciliation: one calculation pipeline behind the
+// screen, the Excel export and the emailed workbook.
+builder.Services.AddScoped<IStockReconciliationService, StockReconciliationService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();
 builder.Services.AddScoped<IDealerInsightService, DealerInsightService>();
 builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();
@@ -139,6 +142,9 @@ builder.Services.AddScoped<IAssistantProvider>(sp =>
 builder.Services.Configure<ContactUsMailOptions>(
     builder.Configuration.GetSection(ContactUsMailOptions.SectionName));
 builder.Services.AddScoped<IContactUsMailService, ContactUsMailService>();
+
+// Daily cleanup of JMDO location history beyond JmdoTracking:RetentionDays (appsettings.json).
+builder.Services.AddHostedService<SpicAPI.Services.TrackingRetentionCleanupService>();
 
 // SDWA Guest House online payment. KeySecret comes from the Razorpay__KeySecret
 // environment variable in Azure (never from appsettings.json) - see RazorpayOptions.

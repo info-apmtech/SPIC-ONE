@@ -176,6 +176,7 @@ namespace SPIC.Core.DTOs
     {
         public int RowId { get; set; }
         public int Csr1Id { get; set; }
+        public int ProgramMasterId { get; set; }
         public string ProgramName { get; set; } = "";
         public decimal Budget { get; set; }
         public AllocTaskStatus Status { get; set; }
@@ -234,6 +235,8 @@ namespace SPIC.Core.DTOs
 
     public class ProductLineDto
     {
+        public int? ProductGroupId { get; set; }
+        public int? ProductId { get; set; }
         public string ProductGroupName { get; set; } = "";
         public string ProductName { get; set; } = "";
         public string StockText { get; set; } = "";
@@ -345,5 +348,29 @@ namespace SPIC.Core.DTOs
     public class JmdoTaskDayCountsDto : JmdoTaskCountsDto
     {
         public DateTime Date { get; set; }
+    }
+
+    // GET api/JmdoTaskAllocation/mine/reports - the signed-in JMDO's "My Reports" page: task
+    // closures this calendar month across every allocation they've ever submitted, plus the two
+    // counts (Soil Samples / Farmers Added) that live outside the allocation tables entirely
+    // (SampleCollection / SasFarmer).
+    public class JmdoFieldReportsDto
+    {
+        public int CompletedThisMonth { get; set; }
+        // Null when nothing completed this month has both a StartedAt and CompletedAt to measure -
+        // Soil Sample never has a StartedAt (see JmdoFieldReportRowDto.Type), so a month of only
+        // Soil Sample closures correctly shows "no data" rather than a misleading 0.
+        public double? AvgCloseTimeHours { get; set; }
+        public int SoilSamplesLoggedThisMonth { get; set; }
+        public int FarmersAddedThisMonth { get; set; }
+        public List<JmdoFieldReportRowDto> Rows { get; set; } = new();
+    }
+
+    public class JmdoFieldReportRowDto
+    {
+        public DateTime Date { get; set; }
+        public string Task { get; set; } = "";
+        public string Type { get; set; } = ""; // Dealer / SPCM / Soil Sample Collection / MD Programs / PoS Liquidation
+        public string Outcome { get; set; } = ""; // Fully Completed / Partially Completed / Not Completed / Completed
     }
 }

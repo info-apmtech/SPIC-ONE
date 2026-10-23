@@ -896,24 +896,26 @@ namespace Spic.Infrastructure.Data
         public DbSet<JMDOTrackingSession> JMDOTrackingSessions { get; set; }
         public DbSet<JMDOTrackingPoint> JMDOTrackingPoints { get; set; }
 
-        //// SAS: sample collection
-        public DbSet<SasFarmer> SasFarmers { get; set; }
-        public DbSet<SampleCollection> SampleCollections { get; set; }
-        public DbSet<SampleItem> SampleItems { get; set; }
-        public DbSet<SamplePayment> SamplePayments { get; set; }
-        public DbSet<SampleConsignment> SampleConsignments { get; set; }
-        public DbSet<ConsignmentPhoto> ConsignmentPhotos { get; set; }
-        public DbSet<SasStatusEvent> SasStatusEvents { get; set; }
-        public DbSet<SampleLabResult> SampleLabResults { get; set; }
-        public DbSet<SasSampleCharge> SasSampleCharges { get; set; }
-        public DbSet<SampleBatch> SampleBatches { get; set; }
-        public DbSet<LabParameter> LabParameters { get; set; }
-        public DbSet<LabDocument> LabDocuments { get; set; }
-        public DbSet<LabActivity> LabActivities { get; set; }
-        public DbSet<LabReport> LabReports { get; set; }
-        public DbSet<LabCropRecommendation> LabCropRecommendations { get; set; }
-        public DbSet<LabTranslation> LabTranslations { get; set; }
-        public DbSet<SasCourier> SasCouriers { get; set; }
+		public DbSet<RefreshToken> RefreshTokens { get; set; }
+
+		//// SAS: sample collection
+		public DbSet<SasFarmer> SasFarmers { get; set; }
+		public DbSet<SampleCollection> SampleCollections { get; set; }
+		public DbSet<SampleItem> SampleItems { get; set; }
+		public DbSet<SamplePayment> SamplePayments { get; set; }
+		public DbSet<SampleConsignment> SampleConsignments { get; set; }
+		public DbSet<ConsignmentPhoto> ConsignmentPhotos { get; set; }
+		public DbSet<SasStatusEvent> SasStatusEvents { get; set; }
+		public DbSet<SampleLabResult> SampleLabResults { get; set; }
+		public DbSet<SasSampleCharge> SasSampleCharges { get; set; }
+		public DbSet<SampleBatch> SampleBatches { get; set; }
+		public DbSet<LabParameter> LabParameters { get; set; }
+		public DbSet<LabDocument> LabDocuments { get; set; }
+		public DbSet<LabActivity> LabActivities { get; set; }
+		public DbSet<LabReport> LabReports { get; set; }
+		public DbSet<LabCropRecommendation> LabCropRecommendations { get; set; }
+		public DbSet<LabTranslation> LabTranslations { get; set; }
+		public DbSet<SasCourier> SasCouriers { get; set; }
 
         //// JMDO Task Allocation
         public DbSet<JmdoTaskAllocation> JmdoTaskAllocations { get; set; }
