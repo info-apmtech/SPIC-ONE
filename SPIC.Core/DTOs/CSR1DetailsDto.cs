@@ -27,7 +27,7 @@ namespace SPIC.Core.DTOs
         public int? LocationId { get; set; }
         public string LocationName { get; set; } = "";
 
-        public int? ResponsiblePersonId { get; set; }
+        public string? ResponsiblePersonId { get; set; }
         public string ResponsiblePersonName { get; set; } = "";
 
 

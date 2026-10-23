@@ -120,15 +120,22 @@
                                         </select>
                                     </label>
                                     <label class="csr-inline-field">
-                                        Responsible Person
-                                        <select class="form-select" @bind="reviewRequest.CSR1.ResponsiblePersonId">
-                                            <option value="">Select Person</option>
-                                            @foreach (var e in reviewEmployees)
-                                            {
-                                                <option value="@e.Id">@e.Name</option>
-                                            }
-                                        </select>
-                                    </label>
+    Responsible Person
+
+    <select class="form-select"
+            @bind="reviewRequest.CSR1.ResponsiblePersonId">
+
+        <option value="">Select Person</option>
+
+        @foreach (var e in reviewEmployees)
+        {
+            <option value="@e.UserId">
+                @e.Name - @e.UserName
+            </option>
+        }
+
+    </select>
+</label>
                                     <label class="csr-inline-field">
                                         Program Date
                                         <input type="date" class="form-control" @bind="reviewRequest.CSR1.CSR1Date" @bind:format="yyyy-MM-dd" min="@ReviewMinDate" max="@ReviewMaxDate" />
@@ -242,16 +249,31 @@
                                         var group = groupIndex;
                                         <div class="csr-focus-inline-card">
                                             <strong>Focus @group</strong>
-                                            <label class="csr-inline-field">
-                                                Focused Crop
-                                                <select class="form-select" value="@GetCrop(group)" @onchange="e => SetCrop(group, e.Value?.ToString())">
-                                                    <option value="0">Select Crop</option>
-                                                    @foreach (var c in reviewCrops)
-                                                    {
-                                                        <option value="@c.Id">@c.Name</option>
-                                                    }
-                                                </select>
-                                            </label>
+                                            <label class="csr-inline-field">Focused Crop</label>
+                                            <div class="csr-pd-pills">
+                                                @foreach (var cropId in GetCrops(group).ToList())
+                                                {
+                                                    var crop = reviewCrops.FirstOrDefault(x => x.Id == cropId);
+                                                    <span class="csr-pd-pill csr-pd-pill-green">
+                                                        @(crop?.Name ?? cropId.ToString())
+                                                        <button type="button"
+                                                                class="btn btn-sm p-0 ms-1"
+                                                                @onclick="() => ToggleReviewCrop(group, cropId, false)">
+                                                            ×
+                                                        </button>
+                                                    </span>
+                                                }
+                                            </div>
+                                            <select class="form-select mt-2"
+                                                    value="0"
+                                                    @onchange="e => AddReviewCrop(group, e.Value?.ToString())">
+                                                <option value="0">Select Crop</option>
+                                                @foreach (var crop in reviewCrops.Where(x => !GetCrops(group).Contains(x.Id)))
+                                                {
+                                                    <option value="@crop.Id">@crop.Name</option>
+                                                }
+                                            </select>
+
                                             <label class="csr-inline-field">Focused Product</label>
                                             <div class="csr-pd-pills">
                                                 @foreach (var productId in GetProducts(group).ToList())
@@ -282,14 +304,22 @@
                         else
                         {
                             <div class="csr-pd-panel csr-pd-focus-grid">
-                                <div class="csr-pd-focus-item"><label>Focused Crops</label><div class="csr-pd-pills">@foreach (var crop in AllFocusCrops) {
-                                    <span class="csr-pd-pill csr-pd-pill-green">@crop</span>
+                                <div class="csr-pd-focus-item">
+                                    <label>Focused Crops</label><div class="csr-pd-pills">
+                                    @foreach (var crop in AllFocusCrops)
+                                    {
+                                        <span class="csr-pd-pill csr-pd-pill-green">@crop</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="csr-pd-focus-item">
+                                <label>Focused Products</label><div class="csr-pd-pills">
+                                @foreach (var product in AllFocusProducts)
+                                {
+                                    <span class="csr-pd-pill csr-pd-pill-blue">@product</span>
                                 }
-                            </div></div>
-                            <div class="csr-pd-focus-item"><label>Focused Products</label><div class="csr-pd-pills">@foreach (var product in AllFocusProducts) {
-                                <span class="csr-pd-pill csr-pd-pill-blue">@product</span>
-                            }
-                        </div></div>
+                            </div>
+                        </div>
                     </div>
                 }
             </section>
@@ -840,8 +870,8 @@
 
 
     /* =========================================================
-                               DRAWER
-                               ========================================================= */
+                                   DRAWER
+                                   ========================================================= */
 
     .csr-pd-overlay {
         position: fixed;
@@ -865,8 +895,8 @@
 
 
     /* =========================================================
-                               HEADER
-                               ========================================================= */
+                                   HEADER
+                                   ========================================================= */
 
     .csr-pd-header {
         min-height: 72px;
@@ -976,8 +1006,8 @@
 
 
     /* =========================================================
-                               CONTENT
-                               ========================================================= */
+                                   CONTENT
+                                   ========================================================= */
 
     .csr-pd-content {
         flex: 1;
@@ -1004,8 +1034,8 @@
 
 
     /* =========================================================
-                               PROGRAM INFO
-                               ========================================================= */
+                                   PROGRAM INFO
+                                   ========================================================= */
 
     .csr-pd-info-grid {
         display: grid;
@@ -1053,8 +1083,8 @@
 
 
     /* =========================================================
-                               EXPENSE
-                               ========================================================= */
+                                   EXPENSE
+                                   ========================================================= */
 
     .csr-pd-expense-grid {
         display: grid;
@@ -1101,8 +1131,8 @@
 
 
     /* =========================================================
-                               FOCUS AREA
-                               ========================================================= */
+                                   FOCUS AREA
+                                   ========================================================= */
 
     .csr-pd-focus-grid {
         padding: 12px;
@@ -1156,8 +1186,8 @@
 
 
     /* =========================================================
-                               TIMELINE
-                               ========================================================= */
+                                   TIMELINE
+                                   ========================================================= */
 
     .csr-pd-timeline {
         padding: 3px 2px;
@@ -1232,8 +1262,8 @@
 
 
     /* =========================================================
-                               REMARKS
-                               ========================================================= */
+                                   REMARKS
+                                   ========================================================= */
 
     .csr-pd-remarks {
         padding: 12px;
@@ -1244,8 +1274,8 @@
 
 
     /* =========================================================
-                               FOOTER
-                               ========================================================= */
+                                   FOOTER
+                                   ========================================================= */
 
     .csr-pd-footer {
         min-height: 60px;
@@ -1385,8 +1415,8 @@
 
 
     /* =========================================================
-                               LOADING
-                               ========================================================= */
+                                   LOADING
+                                   ========================================================= */
 
     .csr-pd-loading {
         min-height: 300px;
@@ -1400,8 +1430,8 @@
 
 
     /* =========================================================
-                               RESPONSIVE
-                               ========================================================= */
+                                   RESPONSIVE
+                                   ========================================================= */
 
     @@media (max-width: 768px) {
 
@@ -1489,7 +1519,7 @@
     private CSR1DetailsDto? details;
     private CSR1SaveRequest? reviewRequest;
     private string reviewError = "";
-    private sealed class ReviewLookup { public int Id { get; set; } public string Name { get; set; } = ""; }
+    private sealed class ReviewLookup { public int Id { get; set; } public string UserId { get; set; } = ""; public string Name { get; set; } = ""; public string UserName { get; set; } = ""; }
     private sealed class ReviewHeadquarter { public int Id { get; set; } public string HeadquarterName { get; set; } = ""; }
     private sealed class ReviewZone { public int Id { get; set; } public string ZoneName { get; set; } = ""; }
     private List<ReviewHeadquarter> reviewHeadquarters = new();
@@ -1507,12 +1537,47 @@
     }
     private List<ReviewLookup> reviewCrops = new();
     private List<ReviewLookup> reviewProducts = new();
-    private int GetCrop(int group) => reviewRequest == null ? 0 : group switch
+
+    private List<int> GetCrops(int group)
     {
-        1 => reviewRequest.Crop1Id,
-        2 => reviewRequest.Crop2Id,
-        _ => reviewRequest.Crop3Id
-    };
+        if (reviewRequest == null) return new();
+
+        return group switch
+        {
+            1 => reviewRequest.Crop1Ids ??= new(),
+            2 => reviewRequest.Crop2Ids ??= new(),
+            _ => reviewRequest.Crop3Ids ??= new()
+        };
+    }
+
+    private void AddReviewCrop(int group, string? value)
+    {
+        if (int.TryParse(value, out var id) && id > 0)
+            ToggleReviewCrop(group, id, true);
+    }
+
+    private void ToggleReviewCrop(int group, int cropId, bool selected)
+    {
+        var list = GetCrops(group);
+
+        if (selected && !list.Contains(cropId))
+        {
+            if (list.Count >= 3)
+            {
+                reviewError = "Maximum 3 crops per focus group.";
+                return;
+            }
+
+            list.Add(cropId);
+        }
+        else if (!selected)
+        {
+            list.Remove(cropId);
+        }
+
+        reviewError = "";
+    }
+
     private List<int> GetProducts(int group)
     {
         if (reviewRequest == null) return new();
@@ -1522,15 +1587,6 @@
             2 => reviewRequest.Product2Ids ??= new(),
             _ => reviewRequest.Product3Ids ??= new()
         };
-    }
-    private void SetCrop(int group, string? value)
-    {
-        if (reviewRequest == null) return;
-        int.TryParse(value, out var cropId);
-        if (group == 1) reviewRequest.Crop1Id = cropId;
-        else if (group == 2) reviewRequest.Crop2Id = cropId;
-        else reviewRequest.Crop3Id = cropId;
-        GetProducts(group).Clear();
     }
     private void ToggleReviewProduct(int group, int productId, bool selected)
     {

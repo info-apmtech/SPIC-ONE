@@ -19,7 +19,7 @@ namespace SPIC.Core.DTOs
 
         public int? HeadquarterId { get; set; }
         public int? LocationId { get; set; }
-        public int? ResponsiblePersonId { get; set; }
+        public string? ResponsiblePersonId { get; set; }
 
         public string Status { get; set; } = "";
         public string Scope { get; set; } = "HQ";

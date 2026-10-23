@@ -89,5 +89,92 @@ namespace SpicAPI.Services
 				"Contact Us enquiry emailed to {Recipients}.",
 				string.Join(", ", _options.To));
 		}
+
+		public async Task SendWithAttachmentAsync(
+			string to,
+			string? cc,
+			string subject,
+			string htmlBody,
+			string attachmentFileName,
+			byte[] attachmentContent,
+			string attachmentContentType,
+			CancellationToken cancellationToken)
+		{
+			if (string.IsNullOrWhiteSpace(_options.Host))
+			{
+				throw new InvalidOperationException(
+					"Alerts:Email:Host is not configured. Set it in appsettings.json " +
+					"or via the Alerts__Email__Host environment variable.");
+			}
+
+			if (string.IsNullOrWhiteSpace(to))
+			throw new InvalidOperationException("No recipient was supplied for the email.");
+
+			var message = new MimeMessage();
+			message.From.Add(new MailboxAddress(
+				string.IsNullOrWhiteSpace(_options.FromName) ? "SPIC" : _options.FromName,
+				_options.FromAddress));
+
+			foreach (var address in SplitAddresses(to))
+				message.To.Add(MailboxAddress.Parse(address));
+
+			foreach (var address in SplitAddresses(cc))
+				message.Cc.Add(MailboxAddress.Parse(address));
+
+			message.Subject = subject;
+
+			var bodyBuilder = new BodyBuilder { HtmlBody = htmlBody };
+
+			if (!string.IsNullOrWhiteSpace(attachmentFileName) && attachmentContent is { Length: > 0 })
+			{
+				bodyBuilder.Attachments.Add(
+					attachmentFileName,
+					attachmentContent,
+					BuildContentType(attachmentContentType));
+			}
+
+			message.Body = bodyBuilder.ToMessageBody();
+
+			using var client = new SmtpClient();
+
+			var security = _options.UseStartTls
+				? SecureSocketOptions.StartTls
+				: SecureSocketOptions.Auto;
+
+			await client.ConnectAsync(_options.Host, _options.Port, security, cancellationToken);
+
+			if (!string.IsNullOrWhiteSpace(_options.UserName))
+				await client.AuthenticateAsync(_options.UserName, _options.Password, cancellationToken);
+
+			await client.SendAsync(message, cancellationToken);
+			await client.DisconnectAsync(true, cancellationToken);
+
+			_logger.LogInformation(
+				"Mail with attachment '{Attachment}' sent to {Recipients}.",
+				attachmentFileName,
+				string.Join(", ", SplitAddresses(to)));
+		}
+
+		/// <summary>Semicolon, comma or newline separated addresses become one address each.</summary>
+		private static IEnumerable<string> SplitAddresses(string? raw) =>
+			(raw ?? string.Empty)
+				.Split(new[] { ';', ',', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+				.Select(address => address.Trim())
+				.Where(address => address.Length > 0);
+
+		/// <summary>"application/vnd...sheet" becomes a MimeKit content type.</summary>
+		private static ContentType BuildContentType(string? raw)
+		{
+			var value = (raw ?? string.Empty).Trim();
+
+			if (value.Length == 0)
+				return new ContentType("application", "octet-stream");
+
+			var separator = value.IndexOf('/');
+			if (separator <= 0 || separator == value.Length - 1)
+				return new ContentType("application", "octet-stream");
+
+			return new ContentType(value[..separator].Trim(), value[(separator + 1)..].Trim());
+		}
 	}
 }

@@ -94,6 +94,9 @@ builder.Services.AddScoped<IIfmsRelayDeviceStore, IfmsRelayDeviceStore>();
 builder.Services.AddScoped<IIfmsAlertSettingsStore, IfmsAlertSettingsStore>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IStockReportService, StockReportService>();
+// State-wise Global Stock Reconciliation: one calculation pipeline behind the
+// screen, the Excel export and the emailed workbook.
+builder.Services.AddScoped<IStockReconciliationService, StockReconciliationService>();
 builder.Services.AddScoped<IPendingAckService, PendingAckService>();
 builder.Services.AddScoped<IDealerInsightService, DealerInsightService>();
 builder.Services.AddScoped<IAgeingReportService, AgeingReportService>();

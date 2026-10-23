@@ -275,6 +275,13 @@
             </div>
         </div>
 
+        @if (!string.IsNullOrWhiteSpace(csr1LoadError))
+        {
+            <div class="alert alert-danger mx-3 mb-3">
+                @csr1LoadError
+            </div>
+        }
+
         <div class="csrm-table-wrapper">
             <table class="csrm-main-table">
                 <thead>
@@ -552,6 +559,7 @@
 
     private List<CSR1ListDto> csr1List = new();
     private bool isLoading = false;
+    private string csr1LoadError = "";
 
     private DateTime? selectedFromDate;
     private DateTime? selectedToDate;
@@ -622,13 +630,31 @@
         try
         {
             isLoading = true;
+            csr1LoadError = "";
 
-            csr1List = await Http.GetFromJsonAsync<List<CSR1ListDto>>(
-                "api/CSR1/list") ?? new();
+            using var response = await Http.GetAsync("api/CSR1/list?mine=false");
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                csr1List = new();
+                csr1LoadError =
+                    $"Unable to load CSR-1 list. HTTP {(int)response.StatusCode}: {body}";
+                Console.WriteLine(csr1LoadError);
+                return;
+            }
+
+            csr1List = System.Text.Json.JsonSerializer.Deserialize<List<CSR1ListDto>>(
+                body,
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                }) ?? new();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"CSR1 Load Error: {ex.Message}");
+            csr1LoadError = $"CSR1 Load Error: {ex.Message}";
             csr1List = new();
         }
         finally

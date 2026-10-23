@@ -1,0 +1,703 @@
+@page "/StateWiseGlobalStockReconciliation"
+@inject HttpClient Http
+@inject FileDownloadService FileDownload
+@inject ToastService Toast
+@inject IJSRuntime JS
+@using SPIC.Core.DTOs
+@using System.Globalization
+
+<style>
+    /* Styling for State-wise Stock Reconciliation aligned with ProductWiseStockAvailability */
+    .recon-highlight-cell {
+        font-weight: 700;
+        color: #0f172a;
+        background-color: #f8fafc;
+    }
+
+    .recon-grand-total {
+        font-weight: 700;
+        background-color: #f1f5f9 !important;
+        border-top: 2px solid #cbd5e1;
+        border-bottom: 2px solid #cbd5e1;
+    }
+
+        .recon-grand-total td {
+            font-weight: 700 !important;
+            color: #0f172a !important;
+        }
+
+    .recon-date-bar {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 14px 20px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .recon-date-controls {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .recon-date-label {
+        font-size: 14px;
+        font-weight: 600;
+        color: #334155;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+    }
+
+    .recon-date-input {
+        width: 170px;
+        padding: 7px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        font-size: 14px;
+        color: #1e293b;
+        background: #f8fafc;
+    }
+
+    .recon-date-input:focus {
+        border-color: #3b82f6;
+        outline: none;
+        background: #ffffff;
+    }
+
+    .recon-source-warning {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+        color: #92400e;
+    }
+
+    .recon-source-warning-title {
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 4px;
+    }
+
+    .recon-source-warning-list {
+        margin: 4px 0 0 20px;
+        padding: 0;
+    }
+
+    /* Modal Backdrop and Box */
+    .recon-modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(15, 23, 42, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+        backdrop-filter: blur(2px);
+    }
+
+    .recon-modal-box {
+        background: #ffffff;
+        border-radius: 12px;
+        width: 90%;
+        max-width: 520px;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    }
+
+    .recon-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        background-color: #f8fafc;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+        .recon-modal-header h3 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+    .recon-modal-close {
+        background: transparent;
+        border: none;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        color: #64748b;
+    }
+
+    .recon-modal-body {
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .recon-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 14px 20px;
+        background-color: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .pw-table th {
+        text-align: right;
+    }
+
+    .pw-table th:first-child,
+    .pw-table th:nth-child(2) {
+        text-align: left;
+    }
+
+    .pw-table td {
+        text-align: right;
+    }
+
+    .pw-table td:first-child,
+    .pw-table td:nth-child(2) {
+        text-align: left;
+    }
+</style>
+
+<div class="container-fluid py-4 px-0">
+
+    <!-- Header -->
+    <PageHeader Title="State-wise Stock Reconciliation"
+                Subtitle="State-wise reconciliation of Global Stock against Distribution Channels"
+                CssClass="pw-header">
+        <Actions>
+            <button class="pw-btn pw-btn-outline" @onclick="ExportExcel" disabled="@(_result == null || !_result.HasAnyData || _isLoading)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                Export Excel
+            </button>
+            <button class="pw-btn pw-btn-outline" @onclick="OpenEmailModal" disabled="@(_result == null || !_result.HasAnyData || _isLoading)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path></svg>
+                Send Email
+            </button>
+        </Actions>
+    </PageHeader>
+
+    <!-- Top Date Control Bar (Simplified for daily workflow) -->
+    <div class="recon-date-bar">
+        <div class="recon-date-controls">
+            <label class="recon-date-label" for="recon-as-on-date">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                As On Date:
+            </label>
+            <input id="recon-as-on-date"
+                   type="date"
+                   class="recon-date-input"
+                   @bind="_asOnDate"
+                   disabled="@(_isLoading)" />
+
+            <button type="button" class="pw-btn pw-btn-solid" @onclick="ViewReconciliation" disabled="@(_isLoading)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                @(_isLoading ? "Loading..." : "View")
+            </button>
+
+            @if (_asOnDate != DateTime.Today)
+            {
+                <button type="button" class="pw-btn pw-btn-outline" @onclick="SetToToday" disabled="@(_isLoading)">
+                    Today
+                </button>
+            }
+        </div>
+
+        <div style="font-size:13px; color:#64748b;">
+            @if (_result != null)
+            {
+                <span>Report Date: <strong>@_result.AsOnDate.ToString("dd-MM-yyyy")</strong></span>
+            }
+        </div>
+    </div>
+
+    <!-- Result / Content Area -->
+    @if (_isLoading && _result == null)
+    {
+        <div class="pw-initial-dashboard" aria-live="polite" aria-busy="true">
+            <div class="pw-loading-title">
+                <span class="pw-spinner" aria-hidden="true"></span>
+                <span>Loading reconciliation records for @_asOnDate.ToString("dd-MM-yyyy")…</span>
+            </div>
+            <div class="pw-table-card pw-skeleton-table-card">
+                <div class="pw-skeleton-table">
+                    <div class="pw-skeleton-table-header"></div>
+                    <div class="pw-skeleton-table-row"></div>
+                    <div class="pw-skeleton-table-row"></div>
+                    <div class="pw-skeleton-table-row"></div>
+                    <div class="pw-skeleton-table-row"></div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (_result is not null && !_result.HasAnyData)
+    {
+        <!-- Empty Current-Date State -->
+        <div class="pw-empty-state">
+            <EmptyState Icon="bi-calendar-x"
+                        Title="No Reconciliation Data Available"
+                        Message="@($"No reconciliation data is available for {_asOnDate:dd-MM-yyyy}. Please complete today's report uploads.")">
+                <div style="display:flex; gap:12px; justify-content:center; margin-top:16px;">
+                    <a href="/ExcelFormatFileUpload" class="pw-btn pw-btn-solid">Go to File Upload</a>
+                    <button type="button" class="pw-btn pw-btn-outline" @onclick="ViewReconciliation">Refresh</button>
+                </div>
+            </EmptyState>
+        </div>
+    }
+    else if (_result is not null)
+    {
+        <div class="pw-dashboard-shell @(_isLoading ? "pw-dashboard-updating" : "")">
+            @if (_isLoading)
+            {
+                <div class="pw-updating-indicator">
+                    <span class="pw-spinner pw-spinner-small" aria-hidden="true"></span>
+                    Updating…
+                </div>
+            }
+
+            <!-- Source Reports Availability Notice -->
+            @if (_result.MissingSources.Count > 0)
+            {
+                <div class="recon-source-warning">
+                    <div class="recon-source-warning-title">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        <span>Partial Report - Pending Uploads for @_result.AsOnDate.ToString("dd-MM-yyyy"):</span>
+                    </div>
+                    <ul class="recon-source-warning-list">
+                        @foreach (var notice in _result.MissingSources)
+                        {
+                            <li>@notice</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <div class="pw-table-card">
+                <div class="pw-table-top">
+                    <div>
+                        <h3 style="margin:0; font-size:16px; font-weight:700; color:#1e293b;">State-wise Stock Reconciliation</h3>
+                        <p style="margin:4px 0 0; font-size:13px; color:#64748b;">
+                            As On Date: <strong>@_result.AsOnDate.ToString("dd-MM-yyyy")</strong>
+                            <span> | Total States: <strong>@_result.Rows.Count</strong></span>
+                        </p>
+                    </div>
+
+                    <input type="text"
+                           class="pw-search-input"
+                           placeholder="Search state…"
+                           @bind="_searchQuery"
+                           @bind:event="oninput"
+                           disabled="@(_isLoading)" />
+                </div>
+
+                <div class="pw-table-wrap">
+                    <table class="pw-table">
+                        <thead>
+                            <tr>
+                                <th style="width:50px;">S.No</th>
+                                <th>State</th>
+                                <th>Closing Stock</th>
+                                <th>Closing GIT</th>
+                                <th class="recon-highlight-cell">Global Stock Total</th>
+                                <th>Wholesaler Stock</th>
+                                <th>Retail Point Stock</th>
+                                <th>Company Sales in GIT</th>
+                                <th>Wholesaler Sales in GIT</th>
+                                <th class="recon-highlight-cell">Channel Total</th>
+                                <th class="recon-highlight-cell">Overall Stock</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (FilteredRows.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="11" style="text-align:center; padding:32px; color:#94a3b8;">
+                                        <EmptyState Title="No Matching States"
+                                                    Message="No reconciliation records found matching your search."
+                                                    Compact="true" />
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                var sno = 0;
+                                @foreach (var row in FilteredRows)
+                                {
+                                    sno++;
+                                    <tr>
+                                        <td>@sno</td>
+                                        <td>@row.State</td>
+                                        <td>@Fmt(row.ClosingStock, _result.HasGlobalStock)</td>
+                                        <td>@Fmt(row.ClosingGit, _result.HasGlobalStock)</td>
+                                        <td class="recon-highlight-cell">@Fmt(row.GlobalStockTotal, _result.HasGlobalStock)</td>
+                                        <td>@Fmt(row.WholesalerStock, _result.HasWholesalerStock)</td>
+                                        <td>@Fmt(row.RetailPointStock, _result.HasRetailPointStock)</td>
+                                        <td>@Fmt(row.CompanySalesInGit, _result.HasCompanySalesGit)</td>
+                                        <td>@Fmt(row.WholesalerSalesInGit, _result.HasWholesalerSalesGit)</td>
+                                        <td class="recon-highlight-cell">@Fmt(row.ChannelTotal, true)</td>
+                                        <td class="recon-highlight-cell" style="font-weight:bold;">@Fmt(row.OverallStock, true)</td>
+                                    </tr>
+                                }
+
+                                <tr class="recon-grand-total">
+                                    <td></td>
+                                    <td>Overall Total</td>
+                                    <td>@Fmt(_result.Totals.ClosingStock, _result.HasGlobalStock)</td>
+                                    <td>@Fmt(_result.Totals.ClosingGit, _result.HasGlobalStock)</td>
+                                    <td class="recon-highlight-cell">@Fmt(_result.Totals.GlobalStockTotal, _result.HasGlobalStock)</td>
+                                    <td>@Fmt(_result.Totals.WholesalerStock, _result.HasWholesalerStock)</td>
+                                    <td>@Fmt(_result.Totals.RetailPointStock, _result.HasRetailPointStock)</td>
+                                    <td>@Fmt(_result.Totals.CompanySalesInGit, _result.HasCompanySalesGit)</td>
+                                    <td>@Fmt(_result.Totals.WholesalerSalesInGit, _result.HasWholesalerSalesGit)</td>
+                                    <td class="recon-highlight-cell">@Fmt(_result.Totals.ChannelTotal, true)</td>
+                                    <td class="recon-highlight-cell" style="font-weight:bold;">@Fmt(_result.Totals.OverallStock, true)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Section 2: GFL Stock As on {SelectedDate} (in MT) -->
+            <div class="pw-table-card" style="margin-top: 24px;">
+                <div class="pw-table-top">
+                    <div>
+                        <h3 style="margin:0; font-size:16px; font-weight:700; color:#1e293b;">
+                            GFL Stock As on @_asOnDate.ToString("dd-MMM-yy") (in MT)
+                        </h3>
+                        <p style="margin:4px 0 0; font-size:13px; color:#64748b;">
+                            Primary Source: <strong>Wholesaler Stock As on Today</strong>
+                            @if (_result.GflStock?.HasAnyData == true)
+                            {
+                                <span> | States: <strong>@_result.GflStock.Rows.Count</strong></span>
+                                <span> | Products: <strong>@_result.GflStock.Columns.Count</strong></span>
+                            }
+                        </p>
+                    </div>
+                </div>
+
+                @if (_result.GflStock is null || !_result.GflStock.HasAnyData)
+                {
+                    <div style="padding: 24px; text-align: center; color: #64748b; background: #f8fafc; border-radius: 8px; margin: 16px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -4px; margin-right: 6px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        <span>GFL stock data is not available for @_asOnDate.ToString("dd-MM-yyyy").</span>
+                    </div>
+                }
+                else
+                {
+                    var filteredGflRows = FilteredGflRows;
+                    <div class="pw-table-wrap" style="overflow-x: auto;">
+                        <table class="pw-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:50px; position: sticky; left: 0; background: #f8fafc; z-index: 2;">S.No</th>
+                                    <th style="min-width: 150px; position: sticky; left: 50px; background: #f8fafc; z-index: 2;">State</th>
+                                    @foreach (var col in _result.GflStock.Columns)
+                                    {
+                                        <th style="text-align: right; min-width: 100px;">@col.DisplayName</th>
+                                    }
+                                    <th class="recon-highlight-cell" style="text-align: right; min-width: 110px;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (filteredGflRows.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="@(_result.GflStock.Columns.Count + 3)" style="text-align:center; padding:32px; color:#94a3b8;">
+                                            <EmptyState Title="No Matching States"
+                                                        Message="No GFL records found matching your search."
+                                                        Compact="true" />
+                                        </td>
+                                    </tr>
+                                }
+                                else
+                                {
+                                    var gSno = 0;
+                                    @foreach (var row in filteredGflRows)
+                                    {
+                                        gSno++;
+                                        <tr>
+                                            <td style="position: sticky; left: 0; background: #ffffff; z-index: 1;">@gSno</td>
+                                            <td style="position: sticky; left: 50px; background: #ffffff; z-index: 1; font-weight: 600;">@row.State</td>
+                                            @foreach (var col in _result.GflStock.Columns)
+                                            {
+                                                var qty = row.Quantities.TryGetValue(col.ProductId, out var v) ? v : 0m;
+                                                <td style="text-align: right;">@Fmt(qty, true)</td>
+                                            }
+                                            <td class="recon-highlight-cell" style="text-align: right; font-weight: bold;">@Fmt(row.Total, true)</td>
+                                        </tr>
+                                    }
+
+                                    <tr class="recon-grand-total">
+                                        <td style="position: sticky; left: 0; background: #f1f5f9; z-index: 1;"></td>
+                                        <td style="position: sticky; left: 50px; background: #f1f5f9; z-index: 1; font-weight: 700;">Total</td>
+                                        @foreach (var col in _result.GflStock.Columns)
+                                        {
+                                            var colSum = _result.GflStock.ColumnTotals.TryGetValue(col.ProductId, out var tot) ? tot : 0m;
+                                            <td style="text-align: right; font-weight: 700;">@Fmt(colSum, true)</td>
+                                        }
+                                        <td class="recon-highlight-cell" style="text-align: right; font-weight: 800;">@Fmt(_result.GflStock.GrandTotal, true)</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Send Email Dialog (Manual Flow) -->
+@if (_emailModalOpen)
+{
+    <div class="recon-modal-backdrop" @onclick="() => _emailModalOpen = false">
+        <div class="recon-modal-box" @onclick:stopPropagation="true">
+            <div class="recon-modal-header">
+                <h3>Send Reconciliation Report</h3>
+                <button type="button" class="recon-modal-close" @onclick="() => _emailModalOpen = false">&times;</button>
+            </div>
+            <div class="recon-modal-body">
+                <div class="pw-form-group">
+                    <label class="pw-form-label">To (recipient email) <span style="color:#ef4444;">*</span></label>
+                    <input type="email" class="pw-form-input" @bind="_modalTo" placeholder="name@spic.co.in" disabled="@(_emailSending)" />
+                </div>
+
+                <div class="pw-form-group">
+                    <label class="pw-form-label">CC (optional)</label>
+                    <input type="text" class="pw-form-input" @bind="_modalCc" placeholder="manager@spic.co.in" disabled="@(_emailSending)" />
+                </div>
+
+                <div class="pw-form-group">
+                    <label class="pw-form-label">Subject</label>
+                    <input type="text" class="pw-form-input" @bind="_modalSubject" disabled="@(_emailSending)" />
+                </div>
+
+                <div style="font-size:12px; color:#64748b; background:#f8fafc; padding:10px 12px; border-radius:6px; border:1px solid #e2e8f0; line-height:1.4;">
+                    <div>Attachment: <strong>Urea_GFL_Stock_@(_asOnDate.ToString("yyyyMMdd")).xlsx</strong></div>
+                    <div style="margin-top:4px; color:#475569;">
+                        Sheet 1: Urea Stock As on @(_asOnDate.AddDays(-1).ToString("dd-MM-yyyy"))<br />
+                        Sheet 2: GFL Stock As on @(_asOnDate.ToString("dd-MM-yyyy"))
+                    </div>
+                </div>
+            </div>
+            <div class="recon-modal-footer">
+                <button type="button" class="pw-btn pw-btn-outline" @onclick="() => _emailModalOpen = false" disabled="@(_emailSending)">
+                    Cancel
+                </button>
+                <button type="button" class="pw-btn pw-btn-solid" @onclick="SendEmailManual" disabled="@(_emailSending)">
+                    @(_emailSending ? "Sending..." : "Send Email")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly CultureInfo InIN = CultureInfo.GetCultureInfo("en-IN");
+
+    private DateTime _asOnDate = DateTime.Today;
+    private bool _isLoading = false;
+    private StockReconciliationResult? _result;
+    private string _searchQuery = string.Empty;
+
+    // Manual Email Modal state
+    private bool _emailModalOpen = false;
+    private bool _emailSending = false;
+    private string _modalTo = string.Empty;
+    private string _modalCc = string.Empty;
+    private string _modalSubject = string.Empty;
+
+    private List<StockReconciliationRow> FilteredRows
+    {
+        get
+        {
+            if (_result?.Rows is null) return new();
+            if (string.IsNullOrWhiteSpace(_searchQuery)) return _result.Rows;
+
+            return _result.Rows
+                .Where(r => r.State.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    private List<GflStockTableRowDto> FilteredGflRows
+    {
+        get
+        {
+            if (_result?.GflStock?.Rows is null) return new();
+            if (string.IsNullOrWhiteSpace(_searchQuery)) return _result.GflStock.Rows;
+
+            return _result.GflStock.Rows
+                .Where(r => r.State.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    /// <summary>
+    /// Formats decimal quantities. If the source report is not available and the value is zero,
+    /// shows "-" to clearly indicate un-uploaded data rather than a zero quantity.
+    /// </summary>
+    private string Fmt(decimal value, bool isSourceAvailable = true)
+    {
+        if (!isSourceAvailable && value == 0) return "-";
+        return value == decimal.Truncate(value)
+            ? value.ToString("#,##0", InIN)
+            : value.ToString("#,##0.###", InIN);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // 1. Default to current local date
+        _asOnDate = DateTime.Today;
+
+        // 2. Automatically load current date reconciliation on page open without requiring a click
+        await ViewReconciliation();
+    }
+
+    private async Task SetToToday()
+    {
+        _asOnDate = DateTime.Today;
+        await ViewReconciliation();
+    }
+
+    private async Task ViewReconciliation()
+    {
+        try
+        {
+            _isLoading = true;
+            StateHasChanged();
+
+            var request = new StockReconciliationDatabaseQueryRequest
+            {
+                AsOnDate = _asOnDate,
+                AutoSendEmail = false
+            };
+
+            using var response = await Http.PostAsJsonAsync("api/StockReconciliation/view", request);
+            if (!response.IsSuccessStatusCode)
+            {
+                Toast.Error("Could not load reconciliation data.");
+                return;
+            }
+
+            var parsed = await response.Content.ReadFromJsonAsync<StockReconciliationGenerateResponse>();
+            if (parsed?.Success == true && parsed.Result != null)
+            {
+                _result = parsed.Result;
+                if (!_result.HasAnyData)
+                {
+                    Toast.Info($"No reconciliation data found for {_asOnDate:dd-MM-yyyy}.");
+                }
+            }
+            else
+            {
+                Toast.Warning(parsed?.Message ?? "No reconciliation records found.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("An error occurred while loading reconciliation: " + ex.Message);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportExcel()
+    {
+        if (_result is null || !_result.HasAnyData) return;
+
+        try
+        {
+            var fileName = string.IsNullOrWhiteSpace(_result.FileName)
+                ? $"State_Wise_Stock_Reconciliation_{_result.AsOnDate:yyyyMMdd}.xlsx"
+                : _result.FileName;
+
+            await FileDownload.PostAsync("api/StockReconciliation/export-excel", _result, fileName);
+            Toast.Success("Workbook exported successfully.", "Export Complete");
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Failed to export Excel workbook: " + ex.Message);
+        }
+    }
+
+    private void OpenEmailModal()
+    {
+        if (_result is null || !_result.HasAnyData) return;
+
+        _modalSubject = $"Urea & GFL Stock - {_asOnDate:dd-MM-yyyy}";
+        _emailModalOpen = true;
+    }
+
+    private async Task SendEmailManual()
+    {
+        if (string.IsNullOrWhiteSpace(_modalTo))
+        {
+            Toast.Warning("Recipient email address is required.");
+            return;
+        }
+
+        try
+        {
+            _emailSending = true;
+            StateHasChanged();
+
+            var request = new DailyCombinedStockMailRequest
+            {
+                AsOnDate = _asOnDate,
+                To = _modalTo,
+                Cc = _modalCc,
+                Subject = _modalSubject
+            };
+
+            using var response = await Http.PostAsJsonAsync("api/StockReconciliation/send-daily-mail", request);
+            var outcome = await response.Content.ReadFromJsonAsync<StockReconciliationEmailOutcome>();
+
+            if (response.IsSuccessStatusCode && outcome?.Sent == true)
+            {
+                Toast.Success(outcome.Message, "Email Sent");
+                _emailModalOpen = false;
+            }
+            else
+            {
+                // Email or validation error does not remove or disturb the visible reconciliation data
+                Toast.Error(outcome?.Message ?? "Failed to send daily stock email.", "Report Incomplete");
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("An error occurred while sending the email: " + ex.Message);
+        }
+        finally
+        {
+            _emailSending = false;
+            StateHasChanged();
+        }
+    }
+}

@@ -293,12 +293,18 @@ namespace SpicAPI.Controllers
 
             if (existing == null)
             {
+                var now = DateTime.Now;
+
                 existing = new ProgramStateBudget
                 {
                     ProgramId = id,
                     StateId = stateId,
                     BudgetAmount = request.BudgetAmount ?? 0,
-                    IsApplicable = request.IsApplicable ?? true
+                    IsApplicable = request.IsApplicable ?? true,
+                    CreatedBy = CurrentUser,
+                    UpdatedBy = CurrentUser,
+                    CreatedAt = now,
+                    UpdatedAt = now
                 };
                 _db.ProgramStateBudgets.Add(existing);
             }
@@ -308,6 +314,9 @@ namespace SpicAPI.Controllers
                     existing.BudgetAmount = request.BudgetAmount.Value;
                 if (request.IsApplicable.HasValue)
                     existing.IsApplicable = request.IsApplicable.Value;
+
+                existing.UpdatedBy = CurrentUser;
+                existing.UpdatedAt = DateTime.Now;
             }
 
             try
@@ -325,6 +334,10 @@ namespace SpicAPI.Controllers
                     concurrent.BudgetAmount = request.BudgetAmount.Value;
                 if (request.IsApplicable.HasValue)
                     concurrent.IsApplicable = request.IsApplicable.Value;
+
+                concurrent.UpdatedBy = CurrentUser;
+                concurrent.UpdatedAt = DateTime.Now;
+
                 await _db.SaveChangesAsync();
                 existing = concurrent;
             }

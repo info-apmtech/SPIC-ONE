@@ -68,13 +68,13 @@ namespace SPIC.Core.DTOs
     {
         public CSR1 CSR1 { get; set; } = new();
 
-        public int Crop1Id { get; set; }
+        public List<int> Crop1Ids { get; set; } = new();
         public List<int> Product1Ids { get; set; } = new();
 
-        public int Crop2Id { get; set; }
+        public List<int> Crop2Ids { get; set; } = new();
         public List<int> Product2Ids { get; set; } = new();
 
-        public int Crop3Id { get; set; }
+        public List<int> Crop3Ids { get; set; } = new();
         public List<int> Product3Ids { get; set; } = new();
     }
 
