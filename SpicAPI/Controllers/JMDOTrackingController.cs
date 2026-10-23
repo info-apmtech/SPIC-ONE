@@ -120,6 +120,31 @@ namespace SpicAPI.Controllers
             return Ok(await MapAsync(session));
         }
 
+        // GET /api/JMDOTracking/mine/latest
+        // The caller's most recent session today, regardless of status - unlike MineActive() this
+        // also returns a session that's already Completed/AutoEnded, so a page reached right after
+        // Stop (MarkAttendance's "View Tracking Details") can still show the route that was just
+        // recorded instead of finding nothing.
+        [HttpGet("mine/latest")]
+        public async Task<IActionResult> MineLatest()
+        {
+            if (!IsJmdo())
+                return Forbid403("Only JMDO users track field visits here.");
+
+            var userId = CurrentUserId();
+            var today = DateTime.Today;
+            var session = await _db.JMDOTrackingSessions
+                .AsNoTracking()
+                .Where(s => s.UserId == userId && s.StartTime >= today)
+                .OrderByDescending(s => s.StartTime)
+                .FirstOrDefaultAsync();
+
+            if (session is null)
+                return NoContent();
+
+            return Ok(await MapAsync(session));
+        }
+
         // POST /api/JMDOTracking/sessions/{sessionId}/points
         [HttpPost("sessions/{sessionId:int}/points")]
         public async Task<IActionResult> AddPoint(int sessionId, [FromBody] JMDOTrackingPointUpsertDto dto)
@@ -322,6 +347,53 @@ namespace SpicAPI.Controllers
             return Ok(rows);
         }
 
+        // GET /api/JMDOTracking/sessions/{sessionId}/points
+        // Oldest-first points for drawing a session's route on a map. A JMDO can only ever fetch
+        // their own session (any status - including a Stopped/AutoEnded one, so a past day's route
+        // can still be reviewed); an Admin/MO/MDO can fetch any session belonging to a JMDO on their
+        // own HQ team, same scope as Team() - never cross-HQ. Capped at 3000 points (~16h of 20s-
+        // interval tracking) so one request can't pull an unbounded payload.
+        [HttpGet("sessions/{sessionId:int}/points")]
+        public async Task<IActionResult> GetSessionPoints(int sessionId)
+        {
+            var session = await _db.JMDOTrackingSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == sessionId);
+            if (session is null)
+                return NotFound(new { Success = false, Message = "Tracking session not found." });
+
+            var userId = CurrentUserId();
+            if (session.UserId != userId)
+            {
+                if (!IsSupervisor())
+                    return Forbid403("You can only view your own tracking sessions.");
+
+                var hqId = CurrentHqId();
+                var sameHq = hqId is > 0 && await _db.Employeelogins
+                    .AsNoTracking()
+                    .AnyAsync(l => l.UserId == session.UserId && l.HeadquartersId == hqId.Value);
+                if (!sameHq)
+                    return Forbid403("You can only view tracking sessions for your own HQ team.");
+            }
+
+            var points = await _db.JMDOTrackingPoints
+                .AsNoTracking()
+                .Where(p => p.TrackingSessionId == sessionId)
+                .OrderBy(p => p.RecordedAt)
+                .Take(3000)
+                .Select(p => new JMDOTrackingPointDto
+                {
+                    Latitude = p.Latitude,
+                    Longitude = p.Longitude,
+                    RecordedAt = p.RecordedAt,
+                    DeviceCapturedAt = p.DeviceCapturedAt,
+                    Accuracy = p.Accuracy
+                })
+                .ToListAsync();
+
+            return Ok(points);
+        }
+
         // Ends the caller's Active session(s) that have gone silent for longer than
         // JmdoTracking:AutoEndAfterHours, at their last recorded point (or their own start, if they
         // have none) - never "now", so the silent gap isn't counted as working time. Status =
@@ -426,6 +498,8 @@ namespace SpicAPI.Controllers
         }
 
         private bool IsJmdo() => CurrentRole() == AppRole.JMDO;
+
+        private bool IsSupervisor() => CurrentRole() is AppRole.Admin or AppRole.MO or AppRole.MDO;
 
         // Same claim-reading rule as JmdoTaskAllocationController/TeamController, kept local to this
         // controller since Team() is the only action here that needs it.

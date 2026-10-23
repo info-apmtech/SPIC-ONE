@@ -111,3 +111,16 @@ public class JMDOTrackingTeamRowDto
     public double? LastLongitude { get; set; }
     public DateTime? SessionStartTime { get; set; }
 }
+
+// GET api/JMDOTracking/sessions/{sessionId}/points - one row per recorded GPS fix, oldest first, for
+// drawing a session's route on a map. RecordedAt (server-received) is what orders/paginates the
+// data server-side; DeviceCapturedAt is exposed too since it's what actually reflects real movement
+// time for a point that was flushed from an offline queue well after it was captured.
+public class JMDOTrackingPointDto
+{
+    public double Latitude { get; set; }
+    public double Longitude { get; set; }
+    public DateTime RecordedAt { get; set; }
+    public DateTime DeviceCapturedAt { get; set; }
+    public double? Accuracy { get; set; }
+}
