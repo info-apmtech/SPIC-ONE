@@ -429,8 +429,8 @@ else
                     </td>
                     <td>
                         ₹@program.TotalBudget.ToString(
-                                                                                                                                                                                                                                                                                                                                                                                                                                            "N0",
-                                                                                                                                                                                                                                                                                                                                                                                                                                            CultureInfo.CreateSpecificCulture("en-IN"))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    "N0",
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    CultureInfo.CreateSpecificCulture("en-IN"))
                     </td>
                     <td style="text-align:right;">
                         <button type="button"
@@ -884,70 +884,43 @@ else
                     </div>
                 }
 
-                <!-- First two rows (4 Columns) -->
-                <div class="csr-grid-4">
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Printing & Stationary</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="printStationary" @bind:event="oninput">
+                @if (isExpenseLoading)
+                {
+                    <div class="text-center py-4">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span class="ms-2">Loading expenses...</span>
                     </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Publicity Material</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="publicityMaterial" @bind:event="oninput">
+                }
+                else if (!string.IsNullOrWhiteSpace(expenseLoadError))
+                {
+                    <div class="alert alert-danger py-2 mb-0" role="alert">
+                        @expenseLoadError
                     </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Stage Arrangements</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="stageArrangements" @bind:event="oninput">
+                }
+                else if (!ExpenseInformations.Any())
+                {
+                    <div class="alert alert-info py-2 mb-0" role="alert">
+                        No active expense information found.
                     </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Service Charges - LCA</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="serviceCharges" @bind:event="oninput">
+                }
+                else
+                {
+                    <div class="csr-grid-4">
+                        @foreach (var expense in ExpenseInformations)
+                        {
+                            <div class="csr-form-group">
+                                <label class="csr-form-label">@expense.Name</label>
+                                <input type="number"
+                                       class="csr-form-control"
+                                       placeholder="0"
+                                       min="0"
+                                       step="0.01"
+                                       value="@GetExpenseAmount(expense.Id)"
+                                       @oninput="e => UpdateExpenseAmount(expense.Id, e.Value?.ToString())" />
+                            </div>
+                        }
                     </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Transport / Rent</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="transportRent" @bind:event="oninput">
-                    </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Jeep Running Expenses</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="jeepExpenses" @bind:event="oninput">
-                    </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Refreshments</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="refreshments" @bind:event="oninput">
-                    </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Inputs</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="inputs" @bind:event="oninput">
-                    </div>
-
-                </div>
-
-                <!-- Last row (3 Columns) -->
-                <div class="csr-grid-3">
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Photography</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="photography" @bind:event="oninput">
-                    </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Compliments</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="compliments" @bind:event="oninput">
-                    </div>
-
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Others</label>
-                        <input type="number" class="csr-form-control" placeholder="0" min="0" step="0.01" @bind="othersExpense" @bind:event="oninput">
-                    </div>
-
-                </div>
+                }
 
             </div>
 
@@ -1657,8 +1630,8 @@ else
             font-weight: 700;
         }
     /* =========================================================
-                                                                                   BUDGET PLAN FILTER
-                                                                                   ========================================================= */
+                                                                                       BUDGET PLAN FILTER
+                                                                                       ========================================================= */
 
     .csr-filter-card {
         background: #ffffff;
@@ -1995,7 +1968,7 @@ else
                 min-height: 44px;
             }
         /* minmax(0,…) so a long "₹ 50,00,000" cannot push the tile (and the
-                                                                                       page) wider than the 392px viewport. */
+                                                                                           page) wider than the 392px viewport. */
         .csr-stats-grid-4 {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
@@ -2034,7 +2007,7 @@ else
             display: none; /* decorative only */
         }
         /* Program table becomes one card per program so "Apply CSR 1" and the
-                                                                                       budget columns are on screen instead of off the right edge. */
+                                                                                           budget columns are on screen instead of off the right edge. */
         .csr-table-container {
             overflow: visible;
             padding: 0 12px 4px;
@@ -2199,7 +2172,7 @@ else
         }
 
     /* Budget plan list (SpicDataTable) pagination on phones: one row, "Items Per Page"
-                                                       left and the pager right, only prev / current / next — same as the other lists. */
+                                                           left and the pager right, only prev / current / next — same as the other lists. */
     @@media (max-width: 767.98px) {
         .csr1c-page .spic-dt .pagination-container {
             flex-direction: row;
@@ -2392,32 +2365,53 @@ else
     private int focusProduct3Id = 0;
 
     // =========================================================
-    // Expense Breakdown
+    // Expense Breakdown - loaded dynamically from ExpenseInformations
     // =========================================================
-    private decimal printStationary = 0;
-    private decimal publicityMaterial = 0;
-    private decimal stageArrangements = 0;
-    private decimal serviceCharges = 0;
-    private decimal transportRent = 0;
-    private decimal jeepExpenses = 0;
-    private decimal refreshments = 0;
-    private decimal inputs = 0;
-    private decimal photography = 0;
-    private decimal compliments = 0;
-    private decimal othersExpense = 0;
+    private List<ExpenseInformationDto> ExpenseInformations = new();
+    private Dictionary<int, decimal> ExpenseAmounts = new();
+    private bool isExpenseLoading = false;
+    private string expenseLoadError = "";
 
-    private decimal TotalExpense =>
-        printStationary +
-        publicityMaterial +
-        stageArrangements +
-        serviceCharges +
-        transportRent +
-        jeepExpenses +
-        refreshments +
-        inputs +
-        photography +
-        compliments +
-        othersExpense;
+    private decimal TotalExpense => ExpenseAmounts.Values.Sum();
+
+    private sealed class ExpenseInformationDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public bool IsActive { get; set; }
+    }
+
+    private decimal GetExpenseAmount(int expenseId)
+    {
+        return ExpenseAmounts.TryGetValue(expenseId, out var amount)
+            ? amount
+            : 0m;
+    }
+
+    private void UpdateExpenseAmount(int expenseId, string? value)
+    {
+        if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var amount))
+        {
+            ExpenseAmounts[expenseId] = amount < 0 ? 0m : amount;
+        }
+        else
+        {
+            ExpenseAmounts[expenseId] = 0m;
+        }
+    }
+
+    private decimal GetExpenseByName(params string[] names)
+    {
+        var expense = ExpenseInformations.FirstOrDefault(x =>
+            names.Any(name => string.Equals(
+                x.Name?.Trim(),
+                name,
+                StringComparison.OrdinalIgnoreCase)));
+
+        return expense != null && ExpenseAmounts.TryGetValue(expense.Id, out var amount)
+            ? amount
+            : 0m;
+    }
 
     // =========================================================
     // Existing Budget Plan List UI Model
@@ -2601,6 +2595,46 @@ else
         await LoadEmployees();
         await LoadCrops();
         await LoadProducts();
+        await LoadExpenseInformations();
+    }
+
+    private async Task LoadExpenseInformations()
+    {
+        isExpenseLoading = true;
+        expenseLoadError = "";
+
+        try
+        {
+            var data = await Http.GetFromJsonAsync<List<ExpenseInformationDto>>(
+                "api/CSR1/expense-informations");
+
+            ExpenseInformations = (data ?? new List<ExpenseInformationDto>())
+                .Where(x => x.IsActive && !string.IsNullOrWhiteSpace(x.Name))
+                .OrderBy(x => x.Id)
+                .ToList();
+
+            var activeIds = ExpenseInformations.Select(x => x.Id).ToHashSet();
+
+            foreach (var key in ExpenseAmounts.Keys.Where(x => !activeIds.Contains(x)).ToList())
+                ExpenseAmounts.Remove(key);
+
+            foreach (var expense in ExpenseInformations)
+            {
+                if (!ExpenseAmounts.ContainsKey(expense.Id))
+                    ExpenseAmounts[expense.Id] = 0m;
+            }
+        }
+        catch (Exception ex)
+        {
+            ExpenseInformations = new();
+            ExpenseAmounts.Clear();
+            expenseLoadError = $"Unable to load expense information: {ex.Message}";
+            Console.WriteLine($"Expense Information Load Error: {ex}");
+        }
+        finally
+        {
+            isExpenseLoading = false;
+        }
     }
 
     private async Task LoadBudgetPrograms()
@@ -3187,38 +3221,40 @@ else
             // EXPENSE DETAILS
             // =========================================================
 
+            // Expense controls are dynamic, but the current CSR1 table still
+            // stores these known expense categories in its existing columns.
             csr1Model.PrintingAndStationery =
-                printStationary;
+                GetExpenseByName("Printing & Stationary", "Printing & Stationery");
 
             csr1Model.PublicityMaterial =
-                publicityMaterial;
+                GetExpenseByName("Publicity Material");
 
             csr1Model.StageArrangements =
-                stageArrangements;
+                GetExpenseByName("Stage Arrangements");
 
             csr1Model.ServiceChargesLCA =
-                serviceCharges;
+                GetExpenseByName("Service Charges - LCA", "Service Charges LCA");
 
             csr1Model.TransportRent =
-                transportRent;
+                GetExpenseByName("Transport / Rent", "Transport Rent");
 
             csr1Model.JeepRunningExpenses =
-                jeepExpenses;
+                GetExpenseByName("Jeep Running Expenses");
 
             csr1Model.Refreshments =
-                refreshments;
+                GetExpenseByName("Refreshments");
 
             csr1Model.Inputs =
-                inputs;
+                GetExpenseByName("Inputs");
 
             csr1Model.Photography =
-                photography;
+                GetExpenseByName("Photography");
 
             csr1Model.Compliments =
-                compliments;
+                GetExpenseByName("Compliments");
 
             csr1Model.Others =
-                othersExpense;
+                GetExpenseByName("Others");
 
 
             // =========================================================
@@ -3641,17 +3677,10 @@ else
         focusProduct2Id = 0;
         focusProduct3Id = 0;
 
-        printStationary = 0;
-        publicityMaterial = 0;
-        stageArrangements = 0;
-        serviceCharges = 0;
-        transportRent = 0;
-        jeepExpenses = 0;
-        refreshments = 0;
-        inputs = 0;
-        photography = 0;
-        compliments = 0;
-        othersExpense = 0;
+        foreach (var expenseId in ExpenseAmounts.Keys.ToList())
+        {
+            ExpenseAmounts[expenseId] = 0m;
+        }
 
         errorMessage = "";
         successMessage = "";

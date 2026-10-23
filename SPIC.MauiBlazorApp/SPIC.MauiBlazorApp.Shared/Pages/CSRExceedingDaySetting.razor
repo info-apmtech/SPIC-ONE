@@ -1,0 +1,975 @@
+﻿@page "/CSRExceedingDaySetting"
+
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject ISessionStore SessionStore
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+
+<div class="container-fluid mf-page">
+
+    <PageHeader Title="CSR Exceeding Day Setting" />
+
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_isError ? "alert-danger" : "alert-success") alert-dismissible fade show">
+
+            @_message
+
+            <button type="button"
+                    class="btn-close"
+                    @onclick="() => _message = null">
+            </button>
+
+        </div>
+    }
+
+
+    <!-- ============================================================ -->
+    <!-- FORM -->
+    <!-- ============================================================ -->
+
+    <div class="main-card mf-form-card">
+
+        <div class="section-header">
+
+            <h3 class="section-title">
+                @(_isEditing
+                    ? "Edit CSR Exceeding Day Setting"
+                    : "Add CSR Exceeding Day Setting")
+            </h3>
+
+        </div>
+
+
+        <div class="row g-3 mb-4 mf-form-row">
+
+
+            <!-- CSR1 Day -->
+
+            <div class="col-md-4">
+
+                <label class="form-label-custom">
+                    CSR1 Day
+                </label>
+
+                <input type="number"
+                       class="form-control-custom w-100"
+                       placeholder="Enter CSR1 Day"
+                       min="1"
+                       max="31"
+                       @bind="_formModel.CSR1Day" />
+
+            </div>
+
+
+            <!-- CSR2 Day -->
+
+            <div class="col-md-4">
+
+                <label class="form-label-custom">
+                    CSR2 Day
+                </label>
+
+                <input type="number"
+                       class="form-control-custom w-100"
+                       placeholder="Enter CSR2 Day"
+                       min="1"
+                       max="31"
+                       @bind="_formModel.CSR2Day" />
+
+            </div>
+
+
+            <!-- Active -->
+
+            <div class="col-md-4">
+
+                <label class="form-label-custom d-block mf-align-label">
+                    Status
+                </label>
+
+                <div class="status-toggle-box @(_formModel.IsActive ? "" : "status-toggle-inactive")">
+
+                    <span>
+                        @(_formModel.IsActive
+                            ? "Active"
+                            : "Inactive")
+                    </span>
+
+                    <label class="switch">
+
+                        <input type="checkbox"
+                               @bind="_formModel.IsActive">
+
+                        <span class="slider"></span>
+
+                    </label>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="d-flex justify-content-end pt-2 mt-4 mf-form-actions">
+
+            <button type="button"
+                    class="btn-cancel mt-3"
+                    @onclick="ResetForm">
+
+                <i class="bi bi-x"></i>
+                Cancel
+
+            </button>
+
+
+            <button type="button"
+                    class="btn-save mt-3"
+                    @onclick="HandleSave"
+                    disabled="@_isSaving">
+
+                <i class="bi bi-save"></i>
+
+                @(_isSaving
+                    ? "Saving..."
+                    : "Save")
+
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <!-- ============================================================ -->
+    <!-- SUMMARY -->
+    <!-- ============================================================ -->
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-4">
+
+            <div class="metric-card bg-blue-light">
+
+                <div class="metric-header">
+                    <h4 class="metric-title">
+                        Total Count
+                    </h4>
+                </div>
+
+                <div class="metric-val">
+                    @_allItems.Count
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-md-4">
+
+            <div class="metric-card bg-mint-light">
+
+                <div class="metric-header">
+                    <h4 class="metric-title">
+                        Active
+                    </h4>
+                </div>
+
+                <div class="metric-val">
+                    @_allItems.Count(x => x.IsActive)
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-md-4">
+
+            <div class="metric-card bg-gray-light">
+
+                <div class="metric-header">
+                    <h4 class="metric-title">
+                        Inactive
+                    </h4>
+                </div>
+
+                <div class="metric-val">
+                    @_allItems.Count(x => !x.IsActive)
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ============================================================ -->
+    <!-- TABLE -->
+    <!-- ============================================================ -->
+
+    <SpicDataTable Items="_filteredItems"
+                   IsLoading="_isLoading"
+                   Title="CSR Exceeding Day Settings"
+                   FileName="CSRExceedingDaySettings"
+                   ExportColumns="GetExportColumns()"
+                   SearchText="@_searchText">
+
+
+        <FilterControls>
+
+            <div class="search-box">
+
+                <i class="bi bi-search"></i>
+
+                <input type="text"
+                       placeholder="Search..."
+                       @bind="_searchText"
+                       @bind:event="oninput"
+                       @bind:after="ApplyFilter" />
+
+            </div>
+
+
+            <select class="filter-select"
+                    @bind="_statusFilter"
+                    @bind:after="ApplyFilter">
+
+                <option value="All">
+                    All Status
+                </option>
+
+                <option value="Active">
+                    Active
+                </option>
+
+                <option value="Inactive">
+                    Inactive
+                </option>
+
+            </select>
+
+        </FilterControls>
+
+
+        <TableHeader>
+
+            <th>CSR1 Day</th>
+
+            <th>CSR2 Day</th>
+
+            <th>Status</th>
+
+            <th>Created At</th>
+
+            <th>Action</th>
+
+        </TableHeader>
+
+
+        <TableRow Context="item">
+
+            <td>
+                @item.CSR1Day
+            </td>
+
+            <td>
+                @item.CSR2Day
+            </td>
+
+
+            <td>
+
+                <span class="status-pill @(item.IsActive ? "status-active" : "status-inactive")"
+                      style="cursor:pointer"
+                      @onclick="() => ToggleStatus(item)">
+
+                    @(item.IsActive
+                        ? "Active"
+                        : "Inactive")
+
+                </span>
+
+            </td>
+
+
+            <td>
+                @item.CreatedAt.ToString("yyyy-MM-dd")
+            </td>
+
+
+            <td>
+
+                <div class="action-icons">
+
+                    <i class="bi bi-trash icon-del"
+                       @onclick="() => DeleteItem(item)">
+                    </i>
+
+                    <i class="bi bi-pencil-square icon-edit"
+                       @onclick="() => EditItem(item)">
+                    </i>
+
+                </div>
+
+            </td>
+
+        </TableRow>
+
+
+        <CardActions Context="item">
+
+            <button type="button"
+                    class="btn btn-outline-primary btn-sm"
+                    @onclick="() => EditItem(item)">
+
+                <i class="bi bi-pencil-square"></i>
+                Edit
+
+            </button>
+
+
+            <button type="button"
+                    class="btn btn-outline-danger btn-sm"
+                    @onclick="() => DeleteItem(item)">
+
+                <i class="bi bi-trash"></i>
+                Delete
+
+            </button>
+
+        </CardActions>
+
+    </SpicDataTable>
+
+</div>
+
+
+<!-- ============================================================ -->
+<!-- DELETE CONFIRM -->
+<!-- ============================================================ -->
+@if (_showDeleteConfirm)
+{
+    <div class="modal-backdrop fade show">
+    </div>
+
+    <div class="modal fade show d-block wiz-modal"
+         tabindex="-1">
+
+        <div class="modal-dialog modal-dialog-centered">
+
+            <div class="modal-content">
+
+                <div class="modal-header">
+
+                    <h5 class="modal-title">
+                        Confirm Delete
+                    </h5>
+
+                    <button type="button"
+                            class="btn-close"
+                            @onclick="CancelDelete">
+                    </button>
+
+                </div>
+
+
+                <div class="modal-body">
+
+                    <p>
+                        Are you sure you want to delete this setting?
+                    </p>
+
+                    <p class="text-muted mb-0">
+
+                        CSR1 Day:
+                        <strong>
+                            @_deleteTarget?.CSR1Day
+                        </strong>
+
+                        <br />
+
+                        CSR2 Day:
+                        <strong>
+                            @_deleteTarget?.CSR2Day
+                        </strong>
+
+                    </p>
+
+                </div>
+
+
+                <div class="modal-footer">
+
+                    <button class="btn btn-secondary"
+                            @onclick="CancelDelete">
+
+                        Cancel
+
+                    </button>
+
+
+                    <button class="btn btn-danger"
+                            @onclick="ConfirmDelete"
+                            disabled="@_isDeleting">
+
+                        @(_isDeleting
+                            ? "Deleting..."
+                            : "Delete")
+
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+}
+
+
+@code {
+
+    private const string ApiBase =
+        "api/CSRExceedingDaySetting";
+
+
+    // =========================================================
+    // DATA
+    // =========================================================
+
+    private List<CSRExceedingDaySettingDto> _allItems = new();
+
+    private List<CSRExceedingDaySettingDto> _filteredItems = new();
+
+
+    // =========================================================
+    // FORM
+    // =========================================================
+
+    private CSRExceedingDaySettingFormModel _formModel = new();
+
+    private bool _isEditing;
+
+    private int? _editingId;
+
+
+    // =========================================================
+    // UI
+    // =========================================================
+
+    private bool _isLoading = true;
+
+    private bool _isSaving;
+
+    private string? _message;
+
+    private bool _isError;
+
+
+    // =========================================================
+    // DELETE
+    // =========================================================
+
+    private bool _showDeleteConfirm;
+
+    private bool _isDeleting;
+
+    private CSRExceedingDaySettingDto? _deleteTarget;
+
+
+    // =========================================================
+    // FILTER
+    // =========================================================
+
+    private string _searchText = "";
+
+    private string _statusFilter = "All";
+
+
+    // =========================================================
+    // INITIALIZE
+    // =========================================================
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+
+    // =========================================================
+    // LOAD
+    // =========================================================
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _isLoading = true;
+
+            _allItems =
+                await Http.GetFromJsonAsync<
+                    List<CSRExceedingDaySettingDto>>(
+                    $"{ApiBase}/all")
+                ?? new();
+
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(
+                $"Failed to load: {ex.Message}",
+                true);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+
+    // =========================================================
+    // FILTER
+    // =========================================================
+
+    private void ApplyFilter()
+    {
+        IEnumerable<CSRExceedingDaySettingDto> query =
+            _allItems;
+
+
+        if (_statusFilter == "Active")
+        {
+            query =
+                query.Where(x => x.IsActive);
+        }
+        else if (_statusFilter == "Inactive")
+        {
+            query =
+                query.Where(x => !x.IsActive);
+        }
+
+
+        if (!string.IsNullOrWhiteSpace(_searchText))
+        {
+            var search =
+                _searchText.Trim();
+
+            query =
+                query.Where(x =>
+                    x.CSR1Day.ToString()
+                        .Contains(search) ||
+
+                    x.CSR2Day.ToString()
+                        .Contains(search));
+        }
+
+
+        _filteredItems =
+            query
+                .OrderByDescending(x => x.CreatedAt)
+                .ToList();
+    }
+
+
+    // =========================================================
+    // SAVE
+    // =========================================================
+
+    private async Task HandleSave()
+    {
+        if (_formModel.CSR1Day < 1 ||
+            _formModel.CSR1Day > 31)
+        {
+            ShowMessage(
+                "CSR1 Day must be between 1 and 31.",
+                true);
+
+            return;
+        }
+
+
+        if (_formModel.CSR2Day < 1 ||
+            _formModel.CSR2Day > 31)
+        {
+            ShowMessage(
+                "CSR2 Day must be between 1 and 31.",
+                true);
+
+            return;
+        }
+
+
+        try
+        {
+            _isSaving = true;
+
+
+            if (_isEditing &&
+                _editingId.HasValue)
+            {
+                var response =
+                    await Http.PutAsJsonAsync(
+                        $"{ApiBase}/{_editingId.Value}",
+                        new
+                        {
+                            Id = _editingId.Value,
+
+                            CSR1Day =
+                                _formModel.CSR1Day,
+
+                            CSR2Day =
+                                _formModel.CSR2Day,
+
+                            IsActive =
+                                _formModel.IsActive
+                        });
+
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error =
+                        await response.Content
+                            .ReadAsStringAsync();
+
+                    ShowMessage(
+                        $"Update failed: {error}",
+                        true);
+
+                    return;
+                }
+
+
+                ShowMessage(
+                    "CSR exceeding day setting updated successfully.",
+                    false);
+            }
+            else
+            {
+                var response =
+                    await Http.PostAsJsonAsync(
+                        ApiBase,
+                        new
+                        {
+                            CSR1Day =
+                                _formModel.CSR1Day,
+
+                            CSR2Day =
+                                _formModel.CSR2Day,
+
+                            IsActive =
+                                _formModel.IsActive
+                        });
+
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error =
+                        await response.Content
+                            .ReadAsStringAsync();
+
+                    ShowMessage(
+                        $"Create failed: {error}",
+                        true);
+
+                    return;
+                }
+
+
+                ShowMessage(
+                    "CSR exceeding day setting created successfully.",
+                    false);
+            }
+
+
+            ResetForm();
+
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(
+                $"Error: {ex.Message}",
+                true);
+        }
+        finally
+        {
+            _isSaving = false;
+        }
+    }
+
+
+    // =========================================================
+    // EDIT
+    // =========================================================
+
+    private void EditItem(
+        CSRExceedingDaySettingDto item)
+    {
+        _isEditing = true;
+
+        _editingId = item.Id;
+
+
+        _formModel =
+            new CSRExceedingDaySettingFormModel
+            {
+                CSR1Day = item.CSR1Day,
+
+                CSR2Day = item.CSR2Day,
+
+                IsActive = item.IsActive
+            };
+    }
+
+
+    // =========================================================
+    // STATUS
+    // =========================================================
+
+    private async Task ToggleStatus(
+        CSRExceedingDaySettingDto item)
+    {
+        try
+        {
+            var newStatus =
+                !item.IsActive;
+
+
+            var response =
+                await Http.PatchAsync(
+                    $"{ApiBase}/{item.Id}/status?isActive={newStatus}",
+                    null);
+
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadData();
+
+                ShowMessage(
+                    newStatus
+                        ? "Setting activated successfully."
+                        : "Setting deactivated successfully.",
+                    false);
+            }
+            else
+            {
+                var error =
+                    await response.Content
+                        .ReadAsStringAsync();
+
+                ShowMessage(
+                    $"Status update failed: {error}",
+                    true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(
+                $"Error: {ex.Message}",
+                true);
+        }
+    }
+
+
+    // =========================================================
+    // DELETE
+    // =========================================================
+
+    private void DeleteItem(
+        CSRExceedingDaySettingDto item)
+    {
+        _deleteTarget = item;
+
+        _showDeleteConfirm = true;
+    }
+
+
+    private async Task ConfirmDelete()
+    {
+        if (_deleteTarget == null)
+            return;
+
+
+        try
+        {
+            _isDeleting = true;
+
+
+            var response =
+                await Http.DeleteAsync(
+                    $"{ApiBase}/{_deleteTarget.Id}");
+
+
+            if (response.IsSuccessStatusCode)
+            {
+                ShowMessage(
+                    "CSR exceeding day setting deleted successfully.",
+                    false);
+
+                await LoadData();
+            }
+            else
+            {
+                var error =
+                    await response.Content
+                        .ReadAsStringAsync();
+
+                ShowMessage(
+                    $"Delete failed: {error}",
+                    true);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage(
+                $"Error: {ex.Message}",
+                true);
+        }
+        finally
+        {
+            _isDeleting = false;
+
+            CancelDelete();
+        }
+    }
+
+
+    private void CancelDelete()
+    {
+        _showDeleteConfirm = false;
+
+        _deleteTarget = null;
+    }
+
+
+    // =========================================================
+    // RESET
+    // =========================================================
+
+    private void ResetForm()
+    {
+        _formModel =
+            new CSRExceedingDaySettingFormModel
+            {
+                IsActive = true
+            };
+
+        _isEditing = false;
+
+        _editingId = null;
+    }
+
+
+    // =========================================================
+    // MESSAGE
+    // =========================================================
+
+    private void ShowMessage(
+        string message,
+        bool isError)
+    {
+        _message = message;
+
+        _isError = isError;
+    }
+
+
+    // =========================================================
+    // EXPORT
+    // =========================================================
+
+    private List<ExportColumn<CSRExceedingDaySettingDto>>
+        GetExportColumns()
+    {
+        return new()
+        {
+            new()
+            {
+                Header = "S:No",
+
+                ValueSelector = item =>
+                    (_filteredItems.IndexOf(item) + 1)
+                        .ToString()
+            },
+
+            new()
+            {
+                Header = "CSR1 Day",
+
+                ValueSelector = item =>
+                    item.CSR1Day.ToString()
+            },
+
+            new()
+            {
+                Header = "CSR2 Day",
+
+                ValueSelector = item =>
+                    item.CSR2Day.ToString()
+            },
+
+            new()
+            {
+                Header = "Status",
+
+                ValueSelector = item =>
+                    item.IsActive
+                        ? "Active"
+                        : "Inactive"
+            },
+
+            new()
+            {
+                Header = "Created At",
+
+                ValueSelector = item =>
+                    item.CreatedAt
+                        .ToString("yyyy-MM-dd")
+            }
+        };
+    }
+
+
+    // =========================================================
+    // DTO
+    // =========================================================
+
+    public class CSRExceedingDaySettingDto
+    {
+        public int Id { get; set; }
+
+        public int CSR1Day { get; set; }
+
+        public int CSR2Day { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+
+        public string? CreatedBy { get; set; }
+
+        public DateTime? UpdatedAt { get; set; }
+
+        public string? UpdatedBy { get; set; }
+    }
+
+
+    // =========================================================
+    // FORM
+    // =========================================================
+
+    public class CSRExceedingDaySettingFormModel
+    {
+        public int CSR1Day { get; set; }
+
+        public int CSR2Day { get; set; }
+
+        public bool IsActive { get; set; } = true;
+    }
+}

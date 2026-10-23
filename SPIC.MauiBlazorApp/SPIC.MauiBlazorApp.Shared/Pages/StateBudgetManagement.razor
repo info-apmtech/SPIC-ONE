@@ -281,7 +281,7 @@
                 <div class="col-12 col-sm-6 col-lg-3">
                     <div class="metric-card bg-amber-light">
                         <div class="metric-header">
-                            <h4 class="metric-title">Remaining State Budget</h4>
+                            <h4 class="metric-title">State MDO Budget</h4>
                         </div>
                         <div class="metric-val">₹ @RemainingStateBudget.ToString("N2")</div>
                     </div>
@@ -335,6 +335,18 @@
 
                         <tbody>
 
+                            <!-- State MDO Amount must be shown first, before the region-wise rows. -->
+                            <tr class="budget-table-total-row">
+                                <td><strong>State MDO Amount</strong></td>
+                                <td>
+                                    <input type="number"
+                                           class="budget-input"
+                                           min="0"
+                                           @bind="_regionSummaryRemaining"
+                                           @bind:event="oninput" />
+                                </td>
+                            </tr>
+
                             @foreach (var item in _regions)
                             {
                                 <tr>
@@ -361,27 +373,6 @@
 
                         </tbody>
 
-                        <!-- Total Budget / Allocated to Region are the existing applicable State
-                         budget and the sum of the rows above - reused as-is, never re-entered.
-                         Remaining Amount is the only manually-entered summary value, saved into
-                         RegionBudgetSummary alongside them whenever this allocation is saved. -->
-                        <tfoot>
-                            <tr class="budget-table-total-row">
-                                <td><strong>Allocated to Region</strong></td>
-                                <td><strong>₹ @TotalRegionAllocated.ToString("N0")</strong></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Remaining Amount</strong></td>
-                                <td>
-                                    <input type="number"
-                                           class="budget-input"
-                                           min="0"
-                                           @bind="_regionSummaryRemaining"
-                                           @bind:event="oninput" />
-                                </td>
-                            </tr>
-                        </tfoot>
-
                     </table>
 
                     <div class="bottom-bar">
@@ -397,7 +388,7 @@
                             </div>
 
                             <div class="bottom-item">
-                                <label>Remaining State Budget</label>
+                                <label>State MDO Budget</label>
                                 <strong>₹ @RemainingStateBudget.ToString("N0")</strong>
                             </div>
                         </div>
@@ -511,7 +502,7 @@
                     <div class="col-12 col-sm-6 col-lg-3">
                         <div class="metric-card bg-amber-light">
                             <div class="metric-header">
-                                <h4 class="metric-title">Region Available Budget</h4>
+                                <h4 class="metric-title">Region MDO Budget</h4>
                             </div>
                             <div class="metric-val">₹ @RemainingRegionBudget.ToString("N2")</div>
                         </div>
@@ -565,6 +556,18 @@
 
                             <tbody>
 
+                                <!-- Region MDO Amount must be shown first, before the headquarters-wise rows. -->
+                                <tr class="budget-table-total-row">
+                                    <td><strong>Region MDO Amount</strong></td>
+                                    <td>
+                                        <input type="number"
+                                               class="budget-input"
+                                               min="0"
+                                               @bind="_hqSummaryRemaining"
+                                               @bind:event="oninput" />
+                                    </td>
+                                </tr>
+
                                 @foreach (var item in _headquarters)
                                 {
                                     <tr>
@@ -591,28 +594,6 @@
 
                             </tbody>
 
-                            <!-- Total Budget / Allocated to Headquarters are the existing applicable
-                             Region budget and the sum of the rows above - reused as-is, never
-                             re-entered. Remaining Amount is the only manually-entered summary
-                             value, saved into HeadquarterBudgetSummary alongside them whenever
-                             this allocation is saved. -->
-                            <tfoot>
-                                <tr class="budget-table-total-row">
-                                    <td><strong>Allocated to Headquarters</strong></td>
-                                    <td><strong>₹ @TotalHeadquartersAllocated.ToString("N0")</strong></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Remaining Amount</strong></td>
-                                    <td>
-                                        <input type="number"
-                                               class="budget-input"
-                                               min="0"
-                                               @bind="_hqSummaryRemaining"
-                                               @bind:event="oninput" />
-                                    </td>
-                                </tr>
-                            </tfoot>
-
                         </table>
 
                         <div class="bottom-bar">
@@ -628,7 +609,7 @@
                                 </div>
 
                                 <div class="bottom-item">
-                                    <label>Remaining Region Budget</label>
+                                    <label>Region MDO Budget</label>
                                     <strong>₹ @RemainingRegionBudget.ToString("N0")</strong>
                                 </div>
                             </div>
@@ -724,8 +705,8 @@
 
 
     /* Metric card accents re-use the LocationMaster metric-card look
-                   (.bg-blue-light/.bg-mint-light/.bg-gray-light come from LocationSaveList.css);
-                   .bg-amber-light adds a 4th tone following the same gradient formula. */
+                           (.bg-blue-light/.bg-mint-light/.bg-gray-light come from LocationSaveList.css);
+                           .bg-amber-light adds a 4th tone following the same gradient formula. */
     .metric-card.bg-amber-light {
         border: 1px solid #fde7c7;
         background: linear-gradient(90deg, #fff7ed24, #fff7ed 100%);
@@ -1824,9 +1805,25 @@
         if (_isSavingHq || _hasHqValidationError || _hqSelectedRegionId <= 0 || _selectedFinancialYearId <= 0)
             return;
 
-        if (!TryValidateSummaryAmounts(SelectedRegionAmount, TotalHeadquartersAllocated, _hqSummaryRemaining, out var preCheckError))
+        var expectedRegionMdoBudget =
+            SelectedRegionAmount - TotalHeadquartersAllocated;
+
+        if (expectedRegionMdoBudget < 0)
         {
-            _hqValidationMessage = preCheckError;
+            _hqValidationMessage =
+                $"Total Headquarters Allocation (₹{TotalHeadquartersAllocated:N0}) " +
+                $"cannot exceed Region Allocated Budget (₹{SelectedRegionAmount:N0}).";
+
+            _hqSuccessMessage = null;
+            return;
+        }
+
+        if (_hqSummaryRemaining != expectedRegionMdoBudget)
+        {
+            _hqValidationMessage =
+                $"Region MDO Budget must be ₹{expectedRegionMdoBudget:N0}. " +
+                $"Current entered amount is ₹{_hqSummaryRemaining:N0}.";
+
             _hqSuccessMessage = null;
             return;
         }
@@ -1919,8 +1916,8 @@
         {
             var expectedRemaining = totalBudget - allocatedAmount;
             error = expectedRemaining >= 0
-                ? $"Remaining Amount must be ₹{expectedRemaining:N0}. Current entered amount is ₹{remainingAmount:N0}."
-                : $"Allocated Amount (₹{allocatedAmount:N0}) cannot exceed Total Budget (₹{totalBudget:N0}).";
+     ? $"State MDO Budget must be ₹{expectedRemaining:N0}. Current entered amount is ₹{remainingAmount:N0}."
+     : $"Total Region Allocation (₹{allocatedAmount:N0}) cannot exceed Selected State Budget (₹{totalBudget:N0}).";
             return false;
         }
 
