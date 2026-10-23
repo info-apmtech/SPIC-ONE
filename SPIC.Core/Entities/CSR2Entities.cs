@@ -14,12 +14,10 @@ public class CSR2
     public DateTime? ActualEventDate { get; set; }
     public TimeOnly? StartTime { get; set; }
     public TimeOnly? EndTime { get; set; }
-    public int? EventCoordinatorEmployeeId { get; set; }
+    public string? EventCoordinatorEmployeeId { get; set; }
     [MaxLength(500)] public string? ActualLocation { get; set; }
     public int? ExpectedParticipantsCount { get; set; }
-    public bool IsOrganized { get; set; } = true;
     [MaxLength(2000)] public string? Remarks { get; set; }
-    [Column(TypeName = "decimal(18,2)")] public decimal? ApprovedBudgetSnapshot { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     [MaxLength(100)] public string? CreatedBy { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -59,7 +57,11 @@ public class CSR2Employee
     [Key] public int Id { get; set; }
     public int CSR2Id { get; set; }
     public CSR2? CSR2 { get; set; }
-    [Required] public int EmployeeInformationId { get; set; }
+
+    // Changed from int to string as requested.
+    [Required, MaxLength(100)]
+    public string EmployeeInformationId { get; set; } = "";
+
     [Required, MaxLength(150)] public string EmployeeName { get; set; } = "";
     [MaxLength(20)] public string? PhoneNumber { get; set; }
     [Required, MaxLength(80)] public string RoleName { get; set; } = "";
@@ -70,13 +72,14 @@ public class CSR2Media
     [Key] public int Id { get; set; }
     public int CSR2Id { get; set; }
     public CSR2? CSR2 { get; set; }
-    [Required, MaxLength(10)] public string MediaType { get; set; } = "Photo";
+
+    // Photo, Video or Document.
+    [Required, MaxLength(20)] public string MediaType { get; set; } = "Photo";
     [Required, MaxLength(260)] public string OriginalFileName { get; set; } = "";
     [Required, MaxLength(150)] public string ContentType { get; set; } = "";
     public long FileSizeBytes { get; set; }
     [Required, MaxLength(600)] public string StorageKey { get; set; } = "";
     [MaxLength(500)] public string? Caption { get; set; }
-    public bool UseInDigitalLibrary { get; set; } = true;
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
     [MaxLength(100)] public string? UploadedBy { get; set; }
 }
@@ -87,8 +90,7 @@ public class CSR2Expense
     public int CSR2Id { get; set; }
     public CSR2? CSR2 { get; set; }
     [Required, MaxLength(60)] public string CategoryKey { get; set; } = "";
-    [Required, MaxLength(150)] public string CategoryName { get; set; } = "";
-    [Column(TypeName = "decimal(18,2)")] public decimal PlannedAmount { get; set; }
+    [Required, MaxLength(150)] public string CategoryName { get; set; } = ""; 
     [Column(TypeName = "decimal(18,2)")] public decimal? ActualAmount { get; set; }
     [MaxLength(100)] public string? BillNo { get; set; }
     public DateTime? ExpenseDate { get; set; }

@@ -10,16 +10,13 @@ namespace SPIC.Core.Entities
     {
         [Key]
         public int Id { get; set; }
+
         public int StateId { get; set; }
         public int? RegionId { get; set; }
 
-        [Required, MaxLength(20)]
-        public string StateSAPCode { get; set; } = string.Empty;
-        [MaxLength(20)]
-        public string? RegionSAPCode { get; set; }
-
-        // These values are managed by the sanction-issuing service after setup.
-        // Confirm whether imported CSV values are NEXT or LAST issued before seeding.
+        // Codes are read from the State and Region masters.
+        // These counters are managed by the sanction-issuing service after setup.
+        // Preserve the existing NEXT/LAST-issued convention when importing values.
         public int SanctionNumber { get; set; }
         public int SanctionNumberState { get; set; }
 

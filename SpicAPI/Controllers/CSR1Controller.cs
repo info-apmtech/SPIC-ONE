@@ -73,6 +73,45 @@ namespace SpicAPI.Controllers
 
         private string CurrentUser => CurrentUserId;
 
+        private static List<int> CleanIds(IEnumerable<int>? ids) =>
+            (ids ?? Enumerable.Empty<int>())
+                .Where(x => x > 0)
+                .Distinct()
+                .ToList();
+
+        private async Task<string?> ResolveResponsiblePersonUserIdAsync(
+    string? responsiblePersonId)
+        {
+            if (string.IsNullOrWhiteSpace(responsiblePersonId))
+                return null;
+
+            var value = responsiblePersonId.Trim();
+
+            // If already an Employeelogins.UserId, keep it.
+            var existingUserId = await _db.Employeelogins
+                .AsNoTracking()
+                .Where(x => x.UserId == value)
+                .Select(x => x.UserId)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(existingUserId))
+                return existingUserId;
+
+            // Old/UI value = EmployeeInformation.Id
+            if (!int.TryParse(value, out var employeeInformationId) ||
+                employeeInformationId <= 0)
+            {
+                return null;
+            }
+
+            // Convert EmployeeInformation.Id -> Employeelogins.UserId
+            return await _db.Employeelogins
+                .AsNoTracking()
+                .Where(x =>
+                    x.EmployeeInformationID == employeeInformationId)
+                .Select(x => x.UserId)
+                .FirstOrDefaultAsync();
+        }
         private async Task NormalizeCSR1UserIdsAsync()
         {
             try
@@ -183,6 +222,8 @@ namespace SpicAPI.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
+            var saveStage = "Request validation";
+
             try
             {
                 if (request == null || request.CSR1 == null)
@@ -194,7 +235,35 @@ namespace SpicAPI.Controllers
                 }
 
                 var model = request.CSR1;
+                // =====================================================
+                // RESOLVE RESPONSIBLE PERSON
+                // EmployeeInformation.Id -> Employeelogins.UserId
+                // =====================================================
 
+                if (string.IsNullOrWhiteSpace(model.ResponsiblePersonId))
+                {
+                    return BadRequest(new
+                    {
+                        message = "Responsible Person is required."
+                    });
+                }
+
+                var responsiblePersonUserId =
+                    await ResolveResponsiblePersonUserIdAsync(
+                        model.ResponsiblePersonId);
+
+                if (string.IsNullOrWhiteSpace(responsiblePersonUserId))
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            "Selected Responsible Person does not have a valid Employee Login."
+                    });
+                }
+
+                // Save Employeelogins.UserId, NOT EmployeeInformation.Id
+                model.ResponsiblePersonId =
+                    responsiblePersonUserId;
 
                 // =====================================================
                 // VALIDATE PROGRAM
@@ -223,11 +292,7 @@ namespace SpicAPI.Controllers
                 }
 
 
-                model.ProgramTypeId =
-                    programMaster.ProgramTypeId;
-
-
-                if (model.ProgramTypeId <= 0)
+                if (programMaster.ProgramTypeId <= 0)
                 {
                     return BadRequest(new
                     {
@@ -238,51 +303,36 @@ namespace SpicAPI.Controllers
 
 
                 // =====================================================
-                // VALIDATE CROP / PRODUCT GROUP 1
+                // VALIDATE MULTI CROP / PRODUCT GROUPS
                 // =====================================================
 
-                if (request.Crop1Id > 0 &&
-                    (request.Product1Ids == null ||
-                     !request.Product1Ids.Any(x => x > 0)))
-                {
-                    return BadRequest(new
-                    {
-                        message =
-                            "Please select at least one product for Focus Crop 1."
-                    });
-                }
+                var crop1Ids = CleanIds(request.Crop1Ids);
+                var crop2Ids = CleanIds(request.Crop2Ids);
+                var crop3Ids = CleanIds(request.Crop3Ids);
 
+                var product1Ids = CleanIds(request.Product1Ids);
+                var product2Ids = CleanIds(request.Product2Ids);
+                var product3Ids = CleanIds(request.Product3Ids);
 
-                // =====================================================
-                // VALIDATE CROP / PRODUCT GROUP 2
-                // =====================================================
+                if (crop1Ids.Count == 0)
+                    return BadRequest(new { message = "Please select at least one Focus Crop 1." });
 
-                if (request.Crop2Id > 0 &&
-                    (request.Product2Ids == null ||
-                     !request.Product2Ids.Any(x => x > 0)))
-                {
-                    return BadRequest(new
-                    {
-                        message =
-                            "Please select at least one product for Focus Crop 2."
-                    });
-                }
+                if (product1Ids.Count == 0)
+                    return BadRequest(new { message = "Please select at least one product for Focus 1." });
 
+                if (crop1Ids.Count > 3 || crop2Ids.Count > 3 || crop3Ids.Count > 3)
+                    return BadRequest(new { message = "Maximum 3 crops are allowed per Focus section." });
 
-                // =====================================================
-                // VALIDATE CROP / PRODUCT GROUP 3
-                // =====================================================
+                if (product1Ids.Count > 3 || product2Ids.Count > 3 || product3Ids.Count > 3)
+                    return BadRequest(new { message = "Maximum 3 products are allowed per Focus section." });
 
-                if (request.Crop3Id > 0 &&
-                    (request.Product3Ids == null ||
-                     !request.Product3Ids.Any(x => x > 0)))
-                {
-                    return BadRequest(new
-                    {
-                        message =
-                            "Please select at least one product for Focus Crop 3."
-                    });
-                }
+                if ((crop2Ids.Count > 0 && product2Ids.Count == 0) ||
+                    (crop2Ids.Count == 0 && product2Ids.Count > 0))
+                    return BadRequest(new { message = "Focus 2 requires both crop and product selections." });
+
+                if ((crop3Ids.Count > 0 && product3Ids.Count == 0) ||
+                    (crop3Ids.Count == 0 && product3Ids.Count > 0))
+                    return BadRequest(new { message = "Focus 3 requires both crop and product selections." });
 
 
                 // =====================================================
@@ -373,6 +423,8 @@ namespace SpicAPI.Controllers
                 // SAVE CSR1
                 // =====================================================
 
+                saveStage = "CSR1 main record";
+
                 var created =
                     await _csr1Repo.CreateAsync(model);
 
@@ -393,107 +445,44 @@ namespace SpicAPI.Controllers
 
 
                 // =====================================================
-                // SAVE GROUP 1
-                // CSR1Products1
+                // SAVE MULTI CROP / PRODUCT GROUPS - NEW DB SHAPE
+                // One row per Focus section. CropId/ProductId are PostgreSQL int[].
                 // =====================================================
 
-                if (request.Crop1Id > 0 &&
-                    request.Product1Ids != null)
+                saveStage = "CSR1Products1";
+
+                await _csr1Products1Repo.CreateAsync(new CSR1Products1
                 {
-                    foreach (var productId in request.Product1Ids
-                                 .Where(x => x > 0)
-                                 .Distinct())
+                    CSR1Id = csr1Id,
+                    CropId = crop1Ids.ToArray(),
+                    ProductId = product1Ids.ToArray(),
+                    IsActive = true
+                });
+
+                if (crop2Ids.Count > 0 && product2Ids.Count > 0)
+                {
+                    saveStage = "CSR1Products2";
+
+                    await _csr1Products2Repo.CreateAsync(new CSR1Products2
                     {
-                        var product =
-                            new CSR1Products1
-                            {
-                                CSR1Id =
-                                    csr1Id,
-
-                                CropId =
-                                    request.Crop1Id,
-
-                                ProductId =
-                                    productId,
-
-                                IsActive =
-                                    true
-                            };
-
-
-                        await _csr1Products1Repo
-                            .CreateAsync(product);
-                    }
+                        CSR1Id = csr1Id,
+                        CropId = crop2Ids.ToArray(),
+                        ProductId = product2Ids.ToArray(),
+                        IsActive = true
+                    });
                 }
 
-
-                // =====================================================
-                // SAVE GROUP 2
-                // CSRProducts2
-                // =====================================================
-
-                if (request.Crop2Id > 0 &&
-                    request.Product2Ids != null)
+                if (crop3Ids.Count > 0 && product3Ids.Count > 0)
                 {
-                    foreach (var productId in request.Product2Ids
-                                 .Where(x => x > 0)
-                                 .Distinct())
+                    saveStage = "CSR1Products3";
+
+                    await _csr1Products3Repo.CreateAsync(new CSR1Products3
                     {
-                        var product =
-                            new CSR1Products2
-                            {
-                                CSR1Id =
-                                    csr1Id,
-
-                                CropId =
-                                    request.Crop2Id,
-
-                                ProductId =
-                                    productId,
-
-                                IsActive =
-                                    true
-                            };
-
-
-                        await _csr1Products2Repo
-                            .CreateAsync(product);
-                    }
-                }
-
-
-                // =====================================================
-                // SAVE GROUP 3
-                // CSRProducts3
-                // =====================================================
-
-                if (request.Crop3Id > 0 &&
-                    request.Product3Ids != null)
-                {
-                    foreach (var productId in request.Product3Ids
-                                 .Where(x => x > 0)
-                                 .Distinct())
-                    {
-                        var product =
-                            new CSR1Products3
-                            {
-                                CSR1Id =
-                                    csr1Id,
-
-                                CropId =
-                                    request.Crop3Id,
-
-                                ProductId =
-                                    productId,
-
-                                IsActive =
-                                    true
-                            };
-
-
-                        await _csr1Products3Repo
-                            .CreateAsync(product);
-                    }
+                        CSR1Id = csr1Id,
+                        CropId = crop3Ids.ToArray(),
+                        ProductId = product3Ids.ToArray(),
+                        IsActive = true
+                    });
                 }
 
 
@@ -511,46 +500,51 @@ namespace SpicAPI.Controllers
                         CSR1Id =
                             created.Id,
 
-                        Crop1Id =
-                            request.Crop1Id,
+                        Crop1Ids = crop1Ids,
+                        Product1Count = product1Ids.Count,
 
-                        Product1Count =
-                            request.Product1Ids?
-                                .Where(x => x > 0)
-                                .Distinct()
-                                .Count() ?? 0,
+                        Crop2Ids = crop2Ids,
+                        Product2Count = product2Ids.Count,
 
-                        Crop2Id =
-                            request.Crop2Id,
-
-                        Product2Count =
-                            request.Product2Ids?
-                                .Where(x => x > 0)
-                                .Distinct()
-                                .Count() ?? 0,
-
-                        Crop3Id =
-                            request.Crop3Id,
-
-                        Product3Count =
-                            request.Product3Ids?
-                                .Where(x => x > 0)
-                                .Distinct()
-                                .Count() ?? 0
+                        Crop3Ids = crop3Ids,
+                        Product3Count = product3Ids.Count
                     }
                 });
             }
-            catch (Exception ex)
+            catch (DbUpdateException ex)
             {
+                var databaseError = ex.GetBaseException().Message;
+
+                Console.WriteLine(
+                    $"[CSR1 SAVE] Stage: {saveStage}; EF Error: {ex.Message}; Database Error: {databaseError}");
+
                 return StatusCode(
                     StatusCodes.Status500InternalServerError,
                     new
                     {
-                        message =
-                            "Error while saving CSR1",
+                        message = "Error while saving CSR1",
+                        stage = saveStage,
+                        error = ex.Message,
+                        innerError = ex.InnerException?.Message,
+                        databaseError
+                    });
+            }
+            catch (Exception ex)
+            {
+                var baseError = ex.GetBaseException().Message;
 
-                        error =
-                            ex.Message
+                Console.WriteLine(
+                    $"[CSR1 SAVE] Stage: {saveStage}; Error: {ex.Message}; Base Error: {baseError}");
+
+                return StatusCode(
+                    StatusCodes.Status500InternalServerError,
+                    new
+                    {
+                        message = "Error while saving CSR1",
+                        stage = saveStage,
+                        error = ex.Message,
+                        innerError = ex.InnerException?.Message,
+                        databaseError = baseError
                     });
             }
         }
@@ -678,17 +672,14 @@ namespace SpicAPI.Controllers
                     csr1 =
                         item,
 
-                    product1Ids =
-                        product1.Select(x => x.ProductId)
-                            .ToList(),
+                    crop1Ids = product1.SelectMany(x => x.CropId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList(),
+                    product1Ids = product1.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList(),
 
-                    product2Ids =
-                        product2.Select(x => x.ProductId)
-                            .ToList(),
+                    crop2Ids = product2.SelectMany(x => x.CropId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList(),
+                    product2Ids = product2.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList(),
 
-                    product3Ids =
-                        product3.Select(x => x.ProductId)
-                            .ToList()
+                    crop3Ids = product3.SelectMany(x => x.CropId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList(),
+                    product3Ids = product3.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList()
                 });
             }
             catch (Exception ex)
@@ -732,6 +723,35 @@ namespace SpicAPI.Controllers
                 }
 
                 var entity = request.CSR1;
+
+                // =====================================================
+                // RESOLVE RESPONSIBLE PERSON
+                // EmployeeInformation.Id -> Employeelogins.UserId
+                // =====================================================
+
+                if (string.IsNullOrWhiteSpace(entity.ResponsiblePersonId))
+                {
+                    return BadRequest(new
+                    {
+                        message = "Responsible Person is required."
+                    });
+                }
+
+                var responsiblePersonUserId =
+                    await ResolveResponsiblePersonUserIdAsync(
+                        entity.ResponsiblePersonId);
+
+                if (string.IsNullOrWhiteSpace(responsiblePersonUserId))
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            "Selected Responsible Person does not have a valid Employee Login."
+                    });
+                }
+
+                entity.ResponsiblePersonId =
+                    responsiblePersonUserId;
 
                 var existing = await _csr1Repo.GetByIdAsync(id);
 
@@ -783,7 +803,13 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                entity.ProgramTypeId = programMaster.ProgramTypeId;
+                if (programMaster.ProgramTypeId <= 0)
+                {
+                    return BadRequest(new
+                    {
+                        message = "ProgramTypeId not configured for selected Program."
+                    });
+                }
 
                 // =====================================================
                 // UPDATE AUDIT
@@ -876,70 +902,46 @@ namespace SpicAPI.Controllers
                 }
 
                 // =====================================================
-                // RECREATE GROUP 1
+                // RECREATE MULTI CROP / PRODUCT GROUPS
                 // =====================================================
 
-                if (request.Crop1Id > 0 &&
-                    request.Product1Ids != null)
+                var updateCrop1Ids = CleanIds(request.Crop1Ids);
+                var updateCrop2Ids = CleanIds(request.Crop2Ids);
+                var updateCrop3Ids = CleanIds(request.Crop3Ids);
+                var updateProduct1Ids = CleanIds(request.Product1Ids);
+                var updateProduct2Ids = CleanIds(request.Product2Ids);
+                var updateProduct3Ids = CleanIds(request.Product3Ids);
+
+                await _csr1Products1Repo.CreateAsync(new CSR1Products1
                 {
-                    foreach (var productId in request.Product1Ids
-                                 .Where(x => x > 0)
-                                 .Distinct())
+                    CSR1Id = id,
+                    CropId = updateCrop1Ids.ToArray(),
+                    ProductId = updateProduct1Ids.ToArray(),
+                    IsActive = true
+                });
+
+                if (updateCrop2Ids.Count > 0 && updateProduct2Ids.Count > 0)
+                {
+                    await _csr1Products2Repo.CreateAsync(new CSR1Products2
                     {
-                        await _csr1Products1Repo.CreateAsync(
-                            new CSR1Products1
-                            {
-                                CSR1Id = id,
-                                CropId = request.Crop1Id,
-                                ProductId = productId,
-                                IsActive = true
-                            });
-                    }
+                        CSR1Id = id,
+                        CropId = updateCrop2Ids.ToArray(),
+                        ProductId = updateProduct2Ids.ToArray(),
+                        IsActive = true
+                    });
                 }
 
-                // =====================================================
-                // RECREATE GROUP 2
-                // =====================================================
-
-                if (request.Crop2Id > 0 &&
-                    request.Product2Ids != null)
+                if (updateCrop3Ids.Count > 0 && updateProduct3Ids.Count > 0)
                 {
-                    foreach (var productId in request.Product2Ids
-                                 .Where(x => x > 0)
-                                 .Distinct())
+                    await _csr1Products3Repo.CreateAsync(new CSR1Products3
                     {
-                        await _csr1Products2Repo.CreateAsync(
-                            new CSR1Products2
-                            {
-                                CSR1Id = id,
-                                CropId = request.Crop2Id,
-                                ProductId = productId,
-                                IsActive = true
-                            });
-                    }
+                        CSR1Id = id,
+                        CropId = updateCrop3Ids.ToArray(),
+                        ProductId = updateProduct3Ids.ToArray(),
+                        IsActive = true
+                    });
                 }
 
-                // =====================================================
-                // RECREATE GROUP 3
-                // =====================================================
-
-                if (request.Crop3Id > 0 &&
-                    request.Product3Ids != null)
-                {
-                    foreach (var productId in request.Product3Ids
-                                 .Where(x => x > 0)
-                                 .Distinct())
-                    {
-                        await _csr1Products3Repo.CreateAsync(
-                            new CSR1Products3
-                            {
-                                CSR1Id = id,
-                                CropId = request.Crop3Id,
-                                ProductId = productId,
-                                IsActive = true
-                            });
-                    }
-                }
 
                 // =====================================================
                 // RESPONSE
@@ -973,6 +975,16 @@ namespace SpicAPI.Controllers
         {
             try
             {
+                // Delete separate approval details first (FK to CSR1).
+                var approvalDetails = await _db.Set<CSR1ApprovalDetails>()
+                    .Where(x => x.CSR1Id == id)
+                    .ToListAsync();
+                if (approvalDetails.Count > 0)
+                {
+                    _db.Set<CSR1ApprovalDetails>().RemoveRange(approvalDetails);
+                    await _db.SaveChangesAsync();
+                }
+
                 // Delete product group 1
                 var products1 =
                     await _csr1Products1Repo
@@ -1063,22 +1075,21 @@ namespace SpicAPI.Controllers
                     .OrderByDescending(x => x.Id)
                     .ToListAsync();
 
-                // mine=true: a JMDO only sees the CSR1 programs they're personally the
-                // ResponsiblePersonId on (Tasks Allocation Step 4 / its MDO review counterpart) -
-                // these are assigned directly on the CSR1 record itself, so there is nothing for
-                // the JMDO or the reviewing MDO to separately "pick"; every other caller (CSR-1
-                // Management, etc.) keeps seeing the full list via the default mine=false.
+                // =========================================================
+                // mine=true
+                // CSR1.ResponsiblePersonId stores Employeelogins.UserId.
+                // Therefore compare it directly with the current UserId.
+                // =========================================================
                 if (mine)
                 {
-                    var myEmployeeId = await _db.Employeelogins
-                        .AsNoTracking()
-                        .Where(e => e.UserId == CurrentUserId)
-                        .Select(e => (int?)e.EmployeeInformationID)
-                        .FirstOrDefaultAsync();
-
-                    csr1Records = myEmployeeId is > 0
-                        ? csr1Records.Where(c => c.ResponsiblePersonId == myEmployeeId).ToList()
-                        : new List<CSR1>();
+                    csr1Records = csr1Records
+                        .Where(c =>
+                            !string.IsNullOrWhiteSpace(c.ResponsiblePersonId) &&
+                            string.Equals(
+                                c.ResponsiblePersonId,
+                                CurrentUserId,
+                                StringComparison.OrdinalIgnoreCase))
+                        .ToList();
                 }
 
                 var programMasters = await _programMasterRepo
@@ -1101,8 +1112,13 @@ namespace SpicAPI.Controllers
                     .GetAll()
                     .ToListAsync();
 
-                var employeeLogins = await _db.Employeelogins.AsNoTracking().ToListAsync();
-                var users = await _db.Users.AsNoTracking().ToListAsync();
+                var employeeLogins = await _db.Employeelogins
+                    .AsNoTracking()
+                    .ToListAsync();
+
+                var users = await _db.Users
+                    .AsNoTracking()
+                    .ToListAsync();
 
                 var result = csr1Records
                     .Select(csr =>
@@ -1111,72 +1127,149 @@ namespace SpicAPI.Controllers
                             .FirstOrDefault(x => x.Id == csr.ProgramId);
 
                         var programType = programTypes
-                            .FirstOrDefault(x => x.Id == csr.ProgramTypeId);
+                            .FirstOrDefault(x => x.Id == program?.ProgramTypeId);
 
-                        var empLogin = employeeLogins.FirstOrDefault(x => x.EmployeeInformationID == csr.ResponsiblePersonId);
-                        var resolvedHqId = (csr.HeadquarterId ?? 0) > 0 ? csr.HeadquarterId : empLogin?.HeadquartersId;
+                        // CSR1.ResponsiblePersonId stores Employeelogins.UserId.
+                        // Resolve the employee/login metadata using that UserId.
+                        var empLogin = !string.IsNullOrWhiteSpace(csr.ResponsiblePersonId)
+                            ? employeeLogins.FirstOrDefault(x =>
+                                string.Equals(
+                                    x.UserId,
+                                    csr.ResponsiblePersonId,
+                                    StringComparison.OrdinalIgnoreCase))
+                            : null;
+
+                        var resolvedHqId =
+                            (csr.HeadquarterId ?? 0) > 0
+                                ? csr.HeadquarterId
+                                : empLogin?.HeadquartersId;
 
                         var creator = !string.IsNullOrEmpty(csr.CreatedBy)
-                            ? users.FirstOrDefault(u => u.Id == csr.CreatedBy)
+                            ? users.FirstOrDefault(u =>
+                                u.Id == csr.CreatedBy)
                             : null;
-                        var creatorRole = creator?.Role.ToString();
-                        var scope = ResolveCSR1Scope(creatorRole, csr.HeadquarterId);
-                        var createdByName = creator?.Name ?? creator?.UserName ?? creator?.Email ?? csr.CreatedBy;
+
+                        var creatorRole =
+                            creator?.Role.ToString();
+
+                        var scope =
+                            ResolveCSR1Scope(
+                                creatorRole,
+                                csr.HeadquarterId);
+
+                        var createdByName =
+                            creator?.Name
+                            ?? creator?.UserName
+                            ?? creator?.Email
+                            ?? csr.CreatedBy;
 
                         return new CSR1ListDto
                         {
                             Id = csr.Id,
+
                             SanctionNo = csr.SanctionNo,
-                            ProgramTypeId = csr.ProgramTypeId,
-                            ProgramType = programType?.Name ?? "",
 
-                            ProgramId = csr.ProgramId,
-                            ProgramName = program?.Name ?? "",
+                            ProgramTypeId =
+                                program?.ProgramTypeId ?? 0,
 
-                            NumberOfPrograms = csr.NumberOfPrograms,
-                            Budget = csr.Budget,
+                            ProgramType =
+                                programType?.Name ?? "",
 
-                            HeadquarterId = resolvedHqId,
-                            LocationId = csr.LocationId,
-                            ResponsiblePersonId = csr.ResponsiblePersonId,
+                            ProgramId =
+                                csr.ProgramId,
 
-                            Status = csr.Status.ToString(),
-                            Scope = scope,
-                            CreatorRole = creatorRole,
-                            CreatedBy = createdByName,
-                            CreatedById = csr.CreatedBy,
-                            Remarks = csr.Remarks,
-                            CreatedAt = csr.CreatedAt,
-                            IsActive = csr.IsActive,
-                            CSR1Date = csr.CSR1Date,
+                            ProgramName =
+                                program?.Name ?? "",
+
+                            NumberOfPrograms =
+                                csr.NumberOfPrograms,
+
+                            Budget =
+                                csr.Budget,
+
+                            HeadquarterId =
+                                resolvedHqId,
+
+                            LocationId =
+                                csr.LocationId,
+
+                            // Now string
+                            ResponsiblePersonId =
+                                csr.ResponsiblePersonId,
+
+                            Status =
+                                csr.Status.ToString(),
+
+                            Scope =
+                                scope,
+
+                            CreatorRole =
+                                creatorRole,
+
+                            CreatedBy =
+                                createdByName,
+
+                            CreatedById =
+                                csr.CreatedBy,
+
+                            Remarks =
+                                csr.Remarks,
+
+                            CreatedAt =
+                                csr.CreatedAt,
+
+                            IsActive =
+                                csr.IsActive,
+
+                            CSR1Date =
+                                csr.CSR1Date,
+
                             Products1 = products1
-                                .Where(x => x.CSR1Id == csr.Id)
-                                .Select(x => new CSR1ProductDto
-                                {
-                                    Id = x.Id,
-                                    CropId = x.CropId,
-                                    ProductId = x.ProductId
-                                })
+                                .Where(x =>
+                                    x.CSR1Id == csr.Id)
+                                .SelectMany(x =>
+                                    (x.CropId ?? Array.Empty<int>())
+                                    .SelectMany(cropId =>
+                                        (x.ProductId ?? Array.Empty<int>())
+                                        .Select(productId =>
+                                            new CSR1ProductDto
+                                            {
+                                                Id = x.Id,
+                                                CropId = cropId,
+                                                ProductId = productId
+                                            })))
                                 .ToList(),
 
                             Products2 = products2
-                                .Where(x => x.CSR1Id == csr.Id)
-                                .Select(x => new CSR1ProductDto
-                                {
-                                    Id = x.Id,
-                                    CropId = x.CropId,
-                                    ProductId = x.ProductId
-                                })
+                                .Where(x =>
+                                    x.CSR1Id == csr.Id)
+                                .SelectMany(x =>
+                                    (x.CropId ?? Array.Empty<int>())
+                                    .SelectMany(cropId =>
+                                        (x.ProductId ?? Array.Empty<int>())
+                                        .Select(productId =>
+                                            new CSR1ProductDto
+                                            {
+                                                Id = x.Id,
+                                                CropId = cropId,
+                                                ProductId = productId
+                                            })))
                                 .ToList(),
 
                             Products3 = products3
-                                .Where(x => x.CSR1Id == csr.Id)
-                                .Select(x => new CSR1ProductDto
-                                {
-                                    Id = x.Id,
-                                    CropId = x.CropId,
-                                    ProductId = x.ProductId
-                                })
+                                .Where(x =>
+                                    x.CSR1Id == csr.Id)
+                                .SelectMany(x =>
+                                    (x.CropId ?? Array.Empty<int>())
+                                    .SelectMany(cropId =>
+                                        (x.ProductId ?? Array.Empty<int>())
+                                        .Select(productId =>
+                                            new CSR1ProductDto
+                                            {
+                                                Id = x.Id,
+                                                CropId = cropId,
+                                                ProductId = productId
+                                            })))
                                 .ToList()
                         };
                     })
@@ -1195,7 +1288,6 @@ namespace SpicAPI.Controllers
                     });
             }
         }
-
 
         [HttpGet("details/{id}")]
         public async Task<IActionResult> GetCSR1Details(int id)
@@ -1231,13 +1323,15 @@ namespace SpicAPI.Controllers
 
 
                 var programType =
-                    await _programTypeRepo
-                        .GetWhere(x => x.Id == csr1.ProgramTypeId)
-                        .FirstOrDefaultAsync();
+                    program != null
+                        ? await _programTypeRepo
+                            .GetWhere(x => x.Id == program.ProgramTypeId)
+                            .FirstOrDefaultAsync()
+                        : null;
 
 
                 // =====================================================
-                // LOCATION / EMPLOYEE
+                // LOCATION
                 // =====================================================
 
                 var headquarter =
@@ -1258,13 +1352,29 @@ namespace SpicAPI.Controllers
                         : null;
 
 
-                var employee =
-                    csr1.ResponsiblePersonId.HasValue
-                        ? await _employeeRepo
-                            .GetWhere(x =>
-                                x.Id == csr1.ResponsiblePersonId.Value)
-                            .FirstOrDefaultAsync()
-                        : null;
+                // =====================================================
+                // RESPONSIBLE PERSON
+                // CSR1.ResponsiblePersonId stores Employeelogins.UserId.
+                // Resolve UserId -> EmployeeInformationID -> Employee name.
+                // =====================================================
+
+                EmployeeInformation? employee = null;
+
+                if (!string.IsNullOrWhiteSpace(csr1.ResponsiblePersonId))
+                {
+                    var responsibleEmployeeId = await _db.Employeelogins
+                        .AsNoTracking()
+                        .Where(x => x.UserId == csr1.ResponsiblePersonId)
+                        .Select(x => (int?)x.EmployeeInformationID)
+                        .FirstOrDefaultAsync();
+
+                    if (responsibleEmployeeId.HasValue)
+                    {
+                        employee = await _employeeRepo
+                            .GetWhere(x => x.Id == responsibleEmployeeId.Value)
+                            .FirstOrDefaultAsync();
+                    }
+                }
 
 
                 // =====================================================
@@ -1320,29 +1430,52 @@ namespace SpicAPI.Controllers
 
 
                 // =====================================================
-                // RESPONSE
+                // CREATED / UPDATED USER
                 // =====================================================
 
-                var createdByUser = !string.IsNullOrEmpty(csr1.CreatedBy)
-                    ? await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == csr1.CreatedBy)
-                    : null;
-                var createdByName = createdByUser?.Name ?? createdByUser?.UserName ?? csr1.CreatedBy;
+                var createdByUser =
+                    !string.IsNullOrEmpty(csr1.CreatedBy)
+                        ? await _db.Users
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(u =>
+                                u.Id == csr1.CreatedBy)
+                        : null;
 
-                var updatedByUser = !string.IsNullOrEmpty(csr1.UpdatedBy)
-                    ? await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == csr1.UpdatedBy)
-                    : null;
-                var updatedByName = updatedByUser?.Name ?? updatedByUser?.UserName ?? csr1.UpdatedBy;
+                var createdByName =
+                    createdByUser?.Name
+                    ?? createdByUser?.UserName
+                    ?? csr1.CreatedBy;
 
-                var (scope, creatorRole) = await ResolveCSR1ScopeAsync(csr1);
+
+                var updatedByUser =
+                    !string.IsNullOrEmpty(csr1.UpdatedBy)
+                        ? await _db.Users
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(u =>
+                                u.Id == csr1.UpdatedBy)
+                        : null;
+
+                var updatedByName =
+                    updatedByUser?.Name
+                    ?? updatedByUser?.UserName
+                    ?? csr1.UpdatedBy;
+
+
+                var (scope, creatorRole) =
+                    await ResolveCSR1ScopeAsync(csr1);
+
+
+                // =====================================================
+                // RESPONSE
+                // =====================================================
 
                 var result =
                     new CSR1DetailsDto
                     {
-                        Id =
-                            csr1.Id,
+                        Id = csr1.Id,
 
                         ProgramTypeId =
-                            csr1.ProgramTypeId,
+                            program?.ProgramTypeId ?? 0,
 
                         ProgramType =
                             programType?.Name ?? "-",
@@ -1444,73 +1577,110 @@ namespace SpicAPI.Controllers
 
                         UpdatedAt =
                             csr1.UpdatedAt,
-                        CSR1Date = csr1.CSR1Date,
-                        SanctionNo = csr1.SanctionNo,
 
+                        CSR1Date =
+                            csr1.CSR1Date,
+
+                        SanctionNo =
+                            csr1.SanctionNo,
+
+
+                        // =====================================================
+                        // FOCUS GROUP 1
+                        // =====================================================
 
                         Focus1 =
                             group1
-                                .Select(x =>
-                                    new CSR1FocusDetailsDto
-                                    {
-                                        CropId =
-                                            x.CropId,
+                                .SelectMany(x =>
+                                    (x.CropId ?? Array.Empty<int>())
+                                        .SelectMany(cropId =>
+                                            (x.ProductId ?? Array.Empty<int>())
+                                                .Select(productId =>
+                                                    new CSR1FocusDetailsDto
+                                                    {
+                                                        CropId = cropId,
 
-                                        CropName =
-                                            crops.FirstOrDefault(c =>
-                                                c.Id == x.CropId)?.Name ?? "-",
+                                                        CropName =
+                                                            crops
+                                                                .FirstOrDefault(c =>
+                                                                    c.Id == cropId)
+                                                                ?.Name ?? "-",
 
-                                        ProductId =
-                                            x.ProductId,
+                                                        ProductId =
+                                                            productId,
 
-                                        ProductName =
-                                            products.FirstOrDefault(p =>
-                                                p.Id == x.ProductId)?.Name ?? "-"
-                                    })
+                                                        ProductName =
+                                                            products
+                                                                .FirstOrDefault(p =>
+                                                                    p.Id == productId)
+                                                                ?.Name ?? "-"
+                                                    })))
                                 .ToList(),
 
+
+                        // =====================================================
+                        // FOCUS GROUP 2
+                        // =====================================================
 
                         Focus2 =
                             group2
-                                .Select(x =>
-                                    new CSR1FocusDetailsDto
-                                    {
-                                        CropId =
-                                            x.CropId,
+                                .SelectMany(x =>
+                                    (x.CropId ?? Array.Empty<int>())
+                                        .SelectMany(cropId =>
+                                            (x.ProductId ?? Array.Empty<int>())
+                                                .Select(productId =>
+                                                    new CSR1FocusDetailsDto
+                                                    {
+                                                        CropId = cropId,
 
-                                        CropName =
-                                            crops.FirstOrDefault(c =>
-                                                c.Id == x.CropId)?.Name ?? "-",
+                                                        CropName =
+                                                            crops
+                                                                .FirstOrDefault(c =>
+                                                                    c.Id == cropId)
+                                                                ?.Name ?? "-",
 
-                                        ProductId =
-                                            x.ProductId,
+                                                        ProductId =
+                                                            productId,
 
-                                        ProductName =
-                                            products.FirstOrDefault(p =>
-                                                p.Id == x.ProductId)?.Name ?? "-"
-                                    })
+                                                        ProductName =
+                                                            products
+                                                                .FirstOrDefault(p =>
+                                                                    p.Id == productId)
+                                                                ?.Name ?? "-"
+                                                    })))
                                 .ToList(),
 
 
+                        // =====================================================
+                        // FOCUS GROUP 3
+                        // =====================================================
+
                         Focus3 =
                             group3
-                                .Select(x =>
-                                    new CSR1FocusDetailsDto
-                                    {
-                                        CropId =
-                                            x.CropId,
+                                .SelectMany(x =>
+                                    (x.CropId ?? Array.Empty<int>())
+                                        .SelectMany(cropId =>
+                                            (x.ProductId ?? Array.Empty<int>())
+                                                .Select(productId =>
+                                                    new CSR1FocusDetailsDto
+                                                    {
+                                                        CropId = cropId,
 
-                                        CropName =
-                                            crops.FirstOrDefault(c =>
-                                                c.Id == x.CropId)?.Name ?? "-",
+                                                        CropName =
+                                                            crops
+                                                                .FirstOrDefault(c =>
+                                                                    c.Id == cropId)
+                                                                ?.Name ?? "-",
 
-                                        ProductId =
-                                            x.ProductId,
+                                                        ProductId =
+                                                            productId,
 
-                                        ProductName =
-                                            products.FirstOrDefault(p =>
-                                                p.Id == x.ProductId)?.Name ?? "-"
-                                    })
+                                                        ProductName =
+                                                            products
+                                                                .FirstOrDefault(p =>
+                                                                    p.Id == productId)
+                                                                ?.Name ?? "-"
+                                                    })))
                                 .ToList()
                     };
 
@@ -1654,15 +1824,22 @@ namespace SpicAPI.Controllers
                 .Where(x => x.CSR1Id == id && x.IsActive)
                 .Select(x => new { x.CropId, x.ProductId }).ToListAsync();
 
+            var crop1Ids = g1.SelectMany(x => x.CropId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
+            var product1Ids = g1.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
+            var crop2Ids = g2.SelectMany(x => x.CropId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
+            var product2Ids = g2.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
+            var crop3Ids = g3.SelectMany(x => x.CropId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
+            var product3Ids = g3.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
+
             return Ok(new CSR1SaveRequest
             {
                 CSR1 = csr,
-                Crop1Id = g1.FirstOrDefault()?.CropId ?? 0,
-                Product1Ids = g1.Select(x => x.ProductId).Distinct().ToList(),
-                Crop2Id = g2.FirstOrDefault()?.CropId ?? 0,
-                Product2Ids = g2.Select(x => x.ProductId).Distinct().ToList(),
-                Crop3Id = g3.FirstOrDefault()?.CropId ?? 0,
-                Product3Ids = g3.Select(x => x.ProductId).Distinct().ToList()
+                Crop1Ids = crop1Ids,
+                Product1Ids = product1Ids,
+                Crop2Ids = crop2Ids,
+                Product2Ids = product2Ids,
+                Crop3Ids = crop3Ids,
+                Product3Ids = product3Ids
             });
         }
 
@@ -1694,24 +1871,38 @@ namespace SpicAPI.Controllers
                         (incoming.CSR1Date.Month != persistent.ProgramMonth ||
                          incoming.CSR1Date.Year != persistent.ProgramYear))
                         throw new ArgumentException("Program date must remain in its allocated month/year.");
-                    static List<int> Clean(List<int>? ids) => (ids ?? new()).Where(x => x > 0).Distinct().ToList();
-                    var p1 = Clean(request.Product1Ids);
-                    var p2 = Clean(request.Product2Ids);
-                    var p3 = Clean(request.Product3Ids);
-                    if (request.Crop1Id <= 0 || p1.Count == 0 || p1.Count > 3 ||
-                        p2.Count > 3 || p3.Count > 3 ||
-                        (p2.Count > 0 && request.Crop2Id <= 0) ||
-                        (p3.Count > 0 && request.Crop3Id <= 0) ||
-                        (request.Crop2Id > 0 && p2.Count == 0) ||
-                        (request.Crop3Id > 0 && p3.Count == 0))
-                        throw new ArgumentException("Invalid focus crops/products (1-3 products per chosen crop).");
+                    var c1 = CleanIds(request.Crop1Ids);
+                    var c2 = CleanIds(request.Crop2Ids);
+                    var c3 = CleanIds(request.Crop3Ids);
+                    var p1 = CleanIds(request.Product1Ids);
+                    var p2 = CleanIds(request.Product2Ids);
+                    var p3 = CleanIds(request.Product3Ids);
+                    if (c1.Count == 0 || p1.Count == 0 ||
+                        c1.Count > 3 || c2.Count > 3 || c3.Count > 3 ||
+                        p1.Count > 3 || p2.Count > 3 || p3.Count > 3 ||
+                        (c2.Count > 0 && p2.Count == 0) ||
+                        (c3.Count > 0 && p3.Count == 0) ||
+                        (c2.Count == 0 && p2.Count > 0) ||
+                        (c3.Count == 0 && p3.Count > 0))
+                        throw new ArgumentException("Invalid focus crops/products (maximum 3 crops and 3 products per Focus section).");
 
                     persistent.NumberOfPrograms = incoming.NumberOfPrograms;
                     // Allocated budget is immutable during review.
                     // persistent.Budget = incoming.Budget;
                     persistent.HeadquarterId = incoming.HeadquarterId;
                     persistent.LocationId = incoming.LocationId;
-                    persistent.ResponsiblePersonId = incoming.ResponsiblePersonId;
+                    var responsiblePersonUserId =
+     await ResolveResponsiblePersonUserIdAsync(
+         incoming.ResponsiblePersonId);
+
+                    if (string.IsNullOrWhiteSpace(responsiblePersonUserId))
+                    {
+                        throw new ArgumentException(
+                            "Selected Responsible Person does not have a valid Employee Login.");
+                    }
+
+                    persistent.ResponsiblePersonId =
+                        responsiblePersonUserId;
                     persistent.CSR1Date = incoming.CSR1Date;
                     persistent.PrintingAndStationery = incoming.PrintingAndStationery;
                     persistent.PublicityMaterial = incoming.PublicityMaterial;
@@ -1732,9 +1923,33 @@ namespace SpicAPI.Controllers
                     _db.Set<CSR1Products1>().RemoveRange(old1);
                     _db.Set<CSR1Products2>().RemoveRange(old2);
                     _db.Set<CSR1Products3>().RemoveRange(old3);
-                    _db.Set<CSR1Products1>().AddRange(p1.Select(p => new CSR1Products1 { CSR1Id = persistent.Id, CropId = request.Crop1Id, ProductId = p, IsActive = true }));
-                    _db.Set<CSR1Products2>().AddRange(p2.Select(p => new CSR1Products2 { CSR1Id = persistent.Id, CropId = request.Crop2Id, ProductId = p, IsActive = true }));
-                    _db.Set<CSR1Products3>().AddRange(p3.Select(p => new CSR1Products3 { CSR1Id = persistent.Id, CropId = request.Crop3Id, ProductId = p, IsActive = true }));
+                    _db.Set<CSR1Products1>().Add(new CSR1Products1
+                    {
+                        CSR1Id = persistent.Id,
+                        CropId = c1.ToArray(),
+                        ProductId = p1.ToArray(),
+                        IsActive = true
+                    });
+                    if (c2.Count > 0 && p2.Count > 0)
+                    {
+                        _db.Set<CSR1Products2>().Add(new CSR1Products2
+                        {
+                            CSR1Id = persistent.Id,
+                            CropId = c2.ToArray(),
+                            ProductId = p2.ToArray(),
+                            IsActive = true
+                        });
+                    }
+                    if (c3.Count > 0 && p3.Count > 0)
+                    {
+                        _db.Set<CSR1Products3>().Add(new CSR1Products3
+                        {
+                            CSR1Id = persistent.Id,
+                            CropId = c3.ToArray(),
+                            ProductId = p3.ToArray(),
+                            IsActive = true
+                        });
+                    }
                 }
 
                 // Copy ONLY server-authorized workflow results from the existing method.
@@ -1746,12 +1961,6 @@ namespace SpicAPI.Controllers
                 persistent.ValidateAt = csr1.ValidateAt;
                 persistent.ApprovedBy = csr1.ApprovedBy;
                 persistent.ApprovedAt = csr1.ApprovedAt;
-                persistent.Level1ApprovedBy = csr1.Level1ApprovedBy;
-                persistent.Level1ApprovedAt = csr1.Level1ApprovedAt;
-                persistent.Level2ApprovedBy = csr1.Level2ApprovedBy;
-                persistent.Level2ApprovedAt = csr1.Level2ApprovedAt;
-                persistent.Level3ApprovedBy = csr1.Level3ApprovedBy;
-                persistent.Level3ApprovedAt = csr1.Level3ApprovedAt;
                 persistent.SanctionNo = csr1.SanctionNo;
 
                 await _db.SaveChangesAsync();
@@ -1764,9 +1973,33 @@ namespace SpicAPI.Controllers
             }
         }
 
+        private async Task<CSR1ApprovalDetails> GetOrCreateApprovalDetailsAsync(int csr1Id)
+        {
+            var approval = await _db.Set<CSR1ApprovalDetails>()
+                .FirstOrDefaultAsync(x => x.CSR1Id == csr1Id);
+
+            if (approval != null)
+                return approval;
+
+            approval = new CSR1ApprovalDetails
+            {
+                CSR1Id = csr1Id,
+                CreatedBy = CurrentUserId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.Set<CSR1ApprovalDetails>().Add(approval);
+            return approval;
+        }
+
+
         [HttpPost("{id:int}/approve")]
         [HttpPut("{id:int}/approve")]
-        public async Task<IActionResult> ApproveCSR1(int id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CSR1SaveRequest? request)
+        public async Task<IActionResult> ApproveCSR1(
+      int id,
+      [FromBody(EmptyBodyBehavior =
+        Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)]
+    CSR1SaveRequest? request)
         {
             try
             {
@@ -1798,7 +2031,7 @@ namespace SpicAPI.Controllers
                 }
 
                 // --------------------------------------------------
-                // 1. Identify current user's roles.
+                // 1. CURRENT USER ROLES
                 // --------------------------------------------------
 
                 var roles = User.FindAll(ClaimTypes.Role)
@@ -1815,26 +2048,18 @@ namespace SpicAPI.Controllers
                     AppRole.AVP.ToString());
 
                 // --------------------------------------------------
-                // 2. Determine workflow using the original
-                //    application submission date.
-                //
-                //    IMPORTANT: CreatedAt is used here only because
-                //    the supplied entity has no SubmittedAt.
-                //    Replace it with the actual submission timestamp
-                //    if drafts can be created before submission.
+                // 2. DETERMINE WORKFLOW
+                // Day 1-26  -> legacy approval
+                // Day >= 27 -> three-level approval
                 // --------------------------------------------------
 
                 var applicationDateIst = csr1.CreatedAt;
-
-                // Assumes CreatedAt was stored in India local time.
-                // Do not convert this value again unless your DB
-                // stores UTC timestamps.
 
                 bool requiresThreeLevelApproval =
                     applicationDateIst.Day >= 27;
 
                 // --------------------------------------------------
-                // 3. Resolve existing application scope.
+                // 3. RESOLVE CSR-1 SCOPE
                 // --------------------------------------------------
 
                 var (scope, creatorRole) =
@@ -1858,10 +2083,10 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                // --------------------------------------------------
-                // 4. Existing single-level approval (Day 1-26).
-                //    Preserve current approval behaviour.
-                // --------------------------------------------------
+                // ==================================================
+                // 4. LEGACY SINGLE-LEVEL APPROVAL
+                // DAY 1 - 26
+                // ==================================================
 
                 if (!requiresThreeLevelApproval)
                 {
@@ -1883,7 +2108,8 @@ namespace SpicAPI.Controllers
                         {
                             return StatusCode(403, new
                             {
-                                message = "Only RM/RMD can approve HQ-level CSR-1."
+                                message =
+                                    "Only RM/RMD can approve HQ-level CSR-1."
                             });
                         }
 
@@ -1892,7 +2118,8 @@ namespace SpicAPI.Controllers
                         {
                             return StatusCode(403, new
                             {
-                                message = "Only SMM can approve State-level CSR-1."
+                                message =
+                                    "Only SMM can approve State-level CSR-1."
                             });
                         }
                     }
@@ -1905,14 +2132,18 @@ namespace SpicAPI.Controllers
                                 scope);
                     }
 
+                    var now = DateTime.UtcNow;
+
                     csr1.Status = CSR1Status.Approved;
                     csr1.ApprovedBy = CurrentUserId;
-                    csr1.ApprovedAt = DateTime.UtcNow;
+                    csr1.ApprovedAt = now;
 
                     csr1.UpdatedBy = CurrentUserId;
-                    csr1.UpdatedAt = DateTime.UtcNow;
+                    csr1.UpdatedAt = now;
 
-                    await SaveReviewAndWorkflowAsync(csr1, request);
+                    await SaveReviewAndWorkflowAsync(
+                        csr1,
+                        request);
 
                     return Ok(new
                     {
@@ -1924,55 +2155,260 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                // --------------------------------------------------
-                // 5. Three-level approval. Validation is mandatory FIRST.
-                //     Validated -> Level1Approved -> Level2Approved -> Approved.
-                // --------------------------------------------------
-                var next = Csr1WorkflowRules.NextStatus(true, csr1.Status.ToString(),
-                    isStateScope ? (HasRole("SMM") ? "SMM" : GetHighestNewRole(roles))
-                                 : (HasRole("RMM") ? "RMM" : GetHighestNewRole(roles)),
-                    scope);
-                if (next == null)
-                    return StatusCode(403, new { message = "Not authorized for the current CSR-1 approval stage, or validation is pending." });
+                // ==================================================
+                // 5. THREE LEVEL APPROVAL
+                //
+                // Validated
+                //      ↓
+                // Level1Approved - SMM / RMM
+                //      ↓
+                // Level2Approved - MDAdmin
+                //      ↓
+                // Approved       - MDHOD
+                // ==================================================
 
-                var now = DateTime.UtcNow;
+                var next = Csr1WorkflowRules.NextStatus(
+                    true,
+                    csr1.Status.ToString(),
+                    isStateScope
+                        ? (HasRole("SMM")
+                            ? "SMM"
+                            : GetHighestNewRole(roles))
+                        : (HasRole("RMM")
+                            ? "RMM"
+                            : GetHighestNewRole(roles)),
+                    scope);
+
+                if (next == null)
+                {
+                    return StatusCode(403, new
+                    {
+                        message =
+                            "Not authorized for the current CSR-1 approval stage, or validation is pending."
+                    });
+                }
+
+                var nowUtc = DateTime.UtcNow;
+
+                // --------------------------------------------------
+                // Load approval history
+                // --------------------------------------------------
+
+                var approvals = await _db
+                    .Set<CSR1ApprovalDetails>()
+                    .Where(x => x.CSR1Id == csr1.Id)
+                    .ToListAsync();
+
+                bool LevelExists(string level) =>
+                    approvals.Any(x =>
+                        string.Equals(
+                            x.ApproverLevel,
+                            level,
+                            StringComparison.OrdinalIgnoreCase));
+
+                // ==================================================
+                // LEVEL 1
+                // ==================================================
+
                 if (next == "Level1Approved")
                 {
-                    if (csr1.Level1ApprovedAt.HasValue)
-                        return BadRequest(new { message = "Level 1 is already completed." });
-                    csr1.Level1ApprovedBy = CurrentUserId;
-                    csr1.Level1ApprovedAt = now;
+                    if (LevelExists("Level1"))
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Level 1 is already completed."
+                        });
+                    }
+
+                    var approval = new CSR1ApprovalDetails
+                    {
+                        CSR1Id = csr1.Id,
+
+                        ApprovedBy = CurrentUserId,
+                        ApprovedAt = nowUtc,
+
+                        ApproverLevel = "Level1",
+
+                        CreatedBy = CurrentUserId,
+                        CreatedAt = nowUtc
+                    };
+
+                    _db.Set<CSR1ApprovalDetails>()
+                        .Add(approval);
                 }
+
+                // ==================================================
+                // LEVEL 2
+                // ==================================================
+
                 else if (next == "Level2Approved")
                 {
-                    if (!csr1.Level1ApprovedAt.HasValue || csr1.Level2ApprovedAt.HasValue)
-                        return BadRequest(new { message = "Invalid Level 2 approval sequence." });
-                    csr1.Level2ApprovedBy = CurrentUserId;
-                    csr1.Level2ApprovedAt = now;
+                    var level1Completed =
+                        LevelExists("Level1");
+
+                    var level2Completed =
+                        LevelExists("Level2");
+
+                    if (!level1Completed)
+                    {
+                        return BadRequest(new
+                        {
+                            message =
+                                "Level 1 approval must be completed before Level 2."
+                        });
+                    }
+
+                    if (level2Completed)
+                    {
+                        return BadRequest(new
+                        {
+                            message =
+                                "Level 2 is already completed."
+                        });
+                    }
+
+                    var approval = new CSR1ApprovalDetails
+                    {
+                        CSR1Id = csr1.Id,
+
+                        ApprovedBy = CurrentUserId,
+                        ApprovedAt = nowUtc,
+
+                        ApproverLevel = "Level2",
+
+                        CreatedBy = CurrentUserId,
+                        CreatedAt = nowUtc
+                    };
+
+                    _db.Set<CSR1ApprovalDetails>()
+                        .Add(approval);
                 }
+
+                // ==================================================
+                // LEVEL 3 / FINAL APPROVAL
+                // ==================================================
+
                 else if (next == "Approved")
                 {
-                    if (!csr1.Level1ApprovedAt.HasValue || !csr1.Level2ApprovedAt.HasValue || csr1.Level3ApprovedAt.HasValue)
-                        return BadRequest(new { message = "Complete Level 1 and Level 2 before final approval." });
+                    var level1Completed =
+                        LevelExists("Level1");
+
+                    var level2Completed =
+                        LevelExists("Level2");
+
+                    var level3Completed =
+                        LevelExists("Level3");
+
+                    if (!level1Completed ||
+                        !level2Completed)
+                    {
+                        return BadRequest(new
+                        {
+                            message =
+                                "Complete Level 1 and Level 2 before final approval."
+                        });
+                    }
+
+                    if (level3Completed)
+                    {
+                        return BadRequest(new
+                        {
+                            message =
+                                "Final approval is already completed."
+                        });
+                    }
+
+                    // Generate sanction only on final approval
                     if (string.IsNullOrWhiteSpace(csr1.SanctionNo))
-                        csr1.SanctionNo = await GenerateSanctionForCSR1Async(csr1, scope);
-                    csr1.Level3ApprovedBy = CurrentUserId;
-                    csr1.Level3ApprovedAt = now;
+                    {
+                        csr1.SanctionNo =
+                            await GenerateSanctionForCSR1Async(
+                                csr1,
+                                scope);
+                    }
+
+                    var approval = new CSR1ApprovalDetails
+                    {
+                        CSR1Id = csr1.Id,
+
+                        ApprovedBy = CurrentUserId,
+                        ApprovedAt = nowUtc,
+
+                        ApproverLevel = "Level3",
+
+                        CreatedBy = CurrentUserId,
+                        CreatedAt = nowUtc
+                    };
+
+                    _db.Set<CSR1ApprovalDetails>()
+                        .Add(approval);
+
+                    // Keep final approval also in CSR1 master
                     csr1.ApprovedBy = CurrentUserId;
-                    csr1.ApprovedAt = now;
+                    csr1.ApprovedAt = nowUtc;
                 }
-                if (!Enum.TryParse<CSR1Status>(next, ignoreCase: true, out var nextStatus) ||
-                    !Enum.IsDefined(typeof(CSR1Status), nextStatus))
-                    return BadRequest(new { message = $"Unknown CSR-1 workflow status: {next}." });
+                else
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            $"Unsupported CSR-1 approval workflow status: {next}."
+                    });
+                }
+
+                // --------------------------------------------------
+                // 6. CONVERT NEXT STATUS
+                // --------------------------------------------------
+
+                if (!Enum.TryParse<CSR1Status>(
+                        next,
+                        ignoreCase: true,
+                        out var nextStatus) ||
+                    !Enum.IsDefined(
+                        typeof(CSR1Status),
+                        nextStatus))
+                {
+                    return BadRequest(new
+                    {
+                        message =
+                            $"Unknown CSR-1 workflow status: {next}."
+                    });
+                }
+
                 csr1.Status = nextStatus;
                 csr1.UpdatedBy = CurrentUserId;
-                csr1.UpdatedAt = now;
-                await SaveReviewAndWorkflowAsync(csr1, request);
+                csr1.UpdatedAt = nowUtc;
+
+                // --------------------------------------------------
+                // 7. SAVE CSR-1 + APPROVAL HISTORY
+                // --------------------------------------------------
+
+                await SaveReviewAndWorkflowAsync(
+                    csr1,
+                    request);
+
                 return Ok(new
                 {
-                    message = next == "Approved" ? "CSR-1 final approval completed." : $"CSR-1 advanced to {next}.",
-                    isFinalApproval = next == "Approved",
-                    sanctionNo = csr1.SanctionNo,
+                    message =
+                        next == "Approved"
+                            ? "CSR-1 final approval completed."
+                            : next == "Level1Approved"
+                                ? "CSR-1 first approval completed."
+                                : "CSR-1 second approval completed.",
+
+                    approvalLevel =
+                        next == "Level1Approved"
+                            ? 1
+                            : next == "Level2Approved"
+                                ? 2
+                                : 3,
+
+                    isFinalApproval =
+                        next == "Approved",
+
+                    sanctionNo =
+                        csr1.SanctionNo,
+
                     data = csr1
                 });
             }
@@ -1982,12 +2418,14 @@ namespace SpicAPI.Controllers
                     StatusCodes.Status500InternalServerError,
                     new
                     {
-                        message = "Error while approving CSR-1",
-                        error = ex.Message
+                        message =
+                            "Error while approving CSR-1",
+
+                        error =
+                            ex.Message
                     });
             }
         }
-
         // =====================================================
         // CSR1 - RESOLVE CURRENT USER ROLE FOR NEW WORKFLOW
         // =====================================================
@@ -2113,13 +2551,11 @@ namespace SpicAPI.Controllers
                 isRegionalApproval,
                 csr1.CSR1Date);
         }
-
-
         private async Task<string> GenerateCSR1SanctionNoAsync(
-            int stateId,
-            int? regionId,
-            bool isRegionalApproval,
-            DateTime programDate)
+    int stateId,
+    int? regionId,
+    bool isRegionalApproval,
+    DateTime programDate)
         {
             if (stateId <= 0)
             {
@@ -2127,25 +2563,36 @@ namespace SpicAPI.Controllers
                     "Valid StateId is required.");
             }
 
-            // --------------------------------------------
-            // FINANCIAL YEAR
-            // Example: 2026-2027 => FY27
-            // --------------------------------------------
-
+            // Financial year: April 2026 to March 2027 => FY27.
             int fyEndYear = programDate.Month >= 4
                 ? programDate.Year + 1
                 : programDate.Year;
 
             string financialYear = $"FY{fyEndYear % 100:D2}";
-
-            // Month: 01, 02 ... 12
             string month = programDate.ToString("MM");
 
-            // --------------------------------------------
-            // REGION SANCTION NUMBER
-            // FY27/TN/MDUI/11/0546
-            // --------------------------------------------
+            // Read State Code from the State master for both approval scopes.
+            var state = await _db.States
+                .AsNoTracking()
+                .Where(x => x.Id == stateId)
+                .Select(x => new { x.StateCode })
+                .FirstOrDefaultAsync();
 
+            if (state == null)
+            {
+                throw new InvalidOperationException(
+                    "Selected State was not found in the State master.");
+            }
+
+            if (string.IsNullOrWhiteSpace(state.StateCode))
+            {
+                throw new InvalidOperationException(
+                    "State Code is missing in the State master.");
+            }
+
+            string stateCode = state.StateCode.Trim();
+
+            // Regional sanction number: FY27/TN/MDUI/11/0546.
             if (isRegionalApproval)
             {
                 if (!regionId.HasValue || regionId.Value <= 0)
@@ -2154,8 +2601,29 @@ namespace SpicAPI.Controllers
                         "RegionId is required for regional sanction.");
                 }
 
-                var sequence = await _db
-                    .SanctionNumberSequences
+                // Read Region Code from the Region master and verify its State.
+                var region = await _db.Regions
+                    .AsNoTracking()
+                    .Where(x => x.Id == regionId.Value && x.StateId == stateId)
+                    .Select(x => new { x.RegionCode })
+                    .FirstOrDefaultAsync();
+
+                if (region == null)
+                {
+                    throw new InvalidOperationException(
+                        "Selected Region was not found or does not belong to the selected State.");
+                }
+
+                if (string.IsNullOrWhiteSpace(region.RegionCode))
+                {
+                    throw new InvalidOperationException(
+                        "Region Code is missing in the Region master.");
+                }
+
+                string regionCode = region.RegionCode.Trim();
+
+                // Keep this entity tracked: the caller saves the counter update.
+                var sequence = await _db.SanctionNumberSequences
                     .FirstOrDefaultAsync(x =>
                         x.StateId == stateId &&
                         x.RegionId == regionId.Value);
@@ -2166,20 +2634,13 @@ namespace SpicAPI.Controllers
                         "Regional sanction number sequence not found.");
                 }
 
-                if (string.IsNullOrWhiteSpace(sequence.StateSAPCode) ||
-                    string.IsNullOrWhiteSpace(sequence.RegionSAPCode))
-                {
-                    throw new InvalidOperationException(
-                        "State or Region SAP Code is missing.");
-                }
-
-                // Stored number assumed to be LAST issued.
+                // Stored number is LAST issued, as in the existing implementation.
                 int nextNumber = checked(sequence.SanctionNumber + 1);
 
                 string sanctionNo =
                     $"{financialYear}/" +
-                    $"{sequence.StateSAPCode.Trim()}/" +
-                    $"{sequence.RegionSAPCode.Trim()}/" +
+                    $"{stateCode}/" +
+                    $"{regionCode}/" +
                     $"{month}/" +
                     $"{nextNumber:D4}";
 
@@ -2187,18 +2648,12 @@ namespace SpicAPI.Controllers
                 sequence.UpdatedBy = CurrentUserId;
                 sequence.UpdatedAt = DateTime.UtcNow;
 
-                // SaveChanges is handled by the caller's
-                // approval transaction.
+                // SaveChanges is handled by the caller's approval transaction.
                 return sanctionNo;
             }
 
-            // --------------------------------------------
-            // STATE SANCTION NUMBER
-            // FY27/TN/11/0005
-            // --------------------------------------------
-
-            var stateSequence = await _db
-                .SanctionNumberSequences
+            // State sanction number: FY27/TN/11/0005.
+            var stateSequence = await _db.SanctionNumberSequences
                 .FirstOrDefaultAsync(x =>
                     x.StateId == stateId &&
                     x.RegionId == null);
@@ -2209,19 +2664,12 @@ namespace SpicAPI.Controllers
                     "State sanction number sequence not found.");
             }
 
-            if (string.IsNullOrWhiteSpace(stateSequence.StateSAPCode))
-            {
-                throw new InvalidOperationException(
-                    "State SAP Code is missing.");
-            }
-
-            // Stored number assumed to be LAST issued.
-            int nextStateNumber =
-                checked(stateSequence.SanctionNumberState + 1);
+            // Stored number is LAST issued, as in the existing implementation.
+            int nextStateNumber = checked(stateSequence.SanctionNumberState + 1);
 
             string stateSanctionNo =
                 $"{financialYear}/" +
-                $"{stateSequence.StateSAPCode.Trim()}/" +
+                $"{stateCode}/" +
                 $"{month}/" +
                 $"{nextStateNumber:D4}";
 
@@ -2229,9 +2677,9 @@ namespace SpicAPI.Controllers
             stateSequence.UpdatedBy = CurrentUserId;
             stateSequence.UpdatedAt = DateTime.UtcNow;
 
+            // SaveChanges is handled by the caller's approval transaction.
             return stateSanctionNo;
         }
-
         // ============================================================
         // REJECT CSR1
         // POST / PUT: api/CSR1/{id}/reject
@@ -2327,39 +2775,168 @@ namespace SpicAPI.Controllers
         public async Task<IActionResult> GetWorkflow(int id)
         {
             var csr1 = await _csr1Repo.GetByIdAsync(id);
-            if (csr1 == null) return NotFound();
+
+            if (csr1 == null)
+                return NotFound();
+
             var three = Csr1WorkflowRules.IsThreeLevelApplication(csr1.CreatedAt);
+
             var (scope, _) = await ResolveCSR1ScopeAsync(csr1);
+
             var roles = User.FindAll(ClaimTypes.Role)
-                .Select(c => c.Value).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var next = three ? Csr1WorkflowRules.NextStatus(true, csr1.Status.ToString(),
-                scope.Equals("State", StringComparison.OrdinalIgnoreCase)
-                  ? (roles.Contains("SMM") ? "SMM" : GetHighestNewRole(roles))
-                  : (roles.Contains("RMM") ? "RMM" : GetHighestNewRole(roles)), scope) : null;
-            var validated = csr1.Status == CSR1Status.Validated;
-            var pending = new[] { CSR1Status.Submitted, CSR1Status.SubmittedForValidation, CSR1Status.Pending }
-                .Contains(csr1.Status);
-            var firstRole = scope.Equals("State", StringComparison.OrdinalIgnoreCase) ? "SMM" : "RMM";
-            var awaiting = !three ? "" : pending ? (scope == "State" ? "Awaiting SMDO validation" : "Awaiting MO validation")
-                : validated ? $"Awaiting {firstRole} approval" :
-                csr1.Status == CSR1Status.Level1Approved ? "Awaiting MDAdmin approval" :
-                csr1.Status == CSR1Status.Level2Approved ? "Awaiting MDHOD approval" : "";
+                .Select(c => c.Value)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var currentApprovalRole = scope.Equals(
+                "State",
+                StringComparison.OrdinalIgnoreCase)
+                    ? (roles.Contains("SMM")
+                        ? "SMM"
+                        : GetHighestNewRole(roles))
+                    : (roles.Contains("RMM")
+                        ? "RMM"
+                        : GetHighestNewRole(roles));
+
+            var next = three
+                ? Csr1WorkflowRules.NextStatus(
+                    true,
+                    csr1.Status.ToString(),
+                    currentApprovalRole,
+                    scope)
+                : null;
+
+            var validated =
+                csr1.Status == CSR1Status.Validated;
+
+            var pending = new[]
+            {
+        CSR1Status.Submitted,
+        CSR1Status.SubmittedForValidation,
+        CSR1Status.Pending
+    }.Contains(csr1.Status);
+
+            var firstRole = scope.Equals(
+                "State",
+                StringComparison.OrdinalIgnoreCase)
+                    ? "SMM"
+                    : "RMM";
+
+            // =========================================================
+            // NEW APPROVAL DETAILS STRUCTURE
+            // One row for each approval level
+            // =========================================================
+
+            var approvals = await _db.Set<CSR1ApprovalDetails>()
+                .AsNoTracking()
+                .Where(x => x.CSR1Id == id)
+                .OrderBy(x => x.ApprovedAt)
+                .ToListAsync();
+
+            var level1Approval = approvals
+                .FirstOrDefault(x =>
+                    string.Equals(
+                        x.ApproverLevel,
+                        "Level1",
+                        StringComparison.OrdinalIgnoreCase));
+
+            var level2Approval = approvals
+                .FirstOrDefault(x =>
+                    string.Equals(
+                        x.ApproverLevel,
+                        "Level2",
+                        StringComparison.OrdinalIgnoreCase));
+
+            var level3Approval = approvals
+                .FirstOrDefault(x =>
+                    string.Equals(
+                        x.ApproverLevel,
+                        "Level3",
+                        StringComparison.OrdinalIgnoreCase));
+
+            // =========================================================
+            // AWAITING LABEL
+            // =========================================================
+
+            var awaiting = !three
+                ? ""
+                : pending
+                    ? (scope.Equals(
+                        "State",
+                        StringComparison.OrdinalIgnoreCase)
+                            ? "Awaiting SMDO validation"
+                            : "Awaiting MO validation")
+                : validated
+                    ? $"Awaiting {firstRole} approval"
+                : csr1.Status == CSR1Status.Level1Approved
+                    ? "Awaiting MDAdmin approval"
+                : csr1.Status == CSR1Status.Level2Approved
+                    ? "Awaiting MDHOD approval"
+                : "";
+
             return Ok(new
             {
                 isThreeLevelWorkflow = three,
-                canValidate = three && pending && (scope == "State"
-                    ? roles.Contains("SMD") || roles.Contains("SMDO") : roles.Contains("MO")),
-                canApprove = three && next != null,
+
+                canValidate =
+                    three &&
+                    pending &&
+                    (
+                        scope.Equals(
+                            "State",
+                            StringComparison.OrdinalIgnoreCase)
+                            ? roles.Contains("SMD") ||
+                              roles.Contains("SMDO")
+                            : roles.Contains("MO")
+                    ),
+
+                canApprove =
+                    three &&
+                    next != null,
+
                 canReject = false,
-                approvalLabel = next == "Level1Approved" ? "1st Approval" :
-                    next == "Level2Approved" ? "2nd Approval" :
-                    next == "Approved" ? "Final Approval" : "Approve",
+
+                approvalLabel =
+                    next == "Level1Approved"
+                        ? "1st Approval"
+                    : next == "Level2Approved"
+                        ? "2nd Approval"
+                    : next == "Approved"
+                        ? "Final Approval"
+                    : "Approve",
+
                 awaitingLabel = awaiting,
-                steps = three ? new object[] {
-                    new { name = $"{firstRole} First Approval", actor = csr1.Level1ApprovedBy, at = csr1.Level1ApprovedAt, completed = csr1.Level1ApprovedAt.HasValue },
-                    new { name = "MDAdmin Second Approval", actor = csr1.Level2ApprovedBy, at = csr1.Level2ApprovedAt, completed = csr1.Level2ApprovedAt.HasValue },
-                    new { name = "MDHOD Final Approval", actor = csr1.Level3ApprovedBy, at = csr1.Level3ApprovedAt, completed = csr1.Level3ApprovedAt.HasValue }
-                } : Array.Empty<object>()
+
+                steps = three
+                    ? new object[]
+                    {
+                new
+                {
+                    name = $"{firstRole} First Approval",
+                    actor = level1Approval?.ApprovedBy,
+                    at = level1Approval?.ApprovedAt,
+                    completed =
+                        level1Approval?.ApprovedAt.HasValue == true
+                },
+
+                new
+                {
+                    name = "MDAdmin Second Approval",
+                    actor = level2Approval?.ApprovedBy,
+                    at = level2Approval?.ApprovedAt,
+                    completed =
+                        level2Approval?.ApprovedAt.HasValue == true
+                },
+
+                new
+                {
+                    name = "MDHOD Final Approval",
+                    actor = level3Approval?.ApprovedBy,
+                    at = level3Approval?.ApprovedAt,
+                    completed =
+                        level3Approval?.ApprovedAt.HasValue == true
+                }
+                    }
+                    : Array.Empty<object>()
             });
         }
 

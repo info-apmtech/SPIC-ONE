@@ -8,10 +8,16 @@ namespace SPIC.Core.DTOs
         public int Id { get; set; }
         public int StateId { get; set; }
         public int? RegionId { get; set; }
-        public string StateSAPCode { get; set; } = "";
-        public string? RegionSAPCode { get; set; }
+
+        // Display values read from the State and Region masters.
+        public string StateName { get; set; } = "";
+        public string? RegionName { get; set; }
+        public string? StateCode { get; set; }
+        public string? RegionCode { get; set; }
+
         public int SanctionNumber { get; set; }
         public int SanctionNumberState { get; set; }
+
         public string? CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; }
         public string? UpdatedBy { get; set; }
@@ -24,23 +30,14 @@ namespace SPIC.Core.DTOs
     {
         [Range(1, int.MaxValue)]
         public int StateId { get; set; }
+
+        [Range(1, int.MaxValue)]
         public int? RegionId { get; set; }
-        [Required, MaxLength(20)]
-        public string StateSAPCode { get; set; } = "";
-        [MaxLength(20)]
-        public string? RegionSAPCode { get; set; }
+
         [Range(0, int.MaxValue)]
         public int SanctionNumber { get; set; }
+
         [Range(0, int.MaxValue)]
         public int SanctionNumberState { get; set; }
-    }
-
-    // Metadata-only edits: sequence counters cannot be reset by this endpoint.
-    public sealed class UpdateSanctionNumberSequenceDto
-    {
-        [Required, MaxLength(20)]
-        public string StateSAPCode { get; set; } = "";
-        [MaxLength(20)]
-        public string? RegionSAPCode { get; set; }
     }
 }

@@ -46,6 +46,11 @@ namespace SPIC.Core.Entities
         public bool IsApplicable { get; set; } = true;
         public ICollection<ProgramRegionBudget> Regions { get; set; }
            = new List<ProgramRegionBudget>();
+
+        public string CreatedBy { get; set; } = "";
+        public string? UpdatedBy { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+        public DateTime UpdatedAt { get; set; } = DateTime.Now;
     }
 
     // State-wise applicability of a program (one row per Program + State), kept as rows

@@ -46,200 +46,33 @@
 
     @if (_activeSection == "State" && CanSeeStateTab)
     {
-    <!-- Selection -->
-    <div class="main-card">
-        <div class="row g-3">
-            <div class="col-12 col-sm-6 col-lg-3">
-                <label class="form-label-custom">Financial Year</label>
-                @if (_availableFYs.Count > 0)
-                {
-                    <select class="form-select-custom w-100" @bind="_selectedFY" @bind:after="OnFYChangedAsync">
-                        @foreach (var fy in _availableFYs)
-                        {
-                            <option value="@fy">FY @fy</option>
-                        }
-                    </select>
-                }
-                else
-                {
-                    <div class="form-control-custom w-100 text-muted">No Annual Budget defined</div>
-                }
-            </div>
-        </div>
-    </div>
-
-    <!-- Summary Cards -->
-    <div class="row g-3 mb-4">
-
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="metric-card bg-blue-light">
-                <div class="metric-header">
-                    <h4 class="metric-title">State Details</h4>
-                </div>
-                <div class="metric-val">@States.Count State(s)</div>
-                <div class="metric-info">FY @(_selectedFY.Length > 0 ? _selectedFY : "-")</div>
-            </div>
-        </div>
-
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="metric-card bg-mint-light">
-                <div class="metric-header">
-                    <h4 class="metric-title">Annual Budget</h4>
-                </div>
-                <div class="metric-val">₹ @TotalStateBudget.ToString("N2")</div>
-            </div>
-        </div>
-
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="metric-card bg-gray-light">
-                <div class="metric-header">
-                    <h4 class="metric-title">Allocated Budget</h4>
-                </div>
-                <div class="metric-val">₹ @TotalAllocated.ToString("N2")</div>
-                <div class="metric-info">@AllocatedPercentText allocated</div>
-            </div>
-        </div>
-
-        <div class="col-12 col-sm-6 col-lg-3">
-            <div class="metric-card bg-amber-light">
-                <div class="metric-header">
-                    <h4 class="metric-title">Remaining Budget</h4>
-                </div>
-                <div class="metric-val">₹ @RemainingBudget.ToString("N2")</div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Allocation Table -->
-    <div class="main-card">
-
-        <div class="section-header">
-            <h3 class="section-title">
-                State-wise Budget Allocation
-            </h3>
-        </div>
-
-        @if (!string.IsNullOrEmpty(_validationMessage))
-        {
-            <div class="alert-box">⚠ @_validationMessage</div>
-        }
-
-        @if (!string.IsNullOrEmpty(_successMessage))
-        {
-            <div class="success-box">✓ @_successMessage</div>
-        }
-
-        <table class="budget-table">
-
-            <thead>
-                <tr>
-                    <th>
-                        State
-                    </th>
-
-                    <th>
-                        Budget
-                    </th>
-                </tr>
-            </thead>
-
-
-            <tbody>
-
-                @foreach (var item in States)
-                {
-                    <tr>
-
-                        <td>
-                            @item.StateName
-                        </td>
-
-
-                        <td>
-
-                            <input type="number"
-                                   class="budget-input"
-                                   min="0"
-                                   @bind="item.BudgetAmount"
-                                   @bind:event="oninput"
-                                   @bind:after="() => OnAmountChanged(item)" />
-
-                        </td>
-
-                    </tr>
-                }
-
-
-            </tbody>
-
-            <!-- Total Budget / Allocated to State are the existing Annual Budget and the sum of
-                 the rows above - reused as-is, never re-entered. Remaining Amount is the only
-                 manually-entered summary value, saved into StateBudgetSummary alongside them
-                 whenever the allocation above is saved - no auto-calculation, no separate form. -->
-            <tfoot>
-                <tr class="budget-table-total-row">
-                    <td><strong>Total Allocated to State</strong></td>
-                    <td><strong>₹ @TotalAllocated.ToString("N0")</strong></td>
-                </tr>
-                @if (!LoginState.IsAdmin)
-                {
-                    <tr>
-                        <td><strong>Remaining Amount</strong></td>
-                        <td>
-                            <input type="number"
-                                   class="budget-input"
-                                   min="0"
-                                   @bind="_stateSummaryRemaining"
-                                   @bind:event="oninput" />
-                        </td>
-                    </tr>
-                }
-            </tfoot>
-
-        </table>
-
-    </div>
-    }
-
-
-    @if (_activeSection == "Region" && CanSeeRegionTab)
-    {
-    <!-- Selection -->
-    <div class="main-card">
-        <div class="row g-3">
-            <div class="col-12 col-sm-6 col-lg-3">
-                <label class="form-label-custom">Financial Year</label>
-                @if (_availableFYs.Count > 0)
-                {
-                    <select class="form-select-custom w-100" @bind="_selectedFY" @bind:after="OnFYChangedAsync">
-                        @foreach (var fy in _availableFYs)
-                        {
-                            <option value="@fy">FY @fy</option>
-                        }
-                    </select>
-                }
-                else
-                {
-                    <div class="form-control-custom w-100 text-muted">No Annual Budget defined</div>
-                }
-            </div>
-
-            <div class="col-12 col-sm-6 col-lg-3">
-                <label class="form-label-custom">State</label>
-                <select class="form-select-custom w-100" @bind="_selectedStateId" @bind:after="OnSelectedStateChangedAsync">
-                    <option value="0">-- Select State --</option>
-                    @foreach (var s in States)
+        <!-- Selection -->
+        <div class="main-card">
+            <div class="row g-3">
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <label class="form-label-custom">Financial Year</label>
+                    @if (_availableFYs.Count > 0)
                     {
-                        <option value="@s.StateId">@s.StateName</option>
+                        <select class="form-select-custom w-100"
+                                @bind="_selectedFinancialYearId"
+                                @bind:after="OnFYChangedAsync">
+
+                            @foreach (var fy in _availableFYs)
+                            {
+                                <option value="@fy.Id">
+                                    @fy.Name
+                                </option>
+                            }
+                        </select>
                     }
-                </select>
+                    else
+                    {
+                        <div class="form-control-custom w-100 text-muted">No Annual Budget defined</div>
+                    }
+                </div>
             </div>
         </div>
-    </div>
 
-    @if (_selectedStateId > 0)
-    {
         <!-- Summary Cards -->
         <div class="row g-3 mb-4">
 
@@ -248,225 +81,171 @@
                     <div class="metric-header">
                         <h4 class="metric-title">State Details</h4>
                     </div>
-                    <div class="metric-val">@(States.FirstOrDefault(s => s.StateId == _selectedStateId)?.StateName ?? "-")</div>
-                    <div class="metric-info">FY @_selectedFY</div>
+                    <div class="metric-val">@States.Count State(s)</div>
+                    <div class="metric-info">@(SelectedFY.Length > 0 ? SelectedFY : "-")</div>
                 </div>
             </div>
 
             <div class="col-12 col-sm-6 col-lg-3">
                 <div class="metric-card bg-mint-light">
                     <div class="metric-header">
-                        <h4 class="metric-title">Region Details</h4>
+                        <h4 class="metric-title">Annual Budget</h4>
                     </div>
-                    <div class="metric-val">@_regions.Count Region(s)</div>
+                    <div class="metric-val">₹ @TotalStateBudget.ToString("N2")</div>
                 </div>
             </div>
 
             <div class="col-12 col-sm-6 col-lg-3">
                 <div class="metric-card bg-gray-light">
                     <div class="metric-header">
-                        <h4 class="metric-title">State Allocated Budget</h4>
+                        <h4 class="metric-title">Allocated Budget</h4>
                     </div>
-                    <div class="metric-val">₹ @SelectedStateAmount.ToString("N2")</div>
+                    <div class="metric-val">₹ @TotalAllocated.ToString("N2")</div>
+                    <div class="metric-info">@AllocatedPercentText allocated</div>
                 </div>
             </div>
 
             <div class="col-12 col-sm-6 col-lg-3">
                 <div class="metric-card bg-amber-light">
                     <div class="metric-header">
-                        <h4 class="metric-title">Remaining State Budget</h4>
+                        <h4 class="metric-title">Remaining Budget</h4>
                     </div>
-                    <div class="metric-val">₹ @RemainingStateBudget.ToString("N2")</div>
+                    <div class="metric-val">₹ @RemainingBudget.ToString("N2")</div>
                 </div>
             </div>
 
         </div>
 
-        <!-- Region Allocation -->
+        <!-- Allocation Table -->
         <div class="main-card">
 
             <div class="section-header">
                 <h3 class="section-title">
-                    Region-wise Budget Allocation
+                    State-wise Budget Allocation
                 </h3>
             </div>
 
-            @if (!string.IsNullOrEmpty(_regionValidationMessage))
+            @if (!string.IsNullOrEmpty(_validationMessage))
             {
-                <div class="alert-box">⚠ @_regionValidationMessage</div>
+                <div class="alert-box">⚠ @_validationMessage</div>
             }
 
-            @if (!string.IsNullOrEmpty(_regionSuccessMessage))
+            @if (!string.IsNullOrEmpty(_successMessage))
             {
-                <div class="success-box">✓ @_regionSuccessMessage</div>
+                <div class="success-box">✓ @_successMessage</div>
             }
 
-            @if (SelectedStateAmount <= 0)
-            {
-                <div class="alert-box">⚠ Save this state's allocation above before distributing it to regions.</div>
-            }
-            else if (_regions.Count == 0)
-            {
-                <div class="alert-box">⚠ No regions found for the selected state.</div>
-            }
-            else
-            {
-                <table class="budget-table">
+            <table class="budget-table">
 
-                    <thead>
+                <thead>
+                    <tr>
+                        <th>
+                            State
+                        </th>
+
+                        <th>
+                            Budget
+                        </th>
+                    </tr>
+                </thead>
+
+
+                <tbody>
+
+                    @foreach (var item in States)
+                    {
                         <tr>
-                            <th>
-                                Region
-                            </th>
 
-                            <th>
-                                Allocation
-                            </th>
+                            <td>
+                                @item.StateName
+                            </td>
+
+
+                            <td>
+
+                                <input type="number"
+                                       class="budget-input"
+                                       min="0"
+                                       @bind="item.BudgetAmount"
+                                       @bind:event="oninput"
+                                       @bind:after="() => OnAmountChanged(item)" />
+
+                            </td>
+
                         </tr>
-                    </thead>
+                    }
 
 
-                    <tbody>
+                </tbody>
 
-                        @foreach (var item in _regions)
-                        {
-                            <tr>
-
-                                <td>
-                                    @item.RegionName
-                                </td>
-
-
-                                <td>
-
-                                    <input type="number"
-                                           class="budget-input"
-                                           min="0"
-                                           @bind="item.BudgetAmount"
-                                           @bind:event="oninput"
-                                           @bind:after="() => OnRegionAmountChanged(item)" />
-
-                                </td>
-
-                            </tr>
-                        }
-
-
-                    </tbody>
-
-                    <!-- Total Budget / Allocated to Region are the existing applicable State
-                         budget and the sum of the rows above - reused as-is, never re-entered.
-                         Remaining Amount is the only manually-entered summary value, saved into
-                         RegionBudgetSummary alongside them whenever this allocation is saved. -->
-                    <tfoot>
-                        <tr class="budget-table-total-row">
-                            <td><strong>Allocated to Region</strong></td>
-                            <td><strong>₹ @TotalRegionAllocated.ToString("N0")</strong></td>
-                        </tr>
+                <!-- Total Budget / Allocated to State are the existing Annual Budget and the sum of
+                 the rows above - reused as-is, never re-entered. Remaining Amount is the only
+                 manually-entered summary value, saved into StateBudgetSummary alongside them
+                 whenever the allocation above is saved - no auto-calculation, no separate form. -->
+                <tfoot>
+                    <tr class="budget-table-total-row">
+                        <td><strong>Total Allocated to State</strong></td>
+                        <td><strong>₹ @TotalAllocated.ToString("N0")</strong></td>
+                    </tr>
+                    @if (!LoginState.IsAdmin)
+                    {
                         <tr>
                             <td><strong>Remaining Amount</strong></td>
                             <td>
                                 <input type="number"
                                        class="budget-input"
                                        min="0"
-                                       @bind="_regionSummaryRemaining"
+                                       @bind="_stateSummaryRemaining"
                                        @bind:event="oninput" />
                             </td>
                         </tr>
-                    </tfoot>
-
-                </table>
-
-                <div class="bottom-bar">
-                    <div class="bottom-summary">
-                        <div class="bottom-item">
-                            <label>Selected State Budget</label>
-                            <strong>₹ @SelectedStateAmount.ToString("N0")</strong>
-                        </div>
-
-                        <div class="bottom-item">
-                            <label>Total Region Allocation</label>
-                            <strong>₹ @TotalRegionAllocated.ToString("N0")</strong>
-                        </div>
-
-                        <div class="bottom-item">
-                            <label>Remaining State Budget</label>
-                            <strong>₹ @RemainingStateBudget.ToString("N0")</strong>
-                        </div>
-                    </div>
-
-                    <div class="action-buttons">
-                        <button class="btn-draft"
-                                @onclick="SaveRegionAllocationsAsync"
-                                disabled="@(_isSavingRegion || _hasRegionValidationError)">
-                            @(_isSavingRegion ? "Saving..." : "Save Region Allocation")
-                        </button>
-                    </div>
-                </div>
-            }
-
-        </div>
-    }
-    }
-
-
-    @if (_activeSection == "Headquarters" && CanSeeHeadquartersTab)
-    {
-    <!-- Selection -->
-    <div class="main-card">
-        <div class="row g-3">
-            <div class="col-12 col-sm-6 col-lg-3">
-                <label class="form-label-custom">Financial Year</label>
-                @if (_availableFYs.Count > 0)
-                {
-                    <select class="form-select-custom w-100" @bind="_selectedFY" @bind:after="OnFYChangedAsync">
-                        @foreach (var fy in _availableFYs)
-                        {
-                            <option value="@fy">FY @fy</option>
-                        }
-                    </select>
-                }
-                else
-                {
-                    <div class="form-control-custom w-100 text-muted">No Annual Budget defined</div>
-                }
-            </div>
-
-            <div class="col-12 col-sm-6 col-lg-3">
-                <label class="form-label-custom">State</label>
-                <select class="form-select-custom w-100" @bind="_hqSelectedStateId" @bind:after="OnHqSelectedStateChangedAsync">
-                    <option value="0">-- Select State --</option>
-                    @foreach (var s in States)
-                    {
-                        <option value="@s.StateId">@s.StateName</option>
                     }
-                </select>
-            </div>
+                </tfoot>
 
-            @if (_hqSelectedStateId > 0 && _hqRegions.Count > 0)
-            {
+            </table>
+
+        </div>
+    }
+
+
+    @if (_activeSection == "Region" && CanSeeRegionTab)
+    {
+        <!-- Selection -->
+        <div class="main-card">
+            <div class="row g-3">
                 <div class="col-12 col-sm-6 col-lg-3">
-                    <label class="form-label-custom">Region</label>
-                    <select class="form-select-custom w-100" @bind="_hqSelectedRegionId" @bind:after="OnHqSelectedRegionChangedAsync">
-                        <option value="0">-- Select Region --</option>
-                        @foreach (var r in _hqRegions)
+                    <label class="form-label-custom">Financial Year</label>
+                    @if (_availableFYs.Count > 0)
+                    {
+                        <select class="form-select-custom w-100"
+                                @bind="_selectedFinancialYearId"
+                                @bind:after="OnFYChangedAsync">
+                            @foreach (var fy in _availableFYs)
+                            {
+                                <option value="@fy.Id">@fy.Name</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <div class="form-control-custom w-100 text-muted">No Annual Budget defined</div>
+                    }
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <label class="form-label-custom">State</label>
+                    <select class="form-select-custom w-100" @bind="_selectedStateId" @bind:after="OnSelectedStateChangedAsync">
+                        <option value="0">-- Select State --</option>
+                        @foreach (var s in States)
                         {
-                            <option value="@r.RegionId">@r.RegionName</option>
+                            <option value="@s.StateId">@s.StateName</option>
                         }
                     </select>
                 </div>
-            }
+            </div>
         </div>
-    </div>
 
-    @if (_hqSelectedStateId > 0)
-    {
-        @if (_hqRegions.Count == 0)
-        {
-            <div class="alert-box">⚠ No regions found for the selected state.</div>
-        }
-
-        @if (_hqSelectedRegionId > 0)
+        @if (_selectedStateId > 0)
         {
             <!-- Summary Cards -->
             <div class="row g-3 mb-4">
@@ -476,8 +255,8 @@
                         <div class="metric-header">
                             <h4 class="metric-title">State Details</h4>
                         </div>
-                        <div class="metric-val">@(States.FirstOrDefault(s => s.StateId == _hqSelectedStateId)?.StateName ?? "-")</div>
-                        <div class="metric-info">FY @_selectedFY</div>
+                        <div class="metric-val">@(States.FirstOrDefault(s => s.StateId == _selectedStateId)?.StateName ?? "-")</div>
+                        <div class="metric-info"> @SelectedFY</div>
                     </div>
                 </div>
 
@@ -486,56 +265,56 @@
                         <div class="metric-header">
                             <h4 class="metric-title">Region Details</h4>
                         </div>
-                        <div class="metric-val">@(_hqRegions.FirstOrDefault(r => r.RegionId == _hqSelectedRegionId)?.RegionName ?? "-")</div>
+                        <div class="metric-val">@_regions.Count Region(s)</div>
                     </div>
                 </div>
 
                 <div class="col-12 col-sm-6 col-lg-3">
                     <div class="metric-card bg-gray-light">
                         <div class="metric-header">
-                            <h4 class="metric-title">Headquarters Details</h4>
+                            <h4 class="metric-title">State Allocated Budget</h4>
                         </div>
-                        <div class="metric-val">@_headquarters.Count Headquarter(s)</div>
+                        <div class="metric-val">₹ @SelectedStateAmount.ToString("N2")</div>
                     </div>
                 </div>
 
                 <div class="col-12 col-sm-6 col-lg-3">
                     <div class="metric-card bg-amber-light">
                         <div class="metric-header">
-                            <h4 class="metric-title">Region Available Budget</h4>
+                            <h4 class="metric-title">Remaining State Budget</h4>
                         </div>
-                        <div class="metric-val">₹ @RemainingRegionBudget.ToString("N2")</div>
+                        <div class="metric-val">₹ @RemainingStateBudget.ToString("N2")</div>
                     </div>
                 </div>
 
             </div>
 
-            <!-- Headquarters Allocation -->
+            <!-- Region Allocation -->
             <div class="main-card">
 
                 <div class="section-header">
                     <h3 class="section-title">
-                        Headquarters-wise Budget Allocation
+                        Region-wise Budget Allocation
                     </h3>
                 </div>
 
-                @if (!string.IsNullOrEmpty(_hqValidationMessage))
+                @if (!string.IsNullOrEmpty(_regionValidationMessage))
                 {
-                    <div class="alert-box">⚠ @_hqValidationMessage</div>
+                    <div class="alert-box">⚠ @_regionValidationMessage</div>
                 }
 
-                @if (!string.IsNullOrEmpty(_hqSuccessMessage))
+                @if (!string.IsNullOrEmpty(_regionSuccessMessage))
                 {
-                    <div class="success-box">✓ @_hqSuccessMessage</div>
+                    <div class="success-box">✓ @_regionSuccessMessage</div>
                 }
 
-                @if (SelectedRegionAmount <= 0)
+                @if (SelectedStateAmount <= 0)
                 {
-                    <div class="alert-box">⚠ Save this region's allocation above before distributing it to headquarters.</div>
+                    <div class="alert-box">⚠ Save this state's allocation above before distributing it to regions.</div>
                 }
-                else if (_headquarters.Count == 0)
+                else if (_regions.Count == 0)
                 {
-                    <div class="alert-box">⚠ No headquarters found for the selected region.</div>
+                    <div class="alert-box">⚠ No regions found for the selected state.</div>
                 }
                 else
                 {
@@ -544,7 +323,7 @@
                         <thead>
                             <tr>
                                 <th>
-                                    Headquarters
+                                    Region
                                 </th>
 
                                 <th>
@@ -556,12 +335,12 @@
 
                         <tbody>
 
-                            @foreach (var item in _headquarters)
+                            @foreach (var item in _regions)
                             {
                                 <tr>
 
                                     <td>
-                                        @item.HeadquarterName
+                                        @item.RegionName
                                     </td>
 
 
@@ -572,7 +351,7 @@
                                                min="0"
                                                @bind="item.BudgetAmount"
                                                @bind:event="oninput"
-                                               @bind:after="() => OnHqAmountChanged(item)" />
+                                               @bind:after="() => OnRegionAmountChanged(item)" />
 
                                     </td>
 
@@ -582,15 +361,14 @@
 
                         </tbody>
 
-                        <!-- Total Budget / Allocated to Headquarters are the existing applicable
-                             Region budget and the sum of the rows above - reused as-is, never
-                             re-entered. Remaining Amount is the only manually-entered summary
-                             value, saved into HeadquarterBudgetSummary alongside them whenever
-                             this allocation is saved. -->
+                        <!-- Total Budget / Allocated to Region are the existing applicable State
+                         budget and the sum of the rows above - reused as-is, never re-entered.
+                         Remaining Amount is the only manually-entered summary value, saved into
+                         RegionBudgetSummary alongside them whenever this allocation is saved. -->
                         <tfoot>
                             <tr class="budget-table-total-row">
-                                <td><strong>Allocated to Headquarters</strong></td>
-                                <td><strong>₹ @TotalHeadquartersAllocated.ToString("N0")</strong></td>
+                                <td><strong>Allocated to Region</strong></td>
+                                <td><strong>₹ @TotalRegionAllocated.ToString("N0")</strong></td>
                             </tr>
                             <tr>
                                 <td><strong>Remaining Amount</strong></td>
@@ -598,7 +376,7 @@
                                     <input type="number"
                                            class="budget-input"
                                            min="0"
-                                           @bind="_hqSummaryRemaining"
+                                           @bind="_regionSummaryRemaining"
                                            @bind:event="oninput" />
                                 </td>
                             </tr>
@@ -609,26 +387,26 @@
                     <div class="bottom-bar">
                         <div class="bottom-summary">
                             <div class="bottom-item">
-                                <label>Region Allocated Budget</label>
-                                <strong>₹ @SelectedRegionAmount.ToString("N0")</strong>
+                                <label>Selected State Budget</label>
+                                <strong>₹ @SelectedStateAmount.ToString("N0")</strong>
                             </div>
 
                             <div class="bottom-item">
-                                <label>Total Headquarters Allocated</label>
-                                <strong>₹ @TotalHeadquartersAllocated.ToString("N0")</strong>
+                                <label>Total Region Allocation</label>
+                                <strong>₹ @TotalRegionAllocated.ToString("N0")</strong>
                             </div>
 
                             <div class="bottom-item">
-                                <label>Remaining Region Budget</label>
-                                <strong>₹ @RemainingRegionBudget.ToString("N0")</strong>
+                                <label>Remaining State Budget</label>
+                                <strong>₹ @RemainingStateBudget.ToString("N0")</strong>
                             </div>
                         </div>
 
                         <div class="action-buttons">
                             <button class="btn-draft"
-                                    @onclick="SaveHeadquarterAllocationsAsync"
-                                    disabled="@(_isSavingHq || _hasHqValidationError)">
-                                @(_isSavingHq ? "Saving..." : "Save Headquarters Allocation")
+                                    @onclick="SaveRegionAllocationsAsync"
+                                    disabled="@(_isSavingRegion || _hasRegionValidationError)">
+                                @(_isSavingRegion ? "Saving..." : "Save Region Allocation")
                             </button>
                         </div>
                     </div>
@@ -637,63 +415,294 @@
             </div>
         }
     }
+
+
+    @if (_activeSection == "Headquarters" && CanSeeHeadquartersTab)
+    {
+        <!-- Selection -->
+        <div class="main-card">
+            <div class="row g-3">
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <label class="form-label-custom">Financial Year</label>
+                    @if (_availableFYs.Count > 0)
+                    {
+                        <select class="form-select-custom w-100"
+                                @bind="_selectedFinancialYearId"
+                                @bind:after="OnFYChangedAsync">
+                            @foreach (var fy in _availableFYs)
+                            {
+                                <option value="@fy.Id"> @fy.Name</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <div class="form-control-custom w-100 text-muted">No Annual Budget defined</div>
+                    }
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <label class="form-label-custom">State</label>
+                    <select class="form-select-custom w-100" @bind="_hqSelectedStateId" @bind:after="OnHqSelectedStateChangedAsync">
+                        <option value="0">-- Select State --</option>
+                        @foreach (var s in States)
+                        {
+                            <option value="@s.StateId">@s.StateName</option>
+                        }
+                    </select>
+                </div>
+
+                @if (_hqSelectedStateId > 0 && _hqRegions.Count > 0)
+                {
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <label class="form-label-custom">Region</label>
+                        <select class="form-select-custom w-100" @bind="_hqSelectedRegionId" @bind:after="OnHqSelectedRegionChangedAsync">
+                            <option value="0">-- Select Region --</option>
+                            @foreach (var r in _hqRegions)
+                            {
+                                <option value="@r.RegionId">@r.RegionName</option>
+                            }
+                        </select>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (_hqSelectedStateId > 0)
+        {
+            @if (_hqRegions.Count == 0)
+            {
+                <div class="alert-box">⚠ No regions found for the selected state.</div>
+            }
+
+            @if (_hqSelectedRegionId > 0)
+            {
+                <!-- Summary Cards -->
+                <div class="row g-3 mb-4">
+
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <div class="metric-card bg-blue-light">
+                            <div class="metric-header">
+                                <h4 class="metric-title">State Details</h4>
+                            </div>
+                            <div class="metric-val">@(States.FirstOrDefault(s => s.StateId == _hqSelectedStateId)?.StateName ?? "-")</div>
+                            <div class="metric-info"> @SelectedFY</div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <div class="metric-card bg-mint-light">
+                            <div class="metric-header">
+                                <h4 class="metric-title">Region Details</h4>
+                            </div>
+                            <div class="metric-val">@(_hqRegions.FirstOrDefault(r => r.RegionId == _hqSelectedRegionId)?.RegionName ?? "-")</div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <div class="metric-card bg-gray-light">
+                            <div class="metric-header">
+                                <h4 class="metric-title">Headquarters Details</h4>
+                            </div>
+                            <div class="metric-val">@_headquarters.Count Headquarter(s)</div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <div class="metric-card bg-amber-light">
+                            <div class="metric-header">
+                                <h4 class="metric-title">Region Available Budget</h4>
+                            </div>
+                            <div class="metric-val">₹ @RemainingRegionBudget.ToString("N2")</div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Headquarters Allocation -->
+                <div class="main-card">
+
+                    <div class="section-header">
+                        <h3 class="section-title">
+                            Headquarters-wise Budget Allocation
+                        </h3>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(_hqValidationMessage))
+                    {
+                        <div class="alert-box">⚠ @_hqValidationMessage</div>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_hqSuccessMessage))
+                    {
+                        <div class="success-box">✓ @_hqSuccessMessage</div>
+                    }
+
+                    @if (SelectedRegionAmount <= 0)
+                    {
+                        <div class="alert-box">⚠ Save this region's allocation above before distributing it to headquarters.</div>
+                    }
+                    else if (_headquarters.Count == 0)
+                    {
+                        <div class="alert-box">⚠ No headquarters found for the selected region.</div>
+                    }
+                    else
+                    {
+                        <table class="budget-table">
+
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Headquarters
+                                    </th>
+
+                                    <th>
+                                        Allocation
+                                    </th>
+                                </tr>
+                            </thead>
+
+
+                            <tbody>
+
+                                @foreach (var item in _headquarters)
+                                {
+                                    <tr>
+
+                                        <td>
+                                            @item.HeadquarterName
+                                        </td>
+
+
+                                        <td>
+
+                                            <input type="number"
+                                                   class="budget-input"
+                                                   min="0"
+                                                   @bind="item.BudgetAmount"
+                                                   @bind:event="oninput"
+                                                   @bind:after="() => OnHqAmountChanged(item)" />
+
+                                        </td>
+
+                                    </tr>
+                                }
+
+
+                            </tbody>
+
+                            <!-- Total Budget / Allocated to Headquarters are the existing applicable
+                             Region budget and the sum of the rows above - reused as-is, never
+                             re-entered. Remaining Amount is the only manually-entered summary
+                             value, saved into HeadquarterBudgetSummary alongside them whenever
+                             this allocation is saved. -->
+                            <tfoot>
+                                <tr class="budget-table-total-row">
+                                    <td><strong>Allocated to Headquarters</strong></td>
+                                    <td><strong>₹ @TotalHeadquartersAllocated.ToString("N0")</strong></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Remaining Amount</strong></td>
+                                    <td>
+                                        <input type="number"
+                                               class="budget-input"
+                                               min="0"
+                                               @bind="_hqSummaryRemaining"
+                                               @bind:event="oninput" />
+                                    </td>
+                                </tr>
+                            </tfoot>
+
+                        </table>
+
+                        <div class="bottom-bar">
+                            <div class="bottom-summary">
+                                <div class="bottom-item">
+                                    <label>Region Allocated Budget</label>
+                                    <strong>₹ @SelectedRegionAmount.ToString("N0")</strong>
+                                </div>
+
+                                <div class="bottom-item">
+                                    <label>Total Headquarters Allocated</label>
+                                    <strong>₹ @TotalHeadquartersAllocated.ToString("N0")</strong>
+                                </div>
+
+                                <div class="bottom-item">
+                                    <label>Remaining Region Budget</label>
+                                    <strong>₹ @RemainingRegionBudget.ToString("N0")</strong>
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button class="btn-draft"
+                                        @onclick="SaveHeadquarterAllocationsAsync"
+                                        disabled="@(_isSavingHq || _hasHqValidationError)">
+                                    @(_isSavingHq ? "Saving..." : "Save Headquarters Allocation")
+                                </button>
+                            </div>
+                        </div>
+                    }
+
+                </div>
+            }
+        }
     }
 
 
     @if (_activeSection == "State" && CanSeeStateTab)
     {
-    <!-- Bottom Summary -->
-    <div class="main-card bottom-bar">
+        <!-- Bottom Summary -->
+        <div class="main-card bottom-bar">
 
 
-        <div class="bottom-summary">
+            <div class="bottom-summary">
 
-            <div class="bottom-item">
-                <label>Total Allocated</label>
-                <strong>
-                    ₹ @TotalAllocated.ToString("N0")
-                </strong>
-            </div>
-
-
-            <div class="bottom-item">
-                <label>Monthly Avg</label>
-                <strong>
-                    ₹ @MonthlyAverage.ToString("N0")
-                </strong>
-            </div>
-
-
-            @if (_hasValidationError)
-            {
-                <div class="alert-box">
-                    ⚠ Total allocated exceeds annual budget
+                <div class="bottom-item">
+                    <label>Total Allocated</label>
+                    <strong>
+                        ₹ @TotalAllocated.ToString("N0")
+                    </strong>
                 </div>
-            }
+
+
+                <div class="bottom-item">
+                    <label>Monthly Avg</label>
+                    <strong>
+                        ₹ @MonthlyAverage.ToString("N0")
+                    </strong>
+                </div>
+
+
+                @if (_hasValidationError)
+                {
+                    <div class="alert-box">
+                        ⚠ Total allocated exceeds annual budget
+                    </div>
+                }
+
+            </div>
+
+
+
+            <div class="action-buttons">
+
+                <button class="btn-draft"
+                        @onclick="SaveAllocationsAsync"
+                        disabled="@(_isSaving || _isSubmitting || _hasValidationError || _availableFYs.Count == 0)">
+                    @(_isSaving ? "Saving..." : "Save Draft")
+                </button>
+
+
+                <button class="btn-submit"
+                        @onclick="SubmitForValidationAsync"
+                        disabled="@(_isSaving || _isSubmitting || _hasValidationError || _availableFYs.Count == 0 || _currentStatus == "Submitted")">
+                    @(_isSubmitting ? "Submitting..." : (_currentStatus == "Submitted" ? "Submitted" : "Submit For Validation"))
+                </button>
+
+            </div>
+
 
         </div>
-
-
-
-        <div class="action-buttons">
-
-            <button class="btn-draft"
-                    @onclick="SaveAllocationsAsync"
-                    disabled="@(_isSaving || _isSubmitting || _hasValidationError || _availableFYs.Count == 0)">
-                @(_isSaving ? "Saving..." : "Save Draft")
-            </button>
-
-
-            <button class="btn-submit"
-                    @onclick="SubmitForValidationAsync"
-                    disabled="@(_isSaving || _isSubmitting || _hasValidationError || _availableFYs.Count == 0 || _currentStatus == "Submitted")">
-                @(_isSubmitting ? "Submitting..." : (_currentStatus == "Submitted" ? "Submitted" : "Submit For Validation"))
-            </button>
-
-        </div>
-
-
-    </div>
     }
 
 
@@ -715,8 +724,8 @@
 
 
     /* Metric card accents re-use the LocationMaster metric-card look
-       (.bg-blue-light/.bg-mint-light/.bg-gray-light come from LocationSaveList.css);
-       .bg-amber-light adds a 4th tone following the same gradient formula. */
+                   (.bg-blue-light/.bg-mint-light/.bg-gray-light come from LocationSaveList.css);
+                   .bg-amber-light adds a 4th tone following the same gradient formula. */
     .metric-card.bg-amber-light {
         border: 1px solid #fde7c7;
         background: linear-gradient(90deg, #fff7ed24, #fff7ed 100%);
@@ -877,9 +886,16 @@
 
     private List<StateBudgetDto> States = new();
 
-    private List<string> _availableFYs = new();
-    private string _selectedFY = "";
-    private Dictionary<string, decimal> _annualBudgetByFY = new();
+    private List<FinancialYearLookupDto> _availableFYs = new();
+
+    private int _selectedFinancialYearId;
+
+    private string SelectedFY =>
+        _availableFYs
+            .FirstOrDefault(x => x.Id == _selectedFinancialYearId)
+            ?.Name ?? "";
+
+    private Dictionary<int, decimal> _annualBudgetByFY = new();
 
     private bool _isSaving;
     private bool _isSubmitting;
@@ -896,7 +912,12 @@
     // maximum available budget for state-wise allocation, never a sum of the
     // states themselves.
     private decimal TotalStateBudget =>
-        _selectedFY.Length > 0 && _annualBudgetByFY.TryGetValue(_selectedFY, out var amt) ? amt : 0m;
+     _selectedFinancialYearId > 0 &&
+     _annualBudgetByFY.TryGetValue(
+         _selectedFinancialYearId,
+         out var amount)
+         ? amount
+         : 0m;
 
 
     private decimal TotalAllocated =>
@@ -916,7 +937,7 @@
     // The single source of truth for "can this be saved": the moment the sum of every
     // state's amount exceeds the FY's Annual Budget, saving is blocked - regardless of
     // which row was just edited.
-    private bool _hasValidationError => _selectedFY.Length > 0 && TotalAllocated > TotalStateBudget;
+    private bool _hasValidationError => _selectedFinancialYearId > 0 && TotalAllocated > TotalStateBudget;
 
     // ---- Level 1 (Admin) Budget Summary (StateBudgetSummary): Total Budget and Allocated to
     // State are never entered here - they're the existing Annual Budget (TotalStateBudget) and
@@ -927,7 +948,7 @@
 
     private async Task LoadStateBudgetSummaryAsync()
     {
-        if (LoginState.IsAdmin || _selectedFY.Length == 0)
+        if (LoginState.IsAdmin || _selectedFinancialYearId <= 0)
         {
             _stateSummaryRemaining = 0;
             return;
@@ -936,7 +957,7 @@
         try
         {
             var dto = await Http.GetFromJsonAsync<StateBudgetSummaryDto>(
-                $"api/Budget/state-budget-summary?fy={Uri.EscapeDataString(_selectedFY)}");
+                $"api/Budget/state-budget-summary?fy={_selectedFinancialYearId}");
             _stateSummaryRemaining = dto?.RemainingAmount ?? 0;
         }
         catch
@@ -955,7 +976,7 @@
         {
             var request = new SaveStateBudgetSummaryRequest
             {
-                FY = _selectedFY,
+                FY = _selectedFinancialYearId.ToString(),
                 TotalBudget = TotalStateBudget,
                 AllocatedAmount = TotalAllocated,
                 RemainingAmount = LoginState.IsAdmin ? 0m : _stateSummaryRemaining
@@ -1008,7 +1029,7 @@
 
         try
         {
-            var request = new SubmitStateBudgetSummaryRequest { FY = _selectedFY };
+            var request = new SubmitStateBudgetSummaryRequest { FY = _selectedFinancialYearId.ToString() };
             var response = await Http.PutAsJsonAsync("api/Budget/state-budget-summary/submit", request);
             if (response.IsSuccessStatusCode)
                 return true;
@@ -1056,7 +1077,7 @@
 
     private async Task LoadRegionBudgetSummaryAsync()
     {
-        if (_selectedStateId <= 0 || _selectedFY.Length == 0)
+        if (_selectedStateId <= 0 || _selectedFinancialYearId <= 0)
         {
             _regionSummaryRemaining = 0;
             return;
@@ -1065,7 +1086,7 @@
         try
         {
             var dto = await Http.GetFromJsonAsync<RegionBudgetSummaryDto>(
-                $"api/Budget/region-budget-summary?stateId={_selectedStateId}&fy={Uri.EscapeDataString(_selectedFY)}");
+                $"api/Budget/region-budget-summary?stateId={_selectedStateId}&fy={_selectedFinancialYearId}");
             // Only the previously-saved Remaining Amount is loaded into the editable row - Total
             // Budget/Allocated are re-derived fresh every time they're saved, so there's nothing
             // stale to load for them here.
@@ -1088,7 +1109,7 @@
             var request = new SaveRegionBudgetSummaryRequest
             {
                 StateId = _selectedStateId,
-                FY = _selectedFY,
+                FY = _selectedFinancialYearId.ToString(),
                 TotalBudget = SelectedStateAmount,
                 AllocatedAmount = TotalRegionAllocated,
                 RemainingAmount = _regionSummaryRemaining
@@ -1131,7 +1152,7 @@
 
         try
         {
-            var request = new SubmitRegionBudgetSummaryRequest { StateId = _selectedStateId, FY = _selectedFY };
+            var request = new SubmitRegionBudgetSummaryRequest { StateId = _selectedStateId, FY = _selectedFinancialYearId.ToString() };
             var response = await Http.PutAsJsonAsync("api/Budget/region-budget-summary/submit", request);
             if (response.IsSuccessStatusCode)
                 return true;
@@ -1182,7 +1203,7 @@
 
     private async Task LoadHeadquarterBudgetSummaryAsync()
     {
-        if (_hqSelectedRegionId <= 0 || _selectedFY.Length == 0)
+        if (_hqSelectedRegionId <= 0 || _selectedFinancialYearId <= 0)
         {
             _hqSummaryRemaining = 0;
             return;
@@ -1191,7 +1212,7 @@
         try
         {
             var dto = await Http.GetFromJsonAsync<HeadquarterBudgetSummaryDto>(
-                $"api/Budget/hq-budget-summary?regionId={_hqSelectedRegionId}&fy={Uri.EscapeDataString(_selectedFY)}");
+                $"api/Budget/hq-budget-summary?regionId={_hqSelectedRegionId}&fy={_selectedFinancialYearId}");
             // Only the previously-saved Remaining Amount is loaded into the editable row - Total
             // Budget/Allocated are re-derived fresh every time they're saved, so there's nothing
             // stale to load for them here.
@@ -1215,7 +1236,7 @@
             var request = new SaveHeadquarterBudgetSummaryRequest
             {
                 RegionId = _hqSelectedRegionId,
-                FY = _selectedFY,
+                FY = _selectedFinancialYearId.ToString(),
                 TotalBudget = SelectedRegionAmount,
                 AllocatedAmount = TotalHeadquartersAllocated,
                 RemainingAmount = _hqSummaryRemaining
@@ -1258,7 +1279,7 @@
 
         try
         {
-            var request = new SubmitHeadquarterBudgetSummaryRequest { RegionId = _hqSelectedRegionId, FY = _selectedFY };
+            var request = new SubmitHeadquarterBudgetSummaryRequest { RegionId = _hqSelectedRegionId, FY = _selectedFinancialYearId.ToString() };
             var response = await Http.PutAsJsonAsync("api/Budget/hq-budget-summary/submit", request);
             if (response.IsSuccessStatusCode)
                 return true;
@@ -1284,7 +1305,7 @@
             : "State";
 
         await LoadAnnualBudgetsAsync();
-        if (_selectedFY.Length > 0)
+        if (_selectedFinancialYearId > 0)
         {
             await LoadStatesAsync();
             await LoadStatusAsync();
@@ -1297,25 +1318,70 @@
     {
         try
         {
-            var budgets = await Http.GetFromJsonAsync<List<DR.AnnualBudgeting>>("api/AnnualBudgeting") ?? new();
+            var budgets =
+                await Http.GetFromJsonAsync<List<DR.AnnualBudgeting>>(
+                    "api/AnnualBudgeting"
+                ) ?? new();
 
-            _annualBudgetByFY = budgets
-                .GroupBy(b => b.FY)
-                .ToDictionary(g => g.Key, g => g.First().Amount);
+            var financialYears =
+                await Http.GetFromJsonAsync<List<FinancialYearLookupDto>>(
+                    "api/FinancialYear/all"
+                ) ?? new();
 
-            _availableFYs = budgets
-                .Select(b => b.FY)
-                .Distinct()
-                .OrderByDescending(fy => fy)
+            var annualBudgetRows =
+                (
+                    from budget in budgets
+                    join fy in financialYears
+                        on budget.FinancialYearId equals fy.Id
+                    where fy.IsActive
+                    select new
+                    {
+                        FinancialYear = fy,
+                        budget.Amount
+                    }
+                )
+                .OrderByDescending(x => x.FinancialYear.StartDate)
                 .ToList();
 
-            if (_availableFYs.Count > 0 && !_availableFYs.Contains(_selectedFY))
-                _selectedFY = _availableFYs[0];
+            // Only FYs that have an Annual Budget.
+            _availableFYs = annualBudgetRows
+                .Select(x => x.FinancialYear)
+                .GroupBy(x => x.Id)
+                .Select(x => x.First())
+                .OrderByDescending(x => x.StartDate)
+                .ToList();
+
+            // Budget amount by FinancialYears.Id.
+            _annualBudgetByFY = annualBudgetRows
+                .GroupBy(x => x.FinancialYear.Id)
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.First().Amount
+                );
+
+            if (_availableFYs.Count > 0)
+            {
+                if (!_availableFYs.Any(
+                        x => x.Id == _selectedFinancialYearId))
+                {
+                    _selectedFinancialYearId =
+                        _availableFYs[0].Id;
+                }
+            }
+            else
+            {
+                _selectedFinancialYearId = 0;
+            }
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine(
+                $"Annual Budget / FY Load Error: {ex.Message}"
+            );
+
             _availableFYs = new();
             _annualBudgetByFY = new();
+            _selectedFinancialYearId = 0;
         }
     }
 
@@ -1346,21 +1412,21 @@
 
     private async Task LoadStatesAsync()
     {
-        if (_selectedFY.Length == 0)
+        if (_selectedFinancialYearId <= 0)
         {
             States = new();
             return;
         }
 
         States =
-            await Http.GetFromJsonAsync<List<StateBudgetDto>>($"api/Budget/states-budget?fy={Uri.EscapeDataString(_selectedFY)}")
+            await Http.GetFromJsonAsync<List<StateBudgetDto>>($"api/Budget/states-budget?fy={_selectedFinancialYearId}")
             ?? new();
     }
 
 
     private async Task LoadStatusAsync()
     {
-        if (_selectedFY.Length == 0)
+        if (_selectedFinancialYearId <= 0)
         {
             _currentStatus = "Draft";
             return;
@@ -1369,7 +1435,7 @@
         try
         {
             var status = await Http.GetFromJsonAsync<StateBudgetStatusDto>(
-                $"api/Budget/state-budget/status?fy={Uri.EscapeDataString(_selectedFY)}");
+                $"api/Budget/state-budget/status?fy={_selectedFinancialYearId}");
             _currentStatus = status?.Status ?? "Draft";
         }
         catch
@@ -1405,7 +1471,7 @@
 
     private async Task SaveAllocationsAsync()
     {
-        if (_isSaving || _hasValidationError || _selectedFY.Length == 0)
+        if (_isSaving || _hasValidationError || _selectedFinancialYearId <= 0)
             return;
 
         _isSaving = true;
@@ -1468,7 +1534,7 @@
         {
             var request = new SaveStateBudgetRequest
             {
-                FY = _selectedFY,
+                FY = _selectedFinancialYearId.ToString(),
                 Allocations = States.Select(s => new StateBudgetAllocationRequest
                 {
                     StateId = s.StateId,
@@ -1506,7 +1572,7 @@
     // saving/submitting is already in progress, so the same allocation can't be submitted twice.
     private async Task SubmitForValidationAsync()
     {
-        if (_isSaving || _isSubmitting || _hasValidationError || _selectedFY.Length == 0 || _currentStatus == "Submitted")
+        if (_isSaving || _isSubmitting || _hasValidationError || _selectedFinancialYearId <= 0 || _currentStatus == "Submitted")
             return;
 
         _isSubmitting = true;
@@ -1524,13 +1590,13 @@
             if (!summarySubmitted)
                 return;
 
-            var request = new SubmitStateBudgetRequest { FY = _selectedFY };
+            var request = new SubmitStateBudgetRequest { FY = _selectedFinancialYearId.ToString() };
             var response = await Http.PutAsJsonAsync("api/Budget/state-budget/submit", request);
             if (response.IsSuccessStatusCode)
             {
                 await LoadStatusAsync();
                 _validationMessage = null;
-                _successMessage = $"State budget allocation for FY {_selectedFY} submitted for validation successfully.";
+                _successMessage = $"State budget allocation for FY {SelectedFY} submitted for validation successfully.";
             }
             else
             {
@@ -1561,7 +1627,7 @@
     // has already been saved for this State + FY so a reload shows exactly the DB state.
     private async Task LoadRegionsAsync()
     {
-        if (_selectedStateId <= 0 || _selectedFY.Length == 0)
+        if (_selectedStateId <= 0 || _selectedFinancialYearId <= 0)
         {
             _regions = new();
             return;
@@ -1569,7 +1635,7 @@
 
         _regions =
             await Http.GetFromJsonAsync<List<RegionBudgetDto>>(
-                $"api/Budget/regions-budget?stateId={_selectedStateId}&fy={Uri.EscapeDataString(_selectedFY)}")
+                $"api/Budget/regions-budget?stateId={_selectedStateId}&fy={_selectedFinancialYearId}")
             ?? new();
     }
 
@@ -1608,7 +1674,7 @@
     // rule in both SaveRegionBudgetSummary and SubmitRegionBudgetSummary.
     private async Task SaveRegionAllocationsAsync()
     {
-        if (_isSavingRegion || _hasRegionValidationError || _selectedStateId <= 0 || _selectedFY.Length == 0)
+        if (_isSavingRegion || _hasRegionValidationError || _selectedStateId <= 0 || _selectedFinancialYearId <= 0)
             return;
 
         if (!TryValidateSummaryAmounts(SelectedStateAmount, TotalRegionAllocated, _regionSummaryRemaining, out var preCheckError))
@@ -1624,7 +1690,7 @@
             var request = new SaveRegionBudgetRequest
             {
                 StateId = _selectedStateId,
-                FY = _selectedFY,
+                FY = _selectedFinancialYearId.ToString(),
                 Allocations = _regions.Select(r => new RegionBudgetAllocationRequest
                 {
                     RegionId = r.RegionId,
@@ -1681,7 +1747,7 @@
     // kept in this section's own independent list.
     private async Task LoadHqRegionsAsync()
     {
-        if (_hqSelectedStateId <= 0 || _selectedFY.Length == 0)
+        if (_hqSelectedStateId <= 0 || _selectedFinancialYearId <= 0)
         {
             _hqRegions = new();
             return;
@@ -1689,7 +1755,7 @@
 
         _hqRegions =
             await Http.GetFromJsonAsync<List<RegionBudgetDto>>(
-                $"api/Budget/regions-budget?stateId={_hqSelectedStateId}&fy={Uri.EscapeDataString(_selectedFY)}")
+                $"api/Budget/regions-budget?stateId={_hqSelectedStateId}&fy={_selectedFinancialYearId}")
             ?? new();
     }
 
@@ -1707,7 +1773,7 @@
     // exactly the DB state.
     private async Task LoadHeadquartersAsync()
     {
-        if (_hqSelectedRegionId <= 0 || _selectedFY.Length == 0)
+        if (_hqSelectedRegionId <= 0 || _selectedFinancialYearId <= 0)
         {
             _headquarters = new();
             return;
@@ -1715,7 +1781,7 @@
 
         _headquarters =
             await Http.GetFromJsonAsync<List<HeadquarterBudgetDto>>(
-                $"api/Budget/hq-budget?regionId={_hqSelectedRegionId}&fy={Uri.EscapeDataString(_selectedFY)}")
+                $"api/Budget/hq-budget?regionId={_hqSelectedRegionId}&fy={_selectedFinancialYearId}")
             ?? new();
     }
 
@@ -1755,7 +1821,7 @@
     // rule in both SaveHeadquarterBudgetSummary and SubmitHeadquarterBudgetSummary.
     private async Task SaveHeadquarterAllocationsAsync()
     {
-        if (_isSavingHq || _hasHqValidationError || _hqSelectedRegionId <= 0 || _selectedFY.Length == 0)
+        if (_isSavingHq || _hasHqValidationError || _hqSelectedRegionId <= 0 || _selectedFinancialYearId <= 0)
             return;
 
         if (!TryValidateSummaryAmounts(SelectedRegionAmount, TotalHeadquartersAllocated, _hqSummaryRemaining, out var preCheckError))
@@ -1771,7 +1837,7 @@
             var request = new SaveHeadquarterBudgetRequest
             {
                 RegionId = _hqSelectedRegionId,
-                FY = _selectedFY,
+                FY = _selectedFinancialYearId.ToString(),
                 Allocations = _headquarters.Select(h => new HeadquarterBudgetAllocationRequest
                 {
                     HeadquarterId = h.HeadquarterId,
@@ -1861,5 +1927,16 @@
         error = "";
         return true;
     }
+    private sealed class FinancialYearLookupDto
+    {
+        public int Id { get; set; }
 
+        public string Name { get; set; } = "";
+
+        public DateTime StartDate { get; set; }
+
+        public DateTime EndDate { get; set; }
+
+        public bool IsActive { get; set; }
+    }
 }

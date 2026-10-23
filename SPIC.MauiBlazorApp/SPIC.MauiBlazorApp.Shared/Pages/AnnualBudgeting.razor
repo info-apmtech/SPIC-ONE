@@ -9,10 +9,14 @@
 @code {
     private List<DR.AnnualBudgeting> _budgets = new();
     private List<DR.AnnualBudgeting> _filtered = new();
-    private DR.AnnualBudgeting _model = new() { FY = "", Amount = 0, IsActive = true };
+    private List<FinancialYearLookup> _financialYears = new();
+    private DR.AnnualBudgeting _model = new() { FinancialYearId = 0, Amount = 0, IsActive = true };
 
     private bool _isEditMode;
     private bool _isSaving;
+    private bool _isLoading = true;
+    private bool _financialYearsLoaded;
+    private bool _focusFinancialYear;
     private string _searchText = "";
     private string _statusFilter = "All";
     private string? _message;
@@ -31,16 +35,78 @@
     private int ActiveCount => _budgets.Count(b => b.IsActive);
     private int InactiveCount => _budgets.Count(b => !b.IsActive);
 
+    // Matches the existing api/FinancialYear/all response.
+    private sealed class FinancialYearLookup
+    {
+        public FinancialYearLookup() { }
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public bool IsActive { get; set; }
+    }
+
+    private string GetFinancialYearName(DR.AnnualBudgeting budget)
+    {
+        var name = _financialYears.FirstOrDefault(x => x.Id == budget.FinancialYearId)?.Name;
+        if (!string.IsNullOrWhiteSpace(name)) return name.Trim();
+        return budget.FinancialYearId > 0 ? $"Financial Year #{budget.FinancialYearId}" : "";
+    }
+
+    private DR.AnnualBudgeting CopyBudget(DR.AnnualBudgeting source) => new()
+    {
+        Id = source.Id,
+        FinancialYearId = source.FinancialYearId,
+        Amount = source.Amount,
+        IsActive = source.IsActive,
+        CreatedBy = source.CreatedBy,
+        CreatedAt = source.CreatedAt,
+        UpdatedBy = source.UpdatedBy,
+        UpdatedAt = source.UpdatedAt
+    };
+
     protected override async Task OnInitializedAsync()
     {
         Loading.Show();
         try
         {
+            await LoadFinancialYears();
             await LoadBudgets();
         }
         finally
         {
+            _isLoading = false;
             Loading.Hide();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusFinancialYear)
+        {
+            _focusFinancialYear = false;
+            await _firstInputRef.FocusAsync();
+        }
+    }
+
+    private async Task LoadFinancialYears()
+    {
+        _financialYearsLoaded = false;
+        try
+        {
+            _financialYears = (await Http.GetFromJsonAsync<List<FinancialYearLookup>>(
+                "api/FinancialYear/all") ?? new())
+                .OrderByDescending(x => x.StartDate)
+                .ThenByDescending(x => x.Name)
+                .ToList();
+            _financialYearsLoaded = true;
+
+            if (_financialYears.Count == 0)
+                ShowMessage("Add a Financial Year in Financial Master before saving an annual budget.", true);
+        }
+        catch (Exception ex)
+        {
+            ShowMessage($"Failed to load financial years: {ex.Message}", true);
         }
     }
 
@@ -62,87 +128,99 @@
         IEnumerable<DR.AnnualBudgeting> query = _budgets;
 
         if (!string.IsNullOrWhiteSpace(_searchText))
-            query = query.Where(b => b.FY.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
+            query = query.Where(b => GetFinancialYearName(b).Contains(_searchText, StringComparison.OrdinalIgnoreCase));
 
         if (_statusFilter == "Active") query = query.Where(b => b.IsActive);
         else if (_statusFilter == "Inactive") query = query.Where(b => !b.IsActive);
 
-        _filtered = query.OrderByDescending(b => b.FY).ToList();
+        _filtered = query.OrderByDescending(b => GetFinancialYearName(b)).ToList();
     }
 
-    private async Task EditBudget(DR.AnnualBudgeting b)
+    private void EditBudget(DR.AnnualBudgeting b)
     {
-        _model = new DR.AnnualBudgeting
-        {
-            Id = b.Id,
-            FY = b.FY,
-            Amount = b.Amount,
-            IsActive = b.IsActive,
-            CreatedBy = b.CreatedBy,
-            CreatedAt = b.CreatedAt
-        };
+        if (_isLoading || _isSaving || !CanEditBudget) return;
+        _model = CopyBudget(b);
 
         _isEditMode = true;
         _message = null;
-
-        await Task.Yield();
-        await _firstInputRef.FocusAsync();
+        _focusFinancialYear = true;
     }
 
     private void ResetForm()
     {
-        _model = new DR.AnnualBudgeting { FY = "", Amount = 0, IsActive = true };
+        _model = new DR.AnnualBudgeting { FinancialYearId = 0, Amount = 0, IsActive = true };
         _isEditMode = false;
+        _focusFinancialYear = false;
         _message = null;
+    }
+
+    private void ToggleFormStatus()
+    {
+        if (_isLoading || _isSaving) return;
+        _model.IsActive = !_model.IsActive;
     }
 
     private async Task SaveBudget()
     {
-        if (string.IsNullOrWhiteSpace(_model.FY))
+        if (_isLoading || _isSaving) return;
+        if (_isEditMode ? !CanEditBudget : !CanAddBudget) return;
+
+        if (!_financialYearsLoaded)
         {
-            ShowMessage("Financial Year is required", true);
+            ShowMessage("Financial years could not be loaded. Reload the page and try again.", true);
             return;
         }
+
+        var selectedYear = _financialYears.FirstOrDefault(x => x.Id == _model.FinancialYearId);
+        if (_model.FinancialYearId <= 0 || selectedYear == null)
+        {
+            ShowMessage("Please select a Financial Year", true);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(selectedYear.Name))
+        {
+            ShowMessage("The selected Financial Year has no name. Update Financial Master first.", true);
+            return;
+        }
+        string yearName = selectedYear.Name.Trim();
+
         if (_model.Amount <= 0)
         {
             ShowMessage("Amount must be greater than zero", true);
             return;
         }
 
-        // Duplicate check (case-insensitive, excluding the record being edited)
+        // One budget per master ID, including inactive records.
         bool duplicate = _budgets.Any(b =>
             b.Id != _model.Id &&
-            b.FY.Trim().Equals(_model.FY.Trim(), StringComparison.OrdinalIgnoreCase));
+            b.FinancialYearId == _model.FinancialYearId);
         if (duplicate)
         {
-            ShowMessage($"An Annual Budgeting record for '{_model.FY}' already exists", true);
+            ShowMessage($"An Annual Budgeting record for '{yearName}' already exists", true);
             return;
         }
 
         _isSaving = true;
         try
         {
-            _model.FY = _model.FY.Trim();
             _model.UpdatedBy = LoginState.UserId ?? "System";
             _model.UpdatedAt = DateTime.Now;
 
-            HttpResponseMessage response;
-            if (_isEditMode && _model.Id > 0)
-            {
-                response = await Http.PutAsJsonAsync($"api/AnnualBudgeting/{_model.Id}", _model);
-            }
-            else
+            if (!_isEditMode)
             {
                 _model.CreatedBy = LoginState.UserId ?? "System";
                 _model.CreatedAt = DateTime.Now;
-                response = await Http.PostAsJsonAsync("api/AnnualBudgeting", _model);
             }
+
+            using var response = _isEditMode && _model.Id > 0
+                ? await Http.PutAsJsonAsync($"api/AnnualBudgeting/{_model.Id}", _model)
+                : await Http.PostAsJsonAsync("api/AnnualBudgeting", _model);
 
             if (response.IsSuccessStatusCode)
             {
                 ShowMessage(_isEditMode
-                    ? $"Annual Budgeting for '{_model.FY}' updated successfully"
-                    : $"Annual Budgeting for '{_model.FY}' saved successfully", false);
+                    ? $"Annual Budgeting for '{yearName}' updated successfully"
+                    : $"Annual Budgeting for '{yearName}' saved successfully", false);
                 ResetFormKeepMessage();
                 await LoadBudgets();
             }
@@ -173,8 +251,9 @@
 
     private void OpenDeleteModal(DR.AnnualBudgeting b)
     {
+        if (_isLoading || _isSaving || !CanDeleteBudget) return;
         _deleteId = b.Id;
-        _deleteFY = b.FY;
+        _deleteFY = GetFinancialYearName(b);
         _showDeleteModal = true;
     }
 
@@ -188,25 +267,29 @@
     // Soft delete: deactivate instead of hard DELETE, matching Designation's convention.
     private async Task ConfirmDelete()
     {
+        if (_isLoading || _isSaving || !CanDeleteBudget) return;
         var target = _budgets.FirstOrDefault(x => x.Id == _deleteId);
         if (target == null) { CancelDelete(); return; }
 
+        var yearName = GetFinancialYearName(target);
+        _isSaving = true;
         try
         {
-            target.IsActive = false;
-            target.UpdatedBy = LoginState.UserId ?? "System";
-            target.UpdatedAt = DateTime.Now;
+            // Include FinancialYearId; update the list only after the API succeeds.
+            var request = CopyBudget(target);
+            request.IsActive = false;
+            request.UpdatedBy = LoginState.UserId ?? "System";
+            request.UpdatedAt = DateTime.Now;
 
-            var response = await Http.PutAsJsonAsync($"api/AnnualBudgeting/{target.Id}", target);
+            using var response = await Http.PutAsJsonAsync($"api/AnnualBudgeting/{target.Id}", request);
             if (response.IsSuccessStatusCode)
             {
-                ShowMessage($"Annual Budgeting for '{_deleteFY}' deactivated successfully", false);
-                if (_model.Id == _deleteId) ResetFormKeepMessage();
+                ShowMessage($"Annual Budgeting for '{yearName}' deactivated successfully", false);
+                if (_model.Id == target.Id) ResetFormKeepMessage();
                 await LoadBudgets();
             }
             else
             {
-                target.IsActive = true; // revert local state on failure
                 var error = await response.Content.ReadAsStringAsync();
                 ShowMessage($"Failed to deactivate: {error}", true);
             }
@@ -217,27 +300,31 @@
         }
         finally
         {
+            _isSaving = false;
             CancelDelete();
         }
     }
 
     private async Task ReactivateBudget(DR.AnnualBudgeting b)
     {
+        if (_isLoading || _isSaving || !CanEditBudget) return;
+        var yearName = GetFinancialYearName(b);
+        _isSaving = true;
         try
         {
-            b.IsActive = true;
-            b.UpdatedBy = LoginState.UserId ?? "System";
-            b.UpdatedAt = DateTime.Now;
+            var request = CopyBudget(b);
+            request.IsActive = true;
+            request.UpdatedBy = LoginState.UserId ?? "System";
+            request.UpdatedAt = DateTime.Now;
 
-            var response = await Http.PutAsJsonAsync($"api/AnnualBudgeting/{b.Id}", b);
+            using var response = await Http.PutAsJsonAsync($"api/AnnualBudgeting/{b.Id}", request);
             if (response.IsSuccessStatusCode)
             {
-                ShowMessage($"Annual Budgeting for '{b.FY}' activated successfully", false);
+                ShowMessage($"Annual Budgeting for '{yearName}' activated successfully", false);
                 await LoadBudgets();
             }
             else
             {
-                b.IsActive = false;
                 var error = await response.Content.ReadAsStringAsync();
                 ShowMessage($"Failed to activate: {error}", true);
             }
@@ -245,6 +332,10 @@
         catch (Exception ex)
         {
             ShowMessage($"Failed to activate: {ex.Message}", true);
+        }
+        finally
+        {
+            _isSaving = false;
         }
     }
 
@@ -262,100 +353,498 @@
 }
 
 <style>
-    .ab-page-title { color: #1F2937; font-weight: 700; font-size: 1.4rem; margin: 24px 0; }
+    .ab-page-title {
+        color: #1F2937;
+        font-weight: 700;
+        font-size: 1.4rem;
+        margin: 24px 0;
+    }
 
     /* --- Add / Edit Card --- */
-    .ab-form-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
-    .ab-form-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .ab-form-title { font-size: 1.05rem; font-weight: 700; color: #1F2937; margin: 0; }
-    .ab-form-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 20px; }
-    .ab-field { display: flex; flex-direction: column; }
-    .ab-field label { font-size: 0.78rem; font-weight: 600; color: #374151; margin-bottom: 6px; }
-    .ab-field input[type="text"], .ab-field input[type="number"] { width: 240px; max-width: 100%; padding: 9px 12px; border: 1px solid #E5E7EB; border-radius: 8px; background: #F9FAFB; font-size: 0.85rem; color: #1F2937; outline: none; transition: border-color .2s; }
-    .ab-field input[type="text"]:focus, .ab-field input[type="number"]:focus { border-color: #059669; background: #fff; box-shadow: 0 0 0 2px rgba(5,150,105,.1); }
+    .ab-form-card {
+        background: #fff;
+        border: 1px solid #E5E7EB;
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+
+    .ab-form-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .ab-form-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #1F2937;
+        margin: 0;
+    }
+
+    .ab-form-row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        margin-bottom: 20px;
+    }
+
+    .ab-field {
+        display: flex;
+        flex-direction: column;
+    }
+
+        .ab-field label {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .ab-field input[type="text"], .ab-field input[type="number"], .ab-field select {
+            width: 240px;
+            max-width: 100%;
+            padding: 9px 12px;
+            border: 1px solid #E5E7EB;
+            border-radius: 8px;
+            background: #F9FAFB;
+            font-size: 0.85rem;
+            color: #1F2937;
+            outline: none;
+            transition: border-color .2s;
+        }
+
+            .ab-field input[type="text"]:focus, .ab-field input[type="number"]:focus, .ab-field select:focus {
+                border-color: #059669;
+                background: #fff;
+                box-shadow: 0 0 0 2px rgba(5,150,105,.1);
+            }
 
     /* Active toggle pill */
-    .ab-toggle-pill { display: flex; align-items: center; gap: 10px; background: #ECFDF5; border: 1px solid #D1FAE5; border-radius: 10px; padding: 9px 16px; cursor: pointer; user-select: none; }
-    .ab-toggle-pill.inactive { background: #F3F4F6; border-color: #E5E7EB; }
-    .ab-toggle-label { font-size: 0.85rem; font-weight: 600; color: #065F46; }
-    .ab-toggle-pill.inactive .ab-toggle-label { color: #6B7280; }
-    .ab-switch { position: relative; width: 42px; height: 22px; background: #22C55E; border-radius: 22px; transition: background .2s; flex-shrink: 0; }
-    .ab-toggle-pill.inactive .ab-switch { background: #D1D5DB; }
-    .ab-switch::after { content: ''; position: absolute; top: 2px; left: 22px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .2s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
-    .ab-toggle-pill.inactive .ab-switch::after { left: 2px; }
+    .ab-toggle-pill {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #ECFDF5;
+        border: 1px solid #D1FAE5;
+        border-radius: 10px;
+        padding: 9px 16px;
+        cursor: pointer;
+        user-select: none;
+    }
+
+        .ab-toggle-pill.inactive {
+            background: #F3F4F6;
+            border-color: #E5E7EB;
+        }
+
+    .ab-toggle-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #065F46;
+    }
+
+    .ab-toggle-pill.inactive .ab-toggle-label {
+        color: #6B7280;
+    }
+
+    .ab-switch {
+        position: relative;
+        width: 42px;
+        height: 22px;
+        background: #22C55E;
+        border-radius: 22px;
+        transition: background .2s;
+        flex-shrink: 0;
+    }
+
+    .ab-toggle-pill.inactive .ab-switch {
+        background: #D1D5DB;
+    }
+
+    .ab-switch::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 22px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        transition: left .2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,.2);
+    }
+
+    .ab-toggle-pill.inactive .ab-switch::after {
+        left: 2px;
+    }
 
     /* Form buttons */
-    .ab-form-actions { display: flex; justify-content: flex-end; gap: 12px; }
-    .ab-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 20px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: .2s; border: 1px solid transparent; }
-    .ab-btn-cancel { background: #fff; border-color: #D1D5DB; color: #4B5563; }
-    .ab-btn-cancel:hover { background: #F9FAFB; }
-    .ab-btn-save { background: #2563EB; color: #fff; }
-    .ab-btn-save:hover { background: #1D4ED8; }
-    .ab-btn-save:disabled { opacity: .6; cursor: not-allowed; }
+    .ab-form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+    }
+
+    .ab-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 9px 20px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: .2s;
+        border: 1px solid transparent;
+    }
+
+    .ab-btn-cancel {
+        background: #fff;
+        border-color: #D1D5DB;
+        color: #4B5563;
+    }
+
+        .ab-btn-cancel:hover {
+            background: #F9FAFB;
+        }
+
+    .ab-btn-save {
+        background: #2563EB;
+        color: #fff;
+    }
+
+        .ab-btn-save:hover {
+            background: #1D4ED8;
+        }
+
+        .ab-btn-save:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
 
     /* --- Stat Cards --- */
-    .ab-stats-row { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
-    .ab-stat-card { flex: 1; min-width: 220px; border: 1px solid #E5E7EB; border-radius: 12px; padding: 18px 20px; }
-    .ab-stat-card.total { background: linear-gradient(135deg, #EEF2FF, #F8FAFF); }
-    .ab-stat-card.active { background: linear-gradient(135deg, #ECFDF5, #F0FDFA); }
-    .ab-stat-card.inactive { background: #F3F4F6; }
-    .ab-stat-label { font-size: 0.82rem; color: #6B7280; font-weight: 600; margin-bottom: 8px; }
-    .ab-stat-value { font-size: 1.5rem; font-weight: 700; color: #1F2937; }
+    .ab-stats-row {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+
+    .ab-stat-card {
+        flex: 1;
+        min-width: 220px;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 18px 20px;
+    }
+
+        .ab-stat-card.total {
+            background: linear-gradient(135deg, #EEF2FF, #F8FAFF);
+        }
+
+        .ab-stat-card.active {
+            background: linear-gradient(135deg, #ECFDF5, #F0FDFA);
+        }
+
+        .ab-stat-card.inactive {
+            background: #F3F4F6;
+        }
+
+    .ab-stat-label {
+        font-size: 0.82rem;
+        color: #6B7280;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .ab-stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1F2937;
+    }
 
     /* --- List Card --- */
-    .ab-list-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 14px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.04); margin-bottom: 40px; }
-    .ab-list-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-    .ab-list-title { font-size: 1.05rem; font-weight: 700; color: #1F2937; margin: 0; }
-    .ab-list-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .ab-search { padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 8px; background: #F9FAFB; font-size: 0.8rem; outline: none; min-width: 200px; }
-    .ab-search:focus { border-color: #059669; background: #fff; }
-    .ab-status-select { padding: 8px 12px; border: 1px solid #E5E7EB; border-radius: 8px; background: #fff; font-size: 0.8rem; outline: none; cursor: pointer; }
+    .ab-list-card {
+        background: #fff;
+        border: 1px solid #E5E7EB;
+        border-radius: 14px;
+        padding: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.04);
+        margin-bottom: 40px;
+    }
 
-    .ab-table { width: 100%; border-collapse: collapse; text-align: center; }
-    .ab-table th { background: #F8FAFC; color: #374151; font-weight: 600; font-size: 0.78rem; padding: 12px 14px; border-bottom: 1px solid #E5E7EB; }
-    .ab-table td { padding: 13px 14px; font-size: 0.8rem; color: #4B5563; border-bottom: 1px solid #F3F4F6; }
-    .ab-table tr:last-child td { border-bottom: none; }
+    .ab-list-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+    }
 
-    .ab-badge { display: inline-block; padding: 4px 14px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; }
-    .ab-badge-active { background: #059669; color: #fff; }
-    .ab-badge-inactive { background: #E5E7EB; color: #6B7280; }
+    .ab-list-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #1F2937;
+        margin: 0;
+    }
 
-    .ab-action-icons { display: flex; gap: 14px; justify-content: center; }
-    .ab-action-icons i { font-size: 1rem; cursor: pointer; }
-    .ab-icon-edit { color: #2563EB; }
-    .ab-icon-delete { color: #DC2626; }
-    .ab-icon-restore { color: #059669; }
+    .ab-list-tools {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .ab-search {
+        padding: 8px 12px;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        background: #F9FAFB;
+        font-size: 0.8rem;
+        outline: none;
+        min-width: 200px;
+    }
+
+        .ab-search:focus {
+            border-color: #059669;
+            background: #fff;
+        }
+
+    .ab-status-select {
+        padding: 8px 12px;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        background: #fff;
+        font-size: 0.8rem;
+        outline: none;
+        cursor: pointer;
+    }
+
+    .ab-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: center;
+    }
+
+        .ab-table th {
+            background: #F8FAFC;
+            color: #374151;
+            font-weight: 600;
+            font-size: 0.78rem;
+            padding: 12px 14px;
+            border-bottom: 1px solid #E5E7EB;
+        }
+
+        .ab-table td {
+            padding: 13px 14px;
+            font-size: 0.8rem;
+            color: #4B5563;
+            border-bottom: 1px solid #F3F4F6;
+        }
+
+        .ab-table tr:last-child td {
+            border-bottom: none;
+        }
+
+    .ab-badge {
+        display: inline-block;
+        padding: 4px 14px;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+
+    .ab-badge-active {
+        background: #059669;
+        color: #fff;
+    }
+
+    .ab-badge-inactive {
+        background: #E5E7EB;
+        color: #6B7280;
+    }
+
+    .ab-action-icons {
+        display: flex;
+        gap: 14px;
+        justify-content: center;
+    }
+
+        .ab-action-icons i {
+            font-size: 1rem;
+            cursor: pointer;
+        }
+
+    .ab-icon-edit {
+        color: #2563EB;
+    }
+
+    .ab-icon-delete {
+        color: #DC2626;
+    }
+
+    .ab-icon-restore {
+        color: #059669;
+    }
 
     /* --- Deactivate Modal --- */
-    .ab-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; z-index: 1055; padding: 1rem; }
-    .ab-modal { background: #fff; border-radius: 12px; padding: 28px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
-    .ab-modal-icon { width: 56px; height: 56px; border-radius: 50%; background: #FEE2E2; color: #DC2626; font-size: 1.5rem; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; }
-    .ab-modal-title { font-size: 1.1rem; font-weight: 700; color: #1F2937; margin-bottom: 8px; }
-    .ab-modal-body { font-size: 0.85rem; color: #6B7280; margin-bottom: 4px; }
-    .ab-modal-warning { font-size: 0.78rem; color: #DC2626; font-weight: 600; margin-bottom: 20px; }
-    .ab-modal-actions { display: flex; gap: 12px; justify-content: center; }
-    .ab-btn-delete { background: #DC2626; color: #fff; }
-    .ab-btn-delete:hover { background: #B91C1C; }
+    .ab-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1055;
+        padding: 1rem;
+    }
+
+    .ab-modal {
+        background: #fff;
+        border-radius: 12px;
+        padding: 28px;
+        max-width: 420px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 8px 24px rgba(0,0,0,.15);
+    }
+
+    .ab-modal-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #FEE2E2;
+        color: #DC2626;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 16px;
+    }
+
+    .ab-modal-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1F2937;
+        margin-bottom: 8px;
+    }
+
+    .ab-modal-body {
+        font-size: 0.85rem;
+        color: #6B7280;
+        margin-bottom: 4px;
+    }
+
+    .ab-modal-warning {
+        font-size: 0.78rem;
+        color: #DC2626;
+        font-weight: 600;
+        margin-bottom: 20px;
+    }
+
+    .ab-modal-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+    }
+
+    .ab-btn-delete {
+        background: #DC2626;
+        color: #fff;
+    }
+
+        .ab-btn-delete:hover {
+            background: #B91C1C;
+        }
 
     @@media (max-width: 767.98px) {
-        .ab-page .ab-form-card, .ab-page .ab-list-card { padding: 16px; border-radius: 12px; }
-        .ab-page .ab-field { width: 100%; }
-        .ab-page .ab-field input[type="text"], .ab-page .ab-field input[type="number"] { width: 100%; min-height: var(--tap-min, 44px); font-size: 16px; }
-        .ab-page .ab-toggle-pill { min-height: var(--tap-min, 44px); width: 100%; justify-content: space-between; }
-        .ab-page .ab-form-actions .ab-btn { width: 100%; min-height: var(--tap-min, 44px); justify-content: center; }
-        .ab-page .ab-stats-row { gap: 8px; flex-wrap: nowrap; margin-bottom: 16px; }
-        .ab-page .ab-stat-card { min-width: 0; padding: 12px 10px; }
-        .ab-page .ab-list-tools { width: 100%; }
-        .ab-page .ab-search { flex: 1 1 auto; min-width: 0; min-height: var(--tap-min, 44px); font-size: 16px; }
-        .ab-page .ab-status-select { min-height: var(--tap-min, 44px); }
-        .ab-page .ab-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .ab-page .ab-table { min-width: 640px; }
-        .ab-modal { padding: 20px; }
-        .ab-modal-actions .ab-btn { flex: 1 1 0; min-height: var(--tap-min, 44px); justify-content: center; }
+        .ab-page .ab-form-card, .ab-page .ab-list-card {
+            padding: 16px;
+            border-radius: 12px;
+        }
+
+        .ab-page .ab-field {
+            width: 100%;
+        }
+
+            .ab-page .ab-field input[type="text"], .ab-page .ab-field input[type="number"], .ab-page .ab-field select {
+                width: 100%;
+                min-height: var(--tap-min, 44px);
+                font-size: 16px;
+            }
+
+        .ab-page .ab-toggle-pill {
+            min-height: var(--tap-min, 44px);
+            width: 100%;
+            justify-content: space-between;
+        }
+
+        .ab-page .ab-form-actions .ab-btn {
+            width: 100%;
+            min-height: var(--tap-min, 44px);
+            justify-content: center;
+        }
+
+        .ab-page .ab-stats-row {
+            gap: 8px;
+            flex-wrap: nowrap;
+            margin-bottom: 16px;
+        }
+
+        .ab-page .ab-stat-card {
+            min-width: 0;
+            padding: 12px 10px;
+        }
+
+        .ab-page .ab-list-tools {
+            width: 100%;
+        }
+
+        .ab-page .ab-search {
+            flex: 1 1 auto;
+            min-width: 0;
+            min-height: var(--tap-min, 44px);
+            font-size: 16px;
+        }
+
+        .ab-page .ab-status-select {
+            min-height: var(--tap-min, 44px);
+        }
+
+        .ab-page .ab-table-wrap {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .ab-page .ab-table {
+            min-width: 640px;
+        }
+
+        .ab-modal {
+            padding: 20px;
+        }
+
+        .ab-modal-actions .ab-btn {
+            flex: 1 1 0;
+            min-height: var(--tap-min, 44px);
+            justify-content: center;
+        }
     }
+
     @@media (min-width: 768px) and (max-width: 1199.98px) {
-        .ab-page .ab-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-        .ab-page .ab-table { min-width: 640px; }
+        .ab-page .ab-table-wrap {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .ab-page .ab-table {
+            min-width: 640px;
+        }
     }
 </style>
 
@@ -376,21 +865,33 @@
     {
         <div class="ab-form-card">
             <div class="ab-form-header">
-                <h3 class="ab-form-title">@(_isEditMode ? $"Edit Annual Budgeting — {_model.FY}" : "Add Annual Budgeting")</h3>
+                <h3 class="ab-form-title">@(_isEditMode ? $"Edit Annual Budgeting — {GetFinancialYearName(_model)}" : "Add Annual Budgeting")</h3>
             </div>
 
             <div class="ab-form-row">
                 <div class="ab-field">
-                    <label>Financial Year (FY)</label>
-                    <input type="text" @bind="_model.FY" placeholder="e.g. 2025-2026" maxlength="20" @ref="_firstInputRef" />
+                    <label for="ab-financial-year">Financial Year (FY)</label>
+                    <select id="ab-financial-year" @bind="_model.FinancialYearId"
+                            @ref="_firstInputRef"
+                            disabled="@(_isLoading || _isSaving || !_financialYearsLoaded)">
+                        <option value="0">Select Financial Year</option>
+                        @if (_model.FinancialYearId > 0 && !_financialYears.Any(x => x.Id == _model.FinancialYearId))
+                        {
+                            <option value="@_model.FinancialYearId" disabled>@GetFinancialYearName(_model) (Unavailable)</option>
+                        }
+                        @foreach (var year in _financialYears)
+                        {
+                            <option value="@year.Id">@year.Name@(year.IsActive ? "" : " (Inactive)")</option>
+                        }
+                    </select>
                 </div>
 
                 <div class="ab-field">
                     <label>Amount</label>
-                    <input type="number" @bind="_model.Amount" min="0" step="0.01" placeholder="Enter Amount" />
+                    <input type="number" @bind="_model.Amount" min="0" step="0.01" placeholder="Enter Amount" disabled="@(_isLoading || _isSaving)" />
                 </div>
 
-                <div class="ab-toggle-pill @(_model.IsActive ? "" : "inactive")" @onclick="() => _model.IsActive = !_model.IsActive">
+                <div class="ab-toggle-pill @(_model.IsActive ? "" : "inactive")" @onclick="ToggleFormStatus">
                     <span class="ab-toggle-label">@(_model.IsActive ? "Active" : "Inactive")</span>
                     <span class="ab-switch"></span>
                 </div>
@@ -398,12 +899,12 @@
 
             <ActionBar Sticky="false" CssClass="ab-form-actions">
                 <Secondary>
-                    <button type="button" class="ab-btn ab-btn-cancel" @onclick="ResetForm">
+                    <button type="button" class="ab-btn ab-btn-cancel" @onclick="ResetForm" disabled="@(_isLoading || _isSaving)">
                         <i class="bi bi-x-lg"></i> Cancel
                     </button>
                 </Secondary>
                 <ChildContent>
-                    <button type="button" class="ab-btn ab-btn-save" @onclick="SaveBudget" disabled="@_isSaving">
+                    <button type="button" class="ab-btn ab-btn-save" @onclick="SaveBudget" disabled="@(_isLoading || _isSaving || !_financialYearsLoaded || _financialYears.Count == 0)">
                         <i class="bi bi-save"></i> @(_isSaving ? "Saving..." : (_isEditMode ? "Update" : "Save"))
                     </button>
                 </ChildContent>
@@ -464,7 +965,7 @@
                         {
                             <tr>
                                 <td>@b.Id</td>
-                                <td>@b.FY</td>
+                                <td>@GetFinancialYearName(b)</td>
                                 <td>@FormatAmount(b.Amount)</td>
                                 <td>@b.CreatedAt.ToString("yyyy-MM-dd")</td>
                                 <td>@(b.CreatedBy ?? "—")</td>
@@ -522,8 +1023,8 @@
             <p class="ab-modal-body">You are about to deactivate FY <strong>@_deleteFY</strong></p>
             <p class="ab-modal-warning">This hides it from active lists. You can reactivate it anytime.</p>
             <div class="ab-modal-actions">
-                <button type="button" class="ab-btn ab-btn-cancel" @onclick="CancelDelete">Cancel</button>
-                <button type="button" class="ab-btn ab-btn-delete" @onclick="ConfirmDelete">
+                <button type="button" class="ab-btn ab-btn-cancel" @onclick="CancelDelete" disabled="@_isSaving">Cancel</button>
+                <button type="button" class="ab-btn ab-btn-delete" @onclick="ConfirmDelete" disabled="@_isSaving">
                     <i class="bi bi-slash-circle"></i> Deactivate
                 </button>
             </div>

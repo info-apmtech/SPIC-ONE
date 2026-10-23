@@ -19,7 +19,8 @@ namespace SPIC.Core.Entities
 	{
 		public int Id { get; set; }
 		public required string StateName { get; set; }
-		public int ZoneId { get; set; }
+        public string? StateCode { get; set; }
+        public int ZoneId { get; set; }
 		public Zone? Zone { get; set; }
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }
@@ -52,7 +53,8 @@ namespace SPIC.Core.Entities
 	{
 		public int Id { get; set; }
 		public required string RegionName { get; set; }
-		public int StateId { get; set; }
+        public string? RegionCode { get; set; }
+        public int StateId { get; set; }
 		public State? State { get; set; }
 		public bool IsActive { get; set; }
 		public DateTime CreatedAt { get; set; }

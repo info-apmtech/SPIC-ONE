@@ -123,7 +123,7 @@
                     <div class="bm-stat-content">
                         <span class="bm-stat-value">₹ 4.85 Cr</span>
                         <span class="bm-stat-label">Total Regional Budget</span>
-                        <span class="bm-stat-sub">FY @(_selectedFY.Length > 0 ? _selectedFY : "-")</span>
+                        <span class="bm-stat-sub">FY @(string.IsNullOrWhiteSpace(SelectedFYName) ? "-" : SelectedFYName)</span>
                     </div>
                     <div class="bm-stat-icon">
                         <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -190,13 +190,13 @@
             @if (_availableFYs.Count > 0)
             {
                 <select class="bm-year-select"
-                        @bind="_selectedFY"
+                        @bind="_selectedFYId"
                         @bind:after="OnFYChangedAsync">
 
                     @foreach (var fy in _availableFYs)
                     {
-                        <option value="@fy">
-                            FY @fy
+                        <option value="@fy.Id">
+                            @fy.Name
                         </option>
                     }
 
@@ -219,7 +219,7 @@
                     <option value="0">-- Select a saved budget --</option>
                     @foreach (var item in _pendingApprovals)
                     {
-                        <option value="@item.Id">@item.SubmittedRole | @item.SubmittedBy | FY @item.FinancialYear | ₹@item.TotalBudget.ToString("N0")</option>
+                        <option value="@item.Id">@item.SubmittedRole | @item.SubmittedBy | @item.FinancialYear | ₹@item.TotalBudget.ToString("N0")</option>
                     }
                 </select>
                 @if (_pendingApprovals.Count == 0)
@@ -600,51 +600,74 @@
             <!-- Left Info Badges -->
             <div class="bm-info-badges">
                 <!-- Total Allocated -->
-                <div class="bm-info-badge bm-badge-green">
-                    <span class="bm-badge-label">TOTAL ALLOCATED</span>
-                    <span class="bm-badge-value">$@TotalAllocatedFormatted</span>
+                <div class="">
+                    @*  <span class="bm-badge-label">TOTAL ALLOCATED</span>
+                    <span class="bm-badge-value">$@TotalAllocatedFormatted</span> *@
                 </div>
 
                 <!-- Monthly Avg -->
-                <div class="bm-info-badge bm-badge-orange">
-                    <span class="bm-badge-label">MONTHLY AVG</span>
-                    <span class="bm-badge-value">$@MonthlyAvgFormatted</span>
+                <div class="">
+                    @*   <span class="bm-badge-label">MONTHLY AVG</span>
+                    <span class="bm-badge-value">$@MonthlyAvgFormatted</span> *@
                 </div>
 
                 <!-- Alert -->
-                <div class="bm-alert-badge">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <div class="">
+                    @* <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                         <line x1="12" y1="9" x2="12" y2="13"></line>
                         <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
-                    <span><strong>1 ALERT:</strong> Infrastructure Over - budget</span>
+                    <span><strong>1 ALERT:</strong> Infrastructure Over - budget</span> *@
                 </div>
             </div>
 
             <!-- Right Action Buttons; native: ActionBar = inline row on tablet/desktop, fixed 44px bar on phone -->
             <ActionBar CssClass="bm-actionbar" AriaLabel="Budget plan actions">
-                @if (CanCreateBudget && !_validationMode)
+
+                @* ============================
+       VALIDATE
+       Status = Submitted
+       ============================ *@
+                @if (_validationMode && CanValidateBudget)
                 {
-                    <button type="button" class="bm-btn-primary" @onclick="HandleSubmitValidation"
-                            disabled="@_isSavingBudget">
-                        @(_isSavingBudget ? "Saving..." : "Save")
-                    </button>
-                }
-                else if (CanValidateBudget && _validationMode)
-                {
-                    <button type="button" class="bm-btn-primary" @onclick="HandleValidateBudget"
+                    <button type="button"
+                            class="bm-btn-primary"
+                            @onclick="HandleValidateBudget"
                             disabled="@(_isValidating || !HasSelectedPendingSubmission)">
                         @(_isValidating ? "Validating..." : "Validate")
                     </button>
                 }
-                else if (CanApproveBudget)
+
+                @* ============================
+       APPROVE
+       Status = Validated
+       Show only when approval record exists
+       ============================ *@
+                else if (CanApproveBudget && HasPendingApproval)
                 {
-                    <button type="button" class="bm-btn-primary" @onclick="HandleApproveBudget"
+                    <button type="button"
+                            class="bm-btn-primary"
+                            @onclick="HandleApproveBudget"
                             disabled="@(_isApproving || !HasSelectedPendingSubmission)">
                         @(_isApproving ? "Approving..." : "Approve")
                     </button>
                 }
+
+                @* ============================
+       INITIAL / CREATE
+       No workflow record yet
+       ============================ *@
+                else
+                {
+                    <button type="button"
+                            class="bm-btn-primary"
+                            @onclick="HandleSubmitValidation"
+                            disabled="@(_isSavingBudget || !CanCreateBudget)">
+                        @(_isSavingBudget ? "Submitting..." : "Submit")
+                    </button>
+                }
+
             </ActionBar>
         </div>
 
@@ -809,8 +832,8 @@
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
     }
         /* css/ProprietorDetails.css defines global .theme-green / .theme-blue
-                                                                       watermarks (::before/::after) that leak onto these tiles and sit on top
-                                                                       of the label text. Neutralise them for this page only. */
+                                                                                                   watermarks (::before/::after) that leak onto these tiles and sit on top
+                                                                                                   of the label text. Neutralise them for this page only. */
         .bm-stat-card::before,
         .bm-stat-card::after {
             content: none !important;
@@ -1264,7 +1287,7 @@
             height: 36px;
         }
         /* Budget table becomes one card per HQ so the Budget input is always
-                                                                           on screen (it used to sit off the right edge of a 720px table). */
+                                                                                                       on screen (it used to sit off the right edge of a 720px table). */
         .bm-table-card {
             overflow: visible;
             border: 0;
@@ -1572,19 +1595,58 @@
     }
 
     // LoginState roles (legacy aliases): RMD=RMDO, SMD=SMDO, RM=RMM.
-    private string BudgetRole => (LoginState.UserRole?.ToString() ?? "").Trim().ToUpperInvariant();
-    private bool CanCreateBudget => BudgetRole is "MO" or "RMDO" or "RMD" or "SMDO" or "SMD";
-    private bool CanApproveBudget => BudgetRole is "SMM" or "RMM" or "RM";
-    private bool CanValidateBudget => BudgetRole is "SMD" or "SMDO" or "RMD" or "RMDO";
-    private bool _validationMode;
-    private bool IsReviewMode => CanApproveBudget || (CanValidateBudget && _validationMode);
-    private bool _isValidating;
-    private decimal SelectedSubmissionTotal =>
-        _pendingApprovals.FirstOrDefault(x => x.Id == _selectedSubmissionId)?.TotalBudget ?? 0m;
-    private bool HasSelectedPendingSubmission =>
-        _pendingApprovals.Any(x => x.Id == _selectedSubmissionId &&
-            string.Equals(x.Status, _validationMode ? "Submitted" : "Valid", StringComparison.OrdinalIgnoreCase));
+    private string BudgetRole =>
+     (LoginState.UserRole?.ToString() ?? "")
+     .Trim()
+     .ToUpperInvariant();
 
+    private bool CanCreateBudget =>
+        BudgetRole is "MO"
+            or "RMDO"
+            or "RMD"
+            or "SMDO"
+            or "SMD";
+
+    private bool CanApproveBudget =>
+        BudgetRole is "SMM"
+            or "RMM"
+            or "RM";
+
+    private bool CanValidateBudget =>
+        BudgetRole is "SMD"
+            or "SMDO"
+            or "RMD"
+            or "RMDO";
+
+    private bool _validationMode;
+
+    private bool IsReviewMode =>
+        CanApproveBudget ||
+        (CanValidateBudget && _validationMode);
+
+    private bool _isValidating;
+
+    private decimal SelectedSubmissionTotal =>
+        _pendingApprovals
+            .FirstOrDefault(x => x.Id == _selectedSubmissionId)
+            ?.TotalBudget ?? 0m;
+
+    private bool HasSelectedPendingSubmission =>
+        _pendingApprovals.Any(x =>
+            x.Id == _selectedSubmissionId &&
+            string.Equals(
+                x.Status,
+                _validationMode
+                    ? "Submitted"
+                    : "Validated",
+                StringComparison.OrdinalIgnoreCase));
+
+    private bool HasPendingApproval =>
+        _pendingApprovals.Any(x =>
+            string.Equals(
+                x.Status,
+                "Validated",
+                StringComparison.OrdinalIgnoreCase));
     private sealed class PendingBudgetApprovalDto
     {
         public int Id { get; set; }
@@ -1604,19 +1666,21 @@
     {
         _pendingApprovals.Clear();
         _selectedSubmissionId = 0;
-        programPlans.Clear();
-        FilteredProgramPlans.Clear();
 
-        if (!IsReviewMode || string.IsNullOrWhiteSpace(_selectedFY))
+        // Keep Program Type / Program Name visible in review mode even when there
+        // is no pending submission for the selected FY.
+        await LoadProgramMasterForReviewAsync();
+
+        if (!IsReviewMode || _selectedFYId <= 0)
             return;
 
         try
         {
             // Validation loads Submitted records.
-            // Approval loads Valid records.
+            // Approval loads Validated records.
             string requiredStatus = _validationMode
                 ? "Submitted"
-                : "Valid";
+                : "Validated";
 
             string endpoint = _validationMode
                 ? "pending-program-validations"
@@ -1627,7 +1691,7 @@
                 : "approval";
 
             string url =
-                $"api/Budget/{endpoint}?fy={Uri.EscapeDataString(_selectedFY)}";
+                $"api/Budget/{endpoint}?fy={_selectedFYId}";
 
             using var response = await Http.GetAsync(url);
 
@@ -1652,14 +1716,9 @@
                 .ReadFromJsonAsync<List<PendingBudgetApprovalDto>>()
                 ?? new List<PendingBudgetApprovalDto>();
 
-            // Filter by selected FY and expected status.
+            // The API is already scoped by FinancialYearId; only status needs client-side filtering.
             _pendingApprovals = records
                 .Where(x =>
-                    string.Equals(
-                        x.FinancialYear,
-                        _selectedFY,
-                        StringComparison.OrdinalIgnoreCase)
-                    &&
                     string.Equals(
                         x.Status,
                         requiredStatus,
@@ -1668,7 +1727,7 @@
 
             Console.WriteLine(
                 $"Budget {actionName} loaded. " +
-                $"FY={_selectedFY}, " +
+                $"FYId={_selectedFYId}, FY={SelectedFYName}, " +
                 $"RequiredStatus={requiredStatus}, " +
                 $"Count={_pendingApprovals.Count}");
 
@@ -1696,6 +1755,44 @@
         }
     }
 
+    private async Task LoadProgramMasterForReviewAsync()
+    {
+        try
+        {
+            programPlans =
+                await Http.GetFromJsonAsync<List<ProgramWiseBudgetDto>>(
+                    "api/Budget/program-master-list")
+                ?? new();
+
+            foreach (var item in programPlans)
+            {
+                item.AprilCount = 0;
+                item.MayCount = 0;
+                item.JuneCount = 0;
+                item.JulyCount = 0;
+                item.AugustCount = 0;
+                item.SeptemberCount = 0;
+                item.OctoberCount = 0;
+                item.NovemberCount = 0;
+                item.DecemberCount = 0;
+                item.JanuaryCount = 0;
+                item.FebruaryCount = 0;
+                item.MarchCount = 0;
+
+                item.TotalBudget = item.IsChangeAmount ? 0 : item.BudgetAmount;
+                CalculateBudget(item);
+            }
+
+            ApplyBudgetFilter();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Review Program Master Load Error: {ex.Message}");
+            programPlans = new();
+            FilteredProgramPlans = new();
+        }
+    }
+
     private void OnApprovalSelectionChanged(ChangeEventArgs e)
     {
         _selectedSubmissionId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
@@ -1705,8 +1802,40 @@
     private void SelectSubmittedBudget()
     {
         var selected = _pendingApprovals.FirstOrDefault(x => x.Id == _selectedSubmissionId);
-        // No recalculation: show the exact saved monthly values for approval.
-        programPlans = selected?.Programs?.ToList() ?? new();
+
+        if (selected == null)
+        {
+            ApplyBudgetFilter();
+            return;
+        }
+
+        var submittedPrograms = selected.Programs ?? new List<ProgramWiseBudgetDto>();
+
+        // Merge saved submission values into Program Master rows so Program Type
+        // and Program Name always come from the master list.
+        foreach (var master in programPlans)
+        {
+            var saved = submittedPrograms.FirstOrDefault(x => x.ProgramId == master.ProgramId);
+            if (saved == null)
+                continue;
+
+            master.TotalBudget = saved.TotalBudget;
+            master.AprilCount = saved.AprilCount;
+            master.MayCount = saved.MayCount;
+            master.JuneCount = saved.JuneCount;
+            master.JulyCount = saved.JulyCount;
+            master.AugustCount = saved.AugustCount;
+            master.SeptemberCount = saved.SeptemberCount;
+            master.OctoberCount = saved.OctoberCount;
+            master.NovemberCount = saved.NovemberCount;
+            master.DecemberCount = saved.DecemberCount;
+            master.JanuaryCount = saved.JanuaryCount;
+            master.FebruaryCount = saved.FebruaryCount;
+            master.MarchCount = saved.MarchCount;
+
+            CalculateBudget(master);
+        }
+
         ApplyBudgetFilter();
     }
 
@@ -1759,6 +1888,33 @@
             foreach (var item in programPlans)
             {
                 CalculateBudget(item);
+            }
+
+            decimal totalAllocatedBudget = TotalAllocatedProgramBudget;
+            decimal allottedBudget = selectedSubmission.TotalBudget;
+
+            if (totalAllocatedBudget != allottedBudget)
+            {
+                decimal difference = allottedBudget - totalAllocatedBudget;
+
+                if (difference > 0)
+                {
+                    ShowBudgetPopup(
+                        $"Total allocated budget ₹{totalAllocatedBudget:N0} " +
+                        $"must equal allotted budget ₹{allottedBudget:N0}. " +
+                        $"Remaining to allocate: ₹{difference:N0}.",
+                        false);
+                }
+                else
+                {
+                    ShowBudgetPopup(
+                        $"Total allocated budget ₹{totalAllocatedBudget:N0} " +
+                        $"exceeds allotted budget ₹{allottedBudget:N0} " +
+                        $"by ₹{Math.Abs(difference):N0}.",
+                        false);
+                }
+
+                return;
             }
 
             var request = new ApproveProgramBudgetRequest
@@ -1868,6 +2024,42 @@
 
             foreach (var item in programPlans) CalculateBudget(item);
 
+            var selectedSubmission = _pendingApprovals
+    .FirstOrDefault(x => x.Id == _selectedSubmissionId);
+
+            if (selectedSubmission == null)
+            {
+                ShowBudgetPopup("Please select a submitted budget.", false);
+                return;
+            }
+
+            decimal totalAllocatedBudget = TotalAllocatedProgramBudget;
+            decimal allottedBudget = selectedSubmission.TotalBudget;
+
+            if (totalAllocatedBudget != allottedBudget)
+            {
+                decimal difference = allottedBudget - totalAllocatedBudget;
+
+                if (difference > 0)
+                {
+                    ShowBudgetPopup(
+                        $"Total allocated budget ₹{totalAllocatedBudget:N0} " +
+                        $"must equal allotted budget ₹{allottedBudget:N0}. " +
+                        $"Remaining to allocate: ₹{difference:N0}.",
+                        false);
+                }
+                else
+                {
+                    ShowBudgetPopup(
+                        $"Total allocated budget ₹{totalAllocatedBudget:N0} " +
+                        $"exceeds allotted budget ₹{allottedBudget:N0} " +
+                        $"by ₹{Math.Abs(difference):N0}.",
+                        false);
+                }
+
+                return;
+            }
+
             var request = new ApproveProgramBudgetRequest
             {
                 Programs = programPlans.Select(p => new ApproveProgramAmountDto
@@ -1917,8 +2109,24 @@
         finally { _isValidating = false; }
     }
 
-    private List<string> _availableFYs = new();
-    private string _selectedFY = string.Empty;
+    private List<FinancialYearOption> _availableFYs = new();
+    private int _selectedFYId = 0;
+
+    private sealed class FinancialYearOption
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public DateTime StartDate { get; set; }
+    }
+
+    // Lightweight response shape so this Razor file does not depend on an AnnualBudgeting entity type.
+    private sealed class AnnualBudgetFinancialYearDto
+    {
+        public int FinancialYearId { get; set; }
+    }
+
+    private string SelectedFYName =>
+        _availableFYs.FirstOrDefault(x => x.Id == _selectedFYId)?.Name ?? string.Empty;
 
     private BudgetPlanningView currentView = BudgetPlanningView.ProgramWise;
 
@@ -2021,9 +2229,9 @@
             Console.WriteLine($"Dashboard load error: {ex.Message}");
         }
 
-        if (string.IsNullOrWhiteSpace(_selectedFY))
+        if (_selectedFYId <= 0)
         {
-            Console.WriteLine("Selected FY is empty.");
+            Console.WriteLine("Selected FinancialYearId is not available.");
             return;
         }
 
@@ -2034,7 +2242,7 @@
             $"Budget Load => Role: {role}, " +
             $"StateId: {LoginState.StateId}, " +
             $"RegionId: {LoginState.RegionId}, " +
-            $"FY: {_selectedFY}"
+            $"FYId: {_selectedFYId}, FY: {SelectedFYName}"
         );
 
         try
@@ -2042,7 +2250,7 @@
             // Single role-budget API call for SMM / SMD / RM / RMD.
             using var response =
                 await Http.GetAsync(
-                    $"api/Budget/role-budget?fy={Uri.EscapeDataString(_selectedFY)}"
+                    $"api/Budget/role-budget?fy={_selectedFYId}"
                 );
 
             var body =
@@ -2091,7 +2299,7 @@
             RoleBudgetSource =
                 result.Source ?? string.Empty;
 
-            switch (role)
+            switch (role.Trim().ToUpperInvariant())
             {
                 case "SMM":
                     SMMAllocatedBudget = result.BudgetAmount;
@@ -2099,35 +2307,40 @@
                     break;
 
                 case "SMD":
+                case "SMDO":
                     // Existing validation/save logic uses SMMAllocatedBudget as the
-                    // available-budget variable, so mirror the SMD budget into it.
+                    // common available-budget variable. Mirror the SMDO budget into it.
                     SMDOAllocatedBudget = result.BudgetAmount;
                     SMMAllocatedBudget = result.BudgetAmount;
                     StateTotalBudget = result.BudgetAmount;
                     break;
 
                 case "RM":
+                case "RMM":
                     SMMAllocatedBudget = result.BudgetAmount;
                     StateTotalBudget = result.BudgetAmount;
                     break;
 
                 case "RMD":
+                case "RMDO":
                     SMMAllocatedBudget = result.BudgetAmount;
                     StateTotalBudget = result.BudgetAmount;
                     break;
+
                 case "MO":
-                    // MO budget comes from HeadquarterBudgetAllocation.Amount
-                    // Keep using SMMAllocatedBudget as the common validation/save variable
+                    // MO budget comes from HeadquarterBudgetAllocation.Amount.
+                    // Keep using SMMAllocatedBudget as the common validation/save variable.
                     SMMAllocatedBudget = result.BudgetAmount;
                     StateTotalBudget = result.BudgetAmount;
                     break;
+
                 default:
                     Console.WriteLine($"Unsupported Budget Role: {role}");
                     break;
             }
 
             Console.WriteLine(
-                $"Budget Loaded => Role={role}, FY={_selectedFY}, " +
+                $"Budget Loaded => Role={role}, FYId={_selectedFYId}, FY={SelectedFYName}, " +
                 $"Budget={result.BudgetAmount}, Label={result.BudgetLabel}, Source={result.Source}"
             );
         }
@@ -2303,60 +2516,48 @@
                     ProgramId = item.ProgramId,
 
 
-                    TotalBudget = item.IsChangeAmount
+                    ProgramBudget = item.IsChangeAmount
                         ? item.TotalBudget
                         : item.BudgetAmount,
 
 
                     AprilCount = item.AprilCount,
-                    April = item.AprilBudget,
 
 
                     MayCount = item.MayCount,
-                    May = item.MayBudget,
 
 
                     JuneCount = item.JuneCount,
-                    June = item.JuneBudget,
 
 
                     JulyCount = item.JulyCount,
-                    July = item.JulyBudget,
 
 
                     AugustCount = item.AugustCount,
-                    August = item.AugustBudget,
 
 
                     SeptemberCount = item.SeptemberCount,
-                    September = item.SeptemberBudget,
 
 
                     OctoberCount = item.OctoberCount,
-                    October = item.OctoberBudget,
 
 
                     NovemberCount = item.NovemberCount,
-                    November = item.NovemberBudget,
 
 
                     DecemberCount = item.DecemberCount,
-                    December = item.DecemberBudget,
 
 
                     JanuaryCount = item.JanuaryCount,
-                    January = item.JanuaryBudget,
 
 
                     FebruaryCount = item.FebruaryCount,
-                    February = item.FebruaryBudget,
 
 
                     MarchCount = item.MarchCount,
-                    March = item.MarchBudget,
 
 
-                    // FinancialYear = _selectedFY,
+                    // FinancialYearId = _selectedFYId,
 
                     // Status = "Draft",
 
@@ -2463,10 +2664,11 @@
             // BUILD REQUEST
             // =====================================================
 
-            var request = new SaveBudgetBatchRequest
+            // Anonymous request keeps this page compatible while sending the new FinancialYearId contract.
+            var request = new
             {
-                FinancialYear =
-                    _selectedFY,
+                FinancialYearId =
+                    _selectedFYId,
 
                 ApprovedAmount =
                     availableBudget,
@@ -2484,7 +2686,7 @@
                             ProgramId =
                                 item.ProgramId,
 
-                            TotalBudget =
+                            ProgramBudget =
                                 item.IsChangeAmount
                                     ? item.TotalBudget
                                     : item.BudgetAmount,
@@ -2492,74 +2694,38 @@
                             AprilCount =
                                 item.AprilCount,
 
-                            April =
-                                item.AprilBudget,
-
                             MayCount =
                                 item.MayCount,
-
-                            May =
-                                item.MayBudget,
 
                             JuneCount =
                                 item.JuneCount,
 
-                            June =
-                                item.JuneBudget,
-
                             JulyCount =
                                 item.JulyCount,
-
-                            July =
-                                item.JulyBudget,
 
                             AugustCount =
                                 item.AugustCount,
 
-                            August =
-                                item.AugustBudget,
-
                             SeptemberCount =
                                 item.SeptemberCount,
-
-                            September =
-                                item.SeptemberBudget,
 
                             OctoberCount =
                                 item.OctoberCount,
 
-                            October =
-                                item.OctoberBudget,
-
                             NovemberCount =
                                 item.NovemberCount,
-
-                            November =
-                                item.NovemberBudget,
 
                             DecemberCount =
                                 item.DecemberCount,
 
-                            December =
-                                item.DecemberBudget,
-
                             JanuaryCount =
                                 item.JanuaryCount,
-
-                            January =
-                                item.JanuaryBudget,
 
                             FebruaryCount =
                                 item.FebruaryCount,
 
-                            February =
-                                item.FebruaryBudget,
-
                             MarchCount =
-                                item.MarchCount,
-
-                            March =
-                                item.MarchBudget
+                                item.MarchCount
                         })
                         .ToList()
             };
@@ -2592,7 +2758,7 @@
             }
 
             ShowBudgetPopup(
-                "Budget created successfully.");
+                "Budget submitted successfully.");
 
             // Refresh only after user acknowledges the success popup.
             _refreshOnBudgetPopupClose = true;
@@ -2882,7 +3048,7 @@
 
 
                     item.TotalBudget =
-                        draft.TotalBudget;
+                        draft.ProgramBudget;
 
 
                     item.AprilCount =
@@ -3031,23 +3197,56 @@
     {
         try
         {
-            var budgets =
-                await Http.GetFromJsonAsync<List<DR.AnnualBudgeting>>(
+            var financialYears =
+                await Http.GetFromJsonAsync<List<DR.FinancialYear>>(
+                    "api/FinancialYear/all"
+                ) ?? new();
+
+            // New FY logic:
+            // show only Financial Years for which an Annual Budget exists.
+            var annualBudgets =
+                await Http.GetFromJsonAsync<List<AnnualBudgetFinancialYearDto>>(
                     "api/AnnualBudgeting"
                 ) ?? new();
 
-            _availableFYs = budgets
-                .Where(x => !string.IsNullOrWhiteSpace(x.FY))
-                .Select(x => x.FY)
+            var annualBudgetFinancialYearIds = annualBudgets
+                .Where(x => x.FinancialYearId > 0)
+                .Select(x => x.FinancialYearId)
                 .Distinct()
-                .OrderByDescending(x => x)
+                .ToHashSet();
+
+            _availableFYs = financialYears
+                .Where(x =>
+                    x.IsActive &&
+                    annualBudgetFinancialYearIds.Contains(x.Id) &&
+                    !string.IsNullOrWhiteSpace(x.Name))
+                .OrderByDescending(x => x.StartDate)
+                .Select(x => new FinancialYearOption
+                {
+                    Id = x.Id,
+                    Name = x.Name.Trim(),
+                    StartDate = x.StartDate
+                })
+                .GroupBy(x => x.Id)
+                .Select(x => x.First())
                 .ToList();
 
-            if (_availableFYs.Count > 0 &&
-                !_availableFYs.Contains(_selectedFY))
+            if (_availableFYs.Count > 0)
             {
-                _selectedFY = _availableFYs[0];
+                if (!_availableFYs.Any(x => x.Id == _selectedFYId))
+                {
+                    _selectedFYId = _availableFYs[0].Id;
+                }
             }
+            else
+            {
+                _selectedFYId = 0;
+            }
+
+            Console.WriteLine(
+                $"Financial Years Loaded => Count={_availableFYs.Count}, " +
+                $"SelectedFYId={_selectedFYId}, SelectedFY={SelectedFYName}"
+            );
         }
         catch (Exception ex)
         {
@@ -3056,7 +3255,7 @@
             );
 
             _availableFYs = new();
-            _selectedFY = string.Empty;
+            _selectedFYId = 0;
         }
     }
 }

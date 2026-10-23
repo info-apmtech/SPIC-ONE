@@ -4,6 +4,7 @@
 @inject HttpClient Http
 
 <PageTitle>Sanction Number Sequence</PageTitle>
+
 <div class="sns-page container-fluid">
     <header class="sns-heading">
         <h3>Sanction Number Sequence</h3>
@@ -16,18 +17,20 @@
     }
 
     <section class="sns-panel">
-        <h4>@(EditingId.HasValue ? "Edit Sanction Sequence" : "Add Sanction Sequence")</h4>
+        <h4>Add Sanction Sequence</h4>
+
         <div class="sns-form-grid">
             <div class="sns-field">
-                <label>Sequence Scope <span class="text-danger">*</span></label>
-                <select class="sns-control" value="@Scope" @onchange="OnScopeChanged" disabled="@(Busy || EditingId.HasValue)">
+                <label for="sns-scope">Sequence Scope <span class="text-danger">*</span></label>
+                <select id="sns-scope" class="sns-control" value="@Scope" @onchange="OnScopeChanged" disabled="@Busy">
                     <option value="State">State (SMM)</option>
                     <option value="Region">Region (RM / RMM)</option>
                 </select>
             </div>
+
             <div class="sns-field">
-                <label>State <span class="text-danger">*</span></label>
-                <select class="sns-control" value="@StateId" @onchange="OnStateChanged" disabled="@(Busy || EditingId.HasValue)">
+                <label for="sns-state">State <span class="text-danger">*</span></label>
+                <select id="sns-state" class="sns-control" value="@StateId" @onchange="OnStateChanged" disabled="@Busy">
                     <option value="">Select State</option>
                     @foreach (var item in States)
                     {
@@ -35,11 +38,12 @@
                     }
                 </select>
             </div>
+
             @if (Scope == "Region")
             {
                 <div class="sns-field">
-                    <label>Region <span class="text-danger">*</span></label>
-                    <select class="sns-control" value="@RegionId" @onchange="OnRegionChanged" disabled="@(Busy || EditingId.HasValue || !StateId.HasValue)">
+                    <label for="sns-region">Region <span class="text-danger">*</span></label>
+                    <select id="sns-region" class="sns-control" value="@RegionId" @onchange="OnRegionChanged" disabled="@(Busy || !StateId.HasValue)">
                         <option value="">Select Region</option>
                         @foreach (var item in Regions)
                         {
@@ -48,197 +52,316 @@
                     </select>
                 </div>
             }
+
             <div class="sns-field">
-                <label>State Code <span class="text-danger">*</span></label>
-                <input class="sns-control" maxlength="20" placeholder="e.g. TN" @bind="Form.StateSAPCode" disabled="@Busy" />
+                <label for="sns-state-code">State Code</label>
+                <input id="sns-state-code" class="sns-control" value="@SelectedStateCode" readonly
+                       placeholder="@(StateId.HasValue ? "Code not configured in State master" : "Select State")" />
             </div>
+
             @if (Scope == "Region")
             {
                 <div class="sns-field">
-                    <label>Region Code <span class="text-danger">*</span></label>
-                    <input class="sns-control" maxlength="20" placeholder="e.g. MDUI" @bind="Form.RegionSAPCode" disabled="@Busy" />
+                    <label for="sns-region-code">Region Code</label>
+                    <input id="sns-region-code" class="sns-control" value="@SelectedRegionCode" readonly
+                           placeholder="@(RegionId.HasValue ? "Code not configured in Region master" : "Select Region")" />
                 </div>
             }
-            @if (!EditingId.HasValue)
-            {
-                <div class="sns-field">
-                    <label>@(Scope == "Region" ? "SanctionNumber (Starting Value)" : "SanctionNumberState (Starting Value)") <span class="text-danger">*</span></label>
-                    @if (Scope == "Region")
-                    {
-                        <input type="number" min="0" class="sns-control" @bind="Form.SanctionNumber" disabled="@Busy" />
-                    }
-                    else
-                    {
-                        <input type="number" min="0" class="sns-control" @bind="Form.SanctionNumberState" disabled="@Busy" />
-                    }
-                </div>
-            }
-            else
-            {
-                <div class="sns-field">
-                    <label>Current Counter (Read Only)</label>
-                    <input class="sns-control" value="@(Scope == "Region" ? Form.SanctionNumber.ToString("D4") : Form.SanctionNumberState.ToString("D4"))" disabled />
-                </div>
-            }
+
+            <div class="sns-field">
+                <label for="sns-starting-value">
+                    @(Scope == "Region" ? "SanctionNumber (Starting Value)" : "SanctionNumberState (Starting Value)")
+                    <span class="text-danger">*</span>
+                </label>
+                @if (Scope == "Region")
+                {
+                    <input id="sns-starting-value" type="number" min="0" class="sns-control" @bind="Form.SanctionNumber" disabled="@Busy" />
+                }
+                else
+                {
+                    <input id="sns-starting-value" type="number" min="0" class="sns-control" @bind="Form.SanctionNumberState" disabled="@Busy" />
+                }
+            </div>
         </div>
+
         <div class="sns-actions">
-            <span class="sns-muted">State counters are shared by all regions in that state. Counters cannot be changed after creation.</span>
+            <span class="sns-muted">
+                Codes are maintained in the State and Region masters.
+                State counters are shared by all regions in that state.
+                Counters cannot be changed after creation.
+            </span>
             <div class="sns-buttons">
                 <button class="sns-btn sns-btn-light" type="button" @onclick="ClearForm" disabled="@Busy">Clear</button>
-                <button class="sns-btn sns-btn-primary" type="button" @onclick="SaveAsync" disabled="@Busy">@(Busy ? "Saving..." : EditingId.HasValue ? "Update Sequence" : "Save Sequence")</button>
+                <button class="sns-btn sns-btn-primary" type="button" @onclick="SaveAsync" disabled="@Busy">
+                    @(Saving ? "Saving..." : "Save Sequence")
+                </button>
             </div>
         </div>
     </section>
 
     <section class="sns-panel sns-list">
+        @{
+            var filteredRows = FilteredRows;
+            var totalPages = Math.Max(1, (int)Math.Ceiling(filteredRows.Count / (double)PageSize));
+            var displayPage = Math.Clamp(CurrentPage, 1, totalPages);
+            var visibleRows = filteredRows.Skip((displayPage - 1) * PageSize).Take(PageSize).ToList();
+        }
+
         <div class="sns-list-heading">
             <h4>Existing Sanction Number Sequences</h4>
-            <input type="search" class="sns-search" placeholder="Search State / Region / Code..." @bind="Search" @bind:event="oninput" />
+            <input type="search" class="sns-search" placeholder="Search State / Region / Code..."
+                   aria-label="Search sanction sequences" @bind="Search" @bind:event="oninput" />
         </div>
-        <p class="sns-muted">@FilteredRows.Count record(s)</p>
+        <p class="sns-muted">@filteredRows.Count record(s)</p>
+
         <div class="sns-table-scroll">
             <table class="sns-table">
-                <thead><tr><th>S.No</th><th>Scope</th><th>State</th><th>Region</th><th>State Code</th><th>Region Code</th><th>SanctionNumber</th><th>SanctionNumberState</th><th>Created At</th><th>Updated At</th><th>Action</th></tr></thead>
+                <thead>
+                    <tr>
+                        <th>S.No</th>
+                        <th>Scope</th>
+                        <th>State</th>
+                        <th>Region</th>
+                        <th>State Code</th>
+                        <th>Region Code</th>
+                        <th>SanctionNumber</th>
+                        <th>SanctionNumberState</th>
+                        <th>Created At</th>
+                        <th>Updated At</th>
+                    </tr>
+                </thead>
                 <tbody>
-                    @if (FilteredRows.Count == 0)
+                    @if (filteredRows.Count == 0)
                     {
-                        <tr><td colspan="11" class="sns-empty">@(Busy ? "Loading..." : "No sanction sequences found.")</td></tr>
+                        <tr><td colspan="10" class="sns-empty">@(Busy ? "Loading..." : "No sanction sequences found.")</td></tr>
                     }
-                    @foreach (var entry in VisibleRows.Select((value, index) => new { value, index }))
+                    @foreach (var entry in visibleRows.Select((value, index) => new { value, index }))
                     {
                         var row = entry.value;
                         <tr @key="row.Id">
-                            <td>@((CurrentPage - 1) * PageSize + entry.index + 1)</td>
+                            <td>@((displayPage - 1) * PageSize + entry.index + 1)</td>
                             <td><span class="sns-pill">@(row.RegionId.HasValue ? "Region" : "State")</span></td>
-                            <td>@LookupName(States, row.StateId)</td>
-                            <td>@(row.RegionId.HasValue ? LookupRegionName(row.RegionId.Value) : "-")</td>
-                            <td>@row.StateSAPCode</td>
-                            <td>@(row.RegionSAPCode ?? "-")</td>
+                            <td>@DisplayName(row.StateName, row.StateId)</td>
+                            <td>@(row.RegionId.HasValue ? DisplayName(row.RegionName, row.RegionId.Value) : "-")</td>
+                            <td>@DisplayCode(row.StateCode)</td>
+                            <td>@(row.RegionId.HasValue ? DisplayCode(row.RegionCode) : "-")</td>
                             <td>@(row.RegionId.HasValue ? row.SanctionNumber.ToString("D4") : "-")</td>
                             <td>@(!row.RegionId.HasValue ? row.SanctionNumberState.ToString("D4") : "-")</td>
                             <td>@row.CreatedAt.ToString("dd MMM yyyy")</td>
                             <td>@(row.UpdatedAt?.ToString("dd MMM yyyy") ?? "-")</td>
-                            <td><button type="button" class="sns-edit" title="Edit Codes" @onclick="() => EditAsync(row)" disabled="@Busy">✎ Edit</button></td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
+
         <div class="sns-pagination">
-            <div class="sns-buttons"><span>Items Per Page</span><select class="sns-page-size" value="@PageSize" @onchange="SetPageSize"><option value="10">10</option><option value="16">16</option><option value="25">25</option><option value="50">50</option></select></div>
-            <div class="sns-buttons"><button class="sns-btn sns-btn-light" disabled="@(CurrentPage <= 1)" @onclick="() => CurrentPage--">‹</button><span>@CurrentPage / @TotalPages</span><button class="sns-btn sns-btn-light" disabled="@(CurrentPage >= TotalPages)" @onclick="() => CurrentPage++">›</button></div>
+            <div class="sns-buttons">
+                <label for="sns-page-size">Items Per Page</label>
+                <select id="sns-page-size" class="sns-page-size" value="@PageSize" @onchange="SetPageSize">
+                    <option value="10">10</option>
+                    <option value="16">16</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                </select>
+            </div>
+            <div class="sns-buttons">
+                <button type="button" class="sns-btn sns-btn-light" aria-label="Previous page"
+                        disabled="@(displayPage <= 1)" @onclick="() => CurrentPage = Math.Max(1, displayPage - 1)">
+                    ‹
+                </button>
+                <span>@displayPage / @totalPages</span>
+                <button type="button" class="sns-btn sns-btn-light" aria-label="Next page"
+                        disabled="@(displayPage >= totalPages)" @onclick="() => CurrentPage = Math.Min(totalPages, displayPage + 1)">
+                    ›
+                </button>
+            </div>
         </div>
     </section>
 </div>
 
 @code {
     private const string Api = "api/SanctionNumberSequence";
+    private const string LookupApi = Api;
+
     private List<SanctionNumberSequenceDto> Rows = new();
     private List<LookupItem> States = new();
     private List<LookupItem> Regions = new();
-    private readonly Dictionary<int, List<LookupItem>> RegionsByState = new();
     private CreateSanctionNumberSequenceDto Form = new();
-    private int? StateId, RegionId, EditingId;
-    private string Scope = "State", Search = "", Message = "";
-    private bool Busy, Success;
+
+    private int? StateId, RegionId;
+    private string Scope = "State", Message = "";
+    private bool Busy, Saving, Success;
     private int PageSize = 16, CurrentPage = 1;
-    private sealed class LookupItem { public int Id { get; set; } public string Name { get; set; } = ""; }
-    private static int? ParseId(object? value) => int.TryParse(value?.ToString(), out var n) && n > 0 ? n : null;
-    private static string LookupName(List<LookupItem> list, int id) => list.FirstOrDefault(x => x.Id == id)?.Name ?? $"Unknown ({id})";
-    private string LookupRegionName(int id) => RegionsByState.Values.SelectMany(x => x).FirstOrDefault(x => x.Id == id)?.Name ?? $"Unknown ({id})";
-    private List<SanctionNumberSequenceDto> FilteredRows => Rows.Where(x => string.IsNullOrWhiteSpace(Search) ||
-        new[] { LookupName(States, x.StateId), x.RegionId.HasValue ? LookupRegionName(x.RegionId.Value) : "", x.StateSAPCode, x.RegionSAPCode ?? "", x.RegionId.HasValue ? "Region" : "State" }
-            .Any(v => v.Contains(Search, StringComparison.OrdinalIgnoreCase))).ToList();
-    private int TotalPages => Math.Max(1, (int)Math.Ceiling(FilteredRows.Count / (double)PageSize));
-    private IEnumerable<SanctionNumberSequenceDto> VisibleRows => FilteredRows.Skip((Math.Min(CurrentPage, TotalPages) - 1) * PageSize).Take(PageSize);
+    private string search = "";
+
+    private string Search
+    {
+        get => search;
+        set { search = value ?? ""; CurrentPage = 1; }
+    }
+
+    // These endpoints must return Code from the corresponding master table.
+    private sealed class LookupItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Code { get; set; }
+    }
+
+    private string SelectedStateCode => States.FirstOrDefault(x => x.Id == StateId)?.Code ?? "";
+    private string SelectedRegionCode => Scope == "Region"
+        ? Regions.FirstOrDefault(x => x.Id == RegionId)?.Code ?? ""
+        : "";
+
+    private static int? ParseId(object? value) =>
+        int.TryParse(value?.ToString(), out var n) && n > 0 ? n : null;
+
+    private static string DisplayName(string? name, int id) =>
+        string.IsNullOrWhiteSpace(name) ? $"Unknown ({id})" : name;
+
+    private static string DisplayCode(string? code) =>
+        string.IsNullOrWhiteSpace(code) ? "-" : code;
+
+    private List<SanctionNumberSequenceDto> FilteredRows => Rows.Where(x =>
+        string.IsNullOrWhiteSpace(Search) ||
+        new[]
+        {
+            DisplayName(x.StateName, x.StateId),
+            x.RegionId.HasValue ? DisplayName(x.RegionName, x.RegionId.Value) : "",
+            x.StateCode ?? "", x.RegionCode ?? "", x.RegionId.HasValue ? "Region" : "State"
+        }.Any(v => v.Contains(Search.Trim(), StringComparison.OrdinalIgnoreCase))).ToList();
+
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
     private async Task LoadAsync()
     {
-        Busy = true; Message = "";
+        Busy = true;
+        Message = "";
         try
         {
-            // Reuses the working state/region master endpoints from RMDHQMapping.
-            States = await Http.GetFromJsonAsync<List<LookupItem>>("api/RMDHQMapping/states") ?? new();
+            States = await Http.GetFromJsonAsync<List<LookupItem>>($"{LookupApi}/states") ?? new();
             Rows = await Http.GetFromJsonAsync<List<SanctionNumberSequenceDto>>(Api) ?? new();
-            foreach (var stateId in Rows.Select(x => x.StateId).Where(x => x > 0).Distinct())
-                await EnsureRegionsAsync(stateId);
-            CurrentPage = Math.Min(CurrentPage, TotalPages);
+            CurrentPage = 1;
         }
         catch (Exception ex) { Fail($"Unable to load sanction sequences: {ex.Message}"); }
         finally { Busy = false; }
     }
-    private async Task EnsureRegionsAsync(int stateId)
+
+    private async Task OnScopeChanged(ChangeEventArgs e)
     {
-        var list = await Http.GetFromJsonAsync<List<LookupItem>>($"api/RMDHQMapping/regions/{stateId}") ?? new();
-        RegionsByState[stateId] = list;
-    }
-    private void OnScopeChanged(ChangeEventArgs e)
-    {
+        if (Busy) return;
         Scope = e.Value?.ToString() == "Region" ? "Region" : "State";
-        RegionId = null; Form.RegionId = null; Form.RegionSAPCode = null;
-        Form.SanctionNumber = 0; Form.SanctionNumberState = 0; Message = "";
+        RegionId = null;
+        Form.RegionId = null;
+        Regions = new();
+        Form.SanctionNumber = 0;
+        Form.SanctionNumberState = 0;
+        Message = "";
+        if (Scope == "Region" && StateId.HasValue)
+            await LoadRegionsAsync(StateId.Value);
     }
+
     private async Task OnStateChanged(ChangeEventArgs e)
     {
-        StateId = ParseId(e.Value); Form.StateId = StateId ?? 0;
-        RegionId = null; Form.RegionId = null; Regions.Clear(); Message = "";
-        if (!StateId.HasValue) return;
-        Busy = true;
-        try { await EnsureRegionsAsync(StateId.Value); Regions = RegionsByState[StateId.Value]; }
-        catch (Exception ex) { Fail(ex.Message); }
-        finally { Busy = false; }
-    }
-    private void OnRegionChanged(ChangeEventArgs e) { RegionId = ParseId(e.Value); Form.RegionId = RegionId; Message = ""; }
-    private async Task EditAsync(SanctionNumberSequenceDto row)
-    {
-        EditingId = row.Id; Scope = row.RegionId.HasValue ? "Region" : "State";
-        StateId = row.StateId; RegionId = row.RegionId;
-        Form = new CreateSanctionNumberSequenceDto
-        {
-            StateId = row.StateId,
-            RegionId = row.RegionId,
-            StateSAPCode = row.StateSAPCode,
-            RegionSAPCode = row.RegionSAPCode,
-            SanctionNumber = row.SanctionNumber,
-            SanctionNumberState = row.SanctionNumberState
-        };
+        if (Busy) return;
+        StateId = ParseId(e.Value);
+        Form.StateId = StateId ?? 0;
+        RegionId = null;
+        Form.RegionId = null;
+        Regions = new();
         Message = "";
-        if (RegionsByState.TryGetValue(row.StateId, out var list)) { Regions = list; return; }
-        Busy = true;
-        try { await EnsureRegionsAsync(row.StateId); Regions = RegionsByState[row.StateId]; }
-        catch (Exception ex) { Fail(ex.Message); }
-        finally { Busy = false; }
+        if (Scope == "Region" && StateId.HasValue)
+            await LoadRegionsAsync(StateId.Value);
     }
-    private void ClearForm()
+
+    private async Task LoadRegionsAsync(int stateId)
     {
-        Form = new(); StateId = RegionId = EditingId = null; Scope = "State"; Regions.Clear(); Message = "";
-    }
-    private void SetPageSize(ChangeEventArgs e)
-    { if (int.TryParse(e.Value?.ToString(), out var size) && size > 0) PageSize = size; CurrentPage = 1; }
-    private void Fail(string text) { Success = false; Message = text; }
-    private async Task SaveAsync()
-    {
-        Message = "";
-        if (!StateId.HasValue) { Fail("Please select a State."); return; }
-        if (string.IsNullOrWhiteSpace(Form.StateSAPCode)) { Fail("State Code is required."); return; }
-        if (Scope == "Region" && !RegionId.HasValue) { Fail("Please select a Region."); return; }
-        if (Scope == "Region" && string.IsNullOrWhiteSpace(Form.RegionSAPCode)) { Fail("Region Code is required."); return; }
-        Form.StateId = StateId.Value;
-        Form.RegionId = Scope == "Region" ? RegionId : null;
-        if (Scope == "State") { Form.RegionSAPCode = null; Form.SanctionNumber = 0; }
-        else Form.SanctionNumberState = 0;
         Busy = true;
         try
         {
-            using var result = EditingId.HasValue
-                ? await Http.PutAsJsonAsync($"{Api}/{EditingId.Value}", new UpdateSanctionNumberSequenceDto { StateSAPCode = Form.StateSAPCode, RegionSAPCode = Form.RegionSAPCode })
-                : await Http.PostAsJsonAsync(Api, Form);
-            if (!result.IsSuccessStatusCode) { Fail(await result.Content.ReadAsStringAsync()); return; }
-            ClearForm(); Rows = await Http.GetFromJsonAsync<List<SanctionNumberSequenceDto>>(Api) ?? new();
-            Success = true; Message = "Sanction number sequence saved successfully.";
+            Regions = await Http.GetFromJsonAsync<List<LookupItem>>($"{LookupApi}/regions/{stateId}") ?? new();
         }
-        catch (Exception ex) { Fail(ex.Message); }
+        catch (Exception ex) { Fail($"Unable to load regions: {ex.Message}"); }
         finally { Busy = false; }
+    }
+
+    private void OnRegionChanged(ChangeEventArgs e)
+    {
+        if (Busy) return;
+        RegionId = ParseId(e.Value);
+        Form.RegionId = RegionId;
+        Message = "";
+    }
+
+    private void ClearForm()
+    {
+        Form = new();
+        StateId = RegionId = null;
+        Scope = "State";
+        Regions = new();
+        Message = "";
+    }
+
+    private void SetPageSize(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var size) && new[] { 10, 16, 25, 50 }.Contains(size))
+            PageSize = size;
+        CurrentPage = 1;
+    }
+
+    private void Fail(string text) { Success = false; Message = text; }
+
+    private async Task SaveAsync()
+    {
+        if (Busy) return;
+        Message = "";
+        if (!StateId.HasValue || !States.Any(x => x.Id == StateId.Value))
+        { Fail("Please select a valid State."); return; }
+        if (string.IsNullOrWhiteSpace(SelectedStateCode))
+        { Fail("State Code is missing. Update the selected State master, then reload this page."); return; }
+        if (Scope == "Region")
+        {
+            if (!RegionId.HasValue || !Regions.Any(x => x.Id == RegionId.Value))
+            { Fail("Please select a valid Region for the selected State."); return; }
+            if (string.IsNullOrWhiteSpace(SelectedRegionCode))
+            { Fail("Region Code is missing. Update the selected Region master, then reload this page."); return; }
+        }
+        if ((Scope == "Region" ? Form.SanctionNumber : Form.SanctionNumberState) < 0)
+        { Fail("Starting value cannot be negative."); return; }
+
+        Form.StateId = StateId.Value;
+        Form.RegionId = Scope == "Region" ? RegionId : null;
+        if (Scope == "State") Form.SanctionNumber = 0;
+        else Form.SanctionNumberState = 0;
+
+        Busy = true;
+        Saving = true;
+        try
+        {
+            using var result = await Http.PostAsJsonAsync(Api, Form);
+            if (!result.IsSuccessStatusCode)
+            {
+                var error = await result.Content.ReadAsStringAsync();
+                Fail(string.IsNullOrWhiteSpace(error) ? "Unable to save sanction sequence." : error);
+                return;
+            }
+
+            ClearForm();
+            Success = true;
+            Message = "Sanction number sequence saved successfully.";
+            try
+            {
+                Rows = await Http.GetFromJsonAsync<List<SanctionNumberSequenceDto>>(Api) ?? new();
+                CurrentPage = 1;
+            }
+            catch
+            {
+                // The POST succeeded. Do not report it as a failed save.
+                Message = "Sanction number sequence saved successfully. The list could not be refreshed; reload this page.";
+            }
+        }
+        catch (Exception ex) { Fail($"Unable to save sanction sequence: {ex.Message}"); }
+        finally { Busy = false; Saving = false; }
     }
 }
