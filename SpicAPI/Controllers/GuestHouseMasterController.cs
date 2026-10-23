@@ -400,8 +400,27 @@ namespace SpicAPI.Controllers
 			if (await _db.GuestHouseRooms.AnyAsync(r => r.GuestHouseId == id))
 				return Conflict(new { Success = false, Message = "Cannot delete this Guest House because it has rooms mapped to it. Delete or deactivate its rooms first." });
 
+			// Everything below is cascade-deleted by the database, so it must be refused here rather than silently lost.
+			if (await _db.GuestHouseBookings.AnyAsync(b => b.GuestHouseId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Guest House because it has bookings. Deactivate it instead." });
+			if (await _db.GuestHouseRoomAllocations.AnyAsync(a => a.GuestHouseId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Guest House because it has room allocations. Deactivate it instead." });
+			if (await _db.SdwaCompanyGuestHouses.AnyAsync(m => m.GuestHouseId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Guest House because it is mapped to one or more SDWA companies. Remove those mappings first." });
+			if (await _db.GuestHouseImages.AnyAsync(i => i.GuestHouseId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Guest House because it has images. Remove its images first." });
+			if (await _db.Set<GuestHouseCancellationPolicy>().AnyAsync(p => p.GuestHouseId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Guest House because it has cancellation policies configured. Deactivate it instead." });
+
 			_db.GuestHouses.Remove(house);
-			await _db.SaveChangesAsync();
+			try
+			{
+				await _db.SaveChangesAsync();
+			}
+			catch (DbUpdateException)
+			{
+				return Conflict(new { Success = false, Message = "Cannot delete this Guest House because other records still depend on it. Deactivate it instead." });
+			}
 			return Ok(new { Success = true, Message = "Guest House deleted successfully." });
 		}
 
@@ -578,7 +597,14 @@ namespace SpicAPI.Controllers
 				return Conflict(new { Success = false, Message = "Cannot delete this Room Type because it has rooms mapped to it. Unlink or delete those rooms first." });
 
 			_db.GuestHouseRoomTypes.Remove(roomType);
-			await _db.SaveChangesAsync();
+			try
+			{
+				await _db.SaveChangesAsync();
+			}
+			catch (DbUpdateException)
+			{
+				return Conflict(new { Success = false, Message = "Cannot delete this Room Type because other records still depend on it. Unlink or delete those rooms first." });
+			}
 			return Ok(new { Success = true, Message = "Room Type deleted successfully." });
 		}
 
@@ -714,8 +740,24 @@ namespace SpicAPI.Controllers
 			if (room == null)
 				return NotFound(new { Success = false, Message = "Room not found." });
 
+			// Bookings, allocations and availability reference the room with a cascading FK, so deleting it would
+			// wipe bookings and their guests, documents, payments, refunds, cancellations and bills. Refuse instead.
+			if (await _db.GuestHouseBookings.AnyAsync(b => b.GuestHouseRoomId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Room because it has bookings. Deactivate it instead." });
+			if (await _db.GuestHouseRoomAllocations.AnyAsync(a => a.GuestHouseRoomId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Room because it has room allocations. Deactivate it instead." });
+			if (await _db.GuestHouseRoomAvailabilities.AnyAsync(a => a.GuestHouseRoomId == id))
+				return Conflict(new { Success = false, Message = "Cannot delete this Room because it has availability records. Deactivate it instead." });
+
 			_db.GuestHouseRooms.Remove(room);
-			await _db.SaveChangesAsync();
+			try
+			{
+				await _db.SaveChangesAsync();
+			}
+			catch (DbUpdateException)
+			{
+				return Conflict(new { Success = false, Message = "Cannot delete this Room because other records still depend on it. Deactivate it instead." });
+			}
 			return Ok(new { Success = true, Message = "Room deleted successfully." });
 		}
 
