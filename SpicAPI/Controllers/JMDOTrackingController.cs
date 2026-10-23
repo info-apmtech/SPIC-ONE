@@ -145,6 +145,32 @@ namespace SpicAPI.Controllers
             return Ok(await MapAsync(session));
         }
 
+        // GET /api/JMDOTracking/mine/today
+        // Every one of the caller's own sessions that started today, oldest first - a JMDO can
+        // Start/Stop Live Tracking more than once in a day (separate site visits), and each one is
+        // its own session/route; MineActive/MineLatest only ever surface a single session, so
+        // MarkAttendance's session picker uses this to let the JMDO switch between all of them.
+        [HttpGet("mine/today")]
+        public async Task<IActionResult> MineToday()
+        {
+            if (!IsJmdo())
+                return Forbid403("Only JMDO users track field visits here.");
+
+            var userId = CurrentUserId();
+            var today = DateTime.Today;
+            var sessions = await _db.JMDOTrackingSessions
+                .AsNoTracking()
+                .Where(s => s.UserId == userId && s.StartTime >= today)
+                .OrderBy(s => s.StartTime)
+                .ToListAsync();
+
+            var result = new List<JMDOTrackingSessionDto>(sessions.Count);
+            foreach (var session in sessions)
+                result.Add(await MapAsync(session));
+
+            return Ok(result);
+        }
+
         // POST /api/JMDOTracking/sessions/{sessionId}/points
         [HttpPost("sessions/{sessionId:int}/points")]
         public async Task<IActionResult> AddPoint(int sessionId, [FromBody] JMDOTrackingPointUpsertDto dto)

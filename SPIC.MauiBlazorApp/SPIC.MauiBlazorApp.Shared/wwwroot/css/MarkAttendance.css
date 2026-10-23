@@ -191,6 +191,49 @@
     color: #000;
 }
 
+/* Read-only confirmation shown in place of the editable form once today's attendance already
+   exists - same visual language as .ma-success-banner, with an explicit "Edit" escape hatch for a
+   genuine correction instead of always re-showing the full form. */
+.ma-attendance-done {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+}
+
+.ma-attendance-done-icon {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #15803d;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+}
+
+.ma-attendance-done-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ma-attendance-done-title {
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: #15803d;
+}
+
+.ma-attendance-done-sub {
+    margin-top: 2px;
+    font-size: 0.85rem;
+    color: #000;
+}
+
 .ma-stats-row {
     display: flex;
     border: 1px solid #bbf7d0;
@@ -242,7 +285,11 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    flex-wrap: wrap;
+    /* Always one line: title/subtitle on the left, the timer badge pinned to the right - this used
+       to be flex-wrap: wrap, which (with no Stop button to share the right-hand side in the
+       Tracking Stopped state) dropped the badge onto its own line below instead of keeping it
+       beside the title. The left side truncates instead of wrapping if it ever runs out of room. */
+    flex-wrap: nowrap;
     padding-bottom: 1.1rem;
     margin-bottom: 1.1rem;
     border-bottom: 1px solid #f1f5f9;
@@ -253,6 +300,12 @@
     align-items: center;
     gap: 14px;
     min-width: 0;
+    flex: 1 1 auto;
+}
+
+.ma-tracking-left-text {
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 .ma-tracking-icon {
@@ -275,6 +328,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
 }
 
 .ma-tracking-dot {
@@ -282,12 +336,16 @@
     height: 8px;
     border-radius: 50%;
     background: #22c55e;
+    flex-shrink: 0;
 }
 
 .ma-tracking-sub {
     font-size: 0.82rem;
     color: #000;
     margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .ma-tracking-actions {
@@ -295,6 +353,11 @@
     align-items: center;
     gap: 10px;
     flex-shrink: 0;
+    /* Keeps this pinned to the right even when it wraps onto its own line (e.g. the "Tracking
+       Stopped" state, where there's no Stop button and the timer badge is the only child) -
+       justify-content: space-between on the parent only right-aligns a lone wrapped item's line
+       if there's another item on that same line to space against. */
+    margin-left: auto;
 }
 
 .ma-btn-stop {
@@ -369,14 +432,68 @@
     box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.22), 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
+/* ---------- Today's sessions picker ---------- */
+.ma-session-picker {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 0.85rem 1.1rem;
+    border-top: 1px solid #e5e7eb;
+    -webkit-overflow-scrolling: touch;
+}
+
+.ma-session-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    color: #374151;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+    .ma-session-chip.active {
+        background: #1b5e20;
+        border-color: #1b5e20;
+        color: #fff;
+    }
+
+.ma-session-chip-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    flex-shrink: 0;
+}
+
 /* ---------- Route playback controls ---------- */
+/* Two stacked rows (play+scrubber, then time+speed) rather than one wide row - a single row with
+   a play button, scrubber, time label and 3 speed buttons doesn't fit narrow phone widths and was
+   pushing the 4x button off-screen. */
 .ma-playback-bar {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    gap: 10px;
     padding: 0.85rem 1.1rem;
     border-top: 1px solid #e5e7eb;
     background: #fafafa;
+}
+
+.ma-playback-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.ma-playback-row-meta {
+    justify-content: space-between;
 }
 
 .ma-playback-btn {
@@ -413,8 +530,6 @@
     color: #6b7280;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    min-width: 92px;
-    text-align: right;
 }
 
 .ma-playback-speed {
@@ -545,6 +660,15 @@
     flex-wrap: wrap;
 }
 
+/* Dot + day date, grouped so they stay on one line together instead of the dot wrapping onto its
+   own line above the date (the bug this file used to have when they were separate flex siblings). */
+.ma-weekly-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
 .ma-weekly-dot {
     flex-shrink: 0;
     width: 10px;
@@ -557,6 +681,22 @@
     min-width: 150px;
     font-weight: 600;
     color: #111827;
+}
+
+/* Status / hours / "- N tasks started" / km, grouped so they wrap together as a unit, in their
+   own contained flex row, instead of wrapping unpredictably alongside the dot/day/tasks line. */
+.ma-weekly-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ma-weekly-hours,
+.ma-weekly-locations {
+    color: #374151;
 }
 
 .ma-weekly-sep {
@@ -628,13 +768,23 @@
         align-items: flex-start;
     }
 
+    .ma-weekly-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
     .ma-weekly-day {
         min-width: 0;
-        flex-basis: 100%;
+    }
+
+    .ma-weekly-meta {
+        padding-left: 20px; /* align under the day text, past the dot */
+        width: 100%;
     }
 
     .ma-weekly-km {
-        margin-left: 20px;
+        margin-left: auto;
     }
 
     .ma-success-banner {
@@ -660,11 +810,6 @@
 
     .ma-tracking-card {
         padding: 1rem 1.1rem 1.1rem;
-    }
-
-    .ma-tracking-actions {
-        width: 100%;
-        justify-content: space-between;
     }
 
     .ma-btn-stop,

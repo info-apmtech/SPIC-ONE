@@ -26,13 +26,25 @@
                     <span class="fd-status-badge @(IsOnDuty ? "fd-status-onduty" : "fd-status-offduty")">@(IsOnDuty ? "On Duty" : "Off Duty")</span>
                 </div>
                 <p class="fd-role-line">@RoleRegionLine</p>
-                <p class="fd-title-line">@TitleLine</p>
             </div>
         </div>
 
-        <button type="button" class="fd-btn fd-btn-primary fd-mark-attendance" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
-            <i class="bi bi-geo-alt-fill"></i> Mark Attendance
-        </button>
+        @if (_hasAttendanceToday)
+        {
+            <div class="fd-attendance-done">
+                <i class="bi bi-check-circle-fill"></i>
+                <div class="fd-attendance-done-text">
+                    <span class="fd-attendance-done-title">Attendance marked today</span>
+                    <span class="fd-attendance-done-sub">@AttendanceStatusText@(_todayAttendance?.AttendanceUpdatedAt is { } at ? $" · {at:h:mm tt}" : "")</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <button type="button" class="fd-btn fd-btn-primary fd-mark-attendance" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
+                <i class="bi bi-geo-alt-fill"></i> Mark Attendance
+            </button>
+        }
     </div>
 
     <!-- Stat cards -->
@@ -305,6 +317,7 @@
     private bool _isLoadingTracking = true;
     private bool _startingTracking;
     private bool _hasAttendanceToday;
+    private JMDOAttendanceDto? _todayAttendance;
 
     // Pure UI ticker so TrackingDuration (computed from _activeSession.StartTime) visibly counts
     // up - the loop service posting points on its own 60s cadence wouldn't otherwise trigger a
@@ -483,7 +496,13 @@
         }
     }
 
-    private string TitleLine => string.IsNullOrWhiteSpace(LoginState.DesignationName) ? "—" : LoginState.DesignationName!;
+    private string AttendanceStatusText => _todayAttendance?.AttendanceStatus switch
+    {
+        JMDOAttendanceStatus.HalfDay => "Half Day",
+        JMDOAttendanceStatus.OnLeave => "On Leave",
+        JMDOAttendanceStatus.Absent => "Absent",
+        _ => "Present"
+    };
 
     // ---------------------------------------------------------------------------------------
     // Stat cards + "Continue where you left off": the same two endpoints TasksAllocation.razor's
@@ -573,6 +592,7 @@
         {
             AttendanceState.IsOnDuty = today?.DutyStatus == JMDODutyStatus.OnDuty;
             _hasAttendanceToday = today is not null;
+            _todayAttendance = today;
         }
 
         await trackingTask;
