@@ -73,6 +73,29 @@ namespace SpicAPI.Controllers
 
         private string CurrentUser => CurrentUserId;
 
+        // ============================================================
+        // EXPENSE INFORMATION MASTER
+        // GET: api/CSR1/expense-informations
+        // Keeps ExpenseInformation untouched; CSR-1 reads the master directly.
+        // ============================================================
+        [HttpGet("expense-informations")]
+        public async Task<IActionResult> GetExpenseInformations()
+        {
+            var expenses = await _db.Set<ExpenseInformation>()
+                .AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Id)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.Name,
+                    x.IsActive
+                })
+                .ToListAsync();
+
+            return Ok(expenses);
+        }
+
         private static List<int> CleanIds(IEnumerable<int>? ids) =>
             (ids ?? Enumerable.Empty<int>())
                 .Where(x => x > 0)
@@ -221,8 +244,6 @@ namespace SpicAPI.Controllers
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
-
-            var saveStage = "Request validation";
 
             try
             {
@@ -423,8 +444,6 @@ namespace SpicAPI.Controllers
                 // SAVE CSR1
                 // =====================================================
 
-                saveStage = "CSR1 main record";
-
                 var created =
                     await _csr1Repo.CreateAsync(model);
 
@@ -449,8 +468,6 @@ namespace SpicAPI.Controllers
                 // One row per Focus section. CropId/ProductId are PostgreSQL int[].
                 // =====================================================
 
-                saveStage = "CSR1Products1";
-
                 await _csr1Products1Repo.CreateAsync(new CSR1Products1
                 {
                     CSR1Id = csr1Id,
@@ -461,8 +478,6 @@ namespace SpicAPI.Controllers
 
                 if (crop2Ids.Count > 0 && product2Ids.Count > 0)
                 {
-                    saveStage = "CSR1Products2";
-
                     await _csr1Products2Repo.CreateAsync(new CSR1Products2
                     {
                         CSR1Id = csr1Id,
@@ -474,8 +489,6 @@ namespace SpicAPI.Controllers
 
                 if (crop3Ids.Count > 0 && product3Ids.Count > 0)
                 {
-                    saveStage = "CSR1Products3";
-
                     await _csr1Products3Repo.CreateAsync(new CSR1Products3
                     {
                         CSR1Id = csr1Id,
@@ -511,40 +524,17 @@ namespace SpicAPI.Controllers
                     }
                 });
             }
-            catch (DbUpdateException ex)
-            {
-                var databaseError = ex.GetBaseException().Message;
-
-                Console.WriteLine(
-                    $"[CSR1 SAVE] Stage: {saveStage}; EF Error: {ex.Message}; Database Error: {databaseError}");
-
-                return StatusCode(
-                    StatusCodes.Status500InternalServerError,
-                    new
-                    {
-                        message = "Error while saving CSR1",
-                        stage = saveStage,
-                        error = ex.Message,
-                        innerError = ex.InnerException?.Message,
-                        databaseError
-                    });
-            }
             catch (Exception ex)
             {
-                var baseError = ex.GetBaseException().Message;
-
-                Console.WriteLine(
-                    $"[CSR1 SAVE] Stage: {saveStage}; Error: {ex.Message}; Base Error: {baseError}");
-
                 return StatusCode(
                     StatusCodes.Status500InternalServerError,
                     new
                     {
-                        message = "Error while saving CSR1",
-                        stage = saveStage,
-                        error = ex.Message,
-                        innerError = ex.InnerException?.Message,
-                        databaseError = baseError
+                        message =
+                            "Error while saving CSR1",
+
+                        error =
+                            ex.Message
                     });
             }
         }
