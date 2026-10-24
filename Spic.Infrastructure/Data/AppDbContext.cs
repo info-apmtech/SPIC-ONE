@@ -951,6 +951,7 @@ namespace Spic.Infrastructure.Data
         public DbSet<CSR1Products1> CSR1Products1 { get; set; }
         public DbSet<CSR1Products2> CSR1Products2 { get; set; }
         public DbSet<CSR1Products3> CSR1Products3 { get; set; }
+        public DbSet<CSR1Expenses> CSR1Expenses { get; set; }
         public DbSet<CSR1ApprovalDetails> CSR1ApprovalDetails { get; set; }
         public DbSet<ProgramStateBudget> ProgramStateBudgets { get; set; }
         public DbSet<ProgramStateMapping> ProgramStateMappings { get; set; }

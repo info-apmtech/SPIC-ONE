@@ -120,22 +120,22 @@
                                         </select>
                                     </label>
                                     <label class="csr-inline-field">
-    Responsible Person
+                                        Responsible Person
 
-    <select class="form-select"
-            @bind="reviewRequest.CSR1.ResponsiblePersonId">
+                                        <select class="form-select"
+                                                @bind="reviewRequest.CSR1.ResponsiblePersonId">
 
-        <option value="">Select Person</option>
+                                            <option value="">Select Person</option>
 
-        @foreach (var e in reviewEmployees)
-        {
-            <option value="@e.UserId">
-                @e.Name - @e.UserName
-            </option>
-        }
+                                            @foreach (var e in reviewEmployees)
+                                            {
+                                                <option value="@e.UserId">
+                                                    @e.Name - @e.UserName
+                                                </option>
+                                            }
 
-    </select>
-</label>
+                                        </select>
+                                    </label>
                                     <label class="csr-inline-field">
                                         Program Date
                                         <input type="date" class="form-control" @bind="reviewRequest.CSR1.CSR1Date" @bind:format="yyyy-MM-dd" min="@ReviewMinDate" max="@ReviewMaxDate" />
@@ -163,53 +163,24 @@
                     </section>
                     <section class="csr-pd-section">
                         <h3>Expense Breakdown</h3>
-                        @if ((CanValidate || CanApprove) && reviewRequest != null)
+                        @if (reviewRequest != null)
                         {
                             <div class="csr-pd-panel csr-inline-edit-grid">
-                                <label class="csr-inline-field">
-                                    Printing & Stationery
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.PrintingAndStationery" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Publicity Material
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.PublicityMaterial" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Stage Arrangements
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.StageArrangements" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Service Charges - LCA
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.ServiceChargesLCA" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Transport / Rent
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.TransportRent" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Jeep Running Expenses
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.JeepRunningExpenses" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Refreshments
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Refreshments" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Inputs
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Inputs" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Photography
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Photography" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Compliments
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Compliments" @bind:event="oninput" />
-                                </label>
-                                <label class="csr-inline-field">
-                                    Others
-                                    <input type="number" class="form-control" min="0" step="0.01" @bind="reviewRequest.CSR1.Others" @bind:event="oninput" />
-                                </label>
+                                @foreach (var expense in reviewExpenseInformations)
+                                {
+                                    var expenseRow = GetReviewExpense(expense.Id);
+                                    <label class="csr-inline-field">
+                                        @expense.Name
+                                        <input type="number"
+                                               class="form-control"
+                                               min="0"
+                                               step="0.01"
+                                               value="@expenseRow.ExpenseAmount"
+                                               @oninput="e => UpdateReviewExpense(expense.Id, e.Value?.ToString())"
+                                               disabled="@(!(CanValidate || CanApprove))" />
+                                    </label>
+                                }
+
                                 <div class="csr-review-total">
                                     <strong>Total Expenses: @FormatAmount(ReviewTotalExpense)</strong>
                                     <span>Remaining Budget: @FormatAmount(details.Budget - ReviewTotalExpense)</span>
@@ -218,24 +189,7 @@
                         }
                         else
                         {
-                            <div class="csr-pd-panel csr-pd-expense-grid">
-                                <div class="csr-pd-expense-column">
-                                    @ExpenseRow("Printing & Stationery", details.PrintingAndStationery)
-                                    @ExpenseRow("Publicity Material", details.PublicityMaterial)
-                                    @ExpenseRow("Stage Arrangements", details.StageArrangements)
-                                    @ExpenseRow("Service Charges - LCA", details.ServiceChargesLCA)
-                                    @ExpenseRow("Transport / Rent", details.TransportRent)
-                                    @ExpenseRow("Jeep Running Expenses", details.JeepRunningExpenses)
-                                </div>
-                                <div class="csr-pd-expense-column">
-                                    @ExpenseRow("Refreshments", details.Refreshments)
-                                    @ExpenseRow("Inputs", details.Inputs)
-                                    @ExpenseRow("Photography", details.Photography)
-                                    @ExpenseRow("Compliments", details.Compliments)
-                                    @ExpenseRow("Others", details.Others)
-                                    @ExpenseRow("Allocated Budget", details.Budget)
-                                </div>
-                            </div>
+                            <div class="csr-pd-panel">No expense details available.</div>
                         }
                     </section>
                     <section class="csr-pd-section">
@@ -870,8 +824,8 @@
 
 
     /* =========================================================
-                                   DRAWER
-                                   ========================================================= */
+                                       DRAWER
+                                       ========================================================= */
 
     .csr-pd-overlay {
         position: fixed;
@@ -895,8 +849,8 @@
 
 
     /* =========================================================
-                                   HEADER
-                                   ========================================================= */
+                                       HEADER
+                                       ========================================================= */
 
     .csr-pd-header {
         min-height: 72px;
@@ -1006,8 +960,8 @@
 
 
     /* =========================================================
-                                   CONTENT
-                                   ========================================================= */
+                                       CONTENT
+                                       ========================================================= */
 
     .csr-pd-content {
         flex: 1;
@@ -1034,8 +988,8 @@
 
 
     /* =========================================================
-                                   PROGRAM INFO
-                                   ========================================================= */
+                                       PROGRAM INFO
+                                       ========================================================= */
 
     .csr-pd-info-grid {
         display: grid;
@@ -1083,8 +1037,8 @@
 
 
     /* =========================================================
-                                   EXPENSE
-                                   ========================================================= */
+                                       EXPENSE
+                                       ========================================================= */
 
     .csr-pd-expense-grid {
         display: grid;
@@ -1131,8 +1085,8 @@
 
 
     /* =========================================================
-                                   FOCUS AREA
-                                   ========================================================= */
+                                       FOCUS AREA
+                                       ========================================================= */
 
     .csr-pd-focus-grid {
         padding: 12px;
@@ -1186,8 +1140,8 @@
 
 
     /* =========================================================
-                                   TIMELINE
-                                   ========================================================= */
+                                       TIMELINE
+                                       ========================================================= */
 
     .csr-pd-timeline {
         padding: 3px 2px;
@@ -1262,8 +1216,8 @@
 
 
     /* =========================================================
-                                   REMARKS
-                                   ========================================================= */
+                                       REMARKS
+                                       ========================================================= */
 
     .csr-pd-remarks {
         padding: 12px;
@@ -1274,8 +1228,8 @@
 
 
     /* =========================================================
-                                   FOOTER
-                                   ========================================================= */
+                                       FOOTER
+                                       ========================================================= */
 
     .csr-pd-footer {
         min-height: 60px;
@@ -1415,8 +1369,8 @@
 
 
     /* =========================================================
-                                   LOADING
-                                   ========================================================= */
+                                       LOADING
+                                       ========================================================= */
 
     .csr-pd-loading {
         min-height: 300px;
@@ -1430,8 +1384,8 @@
 
 
     /* =========================================================
-                                   RESPONSIVE
-                                   ========================================================= */
+                                       RESPONSIVE
+                                       ========================================================= */
 
     @@media (max-width: 768px) {
 
@@ -1517,7 +1471,7 @@
     }
 
     private CSR1DetailsDto? details;
-    private CSR1SaveRequest? reviewRequest;
+    private CSR1SaveRequestWithExpenses? reviewRequest;
     private string reviewError = "";
     private sealed class ReviewLookup { public int Id { get; set; } public string UserId { get; set; } = ""; public string Name { get; set; } = ""; public string UserName { get; set; } = ""; }
     private sealed class ReviewHeadquarter { public int Id { get; set; } public string HeadquarterName { get; set; } = ""; }
@@ -1527,10 +1481,39 @@
     private List<ReviewLookup> reviewEmployees = new();
     private string ReviewMinDate => reviewRequest?.CSR1?.ProgramYear is int y && reviewRequest.CSR1.ProgramMonth is int m && m >= 1 && m <= 12 ? new DateTime(y, m, 1).ToString("yyyy-MM-dd") : "";
     private string ReviewMaxDate => reviewRequest?.CSR1?.ProgramYear is int y && reviewRequest.CSR1.ProgramMonth is int m && m >= 1 && m <= 12 ? new DateTime(y, m, DateTime.DaysInMonth(y, m)).ToString("yyyy-MM-dd") : "";
-    private decimal ReviewTotalExpense => reviewRequest?.CSR1 == null ? 0 :
-        reviewRequest.CSR1.PrintingAndStationery + reviewRequest.CSR1.PublicityMaterial + reviewRequest.CSR1.StageArrangements +
-        reviewRequest.CSR1.ServiceChargesLCA + reviewRequest.CSR1.TransportRent + reviewRequest.CSR1.JeepRunningExpenses +
-        reviewRequest.CSR1.Refreshments + reviewRequest.CSR1.Inputs + reviewRequest.CSR1.Photography + reviewRequest.CSR1.Compliments + reviewRequest.CSR1.Others;
+    private decimal ReviewTotalExpense =>
+        reviewRequest?.Expenses?.Sum(x => x.ExpenseAmount) ?? 0m;
+
+    private List<ReviewExpenseInformation> reviewExpenseInformations = new();
+
+    private sealed class ReviewExpenseInformation
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public bool IsActive { get; set; }
+    }
+
+    private CSR1ExpenseSaveDto GetReviewExpense(int expenseId)
+    {
+        if (reviewRequest == null)
+            return new CSR1ExpenseSaveDto { ExpenseId = expenseId };
+
+        reviewRequest.Expenses ??= new();
+        var row = reviewRequest.Expenses.FirstOrDefault(x => x.ExpenseId == expenseId);
+        if (row != null) return row;
+
+        row = new CSR1ExpenseSaveDto { ExpenseId = expenseId, ExpenseAmount = 0m };
+        reviewRequest.Expenses.Add(row);
+        return row;
+    }
+
+    private void UpdateReviewExpense(int expenseId, string? value)
+    {
+        var row = GetReviewExpense(expenseId);
+        row.ExpenseAmount = decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var amount)
+            ? Math.Max(0m, amount)
+            : 0m;
+    }
     private void AddReviewProduct(int group, string? value)
     {
         if (int.TryParse(value, out var id) && id > 0) ToggleReviewProduct(group, id, true);
@@ -1605,7 +1588,17 @@
         reviewError = "";
         try
         {
-            reviewRequest = await Http.GetFromJsonAsync<CSR1SaveRequest>($"api/CSR1/{CSR1Id}/review-edit");
+            reviewRequest = await Http.GetFromJsonAsync<CSR1SaveRequestWithExpenses>($"api/CSR1/{CSR1Id}/review-edit");
+            reviewExpenseInformations = await Http.GetFromJsonAsync<List<ReviewExpenseInformation>>("api/CSR1/expense-informations") ?? new();
+            reviewExpenseInformations = reviewExpenseInformations.Where(x => x.IsActive).OrderBy(x => x.Id).ToList();
+
+            if (reviewRequest != null)
+            {
+                reviewRequest.Expenses ??= new();
+                foreach (var expense in reviewExpenseInformations)
+                    _ = GetReviewExpense(expense.Id);
+            }
+
             reviewCrops = await Http.GetFromJsonAsync<List<ReviewLookup>>("api/Budget/crops") ?? new();
             reviewProducts = await Http.GetFromJsonAsync<List<ReviewLookup>>("api/Budget/products") ?? new();
             reviewHeadquarters = await Http.GetFromJsonAsync<List<ReviewHeadquarter>>("api/Budget/headquarters") ?? new();
