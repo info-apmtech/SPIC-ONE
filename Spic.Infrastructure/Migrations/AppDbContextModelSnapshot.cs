@@ -804,9 +804,6 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime>("CSR1Date")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<decimal>("Compliments")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
@@ -816,29 +813,14 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int?>("HeadquarterId")
                         .HasColumnType("integer");
 
-                    b.Property<decimal>("Inputs")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
-
-                    b.Property<decimal>("JeepRunningExpenses")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int?>("LocationId")
                         .HasColumnType("integer");
 
                     b.Property<int>("NumberOfPrograms")
                         .HasColumnType("integer");
-
-                    b.Property<decimal>("Others")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("Photography")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("PrintingAndStationery")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("ProgramId")
                         .HasColumnType("integer");
@@ -848,12 +830,6 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Property<int?>("ProgramYear")
                         .HasColumnType("integer");
-
-                    b.Property<decimal>("PublicityMaterial")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("Refreshments")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Remarks")
                         .HasColumnType("text");
@@ -865,17 +841,8 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<string>("SanctionNo")
                         .HasColumnType("text");
 
-                    b.Property<decimal>("ServiceChargesLCA")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("StageArrangements")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<int>("Status")
                         .HasColumnType("integer");
-
-                    b.Property<decimal>("TransportRent")
-                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
@@ -931,6 +898,31 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("CSR1Id");
 
                     b.ToTable("CSR1ApprovalDetails");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR1Expenses", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ExpenseAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("ExpenseId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CSR1Expenses");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR1Products1", b =>

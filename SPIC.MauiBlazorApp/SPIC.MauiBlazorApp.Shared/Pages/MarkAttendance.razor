@@ -13,6 +13,7 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOTrackingApi TrackingApi
 @inject SPIC.MauiBlazorApp.Shared.Services.IFormFactor FormFactor
 @inject SPIC.MauiBlazorApp.Shared.Services.NavHistoryService NavHistory
+@inject SPIC.MauiBlazorApp.Shared.Services.LookupCacheService LookupCache
 @inject IJSRuntime JS
 
 <div class="container-fluid py-4 px-0 ma-page">
@@ -144,7 +145,7 @@
                         <div class="ma-success-text">
                             <div class="ma-success-title-row">
                                 <span class="ma-success-title">Location tracking stopped successfully!</span>
-                                <span class="ma-success-time">23 Sep 2026, 04:32 PM</span>
+                                <span class="ma-success-time">@(_stoppedAt is { } st ? st.ToString("dd MMM yyyy, hh:mm tt") : "just now")</span>
                             </div>
                             <div class="ma-success-sub">Your location has been recorded.</div>
                         </div>
@@ -152,15 +153,15 @@
 
                     <div class="ma-stats-row">
                         <div class="ma-stat">
-                            <div class="ma-stat-top"><i class="bi bi-check-circle"></i> <span class="ma-stat-pct">100%</span></div>
+                            <div class="ma-stat-top"><i class="bi bi-check-circle"></i> <span class="ma-stat-pct">@(_todayAttendance is not null ? "100%" : "0%")</span></div>
                             <div class="ma-stat-label">Attendance Completed</div>
                         </div>
                         <div class="ma-stat">
-                            <div class="ma-stat-top"><i class="bi bi-geo-alt"></i> <span class="ma-stat-pct">100%</span></div>
+                            <div class="ma-stat-top"><i class="bi bi-geo-alt"></i> <span class="ma-stat-pct">@(_stoppedAt is not null ? "100%" : "0%")</span></div>
                             <div class="ma-stat-label">Location Point Saved</div>
                         </div>
                         <div class="ma-stat">
-                            <div class="ma-stat-top"><i class="bi bi-clipboard-check"></i> <span class="ma-stat-pct">100%</span></div>
+                            <div class="ma-stat-top"><i class="bi bi-clipboard-check"></i> <span class="ma-stat-pct">@TodayTaskCompletionPct</span></div>
                             <div class="ma-stat-label">Today Task Completed</div>
                         </div>
                     </div>
@@ -176,12 +177,24 @@
                         <div class="ma-attendance-done-text">
                             <div class="ma-attendance-done-title">Attendance marked today</div>
                             <div class="ma-attendance-done-sub">
-                                @StatusToLabel(_todayAttendance.AttendanceStatus) &middot; @_todayAttendance.VisitArea
+                                @StatusToLabel(_todayAttendance.AttendanceStatus)
+                                @if (!string.IsNullOrWhiteSpace(_todayAttendance.VisitArea))
+                                {
+                                    <text> &middot; @_todayAttendance.VisitArea</text>
+                                }
                                 @if (_todayAttendance.AttendanceUpdatedAt is { } markedAt)
                                 {
                                     <text> &middot; @markedAt.ToString("h:mm tt")</text>
                                 }
                             </div>
+                            @if (_todayAttendance.AttendanceLatitude.HasValue && _todayAttendance.AttendanceLongitude.HasValue)
+                            {
+                                <div class="mt-1">
+                                    <button type="button" class="ma-link-btn" @onclick="() => ViewCoordsOnMap(_todayAttendance.AttendanceLatitude.Value, _todayAttendance.AttendanceLongitude.Value, _todayAttendance.VisitArea)">
+                                        <i class="bi bi-geo-alt-fill me-1"></i>View saved location on map
+                                    </button>
+                                </div>
+                            }
                         </div>
                         <button type="button" class="ma-link-btn" @onclick="() => _editingAttendance = true">Edit</button>
                     </div>
@@ -199,8 +212,24 @@
                     <label class="ma-field-label" for="ma-date">Date<span class="ma-required">*</span></label>
                     <input id="ma-date" type="date" class="ma-input" @bind="visitDate" />
 
-                    <label class="ma-field-label" for="ma-area">Visit Area / Place<span class="ma-required">*</span></label>
-                    <input id="ma-area" type="text" class="ma-input" placeholder="e.g. Anaimalai" @bind="visitArea" @bind:event="oninput" />
+                    <label class="ma-field-label" for="ma-area">
+                        Visit Area / Place
+                        @if (_latitude is null && _longitude is null && !_locating)
+                        {
+                            <span class="text-danger ms-1">* (Type manually)</span>
+                        }
+                        @if (_resolvingAddress)
+                        {
+                            <span class="ma-info-sub">(fetching from your location...)</span>
+                        }
+                        else if (_addressAutoFilled)
+                        {
+                            <span class="ma-info-sub">(from your location - edit if needed)</span>
+                        }
+                    </label>
+                    <input id="ma-area" type="text" class="ma-input"
+                           placeholder="@(_latitude is not null ? "e.g. Anaimalai - auto-filled from location when available" : "Type your visit area / place...")"
+                           @bind="visitArea" @bind:event="oninput" @bind:after="() => _addressAutoFilled = false" />
 
                     <label class="ma-field-label" for="ma-status">Attendance Status</label>
                     <select id="ma-status" class="ma-input" @bind="attendanceStatus">
@@ -210,16 +239,31 @@
                     </select>
 
                     <div class="ma-location-row">
-                        <i class="bi bi-check-circle-fill"></i> @LocationStatusText
+                        @if (_locating)
+                        {
+                            <span class="spinner-border spinner-border-sm text-success" role="status" aria-hidden="true"></span>
+                        }
+                        else if (_latitude is not null && _longitude is not null)
+                        {
+                            <i class="bi bi-check-circle-fill text-success"></i>
+                        }
+                        else
+                        {
+                            <i class="bi bi-geo-alt text-secondary"></i>
+                        }
+                        <span>@LocationStatusText</span>
                         @if (CoordinatesText is not null)
                         {
                             <span class="ma-info-sub">(@CoordinatesText)</span>
                         }
-                        &middot;
-                        <button type="button" class="ma-link-btn" @onclick="ViewOnMap">view on map</button>
+                        @if (_latitude is not null && _longitude is not null)
+                        {
+                            <text> &middot; </text>
+                            <button type="button" class="ma-link-btn" @onclick="ViewOnMap">view on map</button>
+                        }
                     </div>
 
-                    <button type="button" class="ma-btn-submit" disabled="@(_saving || string.IsNullOrWhiteSpace(visitArea))" @onclick="UpdateAttendance">
+                    <button type="button" class="ma-btn-submit" disabled="@_saving" @onclick="UpdateAttendance">
                         @(_saving ? "Updating..." : "Update Attendance")
                     </button>
                 }
@@ -227,8 +271,8 @@
 
             <div class="ma-card ma-profile-card">
                 <div class="ma-profile-top">
-                    <span class="ma-role-badge">JMDO</span>
-                    <h3 class="ma-profile-name">Karthik Raja</h3>
+                    <span class="ma-role-badge">@(LoginState.UserRole?.ToString() ?? "—")</span>
+                    <h3 class="ma-profile-name">@(string.IsNullOrWhiteSpace(LoginState.UserName) ? "—" : LoginState.UserName)</h3>
                 </div>
 
                 <div class="ma-info-rows">
@@ -258,6 +302,12 @@
                             @if (_locatedAt is not null)
                             {
                                 <span class="ma-info-sub">(@_locatedAt.Value.ToString("dd MMM yyyy, hh:mm tt"))</span>
+                            }
+                            @if (_latitude is not null && _longitude is not null)
+                            {
+                                <button type="button" class="ma-link-btn text-start mt-1" @onclick="ViewOnMap">
+                                    <i class="bi bi-map me-1"></i>View on map
+                                </button>
                             }
                         </span>
                     </div>
@@ -302,7 +352,7 @@
                                 <span class="ma-weekly-day">Weekly tasks</span>
                             </div>
                             <div class="ma-weekly-meta">
-                                <span class="ma-info-sub">MD Program, SPCM, Soil Sample, PoS &middot; no planned day</span>
+                                <span class="ma-info-sub">No planned day</span>
                             </div>
                             <span class="ma-weekly-tasks">@TaskCountsText(tasks.WeeklyTasks)</span>
                         </div>
@@ -325,16 +375,57 @@
         </div>
     }
 
+    @if (_showMapModal)
+    {
+        <div class="ma-modal-backdrop" @onclick="CloseMapModal"></div>
+        <div class="ma-modal" role="dialog" aria-modal="true" aria-labelledby="ma-map-title">
+            <div class="ma-modal-header">
+                <div class="ma-modal-title-wrap">
+                    <i class="bi bi-geo-alt-fill text-danger me-1"></i>
+                    <h5 id="ma-map-title" class="ma-modal-title">Location on Map</h5>
+                </div>
+                <button type="button" class="ma-modal-close" @onclick="CloseMapModal" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="ma-modal-body">
+                <div class="ma-modal-meta">
+                    <div class="ma-modal-address">
+                        <i class="bi bi-pin-map-fill text-success me-1"></i>
+                        <strong>@(!string.IsNullOrWhiteSpace(_modalLabel) ? _modalLabel : "Captured Location")</strong>
+                    </div>
+                    @if (_modalLatitude.HasValue && _modalLongitude.HasValue)
+                    {
+                        <div class="ma-modal-coords text-muted">
+                            <i class="bi bi-crosshair me-1"></i> @_modalLatitude.Value.ToString("0.####"), @_modalLongitude.Value.ToString("0.####")
+                        </div>
+                    }
+                </div>
+                <div id="ma-location-view-map" class="ma-view-map-canvas"></div>
+            </div>
+            <div class="ma-modal-footer">
+                <button type="button" class="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1" @onclick="OpenExternalMaps">
+                    <i class="bi bi-box-arrow-up-right"></i> Open in Google Maps
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" @onclick="CloseMapModal">Close</button>
+            </div>
+        </div>
+    }
+
 </div>
 
 @code {
-    // Static placeholder: matches Karthik Raja's profile elsewhere in the app
-    // (FieldDashboard) - no logged-in-user hierarchy lookup exists yet. The
-    // Figma frame's own profile card said "Ravi Kumar", which would
-    // contradict the rest of the app's example data, so this uses the name
-    // that's consistent everywhere else instead.
-    private const string FieldExecRegion = "COIMBATORE";
-    private const string FieldExecJmdoHq = "COIMBATORE";
+    // Resolved from the signed-in user's own HQ (LoginState) and the shared HQ/Region lookup
+    // (LookupCacheService) - same source FieldDashboard.razor's RoleRegionLine uses, replacing the
+    // page's old hardcoded "COIMBATORE" / "COIMBATORE" placeholder. "—" when genuinely unavailable
+    // (lookup not loaded yet, or the signed-in user has no HQ), same fallback convention used
+    // elsewhere in this app rather than a fake default.
+    private SPIC.MauiBlazorApp.Shared.Services.LocationItemDto? MyHeadquarter =>
+        LookupCache.Headquarters.FirstOrDefault(h => h.Id == LoginState.HQId);
+    private SPIC.MauiBlazorApp.Shared.Services.LocationItemDto? MyRegion =>
+        LookupCache.Regions.FirstOrDefault(r => r.Id == LoginState.RegionId);
+    private string FieldExecRegion => (MyHeadquarter?.RegionName ?? MyRegion?.RegionName) is { Length: > 0 } r ? r.ToUpperInvariant() : "—";
+    private string FieldExecJmdoHq => MyHeadquarter?.HeadquarterName is { Length: > 0 } h ? h.ToUpperInvariant() : "—";
 
     // IFormFactor already distinguishes the two hosts for us: "Web" on the Blazor Web host
     // (any browser, desktop or mobile), the real device idiom (Phone/Tablet/...) on the native
@@ -396,7 +487,7 @@
         var prefillForm = !_loadedOnce;
         _loadedOnce = true;
 
-        var tasks = new List<Task> { RefreshTodayStatusAsync(prefillForm), RefreshWeekAsync(), RefreshTaskSummaryAsync() };
+        var tasks = new List<Task> { RefreshTodayStatusAsync(prefillForm), RefreshWeekAsync(), RefreshTaskSummaryAsync(), LookupCache.EnsureLoadedAsync() };
         if (showTrackingState) tasks.Add(LoadTrackingViewAsync());
         await Task.WhenAll(tasks);
     }
@@ -426,6 +517,24 @@
 
         _tasks = result;
         _tasksLoading = false;
+    }
+
+    // Today's own dealer-visit bucket plus the not-day-specific weekly bucket (MD Program/SPCM/
+    // Soil/PoS), the same two buckets FieldDashboard.razor's TodayCounts combines - the stopped-
+    // confirmation stat tile's real completion percentage instead of a fixed "100%". "—" (not 0%)
+    // when there is genuinely nothing allocated today, since 0% would misleadingly read as "none
+    // completed" rather than "nothing to complete".
+    private string TodayTaskCompletionPct
+    {
+        get
+        {
+            if (_tasks is not { HasAllocation: true }) return "—";
+            var today = _tasks.Days.FirstOrDefault(d => d.Date.Date == DateTime.Today);
+            var weekly = _tasks.WeeklyTasks;
+            var allocated = (today?.Allocated ?? 0) + weekly.Allocated;
+            var completed = (today?.Completed ?? 0) + weekly.Completed;
+            return allocated <= 0 ? "—" : $"{completed * 100 / allocated}%";
+        }
     }
 
     // Per-day allocated dealer visits (the only task type with a day). Matched by date, so a task
@@ -507,10 +616,19 @@
         }
     }
 
-    private bool isLate = true;
+    private bool isLate => visitDate < DateTime.Today || (visitDate == DateTime.Today && (_todayAttendance?.AttendanceUpdatedAt is { } u ? u.TimeOfDay > new TimeSpan(10, 0, 0) : DateTime.Now.TimeOfDay > new TimeSpan(10, 0, 0)));
+
+    private bool _showMapModal;
+    private bool _mapModalPendingInit;
+    private double? _modalLatitude;
+    private double? _modalLongitude;
+    private string? _modalLabel;
 
     private DateTime visitDate = DateTime.Today;
     private string visitArea = "";
+    // True while the current visitArea text came from GPS reverse-geocoding, not typing - lets the
+    // "(from your location - edit if needed)" hint disappear the instant the user actually edits it.
+    private bool _addressAutoFilled;
     private string attendanceStatus = "Present";
     private bool _saving;
 
@@ -554,6 +672,28 @@
     {
         [System.Text.Json.Serialization.JsonPropertyName("display_name")]
         public string? DisplayName { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("address")]
+        public NominatimAddress? Address { get; set; }
+    }
+
+    private sealed class NominatimAddress
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("suburb")]
+        public string? Suburb { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("village")]
+        public string? Village { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("town")]
+        public string? Town { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("city")]
+        public string? City { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("hamlet")]
+        public string? Hamlet { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("county")]
+        public string? County { get; set; }
+
+        // Most to least specific, in the order a field officer would actually recognize a place by.
+        public string? ShortAreaName => Suburb ?? Village ?? Town ?? City ?? Hamlet ?? County;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -566,6 +706,19 @@
 
         if (showTrackingState && !_trackLoading && _trackSession is not null)
             await RenderTrackingMapAsync();
+
+        if (_showMapModal && _mapModalPendingInit && _modalLatitude.HasValue && _modalLongitude.HasValue)
+        {
+            _mapModalPendingInit = false;
+            try
+            {
+                await JS.InvokeVoidAsync("initSingleLocationMap", "ma-location-view-map", _modalLatitude.Value, _modalLongitude.Value, _modalLabel ?? "Location");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Init single location map failed: {ex.Message}");
+            }
+        }
     }
 
     // ---- Tracking view (view=tracking): a real route map (tracking-map.js, Leaflet) for one of
@@ -858,10 +1011,14 @@
         StateHasChanged();
 
         string? address = null;
+        string? areaName = null;
         try
         {
+            // addressdetails=1 asks Nominatim for the structured components too, not just the full
+            // display_name - suburb/village/town/city is a much better fit for "Visit Area / Place"
+            // (e.g. "Anaimalai") than the full postal address, which starts with house number/road.
             var request = new HttpRequestMessage(HttpMethod.Get, FormattableString.Invariant(
-                $"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={lat}&lon={lng}&zoom=18"));
+                $"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={lat}&lon={lng}&zoom=18&addressdetails=1"));
             request.Headers.UserAgent.ParseAdd("SPICOne/1.0 (+https://apmtechnologies.in)");
 
             var response = await Http.SendAsync(request);
@@ -869,6 +1026,7 @@
             {
                 var result = await response.Content.ReadFromJsonAsync<NominatimReverseResult>();
                 address = string.IsNullOrWhiteSpace(result?.DisplayName) ? null : result!.DisplayName;
+                areaName = result?.Address?.ShortAreaName;
             }
             else
             {
@@ -887,6 +1045,16 @@
         _resolvingAddress = false;
         if (address is null)
             _addressKey = null; // allow a retry for these coordinates on the next capture
+
+        // Auto-fill Visit Area from the captured location, but only while it's still exactly what an
+        // earlier auto-fill put there (or empty) - never overwrite text the user actually typed,
+        // including a value pre-filled from today's already-saved attendance row.
+        if ((string.IsNullOrWhiteSpace(visitArea) || _addressAutoFilled) && !string.IsNullOrWhiteSpace(areaName))
+        {
+            visitArea = areaName!;
+            _addressAutoFilled = true;
+        }
+
         StateHasChanged();
     }
 
@@ -941,13 +1109,61 @@
         _ => "Present"
     };
 
-    private void ViewOnMap() => Toast.Info("Map view isn't built yet.");
+    private void ViewOnMap()
+    {
+        if (_latitude is null || _longitude is null)
+        {
+            Toast.Warning("No location captured yet.");
+            return;
+        }
+        ViewCoordsOnMap(_latitude.Value, _longitude.Value, !string.IsNullOrWhiteSpace(visitArea) ? visitArea : _address);
+    }
+
+    private void ViewCoordsOnMap(double lat, double lng, string? label)
+    {
+        _modalLatitude = lat;
+        _modalLongitude = lng;
+        _modalLabel = label ?? "Captured Location";
+        _showMapModal = true;
+        _mapModalPendingInit = true;
+        StateHasChanged();
+    }
+
+    private async Task CloseMapModal()
+    {
+        _showMapModal = false;
+        _mapModalPendingInit = false;
+        try { await JS.InvokeVoidAsync("destroySingleLocationMap", "ma-location-view-map"); }
+        catch { }
+    }
+
+    private async Task OpenExternalMaps()
+    {
+        var lat = _modalLatitude ?? _latitude;
+        var lng = _modalLongitude ?? _longitude;
+        if (lat is null || lng is null) return;
+        var url = FormattableString.Invariant($"https://www.google.com/maps/search/?api=1&query={lat.Value},{lng.Value}");
+        try
+        {
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch (Exception ex)
+        {
+            Toast.Error("Could not open external maps: " + ex.Message);
+        }
+    }
 
     // No confirmation modal on this frame (unlike FieldDashboard's own Stop
     // Tracking button) - stops immediately and lands on the same
     // post-stop summary that FieldDashboard's confirm flow uses. Goes through the real
     // api/JMDOTracking/stop (same as FieldDashboard) so Off Duty is saved, not just set locally.
     private bool _stopping;
+
+    // Set by StopTracking() right before navigating to ?view=stopped - the server's own EndTime for
+    // the session just closed. Null only if the stopped view is reached some other way (e.g. a hard
+    // reload on that URL, a fresh component instance that never ran StopTracking itself), in which
+    // case the banner falls back to "just now" instead of showing a wrong/fake date.
+    private DateTime? _stoppedAt;
 
     private async Task StopTracking()
     {
@@ -976,6 +1192,10 @@
             var stopped = await TrackingApi.StopAsync(position.Latitude, position.Longitude);
             if (stopped is null) return; // TrackingApi already raised an error toast; session stays Active
 
+            // EndTime is the server's own stop timestamp for this session - shown on the stopped-
+            // confirmation banner below instead of a fixed placeholder time.
+            _stoppedAt = stopped.EndTime;
+
             AttendanceState.IsOnDuty = false;
             Navigation.NavigateTo("/MarkAttendance?view=stopped"); // view change reloads status + week
         }
@@ -997,31 +1217,38 @@
             Toast.Warning("Date is required.");
             return;
         }
-        if (string.IsNullOrWhiteSpace(visitArea))
-        {
-            Toast.Warning("Visit Area / Place is required.");
-            return;
-        }
 
         _saving = true;
         try
         {
-            // A fresh fix at the moment attendance is marked, not the one captured on page load -
-            // the coordinates must represent "now", not whenever the page happened to render.
-            await CaptureLocationAsync();
-
+            // Try to capture location if not yet captured
             if (_latitude is null || _longitude is null)
             {
-                Toast.Error(_locationError ?? "Could not get your current location. Please try again.");
+                await CaptureLocationAsync();
+            }
+
+            // If location was captured and visitArea is still empty, auto-fetch from reverse-geocoding
+            if (_latitude is not null && _longitude is not null && string.IsNullOrWhiteSpace(visitArea))
+            {
+                await ResolveAddressAsync();
+            }
+
+            // If location is NOT captured, the user MUST manually type the Visit Area
+            if ((_latitude is null || _longitude is null) && string.IsNullOrWhiteSpace(visitArea))
+            {
+                Toast.Warning("Location could not be captured. Please type your Visit Area / Place to save attendance.");
                 return;
             }
 
             var saved = await Api.UpdateAttendanceAsync(
-                visitDate, visitArea.Trim(), ParseStatus(attendanceStatus), _latitude.Value, _longitude.Value);
+                visitDate,
+                string.IsNullOrWhiteSpace(visitArea) ? null : visitArea.Trim(),
+                ParseStatus(attendanceStatus),
+                _latitude,
+                _longitude);
+
             if (saved is null)
             {
-                // Api already raised an error toast. Still on this page, so label the fresh fix -
-                // not awaited, the address lookup must never hold up the form.
                 _ = ResolveAddressAsync();
                 return;
             }
