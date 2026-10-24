@@ -172,6 +172,7 @@ public class ToastService
             else _pendingConfirms.Enqueue(request);
         }
 
+        System.Diagnostics.Debug.WriteLine($"[BACKDBG] ToastService.ConfirmAsync: queued '{title}', OnChange has {OnChange?.GetInvocationList().Length ?? 0} subscriber(s).");
         OnChange?.Invoke();
         return request.Completion.Task;
     }

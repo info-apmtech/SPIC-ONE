@@ -54,6 +54,10 @@ builder.Services.AddScoped<FileDownloadService>();
 builder.Services.AddScoped<ToastService>();
 builder.Services.AddScoped<ConnectivityState>();
 builder.Services.AddScoped<LoginState>();
+// Android-hardware-back-button bridge (see its own doc comment) - registered here too purely
+// because MainLayout.razor is shared between both hosts and injects it; it's a no-op on the Web
+// host since nothing ever calls DeviceInterop's native-only JSInvokable bridge from a browser.
+builder.Services.AddScoped<NavHistoryService>();
 builder.Services.AddScoped<FieldAttendanceState>();
 // Shell state shared by MainLayout and the parameterless Components/Shell components.
 builder.Services.AddScoped<ShellSession>();
