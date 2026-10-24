@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using SPIC.MauiBlazorApp.Services;
 using SPIC.Core.Entities;
@@ -16,7 +16,7 @@ namespace SPIC.MauiBlazorApp
             typeof(MauiProgram).Assembly
                 .GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(a => a.Key == "SpicApiBaseUrl")?.Value
-            ?? "https://api.spicone.in/";
+            ?? "https://previewspicapi.apmiot.com/";
 
         public static MauiApp CreateMauiApp()
         {
