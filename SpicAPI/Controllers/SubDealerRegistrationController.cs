@@ -65,6 +65,8 @@ public class SubDealerRegistrationController : ControllerBase
         if (regionId.GetValueOrDefault() > 0) query = query.Where(x => x.Region == regionId!.Value);
         if (hqId.GetValueOrDefault() > 0) query = query.Where(x => x.HQ == hqId!.Value);
 
+        query = query.Where(x => x.SubDealerCode != null && x.SubDealerCode.Trim() != "");
+
         var items = await query
             .OrderBy(x => x.SubDealerCode)
             .Select(x => new SubDealerLookupDto
@@ -756,7 +758,15 @@ public class SubDealerRegistrationController : ControllerBase
             var entity = await Scoped(tracking: true).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
             if (entity == null) return NotFound("Sub Dealer not found in your permitted scope.");
             if (GetExcelCodeError(entity.SubDealerCode) is string codeError)
-                return BadRequest($"{codeError} A SuperAdmin must correct this master before profile maintenance.");
+                return BadRequest($"The selected Sub Dealer master has an invalid Sub Dealer Code. Admin must repair the master record before profile maintenance.");
+
+            if (string.IsNullOrWhiteSpace(model.SubDealerCode))
+                return BadRequest(new { message = "Sub Dealer Code cannot be changed." });
+
+            var existingCodeKey = SubDealerFormModel.CodeKey(entity.SubDealerCode);
+            var submittedCodeKey = SubDealerFormModel.CodeKey(model.SubDealerCode);
+            if (!string.Equals(existingCodeKey, submittedCodeKey, StringComparison.Ordinal))
+                return BadRequest(new { message = "Sub Dealer Code cannot be changed." });
 
             // Compare the version loaded by the page. Do not accept stale full-form overwrites.
             if (model.UpdatedAt == default || model.UpdatedAt != entity.UpdatedAt)
@@ -781,7 +791,32 @@ public class SubDealerRegistrationController : ControllerBase
                 model.GSTFilePath = SubDealerFileController.LogicalPath(id, fileName);
             }
 
-            ApplyModel(entity, model, applyMasterHierarchy: false);
+            // Explicitly map only editable profile fields; do not overwrite protected master fields.
+            entity.Status = model.Status;
+            entity.FirmName = model.FirmName.Trim().ToUpperInvariant();
+            entity.GoogleMapURL = model.GoogleMapURL;
+            entity.Latitude = model.Latitude;
+            entity.Longitude = model.Longitude;
+            entity.ShopNoORRoomNoOrBlockNo = model.ShopNoORRoomNoOrBlockNo ?? string.Empty;
+            entity.Street = model.Street;
+            entity.SubVillage = model.SubVillage;
+            entity.Village = model.Village ?? string.Empty;
+            entity.PinCode = model.PinCode ?? string.Empty;
+            entity.Block = model.Block;
+            entity.Taluk = model.Taluk;
+            entity.DistrictId = model.DistrictId;
+            entity.DealerStateId = model.DealerStateId;
+            entity.OfficialContactNumber = model.OfficialContactNumber ?? string.Empty;
+            entity.WhatsAppNumber = model.WhatsAppNumber ?? string.Empty;
+            entity.AlternativeNumber = model.AlternativeNumber;
+            entity.WholesaleMFMSId = string.IsNullOrWhiteSpace(model.WholesaleMFMSId) ? null : model.WholesaleMFMSId.Trim();
+            entity.RetailMFMSId = string.IsNullOrWhiteSpace(model.RetailMFMSId) ? null : model.RetailMFMSId.Trim();
+            entity.PANNo = string.IsNullOrWhiteSpace(model.PANNo) ? null : model.PANNo.Trim().ToUpperInvariant();
+            entity.GSTNumber = model.GSTNumber?.Trim().ToUpperInvariant();
+            entity.GSTLegalName = model.GSTLegalName;
+            entity.GSTTradeName = model.GSTTradeName;
+            entity.GSTConstitutionofBusiness = model.GSTConstitutionofBusiness;
+            entity.GSTFilePath = model.GSTFilePath;
             StampModified(_db, _configuration, entity, actor);
             await _db.SaveChangesAsync(cancellationToken);
             // Return the database's actual timestamp precision to the next edit request.
@@ -1400,7 +1435,7 @@ public class SubDealerRegistrationController : ControllerBase
         return new SubDealerFormModel
         {
             Id = entity.Id,
-            SubDealerCode = entity.SubDealerCode,
+            SubDealerCode = entity.SubDealerCode ?? string.Empty,
 
             StateId = entity.StateId,
             Region = entity.Region,

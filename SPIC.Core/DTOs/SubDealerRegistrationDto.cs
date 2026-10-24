@@ -12,7 +12,9 @@ namespace SPIC.Core.DTOs;
 public partial class SubDealerFormModel : IValidatableObject
 {
     public int Id { get; set; }
-    public string? SubDealerCode { get; set; }
+    [Required(ErrorMessage = "Sub Dealer Code is required.")]
+    [MaxLength(50)]
+    public string? SubDealerCode { get; set; } = string.Empty;
     [Range(1, int.MaxValue, ErrorMessage = "State is required.")]
     public int StateId { get; set; }
     [Range(1, int.MaxValue, ErrorMessage = "Region is required.")]
