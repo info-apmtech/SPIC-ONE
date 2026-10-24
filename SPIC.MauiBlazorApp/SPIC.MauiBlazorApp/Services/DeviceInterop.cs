@@ -265,5 +265,18 @@ namespace SPIC.MauiBlazorApp.Services
                 return Task.FromResult(false);
             }
         }
+
+        /// <summary>
+        /// Called once by Routes.razor's first OnAfterRenderAsync (window.notifyAppReady in
+        /// maui-interop.js) - the earliest reliable signal that the WebView has actually rendered
+        /// real content. Hides MainPage's native BootOverlay (icon+spinner shown natively from the
+        /// page's very first frame, before the WebView had anything of its own to show).
+        /// </summary>
+        [JSInvokable]
+        public static Task NotifyContentReady()
+        {
+            MainPage.Current?.HideBootOverlay();
+            return Task.CompletedTask;
+        }
     }
 }
