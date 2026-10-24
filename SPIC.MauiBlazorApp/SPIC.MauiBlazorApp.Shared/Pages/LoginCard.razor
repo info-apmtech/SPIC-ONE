@@ -1,4 +1,4 @@
-﻿@using System.ComponentModel.DataAnnotations
+@using System.ComponentModel.DataAnnotations
 @using System.Net.Http.Headers
 @using System.Net.Http.Json
 @using System.Net
@@ -12,7 +12,7 @@
 <div class="login-card">
 	<h5>Login To Your Account</h5>
 
-	<EditForm Model="_model" OnValidSubmit="HandleLogin">
+	<EditForm Model="_model" OnValidSubmit="HandleLogin" OnInvalidSubmit="HandleInvalidSubmit">
 		<DataAnnotationsValidator />
 		<ValidationSummary />
 
@@ -86,8 +86,25 @@
 	{
 		_showPassword = !_showPassword;
 	}
+	private void LogToFile(string msg)
+	{
+		try
+		{
+			var logPath = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "startup_log.txt");
+			System.IO.File.AppendAllText(logPath, $"[{DateTime.UtcNow:O}] [LOGIN] {msg}\n");
+		}
+		catch { }
+	}
+
+	private void HandleInvalidSubmit()
+	{
+		_errorMessage = "Please enter both User Name and Password.";
+		LogToFile("HandleInvalidSubmit called: form validation failed");
+	}
+
 	private async Task HandleLogin()
 	{
+		LogToFile($"HandleLogin initiated. BaseAddress={Http.BaseAddress}, UserName={_model.UserName}");
 		try
 		{
 			_isLoading = true;
@@ -99,14 +116,18 @@
 				Password = _model.Password ?? string.Empty
 			};
 
+			LogToFile("Posting to api/Authentication/login...");
 			var response = await Http.PostAsJsonAsync("api/Authentication/login", request);
+			LogToFile($"Response status: {(int)response.StatusCode} {response.StatusCode}");
 
 			if (!response.IsSuccessStatusCode)
 			{
+				var errBody = await response.Content.ReadAsStringAsync();
+				LogToFile($"Response body: {errBody}");
 				_errorMessage = response.StatusCode switch
 				{
-					HttpStatusCode.Unauthorized => "Invalid username or password.",
-					_ => "Something went wrong. Please try again later."
+					HttpStatusCode.Unauthorized => string.IsNullOrWhiteSpace(errBody) ? "Invalid username or password." : errBody,
+					_ => $"Server error ({response.StatusCode}): {errBody}"
 				};
 				return;
 			}
@@ -115,10 +136,12 @@
 
 			if (result is null || string.IsNullOrWhiteSpace(result.Token))
 			{
+				LogToFile("Response token is empty or null");
 				_errorMessage = "Something went wrong. Please try again later.";
 				return;
 			}
 
+			LogToFile("Token received successfully, setting session store");
 			var rawToken = result.Token.StartsWith("Bearer ")
 				? result.Token.Substring("Bearer ".Length)
 				: result.Token;
@@ -161,19 +184,23 @@
 			LoginState.SetAllowedPages(result.RoleAccess);
 			LoginState.SetDesignationName(result.DesignationName);
 
+			LogToFile($"Login complete, navigating to {LoginState.LandingPage}");
 			Navigation.NavigateTo(LoginState.LandingPage);
 		}
-		catch (HttpRequestException)
+		catch (HttpRequestException ex)
 		{
-			_errorMessage = "Unable to connect to the server. Please check your internet connection and try again.";
+			LogToFile($"HttpRequestException: {ex.Message}\n{ex.StackTrace}");
+			_errorMessage = $"Unable to connect to server: {ex.Message} (Target: {Http.BaseAddress})";
 		}
-		catch (TaskCanceledException)
+		catch (TaskCanceledException ex)
 		{
-			_errorMessage = "The service is temporarily unavailable. Please try again after some time.";
+			LogToFile($"TaskCanceledException: {ex.Message}");
+			_errorMessage = $"Request timed out: {ex.Message} (Target: {Http.BaseAddress})";
 		}
-		catch (Exception)
+		catch (Exception ex)
 		{
-			_errorMessage = "Something went wrong. Please try again later.";
+			LogToFile($"Exception: {ex.GetType().FullName}: {ex.Message}\n{ex.StackTrace}");
+			_errorMessage = $"Error: {ex.GetType().Name}: {ex.Message}";
 		}
 		finally
 		{

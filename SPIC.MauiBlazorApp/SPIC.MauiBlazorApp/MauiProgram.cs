@@ -20,14 +20,32 @@ namespace SPIC.MauiBlazorApp
 
         public static MauiApp CreateMauiApp()
         {
-            var builder = MauiApp.CreateBuilder();
-            builder
-                .UseMauiApp<App>()
-                .ConfigureFonts(fonts =>
-                {
-                    fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-                });
+            var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "startup_log.txt");
+            void Log(string msg) { try { File.AppendAllText(logPath, $"[{DateTime.UtcNow:O}] {msg}\n"); } catch { } }
 
+            Log("MauiProgram.CreateMauiApp: starting");
+            Log($"MauiProgram.CreateMauiApp: ApiBaseUrl = '{ApiBaseUrl}'");
+            var builder = MauiApp.CreateBuilder();
+
+            try
+            {
+                Log("MauiProgram.CreateMauiApp: UseMauiApp<App>() starting");
+                builder.UseMauiApp<App>();
+                Log("MauiProgram.CreateMauiApp: UseMauiApp<App>() succeeded");
+            }
+            catch (Exception ex)
+            {
+                Log($"MauiProgram.CreateMauiApp: UseMauiApp FAILED: {ex.GetType().FullName}: {ex.Message}\nInner: {ex.InnerException}\nStack: {ex.StackTrace}");
+                throw;
+            }
+
+            Log("MauiProgram.CreateMauiApp: ConfigureFonts");
+            builder.ConfigureFonts(fonts =>
+            {
+                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+            });
+
+            Log("MauiProgram.CreateMauiApp: Registering base services");
             // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
             builder.Services.AddSingleton<ISessionStore, SecureSessionStore>();
@@ -35,6 +53,7 @@ namespace SPIC.MauiBlazorApp
             builder.Services.AddScoped<ToastService>();
             builder.Services.AddScoped<ConnectivityState>();
 
+            Log("MauiProgram.CreateMauiApp: AddMauiBlazorWebView()");
             builder.Services.AddMauiBlazorWebView();
 			builder.Services.AddScoped<LoginState>();
 			builder.Services.AddScoped<NavHistoryService>();
@@ -89,7 +108,10 @@ namespace SPIC.MauiBlazorApp
             builder.Logging.AddDebug();
 #endif
 
-            return builder.Build();
+            Log("MauiProgram.CreateMauiApp: Calling builder.Build()");
+            var app = builder.Build();
+            Log("MauiProgram.CreateMauiApp: builder.Build() complete");
+            return app;
         }
 
         private static TelemetryApp CurrentApp()
