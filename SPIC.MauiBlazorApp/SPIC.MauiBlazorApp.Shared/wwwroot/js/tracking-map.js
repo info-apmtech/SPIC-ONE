@@ -127,3 +127,43 @@ window.destroyTrackingRouteMap = function (elementId) {
         delete window.mapInstances[elementId];
     }
 };
+
+// ---------------------------------------------------------------------------
+// Single-location map modal / viewer (used by MarkAttendance.razor "view on map")
+// ---------------------------------------------------------------------------
+window.initSingleLocationMap = function (elementId, lat, lng, popupText) {
+    if (!window.mapInstances) window.mapInstances = {};
+    if (window.mapInstances[elementId]) {
+        try { window.mapInstances[elementId].remove(); } catch (e) { }
+        delete window.mapInstances[elementId];
+    }
+
+    var map = L.map(elementId).setView([lat, lng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    var markerIcon = L.divIcon({
+        className: 'jt-map-pin-icon jt-map-pin-current',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        html: '<i class="bi bi-geo-alt-fill text-danger" style="font-size: 1.5rem; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));"></i>'
+    });
+
+    var marker = L.marker([lat, lng], { icon: markerIcon }).addTo(map);
+    if (popupText) {
+        marker.bindPopup('<b>' + popupText + '</b>').openPopup();
+    }
+    window.mapInstances[elementId] = map;
+
+    setTimeout(function () {
+        map.invalidateSize();
+    }, 250);
+};
+
+window.destroySingleLocationMap = function (elementId) {
+    if (window.mapInstances && window.mapInstances[elementId]) {
+        try { window.mapInstances[elementId].remove(); } catch (e) { }
+        delete window.mapInstances[elementId];
+    }
+};

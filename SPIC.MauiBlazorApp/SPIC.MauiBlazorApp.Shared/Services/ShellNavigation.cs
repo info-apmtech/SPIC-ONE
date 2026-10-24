@@ -69,6 +69,8 @@ public static class ShellNavigation
     public const string GroupApprovals = "Approvals & Reports";
     public const string GroupSchemes = "Schemes";
     public const string GroupDemoDocumentation = "Demo Documentation";
+    public const string GroupJmdoPortal = "JMDO Portal";
+    public const string GroupMdoPortal = "MDO Portal";
 
     // Admin-only helper for the entries that are deliberately not Designation-controlled.
     private static bool IsAdmin(LoginState s) => s.UserRole is AppRole.Admin;
@@ -440,6 +442,32 @@ public static class ShellNavigation
         { MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.ExtensionRequests) },
         new("FarmDashboard", "Farm Operations", "bi-speedometer2", "/FarmDashboard", nameof(PagePermission.FarmDashboard))
         { MoreOnly = true, Rule = s => s.CanSeeMenu(PagePermission.FarmDashboard) },
+
+        // ---- JMDO Portal (mirrors NavMenu.razor's JmdoMenuItems fragment: My Dashboard / My
+        //      Reports / Tasks Allocation / Mark Attendance / Track Playback). Appended at the end,
+        //      same reasoning as Demo Documentation above - keeps every existing candidate's
+        //      position, and therefore every other role's tab/rail/More order, unchanged.
+        //      Track Playback shares MarkAttendance's PermissionKey: it's MarkAttendance.razor's own
+        //      second @page route (see the RouteAliases entry above), and NavMenu.razor gates both
+        //      NavLinks behind the same CanSeeMenu(PagePermission.MarkAttendance) check. ----
+        new("FieldDashboard", "My Dashboard", "bi-speedometer2", "/FieldDashboard", nameof(PagePermission.FieldDashboard)) { Group = GroupJmdoPortal },
+        new("FieldReports", "My Reports", "bi-file-earmark-bar-graph", "/FieldReports", nameof(PagePermission.FieldReports)) { Group = GroupJmdoPortal },
+        new("TasksAllocation", "Tasks Allocation", "bi-list-task", "/TasksAllocation", nameof(PagePermission.TasksAllocation)) { Group = GroupJmdoPortal },
+        new("MarkAttendance", "Mark Attendance", "bi-calendar-check", "/MarkAttendance", nameof(PagePermission.MarkAttendance)) { Group = GroupJmdoPortal },
+        new("TrackPlayback", "Track Playback", "bi-map", "/TrackPlayback", nameof(PagePermission.MarkAttendance)) { Group = GroupJmdoPortal },
+
+        // ---- MDO Portal (same source fragment, the MDO-only remainder of it). Same reasoning: a
+        //      real MDO's own Designation decides which of these actually show via each item's own
+        //      CanSeeMenu check - this just gives them a destination (tab/More) now that the mobile
+        //      "full menu" sidebar they used to rely on is gone. ----
+        new("MdoDashboard", "Team Dashboard", "bi-diagram-3", "/MdoDashboard", nameof(PagePermission.MdoDashboard)) { Group = GroupMdoPortal },
+        new("AllocationRequests", "Allocation Requests", "bi-person-check", "/AllocationRequests", nameof(PagePermission.AllocationRequests)) { Group = GroupMdoPortal },
+        new("TaskMonitoring", "Task Monitoring", "bi-list-check", "/TaskMonitoring", nameof(PagePermission.TaskMonitoring)) { Group = GroupMdoPortal },
+        new("PerformanceTracker", "Performance Tracker", "bi-trophy", "/PerformanceTracker", nameof(PagePermission.PerformanceTracker)) { Group = GroupMdoPortal },
+        new("TargetAchievement", "Target / Achievement", "bi-bullseye", "/TargetAchievement", nameof(PagePermission.TargetAchievement)) { Group = GroupMdoPortal },
+        new("FarmerData", "Farmer Data", "bi-people", "/FarmerData", nameof(PagePermission.FarmerData)) { Group = GroupMdoPortal },
+        new("MdoReports", "Reports", "bi-bar-chart", "/MdoReports", nameof(PagePermission.MdoReports)) { Group = GroupMdoPortal },
+        new("TeamTracking", "Team Tracking", "bi-geo-alt", "/TeamTracking", nameof(PagePermission.TeamTracking)) { Group = GroupMdoPortal },
     };
 
     // ---------------------------------------------------------------------------------------------
@@ -454,7 +482,13 @@ public static class ShellNavigation
     // Edit ONLY this table to change the bar.
     // ---------------------------------------------------------------------------------------------
     private static readonly string[] DealerPriority = { "SDWADashboard", "WelfareSchemes", "GuestHouse", "MyBookings" };
-    private static readonly string[] FieldStaffPriority = { "Dashboard", "Activities", "SubDealerList", "Farmers" };            // MO / MDO / JMDO
+    private static readonly string[] FieldStaffPriority = { "Dashboard", "Activities", "SubDealerList", "Farmers" };            // MO only
+    // JMDO's and MDO's own most-used destinations (requirement, 2026-10-24) - split out from
+    // FieldStaffPriority so MO (who still uses the generic field-staff bar above) is unaffected.
+    // Deliberately 3 items, not 4: the product owner wants the 4th slot to stay "More", not get
+    // filled by an unrelated page - see the early-return in Pick() below for the JMDO/MDO case.
+    private static readonly string[] JmdoPriority = { "FieldDashboard", "TasksAllocation", "MarkAttendance" };
+    private static readonly string[] MdoPriority = { "MdoDashboard", "AllocationRequests", "TaskMonitoring" };
     private static readonly string[] RegionPriority = { "Dashboard", "SubDealerList", "RMDValidationQueue", "ReportsCenter" };  // RM / RMD
     private static readonly string[] StatePriority = { "Dashboard", "SMMApprovals", "SubDealerList", "ReportsCenter" };         // SMD / SMM
     private static readonly string[] AdminPriority = { "Dashboard", "AVPApprovals", "ReportsCenter", "DigitalLibrary" };        // Admin / CorporateAdmin / Director / AVP (Library falls through for Director / AVP)
@@ -464,7 +498,9 @@ public static class ShellNavigation
     public static IReadOnlyList<string> GetRolePriority(AppRole? role) => role switch
     {
         AppRole.Dealer => DealerPriority,
-        AppRole.MO or AppRole.MDO or AppRole.JMDO => FieldStaffPriority,
+        AppRole.JMDO => JmdoPriority,
+        AppRole.MDO => MdoPriority,
+        AppRole.MO => FieldStaffPriority,
         AppRole.RM or AppRole.RMD => RegionPriority,
         AppRole.SMD or AppRole.SMM => StatePriority,
         AppRole.Admin or AppRole.CorporateAdmin or AppRole.Director or AppRole.AVP => AdminPriority,
@@ -491,9 +527,11 @@ public static class ShellNavigation
 
     /// <summary>
     /// Up to <see cref="MaxPhoneTabs"/> accessible destinations for the phone bottom tab bar:
-    /// the role's priority list first, then the remaining Candidates in order.
+    /// the role's priority list first, then the remaining Candidates in order (except JMDO/MDO,
+    /// whose curated 3-item priority list is used as-is - see Pick's allowFallback param).
     /// </summary>
-    public static IReadOnlyList<ShellTab> GetPhoneTabs(LoginState state) => Pick(state, MaxPhoneTabs);
+    public static IReadOnlyList<ShellTab> GetPhoneTabs(LoginState state) =>
+        Pick(state, MaxPhoneTabs, allowFallback: state?.UserRole is not (AppRole.JMDO or AppRole.MDO));
 
     /// <summary>Up to <see cref="MaxRailItems"/> accessible destinations for the tablet rail (same ordering).</summary>
     public static IReadOnlyList<ShellTab> GetRailItems(LoginState state) => Pick(state, MaxRailItems);
@@ -502,9 +540,25 @@ public static class ShellNavigation
     public static IReadOnlyList<ShellTab> MoreItems(LoginState state)
     {
         var tabs = GetPhoneTabs(state);
-        return Candidates
-            .Where(c => !tabs.Contains(c) && IsAccessible(state, c))
-            .ToList();
+        var items = Candidates.Where(c => !tabs.Contains(c) && IsAccessible(state, c));
+
+        // JMDO's and MDO's More sheet stay scoped to the field portal (requirement, 2026-10-24):
+        // other groups (SAS Portal, MD Portal, etc.) only show up today because a test account
+        // happened to also hold those designations - a real field officer's or supervisor's
+        // designation would never grant them, but this keeps the menu correct either way. JMDO/MDO
+        // Portal are allowed for EITHER role (not just their own) because several pages (Tasks
+        // Allocation, Mark Attendance / Track Playback) are genuinely shared between the two
+        // depending on what a specific Designation grants - IsAccessible's own CanSeeMenu check on
+        // each item is what actually decides visibility; this only keeps unrelated groups out.
+        // Demo Documentation is JMDO-only (requirement, 2026-10-24) - it was part of their old
+        // "full menu" sidebar too, but is not an MDO destination. Ungrouped items (Digital Library,
+        // Community, Contact Us - open to every signed-in role) still show for both.
+        if (state?.UserRole == AppRole.JMDO)
+            items = items.Where(c => c.Group is null or GroupJmdoPortal or GroupMdoPortal or GroupDemoDocumentation);
+        else if (state?.UserRole == AppRole.MDO)
+            items = items.Where(c => c.Group is null or GroupJmdoPortal or GroupMdoPortal);
+
+        return items.ToList();
     }
 
     /// <summary>
@@ -525,7 +579,7 @@ public static class ShellNavigation
         return result;
     }
 
-    private static IReadOnlyList<ShellTab> Pick(LoginState state, int max)
+    private static IReadOnlyList<ShellTab> Pick(LoginState state, int max, bool allowFallback = true)
     {
         var result = new List<ShellTab>(max);
         if (state is null || !state.IsLoggedIn) return result;
@@ -537,6 +591,12 @@ public static class ShellNavigation
             if (tab is not null && !result.Contains(tab) && IsAccessible(state, tab))
                 result.Add(tab);
         }
+
+        // JMDO/MDO's phone priority lists are deliberately 3 items, not 4 (product requirement,
+        // 2026-10-24): the remaining tab-bar slot stays "More" rather than getting filled by an
+        // unrelated generic page via the fallback below. GetRailItems (tablet, more room) still
+        // passes allowFallback: true, so the rail is unaffected.
+        if (!allowFallback) return result;
 
         foreach (var tab in Candidates)
         {

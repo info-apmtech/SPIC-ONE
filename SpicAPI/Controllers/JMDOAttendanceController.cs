@@ -53,12 +53,19 @@ namespace SpicAPI.Controllers
                 return BadRequest(new { Success = false, Message = "Request body is required." });
             if (dto.Date == default)
                 return BadRequest(new { Success = false, Message = "Date is required." });
-            if (string.IsNullOrWhiteSpace(dto.VisitArea))
-                return BadRequest(new { Success = false, Message = "Visit Area / Place is required." });
             if (!Enum.IsDefined(typeof(JMDOAttendanceStatus), dto.AttendanceStatus))
                 return BadRequest(new { Success = false, Message = "Attendance Status is required." });
-            if (!IsValidCoordinate(dto.Latitude, dto.Longitude))
-                return BadRequest(new { Success = false, Message = "A valid current location (latitude/longitude) is required to mark attendance." });
+
+            var hasCoordinates = dto.Latitude.HasValue && dto.Longitude.HasValue;
+            if (hasCoordinates)
+            {
+                if (!IsValidCoordinate(dto.Latitude, dto.Longitude))
+                    return BadRequest(new { Success = false, Message = "A valid location (latitude/longitude) is required." });
+            }
+            else if (string.IsNullOrWhiteSpace(dto.VisitArea))
+            {
+                return BadRequest(new { Success = false, Message = "Visit Area / Place is required when location is unavailable." });
+            }
 
             var userId = CurrentUserId();
             var date = dto.Date.Date;
@@ -82,7 +89,7 @@ namespace SpicAPI.Controllers
                 _db.JMDOAttendances.Add(attendance);
             }
 
-            attendance.VisitArea = dto.VisitArea.Trim();
+            attendance.VisitArea = string.IsNullOrWhiteSpace(dto.VisitArea) ? null : dto.VisitArea.Trim();
             attendance.AttendanceStatus = dto.AttendanceStatus;
             attendance.DutyStatus = DutyStatusFor(dto.AttendanceStatus);
             attendance.AttendanceUpdatedAt = now;

@@ -512,6 +512,14 @@ namespace SpicAPI.Controllers
 
 
                 // =====================================================
+                // SAVE EXPENSE BREAKDOWN - normalized CSR1Expenses rows
+                // =====================================================
+
+                _db.Set<CSR1Expenses>().AddRange(
+                    SPIC.Core.Entities.CSR1ExpenseMapper.ToExpenseRows(model, csr1Id));
+                await _db.SaveChangesAsync();
+
+                // =====================================================
                 // SAVE MULTI CROP / PRODUCT GROUPS - NEW DB SHAPE
                 // One row per Focus section. CropId/ProductId are PostgreSQL int[].
                 // =====================================================
@@ -943,6 +951,19 @@ namespace SpicAPI.Controllers
                         message = "CSR1 record not found."
                     });
                 }
+
+                // =====================================================
+                // REPLACE EXPENSE BREAKDOWN - delete + recreate, same
+                // pattern as the Product groups below.
+                // =====================================================
+
+                var existingExpenses = await _db.Set<CSR1Expenses>()
+                    .Where(x => x.CSR1Id == id)
+                    .ToListAsync();
+                _db.Set<CSR1Expenses>().RemoveRange(existingExpenses);
+                _db.Set<CSR1Expenses>().AddRange(
+                    SPIC.Core.Entities.CSR1ExpenseMapper.ToExpenseRows(entity, id));
+                await _db.SaveChangesAsync();
 
                 // =====================================================
                 // DELETE OLD GROUP 1
@@ -1535,6 +1556,20 @@ namespace SpicAPI.Controllers
 
 
                 // =====================================================
+                // EXPENSE BREAKDOWN
+                // Rehydrates csr1's 11 legacy [NotMapped] properties from
+                // CSR1Expenses, so the DTO fields below keep reading them
+                // the same way they always have.
+                // =====================================================
+
+                var csr1Expenses =
+                    await _db.Set<CSR1Expenses>()
+                        .Where(x => x.CSR1Id == id && x.IsActive)
+                        .ToListAsync();
+                SPIC.Core.Entities.CSR1ExpenseMapper.ApplyExpenses(csr1, csr1Expenses);
+
+
+                // =====================================================
                 // CREATED / UPDATED USER
                 // =====================================================
 
@@ -1887,6 +1922,11 @@ namespace SpicAPI.Controllers
                 .FirstOrDefaultAsync(x => x.Id == id && x.IsActive);
             if (csr == null) return NotFound();
             // INSERT the existing record-level access check here BEFORE returning data.
+
+            var reviewExpenses = await _db.Set<CSR1Expenses>().AsNoTracking()
+                .Where(x => x.CSR1Id == id && x.IsActive)
+                .ToListAsync();
+            SPIC.Core.Entities.CSR1ExpenseMapper.ApplyExpenses(csr, reviewExpenses);
 
             var g1 = await _db.Set<CSR1Products1>().AsNoTracking()
                 .Where(x => x.CSR1Id == id && x.IsActive)

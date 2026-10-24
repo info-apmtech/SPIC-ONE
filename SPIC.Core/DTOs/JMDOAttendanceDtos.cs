@@ -15,9 +15,9 @@ namespace SPIC.Core.DTOs;
 public class JMDOAttendanceUpsertDto
 {
     public DateTime Date { get; set; }
-    public string VisitArea { get; set; } = "";
+    public string? VisitArea { get; set; }
     public JMDOAttendanceStatus AttendanceStatus { get; set; }
-    /// <summary>GPS fix captured at the moment Update Attendance was clicked. Required; the server rejects a missing or out-of-range value.</summary>
+    /// <summary>GPS fix captured at the moment Update Attendance was clicked. Nullable if location unavailable.</summary>
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
 }
@@ -28,7 +28,7 @@ public class JMDOAttendanceDto
     public string UserId { get; set; } = "";
     public string? UserName { get; set; }
     public DateTime Date { get; set; }
-    public string VisitArea { get; set; } = "";
+    public string? VisitArea { get; set; }
     public JMDOAttendanceStatus AttendanceStatus { get; set; }
     public JMDODutyStatus DutyStatus { get; set; }
     public DateTime? AttendanceUpdatedAt { get; set; }

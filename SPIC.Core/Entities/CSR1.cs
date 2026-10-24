@@ -29,6 +29,48 @@ namespace SPIC.Core.Entities
         public string? ResponsiblePersonId { get; set; }
 
         // -------------------------
+        // Expense Breakdown
+        // -------------------------
+        // NotMapped, not columns: the expense breakdown moved to the normalized CSR1Expenses table
+        // (one row per CSR1Id+ExpenseId, see CSR1Expenses below and ExpenseInformation for the
+        // catalog of expense types) on 2026-10-24. These 11 properties are kept on CSR1 purely as a
+        // stable, backward-compatible shape for request/response JSON (CSR1SaveRequest.CSR1 IS this
+        // entity, and the UI still sends/expects these exact field names) - CSR1ExpenseMapper
+        // converts between this shape and CSR1Expenses rows; nothing here is ever queried by EF.
+        [NotMapped]
+        public decimal PrintingAndStationery { get; set; }
+
+        [NotMapped]
+        public decimal PublicityMaterial { get; set; }
+
+        [NotMapped]
+        public decimal StageArrangements { get; set; }
+
+        [NotMapped]
+        public decimal ServiceChargesLCA { get; set; }
+
+        [NotMapped]
+        public decimal TransportRent { get; set; }
+
+        [NotMapped]
+        public decimal JeepRunningExpenses { get; set; }
+
+        [NotMapped]
+        public decimal Refreshments { get; set; }
+
+        [NotMapped]
+        public decimal Inputs { get; set; }
+
+        [NotMapped]
+        public decimal Photography { get; set; }
+
+        [NotMapped]
+        public decimal Compliments { get; set; }
+
+        [NotMapped]
+        public decimal Others { get; set; }
+
+        // -------------------------
         // Workflow
         // -------------------------
         public CSR1Status Status { get; set; } = CSR1Status.Draft;
@@ -92,6 +134,25 @@ namespace SPIC.Core.Entities
         public bool IsActive { get; set; } = true;
     }
 
+    /// <summary>
+    /// One row per (CSR1Id, ExpenseId) with a non-zero amount - the normalized replacement for the
+    /// 11 fixed decimal columns that used to live directly on CSR1 (see that class's own comment).
+    /// ExpenseId references ExpenseInformation.Id (the expense-type catalog: Printing & Stationary,
+    /// Publicity Material, etc). CSR1ExpenseMapper is the single place that converts to/from the
+    /// legacy 11-named-field shape used by CSR1SaveRequest/CSR1DetailsDto and the UI.
+    /// </summary>
+    public class CSR1Expenses
+    {
+        [Key]
+        public int Id { get; set; }
+        public int CSR1Id { get; set; }
+        public int? ExpenseId { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal ExpenseAmount { get; set; }
+
+        public bool IsActive { get; set; } = true;
+    }
 
     public class CSR1Products1
     {

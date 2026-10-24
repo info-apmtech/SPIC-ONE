@@ -324,7 +324,11 @@
                                     }
                                     else if (programsLoadFailed)
                                     {
-                                        <EmptyState Icon="bi-exclamation-triangle" Title="Couldn't load MD programs" Message="Please try again in a moment." Compact="true" />
+                                        <EmptyState Icon="bi-exclamation-triangle" Title="Couldn't load MD programs" Message="Please try again in a moment." Compact="true">
+                                            <button type="button" class="ta-btn ta-btn-next" @onclick="LoadProgramsAsync">
+                                                <i class="bi bi-arrow-clockwise"></i> Retry
+                                            </button>
+                                        </EmptyState>
                                     }
                                     else if (!Programs.Any())
                                     {
@@ -2261,7 +2265,20 @@
 
         try
         {
-            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list?mine=true");
+            // GetFromJsonAsync throws on any non-2xx before ever reading the body, which discards
+            // the server's actual error message (CSR1Controller returns { message, error } on a
+            // 500) - using SendAsync and reading the body on failure keeps that detail in the
+            // console instead of losing it, so a future mismatch is diagnosable in seconds, not an
+            // afternoon of archaeology (2026-10-24: this is exactly what happened here).
+            using var response = await Http.GetAsync("api/CSR1/list?mine=true");
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException(
+                    $"{(int)response.StatusCode} {response.StatusCode}: {body}");
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<List<CSR1ListDto>>();
 
             Programs.Clear();
             Programs.AddRange((result ?? new())
