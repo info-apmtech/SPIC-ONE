@@ -42,12 +42,13 @@ namespace SPIC.MauiBlazorApp.Services
 
         public async Task SetAsync(string key, string value)
         {
+            _fallback[key] = value;
+
             if (!_secureStorageBroken)
             {
                 try
                 {
                     await SecureStorage.Default.SetAsync(key, value);
-                    _fallback.TryRemove(key, out _);
                     return;
                 }
                 catch
@@ -55,9 +56,15 @@ namespace SPIC.MauiBlazorApp.Services
                     _secureStorageBroken = true;
                 }
             }
-
-            _fallback[key] = value;
         }
+
+        public Task SetPersistentAsync(string key, string value) => SetAsync(key, value);
+
+        /// <summary>
+        /// On MAUI, SetAsync holds the active session. Removing the "persistent" copy
+        /// (e.g. when RememberMe is false) must NOT wipe the active session!
+        /// </summary>
+        public Task RemovePersistentAsync(string key) => Task.CompletedTask;
 
         public Task RemoveAsync(string key)
         {
