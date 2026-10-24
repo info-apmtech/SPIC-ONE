@@ -1310,6 +1310,40 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("CSR2Participants");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CSRExceedingDaySetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR1Day")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CSR2Day")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CSRExceedingDaySettings");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.Category", b =>
                 {
                     b.Property<int>("Id")
