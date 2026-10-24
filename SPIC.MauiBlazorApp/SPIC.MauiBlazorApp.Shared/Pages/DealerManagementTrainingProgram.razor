@@ -150,7 +150,7 @@ else if (csr1Plan != null)
                     <div class="dmtp-budget-card dmtp-budget-purple">
                         <div class="dmtp-budget-text">
                             <span class="dmtp-budget-label">Media Uploaded</span>
-                            <span class="dmtp-budget-value">@(eventPhotos.Count + eventVideos.Count + eventDocuments.Count) items</span>
+                            <span class="dmtp-budget-value">@(eventPhotos.Count + eventVideos.Count) items</span>
                         </div>
                         <div class="dmtp-budget-icon">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
@@ -447,48 +447,6 @@ else if (csr1Plan != null)
                     </div>
                 </div>
 
-                <!-- Event Documents: PDF/DOC/DOCX stored in CSR2Media -->
-                <div class="dmtp-card">
-                    <div class="dmtp-list-header">
-                        <h3 class="dmtp-card-title dmtp-no-margin">Event Documents (@eventDocuments.Count)</h3>
-                        <label for="dmtp-documents" class="dmtp-btn-add" style="cursor:pointer;">
-                            <i class="bi bi-plus-lg"></i> Upload Documents
-                        </label>
-                        <InputFile id="dmtp-documents" OnChange="OnDocumentsSelected" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple
-                                   style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
-                    </div>
-                    <div class="dmtp-dropzone" style="position:relative;">
-                        <InputFile OnChange="OnDocumentsSelected" accept=".pdf,.doc,.docx" multiple
-                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
-                        <div class="dmtp-dropzone-icon"><i class="bi bi-file-earmark-text"></i></div>
-                        <p class="dmtp-dropzone-title">Drag and drop documents here, or click to browse</p>
-                        <p class="dmtp-dropzone-sub">PDF, DOC, DOCX up to 25MB each</p>
-                    </div>
-                    @if (isReadingDocuments)
-                    {
-                        <div class="text-muted small mt-2">Uploading documents...</div>
-                    }
-                    @if (eventDocuments.Count == 0)
-                    {
-                        <p class="text-muted mt-3">No documents added yet.</p>
-                    }
-                    <div class="dmtp-people-grid">
-                        @foreach (var document in eventDocuments)
-                        {
-                            <div class="dmtp-person-row" @key="document.Id">
-                                <div class="dmtp-person-avatar"><i class="bi bi-file-earmark-text"></i></div>
-                                <div class="dmtp-person-info">
-                                    <span class="dmtp-person-name">@document.FileName</span>
-                                    <span class="dmtp-person-phone">@FormatFileSize(document.SavedFileSize)</span>
-                                </div>
-                                <input type="text" class="dmtp-form-control" placeholder="Add caption" @bind="document.Caption" style="max-width:260px" />
-                                <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => RemoveDocument(document.Id)">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                        }
-                    </div>
-                </div>
             }
             else if (currentStep == 2)
             {
@@ -693,42 +651,77 @@ else if (csr1Plan != null)
                     <h3 class="dmtp-card-title">Expense &amp; Proof</h3>
                     <p class="dmtp-card-subtitle dmtp-expense-subtitle">Add actual expenses and upload bills/proofs for verification. Planned amounts are from approved CSR-1.</p>
                     <div class="dmtp-expense-color-grid">
-                        @foreach (var item in expenseItems)
+                        @foreach (var group in expenseItems.GroupBy(x => x.ExpenseId).OrderBy(x => x.Key))
                         {
-                            <div class="dmtp-expense-color-card @(item.Key == "Others" ? "dmtp-expense-color-full" : "")" @key="item.Key">
-                                <span class="dmtp-expense-color-icon @item.IconClass" aria-hidden="true"><i class="bi @item.Icon"></i></span>
+                            var category = group.First();
+                            var categoryRows = group.ToList();
+
+                            <div class="dmtp-expense-color-card dmtp-expense-multi-card" @key="category.ExpenseId">
+                                <span class="dmtp-expense-color-icon @category.IconClass" aria-hidden="true"><i class="bi @category.Icon"></i></span>
                                 <div class="dmtp-expense-color-content">
-                                    <div class="dmtp-expense-color-heading">
-                                        <strong>@item.Label</strong>
-                                        <span>CSR-1 planned: @Money(item.PlannedAmount)</span>
+                                    <div class="dmtp-expense-color-heading dmtp-expense-category-heading">
+                                        <div>
+                                            <strong>@category.Label</strong>
+                                            <span class="d-block">CSR-1 planned: @Money(category.PlannedAmount)</span>
+                                        </div>
+                                        @if (csr2Status == "Draft")
+                                        {
+                                            <button type="button" class="dmtp-expense-add-row" @onclick="() => AddExpenseEntry(category)">
+                                                <i class="bi bi-plus-lg"></i> Add
+                                            </button>
+                                        }
                                     </div>
-                                    <div class="dmtp-expense-color-fields">
-                                        <div class="dmtp-form-group">
-                                            <label class="dmtp-form-label">Actual amount (₹)</label>
-                                            <input type="number" step="0.01" min="0" class="dmtp-form-control" placeholder="₹ 0" @bind="item.ActualAmount" disabled="@(csr2Status != "Draft")" />
-                                        </div>
-                                        <div class="dmtp-form-group">
-                                            <label class="dmtp-form-label">Bill No.</label>
-                                            <input type="text" maxlength="100" class="dmtp-form-control" placeholder="Enter bill number" @bind="item.BillNo" disabled="@(csr2Status != "Draft")" />
-                                        </div>
-                                        <div class="dmtp-form-group">
-                                            <label class="dmtp-form-label">Date</label>
-                                            <input type="date" class="dmtp-form-control" @bind="item.ExpenseDate" />
-                                        </div>
-                                        <div class="dmtp-form-group dmtp-expense-proof-control">
-                                            <label class="dmtp-form-label">&nbsp;</label>
-                                            <label for="@($"expense-proof-{item.Key}")" class="dmtp-expense-color-upload"><i class="bi bi-upload"></i> Upload proof</label>
-                                            <InputFile id="@($"expense-proof-{item.Key}")" OnChange="@(e => OnExpenseProofSelected(e, item))" accept=".pdf,.jpg,.jpeg,.png" style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
-                                        </div>
-                                    </div>
-                                    @if (!string.IsNullOrWhiteSpace(item.ProofFileName))
+
+                                    @foreach (var item in categoryRows)
                                     {
-                                        <div class="dmtp-expense-color-file">
-                                            <span title="@item.ProofFileName"><i class="bi bi-paperclip"></i> @item.ProofFileName</span>
-                                            <button type="button" class="dmtp-link-remove" @onclick="() => RemoveExpenseProof(item)">Remove</button>
+                                        <div class="dmtp-expense-entry" @key="item.RowId">
+                                            <div class="dmtp-expense-entry-head">
+                                                <span>Entry @(categoryRows.IndexOf(item) + 1)</span>
+                                                @if (csr2Status == "Draft" && categoryRows.Count > 1)
+                                                {
+                                                    <button type="button" class="dmtp-expense-remove-row" @onclick="() => RemoveExpenseEntry(item)" title="Remove this expense entry">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                }
+                                            </div>
+
+                                            <div class="dmtp-expense-color-fields">
+                                                <div class="dmtp-form-group">
+                                                    <label class="dmtp-form-label">Actual amount (₹)</label>
+                                                    <input type="number" step="0.01" min="0" class="dmtp-form-control" placeholder="₹ 0" @bind="item.ActualAmount" disabled="@(csr2Status != "Draft")" />
+                                                </div>
+                                                <div class="dmtp-form-group">
+                                                    <label class="dmtp-form-label">Bill No.</label>
+                                                    <input type="text" maxlength="100" class="dmtp-form-control" placeholder="Enter bill number" @bind="item.BillNo" disabled="@(csr2Status != "Draft")" />
+                                                </div>
+                                                <div class="dmtp-form-group">
+                                                    <label class="dmtp-form-label">Date</label>
+                                                    <input type="date" class="dmtp-form-control" @bind="item.ExpenseDate" disabled="@(csr2Status != "Draft")" />
+                                                </div>
+                                                <div class="dmtp-form-group dmtp-expense-proof-control">
+                                                    <label class="dmtp-form-label">&nbsp;</label>
+                                                    <label for="@($"expense-proof-{item.RowId:N}")" class="dmtp-expense-color-upload"><i class="bi bi-upload"></i> Upload proofs</label>
+                                                    <InputFile id="@($"expense-proof-{item.RowId:N}")" OnChange="@(e => OnExpenseProofSelected(e, item))" accept=".pdf,.jpg,.jpeg,.png" multiple style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+                                                </div>
+                                            </div>
+
+                                            @if (item.Proofs.Count > 0)
+                                            {
+                                                <div class="dmtp-expense-proof-list">
+                                                    @foreach (var proof in item.Proofs)
+                                                    {
+                                                        <div class="dmtp-expense-color-file" @key="proof.LocalId">
+                                                            <span title="@proof.FileName"><i class="bi bi-paperclip"></i> @proof.FileName</span>
+                                                            @if (csr2Status == "Draft")
+                                                            {
+                                                                <button type="button" class="dmtp-link-remove" @onclick="() => RemoveExpenseProof(item, proof)">Remove</button>
+                                                            }
+                                                        </div>
+                                                    }
+                                                </div>
+                                            }
                                         </div>
                                     }
-
                                 </div>
                             </div>
                         }
@@ -879,10 +872,10 @@ else if (csr1Plan != null)
                     </div>
                 </div>
 
-                <!-- Photos, Videos and Documents -->
+                <!-- Photos and Videos -->
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
-                        <h3 class="dmtp-card-title dmtp-no-margin">Photos, Videos and Documents</h3>
+                        <h3 class="dmtp-card-title dmtp-no-margin">Photos & Videos</h3>
                         <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
                     </div>
                     <div class="dmtp-review-photo-grid">
@@ -924,21 +917,6 @@ else if (csr1Plan != null)
                             }
                         </div>
                     }
-                    @if (eventDocuments.Count > 0)
-                    {
-                        <div class="dmtp-people-grid mt-3">
-                            @foreach (var document in eventDocuments)
-                            {
-                                <div class="dmtp-person-row" @key="document.Id">
-                                    <div class="dmtp-person-avatar"><i class="bi bi-file-earmark-text"></i></div>
-                                    <div class="dmtp-person-info">
-                                        <span class="dmtp-person-name">@document.FileName</span>
-                                        <span class="dmtp-person-phone">@(!string.IsNullOrWhiteSpace(document.Caption) ? document.Caption : "Document")</span>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    }
                 </div>
 
                 <!-- Approved CSR-1 Planned Expense Breakdown -->
@@ -946,11 +924,29 @@ else if (csr1Plan != null)
                     <h3 class="dmtp-card-title">Planned Expense Breakdown (CSR-1)</h3>
                     <div class="dmtp-table-wrap">
                         <table class="dmtp-table">
-                            <thead><tr><th>Expense Category</th><th>Bill No.</th><th>Planned (CSR-1)</th><th>Actual (CSR-2)</th></tr></thead>
+                            <thead><tr><th>Expense Category</th><th>Bill No.</th><th>Bill Date</th><th>Planned (CSR-1)</th><th>Actual (CSR-2)</th></tr></thead>
                             <tbody>
-                                @foreach (var item in CSR1PlannedExpenses)
+                                @foreach (var planned in CSR1PlannedExpenses)
                                 {
-                                    <tr><td>@item.Label</td><td>@Display(expenseItems.FirstOrDefault(x => x.Label == item.Label)?.BillNo)</td><td>@Money(item.Amount)</td><td>@Money(expenseItems.FirstOrDefault(x => x.Label == item.Label)?.ActualAmount ?? 0m)</td></tr>
+                                    var rows = expenseItems.Where(x => x.ExpenseId == planned.ExpenseId).ToList();
+                                    if (rows.Count == 0)
+                                    {
+                                        <tr><td>@planned.Label</td><td>-</td><td>@Money(planned.Amount)</td><td>@Money(0m)</td></tr>
+                                    }
+                                    else
+                                    {
+                                        @for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+                                        {
+                                            var actualItem = rows[rowIndex];
+                                            <tr>
+                                                <td>@planned.Label @(rows.Count > 1 ? $"- Entry {rowIndex + 1}" : "")</td>
+                                                <td>@Display(actualItem.BillNo)</td>
+                                                <td>@(actualItem.ExpenseDate?.ToString("dd MMM yyyy") ?? "-")</td>
+                                                <td>@(rowIndex == 0 ? Money(planned.Amount) : "-")</td>
+                                                <td>@Money(actualItem.ActualAmount ?? 0m)</td>
+                                            </tr>
+                                        }
+                                    }
                                 }
                                 <tr class="dmtp-table-total-row"><td>Total</td><td></td><td>@Money(CSR1PlannedExpenses.Sum(x => x.Amount))</td><td>@Money(ActualExpenseTotal)</td></tr>
                             </tbody>
@@ -1235,6 +1231,12 @@ else if (csr1Plan != null)
             background: #edf9f1
         }
 
+    .dmtp-expense-proof-list {
+        display: grid;
+        gap: 6px;
+        margin-top: 8px;
+    }
+
     .dmtp-expense-color-file {
         display: flex;
         justify-content: space-between;
@@ -1303,6 +1305,61 @@ else if (csr1Plan != null)
     .exp-gray {
         background: #f0f2f4;
         color: #7c8590
+    }
+
+    .dmtp-expense-multi-card {
+        align-items: flex-start;
+    }
+
+    .dmtp-expense-category-heading {
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .dmtp-expense-add-row,
+    .dmtp-expense-remove-row {
+        border: 1px solid #86c8a2;
+        background: #f0fbf5;
+        color: #11693b;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .dmtp-expense-add-row {
+        padding: 6px 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .dmtp-expense-remove-row {
+        width: 28px;
+        height: 28px;
+        color: #b42318;
+        border-color: #f0b4ae;
+        background: #fff5f4;
+    }
+
+    .dmtp-expense-entry {
+        border-top: 1px dashed #d7dde5;
+        padding-top: 9px;
+        margin-top: 9px;
+    }
+
+        .dmtp-expense-entry:first-of-type {
+            margin-top: 0;
+        }
+
+    .dmtp-expense-entry-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+        color: #64748b;
+        font-size: 10px;
+        font-weight: 600;
     }
 
     @@media(max-width:1090px) {
@@ -1375,6 +1432,14 @@ else if (csr1Plan != null)
         public string? ResponsiblePersonId { get; set; }
         public string? ResponsiblePersonEmployeeId { get; set; }
         public string? ResponsiblePersonName { get; set; }
+        public List<CSR1PlannedExpenseApiDto> Expenses { get; set; } = new();
+    }
+
+    private sealed class CSR1PlannedExpenseApiDto
+    {
+        public int ExpenseId { get; set; }
+        public string ExpenseName { get; set; } = "";
+        public decimal ExpenseAmount { get; set; }
     }
 
     private CSR1DisplayDetailsDto? csr1DisplayDetails;
@@ -1402,7 +1467,7 @@ else if (csr1Plan != null)
     private string csr1Error = "";
 
     private record FocusGroup(int Number, List<CSR1FocusDetailsDto> Items);
-    private record PlannedExpense(string Label, decimal Amount);
+    private record PlannedExpense(int ExpenseId, string Label, decimal Amount);
 
     private List<FocusGroup> CSR1FocusGroups => csr1Plan == null ? new() : new()
     {
@@ -1411,20 +1476,15 @@ else if (csr1Plan != null)
         new(3, csr1Plan.Focus3 ?? new())
     };
 
-    private List<PlannedExpense> CSR1PlannedExpenses => csr1Plan == null ? new() : new()
-    {
-        new("Printing & Stationery", csr1Plan.PrintingAndStationery),
-        new("Publicity Material", csr1Plan.PublicityMaterial),
-        new("Stage Arrangements", csr1Plan.StageArrangements),
-        new("Service Charges - LCA", csr1Plan.ServiceChargesLCA),
-        new("Transport / Rent", csr1Plan.TransportRent),
-        new("Jeep Running Expenses", csr1Plan.JeepRunningExpenses),
-        new("Refreshments", csr1Plan.Refreshments),
-        new("Inputs", csr1Plan.Inputs),
-        new("Photography", csr1Plan.Photography),
-        new("Compliments", csr1Plan.Compliments),
-        new("Others", csr1Plan.Others)
-    };
+    // Show every active ExpenseInformations row in CSR-2.
+    // ExpenseAmount is filled from CSR1Expenses when a matching row exists; otherwise it is 0.
+    private List<PlannedExpense> CSR1PlannedExpenses =>
+        csr1DisplayDetails?.Expenses?
+            .Where(x => x.ExpenseId > 0)
+            .OrderBy(x => x.ExpenseId)
+            .Select(x => new PlannedExpense(x.ExpenseId, x.ExpenseName, x.ExpenseAmount))
+            .ToList()
+        ?? new List<PlannedExpense>();
 
     private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
     private static string Money(decimal amount) => "₹ " + amount.ToString("N2", CultureInfo.GetCultureInfo("en-IN"));
@@ -1754,25 +1814,6 @@ else if (csr1Plan != null)
     }
 
     private static string FormatVideoSize(long bytes) => $"{bytes / (1024d * 1024d):N1} MB";
-    private static string FormatFileSize(long bytes) => bytes >= 1024L * 1024L
-        ? $"{bytes / (1024d * 1024d):N1} MB"
-        : $"{bytes / 1024d:N0} KB";
-
-    private const long MaxDocumentBytes = 25L * 1024 * 1024;
-    private readonly List<DocumentItem> eventDocuments = new();
-    private bool isReadingDocuments;
-
-    private sealed class DocumentItem
-    {
-        public Guid Id { get; set; } = Guid.NewGuid();
-        public string FileName { get; set; } = "";
-        public string Caption { get; set; } = "";
-        public string ContentType { get; set; } = "";
-        public byte[] Bytes { get; set; } = Array.Empty<byte>();
-        public int ServerId { get; set; }
-        public long SavedFileSize { get; set; }
-    }
-
     // Stream directly from IBrowserFile to the existing CSR2Controller media API.
     // Avoid MemoryStream, byte[] copies, and base64 video data URLs.
     private async Task OnVideosSelected(InputFileChangeEventArgs args)
@@ -1841,86 +1882,13 @@ else if (csr1Plan != null)
         }
     }
 
-    private async Task OnDocumentsSelected(InputFileChangeEventArgs args)
-    {
-        if (isReadingDocuments || savingCSR2) return;
-        if (csr2Status != "Draft") { ShowCsr2Alert("This CSR-2 is read-only."); return; }
-        if (!ValidateRequiredEventDetails()) { GoToStep(1); return; }
-
-        isReadingDocuments = true;
-        var rejected = new List<string>();
-        try
-        {
-            await SaveCSR2DraftInternal();
-            foreach (var file in args.GetMultipleFiles(20))
-            {
-                var ext = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
-                if (ext != ".pdf" && ext != ".doc" && ext != ".docx")
-                {
-                    rejected.Add($"{file.Name}: PDF/DOC/DOCX only");
-                    continue;
-                }
-                if (file.Size <= 0 || file.Size > MaxDocumentBytes)
-                {
-                    rejected.Add($"{file.Name}: must be under 25MB");
-                    continue;
-                }
-
-                var mime = ext switch
-                {
-                    ".pdf" => "application/pdf",
-                    ".doc" => "application/msword",
-                    _ => "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                };
-
-                await using var stream = file.OpenReadStream(MaxDocumentBytes);
-                using var form = new MultipartFormDataContent();
-                using var content = new StreamContent(stream);
-                content.Headers.ContentType = MediaTypeHeaderValue.Parse(mime);
-                form.Add(content, "file", file.Name);
-                form.Add(new StringContent("Document"), "mediaType");
-                form.Add(new StringContent(""), "caption");
-
-                using var response = await Http.PostAsync($"api/CSR2/{csr2DbId}/media", form);
-                if (!response.IsSuccessStatusCode)
-                {
-                    rejected.Add($"{file.Name}: upload failed - {await response.Content.ReadAsStringAsync()}");
-                    continue;
-                }
-
-                using var result = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-                eventDocuments.Add(new DocumentItem
-                {
-                    ServerId = result.RootElement.GetProperty("id").GetInt32(),
-                    FileName = file.Name,
-                    ContentType = mime,
-                    SavedFileSize = file.Size
-                });
-            }
-        }
-        catch (Exception ex)
-        {
-            rejected.Add($"Unable to upload documents: {ex.Message}");
-        }
-        finally
-        {
-            if (rejected.Count > 0) ShowCsr2Alert(string.Join("; ", rejected));
-            isReadingDocuments = false;
-        }
-    }
-
-    private void RemoveDocument(Guid id)
-    {
-        var media = eventDocuments.FirstOrDefault(x => x.Id == id);
-        if (media?.ServerId > 0) removedMediaIds.Add(media.ServerId);
-        eventDocuments.RemoveAll(x => x.Id == id);
-    }
-
     private void RemoveVideo(Guid id) { var media = eventVideos.FirstOrDefault(x => x.Id == id); if (media?.ServerId > 0) removedMediaIds.Add(media.ServerId); eventVideos.RemoveAll(v => v.Id == id); }
 
     private const long MaxExpenseProofBytes = 10L * 1024 * 1024;
     private sealed class ExpenseItem
     {
+        public Guid RowId { get; set; } = Guid.NewGuid();
+        public int ExpenseId { get; set; }
         public string Key { get; set; } = "";
         public string Label { get; set; } = "";
         public string Icon { get; set; } = "bi-receipt";
@@ -1929,78 +1897,141 @@ else if (csr1Plan != null)
         public decimal? ActualAmount { get; set; }
         public DateTime? ExpenseDate { get; set; }
         public string BillNo { get; set; } = "";
-        public string ProofFileName { get; set; } = "";
-        public string ProofContentType { get; set; } = "";
-        public byte[] ProofBytes { get; set; } = Array.Empty<byte>();
-        public int? ProofId { get; set; }
+        public List<ExpenseProofItem> Proofs { get; set; } = new();
         public string Error { get; set; } = "";
+    }
+
+    private sealed class ExpenseProofItem
+    {
+        public Guid LocalId { get; set; } = Guid.NewGuid();
+        public int? ProofId { get; set; }
+        public string FileName { get; set; } = "";
+        public string ContentType { get; set; } = "";
+        public byte[] Bytes { get; set; } = Array.Empty<byte>();
     }
 
     private readonly List<ExpenseItem> expenseItems = new();
     private decimal ActualExpenseTotal => expenseItems.Sum(x => x.ActualAmount ?? 0m);
     private decimal BudgetBalance => (csr1Plan?.Budget ?? 0m) - ActualExpenseTotal;
 
+    private static readonly string[] ExpenseIcons =
+    {
+        "bi-receipt", "bi-cash-stack", "bi-wallet2", "bi-card-checklist",
+        "bi-file-earmark-text", "bi-bag-check", "bi-box-seam", "bi-clipboard-check",
+        "bi-calculator", "bi-journal-check", "bi-grid"
+    };
+
+    private static readonly string[] ExpenseIconClasses =
+    {
+        "exp-green", "exp-violet", "exp-peach", "exp-blue", "exp-indigo",
+        "exp-mint", "exp-yellow", "exp-pink", "exp-cyan", "exp-sky", "exp-gray"
+    };
+
     private void InitializeExpensesFromCSR1()
     {
         if (csr1Plan is null) return;
-        // Only create the rows once: navigating between steps must not clear user input.
+        // Only create rows once so step navigation does not clear entered CSR-2 values.
         if (expenseItems.Count > 0) return;
-        expenseItems.AddRange(new[]
+
+        var planned = CSR1PlannedExpenses;
+        for (var index = 0; index < planned.Count; index++)
         {
-            new ExpenseItem { Key="PrintingAndStationery", Label="Printing & Stationery", Icon="bi-printer", IconClass="exp-green", PlannedAmount=csr1Plan.PrintingAndStationery },
-            new ExpenseItem { Key="PublicityMaterial", Label="Publicity Material", Icon="bi-megaphone", IconClass="exp-violet", PlannedAmount=csr1Plan.PublicityMaterial },
-            new ExpenseItem { Key="StageArrangements", Label="Stage Arrangements", Icon="bi-shop-window", IconClass="exp-peach", PlannedAmount=csr1Plan.StageArrangements },
-            new ExpenseItem { Key="ServiceChargesLCA", Label="Service Charges - LCA", Icon="bi-gear", IconClass="exp-blue", PlannedAmount=csr1Plan.ServiceChargesLCA },
-            new ExpenseItem { Key="TransportRent", Label="Transport / Rent", Icon="bi-truck", IconClass="exp-indigo", PlannedAmount=csr1Plan.TransportRent },
-            new ExpenseItem { Key="JeepRunningExpenses", Label="Jeep Running Expenses", Icon="bi-car-front", IconClass="exp-mint", PlannedAmount=csr1Plan.JeepRunningExpenses },
-            new ExpenseItem { Key="Refreshments", Label="Refreshments", Icon="bi-cup-hot", IconClass="exp-yellow", PlannedAmount=csr1Plan.Refreshments },
-            new ExpenseItem { Key="Inputs", Label="Inputs", Icon="bi-basket", IconClass="exp-pink", PlannedAmount=csr1Plan.Inputs },
-            new ExpenseItem { Key="Compliments", Label="Compliments", Icon="bi-gift", IconClass="exp-cyan", PlannedAmount=csr1Plan.Compliments },
-            new ExpenseItem { Key="Photography", Label="Photography", Icon="bi-camera", IconClass="exp-sky", PlannedAmount=csr1Plan.Photography },
-            new ExpenseItem { Key="Others", Label="Others", Icon="bi-grid", IconClass="exp-gray", PlannedAmount=csr1Plan.Others }
+            var expense = planned[index];
+            expenseItems.Add(new ExpenseItem
+            {
+                ExpenseId = expense.ExpenseId,
+                // Composite key keeps multiple CSR-2 entries distinct for one ExpenseInformation.
+                Key = BuildExpenseRowKey(expense.ExpenseId, Guid.NewGuid()),
+                Label = expense.Label,
+                PlannedAmount = expense.Amount,
+                Icon = ExpenseIcons[index % ExpenseIcons.Length],
+                IconClass = ExpenseIconClasses[index % ExpenseIconClasses.Length]
+            });
+        }
+    }
+
+    private static string BuildExpenseRowKey(int expenseId, Guid rowId) =>
+        $"{expenseId}:{rowId:N}";
+
+    private static int ParseExpenseIdFromRowKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return 0;
+        var separator = key.IndexOf(':');
+        var idPart = separator >= 0 ? key[..separator] : key;
+        return int.TryParse(idPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : 0;
+    }
+
+    private void AddExpenseEntry(ExpenseItem category)
+    {
+        if (csr2Status != "Draft") return;
+        var rowId = Guid.NewGuid();
+        expenseItems.Add(new ExpenseItem
+        {
+            RowId = rowId,
+            ExpenseId = category.ExpenseId,
+            Key = BuildExpenseRowKey(category.ExpenseId, rowId),
+            Label = category.Label,
+            PlannedAmount = category.PlannedAmount,
+            Icon = category.Icon,
+            IconClass = category.IconClass
         });
+    }
+
+    private void RemoveExpenseEntry(ExpenseItem item)
+    {
+        if (csr2Status != "Draft") return;
+        if (expenseItems.Count(x => x.ExpenseId == item.ExpenseId) <= 1) return;
+        foreach (var proof in item.Proofs.Where(x => x.ProofId.HasValue))
+            removedProofIds.Add(proof.ProofId!.Value);
+        expenseItems.Remove(item);
     }
 
     private async Task OnExpenseProofSelected(InputFileChangeEventArgs e, ExpenseItem item)
     {
         item.Error = "";
-        var file = e.File;
-        var extension = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
-        if (extension != ".pdf" && extension != ".jpg" && extension != ".jpeg" && extension != ".png")
-        {
-            item.Error = "Upload PDF, JPG or PNG only.";
-            ShowCsr2Alert(item.Error);
-            return;
-        }
-        if (file.Size == 0 || file.Size > MaxExpenseProofBytes)
-        {
-            item.Error = "Proof must be smaller than 10 MB.";
-            ShowCsr2Alert(item.Error);
-            return;
-        }
+        var rejected = new List<string>();
         try
         {
-            await using var stream = file.OpenReadStream(MaxExpenseProofBytes);
-            using var memory = new MemoryStream();
-            await stream.CopyToAsync(memory);
-            item.ProofBytes = memory.ToArray();
-            item.ProofFileName = file.Name;
-            item.ProofContentType = file.ContentType;
+            foreach (var file in e.GetMultipleFiles(20))
+            {
+                var extension = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+                if (extension != ".pdf" && extension != ".jpg" && extension != ".jpeg" && extension != ".png")
+                {
+                    rejected.Add($"{file.Name}: PDF/JPG/PNG only");
+                    continue;
+                }
+                if (file.Size == 0 || file.Size > MaxExpenseProofBytes)
+                {
+                    rejected.Add($"{file.Name}: must be smaller than 10 MB");
+                    continue;
+                }
+                await using var stream = file.OpenReadStream(MaxExpenseProofBytes);
+                using var memory = new MemoryStream();
+                await stream.CopyToAsync(memory);
+                item.Proofs.Add(new ExpenseProofItem
+                {
+                    FileName = file.Name,
+                    ContentType = file.ContentType,
+                    Bytes = memory.ToArray()
+                });
+            }
         }
         catch (Exception ex)
         {
-            item.Error = $"Unable to read proof: {ex.Message}";
+            rejected.Add($"Unable to read proof selection: {ex.Message}");
+        }
+
+        if (rejected.Count > 0)
+        {
+            item.Error = string.Join("; ", rejected);
             ShowCsr2Alert(item.Error);
         }
     }
 
-    private void RemoveExpenseProof(ExpenseItem item)
+    private void RemoveExpenseProof(ExpenseItem item, ExpenseProofItem proof)
     {
-        if (item.ProofId.HasValue) removedProofIds.Add(item.ProofId.Value);
-        item.ProofId = null;
-        item.ProofFileName = "";
-        item.ProofContentType = "";
-        item.ProofBytes = Array.Empty<byte>();
+        if (proof.ProofId.HasValue) removedProofIds.Add(proof.ProofId.Value);
+        item.Proofs.Remove(proof);
         item.Error = "";
     }
 
@@ -2297,23 +2328,89 @@ else if (csr1Plan != null)
                 Initials = GetInitials(employeeName)
             });
         }
-        foreach (var item in saved.Expenses)
+        // Rebuild actual expense entries from saved CSR-2 rows. Multiple rows per master expense are supported.
+        foreach (var group in saved.Expenses.GroupBy(x => ParseExpenseIdFromRowKey(x.CategoryKey)))
         {
-            var row = expenseItems.FirstOrDefault(x => x.Key == item.CategoryKey);
-            if (row is null) continue;
-            row.ActualAmount = item.ActualAmount; row.ExpenseDate = item.ExpenseDate; row.BillNo = item.BillNo ?? "";
-            row.ProofId = item.ProofId; row.ProofFileName = item.ProofFileName ?? "";
+            if (group.Key <= 0) continue;
+            var template = expenseItems.FirstOrDefault(x => x.ExpenseId == group.Key);
+            if (template is null) continue;
+
+            var savedRows = group.ToList();
+            var existingRows = expenseItems.Where(x => x.ExpenseId == group.Key).ToList();
+            for (var index = 0; index < savedRows.Count; index++)
+            {
+                var item = savedRows[index];
+                ExpenseItem row;
+                if (index < existingRows.Count)
+                {
+                    row = existingRows[index];
+                }
+                else
+                {
+                    row = new ExpenseItem
+                    {
+                        ExpenseId = template.ExpenseId,
+                        Label = template.Label,
+                        PlannedAmount = template.PlannedAmount,
+                        Icon = template.Icon,
+                        IconClass = template.IconClass
+                    };
+                    expenseItems.Add(row);
+                }
+
+                row.Key = string.IsNullOrWhiteSpace(item.CategoryKey)
+                    ? BuildExpenseRowKey(group.Key, row.RowId)
+                    : item.CategoryKey;
+                row.ActualAmount = item.ActualAmount;
+                row.ExpenseDate = item.ExpenseDate;
+                row.BillNo = item.BillNo ?? "";
+            }
         }
-        eventPhotos.Clear(); eventVideos.Clear(); eventDocuments.Clear();
+        await LoadAllExpenseProofsAsync();
+        eventPhotos.Clear(); eventVideos.Clear();
         triedSavedPhotoPreviews.Clear();
         foreach (var file in saved.Media)
         {
             var url = $"api/CSR2/media/{file.Id}/file";
             if (file.MediaType == "Photo") eventPhotos.Add(new PhotoItem { ServerId = file.Id, FileName = file.OriginalFileName, Caption = file.Caption ?? "", PreviewUrl = "" });
             if (file.MediaType == "Video") eventVideos.Add(new VideoItem { ServerId = file.Id, FileName = file.OriginalFileName, Caption = file.Caption ?? "", PreviewUrl = url, SavedFileSize = file.FileSizeBytes });
-            if (file.MediaType == "Document") eventDocuments.Add(new DocumentItem { ServerId = file.Id, FileName = file.OriginalFileName, Caption = file.Caption ?? "", SavedFileSize = file.FileSizeBytes });
         }
         if (saved.Status != "Draft") { csr2SaveMessage = $"CSR-2 status: {saved.Status}"; }
+    }
+
+    private sealed class ExpenseProofLookupDto
+    {
+        public string CategoryKey { get; set; } = "";
+        public int ProofId { get; set; }
+        public string FileName { get; set; } = "";
+        public string ContentType { get; set; } = "";
+    }
+
+    private async Task LoadAllExpenseProofsAsync()
+    {
+        if (!csr2DbId.HasValue || csr2DbId.Value <= 0) return;
+        try
+        {
+            var proofs = await Http.GetFromJsonAsync<List<ExpenseProofLookupDto>>($"api/CSR2/{csr2DbId.Value}/expense-proofs") ?? new();
+            foreach (var row in expenseItems)
+                row.Proofs.RemoveAll(x => x.ProofId.HasValue);
+
+            foreach (var proof in proofs)
+            {
+                var row = expenseItems.FirstOrDefault(x => x.Key == proof.CategoryKey);
+                if (row == null) continue;
+                row.Proofs.Add(new ExpenseProofItem
+                {
+                    ProofId = proof.ProofId,
+                    FileName = proof.FileName,
+                    ContentType = proof.ContentType
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Unable to load expense proofs: {ex.Message}");
+        }
     }
 
     // Protected API images cannot reliably be rendered with <img src="api/..."> when
@@ -2387,6 +2484,18 @@ else if (csr1Plan != null)
 
     private async Task<bool> SaveCSR2DraftInternal()
     {
+        // Delete server proofs first so removing an expense row cannot orphan files.
+        if (csr2DbId.HasValue && csr2DbId.Value > 0)
+        {
+            foreach (var proofId in removedProofIds.Distinct().ToList())
+            {
+                using var delete = await Http.DeleteAsync($"api/CSR2/proof/{proofId}");
+                if (!delete.IsSuccessStatusCode && delete.StatusCode != System.Net.HttpStatusCode.NotFound)
+                    throw new Exception($"Remove expense proof failed: HTTP {(int)delete.StatusCode}");
+            }
+            removedProofIds.Clear();
+        }
+
         var response = await Http.PostAsJsonAsync("api/CSR2/save-draft", BuildCSR2SaveDto());
         if (!response.IsSuccessStatusCode) throw new Exception($"Save draft failed: HTTP {(int)response.StatusCode} - {await response.Content.ReadAsStringAsync()}");
         using var doc = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -2398,34 +2507,24 @@ else if (csr1Plan != null)
                 throw new Exception($"Remove media failed: HTTP {(int)delete.StatusCode}");
         }
         removedMediaIds.Clear();
-        foreach (var proofId in removedProofIds.Distinct().ToList())
-        {
-            using var delete = await Http.DeleteAsync($"api/CSR2/proof/{proofId}");
-            if (!delete.IsSuccessStatusCode && delete.StatusCode != System.Net.HttpStatusCode.NotFound)
-                throw new Exception($"Remove expense proof failed: HTTP {(int)delete.StatusCode}");
-        }
-        removedProofIds.Clear();
         // Update metadata for previously uploaded files, then upload pending files.
         foreach (var photo in eventPhotos) await UploadOrUpdateMedia(photo.ServerId, photo.Bytes, photo.FileName, "Photo", photo.Caption, photo.ContentType, id => { photo.ServerId = id; photo.Bytes = Array.Empty<byte>(); });
         foreach (var video in eventVideos) await UploadOrUpdateMedia(video.ServerId, video.Bytes, video.FileName, "Video", video.Caption, video.ContentType, id => { video.ServerId = id; video.SavedFileSize = video.Bytes.LongLength; video.Bytes = Array.Empty<byte>(); });
-        foreach (var document in eventDocuments.Where(x => x.ServerId > 0)) await UpdateMediaCaption(document.ServerId, document.Caption);
-        foreach (var item in expenseItems.Where(x => x.ProofBytes.Length > 0))
+        foreach (var item in expenseItems)
         {
-            using var form = new MultipartFormDataContent();
-            using var content = new ByteArrayContent(item.ProofBytes);
-            content.Headers.ContentType = MediaTypeHeaderValue.Parse(string.IsNullOrEmpty(item.ProofContentType) ? "application/octet-stream" : item.ProofContentType);
-            form.Add(content, "file", item.ProofFileName);
-            using var proofResponse = await Http.PostAsync($"api/CSR2/{csr2DbId}/expenses/{Uri.EscapeDataString(item.Key)}/proof", form);
-            if (!proofResponse.IsSuccessStatusCode) throw new Exception($"Proof upload failed ({item.Label}): {await proofResponse.Content.ReadAsStringAsync()}");
-            var oldProofId = item.ProofId;
-            item.ProofBytes = Array.Empty<byte>();
-            using var proofDoc = System.Text.Json.JsonDocument.Parse(await proofResponse.Content.ReadAsStringAsync());
-            item.ProofId = proofDoc.RootElement.GetProperty("id").GetInt32();
-            if (oldProofId.HasValue && oldProofId.Value != item.ProofId.Value)
+            foreach (var proof in item.Proofs.Where(x => x.Bytes.Length > 0).ToList())
             {
-                using var deleteOld = await Http.DeleteAsync($"api/CSR2/proof/{oldProofId.Value}");
-                if (!deleteOld.IsSuccessStatusCode && deleteOld.StatusCode != System.Net.HttpStatusCode.NotFound)
-                    throw new Exception($"New proof uploaded, but old proof deletion failed for {item.Label}.");
+                using var form = new MultipartFormDataContent();
+                using var content = new ByteArrayContent(proof.Bytes);
+                content.Headers.ContentType = MediaTypeHeaderValue.Parse(string.IsNullOrEmpty(proof.ContentType) ? "application/octet-stream" : proof.ContentType);
+                form.Add(content, "file", proof.FileName);
+                using var proofResponse = await Http.PostAsync($"api/CSR2/{csr2DbId}/expenses/{Uri.EscapeDataString(item.Key)}/proof", form);
+                if (!proofResponse.IsSuccessStatusCode)
+                    throw new Exception($"Proof upload failed ({item.Label} / {proof.FileName}): {await proofResponse.Content.ReadAsStringAsync()}");
+
+                using var proofDoc = System.Text.Json.JsonDocument.Parse(await proofResponse.Content.ReadAsStringAsync());
+                proof.ProofId = proofDoc.RootElement.GetProperty("id").GetInt32();
+                proof.Bytes = Array.Empty<byte>();
             }
         }
         return true;

@@ -130,7 +130,21 @@ else
                 </div>
                 <div class="csr-banner-text">
                     <h4>Only approved budget allocations are show below</h4>
-                    <p>You can apply for CSR-1 against these approved programs. Showing plans for @GetTargetProgramMonth().ToString("MMMM yyyy", CultureInfo.GetCultureInfo("en-IN")) only.</p>
+                    @if (isCSR1CutoffLoaded)
+                    {
+                        <p>
+                            You can apply for CSR-1 against these approved programs.
+                            Showing plans for @GetTargetProgramMonth().ToString("MMMM yyyy", CultureInfo.GetCultureInfo("en-IN")) only.
+                        </p>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(workflowSettingError))
+                    {
+                        <p class="text-danger">@workflowSettingError</p>
+                    }
+                    else
+                    {
+                        <p>Loading CSR-1 workflow settings...</p>
+                    }
                 </div>
             </div>
             <div class="csr-banner-right">
@@ -429,8 +443,8 @@ else
                     </td>
                     <td>
                         ₹@program.TotalBudget.ToString(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                    "N0",
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                    CultureInfo.CreateSpecificCulture("en-IN"))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    "N0",
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    CultureInfo.CreateSpecificCulture("en-IN"))
                     </td>
                     <td style="text-align:right;">
                         <button type="button"
@@ -496,15 +510,35 @@ else
                         </select>
                     </div>
 
-                    <!-- Number of Programs -->
-                    <div class="csr-form-group">
-                        <label class="csr-form-label">Number of Programs</label>
-                        <input type="number"
-                               class="csr-form-control"
-                               placeholder="Enter number of programs"
-                               @bind="programCount"
-                               @bind:event="oninput"
-                               min="0" />
+                    <!-- Program Count Summary - kept inside the 3rd form column -->
+                    <div class="csr-form-group csr-program-summary-column">
+                        <div class="csr-program-summary-box">
+                            <div class="csr-program-summary-item">
+                                <span class="csr-program-summary-label">Number of Programs</span>
+                                <input type="number"
+                                       class="csr-form-control csr-program-summary-input"
+                                       placeholder="0"
+                                       @bind="programCount"
+                                       @bind:event="oninput"
+                                       min="0" readonly />
+                            </div>
+
+                            <div class="csr-program-summary-item">
+                                <span class="csr-program-summary-label">Completed Programs</span>
+                                <input type="number"
+                                       class="csr-form-control csr-program-summary-input readonly-input"
+                                       value="@selectedCompletedPrograms"
+                                       readonly />
+                            </div>
+
+                            <div class="csr-program-summary-item">
+                                <span class="csr-program-summary-label">Remaining Programs</span>
+                                <input type="number"
+                                       class="csr-form-control csr-program-summary-input readonly-input"
+                                       value="@selectedRemainingPrograms"
+                                       readonly />
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Budget -->
@@ -1470,6 +1504,42 @@ else
         font-family: 'Inter', sans-serif;
     }
 
+    .csr-program-summary-column {
+        min-width: 0;
+    }
+
+    .csr-program-summary-box {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        width: 100%;
+        align-items: end;
+    }
+
+    .csr-program-summary-label {
+        display: block;
+        min-height: 18px;
+        margin-bottom: 4px;
+        color: #475569;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.1;
+        white-space: nowrap;
+    }
+
+    .csr-program-summary-input {
+        width: 100%;
+        min-width: 0;
+        padding-left: 10px;
+        padding-right: 8px;
+    }
+
+    .csr-program-summary-item {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
     .readonly-input {
         background-color: #f8fafc !important;
         color: #64748b !important;
@@ -1630,8 +1700,8 @@ else
             font-weight: 700;
         }
     /* =========================================================
-                                                                                       BUDGET PLAN FILTER
-                                                                                       ========================================================= */
+                                                                                                       BUDGET PLAN FILTER
+                                                                                                       ========================================================= */
 
     .csr-filter-card {
         background: #ffffff;
@@ -1968,7 +2038,7 @@ else
                 min-height: 44px;
             }
         /* minmax(0,…) so a long "₹ 50,00,000" cannot push the tile (and the
-                                                                                           page) wider than the 392px viewport. */
+                                                                                                           page) wider than the 392px viewport. */
         .csr-stats-grid-4 {
             grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 10px;
@@ -2007,7 +2077,7 @@ else
             display: none; /* decorative only */
         }
         /* Program table becomes one card per program so "Apply CSR 1" and the
-                                                                                           budget columns are on screen instead of off the right edge. */
+                                                                                                           budget columns are on screen instead of off the right edge. */
         .csr-table-container {
             overflow: visible;
             padding: 0 12px 4px;
@@ -2172,7 +2242,7 @@ else
         }
 
     /* Budget plan list (SpicDataTable) pagination on phones: one row, "Items Per Page"
-                                                           left and the pager right, only prev / current / next — same as the other lists. */
+                                                                           left and the pager right, only prev / current / next — same as the other lists. */
     @@media (max-width: 767.98px) {
         .csr1c-page .spic-dt .pagination-container {
             flex-direction: row;
@@ -2216,6 +2286,16 @@ else
                 display: none;
             }
     }
+
+    @@media (max-width: 768px) {
+        .csr-program-summary-box {
+            grid-template-columns: 1fr;
+        }
+
+        .csr-program-summary-label {
+            min-height: auto;
+        }
+    }
 </style>
 
 @code {
@@ -2224,15 +2304,22 @@ else
     private string csrPopupMessage = string.Empty;
     private int selectedBudgetProgramId = 0;
 
+    private int? csr1CutoffDay;
+    private bool isCSR1CutoffLoaded => csr1CutoffDay.HasValue;
+    private string workflowSettingError = string.Empty;
+
     private string ProgramMinDate =>
-    GetTargetProgramMonth()
-        .ToString("yyyy-MM-dd");
+        isCSR1CutoffLoaded
+            ? GetTargetProgramMonth().ToString("yyyy-MM-dd")
+            : string.Empty;
 
     private string ProgramMaxDate =>
-        GetTargetProgramMonth()
-            .AddMonths(1)
-            .AddDays(-1)
-            .ToString("yyyy-MM-dd");
+        isCSR1CutoffLoaded
+            ? GetTargetProgramMonth()
+                .AddMonths(1)
+                .AddDays(-1)
+                .ToString("yyyy-MM-dd")
+            : string.Empty;
 
     private void ShowCSRPopup(string message, bool success = true)
     {
@@ -2297,6 +2384,8 @@ else
     public int ProgramId { get; set; }
     private decimal? selectedBudget = null;
     private int programCount = 0;
+    private int selectedCompletedPrograms = 0;
+    private decimal selectedRemainingPrograms = 0;
 
     // Additional CSR-1 Plan Detail fields
     private string selectedHq = "";
@@ -2488,16 +2577,56 @@ else
 
     private List<BudgetProgramFilterDto> budgetPrograms = new();
 
-    // Cutoff rule: 1st-26th -> next month; 27th onwards -> month after next.
+    // CSR-1 cutoff comes from CSRExceedingDaySettings.CSR1Day.
     // Always calculate in India time, regardless of server/client local timezone.
-    private static DateTime GetTargetProgramMonth()
+    private DateTime GetTargetProgramMonth()
     {
+        if (!csr1CutoffDay.HasValue)
+        {
+            throw new InvalidOperationException(
+                "CSR-1 cutoff day has not been loaded.");
+        }
+
         var indiaTime = TimeZoneInfo.ConvertTimeFromUtc(
             DateTime.UtcNow,
             TimeZoneInfo.FindSystemTimeZoneById("Asia/Kolkata"));
 
+        var monthOffset =
+            indiaTime.Day <= csr1CutoffDay.Value ? 1 : 2;
+
         return new DateTime(indiaTime.Year, indiaTime.Month, 1)
-            .AddMonths(indiaTime.Day <= 26 ? 1 : 2);
+            .AddMonths(monthOffset);
+    }
+
+    private async Task LoadCSR1WorkflowSettingAsync()
+    {
+        workflowSettingError = string.Empty;
+        csr1CutoffDay = null;
+
+        try
+        {
+            var setting = await Http.GetFromJsonAsync<CSR1WorkflowSettingDto>(
+                "api/CSR1/workflow-setting");
+
+            if (setting == null || setting.CSR1Day < 1 || setting.CSR1Day > 31)
+            {
+                workflowSettingError =
+                    "CSR-1 cutoff day is not configured correctly.";
+                return;
+            }
+
+            csr1CutoffDay = setting.CSR1Day;
+        }
+        catch (Exception ex)
+        {
+            workflowSettingError =
+                $"Unable to load CSR-1 workflow setting: {ex.Message}";
+        }
+    }
+
+    private sealed class CSR1WorkflowSettingDto
+    {
+        public int CSR1Day { get; set; }
     }
 
     private static decimal GetTargetMonthCount(BudgetProgramFilterDto program, int month) => month switch
@@ -2586,6 +2715,15 @@ else
         if (loginState.IsAdmin)
         {
             Navigation.NavigateTo("/CSR-1List");
+            return;
+        }
+
+        // Load CSRExceedingDaySettings.CSR1Day first because the target
+        // program month, budget filtering and date picker all depend on it.
+        await LoadCSR1WorkflowSettingAsync();
+
+        if (!isCSR1CutoffLoaded)
+        {
             return;
         }
 
@@ -2712,8 +2850,8 @@ else
                     options
                 );
 
-            // OLD CSR-1 month rule preserved:
-            // day <= 26 => next month only; day >= 27 => second month only.
+            // CSR-1 month rule uses CSRExceedingDaySettings.CSR1Day.
+            // day <= CSR1Day => next month; day > CSR1Day => second month.
             // Only approved programs having a planned count for that target month are shown.
             var targetMonth = GetTargetProgramMonth();
             // Financial year filtering is already done by the API using
@@ -2954,6 +3092,8 @@ else
        program.NumberOfPrograms > 0
            ? (int)program.NumberOfPrograms
            : 1;
+        selectedCompletedPrograms = program.CompletedPrograms;
+        selectedRemainingPrograms = program.RemainingPrograms;
 
         isFormView = true;
     }
@@ -3217,45 +3357,8 @@ else
             // =========================================================
 
 
-            // =========================================================
-            // EXPENSE DETAILS
-            // =========================================================
-
-            // Expense controls are dynamic, but the current CSR1 table still
-            // stores these known expense categories in its existing columns.
-            csr1Model.PrintingAndStationery =
-                GetExpenseByName("Printing & Stationary", "Printing & Stationery");
-
-            csr1Model.PublicityMaterial =
-                GetExpenseByName("Publicity Material");
-
-            csr1Model.StageArrangements =
-                GetExpenseByName("Stage Arrangements");
-
-            csr1Model.ServiceChargesLCA =
-                GetExpenseByName("Service Charges - LCA", "Service Charges LCA");
-
-            csr1Model.TransportRent =
-                GetExpenseByName("Transport / Rent", "Transport Rent");
-
-            csr1Model.JeepRunningExpenses =
-                GetExpenseByName("Jeep Running Expenses");
-
-            csr1Model.Refreshments =
-                GetExpenseByName("Refreshments");
-
-            csr1Model.Inputs =
-                GetExpenseByName("Inputs");
-
-            csr1Model.Photography =
-                GetExpenseByName("Photography");
-
-            csr1Model.Compliments =
-                GetExpenseByName("Compliments");
-
-            csr1Model.Others =
-                GetExpenseByName("Others");
-
+            // Expense values are saved separately in CSR1Expenses.
+            // ExpenseId is taken directly from ExpenseInformations.Id.
 
             // =========================================================
             // STATUS
@@ -3312,7 +3415,7 @@ else
             // =========================================================
 
             var request =
-                new CSR1SaveRequest
+                new CSR1SaveRequestWithExpenses
                 {
                     CSR1 =
                         csr1Model,
@@ -3333,7 +3436,17 @@ else
                         focusCrop3Ids.ToList(),
 
                     Product3Ids =
-                        focusProduct3Ids.ToList()
+                        focusProduct3Ids.ToList(),
+
+                    // Send only entered expense amounts. Zero-value rows are not persisted.
+                    Expenses = ExpenseInformations
+                        .Where(x => GetExpenseAmount(x.Id) > 0)
+                        .Select(x => new CSR1ExpenseSaveDto
+                        {
+                            ExpenseId = x.Id,
+                            ExpenseAmount = GetExpenseAmount(x.Id)
+                        })
+                        .ToList()
                 };
 
 
@@ -3660,6 +3773,8 @@ else
 
         selectedBudget = null;
         programCount = 0;
+        selectedCompletedPrograms = 0;
+        selectedRemainingPrograms = 0;
 
         selectedHQId = 0;
         selectedZoneId = 0;

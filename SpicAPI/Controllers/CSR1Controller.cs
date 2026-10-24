@@ -240,7 +240,7 @@ namespace SpicAPI.Controllers
 
         [HttpPost]
         public async Task<IActionResult> SaveCSR1(
-[FromBody] CSR1SaveRequest request)
+[FromBody] CSR1SaveRequestWithExpenses request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -360,16 +360,44 @@ namespace SpicAPI.Controllers
                 // VALIDATE EXPENSES AGAINST BUDGET
                 // =====================================================
 
-                var totalExpenses = model.PrintingAndStationery + model.PublicityMaterial +
-                    model.StageArrangements + model.ServiceChargesLCA + model.TransportRent +
-                    model.JeepRunningExpenses + model.Refreshments + model.Inputs +
-                    model.Photography + model.Compliments + model.Others;
+                var requestedExpenses = request.Expenses ?? new List<CSR1ExpenseSaveDto>();
 
-                if (model.Budget > 0 && totalExpenses > model.Budget)
+                // Negative amounts are invalid. Zero amounts are allowed in the request,
+                // but are intentionally not persisted in CSR1Expenses.
+                if (requestedExpenses.Any(x => x.ExpenseId <= 0 || x.ExpenseAmount < 0))
+                    return BadRequest(new { message = "Invalid expense id or amount." });
+
+                var expenseRows = requestedExpenses
+                    .Where(x => x.ExpenseAmount > 0)
+                    .ToList();
+
+                if (expenseRows.GroupBy(x => x.ExpenseId).Any(g => g.Count() > 1))
+                    return BadRequest(new { message = "Duplicate expense entries are not allowed." });
+
+                var requestedExpenseIds = expenseRows.Select(x => x.ExpenseId).Distinct().ToList();
+                var validExpenseIds = await _db.Set<ExpenseInformation>()
+                    .AsNoTracking()
+                    .Where(x => x.IsActive && requestedExpenseIds.Contains(x.Id))
+                    .Select(x => x.Id)
+                    .ToListAsync();
+
+                if (requestedExpenseIds.Any(id => !validExpenseIds.Contains(id)))
+                    return BadRequest(new { message = "One or more selected expenses are invalid or inactive." });
+
+                var totalExpenses = expenseRows
+    .Where(x => x.ExpenseAmount > 0)
+    .Sum(x => x.ExpenseAmount);
+
+                totalExpenses = decimal.Round(totalExpenses, 2);
+                var budgetAmount = decimal.Round(model.Budget, 2);
+
+                if (budgetAmount != totalExpenses)
                 {
                     return BadRequest(new
                     {
-                        message = $"Total Expense Breakdown (₹{totalExpenses:N2}) exceeds the allocated Budget (₹{model.Budget:N2}). Expenses must be within the allocated budget."
+                        message =
+                            $"Budget amount and Total Expense must be equal. " +
+                            $"Budget: ₹{budgetAmount:N2}, Total Expense: ₹{totalExpenses:N2}."
                     });
                 }
 
@@ -406,9 +434,11 @@ namespace SpicAPI.Controllers
                 model.Status =
                     CSR1Status.SubmittedForValidation;
 
-                // NEW: Post-26th application rules only. Keep legacy validation workflow.
-                // Server date determines which approval workflow this record uses.
-                if (Csr1WorkflowRules.IsThreeLevelApplication(currentDate))
+                // CSR-1 cutoff day comes from the active CSRExceedingDaySettings row.
+                // The configured cutoff controls legacy vs three-level workflow.
+                var csr1CutoffDay = await GetCSR1CutoffDayAsync();
+
+                if (IsThreeLevelApplication(currentDate, csr1CutoffDay))
                 {
                     var callerRoles = User.FindAll(ClaimTypes.Role)
                         .Select(x => x.Value.Trim())
@@ -417,17 +447,17 @@ namespace SpicAPI.Controllers
                     if (!callerRoles.Any(Csr1WorkflowRules.CanApplyThreeLevel))
                         return StatusCode(StatusCodes.Status403Forbidden, new
                         {
-                            message = "After the 26th, only MO, SMDO or RMDO can submit CSR-1."
+                            message = $"After the configured CSR-1 cutoff day ({csr1CutoffDay}), only MO, SMDO or RMDO can submit CSR-1."
                         });
 
                     // CSR1Date is treated as PROGRAM date (not application date).
-                    var allowedMonth = Csr1WorkflowRules.AllowedProgramMonth(currentDate);
+                    var allowedMonth = AllowedProgramMonth(currentDate, csr1CutoffDay);
                     if (model.CSR1Date == default ||
                         model.CSR1Date.Year != allowedMonth.Year ||
                         model.CSR1Date.Month != allowedMonth.Month)
                         return BadRequest(new
                         {
-                            message = $"After the 26th, only {allowedMonth:MMMM yyyy} programs can be submitted."
+                            message = $"After the configured CSR-1 cutoff day ({csr1CutoffDay}), only {allowedMonth:MMMM yyyy} programs can be submitted."
                         });
 
                     // Do not allow incoming CreatedAt to impersonate an old workflow.
@@ -461,6 +491,24 @@ namespace SpicAPI.Controllers
 
                 int csr1Id =
                     created.Id;
+
+                // =====================================================
+                // SAVE CSR1 EXPENSES
+                // ExpenseId references ExpenseInformations.Id
+                // =====================================================
+                if (expenseRows.Count > 0)
+                {
+                    _db.Set<CSR1Expenses>().AddRange(
+                        expenseRows.Select(x => new CSR1Expenses
+                        {
+                            CSR1Id = csr1Id,
+                            ExpenseId = x.ExpenseId,
+                            ExpenseAmount = x.ExpenseAmount,
+                            IsActive = true
+                        }));
+
+                    await _db.SaveChangesAsync();
+                }
 
 
                 // =====================================================
@@ -656,6 +704,20 @@ namespace SpicAPI.Controllers
                             x.IsActive)
                         .ToListAsync();
 
+                var expenses = await (
+                    from e in _db.Set<CSR1Expenses>().AsNoTracking()
+                    join master in _db.Set<ExpenseInformation>().AsNoTracking()
+                        on e.ExpenseId equals master.Id
+                    where e.CSR1Id == id && e.IsActive && e.ExpenseAmount > 0
+                    orderby master.Id
+                    select new
+                    {
+                        ExpenseId = master.Id,
+                        ExpenseName = master.Name,
+                        e.ExpenseAmount
+                    })
+                    .ToListAsync();
+
 
                 return Ok(new
                 {
@@ -669,7 +731,8 @@ namespace SpicAPI.Controllers
                     product2Ids = product2.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList(),
 
                     crop3Ids = product3.SelectMany(x => x.CropId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList(),
-                    product3Ids = product3.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList()
+                    product3Ids = product3.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList(),
+                    expenses
                 });
             }
             catch (Exception ex)
@@ -697,7 +760,7 @@ namespace SpicAPI.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(
             int id,
-            [FromBody] CSR1SaveRequest request)
+            [FromBody] CSR1SaveRequestWithExpenses request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -754,11 +817,13 @@ namespace SpicAPI.Controllers
                 }
 
                 // =====================================================
-                // NEW: THREE-LEVEL CSR1 EDIT RESTRICTION (AFTER 26TH)
-                // Existing CSR1 workflow remains unchanged.
+                // THREE-LEVEL CSR1 EDIT RESTRICTION
+                // Cutoff day comes from CSRExceedingDaySettings.CSR1Day.
                 // =====================================================
 
-                if (Csr1WorkflowRules.IsThreeLevelApplication(existing.CreatedAt))
+                var updateCutoffDay = await GetCSR1CutoffDayAsync();
+
+                if (IsThreeLevelApplication(existing.CreatedAt, updateCutoffDay))
                 {
                     if (existing.Status != CSR1Status.Draft)
                     {
@@ -800,6 +865,33 @@ namespace SpicAPI.Controllers
                         message = "ProgramTypeId not configured for selected Program."
                     });
                 }
+
+                var requestedUpdateExpenses = request.Expenses ?? new List<CSR1ExpenseSaveDto>();
+
+                if (requestedUpdateExpenses.Any(x => x.ExpenseId <= 0 || x.ExpenseAmount < 0))
+                    return BadRequest(new { message = "Invalid expense id or amount." });
+
+                // Persist only positive amounts; zero-value rows are omitted.
+                var updateExpenses = requestedUpdateExpenses
+                    .Where(x => x.ExpenseAmount > 0)
+                    .ToList();
+
+                if (updateExpenses.GroupBy(x => x.ExpenseId).Any(g => g.Count() > 1))
+                    return BadRequest(new { message = "Invalid or duplicate expense entries." });
+
+                var updateExpenseIds = updateExpenses.Select(x => x.ExpenseId).Distinct().ToList();
+                var validUpdateExpenseIds = await _db.Set<ExpenseInformation>()
+                    .AsNoTracking()
+                    .Where(x => x.IsActive && updateExpenseIds.Contains(x.Id))
+                    .Select(x => x.Id)
+                    .ToListAsync();
+
+                if (updateExpenseIds.Any(id => !validUpdateExpenseIds.Contains(id)))
+                    return BadRequest(new { message = "One or more selected expenses are invalid or inactive." });
+
+                var updateExpenseTotal = updateExpenses.Sum(x => x.ExpenseAmount);
+                if (entity.Budget > 0 && updateExpenseTotal > entity.Budget)
+                    return BadRequest(new { message = $"Total Expense Breakdown (₹{updateExpenseTotal:N2}) exceeds the allocated Budget (₹{entity.Budget:N2})." });
 
                 // =====================================================
                 // UPDATE AUDIT
@@ -932,6 +1024,20 @@ namespace SpicAPI.Controllers
                     });
                 }
 
+                var existingExpenses = await _db.Set<CSR1Expenses>()
+                    .Where(x => x.CSR1Id == id)
+                    .ToListAsync();
+                _db.Set<CSR1Expenses>().RemoveRange(existingExpenses);
+                _db.Set<CSR1Expenses>().AddRange(
+                    updateExpenses.Select(x => new CSR1Expenses
+                    {
+                        CSR1Id = id,
+                        ExpenseId = x.ExpenseId,
+                        ExpenseAmount = x.ExpenseAmount,
+                        IsActive = true
+                    }));
+                await _db.SaveChangesAsync();
+
 
                 // =====================================================
                 // RESPONSE
@@ -965,6 +1071,15 @@ namespace SpicAPI.Controllers
         {
             try
             {
+                var csr1Expenses = await _db.Set<CSR1Expenses>()
+                    .Where(x => x.CSR1Id == id)
+                    .ToListAsync();
+                if (csr1Expenses.Count > 0)
+                {
+                    _db.Set<CSR1Expenses>().RemoveRange(csr1Expenses);
+                    await _db.SaveChangesAsync();
+                }
+
                 // Delete separate approval details first (FK to CSR1).
                 var approvalDetails = await _db.Set<CSR1ApprovalDetails>()
                     .Where(x => x.CSR1Id == id)
@@ -1504,40 +1619,6 @@ namespace SpicAPI.Controllers
                             employee?.Name ?? "-",
 
 
-                        PrintingAndStationery =
-                            csr1.PrintingAndStationery,
-
-                        PublicityMaterial =
-                            csr1.PublicityMaterial,
-
-                        StageArrangements =
-                            csr1.StageArrangements,
-
-                        ServiceChargesLCA =
-                            csr1.ServiceChargesLCA,
-
-                        TransportRent =
-                            csr1.TransportRent,
-
-                        JeepRunningExpenses =
-                            csr1.JeepRunningExpenses,
-
-                        Refreshments =
-                            csr1.Refreshments,
-
-                        Inputs =
-                            csr1.Inputs,
-
-                        Photography =
-                            csr1.Photography,
-
-                        Compliments =
-                            csr1.Compliments,
-
-                        Others =
-                            csr1.Others,
-
-
                         Status =
                             csr1.Status.ToString(),
 
@@ -1701,7 +1782,7 @@ namespace SpicAPI.Controllers
 
         [HttpPost("{id:int}/validate")]
         [HttpPut("{id:int}/validate")]
-        public async Task<IActionResult> ValidateCSR1(int id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CSR1SaveRequest? request)
+        public async Task<IActionResult> ValidateCSR1(int id, [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] CSR1SaveRequestWithExpenses? request)
         {
             try
             {
@@ -1711,7 +1792,10 @@ namespace SpicAPI.Controllers
                     return NotFound(new { message = $"CSR-1 #{id} not found." });
                 }
 
-                if (Csr1WorkflowRules.IsThreeLevelApplication(csr1.CreatedAt) &&
+                var validationCutoffDay = await GetCSR1CutoffDayAsync();
+                var isThreeLevelApplication = IsThreeLevelApplication(csr1.CreatedAt, validationCutoffDay);
+
+                if (isThreeLevelApplication &&
                     !new[] { CSR1Status.SubmittedForValidation, CSR1Status.Submitted, CSR1Status.Pending }
                         .Contains(csr1.Status))
                     return BadRequest(new { message = "This CSR-1 is not awaiting validation." });
@@ -1751,7 +1835,7 @@ namespace SpicAPI.Controllers
                     {
                         // State scope: only SMDO (SMD) can validate (SMDO applies, SMDO validates, SMM approves)
                         if (!string.Equals(currentRole, AppRole.SMD.ToString(), StringComparison.OrdinalIgnoreCase) &&
-                            !(Csr1WorkflowRules.IsThreeLevelApplication(csr1.CreatedAt) &&
+                            !(isThreeLevelApplication &&
                               string.Equals(currentRole, "SMDO", StringComparison.OrdinalIgnoreCase)))
                         {
                             return StatusCode(StatusCodes.Status403Forbidden, new
@@ -1821,7 +1905,18 @@ namespace SpicAPI.Controllers
             var crop3Ids = g3.SelectMany(x => x.CropId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
             var product3Ids = g3.SelectMany(x => x.ProductId ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToList();
 
-            return Ok(new CSR1SaveRequest
+            var expenses = await _db.Set<CSR1Expenses>()
+                .AsNoTracking()
+                .Where(x => x.CSR1Id == id && x.IsActive && x.ExpenseId.HasValue && x.ExpenseAmount > 0)
+                .OrderBy(x => x.ExpenseId)
+                .Select(x => new CSR1ExpenseSaveDto
+                {
+                    ExpenseId = x.ExpenseId!.Value,
+                    ExpenseAmount = x.ExpenseAmount
+                })
+                .ToListAsync();
+
+            return Ok(new CSR1SaveRequestWithExpenses
             {
                 CSR1 = csr,
                 Crop1Ids = crop1Ids,
@@ -1829,12 +1924,13 @@ namespace SpicAPI.Controllers
                 Crop2Ids = crop2Ids,
                 Product2Ids = product2Ids,
                 Crop3Ids = crop3Ids,
-                Product3Ids = product3Ids
+                Product3Ids = product3Ids,
+                Expenses = expenses
             });
         }
 
 
-        private async Task SaveReviewAndWorkflowAsync(CSR1 csr1, CSR1SaveRequest? request)
+        private async Task SaveReviewAndWorkflowAsync(CSR1 csr1, CSR1SaveRequestWithExpenses? request)
         {
             // This transaction includes all four tables plus status/approval fields.
             await using var tx = await _db.Database.BeginTransactionAsync();
@@ -1845,15 +1941,32 @@ namespace SpicAPI.Controllers
 
                 if (request?.CSR1 is { } incoming)
                 {
-                    var expenses = new[] {
-                incoming.PrintingAndStationery, incoming.PublicityMaterial,
-                incoming.StageArrangements, incoming.ServiceChargesLCA,
-                incoming.TransportRent, incoming.JeepRunningExpenses,
-                incoming.Refreshments, incoming.Inputs, incoming.Photography,
-                incoming.Compliments, incoming.Others };
-                    decimal total = expenses.Sum();
-                    if (expenses.Any(v => v < 0) || total <= 0 ||
-                        incoming.Budget <= 0 || total > incoming.Budget || incoming.Budget > persistent.Budget)
+                    var requestedReviewExpenses = request.Expenses ?? new List<CSR1ExpenseSaveDto>();
+
+                    if (requestedReviewExpenses.Any(x => x.ExpenseId <= 0 || x.ExpenseAmount < 0))
+                        throw new ArgumentException("Invalid expense id or amount.");
+
+                    // Ignore zero-value rows; CSR1Expenses stores only entered amounts.
+                    var expenses = requestedReviewExpenses
+                        .Where(x => x.ExpenseAmount > 0)
+                        .ToList();
+
+                    if (expenses.GroupBy(x => x.ExpenseId).Any(g => g.Count() > 1))
+                        throw new ArgumentException("Invalid or duplicate expense entries.");
+
+                    var expenseIds = expenses.Select(x => x.ExpenseId).Distinct().ToList();
+                    var validExpenseIds = await _db.Set<ExpenseInformation>()
+                        .AsNoTracking()
+                        .Where(x => x.IsActive && expenseIds.Contains(x.Id))
+                        .Select(x => x.Id)
+                        .ToListAsync();
+
+                    if (expenseIds.Any(id => !validExpenseIds.Contains(id)))
+                        throw new ArgumentException("One or more selected expenses are invalid or inactive.");
+
+                    decimal total = expenses.Sum(x => x.ExpenseAmount);
+                    if (total <= 0 || incoming.Budget <= 0 ||
+                        total > incoming.Budget || incoming.Budget > persistent.Budget)
                         throw new ArgumentException("Expense total must be > 0 and <= Budget; individual expenses cannot be negative.");
                     if (incoming.NumberOfPrograms <= 0)
                         throw new ArgumentException("Number of Programs is required.");
@@ -1894,17 +2007,20 @@ namespace SpicAPI.Controllers
                     persistent.ResponsiblePersonId =
                         responsiblePersonUserId;
                     persistent.CSR1Date = incoming.CSR1Date;
-                    persistent.PrintingAndStationery = incoming.PrintingAndStationery;
-                    persistent.PublicityMaterial = incoming.PublicityMaterial;
-                    persistent.StageArrangements = incoming.StageArrangements;
-                    persistent.ServiceChargesLCA = incoming.ServiceChargesLCA;
-                    persistent.TransportRent = incoming.TransportRent;
-                    persistent.JeepRunningExpenses = incoming.JeepRunningExpenses;
-                    persistent.Refreshments = incoming.Refreshments;
-                    persistent.Inputs = incoming.Inputs;
-                    persistent.Photography = incoming.Photography;
-                    persistent.Compliments = incoming.Compliments;
-                    persistent.Others = incoming.Others;
+
+                    // Replace normalized CSR-1 expense rows.
+                    var oldExpenses = await _db.Set<CSR1Expenses>()
+                        .Where(x => x.CSR1Id == persistent.Id)
+                        .ToListAsync();
+                    _db.Set<CSR1Expenses>().RemoveRange(oldExpenses);
+                    _db.Set<CSR1Expenses>().AddRange(
+                        expenses.Select(x => new CSR1Expenses
+                        {
+                            CSR1Id = persistent.Id,
+                            ExpenseId = x.ExpenseId,
+                            ExpenseAmount = x.ExpenseAmount,
+                            IsActive = true
+                        }));
 
                     // Only replace children if review payload was supplied.
                     var old1 = await _db.Set<CSR1Products1>().Where(x => x.CSR1Id == persistent.Id).ToListAsync();
@@ -1989,7 +2105,7 @@ namespace SpicAPI.Controllers
       int id,
       [FromBody(EmptyBodyBehavior =
         Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)]
-    CSR1SaveRequest? request)
+    CSR1SaveRequestWithExpenses? request)
         {
             try
             {
@@ -2039,14 +2155,15 @@ namespace SpicAPI.Controllers
 
                 // --------------------------------------------------
                 // 2. DETERMINE WORKFLOW
-                // Day 1-26  -> legacy approval
-                // Day >= 27 -> three-level approval
+                // CSR1Day is read from the active CSRExceedingDaySettings row.
+                // Day <= CSR1Day -> legacy; day > CSR1Day -> three-level.
                 // --------------------------------------------------
 
                 var applicationDateIst = csr1.CreatedAt;
+                var approvalCutoffDay = await GetCSR1CutoffDayAsync();
 
                 bool requiresThreeLevelApproval =
-                    applicationDateIst.Day >= 27;
+                    IsThreeLevelApplication(applicationDateIst, approvalCutoffDay);
 
                 // --------------------------------------------------
                 // 3. RESOLVE CSR-1 SCOPE
@@ -2769,7 +2886,8 @@ namespace SpicAPI.Controllers
             if (csr1 == null)
                 return NotFound();
 
-            var three = Csr1WorkflowRules.IsThreeLevelApplication(csr1.CreatedAt);
+            var workflowCutoffDay = await GetCSR1CutoffDayAsync();
+            var three = IsThreeLevelApplication(csr1.CreatedAt, workflowCutoffDay);
 
             var (scope, _) = await ResolveCSR1ScopeAsync(csr1);
 
@@ -2930,5 +3048,101 @@ namespace SpicAPI.Controllers
             });
         }
 
+        private async Task<(bool IsValid, decimal TotalExpense, string? ErrorMessage)> ValidateBudgetExpenseMatchAsync(
+        CSR1 csr1, IEnumerable<CSR1ExpenseSaveDto>? requestExpenses = null, bool useRequestExpenses = false)
+        {
+            decimal totalExpense;
+
+            if (useRequestExpenses)
+            {
+                var expenses = (requestExpenses ?? Enumerable.Empty<CSR1ExpenseSaveDto>())
+                    .Where(x => x.ExpenseAmount > 0)
+                    .ToList();
+
+                totalExpense = expenses.Sum(x => x.ExpenseAmount);
+            }
+            else
+            {
+                totalExpense = await _db.Set<CSR1Expenses>()
+                    .AsNoTracking()
+                    .Where(x =>
+                        x.CSR1Id == csr1.Id &&
+                        x.IsActive &&
+                        x.ExpenseAmount > 0)
+                    .SumAsync(x => x.ExpenseAmount);
+            }
+
+            var budget = decimal.Round(csr1.Budget, 2);
+            totalExpense = decimal.Round(totalExpense, 2);
+
+            if (budget != totalExpense)
+            {
+                return (
+                    false,
+                    totalExpense,
+                    $"Budget amount and Total Expense must be equal. " +
+                    $"Budget: ₹{budget:N2}, Total Expense: ₹{totalExpense:N2}."
+                );
+            }
+
+            return (true, totalExpense, null);
+        }
+
+        private static bool IsThreeLevelApplication(DateTime localDate, int csr1CutoffDay)
+        {
+            return localDate.Day > csr1CutoffDay;
+        }
+
+        private static DateTime AllowedProgramMonth(DateTime localDate, int csr1CutoffDay)
+        {
+            var monthOffset = localDate.Day <= csr1CutoffDay ? 1 : 2;
+
+            return new DateTime(localDate.Year, localDate.Month, 1)
+                .AddMonths(monthOffset);
+        }
+
+        private async Task<int> GetCSR1CutoffDayAsync()
+        {
+            var setting = await _db.Set<CSRExceedingDaySetting>()
+                .AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderByDescending(x => x.Id)
+                .FirstOrDefaultAsync();
+
+            if (setting == null)
+            {
+                throw new InvalidOperationException(
+                    "Active CSR Exceeding Day Setting is not configured.");
+            }
+
+            if (setting.CSR1Day < 1 || setting.CSR1Day > 31)
+            {
+                throw new InvalidOperationException(
+                    $"Invalid CSR1Day configured: {setting.CSR1Day}.");
+            }
+
+            return setting.CSR1Day;
+        }
+
+        [HttpGet("workflow-setting")]
+        public async Task<IActionResult> GetWorkflowSetting()
+        {
+            try
+            {
+                var csr1Day = await GetCSR1CutoffDayAsync();
+
+                return Ok(new
+                {
+                    CSR1Day = csr1Day
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new
+                {
+                    message = ex.Message
+                });
+            }
+        }
     }
 }

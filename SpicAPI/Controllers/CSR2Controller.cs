@@ -102,6 +102,21 @@ namespace SpicAPI.Controllers
             var focus3 = await _db.Set<CSR1Products3>().AsNoTracking()
                 .Where(x => x.CSR1Id == csr1Id && x.IsActive)
                 .Select(x => new { x.CropId, x.ProductId }).ToListAsync();
+            var plannedExpenses = await _db.Set<ExpenseInformation>()
+                .AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Id)
+                .Select(masterExpense => new
+                {
+                    ExpenseId = masterExpense.Id,
+                    ExpenseName = masterExpense.Name,
+                    ExpenseAmount = _db.Set<CSR1Expenses>()
+                        .Where(e => e.CSR1Id == csr1Id && e.IsActive && e.ExpenseId == masterExpense.Id)
+                        .Select(e => e.ExpenseAmount)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+
             return Ok(new
             {
                 CSR1Id = csr1.Id,
@@ -119,20 +134,7 @@ namespace SpicAPI.Controllers
                 csr1.LocationId,
                 csr1.ResponsiblePersonId,
                 Status = csr1.Status.ToString(),
-                Expenses = new
-                {
-                    csr1.PrintingAndStationery,
-                    csr1.PublicityMaterial,
-                    csr1.StageArrangements,
-                    csr1.ServiceChargesLCA,
-                    csr1.TransportRent,
-                    csr1.JeepRunningExpenses,
-                    csr1.Refreshments,
-                    csr1.Inputs,
-                    csr1.Photography,
-                    csr1.Compliments,
-                    csr1.Others
-                },
+                Expenses = plannedExpenses,
                 Focus1 = focus1,
                 Focus2 = focus2,
                 Focus3 = focus3
@@ -222,33 +224,21 @@ namespace SpicAPI.Controllers
         }
 
         // CSR-2 persistence endpoints (merged from previous package)
-        private static readonly string[] CategoryKeys = {
-        "PrintingAndStationery", "PublicityMaterial", "StageArrangements", "ServiceChargesLCA",
-        "TransportRent", "JeepRunningExpenses", "Refreshments", "Inputs", "Photography", "Compliments", "Others"
-    };
         private string Actor => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
         private string UploadRoot => Path.Combine(_env.ContentRootPath, "App_Data", "csr2-private");
+        private static int ExpenseIdFromCategoryKey(string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return 0;
+            var separator = key.IndexOf(':');
+            var idPart = separator >= 0 ? key[..separator] : key;
+            return int.TryParse(idPart, out var id) ? id : 0;
+        }
+
 
         // IMPORTANT: Replace this with the SAME scope/claims authorization policy as your
         // CSR1 details endpoint. Being logged in alone MUST NOT grant access to every CSR1.
         private Task<CSR1?> ApprovedCsr1Async(int csr1Id) =>
             VisibleApprovedCSR1().FirstOrDefaultAsync(x => x.Id == csr1Id);
-
-        private static decimal PlannedAmount(CSR1 c, string key) => key switch
-        {
-            "PrintingAndStationery" => c.PrintingAndStationery,
-            "PublicityMaterial" => c.PublicityMaterial,
-            "StageArrangements" => c.StageArrangements,
-            "ServiceChargesLCA" => c.ServiceChargesLCA,
-            "TransportRent" => c.TransportRent,
-            "JeepRunningExpenses" => c.JeepRunningExpenses,
-            "Refreshments" => c.Refreshments,
-            "Inputs" => c.Inputs,
-            "Photography" => c.Photography,
-            "Compliments" => c.Compliments,
-            "Others" => c.Others,
-            _ => 0m
-        };
 
         [HttpGet("by-csr1/{csr1Id:int}")]
         public async Task<IActionResult> GetByCsr1(int csr1Id)
@@ -395,12 +385,26 @@ namespace SpicAPI.Controllers
 
             if (dto.Expenses
                     .Select(x => x.CategoryKey)
-                    .Distinct()
-                    .Count() != dto.Expenses.Count ||
-                dto.Expenses.Any(x => !CategoryKeys.Contains(x.CategoryKey)))
+                    .Distinct(StringComparer.Ordinal)
+                    .Count() != dto.Expenses.Count)
             {
-                return BadRequest("Invalid or duplicate expense category.");
+                return BadRequest("Duplicate expense row key.");
             }
+
+            var requestedExpenseIds = dto.Expenses
+                .Select(x => ExpenseIdFromCategoryKey(x.CategoryKey))
+                .ToList();
+
+            if (requestedExpenseIds.Any(x => x <= 0))
+                return BadRequest("Invalid expense category key.");
+
+            var activeExpenseMasters = await _db.Set<ExpenseInformation>()
+                .AsNoTracking()
+                .Where(x => x.IsActive && requestedExpenseIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.Name);
+
+            if (requestedExpenseIds.Any(x => !activeExpenseMasters.ContainsKey(x)))
+                return BadRequest("One or more expense categories are inactive or invalid.");
 
             if (dto.Participants.Any(x =>
                     string.IsNullOrWhiteSpace(x.Name) ||
@@ -521,8 +525,19 @@ namespace SpicAPI.Controllers
                     })
                     .ToList();
 
+            var submittedExpenseKeys = dto.Expenses
+                .Select(x => x.CategoryKey)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var removedExpenses = report.Expenses
+                .Where(x => !submittedExpenseKeys.Contains(x.CategoryKey))
+                .ToList();
+            if (removedExpenses.Count > 0)
+                _db.Set<CSR2Expense>().RemoveRange(removedExpenses);
+
             foreach (var item in dto.Expenses)
             {
+                var expenseId = ExpenseIdFromCategoryKey(item.CategoryKey);
                 var expense =
                     report.Expenses.FirstOrDefault(
                         x => x.CategoryKey == item.CategoryKey);
@@ -538,7 +553,7 @@ namespace SpicAPI.Controllers
                 }
 
                 expense.CategoryName =
-                    item.CategoryName;
+                    activeExpenseMasters[expenseId];
 
 
                 expense.ActualAmount =
@@ -677,6 +692,33 @@ namespace SpicAPI.Controllers
             }
 
             return Ok(new { media.Id, media.MediaType, media.OriginalFileName });
+        }
+
+        [HttpGet("{id:int}/expense-proofs")]
+        public async Task<IActionResult> GetExpenseProofs(int id)
+        {
+            var report = await _db.Set<CSR2>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id);
+            if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null)
+                return NotFound();
+
+            var proofs = await (
+                from expense in _db.Set<CSR2Expense>().AsNoTracking()
+                join proof in _db.Set<CSR2ExpenseProof>().AsNoTracking()
+                    on expense.Id equals proof.CSR2ExpenseId
+                where expense.CSR2Id == id
+                orderby expense.Id, proof.Id
+                select new
+                {
+                    expense.CategoryKey,
+                    ProofId = proof.Id,
+                    FileName = proof.OriginalFileName,
+                    proof.ContentType
+                })
+                .ToListAsync();
+
+            return Ok(proofs);
         }
 
         [HttpPost("{id:int}/expenses/{categoryKey}/proof")]
@@ -852,6 +894,21 @@ namespace SpicAPI.Controllers
                 responsiblePersonName = responsible?.Name;
             }
 
+            var plannedExpenses = await _db.Set<ExpenseInformation>()
+                .AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Id)
+                .Select(masterExpense => new
+                {
+                    ExpenseId = masterExpense.Id,
+                    ExpenseName = masterExpense.Name,
+                    ExpenseAmount = _db.Set<CSR1Expenses>()
+                        .Where(e => e.CSR1Id == csr1Id && e.IsActive && e.ExpenseId == masterExpense.Id)
+                        .Select(e => e.ExpenseAmount)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+
             return Ok(new
             {
                 csr1Id = csr1.Id,
@@ -860,7 +917,8 @@ namespace SpicAPI.Controllers
                 approvedAt = csr1.ApprovedAt,
                 responsiblePersonId = csr1.ResponsiblePersonId,
                 responsiblePersonEmployeeId = responsiblePersonEmployeeId?.ToString(),
-                responsiblePersonName = responsiblePersonName ?? ""
+                responsiblePersonName = responsiblePersonName ?? "",
+                Expenses = plannedExpenses
             });
         }
     }
