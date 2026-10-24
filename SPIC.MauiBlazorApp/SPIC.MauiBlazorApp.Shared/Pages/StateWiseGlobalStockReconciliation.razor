@@ -179,6 +179,60 @@
     .pw-table td:nth-child(2) {
         text-align: left;
     }
+
+    .recon-scroll-table {
+        min-width: 1800px;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+        .recon-scroll-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: #F4F7F9;
+        }
+
+        .recon-scroll-table .recon-sticky-sno {
+            left: 0;
+            width: 64px;
+            min-width: 64px;
+            max-width: 64px;
+        }
+
+        .recon-scroll-table .recon-sticky-state {
+            left: 64px;
+            min-width: 150px;
+        }
+
+        .recon-scroll-table tbody .recon-sticky-sno,
+        .recon-scroll-table tbody .recon-sticky-state {
+            position: sticky;
+            z-index: 3;
+            background: #ffffff;
+        }
+
+        .recon-scroll-table thead .recon-sticky-sno,
+        .recon-scroll-table thead .recon-sticky-state {
+            z-index: 8;
+        }
+
+        .recon-scroll-table tbody .recon-grand-total .recon-sticky-sno,
+        .recon-scroll-table tbody .recon-grand-total .recon-sticky-state {
+            background: #f1f5f9;
+        }
+
+    @@media (max-width: 767.98px) {
+        .recon-scroll-table {
+            min-width: 0;
+        }
+
+            .recon-scroll-table thead th,
+            .recon-scroll-table tbody .recon-sticky-sno,
+            .recon-scroll-table tbody .recon-sticky-state {
+                position: static;
+            }
+    }
 </style>
 
 <div class="container-fluid py-4 px-0">
@@ -297,7 +351,7 @@
             <div class="pw-table-card">
                 <div class="pw-table-top">
                     <div>
-                        <h3 style="margin:0; font-size:16px; font-weight:700; color:#1e293b;">State-wise Stock Reconciliation</h3>
+                        <h3 style="margin:0; font-size:16px; font-weight:700; color:#1e293b;">Urea Stock As on @_result.AsOnDate.ToString("dd-MMM-yy") (in Mt)</h3>
                         <p style="margin:4px 0 0; font-size:13px; color:#64748b;">
                             As On Date: <strong>@_result.AsOnDate.ToString("dd-MM-yyyy")</strong>
                             <span> | Total States: <strong>@_result.Rows.Count</strong></span>
@@ -312,20 +366,20 @@
                            disabled="@(_isLoading)" />
                 </div>
 
-                <div class="pw-table-wrap">
-                    <table class="pw-table">
+                <div class="pw-table-wrap table-scroll-fixed">
+                    <table class="pw-table recon-scroll-table">
                         <thead>
                             <tr>
-                                <th style="width:50px;">S.No</th>
-                                <th>State</th>
-                                <th>Closing Stock</th>
-                                <th>Closing GIT</th>
-                                <th class="recon-highlight-cell">Global Stock Total</th>
+                                <th class="recon-sticky-sno">S.No</th>
+                                <th class="recon-sticky-state">State</th>
+                                <th>Company Stock</th>
+                                <th>GIT From Plant despatches</th>
+                                <th class="recon-highlight-cell">Total Company Stock</th>
                                 <th>Wholesaler Stock</th>
                                 <th>Retail Point Stock</th>
-                                <th>Company Sales in GIT</th>
                                 <th>Wholesaler Sales in GIT</th>
-                                <th class="recon-highlight-cell">Channel Total</th>
+                                <th>Company Sales in GIT</th>
+                                <th class="recon-highlight-cell">Stock Lying with Wholesalers &amp; Retailers including GIT</th>
                                 <th class="recon-highlight-cell">Overall Stock</th>
                             </tr>
                         </thead>
@@ -347,30 +401,30 @@
                                 {
                                     sno++;
                                     <tr>
-                                        <td>@sno</td>
-                                        <td>@row.State</td>
+                                        <td class="recon-sticky-sno">@sno</td>
+                                        <td class="recon-sticky-state">@row.State</td>
                                         <td>@Fmt(row.ClosingStock, _result.HasGlobalStock)</td>
                                         <td>@Fmt(row.ClosingGit, _result.HasGlobalStock)</td>
                                         <td class="recon-highlight-cell">@Fmt(row.GlobalStockTotal, _result.HasGlobalStock)</td>
                                         <td>@Fmt(row.WholesalerStock, _result.HasWholesalerStock)</td>
                                         <td>@Fmt(row.RetailPointStock, _result.HasRetailPointStock)</td>
-                                        <td>@Fmt(row.CompanySalesInGit, _result.HasCompanySalesGit)</td>
                                         <td>@Fmt(row.WholesalerSalesInGit, _result.HasWholesalerSalesGit)</td>
+                                        <td>@Fmt(row.CompanySalesInGit, _result.HasCompanySalesGit)</td>
                                         <td class="recon-highlight-cell">@Fmt(row.ChannelTotal, true)</td>
                                         <td class="recon-highlight-cell" style="font-weight:bold;">@Fmt(row.OverallStock, true)</td>
                                     </tr>
                                 }
 
                                 <tr class="recon-grand-total">
-                                    <td></td>
-                                    <td>Overall Total</td>
+                                    <td class="recon-sticky-sno"></td>
+                                    <td class="recon-sticky-state">Total</td>
                                     <td>@Fmt(_result.Totals.ClosingStock, _result.HasGlobalStock)</td>
                                     <td>@Fmt(_result.Totals.ClosingGit, _result.HasGlobalStock)</td>
                                     <td class="recon-highlight-cell">@Fmt(_result.Totals.GlobalStockTotal, _result.HasGlobalStock)</td>
                                     <td>@Fmt(_result.Totals.WholesalerStock, _result.HasWholesalerStock)</td>
                                     <td>@Fmt(_result.Totals.RetailPointStock, _result.HasRetailPointStock)</td>
-                                    <td>@Fmt(_result.Totals.CompanySalesInGit, _result.HasCompanySalesGit)</td>
                                     <td>@Fmt(_result.Totals.WholesalerSalesInGit, _result.HasWholesalerSalesGit)</td>
+                                    <td>@Fmt(_result.Totals.CompanySalesInGit, _result.HasCompanySalesGit)</td>
                                     <td class="recon-highlight-cell">@Fmt(_result.Totals.ChannelTotal, true)</td>
                                     <td class="recon-highlight-cell" style="font-weight:bold;">@Fmt(_result.Totals.OverallStock, true)</td>
                                 </tr>
@@ -380,12 +434,12 @@
                 </div>
             </div>
 
-            <!-- Section 2: GFL Stock As on {SelectedDate} (in MT) -->
+            <!-- Section 2: GFL Stock As on the loaded report date (in Mt) -->
             <div class="pw-table-card" style="margin-top: 24px;">
                 <div class="pw-table-top">
                     <div>
                         <h3 style="margin:0; font-size:16px; font-weight:700; color:#1e293b;">
-                            GFL Stock As on @_asOnDate.ToString("dd-MMM-yy") (in MT)
+                            GFL Stock As on @_result.AsOnDate.ToString("dd-MMM-yy") (in Mt)
                         </h3>
                         <p style="margin:4px 0 0; font-size:13px; color:#64748b;">
                             Primary Source: <strong>Wholesaler Stock As on Today</strong>
@@ -402,18 +456,18 @@
                 {
                     <div style="padding: 24px; text-align: center; color: #64748b; background: #f8fafc; border-radius: 8px; margin: 16px;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -4px; margin-right: 6px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                        <span>GFL stock data is not available for @_asOnDate.ToString("dd-MM-yyyy").</span>
+                        <span>GFL stock data is not available for @_result.AsOnDate.ToString("dd-MM-yyyy").</span>
                     </div>
                 }
                 else
                 {
                     var filteredGflRows = FilteredGflRows;
-                    <div class="pw-table-wrap" style="overflow-x: auto;">
-                        <table class="pw-table">
-                            <thead>
-                                <tr>
-                                    <th style="width:50px; position: sticky; left: 0; background: #f8fafc; z-index: 2;">S.No</th>
-                                    <th style="min-width: 150px; position: sticky; left: 50px; background: #f8fafc; z-index: 2;">State</th>
+                <div class="pw-table-wrap table-scroll-fixed">
+                    <table class="pw-table recon-scroll-table">
+                        <thead>
+                            <tr>
+                                <th class="recon-sticky-sno">S.No</th>
+                                <th class="recon-sticky-state">State</th>
                                     @foreach (var col in _result.GflStock.Columns)
                                     {
                                         <th style="text-align: right; min-width: 100px;">@col.DisplayName</th>
@@ -438,9 +492,9 @@
                                     @foreach (var row in filteredGflRows)
                                     {
                                         gSno++;
-                                        <tr>
-                                            <td style="position: sticky; left: 0; background: #ffffff; z-index: 1;">@gSno</td>
-                                            <td style="position: sticky; left: 50px; background: #ffffff; z-index: 1; font-weight: 600;">@row.State</td>
+                            <tr>
+                                <td class="recon-sticky-sno">@gSno</td>
+                                <td class="recon-sticky-state" style="font-weight: 600;">@row.State</td>
                                             @foreach (var col in _result.GflStock.Columns)
                                             {
                                                 var qty = row.Quantities.TryGetValue(col.ProductId, out var v) ? v : 0m;
@@ -450,9 +504,9 @@
                                         </tr>
                                     }
 
-                                    <tr class="recon-grand-total">
-                                        <td style="position: sticky; left: 0; background: #f1f5f9; z-index: 1;"></td>
-                                        <td style="position: sticky; left: 50px; background: #f1f5f9; z-index: 1; font-weight: 700;">Total</td>
+                            <tr class="recon-grand-total">
+                                <td class="recon-sticky-sno"></td>
+                                <td class="recon-sticky-state" style="font-weight: 700;">Total</td>
                                         @foreach (var col in _result.GflStock.Columns)
                                         {
                                             var colSum = _result.GflStock.ColumnTotals.TryGetValue(col.ProductId, out var tot) ? tot : 0m;
