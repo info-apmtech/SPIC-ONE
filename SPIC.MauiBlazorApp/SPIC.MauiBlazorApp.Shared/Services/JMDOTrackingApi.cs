@@ -98,6 +98,24 @@ public sealed class JMDOTrackingApi
     }
 
     /// <summary>
+    /// Every one of the caller's own sessions that started today, oldest first - a JMDO can
+    /// Start/Stop Live Tracking more than once a day (separate site visits), and each one is its own
+    /// session/route. Silent on failure (empty list), same reasoning as <see cref="GetMineActiveAsync"/>.
+    /// </summary>
+    public async Task<List<JMDOTrackingSessionDto>> GetMineTodayAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await _http.GetFromJsonAsync<List<JMDOTrackingSessionDto>>($"{Root}/mine/today", Json, ct);
+            return result ?? new();
+        }
+        catch (Exception)
+        {
+            return new();
+        }
+    }
+
+    /// <summary>
     /// Supervisor visibility (Admin/MO/MDO only): every JMDO on the caller's own HQ team with their
     /// current tracking status. Silent on failure (empty list) - same reasoning as
     /// <see cref="GetMineActiveAsync"/>.

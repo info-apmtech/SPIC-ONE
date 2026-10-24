@@ -1,4 +1,5 @@
 @page "/MarkAttendance"
+@page "/TrackPlayback"
 @implements IAsyncDisposable
 @using SPIC.Core.Entities
 @using SPIC.Core.DTOs
@@ -32,7 +33,7 @@
             <div class="ma-tracking-header">
                 <div class="ma-tracking-left">
                     <span class="ma-tracking-icon"><i class="bi bi-geo-alt-fill"></i></span>
-                    <div>
+                    <div class="ma-tracking-left-text">
                         <div class="ma-tracking-title">
                             @(_trackSession?.Status == JMDOTrackingSessionStatus.Active ? "Tracking Active" : "Tracking Stopped")
                             @if (_trackSession?.Status == JMDOTrackingSessionStatus.Active)
@@ -59,6 +60,24 @@
                 </div>
             </div>
 
+            @if (!_trackLoading && _todaySessions.Count > 1)
+            {
+                <div class="ma-session-picker">
+                    @foreach (var s in _todaySessions)
+                    {
+                        <button type="button"
+                                class="@("ma-session-chip" + (s.Id == _trackSession?.Id ? " active" : ""))"
+                                @onclick="() => SelectSession(s)">
+                            @if (s.Status == JMDOTrackingSessionStatus.Active)
+                            {
+                                <span class="ma-session-chip-dot"></span>
+                            }
+                            @FormatSessionLabel(s)
+                        </button>
+                    }
+                </div>
+            }
+
             @if (_trackLoading)
             {
                 <EmptyState Icon="bi-hourglass-split" Title="Loading today's route..." Compact="true" />
@@ -79,21 +98,25 @@
                 @if (_trackPoints.Count >= 2)
                 {
                     <div class="ma-playback-bar">
-                        <button type="button" class="ma-playback-btn" @onclick="TogglePlayback" aria-label="@(_playbackPlaying ? "Pause" : "Play")">
-                            <i class="bi @(_playbackPlaying ? "bi-pause-fill" : "bi-play-fill")"></i>
-                        </button>
+                        <div class="ma-playback-row">
+                            <button type="button" class="ma-playback-btn" @onclick="TogglePlayback" aria-label="@(_playbackPlaying ? "Pause" : "Play")">
+                                <i class="bi @(_playbackPlaying ? "bi-pause-fill" : "bi-play-fill")"></i>
+                            </button>
 
-                        <input type="range" class="ma-playback-scrubber"
-                               min="0" max="@(_trackPoints.Count - 1)" value="@_playbackIndex"
-                               @oninput="OnScrubberInput" />
+                            <input type="range" class="ma-playback-scrubber"
+                                   min="0" max="@(_trackPoints.Count - 1)" value="@_playbackIndex"
+                                   @oninput="OnScrubberInput" />
+                        </div>
 
-                        <span class="ma-playback-time">@PlaybackTimeLabel</span>
+                        <div class="ma-playback-row ma-playback-row-meta">
+                            <span class="ma-playback-time">@PlaybackTimeLabel</span>
 
-                        <div class="ma-playback-speed">
-                            @foreach (var speed in PlaybackSpeeds)
-                            {
-                                <button type="button" class="@(speed == _playbackSpeed ? "active" : "")" @onclick="() => SetPlaybackSpeed(speed)">@speed.ToString("0.#")x</button>
-                            }
+                            <div class="ma-playback-speed">
+                                @foreach (var speed in PlaybackSpeeds)
+                                {
+                                    <button type="button" class="@(speed == _playbackSpeed ? "active" : "")" @onclick="() => SetPlaybackSpeed(speed)">@speed.ToString("0.#")x</button>
+                                }
+                            </div>
                         </div>
                     </div>
                 }
@@ -137,6 +160,23 @@
                     <button type="button" class="ma-btn-submit" @onclick='() => Navigation.NavigateTo("/MarkAttendance?view=tracking")'>
                         <i class="bi bi-map"></i> View Tracking Details
                     </button>
+                }
+                else if (_todayAttendance is not null && !_editingAttendance)
+                {
+                    <div class="ma-attendance-done">
+                        <span class="ma-attendance-done-icon"><i class="bi bi-check-circle-fill"></i></span>
+                        <div class="ma-attendance-done-text">
+                            <div class="ma-attendance-done-title">Attendance marked today</div>
+                            <div class="ma-attendance-done-sub">
+                                @StatusToLabel(_todayAttendance.AttendanceStatus) &middot; @_todayAttendance.VisitArea
+                                @if (_todayAttendance.AttendanceUpdatedAt is { } markedAt)
+                                {
+                                    <text> &middot; @markedAt.ToString("h:mm tt")</text>
+                                }
+                            </div>
+                        </div>
+                        <button type="button" class="ma-link-btn" @onclick="() => _editingAttendance = true">Edit</button>
+                    </div>
                 }
                 else
                 {
@@ -230,13 +270,17 @@
                         @foreach (var day in _week.Days)
                         {
                             <div class="ma-weekly-row">
-                                <span class="ma-weekly-dot"></span>
-                                <span class="ma-weekly-day">@day.Date.ToString("ddd, dd MMM yyyy")</span>
-                                <span class="ma-info-sub">@(day.AttendanceStatus is { } status ? (status == JMDOAttendanceStatus.Absent ? "Absent" : StatusToLabel(status)) : "No attendance")</span>
-                                <span class="ma-weekly-hours">@FormatDuration(day.WorkingDuration)</span>
-                                <span class="ma-weekly-sep">-</span>
-                                <span class="ma-weekly-locations">@day.TasksStarted @(day.TasksStarted == 1 ? "task" : "tasks") started</span>
-                                <span class="ma-weekly-km">@day.DistanceKm.ToString("0.0") km</span>
+                                <div class="ma-weekly-head">
+                                    <span class="ma-weekly-dot"></span>
+                                    <span class="ma-weekly-day">@day.Date.ToString("ddd, dd MMM yyyy")</span>
+                                </div>
+                                <div class="ma-weekly-meta">
+                                    <span class="ma-info-sub">@(day.AttendanceStatus is { } status ? (status == JMDOAttendanceStatus.Absent ? "Absent" : StatusToLabel(status)) : "No attendance")</span>
+                                    <span class="ma-weekly-hours">@FormatDuration(day.WorkingDuration)</span>
+                                    <span class="ma-weekly-sep">-</span>
+                                    <span class="ma-weekly-locations">@day.TasksStarted @(day.TasksStarted == 1 ? "task" : "tasks") started</span>
+                                    <span class="ma-weekly-km">@day.DistanceKm.ToString("0.0") km</span>
+                                </div>
                                 <span class="ma-weekly-tasks">@DayTaskText(day.Date)</span>
                             </div>
                         }
@@ -245,17 +289,25 @@
                     @if (_tasks is { HasAllocation: true } tasks)
                     {
                         <div class="ma-weekly-row ma-weekly-extra">
-                            <span class="ma-weekly-dot"></span>
-                            <span class="ma-weekly-day">Weekly tasks</span>
-                            <span class="ma-info-sub">MD Program, SPCM, Soil Sample, PoS &middot; no planned day</span>
+                            <div class="ma-weekly-head">
+                                <span class="ma-weekly-dot"></span>
+                                <span class="ma-weekly-day">Weekly tasks</span>
+                            </div>
+                            <div class="ma-weekly-meta">
+                                <span class="ma-info-sub">MD Program, SPCM, Soil Sample, PoS &middot; no planned day</span>
+                            </div>
                             <span class="ma-weekly-tasks">@TaskCountsText(tasks.WeeklyTasks)</span>
                         </div>
                         @if (tasks.UnscheduledDealerTasks.Allocated > 0)
                         {
                             <div class="ma-weekly-row ma-weekly-extra">
-                                <span class="ma-weekly-dot"></span>
-                                <span class="ma-weekly-day">Unscheduled dealers</span>
-                                <span class="ma-info-sub">no planned day in this week</span>
+                                <div class="ma-weekly-head">
+                                    <span class="ma-weekly-dot"></span>
+                                    <span class="ma-weekly-day">Unscheduled dealers</span>
+                                </div>
+                                <div class="ma-weekly-meta">
+                                    <span class="ma-info-sub">no planned day in this week</span>
+                                </div>
                                 <span class="ma-weekly-tasks">@TaskCountsText(tasks.UnscheduledDealerTasks)</span>
                             </div>
                         }
@@ -313,14 +365,25 @@
 
         var wasTrackingView = showTrackingState;
         showStoppedState = string.Equals(ViewQuery, "stopped", StringComparison.OrdinalIgnoreCase);
-        showTrackingState = string.Equals(ViewQuery, "tracking", StringComparison.OrdinalIgnoreCase);
+        // Two ways to land on this same view: the "?view=tracking" query (FieldDashboard's "View
+        // Route", MarkAttendance's own "View Tracking Details") and the dedicated "/TrackPlayback"
+        // route (sidebar entry) - the dedicated route exists purely so the sidebar's NavLink can
+        // tell "Mark Attendance" and "Track Playback" apart by path instead of by query string,
+        // which this app's NavLink match was highlighting as the same item for both.
+        var isTrackPlaybackRoute = Navigation.ToBaseRelativePath(Navigation.Uri)
+            .StartsWith("TrackPlayback", StringComparison.OrdinalIgnoreCase);
+        showTrackingState = isTrackPlaybackRoute || string.Equals(ViewQuery, "tracking", StringComparison.OrdinalIgnoreCase);
 
         if (wasTrackingView && !showTrackingState)
             await StopTrackingViewLiveUpdatesAsync();
 
-        if (_loadedOnce && string.Equals(_loadedView, ViewQuery, StringComparison.OrdinalIgnoreCase))
+        // Keyed on the resolved view, not just ViewQuery - "/MarkAttendance" and "/TrackPlayback"
+        // both have a null ViewQuery, so keying on ViewQuery alone would treat navigating between
+        // them as "nothing changed" and skip loading the tracking view's data.
+        var viewKey = isTrackPlaybackRoute ? "tracking" : (ViewQuery ?? "");
+        if (_loadedOnce && string.Equals(_loadedView, viewKey, StringComparison.OrdinalIgnoreCase))
             return;
-        _loadedView = ViewQuery;
+        _loadedView = viewKey;
 
         var prefillForm = !_loadedOnce;
         _loadedOnce = true;
@@ -379,6 +442,12 @@
     private bool _weekLoading = true;
     private JMDOWeeklySummaryDto? _week;
 
+    // Attendance is a once-a-day action: once today's row exists, show a read-only confirmation
+    // instead of the editable form every time the JMDO lands here - "Edit" is still available for
+    // a genuine correction, it's just no longer the default view.
+    private JMDOAttendanceDto? _todayAttendance;
+    private bool _editingAttendance;
+
     private string WeekRangeText =>
         _weekLoading ? "Loading..."
         : _week is null ? "Unavailable"
@@ -399,6 +468,7 @@
             if (!loaded) return;
 
             AttendanceState.IsOnDuty = today?.DutyStatus == JMDODutyStatus.OnDuty;
+            _todayAttendance = today;
 
             // Pre-fills the form from the caller's own attendance row for today, if one already
             // exists - the server upserts by (UserId, Date), so this just lets the JMDO see and
@@ -490,8 +560,11 @@
             await RenderTrackingMapAsync();
     }
 
-    // ---- Tracking view (view=tracking): a real route map (tracking-map.js, Leaflet) for the
-    // session that's either still Active or was most recently stopped today - see LoadTrackingViewAsync.
+    // ---- Tracking view (view=tracking): a real route map (tracking-map.js, Leaflet) for one of
+    // today's sessions - see LoadTrackingViewAsync. A JMDO can Start/Stop Live Tracking more than
+    // once a day (separate site visits); _todaySessions holds every one of them (oldest first) so
+    // SelectSession can switch which route is shown instead of only ever seeing the latest.
+    private List<JMDOTrackingSessionDto> _todaySessions = new();
     private JMDOTrackingSessionDto? _trackSession;
     private List<JMDOTrackingPointDto> _trackPoints = new();
     private bool _trackLoading = true;
@@ -590,15 +663,18 @@
     private static string FormatElapsed(TimeSpan ts) =>
         $"{(int)ts.TotalHours:D2}:{ts.Minutes:D2}:{ts.Seconds:D2}";
 
-    // Prefers the caller's live Active session; falls back to today's most recently stopped one so
-    // a page reached via "View Tracking Details" (right after Stop) still shows the route just
-    // recorded instead of an empty state.
+    // Loads every session the JMDO ran today, then selects the live Active one if there is one,
+    // otherwise the most recently started - so a page reached via "View Tracking Details" (right
+    // after Stop) still shows the route just recorded instead of an empty state. The rest of today's
+    // sessions stay available via the picker (SelectSession) instead of being discarded.
     private async Task LoadTrackingViewAsync()
     {
         _trackLoading = true;
         StateHasChanged();
 
-        _trackSession = await TrackingApi.GetMineActiveAsync() ?? await TrackingApi.GetMineLatestAsync();
+        _todaySessions = await TrackingApi.GetMineTodayAsync();
+        _trackSession = _todaySessions.FirstOrDefault(s => s.Status == JMDOTrackingSessionStatus.Active)
+            ?? _todaySessions.LastOrDefault(); // oldest-first list, so Last = most recently started
         _trackPoints = _trackSession is null ? new() : await TrackingApi.GetSessionPointsAsync(_trackSession.Id);
         _mapPointsDirty = true;
 
@@ -608,6 +684,30 @@
         StartElapsedTimer();
         StartRefreshLoopIfActive();
     }
+
+    // Switches the map/playback to a different one of today's sessions - everything else
+    // (RenderTrackingMapAsync's own session-id guard) already resets the map/playhead correctly for
+    // a changed _trackSession.Id, so this just needs to load that session's own points.
+    private async Task SelectSession(JMDOTrackingSessionDto session)
+    {
+        if (_trackSession?.Id == session.Id) return;
+
+        PausePlayback();
+        _trackSession = session;
+        _trackPoints = await TrackingApi.GetSessionPointsAsync(session.Id);
+        _mapPointsDirty = true;
+
+        StartElapsedTimer();
+        StartRefreshLoopIfActive();
+        StateHasChanged();
+    }
+
+    private static string FormatSessionLabel(JMDOTrackingSessionDto s) =>
+        s.Status == JMDOTrackingSessionStatus.Active
+            ? $"Live · {s.StartTime:h:mm tt}"
+            : s.EndTime is { } end
+                ? $"{s.StartTime:h:mm tt} – {end:h:mm tt}"
+                : $"{s.StartTime:h:mm tt}";
 
     private void StartElapsedTimer()
     {

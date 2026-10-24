@@ -602,6 +602,12 @@ public static class ShellNavigation
         ["EntryInfo"] = "CSR2",
         // JMDO Portal
         ["TaskDetail"] = "TasksAllocation",
+        // "/TrackPlayback" is MarkAttendance.razor's own second @page route (added purely so the
+        // sidebar's NavLink can tell "Mark Attendance" and "Track Playback" apart by path instead
+        // of by query string) - without this alias PageGuard.Check() resolves a permission key of
+        // literal "TrackPlayback", which no designation ever grants, and bounces the user to
+        // LandingPage before the page can render.
+        ["TrackPlayback"] = "MarkAttendance",
     };
 
     /// <summary>First path segment of an absolute or base-relative URI, without query/fragment.</summary>
