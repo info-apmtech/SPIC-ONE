@@ -134,26 +134,6 @@ namespace SPIC.Core.Entities
         public bool IsActive { get; set; } = true;
     }
 
-    /// <summary>
-    /// One row per (CSR1Id, ExpenseId) with a non-zero amount - the normalized replacement for the
-    /// 11 fixed decimal columns that used to live directly on CSR1 (see that class's own comment).
-    /// ExpenseId references ExpenseInformation.Id (the expense-type catalog: Printing & Stationary,
-    /// Publicity Material, etc). CSR1ExpenseMapper is the single place that converts to/from the
-    /// legacy 11-named-field shape used by CSR1SaveRequest/CSR1DetailsDto and the UI.
-    /// </summary>
-    public class CSR1Expenses
-    {
-        [Key]
-        public int Id { get; set; }
-        public int CSR1Id { get; set; }
-        public int? ExpenseId { get; set; }
-
-        [Column(TypeName = "decimal(18,2)")]
-        public decimal ExpenseAmount { get; set; }
-
-        public bool IsActive { get; set; } = true;
-    }
-
     public class CSR1Products1
     {
         [Key]

@@ -952,18 +952,18 @@ namespace SpicAPI.Controllers
                     });
                 }
 
-                // =====================================================
-                // REPLACE EXPENSE BREAKDOWN - delete + recreate, same
-                // pattern as the Product groups below.
-                // =====================================================
+                //// =====================================================
+                //// REPLACE EXPENSE BREAKDOWN - delete + recreate, same
+                //// pattern as the Product groups below.
+                //// =====================================================
 
-                var existingExpenses = await _db.Set<CSR1Expenses>()
-                    .Where(x => x.CSR1Id == id)
-                    .ToListAsync();
-                _db.Set<CSR1Expenses>().RemoveRange(existingExpenses);
-                _db.Set<CSR1Expenses>().AddRange(
-                    SPIC.Core.Entities.CSR1ExpenseMapper.ToExpenseRows(entity, id));
-                await _db.SaveChangesAsync();
+                //var existingExpenses = await _db.Set<CSR1Expenses>()
+                //    .Where(x => x.CSR1Id == id)
+                //    .ToListAsync();
+                //_db.Set<CSR1Expenses>().RemoveRange(existingExpenses);
+                //_db.Set<CSR1Expenses>().AddRange(
+                //    SPIC.Core.Entities.CSR1ExpenseMapper.ToExpenseRows(entity, id));
+                //await _db.SaveChangesAsync();
 
                 // =====================================================
                 // DELETE OLD GROUP 1
