@@ -7,10 +7,33 @@
              BackgroundColor="#0b6b3a"
              SafeAreaEdges="All">
 
-    <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html">
-        <BlazorWebView.RootComponents>
-            <RootComponent Selector="#app" ComponentType="{x:Type shared:Routes}" />
-        </BlazorWebView.RootComponents>
-    </BlazorWebView>
+    <Grid>
+
+        <!-- BackgroundColor matches the page/native splash: Android's WebView surface otherwise
+             defaults to black during its own initialization, before any HTML/CSS paints - without
+             this, that shows as a black flash between the native splash dismissing and index.html's
+             content appearing. -->
+        <BlazorWebView x:Name="blazorWebView" HostPage="wwwroot/index.html" BackgroundColor="#0b6b3a">
+            <BlazorWebView.RootComponents>
+                <RootComponent Selector="#app" ComponentType="{x:Type shared:Routes}" />
+            </BlazorWebView.RootComponents>
+        </BlazorWebView>
+
+        <!-- Bridges the gap the HTML boot screen (index.html) can't cover: the native Android splash
+             screen dismisses as soon as this page's first frame is drawn, which is the WebView
+             control itself - well before it has actually loaded index.html. This overlay is pure
+             native MAUI rendering (zero dependency on the WebView/HTML), so it's visible from that
+             very first frame, showing the same icon+spinner look with no gap. Routes.razor's first
+             render signals MainPage.HideBootOverlay() once real content is on screen, at which point
+             this is hidden and the HTML boot screen (if WebView load is still in flight) or the app
+             itself takes over seamlessly - same green, same icon position. -->
+        <Grid x:Name="BootOverlay" BackgroundColor="#0b6b3a" InputTransparent="True">
+            <VerticalStackLayout HorizontalOptions="Center" VerticalOptions="Center" Spacing="24">
+                <Image Source="bootlogo.png" WidthRequest="168" HeightRequest="168" Aspect="AspectFit" />
+                <ActivityIndicator IsRunning="True" Color="White" WidthRequest="40" HeightRequest="40" />
+            </VerticalStackLayout>
+        </Grid>
+
+    </Grid>
 
 </ContentPage>

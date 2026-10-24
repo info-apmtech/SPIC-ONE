@@ -1,5 +1,6 @@
 ﻿@using SPIC.MauiBlazorApp.Shared.Services.Telemetry
 @inject ClientTelemetry Telemetry
+@inject IJSRuntime JS
 
 <Router AppAssembly="typeof(Layout.MainLayout).Assembly" NotFoundPage="typeof(Pages.NotFound)">
     <Found Context="routeData">
@@ -11,4 +12,17 @@
 @* Page views and client errors for every page, both layouts, both hosts (Services/Telemetry). *@
 @code {
     protected override void OnInitialized() => Telemetry.Start();
+
+    // Signals MainPage.xaml's native BootOverlay (icon+spinner shown from app launch) that it can
+    // come down - this is the earliest point any real content has actually rendered, on either
+    // host. window.notifyAppReady only exists on the native host (maui-interop.js); on the Web host
+    // it's simply undefined, which throws a JSException that's swallowed here rather than guarded
+    // with a platform check, so this stays a one-line, host-agnostic call.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try { await JS.InvokeVoidAsync("notifyAppReady"); }
+        catch (JSException) { }
+    }
 }

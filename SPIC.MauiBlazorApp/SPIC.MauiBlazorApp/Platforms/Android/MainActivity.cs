@@ -1,13 +1,21 @@
-﻿using Android.App;
+using Android.App;
 using Android.Content.PM;
 using Android.OS;
 using Microsoft.AspNetCore.Components.WebView.Maui;
+using SPIC.MauiBlazorApp.Shared.Services;
 
 namespace SPIC.MauiBlazorApp
 {
     [Activity(Theme = "@style/Maui.SplashTheme", MainLauncher = true, ConfigurationChanges = ConfigChanges.ScreenSize | ConfigChanges.Orientation | ConfigChanges.UiMode | ConfigChanges.ScreenLayout | ConfigChanges.SmallestScreenSize | ConfigChanges.Density)]
     public class MainActivity : MauiAppCompatActivity
     {
+        internal static MainActivity? Instance { get; private set; }
+
+        public MainActivity()
+        {
+            Instance = this;
+        }
+
         /// <summary>
         /// WebView inspection is off in Release. Launching from adb with
         /// <c>am start ... --ez webdebug true</c> turns it on for that run only, so a store
@@ -24,20 +32,32 @@ namespace SPIC.MauiBlazorApp
         }
 
         /// <summary>
-        /// Hardware / gesture back: step back through the Blazor page history (which also
-        /// closes an open BottomSheet or More sheet, since they push a history entry) and
-        /// only leave the app when there is nothing left to go back to. Without this the
-        /// Android back button closed the whole app from any page.
+        /// Hardware / gesture back button handler. Calls NavHistoryService directly - it's a plain
+        /// static C# reference (Current), not a JS round-trip, since MainActivity and the Blazor
+        /// circuit share the same process. Must go through TryGoBackAsync (not the sync TryGoBack),
+        /// because the one case that matters most here - nowhere left to go, i.e. the app's root
+        /// page - is exactly the case where it needs to await the "Exit SPIC ONE?" ConfirmDialog
+        /// before deciding whether to actually let the app close.
         /// </summary>
-        public override void OnBackPressed()
+        public override void OnBackPressed() => _ = HandleBackPressedAsync();
+
+        private async Task HandleBackPressedAsync()
         {
-            var page = Microsoft.Maui.Controls.Application.Current?.Windows.FirstOrDefault()?.Page as MainPage;
-            if (page?.WebView?.Handler?.PlatformView is Android.Webkit.WebView webView && webView.CanGoBack())
+            System.Diagnostics.Debug.WriteLine($"[BACKDBG] OnBackPressed fired. Current={(NavHistoryService.Current is null ? "null" : "set")} CanGoBack={NavHistoryService.Current?.CanGoBack}");
+            try
             {
-                webView.GoBack();
-                return;
+                if (NavHistoryService.Current != null && await NavHistoryService.Current.TryGoBackAsync())
+                {
+                    System.Diagnostics.Debug.WriteLine("[BACKDBG] TryGoBackAsync returned true (handled).");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[BACKDBG] HandleBackPressedAsync threw: {ex}");
             }
 
+            System.Diagnostics.Debug.WriteLine("[BACKDBG] Falling through to base.OnBackPressed (exit).");
             base.OnBackPressed();
         }
     }
