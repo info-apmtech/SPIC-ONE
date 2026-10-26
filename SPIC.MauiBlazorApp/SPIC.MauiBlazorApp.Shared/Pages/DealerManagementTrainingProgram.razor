@@ -1,11 +1,13 @@
 @page "/DealerManagementTrainingProgram"
 @inject NavigationManager NavigationManager
 @inject HttpClient Http
+@inject Microsoft.JSInterop.IJSRuntime JS
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
 @using System.Globalization
 @using Microsoft.AspNetCore.Components.Forms
 @using System.Net.Http.Headers
+@using Microsoft.JSInterop
 
 @if (isLoadingCSR1)
 {
@@ -383,65 +385,144 @@ else if (csr1Plan != null)
                 <!-- Event Videos: streamed directly to CSR-2 API to reduce memory usage -->
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
-                        <h3 class="dmtp-card-title dmtp-no-margin">Event Videos (@eventVideos.Count)</h3>
-                        <label for="dmtp-videos-header" class="dmtp-btn-add" style="cursor:pointer;">
+
+                        <h3 class="dmtp-card-title dmtp-no-margin">
+                            Event Videos (@eventVideos.Count)
+                        </h3>
+
+                        <!-- Uses the SAME working input as Browse Files -->
+                        <label for="dmtp-videos-browse"
+                               class="dmtp-btn-add"
+                               style="cursor:pointer;">
                             <i class="bi bi-plus-lg"></i> Upload Videos
                         </label>
-                        <InputFile id="dmtp-videos-header" OnChange="OnVideosSelected" accept="video/mp4,video/quicktime,.mp4,.mov" multiple
-                                   style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+
                     </div>
+
                     <div class="dmtp-dropzone" style="position:relative;">
-                        <InputFile OnChange="OnVideosSelected" accept="video/mp4,video/quicktime,.mp4,.mov" multiple
-                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
-                        <div class="dmtp-dropzone-icon"><i class="bi bi-camera-video"></i></div>
-                        <p class="dmtp-dropzone-title">Drag and Drop Videos here, or choose an option</p>
-                        <p class="dmtp-dropzone-sub">MP4, MOV up to 700MB each</p>
-                        <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
-                            <label for="dmtp-videos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
-                                <i class="bi bi-folder2-open"></i> Browse Files
-                            </label>
-                            <InputFile id="dmtp-videos-browse" OnChange="OnVideosSelected"
-                                       accept="video/mp4,video/quicktime,.mp4,.mov" multiple
-                                       style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
-                            <label for="dmtp-videos-record" class="dmtp-btn-outline-plain" style="cursor:pointer;">
-                                <i class="bi bi-camera-video"></i> Record Video
-                            </label>
-                            <InputFile id="dmtp-videos-record" OnChange="OnVideosSelected"
-                                       accept="video/*" capture="environment"
-                                       style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+
+                        <div class="dmtp-dropzone-icon">
+                            <i class="bi bi-camera-video"></i>
                         </div>
-                        <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile, Record Video requests the camera. Browse Files selects a saved video.</p>
+
+                        <p class="dmtp-dropzone-title">
+                            Drag and Drop Videos here, or choose an option
+                        </p>
+
+                        <p class="dmtp-dropzone-sub">
+                            MP4, MOV up to 700MB each
+                        </p>
+
+                        <div class="dmtp-dropzone-actions"
+                             style="position:relative;z-index:2;">
+
+                            <label for="dmtp-videos-browse"
+                                   class="dmtp-btn-outline-plain"
+                                   style="cursor:pointer;">
+                                <i class="bi bi-folder2-open"></i>
+                                Browse Files
+                            </label>
+
+                            <!-- ONE common working video picker -->
+                            <InputFile id="dmtp-videos-browse"
+                                       OnChange="OnVideosSelected"
+                                       accept="video/mp4,video/quicktime,.mp4,.mov"
+                                       multiple
+                                       style="position:absolute;
+                            width:1px;
+                            height:1px;
+                            opacity:0;
+                            clip-path:inset(50%);
+                            pointer-events:none;" />
+
+                            <label for="dmtp-videos-record"
+                                   class="dmtp-btn-outline-plain"
+                                   style="cursor:pointer;">
+                                <i class="bi bi-camera-video"></i>
+                                Record Video
+                            </label>
+
+                            <InputFile id="dmtp-videos-record"
+                                       OnChange="OnVideosSelected"
+                                       accept="video/*"
+                                       capture="environment"
+                                       style="position:absolute;
+                            width:1px;
+                            height:1px;
+                            opacity:0;
+                            clip-path:inset(50%);
+                            pointer-events:none;" />
+
+                        </div>
+
+                        <p class="dmtp-dropzone-sub mt-2 mb-0">
+                            On mobile, Record Video requests the camera.
+                            Browse Files selects a saved video.
+                        </p>
                     </div>
+
                     @if (isReadingVideos)
                     {
-                        <div class="text-muted small mt-2">Uploading videos directly to server...</div>
+                        <div class="text-muted small mt-2">
+                            Uploading videos directly to server...
+                        </div>
                     }
 
                     @if (eventVideos.Count == 0)
                     {
-                        <p class="text-muted mt-3">No event videos added yet.</p>
+                        <p class="text-muted mt-3">
+                            No event videos added yet.
+                        </p>
                     }
+
                     <div class="dmtp-photo-grid">
                         @foreach (var video in eventVideos)
                         {
                             <div class="dmtp-photo-card" @key="video.Id">
-                                <div class="dmtp-photo-thumb" style="height:auto;min-height:140px;overflow:hidden;background:#152633;">
+
+                                <div class="dmtp-photo-thumb"
+                                     style="height:auto;min-height:140px;overflow:hidden;background:#152633;">
+
                                     @if (!string.IsNullOrEmpty(video.PreviewUrl))
                                     {
-                                        <video controls playsinline preload="metadata" src="@video.PreviewUrl" style="width:100%;max-height:220px;display:block;"></video>
+                                        <video controls
+                                               playsinline
+                                               preload="metadata"
+                                               src="@video.PreviewUrl"
+                                               style="width:100%;max-height:220px;display:block;">
+                                        </video>
                                     }
                                     else
                                     {
-                                        <div class="text-white text-center p-4">Preview unavailable for large video; select a shorter clip or save via server upload.</div>
+                                        <div class="text-white text-center p-4">
+                                            Video preview unavailable.
+                                        </div>
                                     }
+
                                 </div>
-                                <span class="dmtp-photo-filename" title="@video.FileName">@video.FileName (@FormatVideoSize(video.Bytes.LongLength > 0 ? video.Bytes.LongLength : video.SavedFileSize))</span>
-                                <input type="text" class="dmtp-form-control" placeholder="Add video caption" @bind="video.Caption" />
+
+                                <span class="dmtp-photo-filename"
+                                      title="@video.FileName">
+                                    @video.FileName
+                                    (@FormatVideoSize(
+                                                            video.Bytes.LongLength > 0
+                                                                ? video.Bytes.LongLength
+                                                                : video.SavedFileSize))
+                                </span>
+
+                                <input type="text"
+                                       class="dmtp-form-control"
+                                       placeholder="Add video caption"
+                                       @bind="video.Caption" />
+
                                 <div class="dmtp-photo-footer">
-                                    <button type="button" class="dmtp-link-remove" @onclick="() => RemoveVideo(video.Id)">
+                                    <button type="button"
+                                            class="dmtp-link-remove"
+                                            @onclick="() => RemoveVideo(video.Id)">
                                         <i class="bi bi-trash"></i> Remove
                                     </button>
                                 </div>
+
                             </div>
                         }
                     </div>
@@ -490,19 +571,58 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Participant List</h3>
-                        <button type="button" class="dmtp-btn-add" @onclick="AddParticipant">
-                            <i class="bi bi-plus-lg"></i> @(editingParticipantId is null ? "Add Participant" : "Update Participant")
-                        </button>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="button" class="dmtp-btn-add dmtp-btn-new-farmer" @onclick="OpenNewFarmer">
+                                <i class="bi bi-person-plus"></i> New Farmer
+                            </button>
+                            <button type="button" class="dmtp-btn-add" @onclick="AddParticipant">
+                                <i class="bi bi-plus-lg"></i> @(editingParticipantId is null ? "Add Participant" : "Update Participant")
+                            </button>
+                        </div>
                     </div>
 
                     <div class="dmtp-filter-row">
+
+                        <div class="dmtp-form-group dmtp-participant-phone-lookup">
+                            <label class="dmtp-form-label">Phone Number</label>
+                            <input type="tel"
+                                   class="dmtp-form-control"
+                                   placeholder="Enter mobile number"
+                                   maxlength="10"
+                                   autocomplete="off"
+                                   value="@participantPhone"
+                                   @oninput="OnParticipantPhoneInput"
+                                   @onfocus="OpenParticipantPhoneSuggestions" />
+
+                            @if (participantPhoneLookupOpen)
+                            {
+                                <div class="dmtp-participant-phone-dropdown">
+                                    @if (participantPhoneSearching)
+                                    {
+                                        <div class="dmtp-participant-phone-empty">Searching...</div>
+                                    }
+                                    else if (participantPhoneMatches.Count == 0)
+                                    {
+                                        <div class="dmtp-participant-phone-empty">No matching Farmer / Dealer found</div>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var match in participantPhoneMatches)
+                                        {
+                                            <button type="button"
+                                                    class="dmtp-participant-phone-option"
+                                                    @onclick="() => SelectParticipantPhoneMatch(match)">
+                                                <span class="dmtp-participant-phone-main">@match.Mobile - @match.Role</span>
+                                                <span class="dmtp-participant-phone-name">@match.Name</span>
+                                            </button>
+                                        }
+                                    }
+                                </div>
+                            }
+                        </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Name</label>
                             <input type="text" class="dmtp-form-control" placeholder="Enter Name" @bind="participantName" />
-                        </div>
-                        <div class="dmtp-form-group">
-                            <label class="dmtp-form-label">Phone Number</label>
-                            <input type="tel" class="dmtp-form-control" placeholder="10-digit phone number" maxlength="10" @bind="participantPhone" />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Role</label>
@@ -924,7 +1044,7 @@ else if (csr1Plan != null)
                     <h3 class="dmtp-card-title">Planned Expense Breakdown (CSR-1)</h3>
                     <div class="dmtp-table-wrap">
                         <table class="dmtp-table">
-                            <thead><tr><th>Expense Category</th><th>Bill No.</th><th>Bill Date</th><th>Planned (CSR-1)</th><th>Actual (CSR-2)</th></tr></thead>
+                            <thead><tr><th>Expense Category</th><th>Bill No.</th><th>Planned (CSR-1)</th><th>Actual (CSR-2)</th></tr></thead>
                             <tbody>
                                 @foreach (var planned in CSR1PlannedExpenses)
                                 {
@@ -941,7 +1061,6 @@ else if (csr1Plan != null)
                                             <tr>
                                                 <td>@planned.Label @(rows.Count > 1 ? $"- Entry {rowIndex + 1}" : "")</td>
                                                 <td>@Display(actualItem.BillNo)</td>
-                                                <td>@(actualItem.ExpenseDate?.ToString("dd MMM yyyy") ?? "-")</td>
                                                 <td>@(rowIndex == 0 ? Money(planned.Amount) : "-")</td>
                                                 <td>@Money(actualItem.ActualAmount ?? 0m)</td>
                                             </tr>
@@ -1013,6 +1132,120 @@ else if (csr1Plan != null)
     </div>
 
 }
+
+<!-- CSR-2 New Farmer modal: same data fields as Sample Collection and saves to SasFarmers. -->
+@if (newFarmerOpen)
+{
+    <div class="csr2-farmer-backdrop" role="presentation" @onclick="CloseNewFarmer">
+        <div class="csr2-farmer-modal" role="dialog" aria-modal="true" aria-labelledby="csr2-new-farmer-title" @onclick:stopPropagation="true">
+            <div class="csr2-farmer-header">
+                <div>
+                    <h3 id="csr2-new-farmer-title">New Farmer</h3>
+                    <p>Add a farmer while collecting participant details</p>
+                </div>
+                <button type="button" class="csr2-farmer-close" aria-label="Close" @onclick="CloseNewFarmer">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="csr2-farmer-body">
+                <div class="csr2-farmer-grid">
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Farmer Name <span class="text-danger">*</span></label>
+                        <input type="text" class="dmtp-form-control" placeholder="Enter farmer name" @bind="newFarmerName" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Mobile Number <span class="text-danger">*</span></label>
+                        <input type="tel" maxlength="10" class="dmtp-form-control" placeholder="Enter Mobile Number" @bind="newFarmerMobile" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Address 1</label>
+                        <input type="text" class="dmtp-form-control" placeholder="Enter Address" @bind="newFarmerAddress1" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Address 2</label>
+                        <input type="text" class="dmtp-form-control" placeholder="Enter Address" @bind="newFarmerAddress2" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Village / Area</label>
+                        <input type="text" class="dmtp-form-control" placeholder="Enter Village / Area" @bind="newFarmerVillage" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Taluk</label>
+                        <input type="text" class="dmtp-form-control" placeholder="Enter Taluk" @bind="newFarmerTaluk" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">State</label>
+                        <select class="dmtp-form-select" value="@newFarmerStateId" @onchange="OnNewFarmerStateChanged">
+                            <option value="0">Select State</option>
+                            @foreach (var state in farmerStates.OrderBy(x => x.StateName))
+                            {
+                                <option value="@state.Id">@state.StateName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">District</label>
+                        <select class="dmtp-form-select" @bind="newFarmerDistrictId" disabled="@(newFarmerStateId <= 0)">
+                            <option value="0">Select District</option>
+                            @foreach (var district in FarmerDistrictOptions)
+                            {
+                                <option value="@district.Id">@district.DistrictName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Pin Code</label>
+                        <input type="text" maxlength="10" class="dmtp-form-control" placeholder="Enter Pin Code" @bind="newFarmerPinCode" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Latitude</label>
+                        <input type="text" class="dmtp-form-control" placeholder="Enter Latitude" @bind="newFarmerLatitude" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Longitude</label>
+                        <input type="text" class="dmtp-form-control" placeholder="Enter Longitude" @bind="newFarmerLongitude" />
+                    </div>
+                    <div class="dmtp-form-group">
+                        <label class="dmtp-form-label">Survey Number</label>
+                        <input type="text" class="dmtp-form-control" placeholder="Enter Survey Number" @bind="newFarmerSurveyNumber" />
+                    </div>
+                </div>
+
+                <button type="button" class="csr2-use-location" @onclick="UseNewFarmerCurrentLocation" disabled="@newFarmerGettingLocation">
+                    <i class="bi bi-geo-alt"></i> @(newFarmerGettingLocation ? "Getting location..." : "Use my location")
+                </button>
+
+                @if (!string.IsNullOrWhiteSpace(newFarmerError))
+                {
+                    <div class="text-danger small mt-2">@newFarmerError</div>
+                }
+            </div>
+
+            <div class="csr2-farmer-footer">
+                <button type="button" class="dmtp-btn-previous" @onclick="CloseNewFarmer" disabled="@savingNewFarmer">Cancel</button>
+                <button type="button" class="dmtp-btn-add" @onclick="SaveNewFarmerAsync" disabled="@savingNewFarmer">
+                    <i class="bi bi-person-check"></i> @(savingNewFarmer ? "Saving..." : "Save Farmer")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<script>
+    window.csr2GetCurrentPosition = function () {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject("Geolocation is not supported by this browser.");
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(
+                p => resolve({ latitude: p.coords.latitude, longitude: p.coords.longitude }),
+                e => reject(e.message),
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+        });
+    };
+</script>
 
 <!-- CSR-2 centered feedback modal (errors, validation, and successful actions) -->
 @if (showCsr2Alert)
@@ -1115,6 +1348,107 @@ else if (csr1Plan != null)
         overflow-wrap: anywhere;
     }
 
+    .csr2-farmer-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10950;
+        background: rgba(15, 23, 42, .48);
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .csr2-farmer-modal {
+        width: min(650px, 100%);
+        height: 100%;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        box-shadow: -18px 0 50px rgba(15, 23, 42, .16);
+    }
+
+    .csr2-farmer-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 22px 24px;
+        border-bottom: 1px solid #e7ebf0;
+    }
+
+        .csr2-farmer-header h3 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .csr2-farmer-header p {
+            margin: 4px 0 0;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+    .csr2-farmer-close {
+        width: 34px;
+        height: 34px;
+        border: 1px solid #dde3ea;
+        border-radius: 50%;
+        background: #fff;
+        color: #64748b;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+    }
+
+    .csr2-farmer-body {
+        flex: 1;
+        overflow: auto;
+        padding: 24px;
+    }
+
+    .csr2-farmer-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+
+
+    .csr2-use-location {
+        margin-top: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        border: 1px dashed #8fd5ad;
+        background: #eefaf3;
+        color: #167347;
+        border-radius: 8px;
+        padding: 9px 13px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+        .csr2-use-location:disabled {
+            opacity: .65;
+            cursor: default;
+        }
+
+    .csr2-farmer-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        padding: 16px 24px;
+        border-top: 1px solid #e7ebf0;
+        background: #fff;
+    }
+
+    @@media(max-width: 640px) {
+        .csr2-farmer-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
     .csr2-alert-confirm {
         background: #2861eb;
         color: white;
@@ -1130,6 +1464,76 @@ else if (csr1Plan != null)
             outline: 3px solid #9cbbff;
             outline-offset: 2px;
         }
+
+    .dmtp-btn-new-farmer {
+        background: #ffffff;
+        color: #146c43;
+        border: 1px solid #83c59f;
+    }
+
+    .dmtp-participant-phone-lookup {
+        position: relative;
+        z-index: 30;
+    }
+
+    .dmtp-participant-phone-dropdown {
+        position: absolute;
+        top: calc(100% + 5px);
+        left: 0;
+        right: 0;
+        z-index: 2000;
+        max-height: 260px;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #dfe5ec;
+        border-radius: 9px;
+        box-shadow: 0 10px 28px rgba(15,23,42,.14);
+        padding: 5px;
+    }
+
+    .dmtp-participant-phone-option {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        border-radius: 7px;
+        padding: 9px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        text-align: left;
+        cursor: pointer;
+    }
+
+        .dmtp-participant-phone-option:hover {
+            background: #f0f9f4;
+        }
+
+    .dmtp-participant-phone-main {
+        font-size: 12px;
+        font-weight: 700;
+        color: #1f2937;
+        white-space: nowrap;
+    }
+
+    .dmtp-participant-phone-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+        color: #667085;
+    }
+
+    .dmtp-participant-phone-empty {
+        padding: 10px;
+        font-size: 11px;
+        color: #667085;
+    }
+
+    .dmtp-btn-new-farmer:hover {
+        background: #effaf4;
+    }
 
     .dmtp-expense-color-grid {
         display: grid;
@@ -1630,6 +2034,53 @@ else if (csr1Plan != null)
     private string participantPhone = "";
     private string participantRole = "";
     private string participantError = "";
+    private bool participantPhoneLookupOpen;
+    private bool participantPhoneSearching;
+    private CancellationTokenSource? participantPhoneLookupCts;
+    private readonly List<ParticipantPhoneLookupDto> participantPhoneMatches = new();
+
+    private sealed class ParticipantPhoneLookupDto
+    {
+        public int SourceId { get; set; }
+        public string Mobile { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Role { get; set; } = "";
+        public string Source { get; set; } = "";
+    }
+    private bool newFarmerOpen;
+    private bool savingNewFarmer;
+    private bool newFarmerGettingLocation;
+    private string newFarmerName = "";
+    private string newFarmerMobile = "";
+    private string newFarmerAddress1 = "";
+    private string newFarmerAddress2 = "";
+    private string newFarmerVillage = "";
+    private string newFarmerTaluk = "";
+    private int newFarmerStateId;
+    private int newFarmerDistrictId;
+    private string newFarmerPinCode = "";
+    private string newFarmerLatitude = "";
+    private string newFarmerLongitude = "";
+    private string newFarmerSurveyNumber = "";
+    private string newFarmerError = "";
+    private List<FarmerLocationItemDto> farmerStates = new();
+    private List<FarmerLocationItemDto> farmerDistricts = new();
+    private IEnumerable<FarmerLocationItemDto> FarmerDistrictOptions =>
+        farmerDistricts.Where(x => x.StateId == newFarmerStateId).OrderBy(x => x.DistrictName);
+
+    private sealed class FarmerLocationItemDto
+    {
+        public int Id { get; set; }
+        public string StateName { get; set; } = "";
+        public string DistrictName { get; set; } = "";
+        public int StateId { get; set; }
+    }
+
+    private sealed class GeoPositionDto
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
     private int? editingParticipantId;
     private int nextParticipantId = 1;
     private const int participantPageSize = 5;
@@ -1638,6 +2089,246 @@ else if (csr1Plan != null)
     private IEnumerable<PersonInfo> PagedParticipants => participants.Skip((participantPage - 1) * participantPageSize).Take(participantPageSize);
 
     private static string GetInitials(string name) => string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(p => char.ToUpperInvariant(p[0])));
+
+    private async Task OpenNewFarmer()
+    {
+        participantError = "";
+        newFarmerError = "";
+        newFarmerName = participantRole == "Farmer" ? participantName : "";
+        newFarmerMobile = participantRole == "Farmer" ? participantPhone : "";
+        newFarmerAddress1 = "";
+        newFarmerAddress2 = "";
+        newFarmerVillage = "";
+        newFarmerTaluk = "";
+        newFarmerStateId = 0;
+        newFarmerDistrictId = 0;
+        newFarmerPinCode = "";
+        newFarmerLatitude = "";
+        newFarmerLongitude = "";
+        newFarmerSurveyNumber = "";
+        newFarmerOpen = true;
+
+        if (farmerStates.Count == 0 || farmerDistricts.Count == 0)
+        {
+            try
+            {
+                var statesTask = Http.GetFromJsonAsync<List<FarmerLocationItemDto>>("api/State/all");
+                var districtsTask = Http.GetFromJsonAsync<List<FarmerLocationItemDto>>("api/District/all");
+                farmerStates = await statesTask ?? new();
+                farmerDistricts = await districtsTask ?? new();
+            }
+            catch (Exception ex)
+            {
+                newFarmerError = $"Unable to load State/District master: {ex.Message}";
+            }
+        }
+    }
+
+    private void OnNewFarmerStateChanged(ChangeEventArgs e)
+    {
+        newFarmerStateId = int.TryParse(e.Value?.ToString(), out var id) ? id : 0;
+        newFarmerDistrictId = 0;
+    }
+
+    private void CloseNewFarmer()
+    {
+        if (savingNewFarmer) return;
+        newFarmerOpen = false;
+        newFarmerError = "";
+    }
+
+    private async Task UseNewFarmerCurrentLocation()
+    {
+        newFarmerError = "";
+        newFarmerGettingLocation = true;
+        try
+        {
+            var pos = await JS.InvokeAsync<GeoPositionDto>("csr2GetCurrentPosition");
+            newFarmerLatitude = pos.Latitude.ToString("0.######", CultureInfo.InvariantCulture);
+            newFarmerLongitude = pos.Longitude.ToString("0.######", CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex)
+        {
+            newFarmerError = $"Unable to get current location: {ex.Message}";
+        }
+        finally
+        {
+            newFarmerGettingLocation = false;
+        }
+    }
+
+    private async Task SaveNewFarmerAsync()
+    {
+        newFarmerError = "";
+        var name = newFarmerName.Trim();
+        var mobile = newFarmerMobile.Trim();
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            newFarmerError = "Farmer name is required.";
+            return;
+        }
+        if (mobile.Length != 10 || !mobile.All(char.IsDigit))
+        {
+            newFarmerError = "Enter a valid 10-digit mobile number.";
+            return;
+        }
+        if (newFarmerStateId <= 0)
+        {
+            newFarmerError = "Please select State.";
+            return;
+        }
+        if (newFarmerDistrictId <= 0)
+        {
+            newFarmerError = "Please select District.";
+            return;
+        }
+        if (participants.Any(x => string.Equals(x.Phone, mobile, StringComparison.OrdinalIgnoreCase)))
+        {
+            newFarmerError = "This farmer mobile number is already in the participant list.";
+            return;
+        }
+
+        double? latitude = null;
+        double? longitude = null;
+        if (!string.IsNullOrWhiteSpace(newFarmerLatitude))
+        {
+            if (!double.TryParse(newFarmerLatitude, NumberStyles.Float, CultureInfo.InvariantCulture, out var lat))
+            {
+                newFarmerError = "Enter a valid Latitude.";
+                return;
+            }
+            latitude = lat;
+        }
+        if (!string.IsNullOrWhiteSpace(newFarmerLongitude))
+        {
+            if (!double.TryParse(newFarmerLongitude, NumberStyles.Float, CultureInfo.InvariantCulture, out var lng))
+            {
+                newFarmerError = "Enter a valid Longitude.";
+                return;
+            }
+            longitude = lng;
+        }
+
+        savingNewFarmer = true;
+        try
+        {
+            var request = new SasFarmerUpsertDto
+            {
+                Name = name,
+                Mobile = mobile,
+                Address1 = string.IsNullOrWhiteSpace(newFarmerAddress1) ? null : newFarmerAddress1.Trim(),
+                Address2 = string.IsNullOrWhiteSpace(newFarmerAddress2) ? null : newFarmerAddress2.Trim(),
+                Village = string.IsNullOrWhiteSpace(newFarmerVillage) ? null : newFarmerVillage.Trim(),
+                Taluk = string.IsNullOrWhiteSpace(newFarmerTaluk) ? null : newFarmerTaluk.Trim(),
+                StateId = newFarmerStateId,
+                DistrictId = newFarmerDistrictId,
+                PinCode = string.IsNullOrWhiteSpace(newFarmerPinCode) ? null : newFarmerPinCode.Trim(),
+                Latitude = latitude,
+                Longitude = longitude,
+                SurveyNumber = string.IsNullOrWhiteSpace(newFarmerSurveyNumber) ? null : newFarmerSurveyNumber.Trim()
+            };
+
+            using var response = await Http.PostAsJsonAsync("api/Sas/farmers", request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                newFarmerError = string.IsNullOrWhiteSpace(message)
+                    ? $"Unable to save farmer. HTTP {(int)response.StatusCode}."
+                    : message.Trim('"');
+                return;
+            }
+
+            var saved = await response.Content.ReadFromJsonAsync<SasFarmerDto>();
+            var savedName = saved?.Name ?? name;
+            var savedMobile = saved?.Mobile ?? mobile;
+
+            participants.Add(new PersonInfo
+            {
+                Id = nextParticipantId++,
+                Name = savedName,
+                Phone = savedMobile,
+                Role = "Farmer",
+                Initials = GetInitials(savedName)
+            });
+
+            participantPage = ParticipantPageCount;
+            participantName = "";
+            participantPhone = "";
+            participantRole = "";
+            editingParticipantId = null;
+            newFarmerOpen = false;
+            ShowCsr2Alert("Farmer saved successfully and added to the participant list.", false, "Success");
+        }
+        catch (Exception ex)
+        {
+            newFarmerError = $"Unable to save farmer: {ex.Message}";
+        }
+        finally
+        {
+            savingNewFarmer = false;
+        }
+    }
+
+    private async Task OnParticipantPhoneInput(ChangeEventArgs e)
+    {
+        participantPhone = new string((e.Value?.ToString() ?? "").Where(char.IsDigit).Take(10).ToArray());
+        participantPhoneMatches.Clear();
+
+        participantPhoneLookupCts?.Cancel();
+        participantPhoneLookupCts?.Dispose();
+        participantPhoneLookupCts = new CancellationTokenSource();
+        var ct = participantPhoneLookupCts.Token;
+
+        if (participantPhone.Length < 3)
+        {
+            participantPhoneLookupOpen = false;
+            participantPhoneSearching = false;
+            return;
+        }
+
+        participantPhoneLookupOpen = true;
+        participantPhoneSearching = true;
+        try
+        {
+            await Task.Delay(250, ct);
+            var result = await Http.GetFromJsonAsync<List<ParticipantPhoneLookupDto>>(
+                $"api/CSR2/participant-mobile-search?term={Uri.EscapeDataString(participantPhone)}", ct);
+
+            if (ct.IsCancellationRequested) return;
+            participantPhoneMatches.Clear();
+            if (result != null) participantPhoneMatches.AddRange(result);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            participantPhoneMatches.Clear();
+            participantError = $"Unable to search participant mobile number: {ex.Message}";
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested) participantPhoneSearching = false;
+        }
+    }
+
+    private void OpenParticipantPhoneSuggestions()
+    {
+        if (participantPhone.Length >= 3)
+            participantPhoneLookupOpen = true;
+    }
+
+    private void SelectParticipantPhoneMatch(ParticipantPhoneLookupDto match)
+    {
+        participantPhone = match.Mobile;
+        participantName = match.Name;
+        participantRole = match.Role;
+        participantPhoneLookupOpen = false;
+        participantPhoneMatches.Clear();
+        participantError = "";
+    }
 
     private void AddParticipant()
     {
@@ -1703,6 +2394,12 @@ else if (csr1Plan != null)
         participantPhone = "";
         participantRole = "";
         participantError = "";
+        participantPhoneLookupOpen = false;
+        participantPhoneSearching = false;
+        participantPhoneMatches.Clear();
+        participantPhoneLookupCts?.Cancel();
+        participantPhoneLookupCts?.Dispose();
+        participantPhoneLookupCts = null;
         editingParticipantId = null;
     }
 
