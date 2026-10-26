@@ -1037,7 +1037,8 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("time without time zone");
 
                     b.Property<string>("EventCoordinatorEmployeeId")
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<int?>("ExpectedParticipantsCount")
                         .HasColumnType("integer");
@@ -1090,15 +1091,6 @@ namespace Spic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("EmployeeName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("PhoneNumber")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
                     b.Property<string>("RoleName")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -1130,23 +1122,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<int>("CSR2Id")
                         .HasColumnType("integer");
 
-                    b.Property<string>("CategoryKey")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("CategoryName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
                     b.Property<DateTime?>("ExpenseDate")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<int>("ExpenseInformationId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("CSR2Id", "CategoryKey")
-                        .IsUnique();
+                    b.HasIndex("ExpenseInformationId");
+
+                    b.HasIndex("CSR2Id", "ExpenseInformationId");
 
                     b.ToTable("CSR2Expenses");
                 });
@@ -1188,33 +1174,6 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("CSR2ExpenseId");
 
                     b.ToTable("CSR2ExpenseProofs");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.CSR2FocusProduct", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CSR2Id")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("CropId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("GroupNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("ProductId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CSR2Id");
-
-                    b.ToTable("CSR2FocusProduct");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR2Media", b =>
@@ -1283,14 +1242,12 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                    b.Property<string>("ParticipantSource")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
-                    b.Property<string>("PhoneNumber")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
+                    b.Property<int?>("ParticipantSourceId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -1302,6 +1259,93 @@ namespace Spic.Infrastructure.Migrations
                     b.HasIndex("CSR2Id");
 
                     b.ToTable("CSR2Participants");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Products1", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<int[]>("CropId")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.PrimitiveCollection<int[]>("ProductId")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.ToTable("CSR2Products1");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Products2", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<int[]>("CropId")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.PrimitiveCollection<int[]>("ProductId")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.ToTable("CSR2Products2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Products3", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.PrimitiveCollection<int[]>("CropId")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.PrimitiveCollection<int[]>("ProductId")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.ToTable("CSR2Products3");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSRExceedingDaySetting", b =>
@@ -10912,7 +10956,15 @@ namespace Spic.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("SPIC.Core.Entities.ExpenseInformation", "ExpenseInformation")
+                        .WithMany()
+                        .HasForeignKey("ExpenseInformationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("CSR2");
+
+                    b.Navigation("ExpenseInformation");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR2ExpenseProof", b =>
@@ -10924,17 +10976,6 @@ namespace Spic.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("CSR2Expense");
-                });
-
-            modelBuilder.Entity("SPIC.Core.Entities.CSR2FocusProduct", b =>
-                {
-                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
-                        .WithMany("FocusProducts")
-                        .HasForeignKey("CSR2Id")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CSR2");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR2Media", b =>
@@ -10952,6 +10993,39 @@ namespace Spic.Infrastructure.Migrations
                 {
                     b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
                         .WithMany("Participants")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Products1", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Products1")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Products2", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Products2")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2Products3", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("Products3")
                         .HasForeignKey("CSR2Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -11835,11 +11909,15 @@ namespace Spic.Infrastructure.Migrations
 
                     b.Navigation("Expenses");
 
-                    b.Navigation("FocusProducts");
-
                     b.Navigation("Media");
 
                     b.Navigation("Participants");
+
+                    b.Navigation("Products1");
+
+                    b.Navigation("Products2");
+
+                    b.Navigation("Products3");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR2Expense", b =>

@@ -761,12 +761,28 @@ namespace Spic.Infrastructure.Data
                 e.HasMany(x => x.Employees).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(x => x.Media).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
                 e.HasMany(x => x.Expenses).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Products1).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Products2).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
+                e.HasMany(x => x.Products3).WithOne(x => x.CSR2).HasForeignKey(x => x.CSR2Id).OnDelete(DeleteBehavior.Cascade);
             });
             builder.Entity<CSR2Employee>().HasIndex(x => new { x.CSR2Id, x.EmployeeInformationId }).IsUnique();
             builder.Entity<CSR2Expense>(e =>
             {
-                e.HasIndex(x => new { x.CSR2Id, x.CategoryKey }).IsUnique();
-                e.HasMany(x => x.Proofs).WithOne(x => x.CSR2Expense).HasForeignKey(x => x.CSR2ExpenseId).OnDelete(DeleteBehavior.Cascade);
+                e.HasIndex(x => new
+                {
+                    x.CSR2Id,
+                    x.ExpenseInformationId
+                });
+
+                e.HasOne(x => x.ExpenseInformation)
+                    .WithMany()
+                    .HasForeignKey(x => x.ExpenseInformationId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                e.HasMany(x => x.Proofs)
+                    .WithOne(x => x.CSR2Expense)
+                    .HasForeignKey(x => x.CSR2ExpenseId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
             builder.Entity<CSR2Media>().HasIndex(x => new { x.CSR2Id, x.MediaType });
         }

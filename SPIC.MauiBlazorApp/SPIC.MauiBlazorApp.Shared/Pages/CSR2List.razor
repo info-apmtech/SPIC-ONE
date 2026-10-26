@@ -1,0 +1,889 @@
+﻿@page "/CSR-2List"
+@using System.Net.Http.Json
+@using System.Globalization
+@inject HttpClient Http
+@inject NavigationManager NavigationManager
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
+<div class="csr2-list-page">
+    <div class="csr2-list-header">
+        <div>
+            <h2>CSR-2 Program Execution</h2>
+            <p>Manage assigned CSR-2 programs, track completion, attendance, media and expenses.</p>
+        </div>
+    </div>
+
+    <div class="csr2-stats-grid">
+        <button class="csr2-stat-card stat-blue" @onclick="() => ApplyStatusCard(null)">
+            <div><strong>@TotalCount</strong><span>Total CSR-2</span></div>
+            <span class="stat-icon">▣</span>
+        </button>
+        <button class="csr2-stat-card stat-green" @onclick='() => ApplyStatusCard("Approved")'>
+            <div><strong>@GetStatusCount("Approved")</strong><span>Approved</span></div>
+            <span class="stat-icon">✓</span>
+        </button>
+        <button class="csr2-stat-card stat-orange" @onclick='() => ApplyStatusCard("Submitted")'>
+            <div><strong>@GetStatusCount("Submitted")</strong><span>Submitted</span></div>
+            <span class="stat-icon">⌛</span>
+        </button>
+        <button class="csr2-stat-card stat-purple" @onclick='() => ApplyStatusCard("Draft")'>
+            <div><strong>@GetStatusCount("Draft")</strong><span>Drafts</span></div>
+            <span class="stat-icon">▧</span>
+        </button>
+    </div>
+
+    <div class="csr2-filter-card">
+        <div class="csr2-filter-title">☰ Filters</div>
+        <div class="csr2-filter-grid">
+            <div>
+                <label>Date Range - From</label>
+                <input type="date" class="form-control" @bind="fromDate" />
+            </div>
+            <div>
+                <label>Date Range - To</label>
+                <input type="date" class="form-control" @bind="toDate" />
+            </div>
+            <div>
+                <label>Program Type</label>
+                <select class="form-select" @bind="selectedProgramType" @bind:after="ProgramTypeChanged">
+                    <option value="">All Program Type</option>
+                    @foreach (var type in lookups.ProgramTypes)
+                    {
+                        <option value="@type">@type</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label>Program Name</label>
+                <select class="form-select" @bind="selectedProgramId">
+                    <option value="0">All Program Name</option>
+                    @foreach (var program in FilteredPrograms)
+                    {
+                        <option value="@program.Id">@program.Name</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label>Location</label>
+                <select class="form-select" @bind="selectedLocationId">
+                    <option value="0">All Location</option>
+                    @foreach (var location in locations.OrderBy(x => x.DistrictName))
+                    {
+                        <option value="@location.Id">@location.DistrictName</option>
+                    }
+                </select>
+            </div>
+            <div>
+                <label>Status</label>
+                <select class="form-select" @bind="selectedStatus">
+                    <option value="">All Status</option>
+                    @foreach (var status in lookups.Statuses)
+                    {
+                        <option value="@status.Name">@status.Name</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="csr2-filter-actions">
+            <button class="btn btn-light" @onclick="ClearFilters">Clear All</button>
+            <button class="btn btn-primary" @onclick="ApplyFilters">Apply Filters</button>
+        </div>
+    </div>
+
+    <div class="csr2-table-card">
+        <div class="csr2-table-toolbar">
+            <h3>Assigned Programs</h3>
+            <div class="csr2-toolbar-right">
+                <input class="form-control csr2-search" placeholder="Search Program or Sanction number" @bind="search" @bind:event="oninput" />
+                <button class="btn btn-outline-secondary" @onclick="Refresh">↻ Refresh Data</button>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="csr2-state-message">Loading CSR-2 records...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="alert alert-danger m-3">@errorMessage</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle csr2-table">
+                    <thead>
+                        <tr>
+                            <th>Sanction Number</th>
+                            <th>Program Type</th>
+                            <th>Program Name</th>
+                            <th>Location</th>
+                            <th>Approved Budget</th>
+                            <th>Event Date</th>
+                            <th>Attendance</th>
+                            <th>Media</th>
+                            <th>Actual Expense</th>
+                            <th>Report Completion</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (response.Items.Count == 0)
+                        {
+                            <tr><td colspan="12" class="text-center py-4 text-muted">No CSR-2 records found.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var row in response.Items)
+                            {
+                                <tr @key="row.CSR2Id">
+                                    <td><strong>@Display(row.SanctionNumber)</strong></td>
+                                    <td>@Display(row.ProgramType)</td>
+                                    <td>@Display(row.ProgramName)</td>
+                                    <td>@LocationName(row.LocationId)</td>
+                                    <td>@Money(row.ApprovedBudget)</td>
+                                    <td>@(row.ActualEventDate?.ToString("dd MMM yyyy") ?? "-")</td>
+                                    <td>@(row.ParticipantCount + row.EmployeeCount)</td>
+                                    <td>@(row.PhotoCount + row.VideoCount)</td>
+                                    <td>@Money(row.ActualExpense)</td>
+                                    <td>
+                                        <div class="completion-wrap">
+                                            <div class="progress completion-progress">
+                                                <div class="progress-bar" style="width:@row.ReportCompletion%"></div>
+                                            </div>
+                                            <span>@row.ReportCompletion%</span>
+                                        </div>
+                                    </td>
+                                    <td><span class="csr2-status @StatusClass(row.Status)">@row.Status</span></td>
+                                    <td>
+                                        <div class="d-flex flex-wrap gap-2">
+
+                                            <button type="button"
+                                                    class="btn csr2-view-btn"
+                                                    @onclick="() => OpenCSR2(row.CSR1Id)">
+                                                <i class="bi bi-eye"></i>
+                                                View Details
+                                            </button>
+
+                                            @if (CanValidate(row))
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-primary btn-sm"
+                                                        disabled="@workflowActionBusy"
+                                                        @onclick="() => ValidateCSR2(row)">
+                                                    <i class="bi bi-check-circle"></i>
+                                                    Validate
+                                                </button>
+                                            }
+
+                                            @if (CanApprove(row))
+                                            {
+                                                <button type="button"
+                                                        class="btn btn-success btn-sm"
+                                                        disabled="@workflowActionBusy"
+                                                        @onclick="() => ApproveCSR2(row)">
+                                                    <i class="bi bi-check2-circle"></i>
+                                                    Approve
+                                                </button>
+                                            }
+
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="csr2-pager">
+                <div class="d-flex align-items-center gap-2">
+                    <span>Items Per Page</span>
+                    <select class="form-select csr2-page-size" @bind="pageSize" @bind:after="PageSizeChanged">
+                        <option value="8">8</option>
+                        <option value="16">16</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                    </select>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@(page <= 1)" @onclick="PreviousPage">‹</button>
+                    <span>Page @(page) of @Math.Max(1, response.TotalPages)</span>
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@(page >= response.TotalPages)" @onclick="NextPage">›</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .csr2-list-page {
+        padding: 18px;
+        background: #f6f8fb;
+        min-height: 100vh;
+        color: #1f2937
+    }
+
+    .csr2-list-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 16px
+    }
+
+        .csr2-list-header h2 {
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 4px
+        }
+
+        .csr2-list-header p {
+            font-size: 12px;
+            color: #6b7280;
+            margin: 0
+        }
+
+    .csr2-stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4,minmax(0,1fr));
+        gap: 12px;
+        margin-bottom: 14px
+    }
+
+    .csr2-stat-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        background: #fff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        text-align: left;
+        cursor: pointer
+    }
+
+        .csr2-stat-card strong {
+            display: block;
+            font-size: 22px
+        }
+
+        .csr2-stat-card span {
+            font-size: 11px;
+            color: #6b7280
+        }
+
+    .stat-icon {
+        font-size: 20px !important
+    }
+
+    .stat-blue {
+        border-top: 3px solid #3b82f6
+    }
+
+    .stat-green {
+        border-top: 3px solid #22c55e
+    }
+
+    .stat-orange {
+        border-top: 3px solid #f97316
+    }
+
+    .stat-purple {
+        border-top: 3px solid #8b5cf6
+    }
+
+    .csr2-filter-card, .csr2-table-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        margin-bottom: 14px;
+        box-shadow: 0 2px 8px rgba(15,23,42,.03)
+    }
+
+    .csr2-filter-title {
+        font-size: 12px;
+        font-weight: 700;
+        padding: 12px 14px;
+        border-bottom: 1px solid #eef1f4
+    }
+
+    .csr2-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(3,minmax(0,1fr));
+        gap: 12px;
+        padding: 14px
+    }
+
+        .csr2-filter-grid label {
+            display: block;
+            font-size: 10px;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #475569
+        }
+
+    .csr2-filter-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 0 14px 14px
+    }
+
+    .csr2-table-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 14px
+    }
+
+        .csr2-table-toolbar h3 {
+            font-size: 14px;
+            font-weight: 700;
+            margin: 0
+        }
+
+    .csr2-toolbar-right {
+        display: flex;
+        gap: 8px;
+        align-items: center
+    }
+
+    .csr2-search {
+        width: 280px
+    }
+
+    .csr2-table {
+        font-size: 11px;
+        margin: 0
+    }
+
+        .csr2-table th {
+            font-size: 10px;
+            color: #475569;
+            background: #f8fafc;
+            white-space: nowrap
+        }
+
+        .csr2-table td {
+            white-space: nowrap
+        }
+
+    .completion-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 120px
+    }
+
+    .completion-progress {
+        height: 5px;
+        min-width: 75px;
+        flex: 1
+    }
+
+    .completion-wrap span {
+        font-size: 10px
+    }
+
+    .csr2-status {
+        display: inline-block;
+        padding: 4px 9px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700
+    }
+
+    .status-draft {
+        background: #f3f4f6;
+        color: #4b5563
+    }
+
+    .status-submitted {
+        background: #fff7d6;
+        color: #9a6700
+    }
+
+    .status-validated {
+        background: #e8f3ff;
+        color: #1d4ed8
+    }
+
+    .status-approved {
+        background: #dcfce7;
+        color: #15803d
+    }
+
+    .status-rejected {
+        background: #fee2e2;
+        color: #b91c1c
+    }
+
+    .csr2-view-btn {
+        background: #047857;
+        color: #fff;
+        font-size: 10px;
+        padding: 6px 10px
+    }
+
+        .csr2-view-btn:hover {
+            background: #065f46;
+            color: #fff
+        }
+
+    .csr2-pager {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 14px;
+        border-top: 1px solid #eef1f4;
+        font-size: 11px
+    }
+
+    .csr2-page-size {
+        width: 78px
+    }
+
+    .csr2-state-message {
+        padding: 28px;
+        text-align: center;
+        color: #64748b
+    }
+
+    @@media(max-width:1000px) {
+        .csr2-stats-grid {
+            grid-template-columns: repeat(2,1fr)
+        }
+
+        .csr2-filter-grid {
+            grid-template-columns: repeat(2,1fr)
+        }
+
+        .csr2-table-toolbar {
+            align-items: flex-start;
+            flex-direction: column
+        }
+
+        .csr2-toolbar-right {
+            width: 100%;
+            flex-wrap: wrap
+        }
+
+        .csr2-search {
+            width: 100%
+        }
+    }
+
+    @@media(max-width:640px) {
+        .csr2-stats-grid, .csr2-filter-grid {
+            grid-template-columns: 1fr
+        }
+
+        .csr2-list-page {
+            padding: 10px
+        }
+
+        .csr2-pager {
+            align-items: flex-start;
+            gap: 12px;
+            flex-direction: column
+        }
+    }
+</style>
+
+@code {
+    private bool isLoading;
+    private string errorMessage = "";
+    private CSR2ListResponse response = new();
+    private CSR2LookupResponse lookups = new();
+    private List<LocationDto> locations = new();
+
+    private DateTime? fromDate;
+    private DateTime? toDate;
+    private string selectedProgramType = "";
+    private int selectedProgramId;
+    private int selectedLocationId;
+    private string selectedStatus = "";
+    private string search = "";
+    private int page = 1;
+    private int pageSize = 16;
+
+    private bool workflowActionBusy;
+
+    private string CurrentRole =>
+        LoginState.UserRole.ToString();
+
+    private static bool IsHq(CSR2ListRowDto row) =>
+        string.Equals(row.Scope, "HQ", StringComparison.OrdinalIgnoreCase);
+
+    private int TotalCount => response.TotalCount;
+
+    private IEnumerable<ProgramLookupDto> FilteredPrograms =>
+        string.IsNullOrWhiteSpace(selectedProgramType)
+            ? lookups.Programs
+            : lookups.Programs.Where(x => string.Equals(x.ProgramType, selectedProgramType, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLookups();
+        await LoadList();
+    }
+
+    private async Task LoadLookups()
+    {
+        try
+        {
+            lookups = await Http.GetFromJsonAsync<CSR2LookupResponse>("api/CSR2/list/lookups") ?? new();
+            locations = await Http.GetFromJsonAsync<List<LocationDto>>("api/District/all") ?? new();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load filters: {ex.Message}";
+        }
+    }
+
+    private async Task LoadList()
+    {
+        isLoading = true;
+        errorMessage = "";
+        try
+        {
+            var parameters = new List<string>
+            {
+                $"page={page}",
+                $"pageSize={pageSize}"
+            };
+
+            if (fromDate.HasValue) parameters.Add($"fromDate={Uri.EscapeDataString(fromDate.Value.ToString("yyyy-MM-dd"))}");
+            if (toDate.HasValue) parameters.Add($"toDate={Uri.EscapeDataString(toDate.Value.ToString("yyyy-MM-dd"))}");
+            if (!string.IsNullOrWhiteSpace(selectedProgramType)) parameters.Add($"programType={Uri.EscapeDataString(selectedProgramType)}");
+            if (selectedProgramId > 0) parameters.Add($"programId={selectedProgramId}");
+            if (selectedLocationId > 0) parameters.Add($"locationId={selectedLocationId}");
+            if (!string.IsNullOrWhiteSpace(selectedStatus) && Enum.TryParse<CSR2StatusValue>(selectedStatus, true, out var parsedStatus)) parameters.Add($"status={(int)parsedStatus}");
+            if (!string.IsNullOrWhiteSpace(search)) parameters.Add($"search={Uri.EscapeDataString(search.Trim())}");
+
+            response = await Http.GetFromJsonAsync<CSR2ListResponse>("api/CSR2/list?" + string.Join("&", parameters)) ?? new();
+        }
+        catch (Exception ex)
+        {
+            response = new();
+            errorMessage = $"Unable to load CSR-2 list: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private Task ApplyFilters()
+    {
+        page = 1;
+        return LoadList();
+    }
+
+    private async Task ClearFilters()
+    {
+        fromDate = null;
+        toDate = null;
+        selectedProgramType = "";
+        selectedProgramId = 0;
+        selectedLocationId = 0;
+        selectedStatus = "";
+        search = "";
+        page = 1;
+        await LoadList();
+    }
+
+    private void ProgramTypeChanged()
+    {
+        if (selectedProgramId > 0 && !FilteredPrograms.Any(x => x.Id == selectedProgramId))
+            selectedProgramId = 0;
+    }
+
+    private async Task ApplyStatusCard(string? status)
+    {
+        selectedStatus = status ?? "";
+        page = 1;
+        await LoadList();
+    }
+
+    private Task Refresh() => LoadList();
+
+    private async Task PreviousPage()
+    {
+        if (page <= 1) return;
+        page--;
+        await LoadList();
+    }
+
+    private async Task NextPage()
+    {
+        if (page >= response.TotalPages) return;
+        page++;
+        await LoadList();
+    }
+
+    private async Task PageSizeChanged()
+    {
+        page = 1;
+        await LoadList();
+    }
+
+    private void OpenCSR2(int csr1Id) =>
+        NavigationManager.NavigateTo($"/DealerManagementTrainingProgram?csr1Id={csr1Id}");
+
+    private int GetStatusCount(string status) =>
+        response.StatusCounts.FirstOrDefault(x => string.Equals(x.Status, status, StringComparison.OrdinalIgnoreCase))?.Count ?? 0;
+
+    private string LocationName(int? id) =>
+        !id.HasValue || id <= 0
+            ? "-"
+            : locations.FirstOrDefault(x => x.Id == id.Value)?.DistrictName ?? $"Location #{id}";
+
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+    private static string Money(decimal amount) => "₹ " + amount.ToString("N2", CultureInfo.GetCultureInfo("en-IN"));
+
+    private static string StatusClass(string status) => status.ToLowerInvariant() switch
+    {
+        "draft" => "status-draft",
+        "submitted" => "status-submitted",
+        "validated" => "status-validated",
+        "approved" => "status-approved",
+        "rejected" => "status-rejected",
+        _ => "status-draft"
+    };
+
+    private enum CSR2StatusValue
+    {
+        Draft = 0,
+        Submitted = 1,
+        Validated = 2,
+        Approved = 3,
+        Rejected = 4
+    }
+
+    private sealed class CSR2LookupResponse
+    {
+        public List<string> ProgramTypes { get; set; } = new();
+        public List<ProgramLookupDto> Programs { get; set; } = new();
+        public List<StatusLookupDto> Statuses { get; set; } = new();
+    }
+
+    private sealed class ProgramLookupDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string ProgramType { get; set; } = "";
+    }
+
+    private sealed class StatusLookupDto
+    {
+        public int Value { get; set; }
+        public string Name { get; set; } = "";
+    }
+
+    private sealed class LocationDto
+    {
+        public int Id { get; set; }
+        public string DistrictName { get; set; } = "";
+    }
+
+    private sealed class CSR2ListResponse
+    {
+        public int TotalCount { get; set; }
+        public int Page { get; set; } = 1;
+        public int PageSize { get; set; } = 16;
+        public int TotalPages { get; set; } = 1;
+        public List<StatusCountDto> StatusCounts { get; set; } = new();
+        public List<CSR2ListRowDto> Items { get; set; } = new();
+    }
+
+    private sealed class StatusCountDto
+    {
+        public string Status { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    private sealed class CSR2ListRowDto
+    {
+        public int CSR2Id { get; set; }
+        public int CSR1Id { get; set; }
+        public string SanctionNumber { get; set; } = "";
+        public string ProgramType { get; set; } = "";
+        public int ProgramId { get; set; }
+        public string ProgramName { get; set; } = "";
+        public int? LocationId { get; set; }
+        public int? HeadquarterId { get; set; }
+        public string Scope { get; set; } = "";
+        public decimal ApprovedBudget { get; set; }
+        public string Status { get; set; } = "Draft";
+        public int StatusValue { get; set; }
+        public DateTime? ActualEventDate { get; set; }
+        public TimeOnly? StartTime { get; set; }
+        public TimeOnly? EndTime { get; set; }
+        public string? EventCoordinatorEmployeeId { get; set; }
+        public string? ActualLocation { get; set; }
+        public int? ExpectedParticipantsCount { get; set; }
+        public string? Remarks { get; set; }
+        public int ParticipantCount { get; set; }
+        public int EmployeeCount { get; set; }
+        public int PhotoCount { get; set; }
+        public int VideoCount { get; set; }
+        public int ExpenseCount { get; set; }
+        public decimal ActualExpense { get; set; }
+        public int ProofCount { get; set; }
+        public int ReportCompletion { get; set; }
+    }
+
+    private bool CanValidate(CSR2ListRowDto row)
+    {
+        if (!string.Equals(
+                row.Status,
+                "Submitted",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (IsHq(row))
+        {
+            // HQ CSR-2 -> MO validates
+            return string.Equals(
+                CurrentRole,
+                "MO",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        // State CSR-2 -> SMDO validates
+        return string.Equals(
+            CurrentRole,
+            "SMDO",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool CanApprove(CSR2ListRowDto row)
+    {
+        if (!string.Equals(
+                row.Status,
+                "Validated",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (IsHq(row))
+        {
+            // HQ CSR-2 -> RM/RMM approves
+            return
+                string.Equals(
+                    CurrentRole,
+                    "RM",
+                    StringComparison.OrdinalIgnoreCase)
+                ||
+                string.Equals(
+                    CurrentRole,
+                    "RMM",
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
+        // State CSR-2 has no separate approval stage.
+        // SMDO validation completes the State workflow.
+        return false;
+    }
+
+    private async Task ValidateCSR2(CSR2ListRowDto row)
+    {
+        if (workflowActionBusy)
+            return;
+
+        if (!CanValidate(row))
+        {
+            errorMessage =
+                "You are not authorized to validate this CSR-2.";
+            return;
+        }
+
+        workflowActionBusy = true;
+        errorMessage = "";
+
+        try
+        {
+            using var responseMessage =
+                await Http.PostAsync(
+                    $"api/CSR2/{row.CSR2Id}/validate",
+                    null);
+
+            if (!responseMessage.IsSuccessStatusCode)
+            {
+                var message =
+                    await responseMessage.Content.ReadAsStringAsync();
+
+                errorMessage =
+                    string.IsNullOrWhiteSpace(message)
+                        ? "Unable to validate CSR-2."
+                        : message;
+
+                return;
+            }
+
+            await LoadList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage =
+                $"CSR-2 validation failed: {ex.Message}";
+        }
+        finally
+        {
+            workflowActionBusy = false;
+        }
+    }
+
+    private async Task ApproveCSR2(CSR2ListRowDto row)
+    {
+        if (workflowActionBusy)
+            return;
+
+        if (!CanApprove(row))
+        {
+            errorMessage =
+                "You are not authorized to approve this CSR-2.";
+            return;
+        }
+
+        workflowActionBusy = true;
+        errorMessage = "";
+
+        try
+        {
+            using var responseMessage =
+                await Http.PostAsync(
+                    $"api/CSR2/{row.CSR2Id}/approve",
+                    null);
+
+            if (!responseMessage.IsSuccessStatusCode)
+            {
+                var message =
+                    await responseMessage.Content.ReadAsStringAsync();
+
+                errorMessage =
+                    string.IsNullOrWhiteSpace(message)
+                        ? "Unable to approve CSR-2."
+                        : message;
+
+                return;
+            }
+
+            await LoadList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage =
+                $"CSR-2 approval failed: {ex.Message}";
+        }
+        finally
+        {
+            workflowActionBusy = false;
+        }
+    }
+}
