@@ -359,6 +359,8 @@ public static class ShellNavigation
         new("FinalReportCSRView", "Final Report CSR", "bi-file-earmark-text", "/FinalReportCSRView", nameof(PagePermission.FinalReportCSRView)) { Group = GroupMdPortal },
         new("MOSubmissionValidation", "MO Submission Validation", "bi-ui-checks-grid", "/MOSubmissionValidation", nameof(PagePermission.MOSubmissionValidation)) { Group = GroupMdPortal },
         new("RMApprovalStatus", "RM Approval Status", "bi-diagram-3", "/RMApprovalStatus", nameof(PagePermission.RMApprovalStatus)) { Group = GroupMdPortal },
+        new("RMDHQMapping", "RMD HQ Mapping", "bi-geo-alt-fill", "/RMDHQMapping", nameof(PagePermission.RMDHQMapping)) { Group = GroupMdPortal, MoreOnly = true },
+        new("SanctionNumberSequence", "Sanction Number Sequence", "bi-123", "/SanctionNumberSequence", nameof(PagePermission.SanctionNumberSequence)) { Group = GroupMdPortal, MoreOnly = true },
 
         // ---- top level, continued (mirrors NavMenu.razor) ----
         new("Profile", "Profile", "bi-person-circle", "/Profile", nameof(PagePermission.Profile)),
@@ -410,6 +412,10 @@ public static class ShellNavigation
         new("Agriculture", "Agriculture & Products", "bi-flower1", "/Agriculture", nameof(PagePermission.Agriculture)) { Group = GroupSettings },
         new("Financial", "Financial Master", "bi-bank", "/Financial", nameof(PagePermission.Financial)) { Group = GroupSettings },
         new("Relationship", "Relationship Master", "bi-link-45deg", "/Relationship", nameof(PagePermission.Relationship)) { Group = GroupSettings },
+        new("PlantDealerNatureMaster", "Plant & Dealer Nature", "bi-tree-fill", "/PlantDealerNatureMaster", nameof(PagePermission.PlantDealerNatureMaster)) { Group = GroupSettings, MoreOnly = true },
+        new("GpsSettings", "GPS Settings", "bi-sliders", "/GpsSettings", nameof(PagePermission.GpsSettings)) { Group = GroupSettings, MoreOnly = true },
+        new("ExpenseInformation", "ExpenseInfo Master", "bi-cash-coin", "/ExpenseInformation", nameof(PagePermission.ExpenseInformation)) { Group = GroupSettings, MoreOnly = true },
+        new("CSRExceedingDaySetting", "CSR ExceedingDay Setting", "bi-calendar2-range", "/CSRExceedingDaySetting", nameof(PagePermission.CSRExceedingDaySetting)) { Group = GroupSettings, MoreOnly = true },
         // ---- Contact ----
         new("ContactUs", "Contact Us", "bi-headset", "/ContactUs", nameof(PagePermission.ContactUs)),
 
