@@ -12,14 +12,16 @@ namespace SPIC.Core.Entities
         // -------------------------
         // CSR-1 Plan Details
         // -------------------------
-        // ProgramTypeId removed. Program type is derived from ProgramMaster.ProgramTypeId.
+        // Program type is derived from ProgramMaster.ProgramTypeId.
         public int ProgramId { get; set; }
+
         public int NumberOfPrograms { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
         public decimal Budget { get; set; }
 
         public int? HeadquarterId { get; set; }
+
         public int? LocationId { get; set; }
 
         // Stores Employeelogins.UserId as text.
@@ -72,39 +74,58 @@ namespace SPIC.Core.Entities
         // Workflow
         // -------------------------
         public CSR1Status Status { get; set; } = CSR1Status.Draft;
+
         public string? Remarks { get; set; }
+
         public string? ValidateBy { get; set; }
+
         public DateTime? ValidateAt { get; set; }
+
         public string? ApprovedBy { get; set; }
+
         public DateTime? ApprovedAt { get; set; }
 
         // -------------------------
         // Audit
         // -------------------------
         public string? CreatedBy { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.Now;
+
         public string? UpdatedBy { get; set; }
+
         public DateTime? UpdatedAt { get; set; }
+
         public bool IsActive { get; set; } = true;
+
         public DateTime CSR1Date { get; set; }
+
         public string? SanctionNo { get; set; }
+
         public int? BudgetProgramId { get; set; }
+
         public int? ProgramMonth { get; set; }
+
         public int? ProgramYear { get; set; }
     }
 
-    /// <summary>
-    /// One row per (CSR1Id, ExpenseId) with a non-zero amount - the normalized replacement for the
-    /// 11 fixed decimal columns that used to live directly on CSR1 (see that class's own comment).
-    /// ExpenseId references ExpenseInformation.Id (the expense-type catalog: Printing & Stationary,
-    /// Publicity Material, etc). CSR1ExpenseMapper is the single place that converts to/from the
-    /// legacy 11-named-field shape used by CSR1SaveRequest/CSR1DetailsDto and the UI.
-    /// </summary>
+
+    // =========================================================
+    // CSR-1 EXPENSES
+    // Each expense is stored as a separate row.
+    // ExpenseId = ExpenseInformations.Id
+    // =========================================================
     public class CSR1Expenses
     {
         [Key]
         public int Id { get; set; }
+
         public int CSR1Id { get; set; }
+
+        [ForeignKey(nameof(CSR1Id))]
+        public CSR1? CSR1 { get; set; }
+
+        // ExpenseInformations.Id
         public int? ExpenseId { get; set; }
 
         [Column(TypeName = "decimal(18,2)")]
@@ -117,6 +138,7 @@ namespace SPIC.Core.Entities
     {
         [Key]
         public int Id { get; set; }
+
         public int CSR1Id { get; set; }
 
         [Column(TypeName = "integer[]")]
@@ -127,11 +149,13 @@ namespace SPIC.Core.Entities
 
         public bool IsActive { get; set; } = true;
     }
+
 
     public class CSR1Products2
     {
         [Key]
         public int Id { get; set; }
+
         public int CSR1Id { get; set; }
 
         [Column(TypeName = "integer[]")]
@@ -142,11 +166,13 @@ namespace SPIC.Core.Entities
 
         public bool IsActive { get; set; } = true;
     }
+
 
     public class CSR1Products3
     {
         [Key]
         public int Id { get; set; }
+
         public int CSR1Id { get; set; }
 
         [Column(TypeName = "integer[]")]
@@ -158,23 +184,32 @@ namespace SPIC.Core.Entities
         public bool IsActive { get; set; } = true;
     }
 
+
     public class CSR1ApprovalDetails
     {
         [Key]
         public int Id { get; set; }
+
         public int CSR1Id { get; set; }
 
         [ForeignKey(nameof(CSR1Id))]
         public CSR1? CSR1 { get; set; }
 
         public string? ApprovedBy { get; set; }
+
         public DateTime? ApprovedAt { get; set; }
+
         public string? ApproverLevel { get; set; }
+
         public string? CreatedBy { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
         public string? UpdatedBy { get; set; }
+
         public DateTime? UpdatedAt { get; set; }
     }
+
 
     public enum CSR1Status
     {

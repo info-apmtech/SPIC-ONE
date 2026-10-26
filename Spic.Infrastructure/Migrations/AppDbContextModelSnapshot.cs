@@ -922,6 +922,8 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CSR1Id");
+
                     b.ToTable("CSR1Expenses");
                 });
 
@@ -10890,6 +10892,17 @@ namespace Spic.Infrastructure.Migrations
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR1ApprovalDetails", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR1", "CSR1")
+                        .WithMany()
+                        .HasForeignKey("CSR1Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR1");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR1Expenses", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.CSR1", "CSR1")
                         .WithMany()
