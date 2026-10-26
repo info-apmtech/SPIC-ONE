@@ -108,18 +108,22 @@ namespace SpicAPI.Controllers
             var focus3 = await _db.Set<CSR1Products3>().AsNoTracking()
                 .Where(x => x.CSR1Id == csr1Id && x.IsActive)
                 .Select(x => new { x.CropId, x.ProductId }).ToListAsync();
+            // Show every active expense master in CSR-2.
+            // If CSR-1 has a matching CSR1Expenses row, use its amount; otherwise planned amount = 0.
             var plannedExpenses = await _db.Set<ExpenseInformation>()
                 .AsNoTracking()
-                .Where(x => x.IsActive)
-                .OrderBy(x => x.Id)
+                .Where(masterExpense => masterExpense.IsActive)
+                .OrderBy(masterExpense => masterExpense.Id)
                 .Select(masterExpense => new
                 {
                     ExpenseId = masterExpense.Id,
                     ExpenseName = masterExpense.Name,
                     ExpenseAmount = _db.Set<CSR1Expenses>()
-                        .Where(e => e.CSR1Id == csr1Id && e.IsActive && e.ExpenseId == masterExpense.Id)
-                        .Select(e => e.ExpenseAmount)
-                        .FirstOrDefault()
+                        .Where(e =>
+                            e.CSR1Id == csr1Id &&
+                            e.IsActive &&
+                            e.ExpenseId == masterExpense.Id)
+                        .Sum(e => (decimal?)e.ExpenseAmount) ?? 0m
                 })
                 .ToListAsync();
 
@@ -145,6 +149,94 @@ namespace SpicAPI.Controllers
                 Focus2 = focus2,
                 Focus3 = focus3
             });
+        }
+
+        [HttpGet("participant-mobile-search")]
+        public async Task<IActionResult> SearchParticipantMobile([FromQuery] string? term)
+        {
+            var search = new string((term ?? string.Empty)
+                .Where(char.IsDigit)
+                .Take(15)
+                .ToArray());
+
+            if (search.Length < 3)
+                return Ok(new List<ParticipantMobileLookupResult>());
+
+            var farmers = await _db.Set<SasFarmer>()
+                .AsNoTracking()
+                .Where(x => !x.IsDeleted &&
+                            x.Mobile != null &&
+                            x.Mobile.Contains(search))
+                .OrderBy(x => x.Mobile)
+                .Take(20)
+                .Select(x => new ParticipantMobileLookupResult
+                {
+                    SourceId = x.Id,
+                    Mobile = x.Mobile,
+                    Name = x.Name ?? string.Empty,
+                    Role = "Farmer",
+                    Source = "SasFarmers"
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            var dealerRows = await _db.Set<DealerRegistration>()
+                .AsNoTracking()
+                .Where(x =>
+                    (x.OfficialContactNumber != null &&
+                     x.OfficialContactNumber.Contains(search)) ||
+                    (x.AlternativeNumber != null &&
+                     x.AlternativeNumber.Contains(search)))
+                .OrderBy(x => x.FirmName)
+                .Take(30)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.FirmName,
+                    x.OfficialContactNumber,
+                    x.AlternativeNumber
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            var dealers = dealerRows
+                .SelectMany(x => new[]
+                {
+                    new ParticipantMobileLookupResult
+                    {
+                        SourceId = x.Id,
+                        Mobile = x.OfficialContactNumber ?? string.Empty,
+                        Name = x.FirmName ?? string.Empty,
+                        Role = "Dealer",
+                        Source = "DealerRegistrations"
+                    },
+                    new ParticipantMobileLookupResult
+                    {
+                        SourceId = x.Id,
+                        Mobile = x.AlternativeNumber ?? string.Empty,
+                        Name = x.FirmName ?? string.Empty,
+                        Role = "Dealer",
+                        Source = "DealerRegistrations"
+                    }
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x.Mobile) &&
+                            x.Mobile.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            var result = farmers
+                .Concat(dealers)
+                .GroupBy(x => new
+                {
+                    x.SourceId,
+                    Mobile = x.Mobile.Trim(),
+                    x.Role
+                })
+                .Select(g => g.First())
+                .OrderBy(x => x.Mobile.StartsWith(search, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+                .ThenBy(x => x.Mobile)
+                .ThenBy(x => x.Role)
+                .Take(20)
+                .ToList();
+
+            return Ok(result);
         }
 
         [HttpGet("all")]
@@ -230,16 +322,9 @@ namespace SpicAPI.Controllers
         }
 
         // CSR-2 persistence endpoints (merged from previous package)
+        // Expense categories are dynamic and are validated against CSR1Expenses/ExpenseInformations.
         private string Actor => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
         private string UploadRoot => Path.Combine(_env.ContentRootPath, "App_Data", "csr2-private");
-        private static int ExpenseIdFromCategoryKey(string? key)
-        {
-            if (string.IsNullOrWhiteSpace(key)) return 0;
-            var separator = key.IndexOf(':');
-            var idPart = separator >= 0 ? key[..separator] : key;
-            return int.TryParse(idPart, out var id) ? id : 0;
-        }
-
 
         // IMPORTANT: Replace this with the SAME scope/claims authorization policy as your
         // CSR1 details endpoint. Being logged in alone MUST NOT grant access to every CSR1.
@@ -389,28 +474,36 @@ namespace SpicAPI.Controllers
                     "Invalid focus selections. Group 1 requires at least one crop and one product; maximum three crops and three products per group.");
             }
 
-            if (dto.Expenses
-                    .Select(x => x.CategoryKey)
-                    .Distinct(StringComparer.Ordinal)
-                    .Count() != dto.Expenses.Count)
-            {
-                return BadRequest("Duplicate expense row key.");
-            }
-
-            var requestedExpenseIds = dto.Expenses
-                .Select(x => ExpenseIdFromCategoryKey(x.CategoryKey))
-                .ToList();
-
-            if (requestedExpenseIds.Any(x => x <= 0))
-                return BadRequest("Invalid expense category key.");
-
-            var activeExpenseMasters = await _db.Set<ExpenseInformation>()
+            // CSR-2 expense rows are driven by the complete active ExpenseInformations master,
+            // not only by CSR1Expenses rows that have a non-zero planned amount.
+            var csr1ExpenseMasters = await _db.Set<ExpenseInformation>()
                 .AsNoTracking()
-                .Where(x => x.IsActive && requestedExpenseIds.Contains(x.Id))
-                .ToDictionaryAsync(x => x.Id, x => x.Name);
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.Id)
+                .Select(x => new
+                {
+                    ExpenseId = x.Id,
+                    ExpenseName = x.Name
+                })
+                .ToListAsync(HttpContext.RequestAborted);
 
-            if (requestedExpenseIds.Any(x => !activeExpenseMasters.ContainsKey(x)))
-                return BadRequest("One or more expense categories are inactive or invalid.");
+            var allowedExpenseByKey = csr1ExpenseMasters
+                .GroupBy(x => x.ExpenseId)
+                .ToDictionary(
+                    g => g.Key.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    g => g.First().ExpenseName,
+                    StringComparer.OrdinalIgnoreCase);
+
+            if (dto.Expenses
+                    .Select(x => x.CategoryKey?.Trim() ?? "")
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count() != dto.Expenses.Count ||
+                dto.Expenses.Any(x =>
+                    string.IsNullOrWhiteSpace(x.CategoryKey) ||
+                    !allowedExpenseByKey.ContainsKey(x.CategoryKey.Trim())))
+            {
+                return BadRequest("Invalid or duplicate expense category. Expense rows must come from the active ExpenseInformations master.");
+            }
 
             if (dto.Participants.Any(x =>
                     string.IsNullOrWhiteSpace(x.Name) ||
@@ -531,22 +624,15 @@ namespace SpicAPI.Controllers
                     })
                     .ToList();
 
-            var submittedExpenseKeys = dto.Expenses
-                .Select(x => x.CategoryKey)
-                .ToHashSet(StringComparer.Ordinal);
-
-            var removedExpenses = report.Expenses
-                .Where(x => !submittedExpenseKeys.Contains(x.CategoryKey))
-                .ToList();
-            if (removedExpenses.Count > 0)
-                _db.Set<CSR2Expense>().RemoveRange(removedExpenses);
-
             foreach (var item in dto.Expenses)
             {
-                var expenseId = ExpenseIdFromCategoryKey(item.CategoryKey);
+                var normalizedCategoryKey = item.CategoryKey.Trim();
                 var expense =
                     report.Expenses.FirstOrDefault(
-                        x => x.CategoryKey == item.CategoryKey);
+                        x => string.Equals(
+                            x.CategoryKey,
+                            normalizedCategoryKey,
+                            StringComparison.OrdinalIgnoreCase));
 
                 if (expense == null)
                 {
@@ -558,8 +644,11 @@ namespace SpicAPI.Controllers
                     report.Expenses.Add(expense);
                 }
 
+                expense.CategoryKey = normalizedCategoryKey;
+
+                // Category name is authoritative from ExpenseInformations, not from the client.
                 expense.CategoryName =
-                    activeExpenseMasters[expenseId];
+                    allowedExpenseByKey[normalizedCategoryKey];
 
 
                 expense.ActualAmount =
@@ -700,33 +789,6 @@ namespace SpicAPI.Controllers
             return Ok(new { media.Id, media.MediaType, media.OriginalFileName });
         }
 
-        [HttpGet("{id:int}/expense-proofs")]
-        public async Task<IActionResult> GetExpenseProofs(int id)
-        {
-            var report = await _db.Set<CSR2>()
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == id);
-            if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null)
-                return NotFound();
-
-            var proofs = await (
-                from expense in _db.Set<CSR2Expense>().AsNoTracking()
-                join proof in _db.Set<CSR2ExpenseProof>().AsNoTracking()
-                    on expense.Id equals proof.CSR2ExpenseId
-                where expense.CSR2Id == id
-                orderby expense.Id, proof.Id
-                select new
-                {
-                    expense.CategoryKey,
-                    ProofId = proof.Id,
-                    FileName = proof.OriginalFileName,
-                    proof.ContentType
-                })
-                .ToListAsync();
-
-            return Ok(proofs);
-        }
-
         [HttpPost("{id:int}/expenses/{categoryKey}/proof")]
         [RequestSizeLimit(12L * 1024 * 1024)]
         [Consumes("multipart/form-data")]
@@ -861,6 +923,25 @@ namespace SpicAPI.Controllers
                 });
             }
 
+            // Return all active ExpenseInformations for CSR-2 display.
+            // Matching CSR1Expenses values are filled in; missing rows are returned as 0.
+            var plannedExpenses = await _db.Set<ExpenseInformation>()
+                .AsNoTracking()
+                .Where(masterExpense => masterExpense.IsActive)
+                .OrderBy(masterExpense => masterExpense.Id)
+                .Select(masterExpense => new
+                {
+                    ExpenseId = masterExpense.Id,
+                    ExpenseName = masterExpense.Name,
+                    ExpenseAmount = _db.Set<CSR1Expenses>()
+                        .Where(expense =>
+                            expense.CSR1Id == csr1Id &&
+                            expense.IsActive &&
+                            expense.ExpenseId == masterExpense.Id)
+                        .Sum(expense => (decimal?)expense.ExpenseAmount) ?? 0m
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
             string? approvedByName = null;
             string? responsiblePersonName = null;
 
@@ -900,21 +981,6 @@ namespace SpicAPI.Controllers
                 responsiblePersonName = responsible?.Name;
             }
 
-            var plannedExpenses = await _db.Set<ExpenseInformation>()
-                .AsNoTracking()
-                .Where(x => x.IsActive)
-                .OrderBy(x => x.Id)
-                .Select(masterExpense => new
-                {
-                    ExpenseId = masterExpense.Id,
-                    ExpenseName = masterExpense.Name,
-                    ExpenseAmount = _db.Set<CSR1Expenses>()
-                        .Where(e => e.CSR1Id == csr1Id && e.IsActive && e.ExpenseId == masterExpense.Id)
-                        .Select(e => e.ExpenseAmount)
-                        .FirstOrDefault()
-                })
-                .ToListAsync();
-
             return Ok(new
             {
                 csr1Id = csr1.Id,
@@ -924,9 +990,18 @@ namespace SpicAPI.Controllers
                 responsiblePersonId = csr1.ResponsiblePersonId,
                 responsiblePersonEmployeeId = responsiblePersonEmployeeId?.ToString(),
                 responsiblePersonName = responsiblePersonName ?? "",
-                Expenses = plannedExpenses
+                expenses = plannedExpenses
             });
         }
+    }
+
+    public class ParticipantMobileLookupResult
+    {
+        public int SourceId { get; set; }
+        public string Mobile { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Role { get; set; } = string.Empty;
+        public string Source { get; set; } = string.Empty;
     }
 
     public class CSR2UploadMediaDto

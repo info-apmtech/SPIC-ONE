@@ -1202,18 +1202,42 @@ namespace SpicAPI.Controllers
                     .ToListAsync();
 
                 // =========================================================
-                // mine=true
-                // CSR1.ResponsiblePersonId stores Employeelogins.UserId.
-                // Therefore compare it directly with the current UserId.
+                // CSR-1 LIST ACCESS
+                // Admin -> all active CSR-1 records.
+                // All other roles -> only records assigned to the logged-in
+                // user through CSR1.ResponsiblePersonId.
+                //
+                // ResponsiblePersonId stores Employeelogins.UserId, so it is
+                // compared directly with CurrentUserId.
+                // The old mine query flag is kept only for API compatibility;
+                // it can no longer be used by non-admin users to bypass scope.
                 // =========================================================
-                if (mine)
+                var roles = User.FindAll(ClaimTypes.Role)
+                    .Select(x => x.Value?.Trim())
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var isAdmin = roles.Contains(AppRole.Admin.ToString());
+
+                if (!isAdmin)
                 {
+                    var currentUserId = CurrentUserId?.Trim();
+
+                    if (string.IsNullOrWhiteSpace(currentUserId) ||
+                        string.Equals(currentUserId, "System", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Unauthorized(new
+                        {
+                            message = "Unable to identify the logged-in user."
+                        });
+                    }
+
                     csr1Records = csr1Records
                         .Where(c =>
                             !string.IsNullOrWhiteSpace(c.ResponsiblePersonId) &&
                             string.Equals(
-                                c.ResponsiblePersonId,
-                                CurrentUserId,
+                                c.ResponsiblePersonId.Trim(),
+                                currentUserId,
                                 StringComparison.OrdinalIgnoreCase))
                         .ToList();
                 }
