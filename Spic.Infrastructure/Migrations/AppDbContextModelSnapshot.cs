@@ -4992,6 +4992,8 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("AllocationDate");
 
+                    b.HasIndex("HeadquarterId");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("SubmittedByUserId");
@@ -5048,6 +5050,8 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AllocationId");
+
+                    b.HasIndex("DealerRegistrationId");
 
                     b.ToTable("JmdoTaskAllocationDealers");
                 });
@@ -11353,6 +11357,11 @@ namespace Spic.Infrastructure.Migrations
                         .HasForeignKey("AllocationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.DealerRegistration", null)
+                        .WithMany()
+                        .HasForeignKey("DealerRegistrationId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Allocation");
                 });

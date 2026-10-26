@@ -175,6 +175,9 @@ namespace Spic.Infrastructure.Data
                 entity.HasIndex(x => x.SubmittedByUserId);
                 entity.HasIndex(x => x.AllocationDate);
                 entity.HasIndex(x => x.Status);
+                // MDO/RM review queues and team reports (AllocationRequestReview, MdoReports) always
+                // scope by the submitter's HQ - was an unindexed full scan.
+                entity.HasIndex(x => x.HeadquarterId);
                 entity.HasMany(x => x.Dealers)
                     .WithOne(d => d.Allocation)
                     .HasForeignKey(d => d.AllocationId)
@@ -183,6 +186,19 @@ namespace Spic.Infrastructure.Data
                     .WithOne(p => p.Allocation)
                     .HasForeignKey(p => p.AllocationId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            builder.Entity<JmdoTaskAllocationDealer>(entity =>
+            {
+                // DealerInsightService/TaskDetail resolve against this column directly - was
+                // unindexed. Real FK (unlike the legacy SubDealerId snapshot field) because this one
+                // is meant to reference a live DealerRegistration row; SetNull rather than Cascade so
+                // deleting a dealer master never deletes historical allocation/visit records.
+                entity.HasIndex(x => x.DealerRegistrationId);
+                entity.HasOne<DealerRegistration>()
+                    .WithMany()
+                    .HasForeignKey(x => x.DealerRegistrationId)
+                    .OnDelete(DeleteBehavior.SetNull);
             });
 
             // JMDO Attendance and Tracking: one attendance row per (UserId, Date); a session is a
@@ -221,8 +237,8 @@ namespace Spic.Infrastructure.Data
                 entity.Property(x => x.Budget).HasColumnType("numeric(12,2)");
             });
 
-            // MDO -> JMDO yearly targets: table created manually (no migration). The unique index
-            // mirrors the one expected on the table so save is an update, never a duplicate row.
+            // MDO -> JMDO yearly targets. The unique index keeps a save an update, never a duplicate
+            // row for the same (JMDO, financial year).
             builder.Entity<JmdoYearlyTarget>(entity =>
             {
                 entity.ToTable("JmdoYearlyTargets");
