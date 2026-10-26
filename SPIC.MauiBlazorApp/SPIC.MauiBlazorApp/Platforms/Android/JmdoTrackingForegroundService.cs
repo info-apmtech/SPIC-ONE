@@ -107,6 +107,13 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
             base.OnDestroy();
         }
 
+        // The interval RequestLocationUpdates was last registered with - compared against the live
+        // Preference value on every fix (OnLocationChanged) so an admin changing GPS Settings mid-
+        // session actually takes effect, instead of only applying to the NEXT Start Live Tracking.
+        // Android has no API to change minTime on an active registration; RemoveUpdates + re-request
+        // is the only way.
+        private TimeSpan _registeredInterval;
+
         private void StartLocationUpdates()
         {
             _locationManager = (LocationManager?)GetSystemService(LocationService);
@@ -118,11 +125,23 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 
             if (!_locationManager.IsProviderEnabled(provider)) return; // location services off on the device - nothing to do
 
+            _registeredInterval = GetRequestInterval();
             _locationManager.RequestLocationUpdates(
                 provider,
-                (long)GetRequestInterval().TotalMilliseconds,
+                (long)_registeredInterval.TotalMilliseconds,
                 MinDistanceMeters,
                 this);
+        }
+
+        private void RestartLocationUpdatesIfIntervalChanged()
+        {
+            if (_locationManager is null) return;
+
+            var latest = GetRequestInterval();
+            if (latest == _registeredInterval) return;
+
+            try { _locationManager.RemoveUpdates(this); } catch { }
+            StartLocationUpdates(); // re-reads the Preference and re-registers with the new interval
         }
 
         // ILocationListener - Location is ambiguous with Microsoft.Maui.Devices.Sensors.Location
@@ -130,6 +149,8 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
         public void OnLocationChanged(global::Android.Locations.Location location)
         {
             if (_cts is not { IsCancellationRequested: false } cts) return;
+
+            RestartLocationUpdatesIfIntervalChanged();
 
             var sessionId = _sessionId;
             var lat = location.Latitude;
