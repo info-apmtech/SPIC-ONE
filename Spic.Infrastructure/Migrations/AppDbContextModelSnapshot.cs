@@ -9883,7 +9883,8 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("SubDealerCode")
-                        .HasColumnType("text");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("SubVillage")
                         .HasColumnType("text");
