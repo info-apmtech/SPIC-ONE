@@ -110,19 +110,34 @@ namespace SPIC.MauiBlazorApp.Platforms.iOS
             _instance._cts = null;
         }
 
+        private static int GetIntervalSeconds()
+        {
+            try
+            {
+                var s = Microsoft.Maui.Storage.Preferences.Default.Get("GpsTrackingIntervalSeconds", 20);
+                return s is >= 1 and <= 100 ? s : 20;
+            }
+            catch
+            {
+                return 20;
+            }
+        }
+
         public override void LocationsUpdated(CLLocationManager manager, CLLocation[] locations)
         {
             if (_cts is not { IsCancellationRequested: false } cts) return;
             var latest = locations.LastOrDefault();
             if (latest is null) return;
 
-            // Throttle duplicate stationary fixes within 15 seconds to save battery and bandwidth,
-            // while guaranteeing a point is sent at least every 20 seconds even if stationary.
+            // Throttle duplicate stationary fixes proportionally to the configured tracking interval
+            // to save battery and bandwidth, while ensuring points are sent periodically even if stationary.
+            var interval = GetIntervalSeconds();
+            var throttleThreshold = Math.Max(1, (int)(interval * 0.75));
             var now = DateTime.UtcNow;
             var timeSinceLast = (now - _lastReportTime).TotalSeconds;
             var distanceMoved = _lastReportedLocation != null ? latest.DistanceFrom(_lastReportedLocation) : double.MaxValue;
 
-            if (_lastReportedLocation != null && timeSinceLast < 15 && distanceMoved < 10)
+            if (_lastReportedLocation != null && timeSinceLast < throttleThreshold && distanceMoved < 10)
             {
                 return;
             }

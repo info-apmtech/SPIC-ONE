@@ -39,7 +39,42 @@ namespace SpicAPI.Controllers
             _config = config;
         }
 
-        private int IntervalSeconds => _config.GetValue<int?>("JmdoTracking:IntervalSeconds") ?? 60;
+        private async Task<int> GetEffectiveIntervalSecondsAsync()
+        {
+            try
+            {
+                var active = await _db.GpsSettings
+                    .AsNoTracking()
+                    .Where(s => s.IsActive)
+                    .OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt)
+                    .Select(s => s.IntervalSeconds)
+                    .FirstOrDefaultAsync();
+
+                if (active is >= 1 and <= 100) return active;
+            }
+            catch { }
+
+            return _config.GetValue<int?>("JmdoTracking:IntervalSeconds") ?? 20;
+        }
+
+        private int GetEffectiveIntervalSecondsSync()
+        {
+            try
+            {
+                var active = _db.GpsSettings
+                    .AsNoTracking()
+                    .Where(s => s.IsActive)
+                    .OrderByDescending(s => s.UpdatedAt ?? s.CreatedAt)
+                    .Select(s => s.IntervalSeconds)
+                    .FirstOrDefault();
+
+                if (active is >= 1 and <= 100) return active;
+            }
+            catch { }
+
+            return _config.GetValue<int?>("JmdoTracking:IntervalSeconds") ?? 20;
+        }
+
         private double AutoEndAfterHours => _config.GetValue<double?>("JmdoTracking:AutoEndAfterHours") ?? 24;
 
         // POST /api/JMDOTracking/start
@@ -194,7 +229,8 @@ namespace SpicAPI.Controllers
             _db.JMDOTrackingPoints.Add(NewPoint(session.Id, dto, now));
             await _db.SaveChangesAsync();
 
-            return Ok();
+            var currentInterval = await GetEffectiveIntervalSecondsAsync();
+            return Ok(new { intervalSeconds = currentInterval });
         }
 
         // POST /api/JMDOTracking/sessions/{sessionId}/points/batch
@@ -232,7 +268,8 @@ namespace SpicAPI.Controllers
             _db.JMDOTrackingPoints.AddRange(ordered);
             await _db.SaveChangesAsync();
 
-            return Ok();
+            var currentInterval = await GetEffectiveIntervalSecondsAsync();
+            return Ok(new { intervalSeconds = currentInterval });
         }
 
         // POST /api/JMDOTracking/stop
@@ -353,6 +390,7 @@ namespace SpicAPI.Controllers
                 .ToListAsync();
             var lastPointBySession = lastPoints.ToDictionary(p => p.TrackingSessionId);
 
+            var interval = await GetEffectiveIntervalSecondsAsync();
             var rows = team.Select(t =>
             {
                 latestByUser.TryGetValue(t.UserId, out var session);
@@ -362,7 +400,7 @@ namespace SpicAPI.Controllers
                 {
                     UserId = t.UserId,
                     JmdoName = t.Name,
-                    LiveStatus = session is null ? JmdoTrackingLiveStatus.NotStarted : ResolveLiveStatus(session, lastPoint?.RecordedAt),
+                    LiveStatus = session is null ? JmdoTrackingLiveStatus.NotStarted : ResolveLiveStatus(session, lastPoint?.RecordedAt, interval),
                     LastPointAt = lastPoint?.RecordedAt,
                     LastLatitude = lastPoint?.Latitude,
                     LastLongitude = lastPoint?.Longitude,
@@ -471,6 +509,7 @@ namespace SpicAPI.Controllers
 
         private async Task<JMDOTrackingSessionDto> MapAsync(JMDOTrackingSession s)
         {
+            var intervalSeconds = await GetEffectiveIntervalSecondsAsync();
             var lastPoint = await _db.JMDOTrackingPoints
                 .AsNoTracking()
                 .Where(p => p.TrackingSessionId == s.Id)
@@ -488,10 +527,11 @@ namespace SpicAPI.Controllers
                 StartLatitude = s.StartLatitude,
                 StartLongitude = s.StartLongitude,
                 Status = s.Status,
-                LiveStatus = ResolveLiveStatus(s, lastPoint?.RecordedAt),
+                LiveStatus = ResolveLiveStatus(s, lastPoint?.RecordedAt, intervalSeconds),
                 LastPointAt = lastPoint?.RecordedAt,
                 LastLatitude = lastPoint?.Latitude,
-                LastLongitude = lastPoint?.Longitude
+                LastLongitude = lastPoint?.Longitude,
+                IntervalSeconds = intervalSeconds
             };
         }
 
@@ -501,14 +541,15 @@ namespace SpicAPI.Controllers
         // anything a device claims about its own local/offline-queue state, so a device that's been
         // silent for an hour reads Offline here even while it's still quietly collecting points to
         // flush later.
-        private JmdoTrackingLiveStatus ResolveLiveStatus(JMDOTrackingSession session, DateTime? lastPointAt)
+        private JmdoTrackingLiveStatus ResolveLiveStatus(JMDOTrackingSession session, DateTime? lastPointAt, int? interval = null)
         {
             if (session.Status == JMDOTrackingSessionStatus.Completed) return JmdoTrackingLiveStatus.Stopped;
             if (session.Status == JMDOTrackingSessionStatus.AutoEnded) return JmdoTrackingLiveStatus.AutoEnded;
             if (session.Status == JMDOTrackingSessionStatus.Cancelled) return JmdoTrackingLiveStatus.Stopped;
 
+            var effectiveInterval = interval ?? GetEffectiveIntervalSecondsSync();
             var since = DateTime.Now - (lastPointAt ?? session.StartTime);
-            if (since <= TimeSpan.FromSeconds(IntervalSeconds * 2)) return JmdoTrackingLiveStatus.Live;
+            if (since <= TimeSpan.FromSeconds(effectiveInterval * 2)) return JmdoTrackingLiveStatus.Live;
             if (since <= TimeSpan.FromMinutes(15)) return JmdoTrackingLiveStatus.Stale;
             return JmdoTrackingLiveStatus.Offline;
         }

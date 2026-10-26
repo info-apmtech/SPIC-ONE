@@ -36,8 +36,19 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 
         // Android's own throttling/batching inside RequestLocationUpdates, not a separate timer -
         // lets the OS coalesce updates for battery life instead of this service forcing a fix every
-        // tick regardless of whether the device even moved.
-        private static readonly TimeSpan RequestInterval = TimeSpan.FromSeconds(20);
+        private static TimeSpan GetRequestInterval()
+        {
+            try
+            {
+                var seconds = Microsoft.Maui.Storage.Preferences.Default.Get("GpsTrackingIntervalSeconds", 20);
+                if (seconds is < 1 or > 100) seconds = 20;
+                return TimeSpan.FromSeconds(seconds);
+            }
+            catch
+            {
+                return TimeSpan.FromSeconds(20);
+            }
+        }
         private const float MinDistanceMeters = 25f;
 
         private LocationManager? _locationManager;
@@ -109,7 +120,7 @@ namespace SPIC.MauiBlazorApp.Platforms.Android
 
             _locationManager.RequestLocationUpdates(
                 provider,
-                (long)RequestInterval.TotalMilliseconds,
+                (long)GetRequestInterval().TotalMilliseconds,
                 MinDistanceMeters,
                 this);
         }

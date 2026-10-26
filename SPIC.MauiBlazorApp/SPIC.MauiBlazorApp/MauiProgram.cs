@@ -108,6 +108,18 @@ namespace SPIC.MauiBlazorApp
             builder.Logging.AddDebug();
 #endif
 
+            // Wire native persistent GPS interval preferences
+            GpsTrackingConfiguration.OnGetNativeInterval = () =>
+            {
+                try { return Preferences.Default.Get("GpsTrackingIntervalSeconds", 20); }
+                catch { return 20; }
+            };
+            GpsTrackingConfiguration.OnSaveNativeInterval = (val) =>
+            {
+                try { Preferences.Default.Set("GpsTrackingIntervalSeconds", val); }
+                catch { }
+            };
+
             Log("MauiProgram.CreateMauiApp: Calling builder.Build()");
             var app = builder.Build();
             Log("MauiProgram.CreateMauiApp: builder.Build() complete");

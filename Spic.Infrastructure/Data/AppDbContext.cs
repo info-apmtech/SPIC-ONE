@@ -994,5 +994,6 @@ namespace Spic.Infrastructure.Data
         public DbSet<CSR2ExpenseProof> CSR2ExpenseProofs => Set<CSR2ExpenseProof>();
         public DbSet<ExpenseInformation> ExpenseInformations { get; set; }
         public DbSet<CSRExceedingDaySetting> CSRExceedingDaySettings { get; set; }
+        public DbSet<GpsSetting> GpsSettings { get; set; }
     }
 }

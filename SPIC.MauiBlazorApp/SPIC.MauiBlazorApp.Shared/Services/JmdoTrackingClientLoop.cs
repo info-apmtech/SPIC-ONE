@@ -22,8 +22,6 @@ namespace SPIC.MauiBlazorApp.Shared.Services;
 /// </summary>
 public sealed class JmdoTrackingClientLoop : IDisposable
 {
-    private const int PointIntervalSeconds = 20;
-
     private readonly IJSRuntime _js;
     private readonly JMDOTrackingApi _trackingApi;
 
@@ -65,11 +63,13 @@ public sealed class JmdoTrackingClientLoop : IDisposable
 
     private async Task RunAsync(int sessionId, CancellationToken ct)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(PointIntervalSeconds));
         try
         {
-            while (await timer.WaitForNextTickAsync(ct))
+            while (!ct.IsCancellationRequested)
             {
+                var intervalSeconds = GpsTrackingConfiguration.IntervalSeconds;
+                await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), ct);
+
                 GeoResult? position;
                 try
                 {
