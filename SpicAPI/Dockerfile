@@ -23,18 +23,26 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 # Native libraries:
 #   libfontconfig1            QuestPDF / SkiaSharp text rendering
 #   libtesseract5, liblept5   Tesseract OCR used by dealer document upload
-# The Tesseract .NET wrapper looks for versioned file names on Linux,
-# so the distro libraries are linked under the names it expects.
+# The base image is Ubuntu 24.04: leptonica 1.82.0 and tesseract 5.3.4, which match
+# the Tesseract 5.2.0 wrapper's leptonica-1.82.0 / tesseract50 (5.x C API) bindings.
+# The wrapper P/Invokes "libdl" for dlopen, but glibc >= 2.34 ships only libdl.so.2.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends libfontconfig1 libtesseract5 liblept5 \
  && rm -rf /var/lib/apt/lists/* \
- && ln -sf "$(ls /usr/lib/x86_64-linux-gnu/libtesseract.so.5* | head -n1)" /usr/lib/x86_64-linux-gnu/libtesseract50.so \
- && ln -sf "$(ls /usr/lib/x86_64-linux-gnu/liblept.so.5* | head -n1)" /usr/lib/x86_64-linux-gnu/libleptonica-1.82.0.so
+ && ln -sf libdl.so.2 /usr/lib/x86_64-linux-gnu/libdl.so \
+ && test -e /usr/lib/x86_64-linux-gnu/libdl.so
 
 WORKDIR /app
 # Mount points for Azure Files: uploads, logistics uploads, data-protection keys.
 # Created (and owned) before the app is copied so no layer has to re-copy the app.
-RUN mkdir -p /app/Uploads /app/wwwroot/uploads /app/keys && chown -R app:app /app
+# The Tesseract wrapper (InteropDotNet) never searches the system library path: it only
+# loads <app dir>/x64/<name> if that file exists, so the distro libraries are linked
+# there under the names it asks for. test -e fails the build if a link would dangle.
+RUN mkdir -p /app/Uploads /app/wwwroot/uploads /app/keys /app/x64 \
+ && ln -s /usr/lib/x86_64-linux-gnu/liblept.so.5 /app/x64/libleptonica-1.82.0.so \
+ && ln -s /usr/lib/x86_64-linux-gnu/libtesseract.so.5 /app/x64/libtesseract50.so \
+ && test -e /app/x64/libleptonica-1.82.0.so && test -e /app/x64/libtesseract50.so \
+ && chown -R app:app /app
 
 COPY --chown=app:app --from=build /app/publish .
 COPY --chown=app:app SpicAPI/tessdata ./tessdata
