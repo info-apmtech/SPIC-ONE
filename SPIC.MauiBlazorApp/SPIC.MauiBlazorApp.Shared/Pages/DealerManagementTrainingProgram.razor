@@ -317,38 +317,44 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Event Photos (@eventPhotos.Count)</h3>
-                        <label for="dmtp-photos-header" class="dmtp-btn-add" style="cursor:pointer;">
-                            <i class="bi bi-plus-lg"></i> Upload Photos
-                        </label>
-                        <InputFile id="dmtp-photos-header" OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple style="display:none" />
+                        @if (CanEditCurrentCSR2)
+                        {
+                            <label for="dmtp-photos-header" class="dmtp-btn-add" style="cursor:pointer;">
+                                <i class="bi bi-plus-lg"></i> Upload Photos
+                            </label>
+                            <InputFile id="dmtp-photos-header" OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple style="display:none" />
+                        }
                     </div>
 
-                    <div class="dmtp-dropzone" style="position:relative;">
-                        <InputFile OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
-                                   style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
-                        <div class="dmtp-dropzone-icon">
-                            <i class="bi bi-image"></i>
+                    @if (CanEditCurrentCSR2)
+                    {
+                        <div class="dmtp-dropzone" style="position:relative;">
+                            <InputFile OnChange="OnPhotosSelected" accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
+                                       style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:1;" />
+                            <div class="dmtp-dropzone-icon">
+                                <i class="bi bi-image"></i>
+                            </div>
+                            <p class="dmtp-dropzone-title">Drag and drop photos here, or click to browse</p>
+                            <p class="dmtp-dropzone-sub">JPG, PNG up to 20MB each</p>
+                            <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
+                                <label for="dmtp-photos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                    <i class="bi bi-folder2-open"></i> Browse Files
+                                </label>
+                                @* On mobile this opens the gallery/file picker; it does not force the camera. *@
+                                <InputFile id="dmtp-photos-browse" OnChange="OnPhotosSelected"
+                                           accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
+                                           style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
+                                <label for="dmtp-photos-camera" class="dmtp-btn-outline-plain" style="cursor:pointer;">
+                                    <i class="bi bi-camera"></i> Take Photo
+                                </label>
+                                @* Mobile camera: rear-facing camera where supported; browsers may offer a chooser. *@
+                                <InputFile id="dmtp-photos-camera" OnChange="OnPhotosSelected"
+                                           accept="image/jpeg,image/png,image/*" capture="environment"
+                                           style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
+                            </div>
+                            <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile: Take Photo opens the camera when supported; Browse Files opens your gallery or files.</p>
                         </div>
-                        <p class="dmtp-dropzone-title">Drag and drop photos here, or click to browse</p>
-                        <p class="dmtp-dropzone-sub">JPG, PNG up to 20MB each</p>
-                        <div class="dmtp-dropzone-actions" style="position:relative;z-index:2;">
-                            <label for="dmtp-photos-browse" class="dmtp-btn-outline-plain" style="cursor:pointer;">
-                                <i class="bi bi-folder2-open"></i> Browse Files
-                            </label>
-                            @* On mobile this opens the gallery/file picker; it does not force the camera. *@
-                            <InputFile id="dmtp-photos-browse" OnChange="OnPhotosSelected"
-                                       accept="image/jpeg,image/png,.jpg,.jpeg,.png" multiple
-                                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
-                            <label for="dmtp-photos-camera" class="dmtp-btn-outline-plain" style="cursor:pointer;">
-                                <i class="bi bi-camera"></i> Take Photo
-                            </label>
-                            @* Mobile camera: rear-facing camera where supported; browsers may offer a chooser. *@
-                            <InputFile id="dmtp-photos-camera" OnChange="OnPhotosSelected"
-                                       accept="image/jpeg,image/png,image/*" capture="environment"
-                                       style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;clip-path:inset(50%);pointer-events:none;" />
-                        </div>
-                        <p class="dmtp-dropzone-sub mt-2 mb-0">On mobile: Take Photo opens the camera when supported; Browse Files opens your gallery or files.</p>
-                    </div>
+                    }
                     @if (isReadingPhotos)
                     {
                         <div class="text-muted small mt-2">Loading selected photos...</div>
@@ -373,12 +379,15 @@ else if (csr1Plan != null)
                                     }
                                 </div>
                                 <span class="dmtp-photo-filename" title="@photo.FileName">@photo.FileName</span>
-                                <input type="text" class="dmtp-form-control" placeholder="Add caption" @bind="photo.Caption" />
-                                <div class="dmtp-photo-footer">
-                                    <button type="button" class="dmtp-link-remove" @onclick="() => RemovePhoto(photo.Id)">
-                                        <i class="bi bi-trash"></i> Remove
-                                    </button>
-                                </div>
+                                <input type="text" class="dmtp-form-control" placeholder="Add caption" @bind="photo.Caption" disabled="@(!CanEditCurrentCSR2)" />
+                                @if (CanEditCurrentCSR2)
+                                {
+                                    <div class="dmtp-photo-footer">
+                                        <button type="button" class="dmtp-link-remove" @onclick="() => RemovePhoto(photo.Id)">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    </div>
+                                }
                             </div>
                         }
                     </div>
@@ -392,76 +401,81 @@ else if (csr1Plan != null)
                             Event Videos (@eventVideos.Count)
                         </h3>
 
-                        <!-- Uses the SAME working input as Browse Files -->
-                        <label for="dmtp-videos-browse"
-                               class="dmtp-btn-add"
-                               style="cursor:pointer;">
-                            <i class="bi bi-plus-lg"></i> Upload Videos
-                        </label>
-
-                    </div>
-
-                    <div class="dmtp-dropzone" style="position:relative;">
-
-                        <div class="dmtp-dropzone-icon">
-                            <i class="bi bi-camera-video"></i>
-                        </div>
-
-                        <p class="dmtp-dropzone-title">
-                            Drag and Drop Videos here, or choose an option
-                        </p>
-
-                        <p class="dmtp-dropzone-sub">
-                            MP4, MOV up to 700MB each
-                        </p>
-
-                        <div class="dmtp-dropzone-actions"
-                             style="position:relative;z-index:2;">
-
+                        @if (CanEditCurrentCSR2)
+                        {
                             <label for="dmtp-videos-browse"
-                                   class="dmtp-btn-outline-plain"
+                                   class="dmtp-btn-add"
                                    style="cursor:pointer;">
-                                <i class="bi bi-folder2-open"></i>
-                                Browse Files
+                                <i class="bi bi-plus-lg"></i> Upload Videos
                             </label>
+                        }
 
-                            <!-- ONE common working video picker -->
-                            <InputFile id="dmtp-videos-browse"
-                                       OnChange="OnVideosSelected"
-                                       accept="video/mp4,video/quicktime,.mp4,.mov"
-                                       multiple
-                                       style="position:absolute;
-                            width:1px;
-                            height:1px;
-                            opacity:0;
-                            clip-path:inset(50%);
-                            pointer-events:none;" />
-
-                            <label for="dmtp-videos-record"
-                                   class="dmtp-btn-outline-plain"
-                                   style="cursor:pointer;">
-                                <i class="bi bi-camera-video"></i>
-                                Record Video
-                            </label>
-
-                            <InputFile id="dmtp-videos-record"
-                                       OnChange="OnVideosSelected"
-                                       accept="video/*"
-                                       capture="environment"
-                                       style="position:absolute;
-                            width:1px;
-                            height:1px;
-                            opacity:0;
-                            clip-path:inset(50%);
-                            pointer-events:none;" />
-
-                        </div>
-
-                        <p class="dmtp-dropzone-sub mt-2 mb-0">
-                            On mobile, Record Video requests the camera.
-                            Browse Files selects a saved video.
-                        </p>
                     </div>
+
+                    @if (CanEditCurrentCSR2)
+                    {
+                        <div class="dmtp-dropzone" style="position:relative;">
+
+                            <div class="dmtp-dropzone-icon">
+                                <i class="bi bi-camera-video"></i>
+                            </div>
+
+                            <p class="dmtp-dropzone-title">
+                                Drag and Drop Videos here, or choose an option
+                            </p>
+
+                            <p class="dmtp-dropzone-sub">
+                                MP4, MOV up to 700MB each
+                            </p>
+
+                            <div class="dmtp-dropzone-actions"
+                                 style="position:relative;z-index:2;">
+
+                                <label for="dmtp-videos-browse"
+                                       class="dmtp-btn-outline-plain"
+                                       style="cursor:pointer;">
+                                    <i class="bi bi-folder2-open"></i>
+                                    Browse Files
+                                </label>
+
+                                <!-- ONE common working video picker -->
+                                <InputFile id="dmtp-videos-browse"
+                                           OnChange="OnVideosSelected"
+                                           accept="video/mp4,video/quicktime,.mp4,.mov"
+                                           multiple
+                                           style="position:absolute;
+                                width:1px;
+                                height:1px;
+                                opacity:0;
+                                clip-path:inset(50%);
+                                pointer-events:none;" />
+
+                                <label for="dmtp-videos-record"
+                                       class="dmtp-btn-outline-plain"
+                                       style="cursor:pointer;">
+                                    <i class="bi bi-camera-video"></i>
+                                    Record Video
+                                </label>
+
+                                <InputFile id="dmtp-videos-record"
+                                           OnChange="OnVideosSelected"
+                                           accept="video/*"
+                                           capture="environment"
+                                           style="position:absolute;
+                                width:1px;
+                                height:1px;
+                                opacity:0;
+                                clip-path:inset(50%);
+                                pointer-events:none;" />
+
+                            </div>
+
+                            <p class="dmtp-dropzone-sub mt-2 mb-0">
+                                On mobile, Record Video requests the camera.
+                                Browse Files selects a saved video.
+                            </p>
+                        </div>
+                    }
 
                     @if (isReadingVideos)
                     {
@@ -507,23 +521,27 @@ else if (csr1Plan != null)
                                       title="@video.FileName">
                                     @video.FileName
                                     (@FormatVideoSize(
-                                                                                                                                                                                                                                                                                    video.Bytes.LongLength > 0
-                                                                                                                                                                                                                                                                                        ? video.Bytes.LongLength
-                                                                                                                                                                                                                                                                                        : video.SavedFileSize))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                        video.Bytes.LongLength > 0
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ? video.Bytes.LongLength
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                            : video.SavedFileSize))
                                 </span>
 
                                 <input type="text"
                                        class="dmtp-form-control"
                                        placeholder="Add video caption"
-                                       @bind="video.Caption" />
+                                       @bind="video.Caption"
+                                       disabled="@(!CanEditCurrentCSR2)" />
 
-                                <div class="dmtp-photo-footer">
-                                    <button type="button"
-                                            class="dmtp-link-remove"
-                                            @onclick="() => RemoveVideo(video.Id)">
-                                        <i class="bi bi-trash"></i> Remove
-                                    </button>
-                                </div>
+                                @if (CanEditCurrentCSR2)
+                                {
+                                    <div class="dmtp-photo-footer">
+                                        <button type="button"
+                                                class="dmtp-link-remove"
+                                                @onclick="() => RemoveVideo(video.Id)">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    </div>
+                                }
 
                             </div>
                         }
@@ -573,14 +591,17 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Participant List</h3>
-                        <div class="d-flex flex-wrap gap-2">
-                            <button type="button" class="dmtp-btn-add dmtp-btn-new-farmer" @onclick="OpenNewFarmer">
-                                <i class="bi bi-person-plus"></i> New Farmer
-                            </button>
-                            <button type="button" class="dmtp-btn-add" @onclick="AddParticipant">
-                                <i class="bi bi-plus-lg"></i> @(editingParticipantId is null ? "Add Participant" : "Update Participant")
-                            </button>
-                        </div>
+                        @if (CanEditCurrentCSR2)
+                        {
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" class="dmtp-btn-add dmtp-btn-new-farmer" @onclick="OpenNewFarmer">
+                                    <i class="bi bi-person-plus"></i> New Farmer
+                                </button>
+                                <button type="button" class="dmtp-btn-add" @onclick="AddParticipant">
+                                    <i class="bi bi-plus-lg"></i> @(editingParticipantId is null ? "Add Participant" : "Update Participant")
+                                </button>
+                            </div>
+                        }
                     </div>
 
                     <div class="dmtp-filter-row">
@@ -594,7 +615,8 @@ else if (csr1Plan != null)
                                    autocomplete="off"
                                    value="@participantPhone"
                                    @oninput="OnParticipantPhoneInput"
-                                   @onfocus="OpenParticipantPhoneSuggestions" />
+                                   @onfocus="OpenParticipantPhoneSuggestions"
+                                   disabled="@(!CanEditCurrentCSR2)" />
 
                             @if (participantPhoneLookupOpen)
                             {
@@ -624,21 +646,20 @@ else if (csr1Plan != null)
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Name</label>
-                            <input type="text" class="dmtp-form-control" placeholder="Enter Name" @bind="participantName" />
+                            <input type="text" class="dmtp-form-control" placeholder="Enter Name" @bind="participantName" disabled="@(!CanEditCurrentCSR2)" />
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Role</label>
-                            <select class="dmtp-form-select" @bind="participantRole">
+                            <select class="dmtp-form-select" @bind="participantRole" disabled="@(!CanEditCurrentCSR2)">
                                 <option value="">Select Role</option>
                                 <option value="Farmer">Farmer</option>
                                 <option value="Dealer">Dealer</option>
-                                <option value="Distributor">Distributor</option>
                                 <option value="Other">Other</option>
                             </select>
                         </div>
                     </div>
 
-                    @if (editingParticipantId is not null)
+                    @if (CanEditCurrentCSR2 && editingParticipantId is not null)
                     {
                         <button type="button" class="dmtp-btn-previous mb-3" @onclick="ClearParticipantForm">Cancel Edit</button>
                     }
@@ -653,12 +674,15 @@ else if (csr1Plan != null)
                                     <span class="dmtp-person-phone">Phone Number: @person.Phone</span>
                                 </div>
                                 <span class="dmtp-role-badge">@person.Role</span>
-                                <button type="button" class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit" @onclick="() => EditParticipant(person)">
-                                    <i class="bi bi-pencil-square"></i>
-                                </button>
-                                <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => DeleteParticipant(person.Id)">
-                                    <i class="bi bi-trash"></i>
-                                </button>
+                                @if (CanEditCurrentCSR2)
+                                {
+                                    <button type="button" class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit" @onclick="() => EditParticipant(person)">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => DeleteParticipant(person.Id)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                }
                             </div>
                         }
                     </div>
@@ -690,10 +714,13 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">SPIC Employee List</h3>
-                        <button type="button" class="dmtp-btn-add" @onclick="AddEmployee">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Add Employee
-                        </button>
+                        @if (CanEditCurrentCSR2)
+                        {
+                            <button type="button" class="dmtp-btn-add" @onclick="AddEmployee">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                Add Employee
+                            </button>
+                        }
                     </div>
 
                     <div class="dmtp-filter-row">
@@ -702,7 +729,8 @@ else if (csr1Plan != null)
 
                             <select class="dmtp-form-select"
                                     @bind="selectedEmployeeId"
-                                    @bind:after="OnEmployeeChanged">
+                                    @bind:after="OnEmployeeChanged"
+                                    disabled="@(!CanEditCurrentCSR2)">
 
                                 <option value="0">Select Employee</option>
 
@@ -721,7 +749,7 @@ else if (csr1Plan != null)
                         </div>
                         <div class="dmtp-form-group">
                             <label class="dmtp-form-label">Role</label>
-                            <select class="dmtp-form-select" @bind="selectedEmployeeRole">
+                            <select class="dmtp-form-select" @bind="selectedEmployeeRole" disabled="@(!CanEditCurrentCSR2)">
                                 <option value="">Select Role</option>
                                 @foreach (var role in selectedEmployeeRoles)
                                 {
@@ -742,12 +770,15 @@ else if (csr1Plan != null)
                                     <span class="dmtp-person-phone">PH: @person.Phone</span>
                                 </div>
                                 <span class="dmtp-role-badge">@person.Role</span>
-                                <button type="button" class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit" @onclick="() => EditEmployee(person.Id)">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                                </button>
-                                <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => DeleteEmployee(person.Id)">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                                </button>
+                                @if (CanEditCurrentCSR2)
+                                {
+                                    <button type="button" class="dmtp-icon-btn dmtp-icon-edit" aria-label="Edit" @onclick="() => EditEmployee(person.Id)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                    </button>
+                                    <button type="button" class="dmtp-icon-btn dmtp-icon-delete" aria-label="Delete" @onclick="() => DeleteEmployee(person.Id)">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    </button>
+                                }
                             </div>
                         }
                     </div>
@@ -820,11 +851,14 @@ else if (csr1Plan != null)
                                                     <label class="dmtp-form-label">Date</label>
                                                     <input type="date" class="dmtp-form-control" @bind="item.ExpenseDate" disabled="@(!CanEditCurrentCSR2)" />
                                                 </div>
-                                                <div class="dmtp-form-group dmtp-expense-proof-control">
-                                                    <label class="dmtp-form-label">&nbsp;</label>
-                                                    <label for="@($"expense-proof-{item.RowId:N}")" class="dmtp-expense-color-upload"><i class="bi bi-upload"></i> Upload proofs</label>
-                                                    <InputFile id="@($"expense-proof-{item.RowId:N}")" OnChange="@(e => OnExpenseProofSelected(e, item))" accept=".pdf,.jpg,.jpeg,.png" multiple style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
-                                                </div>
+                                                @if (CanEditCurrentCSR2)
+                                                {
+                                                    <div class="dmtp-form-group dmtp-expense-proof-control">
+                                                        <label class="dmtp-form-label">&nbsp;</label>
+                                                        <label for="@($"expense-proof-{item.RowId:N}")" class="dmtp-expense-color-upload"><i class="bi bi-upload"></i> Upload proofs</label>
+                                                        <InputFile id="@($"expense-proof-{item.RowId:N}")" OnChange="@(e => OnExpenseProofSelected(e, item))" accept=".pdf,.jpg,.jpeg,.png" multiple style="position:absolute;width:1px;height:1px;opacity:0;clip-path:inset(50%);pointer-events:none;" />
+                                                    </div>
+                                                }
                                             </div>
 
                                             @if (item.Proofs.Count > 0)
@@ -892,7 +926,10 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Actual Event Details</h3>
-                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
+                        @if (CanEditCurrentCSR2)
+                        {
+                            <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
+                        }
                     </div>
                     <div class="dmtp-plan-grid dmtp-review-grid-5">
                         <div class="dmtp-plan-item">
@@ -970,7 +1007,10 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin dmtp-center-title">Attendance Summary</h3>
-                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(2)">Edit</button>
+                        @if (CanEditCurrentCSR2)
+                        {
+                            <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(2)">Edit</button>
+                        }
                     </div>
                     <div class="dmtp-attendance-grid">
                         <div class="dmtp-attendance-card dmtp-attendance-green">
@@ -998,7 +1038,10 @@ else if (csr1Plan != null)
                 <div class="dmtp-card">
                     <div class="dmtp-list-header">
                         <h3 class="dmtp-card-title dmtp-no-margin">Photos & Videos</h3>
-                        <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
+                        @if (CanEditCurrentCSR2)
+                        {
+                            <button type="button" class="dmtp-btn-edit-outline" @onclick="() => GoToStep(1)">Edit</button>
+                        }
                     </div>
                     <div class="dmtp-review-photo-grid">
                         @foreach (var photo in eventPhotos)
@@ -1082,16 +1125,19 @@ else if (csr1Plan != null)
             {
                 <div class="dmtp-action-bar">
                     <span class="dmtp-action-note">Complete external planning to begin execution.</span>
-                    <div class="dmtp-action-buttons">
-                        <button type="button" class="dmtp-btn-not-organized">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="9"></line></svg>
-                            Not Organized
-                        </button>
-                        <button type="button" class="dmtp-btn-start-event" @onclick="OpenStartConfirm">
-                            Start Event
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                        </button>
-                    </div>
+                    @if (CanEditCurrentCSR2)
+                    {
+                        <div class="dmtp-action-buttons">
+                            <button type="button" class="dmtp-btn-not-organized">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="9"></line></svg>
+                                Not Organized
+                            </button>
+                            <button type="button" class="dmtp-btn-start-event" @onclick="OpenStartConfirm">
+                                Start Event
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </button>
+                        </div>
+                    }
                 </div>
             }
             else if (currentStep == 2)
@@ -1102,10 +1148,13 @@ else if (csr1Plan != null)
                         Previous
                     </button>
                     <div class="dmtp-action-buttons">
-                        <button type="button" class="dmtp-btn-save-draft" @onclick="() => SaveCSR2Draft()" disabled="@(savingCSR2 || !CanEditCurrentCSR2)">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                            @(csr2Status == "Draft" ? "Save Draft" : "Save Changes")
-                        </button>
+                        @if (CanEditCurrentCSR2)
+                        {
+                            <button type="button" class="dmtp-btn-save-draft" @onclick="() => SaveCSR2Draft()" disabled="@savingCSR2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                @(csr2Status == "Draft" ? "Save Draft" : "Save Changes")
+                            </button>
+                        }
                         @if (CanApplyCurrentCSR2 && !CanManageExpenseAndSubmit)
                         {
                             <button type="button" class="dmtp-btn-start-event" @onclick="SubmitCSR2" disabled="@savingCSR2">
@@ -1130,10 +1179,13 @@ else if (csr1Plan != null)
                         Previous
                     </button>
                     <div class="dmtp-action-buttons">
-                        <button type="button" class="dmtp-btn-save-draft" @onclick="() => SaveCSR2Draft()" disabled="@(savingCSR2 || !CanEditCurrentCSR2)">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                            @(csr2Status == "Draft" ? "Save Draft" : "Save Changes")
-                        </button>
+                        @if (CanEditCurrentCSR2)
+                        {
+                            <button type="button" class="dmtp-btn-save-draft" @onclick="() => SaveCSR2Draft()" disabled="@savingCSR2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                @(csr2Status == "Draft" ? "Save Draft" : "Save Changes")
+                            </button>
+                        }
                         <button type="button" class="dmtp-btn-start-event" @onclick="GoNext">
                             Continue to @NextStepLabel()
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
@@ -1155,7 +1207,7 @@ else if (csr1Plan != null)
                         @if (CanApplyCurrentCSR2 || CanValidateCurrentCSR2 || CanApproveCurrentCSR2)
                         {
                             <button type="button" class="dmtp-btn-start-event" @onclick="SubmitCSR2" disabled="@savingCSR2">
-                                @(CanApplyCurrentCSR2 ? "Apply CSR-2" : CanValidateCurrentCSR2 ? "Validate CSR-2" : "Approve CSR-2")
+                                @(CanApplyCurrentCSR2 ? "Apply CSR-2" : CanValidateCurrentCSR2 ? "Validate CSR-2" : CurrentApprovalButtonText)
                             </button>
                         }
                     </div>
@@ -1168,7 +1220,7 @@ else if (csr1Plan != null)
 }
 
 <!-- CSR-2 New Farmer modal: same data fields as Sample Collection and saves to SasFarmers. -->
-@if (newFarmerOpen)
+@if (newFarmerOpen && CanEditCurrentCSR2)
 {
     <div class="csr2-farmer-backdrop" role="presentation" @onclick="CloseNewFarmer">
         <div class="csr2-farmer-modal" role="dialog" aria-modal="true" aria-labelledby="csr2-new-farmer-title" @onclick:stopPropagation="true">
@@ -1928,6 +1980,39 @@ else if (csr1Plan != null)
     private static string Money(decimal amount) => "₹ " + amount.ToString("N2", CultureInfo.GetCultureInfo("en-IN"));
 
     private int? loadedCsr1Id;
+    private sealed class CSR2WorkflowModeDto
+    {
+        public int CSR2Day { get; set; }
+        public int ReferenceDay { get; set; }
+        public bool RequiresMultiLevelApproval { get; set; }
+        public string Scope { get; set; } = "";
+        public string Status { get; set; } = "Draft";
+        public bool CanApply { get; set; }
+        public bool CanValidate { get; set; }
+        public bool CanApprove { get; set; }
+        public string ActionLabel { get; set; } = "";
+    }
+
+    private string csr2WorkflowScope = "";
+    private bool csr2WorkflowCanApply;
+    private bool csr2WorkflowCanValidate;
+    private bool csr2WorkflowCanApprove;
+    private string csr2WorkflowActionLabel = "";
+
+    private async Task LoadCSR2WorkflowModeAsync(int csr1Id)
+    {
+        var mode = await Http.GetFromJsonAsync<CSR2WorkflowModeDto>($"api/CSR2/workflow-mode/{csr1Id}");
+        csr2CutoffDay = mode?.CSR2Day ?? 0;
+        csr2RequiresMultiLevelApproval = mode?.RequiresMultiLevelApproval ?? false;
+        csr2WorkflowScope = mode?.Scope ?? "";
+        if (!string.IsNullOrWhiteSpace(mode?.Status))
+            csr2Status = mode!.Status;
+        csr2WorkflowCanApply = mode?.CanApply ?? false;
+        csr2WorkflowCanValidate = mode?.CanValidate ?? false;
+        csr2WorkflowCanApprove = mode?.CanApprove ?? false;
+        csr2WorkflowActionLabel = mode?.ActionLabel ?? "";
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         if (CSR1Id.HasValue && CSR1Id == loadedCsr1Id && csr1Plan != null) return;
@@ -1951,6 +2036,7 @@ else if (csr1Plan != null)
             var displayTask = LoadCSR1DisplayDetailsAsync(csr1Id);
             var employeeTask = LoadEmployees();
             var cropsTask = LoadFocusLookups();
+            var workflowTask = LoadCSR2WorkflowModeAsync(csr1Id);
             var draftTask = Http.GetAsync($"api/CSR2/by-csr1/{csr1Id}");
 
             using var response = await planTask;
@@ -1960,6 +2046,7 @@ else if (csr1Plan != null)
                 await displayTask;
                 await employeeTask;
                 await cropsTask;
+                await workflowTask;
                 using var ignoredDraft = await draftTask;
                 return;
             }
@@ -1976,6 +2063,7 @@ else if (csr1Plan != null)
             await displayTask;
             await employeeTask;
             await cropsTask;
+            await workflowTask;
 
             if (csr1Plan != null)
             {
@@ -2025,11 +2113,14 @@ else if (csr1Plan != null)
 
     private static readonly HashSet<string> ExpenseAndSubmitRoles = new(StringComparer.OrdinalIgnoreCase)
     {
+        "MDO",
         "MO",
+        "SMD",
         "SMDO",
         "SMM",
         "RMDO",
         "RMM",
+        "RM",
         "MDADMIN",
         "MDHOD"
     };
@@ -2040,22 +2131,71 @@ else if (csr1Plan != null)
         !string.IsNullOrWhiteSpace(LoginState.UserId) &&
         string.Equals(csr1DisplayDetails?.ResponsiblePersonId, LoginState.UserId, StringComparison.OrdinalIgnoreCase);
 
-    private bool IsStateCSR2 => string.Equals(csr1Plan?.Scope, "State", StringComparison.OrdinalIgnoreCase);
-    private bool CanApplyCurrentCSR2 => csr2Status == "Draft" && IsResponsiblePersonLogin;
+    private bool IsStateCSR2 =>
+        string.Equals(csr2WorkflowScope, "State", StringComparison.OrdinalIgnoreCase) ||
+        (string.IsNullOrWhiteSpace(csr2WorkflowScope) &&
+         string.Equals(csr1Plan?.Scope, "State", StringComparison.OrdinalIgnoreCase));
+
+    // CSR-2 follows the same scope workflow as CSR-1:
+    // HQ    : MDO apply -> MO validate -> RM/RMM approve
+    // State : SMD/SMDO apply -> SMD/SMDO validate -> SMM approve
+    // The CSR-1 Responsible Person keeps the existing special flow and is
+    // intentionally limited to Tabs 1 & 2 while the CSR-2 is still Draft.
+    private bool IsWorkflowApplicantRole =>
+        IsStateCSR2 ? IsRole("SMD", "SMDO") : IsRole("MDO");
+
+    private bool CanResponsiblePersonApplyCSR2 =>
+        csr2Status == "Draft" && IsResponsiblePersonLogin;
+
+    private bool CanWorkflowApplicantApplyCSR2 =>
+        csr2Status == "Draft" && !IsResponsiblePersonLogin && IsWorkflowApplicantRole;
+
+    private bool CanApplyCurrentCSR2 =>
+        csr2Status == "Draft" &&
+        (csr2WorkflowCanApply || CanResponsiblePersonApplyCSR2 || CanWorkflowApplicantApplyCSR2);
+
+    private bool csr2RequiresMultiLevelApproval;
+    private int csr2CutoffDay;
+
     private bool CanValidateCurrentCSR2 =>
-        csr2Status == "Submitted" && (IsStateCSR2 ? IsRole("SMDO") : IsRole("MO"));
+        csr2Status == "Submitted" &&
+        (csr2WorkflowCanValidate ||
+         (IsStateCSR2 && IsRole("SMD", "SMDO")) ||
+         (string.Equals(csr2WorkflowScope, "HQ", StringComparison.OrdinalIgnoreCase) && IsRole("MO")));
+
     private bool CanApproveCurrentCSR2 =>
-        csr2Status == "Validated" && (IsStateCSR2 ? IsRole("SMM") : IsRole("RMM", "RM"));
+        csr2WorkflowCanApprove ||
+        (!csr2RequiresMultiLevelApproval && csr2Status == "Validated" &&
+         (IsStateCSR2 ? IsRole("SMM") : IsRole("RM"))) ||
+        (csr2RequiresMultiLevelApproval &&
+         ((csr2Status == "Validated" &&
+           (IsStateCSR2 ? IsRole("SMM") : IsRole("RMM"))) ||
+          (csr2Status == "Level1Approved" && IsRole("MDADMIN")) ||
+          (csr2Status == "Level2Approved" && IsRole("CSMDHOD", "CSMD-HOD", "MDHOD"))));
+
+    private string CurrentApprovalButtonText =>
+        !string.IsNullOrWhiteSpace(csr2WorkflowActionLabel)
+            ? csr2WorkflowActionLabel
+            : !csr2RequiresMultiLevelApproval
+                ? "Approve CSR-2"
+                : csr2Status == "Validated"
+                    ? "Approve Level 1"
+                    : csr2Status == "Level1Approved"
+                        ? "Approve Level 2"
+                        : "Approve Level 3";
+
     private bool IsSupportReviewRole => IsRole("RMDO", "MDADMIN", "MDHOD");
+
+    // Only Draft applicants can edit CSR-2 data.
+    // Validators/approvers review the submitted data read-only and perform only
+    // their workflow action.
     private bool CanEditCurrentCSR2 =>
-        csr2Status != "Approved" &&
-        (IsSupportReviewRole || CanApplyCurrentCSR2 || CanValidateCurrentCSR2 || CanApproveCurrentCSR2);
+        csr2Status == "Draft" && CanApplyCurrentCSR2;
 
     private bool CanManageExpenseAndSubmit =>
-        // While the CSR-1 Responsible Person is preparing a Draft CSR-2,
-        // they are intentionally limited to Tabs 1 & 2 even when their role
-        // (for example SMDO) is also a workflow reviewer role.
-        !CanApplyCurrentCSR2 &&
+        // Responsible Person always remains limited to Tabs 1 & 2, including
+        // after submission. Workflow/reviewer roles can review all four tabs.
+        !IsResponsiblePersonLogin &&
         ExpenseAndSubmitRoles.Contains(CurrentRole);
 
     private IEnumerable<StepInfo> VisibleSteps =>
@@ -2125,7 +2265,7 @@ else if (csr1Plan != null)
     private string participantError = "";
     private bool participantPhoneLookupOpen;
     private bool participantPhoneSearching;
-    private CancellationTokenSource? participantPhoneLookupCts;
+    private int participantPhoneSearchVersion = 0;
     private readonly List<ParticipantPhoneLookupDto> participantPhoneMatches = new();
 
     private sealed class ParticipantPhoneLookupDto
@@ -2369,15 +2509,29 @@ else if (csr1Plan != null)
 
     private async Task OnParticipantPhoneInput(ChangeEventArgs e)
     {
-        participantPhone = new string((e.Value?.ToString() ?? "").Where(char.IsDigit).Take(10).ToArray());
+        participantPhone = new string(
+            (e.Value?.ToString() ?? "")
+            .Where(char.IsDigit)
+            .Take(10)
+            .ToArray());
+
         participantPhoneMatches.Clear();
 
-        participantPhoneLookupCts?.Cancel();
-        participantPhoneLookupCts?.Dispose();
-        participantPhoneLookupCts = new CancellationTokenSource();
-        var ct = participantPhoneLookupCts.Token;
+        // Phone changed, so previous Farmer / Dealer mapping is no longer valid.
+        participantSourceId = null;
+        participantSource = "";
 
-        if (participantPhone.Length < 3)
+        if (editingParticipantId is null)
+        {
+            participantName = "";
+            participantRole = "";
+        }
+
+        // Increment instead of cancelling the HTTP request.
+        var searchVersion = ++participantPhoneSearchVersion;
+        var searchPhone = participantPhone;
+
+        if (searchPhone.Length < 3)
         {
             participantPhoneLookupOpen = false;
             participantPhoneSearching = false;
@@ -2386,28 +2540,55 @@ else if (csr1Plan != null)
 
         participantPhoneLookupOpen = true;
         participantPhoneSearching = true;
+
         try
         {
-            await Task.Delay(250, ct);
-            var result = await Http.GetFromJsonAsync<List<ParticipantPhoneLookupDto>>(
-                $"api/CSR2/participant-mobile-search?term={Uri.EscapeDataString(participantPhone)}", ct);
+            // Debounce.
+            await Task.Delay(250);
 
-            if (ct.IsCancellationRequested) return;
+            // User typed something else while waiting.
+            if (searchVersion != participantPhoneSearchVersion)
+                return;
+
+            var result =
+                await Http.GetFromJsonAsync<List<ParticipantPhoneLookupDto>>(
+                    $"api/CSR2/participant-mobile-search?term={Uri.EscapeDataString(searchPhone)}");
+
+            // Ignore an old response if the user has typed another digit.
+            if (searchVersion != participantPhoneSearchVersion)
+                return;
+
             participantPhoneMatches.Clear();
-            if (result != null) participantPhoneMatches.AddRange(result);
-        }
-        catch (OperationCanceledException)
-        {
-            return;
+
+            if (result != null)
+                participantPhoneMatches.AddRange(result);
+
+            // No Farmer / Dealer found for complete 10-digit number.
+            // Keep existing Other participant logic.
+            if (searchPhone.Length == 10 &&
+                participantPhoneMatches.Count == 0)
+            {
+                participantSourceId = null;
+                participantSource = "";
+                participantRole = "Other";
+                participantPhoneLookupOpen = false;
+            }
         }
         catch (Exception ex)
         {
+            // Ignore result if another search has already started.
+            if (searchVersion != participantPhoneSearchVersion)
+                return;
+
             participantPhoneMatches.Clear();
-            participantError = $"Unable to search participant mobile number: {ex.Message}";
+
+            participantError =
+                $"Unable to search participant mobile number: {ex.Message}";
         }
         finally
         {
-            if (!ct.IsCancellationRequested) participantPhoneSearching = false;
+            if (searchVersion == participantPhoneSearchVersion)
+                participantPhoneSearching = false;
         }
     }
 
@@ -2532,9 +2713,7 @@ else if (csr1Plan != null)
         participantPhoneLookupOpen = false;
         participantPhoneSearching = false;
         participantPhoneMatches.Clear();
-        participantPhoneLookupCts?.Cancel();
-        participantPhoneLookupCts?.Dispose();
-        participantPhoneLookupCts = null;
+        participantPhoneSearchVersion++;
         editingParticipantId = null;
     }
 
@@ -3712,26 +3891,26 @@ else if (csr1Plan != null)
     private async Task SubmitCSR2()
     {
         string endpoint;
-        string nextStatus;
         string successMessage;
 
         if (CanApplyCurrentCSR2)
         {
             endpoint = "submit";
-            nextStatus = "Submitted";
-            successMessage = "CSR-2 applied successfully and sent for validation.";
+            successMessage = csr2RequiresMultiLevelApproval
+                ? "CSR-2 applied successfully and sent for Level 1 approval."
+                : "CSR-2 applied successfully and sent for validation.";
         }
         else if (CanValidateCurrentCSR2)
         {
             endpoint = "validate";
-            nextStatus = "Validated";
             successMessage = "CSR-2 validated successfully.";
         }
         else if (CanApproveCurrentCSR2)
         {
             endpoint = "approve";
-            nextStatus = "Approved";
-            successMessage = "CSR-2 approved successfully.";
+            successMessage = csr2RequiresMultiLevelApproval
+                ? $"{CurrentApprovalButtonText} completed successfully."
+                : "CSR-2 approved successfully.";
         }
         else
         {
@@ -3739,8 +3918,18 @@ else if (csr1Plan != null)
             return;
         }
 
-        await SaveCSR2Draft(false);
-        if (csr2SaveError || csr2DbId is null) return;
+        // Draft applicants save the latest data before Apply.
+        // Validators/approvers are read-only and must not call save-draft.
+        if (CanApplyCurrentCSR2)
+        {
+            await SaveCSR2Draft(false);
+            if (csr2SaveError || csr2DbId is null) return;
+        }
+        else if (csr2DbId is null)
+        {
+            ShowCsr2Alert("Unable to perform workflow action because CSR-2 ID is missing.");
+            return;
+        }
 
         savingCSR2 = true;
         try
@@ -3749,7 +3938,31 @@ else if (csr1Plan != null)
             if (!response.IsSuccessStatusCode)
                 throw new Exception(await response.Content.ReadAsStringAsync());
 
-            csr2Status = nextStatus;
+            using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (json.RootElement.TryGetProperty("status", out var statusElement) ||
+                json.RootElement.TryGetProperty("Status", out statusElement))
+            {
+                csr2Status = statusElement.GetString() ?? csr2Status;
+            }
+
+            if (json.RootElement.TryGetProperty("requiresMultiLevelApproval", out var multiElement) ||
+                json.RootElement.TryGetProperty("RequiresMultiLevelApproval", out multiElement))
+            {
+                csr2RequiresMultiLevelApproval = multiElement.GetBoolean();
+            }
+
+            // Apply's actual workflow is known only after SubmittedAt is stamped by the API.
+            if (endpoint == "submit")
+            {
+                successMessage = csr2RequiresMultiLevelApproval
+                    ? "CSR-2 applied successfully and sent for Level 1 approval."
+                    : "CSR-2 applied successfully and sent for validation.";
+            }
+
+            // Refresh server-authoritative permissions for the next workflow stage.
+            if (CSR1Id.HasValue && CSR1Id.Value > 0)
+                await LoadCSR2WorkflowModeAsync(CSR1Id.Value);
+
             csr2SaveMessage = successMessage;
             ShowCsr2Alert(csr2SaveMessage, false);
         }

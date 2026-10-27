@@ -183,7 +183,7 @@
                                                         disabled="@workflowActionBusy"
                                                         @onclick="() => ApproveCSR2(row)">
                                                     <i class="bi bi-check2-circle"></i>
-                                                    Approve
+                                                    @(string.IsNullOrWhiteSpace(row.ActionLabel) ? "Approve" : row.ActionLabel)
                                                 </button>
                                             }
 
@@ -510,12 +510,6 @@
 
     private bool workflowActionBusy;
 
-    private string CurrentRole =>
-        LoginState.UserRole.ToString();
-
-    private static bool IsHq(CSR2ListRowDto row) =>
-        string.Equals(row.Scope, "HQ", StringComparison.OrdinalIgnoreCase);
-
     private int TotalCount => response.TotalCount;
 
     private IEnumerable<ProgramLookupDto> FilteredPrograms =>
@@ -650,6 +644,8 @@
         "validated" => "status-validated",
         "approved" => "status-approved",
         "rejected" => "status-rejected",
+        "level1approved" => "status-validated",
+        "level2approved" => "status-validated",
         _ => "status-draft"
     };
 
@@ -659,7 +655,9 @@
         Submitted = 1,
         Validated = 2,
         Approved = 3,
-        Rejected = 4
+        Rejected = 4,
+        Level1Approved = 5,
+        Level2Approved = 6
     }
 
     private sealed class CSR2LookupResponse
@@ -715,6 +713,10 @@
         public int? LocationId { get; set; }
         public int? HeadquarterId { get; set; }
         public string Scope { get; set; } = "";
+        public bool RequiresMultiLevelApproval { get; set; }
+        public bool CanValidate { get; set; }
+        public bool CanApprove { get; set; }
+        public string ActionLabel { get; set; } = "";
         public decimal ApprovedBudget { get; set; }
         public string Status { get; set; } = "Draft";
         public int StatusValue { get; set; }
@@ -735,61 +737,9 @@
         public int ReportCompletion { get; set; }
     }
 
-    private bool CanValidate(CSR2ListRowDto row)
-    {
-        if (!string.Equals(
-                row.Status,
-                "Submitted",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
+    private static bool CanValidate(CSR2ListRowDto row) => row.CanValidate;
 
-        if (IsHq(row))
-        {
-            // HQ CSR-2 -> MO validates
-            return string.Equals(
-                CurrentRole,
-                "MO",
-                StringComparison.OrdinalIgnoreCase);
-        }
-
-        // State CSR-2 -> SMDO validates
-        return string.Equals(
-            CurrentRole,
-            "SMDO",
-            StringComparison.OrdinalIgnoreCase);
-    }
-
-    private bool CanApprove(CSR2ListRowDto row)
-    {
-        if (!string.Equals(
-                row.Status,
-                "Validated",
-                StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (IsHq(row))
-        {
-            // HQ CSR-2 -> RM/RMM approves
-            return
-                string.Equals(
-                    CurrentRole,
-                    "RM",
-                    StringComparison.OrdinalIgnoreCase)
-                ||
-                string.Equals(
-                    CurrentRole,
-                    "RMM",
-                    StringComparison.OrdinalIgnoreCase);
-        }
-
-        // State CSR-2 has no separate approval stage.
-        // SMDO validation completes the State workflow.
-        return false;
-    }
+    private static bool CanApprove(CSR2ListRowDto row) => row.CanApprove;
 
     private async Task ValidateCSR2(CSR2ListRowDto row)
     {
