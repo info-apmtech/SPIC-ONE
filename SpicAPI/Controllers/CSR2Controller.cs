@@ -189,12 +189,6 @@ namespace SpicAPI.Controllers
             var visibleCsr1 = await VisibleApprovedCSR1Async();
             var csr1 = await visibleCsr1.FirstOrDefaultAsync(x => x.Id == csr1Id);
             if (csr1 == null) return NotFound(new { message = "Approved CSR1 record not found." });
-
-            // Rehydrate the 11 legacy expense properties from CSR1Expenses - EF no longer
-            // populates them (they're [NotMapped]; the real data lives in CSR1Expenses now).
-            var csr1ExpenseRows = await _db.Set<CSR1Expenses>().AsNoTracking()
-                .Where(x => x.CSR1Id == csr1Id && x.IsActive).ToListAsync();
-            SPIC.Core.Entities.CSR1ExpenseMapper.ApplyExpenses(csr1, csr1ExpenseRows);
             var master = await _db.Set<ProgramMaster>().AsNoTracking()
                 .Where(x => x.Id == csr1.ProgramId)
                 .Select(x => new { ProgramName = x.Name, ProgramType = x.ProgramType.Name })
@@ -579,7 +573,6 @@ namespace SpicAPI.Controllers
             // Validation is mandatory in BOTH normal and exceeded-date workflows.
             // CSR2Day changes only the approval path after validation.
             var canValidate = report?.Status == CSR2Status.Submitted &&
-                              !IsResponsiblePerson(csr1) &&
                               (isState ? HasRole(effectiveRoles, "SMD", "SMDO") : isHq && HasRole(effectiveRoles, "MO"));
 
             var canApprove = false;
@@ -2062,7 +2055,6 @@ namespace SpicAPI.Controllers
 
                 var canValidate =
                     x.StatusValue == (int)CSR2Status.Submitted &&
-                    !isResponsiblePerson &&
                     (isState
                         ? HasRole(effectiveRoles, "SMD", "SMDO")
                         : HasRole(effectiveRoles, "MO"));

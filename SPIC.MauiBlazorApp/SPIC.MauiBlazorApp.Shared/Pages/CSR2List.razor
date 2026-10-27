@@ -737,9 +737,31 @@
         public int ReportCompletion { get; set; }
     }
 
-    private static bool CanValidate(CSR2ListRowDto row) => row.CanValidate;
+    private string CurrentRole => LoginState.UserRole.ToString();
 
-    private static bool CanApprove(CSR2ListRowDto row) => row.CanApprove;
+    private bool IsRole(params string[] roles) =>
+        roles.Any(role => string.Equals(CurrentRole, role, StringComparison.OrdinalIgnoreCase));
+
+    private bool IsState(CSR2ListRowDto row) =>
+        string.Equals(row.Scope, "State", StringComparison.OrdinalIgnoreCase);
+
+    private bool CanValidate(CSR2ListRowDto row)
+    {
+        // Prefer the API permission when it is available.
+        if (row.CanValidate)
+            return true;
+
+        // Preserve the old working list behavior as a UI fallback.
+        // Validation is required in BOTH normal and exceeded-date workflows.
+        if (!string.Equals(row.Status, "Submitted", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return IsState(row)
+            ? IsRole("SMD", "SMDO")
+            : IsRole("MO");
+    }
+
+    private bool CanApprove(CSR2ListRowDto row) => row.CanApprove;
 
     private async Task ValidateCSR2(CSR2ListRowDto row)
     {

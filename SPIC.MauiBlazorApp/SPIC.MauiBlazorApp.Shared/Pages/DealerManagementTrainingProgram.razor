@@ -521,9 +521,9 @@ else if (csr1Plan != null)
                                       title="@video.FileName">
                                     @video.FileName
                                     (@FormatVideoSize(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        video.Bytes.LongLength > 0
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ? video.Bytes.LongLength
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            : video.SavedFileSize))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                video.Bytes.LongLength > 0
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ? video.Bytes.LongLength
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    : video.SavedFileSize))
                                 </span>
 
                                 <input type="text"
@@ -1470,7 +1470,7 @@ else if (csr1Plan != null)
 
         .csr2-farmer-header p {
             margin: 4px 0 0;
-            color: #1f2937;
+            color: #6b7280;
             font-size: 13px;
         }
 
@@ -1480,7 +1480,7 @@ else if (csr1Plan != null)
         border: 1px solid #dde3ea;
         border-radius: 50%;
         background: #fff;
-        color: #1f2937;
+        color: #64748b;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -1847,7 +1847,7 @@ else if (csr1Plan != null)
         justify-content: space-between;
         align-items: center;
         margin-bottom: 6px;
-        color: #1f2937;
+        color: #64748b;
         font-size: 10px;
         font-weight: 600;
     }
@@ -2001,16 +2001,34 @@ else if (csr1Plan != null)
 
     private async Task LoadCSR2WorkflowModeAsync(int csr1Id)
     {
-        var mode = await Http.GetFromJsonAsync<CSR2WorkflowModeDto>($"api/CSR2/workflow-mode/{csr1Id}");
-        csr2CutoffDay = mode?.CSR2Day ?? 0;
-        csr2RequiresMultiLevelApproval = mode?.RequiresMultiLevelApproval ?? false;
-        csr2WorkflowScope = mode?.Scope ?? "";
-        if (!string.IsNullOrWhiteSpace(mode?.Status))
-            csr2Status = mode!.Status;
-        csr2WorkflowCanApply = mode?.CanApply ?? false;
-        csr2WorkflowCanValidate = mode?.CanValidate ?? false;
-        csr2WorkflowCanApprove = mode?.CanApprove ?? false;
-        csr2WorkflowActionLabel = mode?.ActionLabel ?? "";
+        // Workflow metadata is optional for page rendering.
+        // Keep the old working page-load behavior if this endpoint is unavailable
+        // (for example during mixed-version deployment or authorization mismatch).
+        try
+        {
+            using var response = await Http.GetAsync($"api/CSR2/workflow-mode/{csr1Id}");
+            if (!response.IsSuccessStatusCode)
+                return;
+
+            var mode = await response.Content.ReadFromJsonAsync<CSR2WorkflowModeDto>();
+            if (mode == null)
+                return;
+
+            csr2CutoffDay = mode.CSR2Day;
+            csr2RequiresMultiLevelApproval = mode.RequiresMultiLevelApproval;
+            csr2WorkflowScope = mode.Scope ?? "";
+            if (!string.IsNullOrWhiteSpace(mode.Status))
+                csr2Status = mode.Status;
+            csr2WorkflowCanApply = mode.CanApply;
+            csr2WorkflowCanValidate = mode.CanValidate;
+            csr2WorkflowCanApprove = mode.CanApprove;
+            csr2WorkflowActionLabel = mode.ActionLabel ?? "";
+        }
+        catch
+        {
+            // Do not fail CSR-2 page load only because workflow metadata could not be read.
+            // Existing local role/status fallbacks below continue to control the UI.
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -2136,6 +2154,11 @@ else if (csr1Plan != null)
         (string.IsNullOrWhiteSpace(csr2WorkflowScope) &&
          string.Equals(csr1Plan?.Scope, "State", StringComparison.OrdinalIgnoreCase));
 
+    private bool IsHqCSR2 =>
+        string.Equals(csr2WorkflowScope, "HQ", StringComparison.OrdinalIgnoreCase) ||
+        (string.IsNullOrWhiteSpace(csr2WorkflowScope) &&
+         string.Equals(csr1Plan?.Scope, "HQ", StringComparison.OrdinalIgnoreCase));
+
     // CSR-2 follows the same scope workflow as CSR-1:
     // HQ    : MDO apply -> MO validate -> RM/RMM approve
     // State : SMD/SMDO apply -> SMD/SMDO validate -> SMM approve
@@ -2161,7 +2184,7 @@ else if (csr1Plan != null)
         csr2Status == "Submitted" &&
         (csr2WorkflowCanValidate ||
          (IsStateCSR2 && IsRole("SMD", "SMDO")) ||
-         (string.Equals(csr2WorkflowScope, "HQ", StringComparison.OrdinalIgnoreCase) && IsRole("MO")));
+         (IsHqCSR2 && IsRole("MO")));
 
     private bool CanApproveCurrentCSR2 =>
         csr2WorkflowCanApprove ||
