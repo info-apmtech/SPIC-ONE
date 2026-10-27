@@ -1,8 +1,10 @@
 @page "/TargetAchievement"
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
+@using SPIC.Core.Entities
 @using SPIC.MauiBlazorApp.Shared.Pages.Lab.Analyst
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 @inject HttpClient Http
 
 <div class="container-fluid py-4 px-0 tga-page">
@@ -49,9 +51,12 @@
             </div>
         </div>
 
-        <button type="button" class="tga-btn-save" disabled="@(_saving || selectedJmdoId == 0 || string.IsNullOrWhiteSpace(spcmTarget) || string.IsNullOrWhiteSpace(soilTarget))" @onclick="SaveTargetAllocation">
-            <i class="bi bi-check-lg"></i> @(_saving ? "Saving..." : "Save Target Allocation")
-        </button>
+        @if (LoginState.Can(PagePermission.TargetAchievement, "Entry") || LoginState.Can(PagePermission.TargetAchievement, "Update"))
+        {
+            <button type="button" class="tga-btn-save" disabled="@(_saving || selectedJmdoId == 0 || string.IsNullOrWhiteSpace(spcmTarget) || string.IsNullOrWhiteSpace(soilTarget))" @onclick="SaveTargetAllocation">
+                <i class="bi bi-check-lg"></i> @(_saving ? "Saving..." : "Save Target Allocation")
+            </button>
+        }
     </div>
 
     @if (_targetsError)
@@ -98,9 +103,12 @@
                 </td>
             </TableRow>
             <CardActions Context="row">
-                <button type="button" class="tga-icon-btn" title="Edit target" disabled="@_saving" @onclick="() => EditTarget(row)">
-                    <i class="bi bi-pencil"></i>
-                </button>
+                @if (LoginState.Can(PagePermission.TargetAchievement, "Update"))
+                {
+                    <button type="button" class="tga-icon-btn" title="Edit target" disabled="@_saving" @onclick="() => EditTarget(row)">
+                        <i class="bi bi-pencil"></i>
+                    </button>
+                }
             </CardActions>
         </SpicDataTable>
     }
