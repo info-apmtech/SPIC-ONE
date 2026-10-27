@@ -6,7 +6,6 @@ namespace SPIC.Core.DTOs
 {
     public class CSR2FocusProductDto
     {
-        public int GroupNumber { get; set; }
         public int CropId { get; set; }
         public int ProductId { get; set; }
     }
