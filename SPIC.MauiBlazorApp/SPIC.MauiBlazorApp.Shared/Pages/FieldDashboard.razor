@@ -123,13 +123,13 @@
             {
                 <span class="fd-tracking-mobile-only"><i class="bi bi-phone"></i> Mobile app only</span>
             }
-            else if (_hasAttendanceToday)
+            else if (_hasAttendanceToday && LoginState.Can(PagePermission.FieldDashboard, "Entry"))
             {
                 <button type="button" class="fd-btn fd-btn-primary fd-update-btn" disabled="@_startingTracking" @onclick="StartLiveTracking">
                     <i class="bi bi-play-circle-fill"></i> @(_startingTracking ? "Starting..." : "Start Live Tracking")
                 </button>
             }
-            else
+            else if (!_hasAttendanceToday)
             {
                 <button type="button" class="fd-btn fd-btn-outline fd-update-btn" @onclick='() => Navigation.NavigateTo("/MarkAttendance")'>
                     <i class="bi bi-upload"></i> MARK ATTENDANCE
@@ -153,9 +153,12 @@
                     <button type="button" class="fd-btn fd-btn-outline fd-btn-view" @onclick='() => Navigation.NavigateTo("/MarkAttendance?view=tracking")'>
                         <i class="bi bi-map"></i> View Route
                     </button>
-                    <button type="button" class="fd-btn fd-btn-stop" @onclick="RequestStopTracking">
-                        <i class="bi bi-stop-circle-fill"></i> Stop Tracking
-                    </button>
+                    @if (LoginState.Can(PagePermission.FieldDashboard, "Update"))
+                    {
+                        <button type="button" class="fd-btn fd-btn-stop" @onclick="RequestStopTracking">
+                            <i class="bi bi-stop-circle-fill"></i> Stop Tracking
+                        </button>
+                    }
                     <span class="fd-timer-badge"><i class="bi bi-stopwatch"></i> @TrackingDuration</span>
                 </div>
             </div>
