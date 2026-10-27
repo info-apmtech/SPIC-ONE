@@ -20,24 +20,112 @@ namespace SpicAPI.Controllers
         private readonly IWebHostEnvironment _env;
         public CSR2Controller(AppDbContext db, IWebHostEnvironment env) { _db = db; _env = env; }
 
-        // Keep the approved CSR-1 visibility rule consistent for list, read and persistence.
-        // Adapt this rule to existing state/region/HQ authorization before production.
-        private IQueryable<CSR1> VisibleApprovedCSR1()
+        // CSR-2 records are visible to the Responsible Person and to the workflow
+        // validator/approver roles for the corresponding CSR-1 scope.
+        private async Task<IQueryable<CSR1>> VisibleApprovedCSR1Async()
         {
-            var query = _db.Set<CSR1>().AsNoTracking()
-                .Where(x => x.IsActive && x.Status == CSR1Status.Approved);
-            if (!User.IsInRole("Admin") && !User.IsInRole("SuperAdmin"))
+            var query = _db.Set<CSR1>()
+                .AsNoTracking()
+                .Where(x =>
+                    x.IsActive &&
+                    x.Status == CSR1Status.Approved);
+
+            if (User.IsInRole("Admin") ||
+                User.IsInRole("SuperAdmin"))
             {
-                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                query = query.Where(x => x.CreatedBy == userId);
+                return query;
             }
-            return query;
+
+            var userId =
+                User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+            if (string.IsNullOrWhiteSpace(userId))
+                return query.Where(_ => false);
+
+            // The CSR-1 Responsible Person must always be able to see/open the
+            // corresponding CSR-2 so they can complete Tabs 1 & 2 and apply it.
+            // Reviewer scope is OR-ed with this ownership rule; it never replaces it.
+            var responsiblePredicate = query.Where(x =>
+                x.ResponsiblePersonId == userId);
+
+            var loginScope = await _db.Set<Employeelogin>()
+                .AsNoTracking()
+                .Where(x =>
+                    x.UserId == userId &&
+                    x.IsActive)
+                .Select(x => new
+                {
+                    x.StateId,
+                    x.RegionId,
+                    x.HeadquartersId
+                })
+                .FirstOrDefaultAsync();
+
+            // A valid Responsible Person must not lose access only because their
+            // Employeelogin scope values are incomplete.
+            if (loginScope == null)
+                return responsiblePredicate;
+
+            // STATE workflow follows the CSR-1 applicant's organisation scope.
+            // CSR-1 State flow: SMDO apply -> SMDO validate -> SMM approve.
+            // SMD is retained as state-level read visibility only.
+            if (User.IsInRole("SMD") ||
+                User.IsInRole("SMDO"))
+            {
+                if (loginScope.StateId <= 0)
+                    return responsiblePredicate;
+
+                var stateId = loginScope.StateId;
+
+                return query.Where(csr1 =>
+                    csr1.ResponsiblePersonId == userId ||
+                    _db.Set<Employeelogin>().Any(applicantLogin =>
+                        applicantLogin.IsActive &&
+                        applicantLogin.UserId == csr1.CreatedBy &&
+                        applicantLogin.StateId == stateId));
+            }
+
+            // SMM has no CSR-2 reviewer/approval stage in the State workflow.
+            // If an SMM is the CSR-1 Responsible Person, responsiblePredicate still
+            // allows that person to prepare/apply their own CSR-2 Tabs 1 & 2.
+            if (User.IsInRole("SMM"))
+                return responsiblePredicate;
+
+            // HQ workflow: MDO applies CSR-1, MO validates CSR-2, RM/RMM approves.
+            // MO/RM/RMM reviewer visibility is Headquarters only.
+            if (User.IsInRole("MO") ||
+                User.IsInRole("RM") ||
+                User.IsInRole("RMM"))
+            {
+                if (loginScope.HeadquartersId <= 0)
+                    return responsiblePredicate;
+
+                var hqId = loginScope.HeadquartersId;
+
+                return query.Where(csr1 =>
+                    csr1.ResponsiblePersonId == userId ||
+                    _db.Set<Employeelogin>().Any(applicantLogin =>
+                        applicantLogin.IsActive &&
+                        applicantLogin.UserId == csr1.CreatedBy &&
+                        applicantLogin.HeadquartersId == hqId));
+            }
+
+            if (User.IsInRole("RMDO") ||
+                User.IsInRole("MDADMIN") ||
+                User.IsInRole("MDHOD"))
+            {
+                return query;
+            }
+
+            return responsiblePredicate;
         }
 
         [HttpGet("assigned-programs")]
         public async Task<IActionResult> GetAssignedPrograms()
         {
-            var records = await VisibleApprovedCSR1()
+            var visibleCsr1 = await VisibleApprovedCSR1Async();
+
+            var records = await visibleCsr1
                 .OrderByDescending(x => x.Id)
                 .Select(x => new
                 {
@@ -87,7 +175,8 @@ namespace SpicAPI.Controllers
         [HttpGet("assigned-programs/{csr1Id:int}")]
         public async Task<IActionResult> GetProgramDetails(int csr1Id)
         {
-            var csr1 = await VisibleApprovedCSR1().FirstOrDefaultAsync(x => x.Id == csr1Id);
+            var visibleCsr1 = await VisibleApprovedCSR1Async();
+            var csr1 = await visibleCsr1.FirstOrDefaultAsync(x => x.Id == csr1Id);
             if (csr1 == null) return NotFound(new { message = "Approved CSR1 record not found." });
 
             // Rehydrate the 11 legacy expense properties from CSR1Expenses - EF no longer
@@ -324,12 +413,118 @@ namespace SpicAPI.Controllers
         // CSR-2 persistence endpoints (merged from previous package)
         // Expense categories are dynamic and are validated against CSR1Expenses/ExpenseInformations.
         private string Actor => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "unknown";
+        private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         private string UploadRoot => Path.Combine(_env.ContentRootPath, "App_Data", "csr2-private");
+
+        private bool IsRole(params string[] roles) => roles.Any(User.IsInRole);
+
+        private bool IsResponsiblePerson(CSR1 csr1) =>
+            !string.IsNullOrWhiteSpace(CurrentUserId) &&
+            string.Equals(csr1.ResponsiblePersonId, CurrentUserId, StringComparison.OrdinalIgnoreCase);
+
+        private async Task<string> ResolveCSR2ScopeAsync(CSR1 csr1)
+        {
+            string? creatorRole = null;
+
+            if (!string.IsNullOrWhiteSpace(csr1.CreatedBy))
+            {
+                var creator = await _db.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(u => u.Id == csr1.CreatedBy);
+
+                if (creator != null)
+                    creatorRole = creator.Role.ToString();
+            }
+
+            if (!string.IsNullOrWhiteSpace(creatorRole))
+            {
+                if (string.Equals(creatorRole, "SMDO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, "SMD", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, "SMM", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "State";
+                }
+
+                if (string.Equals(creatorRole, "RMDO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, "MDO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, "JMDO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, "MO", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, "RM", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(creatorRole, "RMD", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "HQ";
+                }
+            }
+
+            // Same fallback currently used by CSR-1 scope resolution.
+            return csr1.HeadquarterId > 0 ? "HQ" : "State";
+        }
+
+        private bool CanEditCSR2(CSR1 csr1, CSR2 report)
+        {
+            if (report.Status == CSR2Status.Approved)
+                return false;
+
+            // MD review roles retain the existing Expense & Proof management access.
+            if (IsRole("RMDO", "MDADMIN", "MDHOD"))
+                return true;
+
+            if (report.Status == CSR2Status.Draft)
+                return IsResponsiblePerson(csr1);
+
+            // ApprovedCsr1Async already applies the logged-in user's State/Region/HQ scope.
+            // Therefore role + status is enough here; do not infer workflow from HeadquarterId.
+            if (report.Status == CSR2Status.Submitted)
+                return IsRole("MO", "SMDO");
+
+            if (report.Status == CSR2Status.Validated)
+                return IsRole("RM", "RMM");
+
+            return false;
+        }
 
         // IMPORTANT: Replace this with the SAME scope/claims authorization policy as your
         // CSR1 details endpoint. Being logged in alone MUST NOT grant access to every CSR1.
-        private Task<CSR1?> ApprovedCsr1Async(int csr1Id) =>
-            VisibleApprovedCSR1().FirstOrDefaultAsync(x => x.Id == csr1Id);
+        private async Task<CSR1?> ApprovedCsr1Async(int csr1Id)
+        {
+            var visibleCsr1 = await VisibleApprovedCSR1Async();
+            return await visibleCsr1.FirstOrDefaultAsync(x => x.Id == csr1Id);
+        }
+
+        private static CSR2FocusGroupDto ToFocusGroupDto(CSR2Products1? source) => new()
+        {
+            CropId = source?.CropId ?? Array.Empty<int>(),
+            ProductId = source?.ProductId ?? Array.Empty<int>()
+        };
+
+        private static CSR2FocusGroupDto ToFocusGroupDto(CSR2Products2? source) => new()
+        {
+            CropId = source?.CropId ?? Array.Empty<int>(),
+            ProductId = source?.ProductId ?? Array.Empty<int>()
+        };
+
+        private static CSR2FocusGroupDto ToFocusGroupDto(CSR2Products3? source) => new()
+        {
+            CropId = source?.CropId ?? Array.Empty<int>(),
+            ProductId = source?.ProductId ?? Array.Empty<int>()
+        };
+
+        private static (int[] Crops, int[] Products) NormalizeFocusGroup(CSR2FocusGroupDto? source)
+        {
+            var crops = (source?.CropId ?? Array.Empty<int>())
+                .Where(x => x > 0)
+                .Distinct()
+                .Take(3)
+                .ToArray();
+
+            var products = (source?.ProductId ?? Array.Empty<int>())
+                .Where(x => x > 0)
+                .Distinct()
+                .Take(3)
+                .ToArray();
+
+            return (crops, products);
+        }
 
         [HttpGet("by-csr1/{csr1Id:int}")]
         public async Task<IActionResult> GetByCsr1(int csr1Id)
@@ -342,7 +537,9 @@ namespace SpicAPI.Controllers
                 .Include(x => x.Participants)
                 .Include(x => x.Employees)
                 .Include(x => x.Media)
-                .Include(x => x.FocusProducts)
+                .Include(x => x.Products1)
+                .Include(x => x.Products2)
+                .Include(x => x.Products3)
                 .Include(x => x.Expenses)
                     .ThenInclude(x => x.Proofs)
                 .AsSplitQuery()
@@ -353,79 +550,249 @@ namespace SpicAPI.Controllers
             if (report == null)
                 return NotFound();
 
+
+            // =========================================================
+            // PARTICIPANT DISPLAY DETAILS
+            // =========================================================
+
+            var participantDtos = new List<CSR2ParticipantDto>();
+
+            foreach (var participant in report.Participants)
+            {
+                string? name = null;
+                string? phone = null;
+
+                if (participant.ParticipantSourceId.HasValue)
+                {
+                    if (string.Equals(
+                            participant.ParticipantSource,
+                            "SasFarmers",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        var farmer = await _db.Set<SasFarmer>()
+                            .AsNoTracking()
+                            .Where(x =>
+                                x.Id == participant.ParticipantSourceId.Value &&
+                                !x.IsDeleted)
+                            .Select(x => new
+                            {
+                                Name = x.Name,
+                                Phone = x.Mobile
+                            })
+                            .FirstOrDefaultAsync();
+
+                        name = farmer?.Name;
+                        phone = farmer?.Phone;
+                    }
+                    else if (string.Equals(
+                                 participant.ParticipantSource,
+                                 "DealerRegistrations",
+                                 StringComparison.OrdinalIgnoreCase))
+                    {
+                        var dealer = await _db.Set<DealerRegistration>()
+                            .AsNoTracking()
+                            .Where(x =>
+                                x.Id == participant.ParticipantSourceId.Value)
+                            .Select(x => new
+                            {
+                                Name = x.FirmName,
+                                Phone = x.OfficialContactNumber
+                            })
+                            .FirstOrDefaultAsync();
+
+                        name = dealer?.Name;
+                        phone = dealer?.Phone;
+                    }
+                }
+
+                participantDtos.Add(new CSR2ParticipantDto
+                {
+                    ParticipantSourceId =
+                        participant.ParticipantSourceId,
+
+                    ParticipantSource =
+                        participant.ParticipantSource,
+
+                    Role =
+                        participant.Role,
+
+                    Name =
+                        name,
+
+                    PhoneNumber =
+                        phone
+                });
+            }
+
+
+            // =========================================================
+            // EMPLOYEE DISPLAY DETAILS
+            // =========================================================
+
+            var employeeDtos = new List<CSR2EmployeeDto>();
+
+            foreach (var item in report.Employees)
+            {
+                var employeeDetails = await (
+                    from login in _db.Set<Employeelogin>().AsNoTracking()
+
+                    join employee in _db.Set<EmployeeInformation>().AsNoTracking()
+                        on login.EmployeeInformationID equals employee.Id
+
+                    where login.UserId == item.EmployeeInformationId
+
+                    select new
+                    {
+                        employee.Name,
+
+                        PhoneNumber =
+                            employee.OfficialPhoneNumber
+                            ?? employee.PersonalPhoneNumber
+                    }
+                ).FirstOrDefaultAsync();
+
+                employeeDtos.Add(new CSR2EmployeeDto
+                {
+                    EmployeeInformationId =
+                        item.EmployeeInformationId,
+
+                    RoleName =
+                        item.RoleName,
+
+                    EmployeeName =
+                        employeeDetails?.Name,
+
+                    PhoneNumber =
+                        employeeDetails?.PhoneNumber
+                });
+            }
+
+
+            // =========================================================
+            // EXPENSE MASTER NAMES
+            // =========================================================
+
+            var expenseInformationIds = report.Expenses
+                .Select(x => x.ExpenseInformationId)
+                .Distinct()
+                .ToList();
+
+            var expenseNames = await _db.Set<ExpenseInformation>()
+                .AsNoTracking()
+                .Where(x => expenseInformationIds.Contains(x.Id))
+                .ToDictionaryAsync(
+                    x => x.Id,
+                    x => x.Name);
+
+
+            // =========================================================
+            // RESPONSE
+            // =========================================================
+
             return Ok(new CSR2DetailsDto
             {
                 Id = report.Id,
+
                 CSR1Id = report.CSR1Id,
+
                 Status = report.Status.ToString(),
 
-                ActualEventDate = report.ActualEventDate,
-                StartTime = report.StartTime,
-                EndTime = report.EndTime,
+                ActualEventDate =
+                    report.ActualEventDate,
+
+                StartTime =
+                    report.StartTime,
+
+                EndTime =
+                    report.EndTime,
 
                 EventCoordinatorEmployeeId =
                     report.EventCoordinatorEmployeeId,
 
-                ActualLocation = report.ActualLocation,
-                ExpectedParticipantsCount = report.ExpectedParticipantsCount,
+                ActualLocation =
+                    report.ActualLocation,
 
-                Participants = report.Participants
-                    .Select(x => new CSR2ParticipantDto
-                    {
-                        Name = x.Name,
-                        PhoneNumber = x.PhoneNumber,
-                        Role = x.Role
-                    })
-                    .ToList(),
+                ExpectedParticipantsCount =
+                    report.ExpectedParticipantsCount,
 
-                Employees = report.Employees
-                    .Select(x => new CSR2EmployeeDto
-                    {
-                        EmployeeInformationId = x.EmployeeInformationId,
-                        EmployeeName = x.EmployeeName,
-                        PhoneNumber = x.PhoneNumber,
-                        RoleName = x.RoleName
-                    })
-                    .ToList(),
+                Remarks =
+                    report.Remarks,
 
-                FocusProducts = report.FocusProducts
-                    .Select(x => new CSR2FocusProductDto
-                    {
-                        GroupNumber = x.GroupNumber,
-                        CropId = x.CropId,
-                        ProductId = x.ProductId
-                    })
-                    .ToList(),
 
-                Expenses = report.Expenses
-                    .Select(x => new CSR2ExpenseDto
-                    {
-                        CategoryKey = x.CategoryKey,
-                        CategoryName = x.CategoryName,
-                        ActualAmount = x.ActualAmount,
-                        ExpenseDate = x.ExpenseDate,
-                        BillNo = x.BillNo,
+                Participants =
+                    participantDtos,
 
-                        ProofId = x.Proofs
-                            .Select(p => (int?)p.Id)
-                            .FirstOrDefault(),
 
-                        ProofFileName = x.Proofs
-                            .Select(p => p.OriginalFileName)
-                            .FirstOrDefault()
-                    })
-                    .ToList(),
+                Employees =
+                    employeeDtos,
 
-                Media = report.Media
-                    .Select(x => new CSR2MediaDto
-                    {
-                        Id = x.Id,
-                        MediaType = x.MediaType,
-                        OriginalFileName = x.OriginalFileName,
-                        Caption = x.Caption,
-                        FileSizeBytes = x.FileSizeBytes
-                    })
-                    .ToList()
+
+                Products1 = ToFocusGroupDto(report.Products1.FirstOrDefault()),
+                Products2 = ToFocusGroupDto(report.Products2.FirstOrDefault()),
+                Products3 = ToFocusGroupDto(report.Products3.FirstOrDefault()),
+
+
+                Expenses =
+                    report.Expenses
+                        .OrderBy(x => x.ExpenseInformationId)
+                        .ThenBy(x => x.Id)
+                        .Select(x => new CSR2ExpenseDto
+                        {
+                            Id = x.Id,
+
+                            ExpenseInformationId =
+                                x.ExpenseInformationId,
+
+                            ExpenseName =
+                                expenseNames.TryGetValue(
+                                    x.ExpenseInformationId,
+                                    out var expenseName)
+                                        ? expenseName
+                                        : "",
+
+                            ActualAmount =
+                                x.ActualAmount,
+
+                            ExpenseDate =
+                                x.ExpenseDate,
+
+                            BillNo =
+                                x.BillNo,
+
+                            Proofs =
+                                x.Proofs
+                                    .OrderBy(p => p.Id)
+                                    .Select(p => new CSR2ExpenseProofDto
+                                    {
+                                        Id = p.Id,
+
+                                        OriginalFileName =
+                                            p.OriginalFileName
+                                    })
+                                    .ToList()
+                        })
+                        .ToList(),
+
+
+                Media =
+                    report.Media
+                        .Select(x => new CSR2MediaDto
+                        {
+                            Id = x.Id,
+
+                            MediaType =
+                                x.MediaType,
+
+                            OriginalFileName =
+                                x.OriginalFileName,
+
+                            Caption =
+                                x.Caption,
+
+                            FileSizeBytes =
+                                x.FileSizeBytes
+                        })
+                        .ToList()
             });
         }
 
@@ -433,244 +800,341 @@ namespace SpicAPI.Controllers
         public async Task<IActionResult> SaveDraft([FromBody] CSR2SaveDto dto)
         {
             var csr1 = await ApprovedCsr1Async(dto.CSR1Id);
-
             if (csr1 == null)
                 return NotFound("Approved CSR1 not available or access denied.");
 
-            if (dto.EndTime.HasValue &&
-                dto.StartTime.HasValue &&
-                dto.EndTime <= dto.StartTime)
-            {
+            if (dto.EndTime.HasValue && dto.StartTime.HasValue && dto.EndTime <= dto.StartTime)
                 return BadRequest("Event end time must be later than start time.");
-            }
 
             if (string.IsNullOrWhiteSpace(dto.EventCoordinatorEmployeeId))
                 return BadRequest("Event Coordinator is required.");
 
-            if (dto.ExpectedParticipantsCount < 0 ||
-                dto.Expenses.Any(x => x.ActualAmount < 0))
+            if (dto.ExpectedParticipantsCount < 0)
+                return BadRequest("Invalid participant count.");
+
+            if (dto.Expenses.Any(x => x.ActualAmount < 0))
+                return BadRequest("Expense amount cannot be negative.");
+
+            // CSR-2 focus groups mirror CSR-1: Products1, Products2 and Products3.
+            var focus1 = NormalizeFocusGroup(dto.Products1);
+            var focus2 = NormalizeFocusGroup(dto.Products2);
+            var focus3 = NormalizeFocusGroup(dto.Products3);
+
+            if (focus1.Crops.Length == 0 || focus1.Products.Length == 0)
+                return BadRequest("Focus Group 1 requires at least one crop and one product.");
+
+            if (focus1.Crops.Length > 3 || focus1.Products.Length > 3 ||
+                focus2.Crops.Length > 3 || focus2.Products.Length > 3 ||
+                focus3.Crops.Length > 3 || focus3.Products.Length > 3)
             {
-                return BadRequest("Invalid expense amounts or participant counts.");
+                return BadRequest("Maximum 3 crops and 3 products are allowed in each focus group.");
             }
 
-            var focusGroups = dto.FocusProducts
-                .GroupBy(x => x.GroupNumber)
-                .ToList();
-
-            if (dto.FocusProducts.Any(x =>
-                    x.GroupNumber is < 1 or > 3 ||
-                    x.CropId <= 0 ||
-                    x.ProductId <= 0) ||
-                dto.FocusProducts
-                    .GroupBy(x => new { x.GroupNumber, x.CropId, x.ProductId })
-                    .Any(g => g.Count() > 1) ||
-                focusGroups.Any(g => g.Select(x => x.CropId).Distinct().Count() > 3) ||
-                focusGroups.Any(g => g.Select(x => x.ProductId).Distinct().Count() > 3) ||
-                !focusGroups.Any(g => g.Key == 1 &&
-                    g.Select(x => x.CropId).Distinct().Any() &&
-                    g.Select(x => x.ProductId).Distinct().Any()))
+            if ((focus2.Crops.Length > 0 && focus2.Products.Length == 0) ||
+                (focus2.Crops.Length == 0 && focus2.Products.Length > 0))
             {
-                return BadRequest(
-                    "Invalid focus selections. Group 1 requires at least one crop and one product; maximum three crops and three products per group.");
+                return BadRequest("Focus Group 2 must contain both crop and product selections.");
             }
 
-            // CSR-2 expense rows are driven by the complete active ExpenseInformations master,
-            // not only by CSR1Expenses rows that have a non-zero planned amount.
-            var csr1ExpenseMasters = await _db.Set<ExpenseInformation>()
+            if ((focus3.Crops.Length > 0 && focus3.Products.Length == 0) ||
+                (focus3.Crops.Length == 0 && focus3.Products.Length > 0))
+            {
+                return BadRequest("Focus Group 3 must contain both crop and product selections.");
+            }
+
+            // Expenses are driven dynamically by ExpenseInformations.
+            // Duplicate ExpenseInformationId values are intentionally allowed because
+            // one expense category can contain multiple bill/expense rows.
+            var activeExpenseIds = await _db.Set<ExpenseInformation>()
                 .AsNoTracking()
                 .Where(x => x.IsActive)
-                .OrderBy(x => x.Id)
-                .Select(x => new
-                {
-                    ExpenseId = x.Id,
-                    ExpenseName = x.Name
-                })
+                .Select(x => x.Id)
                 .ToListAsync(HttpContext.RequestAborted);
 
-            var allowedExpenseByKey = csr1ExpenseMasters
-                .GroupBy(x => x.ExpenseId)
-                .ToDictionary(
-                    g => g.Key.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    g => g.First().ExpenseName,
-                    StringComparer.OrdinalIgnoreCase);
-
             if (dto.Expenses
-                    .Select(x => x.CategoryKey?.Trim() ?? "")
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .Count() != dto.Expenses.Count ||
-                dto.Expenses.Any(x =>
-                    string.IsNullOrWhiteSpace(x.CategoryKey) ||
-                    !allowedExpenseByKey.ContainsKey(x.CategoryKey.Trim())))
+                .Where(x => x.ActualAmount.HasValue && x.ActualAmount.Value > 0)
+                .Any(x =>
+                    x.ExpenseInformationId <= 0 ||
+                    !activeExpenseIds.Contains(x.ExpenseInformationId)))
             {
-                return BadRequest("Invalid or duplicate expense category. Expense rows must come from the active ExpenseInformations master.");
+                return BadRequest("Invalid expense. Expense must come from active ExpenseInformations.");
             }
 
+            if (dto.Participants.Any(x => string.IsNullOrWhiteSpace(x.Role)))
+                return BadRequest("Participant role is required.");
+
             if (dto.Participants.Any(x =>
-                    string.IsNullOrWhiteSpace(x.Name) ||
-                    string.IsNullOrWhiteSpace(x.Role)) ||
-                dto.Employees.Any(x =>
+                    !string.IsNullOrWhiteSpace(x.ParticipantSource) &&
+                    !string.Equals(x.ParticipantSource, "Other", StringComparison.OrdinalIgnoreCase) &&
+                    (!x.ParticipantSourceId.HasValue || x.ParticipantSourceId.Value <= 0)))
+            {
+                return BadRequest("Participant master ID is required.");
+            }
+
+            if (dto.Employees.Any(x =>
                     string.IsNullOrWhiteSpace(x.EmployeeInformationId) ||
                     string.IsNullOrWhiteSpace(x.RoleName)))
             {
-                return BadRequest(
-                    "Required participant or employee data is missing.");
+                return BadRequest("Required employee information is missing.");
             }
 
             var report = await _db.Set<CSR2>()
                 .Include(x => x.Participants)
                 .Include(x => x.Employees)
                 .Include(x => x.Expenses)
-                .Include(x => x.FocusProducts)
+                    .ThenInclude(x => x.Proofs)
+                .Include(x => x.Products1)
+                .Include(x => x.Products2)
+                .Include(x => x.Products3)
                 .AsSplitQuery()
-                .FirstOrDefaultAsync(
-                    x => x.CSR1Id == dto.CSR1Id,
-                    HttpContext.RequestAborted);
+                .FirstOrDefaultAsync(x => x.CSR1Id == dto.CSR1Id, HttpContext.RequestAborted);
 
-            if (report != null &&
-                dto.Id.HasValue &&
-                dto.Id != report.Id)
-            {
+            if (report != null && dto.Id.HasValue && dto.Id.Value != report.Id)
                 return Conflict("Report ID mismatch.");
-            }
 
-            if (report != null &&
-                report.Status != CSR2Status.Draft)
-            {
-                return Conflict("Submitted reports are read-only.");
-            }
+            if (report == null && !IsResponsiblePerson(csr1))
+                return StatusCode(StatusCodes.Status403Forbidden, "Only the Responsible Person can create the CSR-2 draft.");
 
-            if (report == null)
+            if (report != null && !CanEditCSR2(csr1, report))
+                return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to edit this CSR-2 at the current workflow stage.");
+
+            await using var tx = await _db.Database.BeginTransactionAsync(HttpContext.RequestAborted);
+            try
             {
-                report = new CSR2
+                if (report == null)
                 {
-                    CSR1Id = dto.CSR1Id,
-                    CreatedBy = Actor,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    report = new CSR2
+                    {
+                        CSR1Id = dto.CSR1Id,
+                        CreatedBy = Actor,
+                        CreatedAt = DateTime.UtcNow,
+                        Status = CSR2Status.Draft
+                    };
 
-                _db.Set<CSR2>().Add(report);
-            }
+                    _db.Set<CSR2>().Add(report);
+                    // Generate CSR2.Id before child rows/proof uploads are created.
+                    await _db.SaveChangesAsync(HttpContext.RequestAborted);
+                }
 
-            report.ActualEventDate = csr1.CSR1Date;
+                report.ActualEventDate = dto.ActualEventDate ?? csr1.CSR1Date;
+                report.StartTime = dto.StartTime;
+                report.EndTime = dto.EndTime;
+                report.EventCoordinatorEmployeeId = string.IsNullOrWhiteSpace(dto.EventCoordinatorEmployeeId)
+                    ? null
+                    : dto.EventCoordinatorEmployeeId.Trim();
+                report.ActualLocation = string.IsNullOrWhiteSpace(dto.ActualLocation)
+                    ? null
+                    : dto.ActualLocation.Trim();
+                report.ExpectedParticipantsCount = dto.ExpectedParticipantsCount;
+                report.Remarks = string.IsNullOrWhiteSpace(dto.Remarks) ? null : dto.Remarks.Trim();
+                report.UpdatedAt = DateTime.UtcNow;
+                report.UpdatedBy = Actor;
 
-            report.StartTime = dto.StartTime;
+                // Participant name/mobile are display-only and resolved from the source master.
+                if (report.Participants.Count > 0)
+                    _db.Set<CSR2Participant>().RemoveRange(report.Participants);
 
-            report.EndTime = dto.EndTime;
-
-            report.EventCoordinatorEmployeeId =
-                dto.EventCoordinatorEmployeeId?.Trim();
-
-            report.ActualLocation =
-                dto.ActualLocation?.Trim();
-
-            report.ExpectedParticipantsCount =
-                dto.ExpectedParticipantsCount;
-
-            report.UpdatedAt =
-                DateTime.UtcNow;
-
-            report.UpdatedBy =
-                Actor;
-
-            await using var tx =
-                await _db.Database.BeginTransactionAsync();
-
-            _db.Set<CSR2Participant>()
-                .RemoveRange(report.Participants);
-
-            _db.Set<CSR2Employee>()
-                .RemoveRange(report.Employees);
-
-            _db.Set<CSR2FocusProduct>()
-                .RemoveRange(report.FocusProducts);
-
-            report.Participants =
-                dto.Participants
+                report.Participants = dto.Participants
                     .Select(x => new CSR2Participant
                     {
-                        Name = x.Name.Trim(),
-                        PhoneNumber = x.PhoneNumber,
-                        Role = x.Role.Trim()
+                        CSR2Id = report.Id,
+                        ParticipantSourceId = x.ParticipantSourceId,
+                        ParticipantSource = string.IsNullOrWhiteSpace(x.ParticipantSource)
+                            ? null
+                            : x.ParticipantSource.Trim(),
+                        Role = x.Role.Trim(),
+                        CreatedAt = DateTime.UtcNow
                     })
                     .ToList();
 
-            report.FocusProducts =
-                dto.FocusProducts
-                    .Select(x => new CSR2FocusProduct
-                    {
-                        GroupNumber = x.GroupNumber,
-                        CropId = x.CropId,
-                        ProductId = x.ProductId
-                    })
-                    .ToList();
+                // Employee name/mobile are display-only and resolved from Employeelogin/EmployeeInformation.
+                if (report.Employees.Count > 0)
+                    _db.Set<CSR2Employee>().RemoveRange(report.Employees);
 
-            report.Employees =
-                dto.Employees
-                    .GroupBy(x => x.EmployeeInformationId)
+                report.Employees = dto.Employees
+                    .Where(x => !string.IsNullOrWhiteSpace(x.EmployeeInformationId))
+                    .GroupBy(x => x.EmployeeInformationId.Trim(), StringComparer.OrdinalIgnoreCase)
                     .Select(g => g.First())
                     .Select(x => new CSR2Employee
                     {
-                        EmployeeInformationId =
-                            x.EmployeeInformationId,
-
-                        EmployeeName =
-                            x.EmployeeName,
-
-                        PhoneNumber =
-                            x.PhoneNumber,
-
-                        RoleName =
-                            x.RoleName
+                        CSR2Id = report.Id,
+                        EmployeeInformationId = x.EmployeeInformationId.Trim(),
+                        RoleName = x.RoleName.Trim()
                     })
                     .ToList();
 
-            foreach (var item in dto.Expenses)
-            {
-                var normalizedCategoryKey = item.CategoryKey.Trim();
-                var expense =
-                    report.Expenses.FirstOrDefault(
-                        x => string.Equals(
-                            x.CategoryKey,
-                            normalizedCategoryKey,
-                            StringComparison.OrdinalIgnoreCase));
+                // Persist CSR-2 focus groups exactly like CSR-1 arrays.
+                // Products1 is mandatory.
+                // Products2 and Products3 are optional and are saved only
+                // when both CropId and ProductId are available.
 
-                if (expense == null)
+
+                // =====================================================
+                // PRODUCTS 1 - MANDATORY
+                // =====================================================
+
+                var product1 = report.Products1.FirstOrDefault();
+
+                if (product1 == null)
                 {
-                    expense = new CSR2Expense
+                    product1 = new CSR2Products1
                     {
-                        CategoryKey = item.CategoryKey
+                        CSR2Id = report.Id
                     };
 
-                    report.Expenses.Add(expense);
+                    report.Products1.Add(product1);
                 }
 
-                expense.CategoryKey = normalizedCategoryKey;
-
-                // Category name is authoritative from ExpenseInformations, not from the client.
-                expense.CategoryName =
-                    allowedExpenseByKey[normalizedCategoryKey];
+                product1.CropId = focus1.Crops;
+                product1.ProductId = focus1.Products;
+                product1.IsActive = true;
 
 
-                expense.ActualAmount =
-                    item.ActualAmount;
+                // =====================================================
+                // PRODUCTS 2 - OPTIONAL
+                // Save only if both crop and product are available.
+                // =====================================================
 
-                expense.ExpenseDate =
-                    item.ExpenseDate;
+                var product2 = report.Products2.FirstOrDefault();
 
-                expense.BillNo =
-                    item.BillNo?.Trim();
+                var hasProduct2Data =
+                    focus2.Crops.Length > 0 &&
+                    focus2.Products.Length > 0;
+
+                if (hasProduct2Data)
+                {
+                    if (product2 == null)
+                    {
+                        product2 = new CSR2Products2
+                        {
+                            CSR2Id = report.Id
+                        };
+
+                        report.Products2.Add(product2);
+                    }
+
+                    product2.CropId = focus2.Crops;
+                    product2.ProductId = focus2.Products;
+                    product2.IsActive = true;
+                }
+                else if (product2 != null)
+                {
+                    // If previously saved and user clears Products2,
+                    // remove the row completely.
+                    _db.Set<CSR2Products2>().Remove(product2);
+                }
+
+
+                // =====================================================
+                // PRODUCTS 3 - OPTIONAL
+                // Save only if both crop and product are available.
+                // =====================================================
+
+                var product3 = report.Products3.FirstOrDefault();
+
+                var hasProduct3Data =
+                    focus3.Crops.Length > 0 &&
+                    focus3.Products.Length > 0;
+
+                if (hasProduct3Data)
+                {
+                    if (product3 == null)
+                    {
+                        product3 = new CSR2Products3
+                        {
+                            CSR2Id = report.Id
+                        };
+
+                        report.Products3.Add(product3);
+                    }
+
+                    product3.CropId = focus3.Crops;
+                    product3.ProductId = focus3.Products;
+                    product3.IsActive = true;
+                }
+                else if (product3 != null)
+                {
+                    // If previously saved and user clears Products3,
+                    // remove the row completely.
+                    _db.Set<CSR2Products3>().Remove(product3);
+                }
+
+                // Save only expense rows where ActualAmount > 0.
+                // Rows with null/0 amount are not persisted. If an existing row
+                // is changed to null/0, it is removed from CSR2Expenses.
+                var validIncomingExpenses = dto.Expenses
+                    .Where(x => x.ActualAmount.HasValue && x.ActualAmount.Value > 0)
+                    .ToList();
+
+                var incomingExistingIds = validIncomingExpenses
+                    .Where(x => x.Id.HasValue && x.Id.Value > 0)
+                    .Select(x => x.Id!.Value)
+                    .ToHashSet();
+
+                var removedExpenses = report.Expenses
+                    .Where(x => x.Id > 0 && !incomingExistingIds.Contains(x.Id))
+                    .ToList();
+
+                if (removedExpenses.Count > 0)
+                    _db.Set<CSR2Expense>().RemoveRange(removedExpenses);
+
+                foreach (var item in validIncomingExpenses)
+                {
+                    CSR2Expense? expense = null;
+
+                    if (item.Id.HasValue && item.Id.Value > 0)
+                    {
+                        expense = report.Expenses.FirstOrDefault(x => x.Id == item.Id.Value);
+                        if (expense == null)
+                            return BadRequest($"Expense row #{item.Id.Value} does not belong to this CSR-2.");
+                    }
+
+                    if (expense == null)
+                    {
+                        expense = new CSR2Expense
+                        {
+                            CSR2Id = report.Id
+                        };
+                        report.Expenses.Add(expense);
+                    }
+
+                    expense.ExpenseInformationId = item.ExpenseInformationId;
+                    expense.ActualAmount = item.ActualAmount;
+                    expense.ExpenseDate = item.ExpenseDate;
+                    expense.BillNo = string.IsNullOrWhiteSpace(item.BillNo)
+                        ? null
+                        : item.BillNo.Trim();
+                }
+
+                await _db.SaveChangesAsync(HttpContext.RequestAborted);
+                await tx.CommitAsync(HttpContext.RequestAborted);
+
+                var deletedIds = removedExpenses.Select(x => x.Id).ToHashSet();
+                return Ok(new
+                {
+                    id = report.Id,
+                    report.CSR1Id,
+                    Status = report.Status.ToString(),
+                    Expenses = report.Expenses
+                        .Where(x => !deletedIds.Contains(x.Id))
+                        .OrderBy(x => x.ExpenseInformationId)
+                        .ThenBy(x => x.Id)
+                        .Select(x => new
+                        {
+                            x.Id,
+                            x.ExpenseInformationId,
+                            x.ActualAmount,
+                            x.BillNo,
+                            x.ExpenseDate
+                        })
+                        .ToList()
+                });
             }
-
-            await _db.SaveChangesAsync();
-
-            await tx.CommitAsync();
-
-            return Ok(new
+            catch
             {
-                id = report.Id,
-                report.CSR1Id,
-                Status = report.Status.ToString()
-            });
+                await tx.RollbackAsync(HttpContext.RequestAborted);
+                throw;
+            }
         }
 
         [HttpPost("{id:int}/submit")]
@@ -678,16 +1142,21 @@ namespace SpicAPI.Controllers
         {
             var report = await _db.Set<CSR2>()
                 .Include(x => x.Expenses)
-                .FirstOrDefaultAsync(x => x.Id == id);
+                .Include(x => x.Participants)
+                .Include(x => x.Employees)
+                .Include(x => x.Media)
+                .FirstOrDefaultAsync(x => x.Id == id, HttpContext.RequestAborted);
 
-            if (report == null ||
-                await ApprovedCsr1Async(report.CSR1Id) == null)
-            {
-                return NotFound();
-            }
+            if (report == null) return NotFound();
+
+            var csr1 = await ApprovedCsr1Async(report.CSR1Id);
+            if (csr1 == null) return NotFound();
+
+            if (!IsResponsiblePerson(csr1))
+                return StatusCode(StatusCodes.Status403Forbidden, "Only the Responsible Person can apply CSR-2.");
 
             if (report.Status != CSR2Status.Draft)
-                return Conflict("Already submitted.");
+                return Conflict("CSR-2 has already been applied.");
 
             if (!report.ActualEventDate.HasValue ||
                 !report.StartTime.HasValue ||
@@ -695,29 +1164,104 @@ namespace SpicAPI.Controllers
                 report.EndTime <= report.StartTime ||
                 string.IsNullOrWhiteSpace(report.EventCoordinatorEmployeeId) ||
                 string.IsNullOrWhiteSpace(report.ActualLocation))
-            {
-                return BadRequest("Complete actual event details.");
-            }
+                return BadRequest("Complete all mandatory actual event details before applying.");
 
-            if (report.Expenses.Any(x =>
-                    x.ActualAmount > 0 &&
-                    !x.ExpenseDate.HasValue))
-            {
-                return BadRequest(
-                    "Expense dates are required for amounts entered.");
-            }
+            if (!report.Media.Any(x => x.MediaType == "Photo"))
+                return BadRequest("At least one Event Photo is required.");
+
+            if (!report.Media.Any(x => x.MediaType == "Video"))
+                return BadRequest("At least one Event Video is required.");
+
+            if (!report.Participants.Any())
+                return BadRequest("At least one Participant is required.");
+
+            if (!report.Employees.Any())
+                return BadRequest("At least one SPIC Employee is required.");
 
             report.Status = CSR2Status.Submitted;
             report.SubmittedAt = DateTime.UtcNow;
             report.SubmittedBy = Actor;
+            report.UpdatedAt = DateTime.UtcNow;
+            report.UpdatedBy = Actor;
 
-            await _db.SaveChangesAsync();
+            await _db.SaveChangesAsync(HttpContext.RequestAborted);
+            return Ok(new { report.Id, Status = report.Status.ToString() });
+        }
 
-            return Ok(new
+        [HttpPost("{id:int}/validate")]
+        public async Task<IActionResult> ValidateCSR2(int id)
+        {
+            var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == id, HttpContext.RequestAborted);
+            if (report == null) return NotFound();
+
+            var csr1 = await ApprovedCsr1Async(report.CSR1Id);
+            if (csr1 == null) return NotFound();
+
+            if (report.Status != CSR2Status.Submitted)
+                return Conflict("Only submitted CSR-2 can be validated.");
+
+            var scope = await ResolveCSR2ScopeAsync(csr1);
+            var isStateScope = string.Equals(scope, "State", StringComparison.OrdinalIgnoreCase);
+            var isHqScope = string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase);
+
+            if (isStateScope)
             {
-                report.Id,
-                Status = report.Status.ToString()
-            });
+                if (!IsRole("SMDO"))
+                    return StatusCode(StatusCodes.Status403Forbidden,
+                        "Only SMDO can validate State CSR-2 within the assigned State scope.");
+
+                // State CSR-2 has no separate approval stage.
+                // SMDO validation is the final workflow action.
+                report.Status = CSR2Status.Approved;
+            }
+            else if (isHqScope)
+            {
+                if (!IsRole("MO"))
+                    return StatusCode(StatusCodes.Status403Forbidden,
+                        "Only MO can validate HQ CSR-2 within the assigned Headquarters scope.");
+
+                // HQ CSR-2 still requires RM/RMM approval after MO validation.
+                report.Status = CSR2Status.Validated;
+            }
+            else
+            {
+                return BadRequest("Unable to determine CSR-2 workflow scope.");
+            }
+
+            report.UpdatedAt = DateTime.UtcNow;
+            report.UpdatedBy = Actor;
+            await _db.SaveChangesAsync(HttpContext.RequestAborted);
+
+            return Ok(new { report.Id, Scope = scope, Status = report.Status.ToString() });
+        }
+
+        [HttpPost("{id:int}/approve")]
+        public async Task<IActionResult> ApproveCSR2(int id)
+        {
+            var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == id, HttpContext.RequestAborted);
+            if (report == null) return NotFound();
+
+            var csr1 = await ApprovedCsr1Async(report.CSR1Id);
+            if (csr1 == null) return NotFound();
+
+            if (report.Status != CSR2Status.Validated)
+                return Conflict("Only validated CSR-2 can be approved.");
+
+            var scope = await ResolveCSR2ScopeAsync(csr1);
+
+            if (!string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase))
+                return Conflict("State CSR-2 does not have a separate approval stage. SMDO validation completes the workflow.");
+
+            if (!IsRole("RM", "RMM"))
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    "Only RM/RMM can approve HQ CSR-2 within their assigned Headquarters scope.");
+
+            report.Status = CSR2Status.Approved;
+            report.UpdatedAt = DateTime.UtcNow;
+            report.UpdatedBy = Actor;
+            await _db.SaveChangesAsync(HttpContext.RequestAborted);
+
+            return Ok(new { report.Id, Status = report.Status.ToString() });
         }
 
         [HttpPost("{id:int}/media")]
@@ -731,8 +1275,11 @@ namespace SpicAPI.Controllers
             var caption = form.Caption;
 
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == id);
-            if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != CSR2Status.Draft) return Conflict("Only draft reports accept uploads.");
+            if (report == null) return NotFound();
+            var csr1 = await ApprovedCsr1Async(report.CSR1Id);
+            if (csr1 == null) return NotFound();
+            if (!CanEditCSR2(csr1, report))
+                return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to upload media at the current workflow stage.");
 
             var isPhoto = string.Equals(mediaType, "Photo", StringComparison.OrdinalIgnoreCase);
             var isVideo = string.Equals(mediaType, "Video", StringComparison.OrdinalIgnoreCase);
@@ -789,23 +1336,67 @@ namespace SpicAPI.Controllers
             return Ok(new { media.Id, media.MediaType, media.OriginalFileName });
         }
 
-        [HttpPost("{id:int}/expenses/{categoryKey}/proof")]
+        [HttpPost("{id:int}/expenses/{expenseId:int}/proof")]
         [RequestSizeLimit(12L * 1024 * 1024)]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> UploadExpenseProof(int id, string categoryKey, IFormFile file)
+        public async Task<IActionResult> UploadExpenseProof(int id, int expenseId, IFormFile file)
         {
-            var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == id);
-            if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != CSR2Status.Draft) return Conflict("Only draft reports accept uploads.");
-            var expense = await _db.Set<CSR2Expense>().Include(x => x.Proofs).FirstOrDefaultAsync(x => x.CSR2Id == id && x.CategoryKey == categoryKey);
-            if (expense == null) return NotFound("Save the expense row first.");
+            var report = await _db.Set<CSR2>()
+                .FirstOrDefaultAsync(x => x.Id == id, HttpContext.RequestAborted);
+
+            if (report == null) return NotFound();
+            var csr1 = await ApprovedCsr1Async(report.CSR1Id);
+            if (csr1 == null) return NotFound();
+            if (!CanEditCSR2(csr1, report))
+                return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to upload expense proofs at the current workflow stage.");
+
+            var expense = await _db.Set<CSR2Expense>()
+                .Include(x => x.Proofs)
+                .FirstOrDefaultAsync(
+                    x => x.Id == expenseId && x.CSR2Id == id,
+                    HttpContext.RequestAborted);
+
+            if (expense == null)
+                return NotFound("Save the expense row before uploading proof.");
+
             var extensions = new[] { ".pdf", ".jpg", ".jpeg", ".png" };
-            if (file == null || file.Length <= 0 || file.Length > 10L * 1024 * 1024 || !extensions.Contains(Path.GetExtension(file.FileName).ToLowerInvariant())) return BadRequest("Invalid proof type or size.");
+            if (file == null ||
+                file.Length <= 0 ||
+                file.Length > 10L * 1024 * 1024 ||
+                !extensions.Contains(Path.GetExtension(file.FileName).ToLowerInvariant()))
+            {
+                return BadRequest("Invalid proof type or size.");
+            }
+
             var stored = await StoreFileAsync(id, file, extensions);
-            var proof = new CSR2ExpenseProof { CSR2ExpenseId = expense.Id, OriginalFileName = Path.GetFileName(file.FileName), ContentType = stored.ContentType, FileSizeBytes = file.Length, StorageKey = stored.StorageKey };
-            try { _db.Set<CSR2ExpenseProof>().Add(proof); await _db.SaveChangesAsync(); }
-            catch { System.IO.File.Delete(stored.Path); throw; }
-            return Ok(new { proof.Id, proof.OriginalFileName });
+            var proof = new CSR2ExpenseProof
+            {
+                CSR2ExpenseId = expense.Id,
+                OriginalFileName = Path.GetFileName(file.FileName),
+                ContentType = stored.ContentType,
+                FileSizeBytes = file.Length,
+                StorageKey = stored.StorageKey,
+                UploadedAt = DateTime.UtcNow
+            };
+
+            try
+            {
+                _db.Set<CSR2ExpenseProof>().Add(proof);
+                await _db.SaveChangesAsync(HttpContext.RequestAborted);
+            }
+            catch
+            {
+                if (System.IO.File.Exists(stored.Path))
+                    System.IO.File.Delete(stored.Path);
+                throw;
+            }
+
+            return Ok(new
+            {
+                id = proof.Id,
+                expenseId = expense.Id,
+                proof.OriginalFileName
+            });
         }
 
         [HttpGet("media/{mediaId:int}/file")]
@@ -834,8 +1425,10 @@ namespace SpicAPI.Controllers
             var media = await _db.Set<CSR2Media>().FirstOrDefaultAsync(x => x.Id == mediaId);
             if (media == null) return NotFound();
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == media.CSR2Id);
-            if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != CSR2Status.Draft) return Conflict();
+            if (report == null) return NotFound();
+            var csr1 = await ApprovedCsr1Async(report.CSR1Id);
+            if (csr1 == null) return NotFound();
+            if (!CanEditCSR2(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
             _db.Remove(media); await _db.SaveChangesAsync();
             System.IO.File.Delete(ResolveStoragePath(media.StorageKey)); return NoContent();
         }
@@ -845,8 +1438,10 @@ namespace SpicAPI.Controllers
             var proof = await _db.Set<CSR2ExpenseProof>().Include(x => x.CSR2Expense).FirstOrDefaultAsync(x => x.Id == proofId);
             if (proof?.CSR2Expense == null) return NotFound();
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == proof.CSR2Expense.CSR2Id);
-            if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != CSR2Status.Draft) return Conflict();
+            if (report == null) return NotFound();
+            var csr1 = await ApprovedCsr1Async(report.CSR1Id);
+            if (csr1 == null) return NotFound();
+            if (!CanEditCSR2(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
             _db.Remove(proof); await _db.SaveChangesAsync();
             System.IO.File.Delete(ResolveStoragePath(proof.StorageKey)); return NoContent();
         }
@@ -856,8 +1451,10 @@ namespace SpicAPI.Controllers
             var media = await _db.Set<CSR2Media>().FirstOrDefaultAsync(x => x.Id == mediaId);
             if (media == null) return NotFound();
             var report = await _db.Set<CSR2>().FirstOrDefaultAsync(x => x.Id == media.CSR2Id);
-            if (report == null || await ApprovedCsr1Async(report.CSR1Id) == null) return NotFound();
-            if (report.Status != CSR2Status.Draft) return Conflict();
+            if (report == null) return NotFound();
+            var csr1 = await ApprovedCsr1Async(report.CSR1Id);
+            if (csr1 == null) return NotFound();
+            if (!CanEditCSR2(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
             media.Caption = patch.Caption;
             await _db.SaveChangesAsync(); return NoContent();
         }
@@ -890,6 +1487,287 @@ namespace SpicAPI.Controllers
             var path = Path.GetFullPath(Path.Combine(root, storageKey.Replace('/', Path.DirectorySeparatorChar)));
             if (!path.StartsWith(root, StringComparison.Ordinal)) throw new InvalidOperationException("Invalid storage key.");
             return path;
+        }
+
+
+        // =============================================================
+        // CSR-2 LIST PAGE ENDPOINTS
+        // Uses this existing CSR2Controller. No separate list controller.
+        // =============================================================
+        [HttpGet("list/lookups")]
+        public async Task<IActionResult> GetCSR2ListLookups()
+        {
+            var programTypes = await _db.Set<ProgramMaster>()
+                .AsNoTracking()
+                .Where(x => x.ProgramType != null)
+                .Select(x => x.ProgramType.Name)
+                .Where(x => x != null && x != "")
+                .Distinct()
+                .OrderBy(x => x)
+                .ToListAsync(HttpContext.RequestAborted);
+
+            var programs = await _db.Set<ProgramMaster>()
+                .AsNoTracking()
+                .OrderBy(x => x.Name)
+                .Select(x => new
+                {
+                    x.Id,
+                    Name = x.Name,
+                    ProgramType = x.ProgramType.Name
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            var statuses = Enum.GetValues<CSR2Status>()
+                .Select(value => new
+                {
+                    Value = (int)value,
+                    Name = value.ToString()
+                })
+                .ToList();
+
+            return Ok(new
+            {
+                ProgramTypes = programTypes,
+                Programs = programs,
+                Statuses = statuses
+            });
+        }
+
+        [HttpGet("list")]
+        public async Task<IActionResult> GetCSR2List(
+            [FromQuery] DateTime? fromDate,
+            [FromQuery] DateTime? toDate,
+            [FromQuery] string? programType,
+            [FromQuery] int? programId,
+            [FromQuery] int? locationId,
+            [FromQuery] CSR2Status? status,
+            [FromQuery] string? search,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 16)
+        {
+            page = Math.Max(1, page);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+
+            // Reuse the exact same CSR-1 visibility/workflow rule already used by
+            // the existing CSR-2 create/read/update APIs.
+            var visibleCsr1 = await VisibleApprovedCSR1Async();
+
+            var query =
+                from csr2 in _db.Set<CSR2>().AsNoTracking()
+                join csr1 in visibleCsr1
+                    on csr2.CSR1Id equals csr1.Id
+                join program in _db.Set<ProgramMaster>().AsNoTracking()
+                    on csr1.ProgramId equals program.Id
+                select new
+                {
+                    CSR2 = csr2,
+                    CSR1 = csr1,
+                    Program = program
+                };
+
+            if (fromDate.HasValue)
+            {
+                var from = fromDate.Value.Date;
+                query = query.Where(x =>
+                    x.CSR2.ActualEventDate.HasValue &&
+                    x.CSR2.ActualEventDate.Value >= from);
+            }
+
+            if (toDate.HasValue)
+            {
+                var toExclusive = toDate.Value.Date.AddDays(1);
+                query = query.Where(x =>
+                    x.CSR2.ActualEventDate.HasValue &&
+                    x.CSR2.ActualEventDate.Value < toExclusive);
+            }
+
+            if (!string.IsNullOrWhiteSpace(programType))
+            {
+                var type = programType.Trim();
+                query = query.Where(x => x.Program.ProgramType.Name == type);
+            }
+
+            if (programId.HasValue && programId.Value > 0)
+                query = query.Where(x => x.Program.Id == programId.Value);
+
+            if (locationId.HasValue && locationId.Value > 0)
+                query = query.Where(x => x.CSR1.LocationId == locationId.Value);
+
+            if (status.HasValue)
+                query = query.Where(x => x.CSR2.Status == status.Value);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var term = search.Trim();
+                query = query.Where(x =>
+                    (x.CSR1.SanctionNo != null && x.CSR1.SanctionNo.Contains(term)) ||
+                    x.Program.Name.Contains(term) ||
+                    x.Program.ProgramType.Name.Contains(term) ||
+                    (x.CSR2.ActualLocation != null && x.CSR2.ActualLocation.Contains(term)));
+            }
+
+            var totalCount = await query.CountAsync(HttpContext.RequestAborted);
+
+            var rows = await query
+                .OrderByDescending(x => x.CSR2.UpdatedAt ?? x.CSR2.CreatedAt)
+                .ThenByDescending(x => x.CSR2.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new
+                {
+                    CSR2Id = x.CSR2.Id,
+                    CSR1Id = x.CSR1.Id,
+                    SanctionNumber = x.CSR1.SanctionNo ?? "",
+                    ProgramType = x.Program.ProgramType.Name,
+                    ProgramId = x.Program.Id,
+                    ProgramName = x.Program.Name,
+                    LocationId = x.CSR1.LocationId,
+                    HeadquarterId = x.CSR1.HeadquarterId,
+                    ApprovedBudget = x.CSR1.Budget,
+                    Status = x.CSR2.Status.ToString(),
+                    StatusValue = (int)x.CSR2.Status,
+                    x.CSR2.ActualEventDate,
+                    x.CSR2.StartTime,
+                    x.CSR2.EndTime,
+                    x.CSR2.EventCoordinatorEmployeeId,
+                    x.CSR2.ActualLocation,
+                    x.CSR2.ExpectedParticipantsCount,
+                    x.CSR2.Remarks,
+                    x.CSR2.CreatedAt,
+                    x.CSR2.CreatedBy,
+                    x.CSR2.UpdatedAt,
+                    x.CSR2.UpdatedBy,
+                    x.CSR2.SubmittedAt,
+                    x.CSR2.SubmittedBy,
+                    ResponsiblePersonId = x.CSR1.ResponsiblePersonId,
+                    CSR1CreatedBy = x.CSR1.CreatedBy,
+                    ParticipantCount = _db.Set<CSR2Participant>()
+                        .Count(p => p.CSR2Id == x.CSR2.Id),
+                    EmployeeCount = _db.Set<CSR2Employee>()
+                        .Count(e => e.CSR2Id == x.CSR2.Id),
+                    PhotoCount = _db.Set<CSR2Media>()
+                        .Count(m => m.CSR2Id == x.CSR2.Id && m.MediaType == "Photo"),
+                    VideoCount = _db.Set<CSR2Media>()
+                        .Count(m => m.CSR2Id == x.CSR2.Id && m.MediaType == "Video"),
+                    ExpenseCount = _db.Set<CSR2Expense>()
+                        .Count(e => e.CSR2Id == x.CSR2.Id),
+                    ActualExpense = _db.Set<CSR2Expense>()
+                        .Where(e => e.CSR2Id == x.CSR2.Id && e.ActualAmount.HasValue)
+                        .Sum(e => (decimal?)e.ActualAmount) ?? 0m,
+                    ProofCount = _db.Set<CSR2ExpenseProof>()
+                        .Count(p => _db.Set<CSR2Expense>()
+                            .Any(e => e.Id == p.CSR2ExpenseId && e.CSR2Id == x.CSR2.Id))
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            // Determine State/HQ from the CSR-1 applicant role, not from CSR1.HeadquarterId.
+            // State CSR-1 rows can still carry a HeadquarterId, so HeadquarterId > 0 is not
+            // a reliable workflow discriminator.
+            var csr1CreatorIds = rows
+                .Select(x => x.CSR1CreatedBy)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct()
+                .ToList();
+
+            var csr1CreatorRoles = await _db.Set<Employeelogin>()
+                .AsNoTracking()
+                .Where(x =>
+                    x.IsActive &&
+                    csr1CreatorIds.Contains(x.UserId))
+                .Select(x => new
+                {
+                    x.UserId,
+                    x.Role
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            var creatorRoleByUserId = csr1CreatorRoles
+                .GroupBy(x => x.UserId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(x => x.Role.ToString()).FirstOrDefault() ?? "",
+                    StringComparer.OrdinalIgnoreCase);
+
+            var items = rows.Select(x =>
+            {
+                var mandatoryComplete = 0;
+                if (x.ActualEventDate.HasValue) mandatoryComplete++;
+                if (x.StartTime.HasValue) mandatoryComplete++;
+                if (x.EndTime.HasValue) mandatoryComplete++;
+                if (!string.IsNullOrWhiteSpace(x.EventCoordinatorEmployeeId)) mandatoryComplete++;
+                if (!string.IsNullOrWhiteSpace(x.ActualLocation)) mandatoryComplete++;
+                if (x.PhotoCount > 0) mandatoryComplete++;
+                if (x.VideoCount > 0) mandatoryComplete++;
+                if (x.ParticipantCount > 0) mandatoryComplete++;
+                if (x.EmployeeCount > 0) mandatoryComplete++;
+
+                var reportCompletion = (int)Math.Round(mandatoryComplete / 9d * 100d);
+
+                return new
+                {
+                    x.CSR2Id,
+                    x.CSR1Id,
+                    x.SanctionNumber,
+                    x.ProgramType,
+                    x.ProgramId,
+                    x.ProgramName,
+                    x.LocationId,
+                    x.HeadquarterId,
+                    x.ApprovedBudget,
+                    x.Status,
+                    x.StatusValue,
+                    x.ActualEventDate,
+                    x.StartTime,
+                    x.EndTime,
+                    x.EventCoordinatorEmployeeId,
+                    x.ActualLocation,
+                    x.ExpectedParticipantsCount,
+                    x.Remarks,
+                    x.CreatedAt,
+                    x.CreatedBy,
+                    x.UpdatedAt,
+                    x.UpdatedBy,
+                    x.SubmittedAt,
+                    x.SubmittedBy,
+                    x.ResponsiblePersonId,
+                    Scope =
+                        !string.IsNullOrWhiteSpace(x.CSR1CreatedBy) &&
+                        creatorRoleByUserId.TryGetValue(x.CSR1CreatedBy, out var creatorRole) &&
+                        (string.Equals(creatorRole, "SMDO", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(creatorRole, "SMD", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(creatorRole, "SMM", StringComparison.OrdinalIgnoreCase))
+                            ? "State"
+                            : "HQ",
+                    x.ParticipantCount,
+                    x.EmployeeCount,
+                    x.PhotoCount,
+                    x.VideoCount,
+                    x.ExpenseCount,
+                    x.ActualExpense,
+                    x.ProofCount,
+                    ReportCompletion = reportCompletion
+                };
+            }).ToList();
+
+            // Counts are calculated after the active filters are applied, but before paging.
+            var statusCounts = await query
+                .GroupBy(x => x.CSR2.Status)
+                .Select(g => new
+                {
+                    Status = g.Key.ToString(),
+                    Count = g.Count()
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            return Ok(new
+            {
+                TotalCount = totalCount,
+                Page = page,
+                PageSize = pageSize,
+                TotalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize)),
+                StatusCounts = statusCounts,
+                Items = items
+            });
         }
 
         [HttpGet("csr1-display/{csr1Id:int}")]
@@ -1007,10 +1885,10 @@ namespace SpicAPI.Controllers
     public class CSR2UploadMediaDto
     {
         public IFormFile File { get; set; } = null!;
+
         public string MediaType { get; set; } = string.Empty;
+
         public string? Caption { get; set; }
     }
-
-
 }
 
