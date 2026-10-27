@@ -10,29 +10,17 @@ namespace Spic.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-      name: "Level1ApprovedAt",
-      table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level1ApprovedBy",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level2ApprovedAt",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level2ApprovedBy",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level3ApprovedAt",
-                table: "CSR1");
-
-            migrationBuilder.DropColumn(
-                name: "Level3ApprovedBy",
-                table: "CSR1");
+            // 20261022044018_UpdateCSR1CropProductsApprovals already drops these columns; a plain
+            // DropColumn here fails with "column does not exist". IF EXISTS keeps it safe everywhere.
+            migrationBuilder.Sql("""
+                ALTER TABLE "CSR1"
+                    DROP COLUMN IF EXISTS "Level1ApprovedAt",
+                    DROP COLUMN IF EXISTS "Level1ApprovedBy",
+                    DROP COLUMN IF EXISTS "Level2ApprovedAt",
+                    DROP COLUMN IF EXISTS "Level2ApprovedBy",
+                    DROP COLUMN IF EXISTS "Level3ApprovedAt",
+                    DROP COLUMN IF EXISTS "Level3ApprovedBy";
+                """);
         }
 
         /// <inheritdoc />

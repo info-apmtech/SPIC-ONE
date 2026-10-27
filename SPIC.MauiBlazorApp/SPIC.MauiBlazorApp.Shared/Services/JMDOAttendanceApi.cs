@@ -91,11 +91,11 @@ public sealed class JMDOAttendanceApi
     /// <summary>
     /// Creates or updates the caller's attendance for the given date and sets them On Duty.
     /// <paramref name="latitude"/>/<paramref name="longitude"/> are the GPS fix captured at the
-    /// moment Update Attendance was clicked; the server rejects the request without them.
+    /// moment Update Attendance was clicked (nullable if location is unavailable).
     /// </summary>
     public async Task<JMDOAttendanceDto?> UpdateAttendanceAsync(
-        DateTime date, string visitArea, JMDOAttendanceStatus status,
-        double latitude, double longitude, CancellationToken ct = default)
+        DateTime date, string? visitArea, JMDOAttendanceStatus status,
+        double? latitude = null, double? longitude = null, CancellationToken ct = default)
     {
         try
         {

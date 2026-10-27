@@ -86,6 +86,7 @@ public class JMDOTrackingSessionDto
     public DateTime? LastPointAt { get; set; }
     public double? LastLatitude { get; set; }
     public double? LastLongitude { get; set; }
+    public int? IntervalSeconds { get; set; }
 }
 
 public class JMDOTrackingPointUpsertDto

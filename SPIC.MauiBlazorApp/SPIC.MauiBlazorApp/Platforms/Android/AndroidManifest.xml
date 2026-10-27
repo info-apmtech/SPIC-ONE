@@ -1,6 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-	<application android:allowBackup="false" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:networkSecurityConfig="@xml/network_security_config" />
+	<!-- enableOnBackInvokedCallback=false: forces the legacy Activity.OnBackPressed() dispatch path
+	     instead of Android 13+'s predictive-back/OnBackInvokedCallback system. MainActivity's own
+	     OnBackPressed() override (see its doc comment) is what routes the hardware/gesture back
+	     button through NavHistoryService's app-wide back-stack - predictive back bypasses that
+	     override entirely on OS versions/skins that enable it by default, which is the most likely
+	     reason the back gesture kept closing the app outright even after that override was in place. -->
+	<application android:allowBackup="false" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true" android:networkSecurityConfig="@xml/network_security_config" android:enableOnBackInvokedCallback="false" />
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 	<uses-permission android:name="android.permission.INTERNET" />
 	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -13,4 +19,7 @@
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 	<!-- Android 13+ requires this to show the "Live Tracking active" persistent notification. -->
 	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+	<!-- Battery optimization exemption prompt (DeviceInterop.StartBackgroundTracking) - mitigates
+	     Doze/App Standby throttling background GPS delivery regardless of the configured interval. -->
+	<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 </manifest>

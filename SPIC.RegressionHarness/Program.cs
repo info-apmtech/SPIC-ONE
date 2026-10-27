@@ -28,6 +28,10 @@ internal static class Program
 		// Guest House single and multi-record inventory availability, holding windows,
 		// serialization detection, cancellations, check-in, check-out and allocations.
 		GuestHouseInventoryTests.Run();
+		Console.WriteLine();
+
+		// GPS Settings entity, DTOs, controller authorization, and role access.
+		GpsSettingsTests.Run();
 
 		return Check.Report("Total");
 	}

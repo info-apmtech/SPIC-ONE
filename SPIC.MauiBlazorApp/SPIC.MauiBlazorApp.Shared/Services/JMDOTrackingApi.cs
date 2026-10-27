@@ -42,7 +42,11 @@ public sealed class JMDOTrackingApi
             var dto = new JMDOTrackingStartDto { Latitude = latitude, Longitude = longitude };
             var response = await _http.PostAsJsonAsync($"{Root}/start", dto, Json, ct);
             if (response.IsSuccessStatusCode)
-                return await response.Content.ReadFromJsonAsync<JMDOTrackingSessionDto>(Json, ct);
+            {
+                var session = await response.Content.ReadFromJsonAsync<JMDOTrackingSessionDto>(Json, ct);
+                SyncInterval(session);
+                return session;
+            }
 
             var message = await ReadErrorAsync(response, ct);
             _toast.Error(message ?? "Could not start tracking.");
@@ -69,7 +73,9 @@ public sealed class JMDOTrackingApi
             var response = await _http.GetAsync($"{Root}/mine/active", ct);
             if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
                 return null;
-            return await response.Content.ReadFromJsonAsync<JMDOTrackingSessionDto>(Json, ct);
+            var session = await response.Content.ReadFromJsonAsync<JMDOTrackingSessionDto>(Json, ct);
+            SyncInterval(session);
+            return session;
         }
         catch (Exception)
         {
@@ -89,11 +95,39 @@ public sealed class JMDOTrackingApi
             var response = await _http.GetAsync($"{Root}/mine/latest", ct);
             if (response.StatusCode == System.Net.HttpStatusCode.NoContent || !response.IsSuccessStatusCode)
                 return null;
-            return await response.Content.ReadFromJsonAsync<JMDOTrackingSessionDto>(Json, ct);
+            var session = await response.Content.ReadFromJsonAsync<JMDOTrackingSessionDto>(Json, ct);
+            SyncInterval(session);
+            return session;
         }
         catch (Exception)
         {
             return null;
+        }
+    }
+
+    private static void SyncInterval(JMDOTrackingSessionDto? session)
+    {
+        if (session?.IntervalSeconds is >= GpsTrackingConfiguration.MinIntervalSeconds and <= GpsTrackingConfiguration.MaxIntervalSeconds)
+        {
+            GpsTrackingConfiguration.IntervalSeconds = session.IntervalSeconds.Value;
+        }
+    }
+
+    /// <summary>
+    /// Every one of the caller's own sessions that started today, oldest first - a JMDO can
+    /// Start/Stop Live Tracking more than once a day (separate site visits), and each one is its own
+    /// session/route. Silent on failure (empty list), same reasoning as <see cref="GetMineActiveAsync"/>.
+    /// </summary>
+    public async Task<List<JMDOTrackingSessionDto>> GetMineTodayAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await _http.GetFromJsonAsync<List<JMDOTrackingSessionDto>>($"{Root}/mine/today", Json, ct);
+            return result ?? new();
+        }
+        catch (Exception)
+        {
+            return new();
         }
     }
 
@@ -146,12 +180,30 @@ public sealed class JMDOTrackingApi
         {
             var dto = new JMDOTrackingPointUpsertDto { Latitude = latitude, Longitude = longitude, Accuracy = accuracy };
             var response = await _http.PostAsJsonAsync($"{Root}/sessions/{sessionId}/points", dto, Json, ct);
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                try
+                {
+                    var data = await response.Content.ReadFromJsonAsync<GpsPointResponseDto>(Json, ct);
+                    if (data?.IntervalSeconds is >= GpsTrackingConfiguration.MinIntervalSeconds and <= GpsTrackingConfiguration.MaxIntervalSeconds)
+                    {
+                        GpsTrackingConfiguration.IntervalSeconds = data.IntervalSeconds.Value;
+                    }
+                }
+                catch { }
+                return true;
+            }
+            return false;
         }
         catch (Exception)
         {
             return false;
         }
+    }
+
+    private sealed class GpsPointResponseDto
+    {
+        public int? IntervalSeconds { get; set; }
     }
 
     /// <summary>

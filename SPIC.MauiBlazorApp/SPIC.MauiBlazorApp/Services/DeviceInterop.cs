@@ -229,6 +229,29 @@ namespace SPIC.MauiBlazorApp.Services
                     // declined, which still works but is less transparent to the JMDO, so this is
                     // requested but not required to proceed.
 
+                    // Battery optimization exemption: Doze/App Standby throttles background location
+                    // delivery more and more the longer the screen stays off, REGARDLESS of the
+                    // interval requested in JmdoTrackingForegroundService (RequestLocationUpdates'
+                    // minTime is a floor Android is still free to miss) - this is the standard
+                    // mitigation. Same "requested, not required" shape as the two checks above: Live
+                    // Tracking still runs without it, just subject to more throttling.
+                    try
+                    {
+                        var context = global::Android.App.Application.Context;
+                        var powerManager = (global::Android.OS.PowerManager?)context.GetSystemService(global::Android.Content.Context.PowerService);
+                        if (powerManager is not null && !powerManager.IsIgnoringBatteryOptimizations(context.PackageName))
+                        {
+                            var intent = new global::Android.Content.Intent(global::Android.Provider.Settings.ActionRequestIgnoreBatteryOptimizations);
+                            intent.SetData(global::Android.Net.Uri.Parse($"package:{context.PackageName}"));
+                            intent.AddFlags(global::Android.Content.ActivityFlags.NewTask);
+                            context.StartActivity(intent);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Battery optimization exemption request failed: {ex}");
+                    }
+
                     SPIC.MauiBlazorApp.Platforms.Android.JmdoTrackingForegroundService.EnsureRunning(
                         global::Android.App.Application.Context, sessionId);
                     return true;
@@ -264,6 +287,19 @@ namespace SPIC.MauiBlazorApp.Services
                 System.Diagnostics.Debug.WriteLine($"StopBackgroundTracking failed: {ex}");
                 return Task.FromResult(false);
             }
+        }
+
+        /// <summary>
+        /// Called once by Routes.razor's first OnAfterRenderAsync (window.notifyAppReady in
+        /// maui-interop.js) - the earliest reliable signal that the WebView has actually rendered
+        /// real content. Hides MainPage's native BootOverlay (icon+spinner shown natively from the
+        /// page's very first frame, before the WebView had anything of its own to show).
+        /// </summary>
+        [JSInvokable]
+        public static Task NotifyContentReady()
+        {
+            MainPage.Current?.HideBootOverlay();
+            return Task.CompletedTask;
         }
     }
 }

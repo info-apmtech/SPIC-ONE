@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using Microsoft.Extensions.Logging;
 using SPIC.MauiBlazorApp.Services;
 using SPIC.Core.Entities;
@@ -16,18 +16,36 @@ namespace SPIC.MauiBlazorApp
             typeof(MauiProgram).Assembly
                 .GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(a => a.Key == "SpicApiBaseUrl")?.Value
-            ?? "https://api.spicone.in/";
+            ?? "https://previewspicapi.apmiot.com/";
 
         public static MauiApp CreateMauiApp()
         {
-            var builder = MauiApp.CreateBuilder();
-            builder
-                .UseMauiApp<App>()
-                .ConfigureFonts(fonts =>
-                {
-                    fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-                });
+            var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "startup_log.txt");
+            void Log(string msg) { try { File.AppendAllText(logPath, $"[{DateTime.UtcNow:O}] {msg}\n"); } catch { } }
 
+            Log("MauiProgram.CreateMauiApp: starting");
+            Log($"MauiProgram.CreateMauiApp: ApiBaseUrl = '{ApiBaseUrl}'");
+            var builder = MauiApp.CreateBuilder();
+
+            try
+            {
+                Log("MauiProgram.CreateMauiApp: UseMauiApp<App>() starting");
+                builder.UseMauiApp<App>();
+                Log("MauiProgram.CreateMauiApp: UseMauiApp<App>() succeeded");
+            }
+            catch (Exception ex)
+            {
+                Log($"MauiProgram.CreateMauiApp: UseMauiApp FAILED: {ex.GetType().FullName}: {ex.Message}\nInner: {ex.InnerException}\nStack: {ex.StackTrace}");
+                throw;
+            }
+
+            Log("MauiProgram.CreateMauiApp: ConfigureFonts");
+            builder.ConfigureFonts(fonts =>
+            {
+                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+            });
+
+            Log("MauiProgram.CreateMauiApp: Registering base services");
             // Add device-specific services used by the SPIC.MauiBlazorApp.Shared project
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
             builder.Services.AddSingleton<ISessionStore, SecureSessionStore>();
@@ -35,8 +53,10 @@ namespace SPIC.MauiBlazorApp
             builder.Services.AddScoped<ToastService>();
             builder.Services.AddScoped<ConnectivityState>();
 
+            Log("MauiProgram.CreateMauiApp: AddMauiBlazorWebView()");
             builder.Services.AddMauiBlazorWebView();
 			builder.Services.AddScoped<LoginState>();
+			builder.Services.AddScoped<NavHistoryService>();
 			builder.Services.AddScoped<FieldAttendanceState>();
 			// Shell state shared by MainLayout and the parameterless Components/Shell components.
 			builder.Services.AddScoped<ShellSession>();
@@ -88,7 +108,22 @@ namespace SPIC.MauiBlazorApp
             builder.Logging.AddDebug();
 #endif
 
-            return builder.Build();
+            // Wire native persistent GPS interval preferences
+            GpsTrackingConfiguration.OnGetNativeInterval = () =>
+            {
+                try { return Preferences.Default.Get("GpsTrackingIntervalSeconds", 20); }
+                catch { return 20; }
+            };
+            GpsTrackingConfiguration.OnSaveNativeInterval = (val) =>
+            {
+                try { Preferences.Default.Set("GpsTrackingIntervalSeconds", val); }
+                catch { }
+            };
+
+            Log("MauiProgram.CreateMauiApp: Calling builder.Build()");
+            var app = builder.Build();
+            Log("MauiProgram.CreateMauiApp: builder.Build() complete");
+            return app;
         }
 
         private static TelemetryApp CurrentApp()

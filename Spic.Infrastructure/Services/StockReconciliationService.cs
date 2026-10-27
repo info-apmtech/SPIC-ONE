@@ -408,7 +408,7 @@ namespace Spic.Infrastructure.Services
 			// Merge state-wise
 			var stateMap = new Dictionary<string, StateAmounts>(StringComparer.OrdinalIgnoreCase);
 
-			StateAmounts GetOrCreate(int? stateId)
+			StateAmounts GetOrCreate(int? stateId, bool plantFallback = false)
 			{
 				string name;
 				if (stateId.HasValue && states.TryGetValue(stateId.Value, out var sName) && !string.IsNullOrWhiteSpace(sName))
@@ -417,7 +417,7 @@ namespace Spic.Infrastructure.Services
 				}
 				else
 				{
-					name = "Other / Unassigned";
+					name = plantFallback ? "Plant" : "Other / Unassigned";
 				}
 
 				if (!stateMap.TryGetValue(name, out var amt))
@@ -430,7 +430,7 @@ namespace Spic.Infrastructure.Services
 
 			foreach (var item in reconGroups)
 			{
-				var amt = GetOrCreate(item.StateId);
+				var amt = GetOrCreate(item.StateId, plantFallback: !item.StateId.HasValue);
 				amt.ClosingStock += item.ClosingStock;
 				amt.ClosingGit += item.ClosingGit;
 			}
@@ -460,7 +460,8 @@ namespace Spic.Infrastructure.Services
 			}
 
 			var rows = stateMap.Values
-				.OrderBy(x => x.State, StringComparer.OrdinalIgnoreCase)
+				.OrderBy(x => x.State.Equals("Plant", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+				.ThenBy(x => x.State, StringComparer.OrdinalIgnoreCase)
 				.Select(x => new StockReconciliationRow
 				{
 					State = x.State,
@@ -550,7 +551,7 @@ namespace Spic.Infrastructure.Services
 			var worksheet = workbook.Worksheets.Add("Stock Reconciliation");
 
 			var titleRow = worksheet.Cell(1, 1);
-			titleRow.Value = "State-wise Global Stock Reconciliation";
+			titleRow.Value = $"Urea Stock As on {result.AsOnDate:dd-MMM-yy} (in Mt)";
 			titleRow.Style.Font.Bold = true;
 			titleRow.Style.Font.FontSize = 14;
 			titleRow.Style.Font.FontColor = XLColor.FromHtml("#0f172a");
@@ -572,14 +573,14 @@ namespace Spic.Infrastructure.Services
 			var headers = new[]
 			{
 				"State",
-				"Closing Stock",
-				"Closing GIT",
-				"Global Stock Total",
+				"Company Stock",
+				"GIT From Plant despatches",
+				"Total Company Stock",
 				"Wholesaler Stock",
 				"Retail Point Stock",
-				"Company Sales in GIT",
 				"Wholesaler Sales in GIT",
-				"Channel Total",
+				"Company Sales in GIT",
+				"Stock Lying with Wholesalers & Retailers including GIT",
 				"Overall Stock"
 			};
 
@@ -592,8 +593,10 @@ namespace Spic.Infrastructure.Services
 				cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#0f172a");
 				cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 				cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+				cell.Style.Alignment.WrapText = true;
 				cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
 			}
+			worksheet.Row(headerRow).Height = 30;
 
 			// The column format is set BEFORE the numbers are written, because a
 			// column style applied afterwards would overwrite the per-cell
@@ -612,22 +615,22 @@ namespace Spic.Infrastructure.Services
 				SetNumber(worksheet, dataRow, 4, reconciliationRow.GlobalStockTotal);
 				SetNumber(worksheet, dataRow, 5, reconciliationRow.WholesalerStock);
 				SetNumber(worksheet, dataRow, 6, reconciliationRow.RetailPointStock);
-				SetNumber(worksheet, dataRow, 7, reconciliationRow.CompanySalesInGit);
-				SetNumber(worksheet, dataRow, 8, reconciliationRow.WholesalerSalesInGit);
+				SetNumber(worksheet, dataRow, 7, reconciliationRow.WholesalerSalesInGit);
+				SetNumber(worksheet, dataRow, 8, reconciliationRow.CompanySalesInGit);
 				SetNumber(worksheet, dataRow, 9, reconciliationRow.ChannelTotal);
 				SetNumber(worksheet, dataRow, 10, reconciliationRow.OverallStock);
 				dataRow++;
 			}
 
 			var totals = result.Totals ?? new StockReconciliationTotals();
-			worksheet.Cell(dataRow, 1).Value = "Overall Total";
+			worksheet.Cell(dataRow, 1).Value = "Total";
 			SetNumber(worksheet, dataRow, 2, totals.ClosingStock);
 			SetNumber(worksheet, dataRow, 3, totals.ClosingGit);
 			SetNumber(worksheet, dataRow, 4, totals.GlobalStockTotal);
 			SetNumber(worksheet, dataRow, 5, totals.WholesalerStock);
 			SetNumber(worksheet, dataRow, 6, totals.RetailPointStock);
-			SetNumber(worksheet, dataRow, 7, totals.CompanySalesInGit);
-			SetNumber(worksheet, dataRow, 8, totals.WholesalerSalesInGit);
+			SetNumber(worksheet, dataRow, 7, totals.WholesalerSalesInGit);
+			SetNumber(worksheet, dataRow, 8, totals.CompanySalesInGit);
 			SetNumber(worksheet, dataRow, 9, totals.ChannelTotal);
 			SetNumber(worksheet, dataRow, 10, totals.OverallStock);
 
@@ -919,14 +922,14 @@ namespace Spic.Infrastructure.Services
 			sb.Append("<p style=\"margin:0 0 20px 0;\">Kindly find the attached report for your reference.</p>");
 
 			// -------------------------------------------------------------
-			// Section 1: Urea Stock As on {previousDate:dd-MMM-yy} (in MT)
+			// Section 1: Urea Stock As on {previousDate:dd-MMM-yy} (in Mt)
 			// -------------------------------------------------------------
-			sb.Append($"<div style=\"font-size:14px;font-weight:bold;color:#0f172a;margin-bottom:8px;padding-top:4px;\">Urea Stock As on {previousDate:dd-MMM-yy} (in MT)</div>");
+			sb.Append($"<div style=\"font-size:14px;font-weight:bold;color:#0f172a;margin-bottom:8px;padding-top:4px;\">Urea Stock As on {previousDate:dd-MMM-yy} (in Mt)</div>");
 			sb.Append("<table cellpadding=\"5\" cellspacing=\"0\" style=\"border-collapse:collapse;width:100%;font-size:12px;font-family:Arial,Helvetica,sans-serif;margin-bottom:24px;border:1px solid #475569;\">");
 			sb.Append("<thead><tr style=\"background-color:#1e293b;color:#ffffff;font-size:11px;font-weight:bold;\">");
 			sb.Append("<th style=\"border:1px solid #475569;padding:6px 8px;text-align:left;\">State</th>");
 			sb.Append("<th style=\"border:1px solid #475569;padding:6px 8px;text-align:right;\">Company Stock</th>");
-			sb.Append("<th style=\"border:1px solid #475569;padding:6px 8px;text-align:right;\"><span style=\"color:#ef4444;\">GIT</span> From Plant Despatches</th>");
+			sb.Append("<th style=\"border:1px solid #475569;padding:6px 8px;text-align:right;\"><span style=\"color:#ef4444;\">GIT</span> From Plant despatches</th>");
 			sb.Append("<th style=\"border:1px solid #475569;padding:6px 8px;text-align:right;\">Total Company Stock</th>");
 			sb.Append("<th style=\"border:1px solid #475569;padding:6px 8px;text-align:right;\">Wholesaler Stock</th>");
 			sb.Append("<th style=\"border:1px solid #475569;padding:6px 8px;text-align:right;\">Retail Point Stock</th>");
@@ -975,9 +978,9 @@ namespace Spic.Infrastructure.Services
 			sb.Append("</tr></tbody></table>");
 
 			// -------------------------------------------------------------
-			// Section 2: GFL Stock As on {currentDate:dd-MMM-yy} (in MT)
+			// Section 2: GFL Stock As on {currentDate:dd-MMM-yy} (in Mt)
 			// -------------------------------------------------------------
-			sb.Append($"<div style=\"font-size:14px;font-weight:bold;color:#0f172a;margin:28px 0 8px 0;\">GFL Stock As on {currentDate:dd-MMM-yy} (in MT)</div>");
+			sb.Append($"<div style=\"font-size:14px;font-weight:bold;color:#0f172a;margin:28px 0 8px 0;\">GFL Stock As on {currentDate:dd-MMM-yy} (in Mt)</div>");
 			sb.Append("<table cellpadding=\"5\" cellspacing=\"0\" style=\"border-collapse:collapse;width:100%;font-size:12px;font-family:Arial,Helvetica,sans-serif;margin-bottom:24px;border:1px solid #475569;\">");
 			sb.Append("<thead><tr style=\"background-color:#1e293b;color:#ffffff;font-size:11px;font-weight:bold;\">");
 			sb.Append("<th style=\"border:1px solid #475569;padding:6px 8px;text-align:left;\">State</th>");
@@ -1031,7 +1034,7 @@ namespace Spic.Infrastructure.Services
 			// Sheet 1: Urea Stock
 			// -------------------------------------------------------------
 			var ureaSheet = workbook.Worksheets.Add("Urea Stock");
-			ureaSheet.Cell(1, 1).Value = $"Urea Stock As on {previousDate:dd-MMM-yy} (in MT)";
+			ureaSheet.Cell(1, 1).Value = $"Urea Stock As on {previousDate:dd-MMM-yy} (in Mt)";
 			ureaSheet.Range(1, 1, 1, 10).Merge();
 			ureaSheet.Cell(1, 1).Style.Font.Bold = true;
 			ureaSheet.Cell(1, 1).Style.Font.FontSize = 13;
@@ -1045,7 +1048,7 @@ namespace Spic.Infrastructure.Services
 			{
 				"State",
 				"Company Stock",
-				"GIT From Plant Despatches",
+				"GIT From Plant despatches",
 				"Total Company Stock",
 				"Wholesaler Stock",
 				"Retail Point Stock",
@@ -1136,7 +1139,7 @@ namespace Spic.Infrastructure.Services
 			const string numberFormat = "#,##0.###;-#,##0.###;0";
 			var totalGflCols = Math.Max(3, 1 + gflTable.Columns.Count + 1); // State + Products + Total
 
-			gflSheet.Cell(1, 1).Value = $"GFL Stock As on {asOnDate:dd-MMM-yy} (in MT)";
+			gflSheet.Cell(1, 1).Value = $"GFL Stock As on {asOnDate:dd-MMM-yy} (in Mt)";
 			gflSheet.Range(1, 1, 1, totalGflCols).Merge();
 			gflSheet.Cell(1, 1).Style.Font.Bold = true;
 			gflSheet.Cell(1, 1).Style.Font.FontSize = 13;

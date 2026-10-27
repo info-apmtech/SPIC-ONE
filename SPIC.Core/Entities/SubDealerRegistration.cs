@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel.DataAnnotations;
 
 namespace SPIC.Core.Entities;
 
@@ -11,9 +12,7 @@ public enum SubDealerStatus
 public class SubDealerRegistration
 {
     public int Id { get; set; }
-    // Actual Admin-imported code. NEVER generate SD+Id. Nullable only for reading legacy
-    // invalid records so SuperAdmin can repair them; all application writes validate the code.
-    // Apply the database guard separately after the preflight in README_DEPLOYMENT.md.
+    [MaxLength(50)]
     public string? SubDealerCode { get; set; }
     public int StateId { get; set; }
     public int Region { get; set; }

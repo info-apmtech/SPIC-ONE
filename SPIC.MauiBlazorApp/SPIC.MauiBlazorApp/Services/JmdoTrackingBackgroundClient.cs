@@ -119,7 +119,11 @@ namespace SPIC.MauiBlazorApp.Services
                 Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
                 var response = await send(Http);
-                if (response.IsSuccessStatusCode) return true;
+                if (response.IsSuccessStatusCode)
+                {
+                    TryUpdateInterval(response);
+                    return true;
+                }
 
                 if (response.StatusCode != System.Net.HttpStatusCode.Unauthorized) return false;
 
@@ -136,12 +140,46 @@ namespace SPIC.MauiBlazorApp.Services
 
                 Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 var retry = await send(Http);
-                return retry.IsSuccessStatusCode;
+                if (retry.IsSuccessStatusCode)
+                {
+                    TryUpdateInterval(retry);
+                    return true;
+                }
+                return false;
             }
             catch (Exception)
             {
                 return false;
             }
+        }
+
+        private static void TryUpdateInterval(HttpResponseMessage response)
+        {
+            try
+            {
+                if (response.Content.Headers.ContentType?.MediaType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var data = await response.Content.ReadFromJsonAsync<GpsPointResponseDto>();
+                            if (data?.IntervalSeconds is >= GpsTrackingConfiguration.MinIntervalSeconds and <= GpsTrackingConfiguration.MaxIntervalSeconds)
+                            {
+                                GpsTrackingConfiguration.IntervalSeconds = data.IntervalSeconds.Value;
+                                Preferences.Default.Set("GpsTrackingIntervalSeconds", data.IntervalSeconds.Value);
+                            }
+                        }
+                        catch { }
+                    });
+                }
+            }
+            catch { }
+        }
+
+        private sealed class GpsPointResponseDto
+        {
+            public int? IntervalSeconds { get; set; }
         }
 
         /// <summary>Trades the stored refresh token for a new access+refresh pair, writing both back

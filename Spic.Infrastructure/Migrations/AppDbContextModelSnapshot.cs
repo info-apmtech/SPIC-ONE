@@ -3547,6 +3547,37 @@ namespace Spic.Infrastructure.Migrations
                     b.ToTable("FinancialYears");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.GpsSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<int>("IntervalSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GpsSettings");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.GuestHouse", b =>
                 {
                     b.Property<int>("Id")
@@ -5070,6 +5101,8 @@ namespace Spic.Infrastructure.Migrations
 
                     b.HasIndex("AllocationDate");
 
+                    b.HasIndex("HeadquarterId");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("SubmittedByUserId");
@@ -5126,6 +5159,8 @@ namespace Spic.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AllocationId");
+
+                    b.HasIndex("DealerRegistrationId");
 
                     b.ToTable("JmdoTaskAllocationDealers");
                 });
@@ -9961,7 +9996,8 @@ namespace Spic.Infrastructure.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("SubDealerCode")
-                        .HasColumnType("text");
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<string>("SubVillage")
                         .HasColumnType("text");
@@ -11471,6 +11507,11 @@ namespace Spic.Infrastructure.Migrations
                         .HasForeignKey("AllocationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("SPIC.Core.Entities.DealerRegistration", null)
+                        .WithMany()
+                        .HasForeignKey("DealerRegistrationId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Allocation");
                 });

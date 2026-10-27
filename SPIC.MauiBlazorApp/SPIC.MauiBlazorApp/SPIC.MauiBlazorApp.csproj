@@ -29,7 +29,7 @@
          For individual files, you can override by setting Inflator metadata:
            <MauiXaml Update="MyPage.xaml" Inflator="Default" /> (reverts to defaults: Runtime for Debug, XamlC for Release)
            <MauiXaml Update="MyPage.xaml" Inflator="Runtime" /> (force runtime inflation) -->
-    <MauiXamlInflator>SourceGen</MauiXamlInflator>
+    <MauiXamlInflator Condition="'$(Configuration)' != 'Release'">SourceGen</MauiXamlInflator>
 
     <!-- Display name -->
     <ApplicationTitle>SPIC ONE</ApplicationTitle>
@@ -89,15 +89,15 @@
   <!--<PropertyGroup>
     <SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://api.spicone.in/</SpicApiBaseUrl>
   </PropertyGroup>-->
-	<!--BELOW SpicApiBaseUrl IS LOCAL API FOR LIVE DEPLOYMENT PLEASE COMMENT BELOW-->
-	<!-- Local testing over "adb reverse tcp:5034 tcp:5034" (ADB-over-WiFi or USB) - the phone's own
-	     localhost:5034 is forwarded straight to this dev machine's localhost:5034 (SpicAPI's HTTP
-	     profile, launchSettings.json), no tunnel/account needed. network_security_config.xml already
-	     allows cleartext for "localhost" specifically for this. Re-run the adb reverse command after
-	     every phone reboot or adb disconnect/reconnect - it doesn't persist. -->
+	<!-- Preview / Testing API -->
+	<PropertyGroup>
+		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">https://previewspicapi.apmiot.com/</SpicApiBaseUrl>
+	</PropertyGroup>
+	<!-- Local testing (uncomment when debugging against local SpicAPI):
 	<PropertyGroup>
 		<SpicApiBaseUrl Condition="'$(SpicApiBaseUrl)' == ''">http://localhost:5034/</SpicApiBaseUrl>
 	</PropertyGroup>
+	-->
   <ItemGroup>
     <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
       <_Parameter1>SpicApiBaseUrl</_Parameter1>
@@ -127,6 +127,21 @@
     <CodesignEntitlements>Platforms/iOS/Entitlements.plist</CodesignEntitlements>
     <CodesignRequireProvisioningProfile>false</CodesignRequireProvisioningProfile>
     <_MlaunchWaitForExit Condition="'$(_MlaunchWaitForExit)' == ''">false</_MlaunchWaitForExit>
+  </PropertyGroup>
+
+  <!-- iOS Release configuration:
+       - UseInterpreter=true: avoids strict AOT traps on reflection/Blazor/serializers on physical iOS devices
+       - MtouchInterpreter=all: instructs the Mono runtime to interpret assemblies without hitting invalid AOT stubs
+       - UseLlvm=false: disables LLVM code generation that triggers SIGABRT / stack check failure on .NET iOS startup
+       - MtouchLink=SdkOnly: ensures SDK assemblies are linked without stripping application logic
+       - _ExportSymbolsExplicitly=true: prevents Apple linker from stripping runtime entry points
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And $([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+    <UseInterpreter>true</UseInterpreter>
+    <MtouchInterpreter>all</MtouchInterpreter>
+    <UseLlvm>false</UseLlvm>
+    <MtouchLink>None</MtouchLink>
+    <_ExportSymbolsExplicitly>true</_ExportSymbolsExplicitly>
   </PropertyGroup>
 
 </Project>

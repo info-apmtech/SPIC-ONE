@@ -10,13 +10,21 @@
 @inject SPIC.MauiBlazorApp.Shared.Services.ToastService Toast
 @inject SPIC.MauiBlazorApp.Shared.Services.LookupCacheService LookupCache
 @inject SPIC.MauiBlazorApp.Shared.Services.JMDOAttendanceApi AttendanceApi
+@inject SPIC.MauiBlazorApp.Shared.Services.NavHistoryService NavHistory
 
 <div class="container-fluid py-4 px-0 ta-page">
 
     <!-- Header card -->
     <div class="ta-header-card">
-        <h2 class="ta-title">Tasks Allocation</h2>
-        <p class="ta-subtitle">@HeaderSubtitle</p>
+        <div class="d-flex align-items-center gap-3">
+            <button type="button" class="btn btn-outline-secondary rounded-circle d-inline-flex align-items-center justify-content-center p-0 flex-shrink-0" style="width: 38px; height: 38px;" @onclick="GoBack" aria-label="Go back" title="Go back">
+                <i class="bi bi-arrow-left fs-5"></i>
+            </button>
+            <div>
+                <h2 class="ta-title mb-1">Tasks Allocation</h2>
+                <p class="ta-subtitle mb-0">@HeaderSubtitle</p>
+            </div>
+        </div>
     </div>
 
     <!-- Tabs + content card -->
@@ -316,7 +324,11 @@
                                     }
                                     else if (programsLoadFailed)
                                     {
-                                        <EmptyState Icon="bi-exclamation-triangle" Title="Couldn't load MD programs" Message="Please try again in a moment." Compact="true" />
+                                        <EmptyState Icon="bi-exclamation-triangle" Title="Couldn't load MD programs" Message="Please try again in a moment." Compact="true">
+                                            <button type="button" class="ta-btn ta-btn-next" @onclick="LoadProgramsAsync">
+                                                <i class="bi bi-arrow-clockwise"></i> Retry
+                                            </button>
+                                        </EmptyState>
                                     }
                                     else if (!Programs.Any())
                                     {
@@ -2253,7 +2265,20 @@
 
         try
         {
-            var result = await Http.GetFromJsonAsync<List<CSR1ListDto>>("api/CSR1/list?mine=true");
+            // GetFromJsonAsync throws on any non-2xx before ever reading the body, which discards
+            // the server's actual error message (CSR1Controller returns { message, error } on a
+            // 500) - using SendAsync and reading the body on failure keeps that detail in the
+            // console instead of losing it, so a future mismatch is diagnosable in seconds, not an
+            // afternoon of archaeology (2026-10-24: this is exactly what happened here).
+            using var response = await Http.GetAsync("api/CSR1/list?mine=true");
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync();
+                throw new HttpRequestException(
+                    $"{(int)response.StatusCode} {response.StatusCode}: {body}");
+            }
+
+            var result = await response.Content.ReadFromJsonAsync<List<CSR1ListDto>>();
 
             Programs.Clear();
             Programs.AddRange((result ?? new())
@@ -2311,5 +2336,12 @@
             return opt.SanctionDate;
 
         return "—";
+    }
+
+    private void GoBack()
+    {
+        if (NavHistory.TryGoBack())
+            return;
+        Navigation.NavigateTo(LoginState.LandingPage);
     }
 }

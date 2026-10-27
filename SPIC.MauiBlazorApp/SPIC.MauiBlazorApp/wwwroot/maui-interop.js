@@ -85,6 +85,14 @@
     window.stopBackgroundTracking = function () {
         return invoke('StopBackgroundTracking');
     };
+
+    // Called once by Routes.razor's first render - tells MainPage its native BootOverlay
+    // (icon+spinner shown immediately on app launch, before this WebView had anything to show) can
+    // come down, since real content is now on screen. Native-only: the Web host's index.html never
+    // loads this script, so Routes.razor's call is wrapped in a try/catch there and simply no-ops.
+    window.notifyAppReady = function () {
+        return invoke('NotifyContentReady');
+    };
 })();
 
 // Native share sheet (Android / iOS / Windows) instead of the Web Share API, which the

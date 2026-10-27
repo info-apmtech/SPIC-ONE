@@ -29,6 +29,48 @@ namespace SPIC.Core.Entities
         public string? ResponsiblePersonId { get; set; }
 
         // -------------------------
+        // Expense Breakdown
+        // -------------------------
+        // NotMapped, not columns: the expense breakdown moved to the normalized CSR1Expenses table
+        // (one row per CSR1Id+ExpenseId, see CSR1Expenses below and ExpenseInformation for the
+        // catalog of expense types) on 2026-10-24. These 11 properties are kept on CSR1 purely as a
+        // stable, backward-compatible shape for request/response JSON (CSR1SaveRequest.CSR1 IS this
+        // entity, and the UI still sends/expects these exact field names) - CSR1ExpenseMapper
+        // converts between this shape and CSR1Expenses rows; nothing here is ever queried by EF.
+        [NotMapped]
+        public decimal PrintingAndStationery { get; set; }
+
+        [NotMapped]
+        public decimal PublicityMaterial { get; set; }
+
+        [NotMapped]
+        public decimal StageArrangements { get; set; }
+
+        [NotMapped]
+        public decimal ServiceChargesLCA { get; set; }
+
+        [NotMapped]
+        public decimal TransportRent { get; set; }
+
+        [NotMapped]
+        public decimal JeepRunningExpenses { get; set; }
+
+        [NotMapped]
+        public decimal Refreshments { get; set; }
+
+        [NotMapped]
+        public decimal Inputs { get; set; }
+
+        [NotMapped]
+        public decimal Photography { get; set; }
+
+        [NotMapped]
+        public decimal Compliments { get; set; }
+
+        [NotMapped]
+        public decimal Others { get; set; }
+
+        // -------------------------
         // Workflow
         // -------------------------
         public CSR1Status Status { get; set; } = CSR1Status.Draft;
@@ -91,7 +133,6 @@ namespace SPIC.Core.Entities
 
         public bool IsActive { get; set; } = true;
     }
-
 
     public class CSR1Products1
     {
