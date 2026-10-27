@@ -24,7 +24,17 @@ public class CSR2
     [MaxLength(100)] public string? UpdatedBy { get; set; }
     public DateTime? SubmittedAt { get; set; }
     [MaxLength(100)] public string? SubmittedBy { get; set; }
+    // Validation audit
+    [MaxLength(100)]
+    public string? ValidateBy { get; set; }
 
+    public DateTime? ValidateAt { get; set; }
+
+    // Approval audit
+    [MaxLength(100)]
+    public string? ApprovedBy { get; set; }
+
+    public DateTime? ApprovedAt { get; set; }
     public ICollection<CSR2Participant> Participants { get; set; } = new List<CSR2Participant>();
     public ICollection<CSR2Employee> Employees { get; set; } = new List<CSR2Employee>();
     public ICollection<CSR2Media> Media { get; set; } = new List<CSR2Media>();
@@ -37,6 +47,9 @@ public class CSR2
 
     public ICollection<CSR2Products3> Products3 { get; set; }
         = new List<CSR2Products3>();
+
+    public ICollection<CSR2ApprovalDetails> ApprovalDetails { get; set; }
+       = new List<CSR2ApprovalDetails>();
 }
 
 public class CSR2Products1
@@ -100,12 +113,32 @@ public class CSR2Products3
 
 public class CSR2Participant
 {
-    [Key] public int Id { get; set; }
-    [Required] public int CSR2Id { get; set; }
+    [Key]
+    public int Id { get; set; }
+
+    [Required]
+    public int CSR2Id { get; set; }
+
     public CSR2? CSR2 { get; set; }
+
+    // Farmer / Dealer master Id when participant is selected from master.
+    // Null when participant is manually entered as "Other".
     public int? ParticipantSourceId { get; set; }
-    [MaxLength(50)] public string? ParticipantSource { get; set; }
-    [Required, MaxLength(50)] public string Role { get; set; } = "";
+
+    // Examples: SasFarmers, Dealer, etc.
+    // Null for manually entered "Other" participant.
+    [MaxLength(50)]
+    public string? ParticipantSource { get; set; }
+
+    [MaxLength(150)]
+    public string? Name { get; set; }
+
+    [MaxLength(20)]
+    public string? PhoneNumber { get; set; }
+
+    [Required, MaxLength(50)]
+    public string Role { get; set; } = "";
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -160,11 +193,44 @@ public class CSR2ExpenseProof
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
 }
 
+public class CSR2ApprovalDetails
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Required]
+    public int CSR2Id { get; set; }
+
+    [ForeignKey(nameof(CSR2Id))]
+    public CSR2? CSR2 { get; set; }
+
+    [MaxLength(100)]
+    public string? ApprovedBy { get; set; }
+
+    public DateTime? ApprovedAt { get; set; }
+
+    [MaxLength(50)]
+    public string? ApproverLevel { get; set; }
+
+    [MaxLength(100)]
+    public string? CreatedBy { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+    [MaxLength(100)]
+    public string? UpdatedBy { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
+}
+
+
 public enum CSR2Status
 {
     Draft = 0,
     Submitted = 1,
     Validated = 2,
     Approved = 3,
-    Rejected = 4
+    Rejected = 4,
+    Level1Approved = 5,
+    Level2Approved = 6
 }

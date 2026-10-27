@@ -1023,6 +1023,13 @@ namespace Spic.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<int>("CSR1Id")
                         .HasColumnType("integer");
 
@@ -1067,12 +1074,62 @@ namespace Spic.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("ValidateAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ValidateBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CSR1Id")
                         .IsUnique();
 
                     b.ToTable("CSR2s");
+                });
+
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2ApprovalDetails", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ApprovedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ApproverLevel")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("CSR2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CSR2Id");
+
+                    b.ToTable("CSR2ApprovalDetails");
                 });
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR2Employee", b =>
@@ -1242,12 +1299,20 @@ namespace Spic.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("Name")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
                     b.Property<string>("ParticipantSource")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
                     b.Property<int?>("ParticipantSourceId")
                         .HasColumnType("integer");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("Role")
                         .IsRequired()
@@ -10973,6 +11038,17 @@ namespace Spic.Infrastructure.Migrations
                     b.Navigation("CSR1");
                 });
 
+            modelBuilder.Entity("SPIC.Core.Entities.CSR2ApprovalDetails", b =>
+                {
+                    b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
+                        .WithMany("ApprovalDetails")
+                        .HasForeignKey("CSR2Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CSR2");
+                });
+
             modelBuilder.Entity("SPIC.Core.Entities.CSR2Employee", b =>
                 {
                     b.HasOne("SPIC.Core.Entities.CSR2", "CSR2")
@@ -11946,6 +12022,8 @@ namespace Spic.Infrastructure.Migrations
 
             modelBuilder.Entity("SPIC.Core.Entities.CSR2", b =>
                 {
+                    b.Navigation("ApprovalDetails");
+
                     b.Navigation("Employees");
 
                     b.Navigation("Expenses");
