@@ -1,4 +1,4 @@
-﻿@page "/SubDealerList"
+@page "/SubDealerList"
 @implements IDisposable
 @using System.IO.Compression
 @using System.Net.Http.Json
@@ -1766,8 +1766,28 @@
 
                 @if (!string.IsNullOrWhiteSpace(_importMessage))
                 {
-                    <div class="alert @(_importAwaitingConfirmation || _importPartialSuccess ? "alert-warning border-warning text-warning-emphasis" : _importHasError ? "alert-danger" : "alert-success") py-2 mt-3 mb-0 small">
+                    <div class="alert @(_importAwaitingConfirmation || _importPartialSuccess ? (_importInserted == 0 && _importUnchanged > 0 && _importRejected.Count == 0 ? "alert-info border-info text-info-emphasis" : "alert-warning border-warning text-warning-emphasis") : _importHasError ? "alert-danger" : "alert-success") py-2 mt-3 mb-0 small" style="white-space: pre-line;">
                         @_importMessage
+                    </div>
+                }
+
+                @if (_importRejected.Any(x =>
+                    x.Reason.Contains("contact Admin", StringComparison.OrdinalIgnoreCase) ||
+                    x.Reason.Contains("different Firm / State / Region / HQ mapping", StringComparison.OrdinalIgnoreCase)))
+                {
+                    <div class="alert alert-warning border-danger py-2 px-3 mt-3 mb-0 small" role="alert" style="background-color: #fff3cd; border: 1.5px solid #dc3545; color: #842029;">
+                        <div class="d-flex align-items-start gap-2">
+                            <i class="bi bi-exclamation-triangle-fill fs-5 text-danger flex-shrink-0 mt-1"></i>
+                            <div>
+                                <strong class="text-danger">Warning: Existing Sub Dealer master conflict detected!</strong>
+                                <div class="mt-1">
+                                    The uploaded file contains a different Firm / State / Region / HQ mapping for an existing Sub Dealer.
+                                    Bulk Upload cannot modify an existing Sub Dealer master.
+                                    <br />
+                                    <strong>If you want to change this mapping, please contact Admin.</strong>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 }
 
@@ -1787,38 +1807,35 @@
                 {
                     <div class="alert alert-light border small mt-3 mb-0">
                         <div class="fw-semibold mb-2">Import summary</div>
-                        <div class="d-flex flex-wrap gap-3">
+                        <div class="d-flex flex-wrap gap-3 align-items-center">
                             <span>Total data rows: <strong>@_importTotalRows</strong></span>
+                            <span class="@(_importInserted > 0 ? "text-success fw-bold" : "")">New: <strong>@_importInserted</strong></span>
+                            <span class="@(_importUnchanged > 0 ? "text-primary fw-semibold" : "")">Already same: <strong>@_importUnchanged</strong></span>
+                            <span class="@(_importRejected.Count > 0 ? "text-danger fw-bold" : "")">Rejected: <strong>@_importRejected.Count</strong></span>
                             @if (_importAwaitingConfirmation)
                             {
-                                <span class="text-warning"><strong>Preview only - nothing saved yet.</strong></span>
-                                <span>New: <strong>@_importInserted</strong></span>
-                                <span>Changed: <strong>@_importUpdated</strong></span>
-                                <span>Already same: <strong>@_importUnchanged</strong></span>
+                                <span class="badge bg-warning text-dark ms-auto">Preview only - nothing saved yet</span>
                             }
                             else if (_importUnconfirmedRows > 0)
                             {
-                                <span class="text-warning">Saved: <strong>not confirmed</strong>
-                                    (@_importUnconfirmedRows row(s) were sent; the result was not received)</span>
+                                <span class="badge bg-danger ms-auto">Outcome unconfirmed</span>
                             }
-                            else
+                            else if (_importInserted > 0)
                             {
-                                <span class="text-success">Saved changes: <strong>@(_importInserted + _importUpdated)</strong>
-                                    (Inserted @_importInserted, Updated @_importUpdated, Unchanged @_importUnchanged)</span>
+                                <span class="badge bg-success ms-auto">Saved</span>
                             }
-                            <span class="text-danger">Rejected: <strong>@_importRejected.Count</strong></span>
                         </div>
 
                         @if (_importRejected.Count > 0)
                         {
-                            <div class="table-responsive mt-2" style="max-height: 260px; overflow-y: auto;">
+                            <div class="table-responsive mt-3" style="max-height: 260px; overflow-y: auto;">
                                 <table class="table table-sm table-bordered align-middle mb-0">
                                     <thead>
-                                        <tr>
-                                            <th>Excel Row</th>
-                                            <th>Sub Dealer Code</th>
+                                        <tr class="table-light">
+                                            <th style="width: 80px;">Excel Row</th>
+                                            <th style="width: 140px;">Sub Dealer Code</th>
                                             <th>Sub Dealer Name</th>
-                                            <th>Type</th>
+                                            <th style="width: 100px;">Type</th>
                                             <th>Reason</th>
                                         </tr>
                                     </thead>
@@ -1827,12 +1844,12 @@
                                         {
                                             <tr>
                                                 <td>@rejected.ExcelRowNumber</td>
-                                                <td>@rejected.SubDealerCode</td>
+                                                <td class="fw-semibold">@rejected.SubDealerCode</td>
                                                 <td>@rejected.SubDealerName</td>
                                                 <td>
                                                     <span class="badge @(rejected.Category == SubDealerImportRejectCategory.Duplicate ? "bg-warning text-dark" : rejected.Category == SubDealerImportRejectCategory.DatabaseError ? "bg-danger" : "bg-secondary")">@rejected.Category</span>
                                                 </td>
-                                                <td>@rejected.Reason</td>
+                                                <td style="white-space: pre-line;">@rejected.Reason</td>
                                             </tr>
                                         }
                                     </tbody>
@@ -3824,7 +3841,7 @@
                 .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
             var mappedRows = new List<SubDealerBulkImportRowDto>();
-            var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenMappedRows = new Dictionary<string, SubDealerBulkImportRowDto>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var row in parsed.Rows)
             {
@@ -3859,16 +3876,6 @@
                     string.IsNullOrWhiteSpace(row.State))
                 {
                     Reject(SubDealerImportRejectCategory.Validation, "HQ, Region and State are required.");
-                    continue;
-                }
-
-                // Only a fully mapped row claims its code (added to seenCodes below),
-                // so the first valid occurrence is kept and later ones are rejected.
-                if (seenCodes.Contains(code))
-                {
-                    Reject(
-                        SubDealerImportRejectCategory.Duplicate,
-                        $"Duplicate Sub Dealer Code '{code}' in the uploaded file; an earlier row with this code was used.");
                     continue;
                 }
 
@@ -3914,8 +3921,32 @@
                     continue;
                 }
 
-                seenCodes.Add(code);
-                mappedRows.Add(new SubDealerBulkImportRowDto
+                var normalizedCode = SubDealerFormModel.CodeKey(code);
+                if (seenMappedRows.TryGetValue(normalizedCode, out var firstMapped))
+                {
+                    bool sameMapping =
+                        string.Equals(firstMapped.FirmName.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                        firstMapped.StateId == resolvedState.Id &&
+                        firstMapped.RegionId == resolvedRegion.Id &&
+                        firstMapped.HQId == resolvedHq.Id;
+
+                    if (sameMapping)
+                    {
+                        Reject(
+                            SubDealerImportRejectCategory.Duplicate,
+                            $"Sub Dealer Code {code} already appears in this Excel with the same mapping; row {firstMapped.ExcelRowNumber} was processed.");
+                        continue;
+                    }
+                    else
+                    {
+                        Reject(
+                            SubDealerImportRejectCategory.Duplicate,
+                            $"Sub Dealer Code {code} already appears in this Excel with a different Firm / State / Region / HQ mapping.");
+                        continue;
+                    }
+                }
+
+                var mappedDto = new SubDealerBulkImportRowDto
                 {
                     ExcelRowNumber = row.RowNumber,
                     SubDealerCode = code,
@@ -3923,7 +3954,10 @@
                     StateId = resolvedState.Id,
                     RegionId = resolvedRegion.Id,
                     HQId = resolvedHq.Id
-                });
+                };
+
+                seenMappedRows[normalizedCode] = mappedDto;
+                mappedRows.Add(mappedDto);
             }
 
             if (mappedRows.Count == 0)
@@ -4005,12 +4039,18 @@
             var rowLevelReasons = result.Rejected.Select(x => x.Reason).ToHashSet();
             _importErrors.AddRange(result.Errors.Where(x => !rowLevelReasons.Contains(x)));
 
+            var hasConflictRejection = _importRejected.Any(x =>
+                x.Reason.Contains("contact Admin", StringComparison.OrdinalIgnoreCase) ||
+                x.Reason.Contains("different Firm / State / Region / HQ mapping", StringComparison.OrdinalIgnoreCase));
+
             if (!result.RequiresConfirmation)
             {
                 _importHasError = true;
                 _importAwaitingConfirmation = false;
                 _pendingImportRequest = null;
-                _importMessage = "No valid rows are available to import. Nothing was saved.";
+                _importMessage = hasConflictRejection
+                    ? "Sub Dealer Code already exists with a different Firm / State / Region / HQ mapping.\nBulk Upload cannot update existing Sub Dealer master details.\nPlease contact Admin for changes."
+                    : "No valid rows are available to import. Nothing was saved.";
                 return;
             }
 
@@ -4021,10 +4061,18 @@
             _importHasError = false;
             _importPartialSuccess = result.Rejected.Count > 0 || result.Errors.Count > 0;
 
-            _importMessage = result.Unchanged > 0
-                ? $"Warning: {result.Unchanged} row(s) already have the same Sub Dealer Code, Firm Name, State, Region and HQ. " +
-                  $"Planned new: {result.Inserted}, planned changes: {result.Updated}. Nothing has been saved yet. Click Proceed Import to continue, or Cancel to save nothing."
-                : $"Import preview ready. New: {result.Inserted}, changes: {result.Updated}. Nothing has been saved yet. Click Proceed Import to continue.";
+            if (result.Inserted > 0)
+            {
+                _importMessage = result.Unchanged > 0
+                    ? $"Import preview ready. New: {result.Inserted}, Already same: {result.Unchanged}. Nothing has been saved yet. Click Proceed Import to continue."
+                    : $"Import preview ready. New: {result.Inserted}. Nothing has been saved yet. Click Proceed Import to continue.";
+            }
+            else
+            {
+                _importMessage = result.Unchanged == 1
+                    ? "Sub Dealer Code is already available with the same Firm / State / Region / HQ.\nNo changes required."
+                    : $"{result.Unchanged} Sub Dealer Code(s) are already available with the same Firm / State / Region / HQ.\nNo changes required.";
+            }
         }
         catch (Exception ex)
         {
@@ -4117,10 +4165,16 @@
             if (_importRejected.Count > 0 || _importErrors.Count > 0)
             {
                 _importHasError = true;
-                _importPartialSuccess = _importInserted + _importUpdated > 0;
-                _importMessage = _importInserted + _importUpdated > 0
-                    ? $"Import completed with some rejected rows. Inserted: {_importInserted}, Updated: {_importUpdated}, Unchanged: {_importUnchanged}."
-                    : $"No database changes were made. Unchanged: {_importUnchanged}. Review the rejected rows below.";
+                _importPartialSuccess = _importInserted > 0;
+                var hasConflict = _importRejected.Any(x =>
+                    x.Reason.Contains("contact Admin", StringComparison.OrdinalIgnoreCase) ||
+                    x.Reason.Contains("different Firm / State / Region / HQ mapping", StringComparison.OrdinalIgnoreCase));
+
+                _importMessage = _importInserted > 0
+                    ? $"Import completed with some rejected rows. New: {_importInserted}, Already same: {_importUnchanged}, Rejected: {_importRejected.Count}."
+                    : hasConflict
+                        ? "Sub Dealer Code already exists with a different Firm / State / Region / HQ mapping.\nBulk Upload cannot update existing Sub Dealer master details.\nPlease contact Admin for changes."
+                        : $"No database changes were made. Already same: {_importUnchanged}. Review the rejected rows below.";
                 return;
             }
 
@@ -4128,9 +4182,9 @@
             _importHasError = false;
             _importPartialSuccess = false;
             _pageMessageIsError = false;
-            _pageMessage = _importInserted + _importUpdated > 0
-                ? $"Sub Dealer master imported successfully. Inserted: {_importInserted}, Updated: {_importUpdated}, Unchanged: {_importUnchanged}."
-                : $"Import checked and confirmed. {_importUnchanged} row(s) already matched the database; no update was required.";
+            _pageMessage = _importInserted > 0
+                ? $"Sub Dealer master imported successfully. New: {_importInserted}, Already same: {_importUnchanged}."
+                : $"Sub Dealer Code is already available with the same Firm / State / Region / HQ. No changes required.";
         }
         catch (Exception ex)
         {
