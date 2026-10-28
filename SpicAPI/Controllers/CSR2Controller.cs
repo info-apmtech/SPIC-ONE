@@ -68,7 +68,7 @@ namespace SpicAPI.Controllers
 
             // STATE workflow follows the CSR-1 applicant's organisation scope.
             // CSR-1 State flow: SMDO apply -> SMDO validate -> SMM approve.
-            // SMD is retained as state-level read visibility only.
+            // SMD/SMDO are State workflow applicant/validator roles.
             if (User.IsInRole("SMD") ||
                 User.IsInRole("SMDO"))
             {
@@ -85,15 +85,26 @@ namespace SpicAPI.Controllers
                         applicantLogin.StateId == stateId));
             }
 
-            // SMM has no CSR-2 reviewer/approval stage in the State workflow.
-            // If an SMM is the CSR-1 Responsible Person, responsiblePredicate still
-            // allows that person to prepare/apply their own CSR-2 Tabs 1 & 2.
+            // State approval role: SMM must see approved CSR-1 records in the same State.
             if (User.IsInRole("SMM"))
-                return responsiblePredicate;
+            {
+                if (loginScope.StateId <= 0)
+                    return responsiblePredicate;
 
-            // HQ workflow: MDO applies CSR-1, MO validates CSR-2, RM/RMM approves.
-            // MO/RM/RMM reviewer visibility is Headquarters only.
-            if (User.IsInRole("MO") ||
+                var stateId = loginScope.StateId;
+
+                return query.Where(csr1 =>
+                    csr1.ResponsiblePersonId == userId ||
+                    _db.Set<Employeelogin>().Any(applicantLogin =>
+                        applicantLogin.IsActive &&
+                        applicantLogin.UserId == csr1.CreatedBy &&
+                        applicantLogin.StateId == stateId));
+            }
+
+            // HQ workflow: MDO applies CSR-2, MO validates, RM/RMM approves.
+            // Workflow visibility is Headquarters only.
+            if (User.IsInRole("MDO") ||
+                User.IsInRole("MO") ||
                 User.IsInRole("RM") ||
                 User.IsInRole("RMM"))
             {
@@ -178,12 +189,6 @@ namespace SpicAPI.Controllers
             var visibleCsr1 = await VisibleApprovedCSR1Async();
             var csr1 = await visibleCsr1.FirstOrDefaultAsync(x => x.Id == csr1Id);
             if (csr1 == null) return NotFound(new { message = "Approved CSR1 record not found." });
-
-            // Rehydrate the 11 legacy expense properties from CSR1Expenses - EF no longer
-            // populates them (they're [NotMapped]; the real data lives in CSR1Expenses now).
-            var csr1ExpenseRows = await _db.Set<CSR1Expenses>().AsNoTracking()
-                .Where(x => x.CSR1Id == csr1Id && x.IsActive).ToListAsync();
-            SPIC.Core.Entities.CSR1ExpenseMapper.ApplyExpenses(csr1, csr1ExpenseRows);
             var master = await _db.Set<ProgramMaster>().AsNoTracking()
                 .Where(x => x.Id == csr1.ProgramId)
                 .Select(x => new { ProgramName = x.Name, ProgramType = x.ProgramType.Name })
@@ -416,7 +421,35 @@ namespace SpicAPI.Controllers
         private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
         private string UploadRoot => Path.Combine(_env.ContentRootPath, "App_Data", "csr2-private");
 
-        private bool IsRole(params string[] roles) => roles.Any(User.IsInRole);
+        // CSR-2 workflow permissions use the active employee login role first.
+        // JWT/AppUsers role is retained only as a compatibility fallback.
+        private async Task<HashSet<string>> GetEffectiveCSR2RolesAsync()
+        {
+            var roles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(CurrentUserId))
+            {
+                var employeeRoles = await _db.Set<Employeelogin>()
+                    .AsNoTracking()
+                    .Where(x => x.IsActive && x.UserId == CurrentUserId)
+                    .Select(x => x.Role.ToString())
+                    .Distinct()
+                    .ToListAsync(HttpContext.RequestAborted);
+
+                foreach (var role in employeeRoles)
+                    if (!string.IsNullOrWhiteSpace(role))
+                        roles.Add(role);
+            }
+
+            foreach (var claim in User.FindAll(ClaimTypes.Role))
+                if (!string.IsNullOrWhiteSpace(claim.Value))
+                    roles.Add(claim.Value);
+
+            return roles;
+        }
+
+        private static bool HasRole(IReadOnlySet<string> effectiveRoles, params string[] roles) =>
+            roles.Any(effectiveRoles.Contains);
 
         private bool IsResponsiblePerson(CSR1 csr1) =>
             !string.IsNullOrWhiteSpace(CurrentUserId) &&
@@ -424,63 +457,220 @@ namespace SpicAPI.Controllers
 
         private async Task<string> ResolveCSR2ScopeAsync(CSR1 csr1)
         {
-            string? creatorRole = null;
-
+            // Resolve workflow scope from the CSR-1 applicant's Employeelogin role.
+            // Do not infer State/HQ from HeadquarterId because State CSR-1 records
+            // may also carry a HeadquarterId.
             if (!string.IsNullOrWhiteSpace(csr1.CreatedBy))
             {
-                var creator = await _db.Users
+                var creatorRoles = await _db.Set<Employeelogin>()
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(u => u.Id == csr1.CreatedBy);
+                    .Where(x => x.UserId == csr1.CreatedBy)
+                    .Select(x => x.Role.ToString())
+                    .Distinct()
+                    .ToListAsync(HttpContext.RequestAborted);
 
-                if (creator != null)
-                    creatorRole = creator.Role.ToString();
-            }
-
-            if (!string.IsNullOrWhiteSpace(creatorRole))
-            {
-                if (string.Equals(creatorRole, "SMDO", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, "SMD", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, "SMM", StringComparison.OrdinalIgnoreCase))
+                if (creatorRoles.Any(role =>
+                        string.Equals(role, "SMD", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(role, "SMDO", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(role, "SMM", StringComparison.OrdinalIgnoreCase)))
                 {
                     return "State";
                 }
 
-                if (string.Equals(creatorRole, "RMDO", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, "MDO", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, "JMDO", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, "MO", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, "RM", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(creatorRole, "RMD", StringComparison.OrdinalIgnoreCase))
+                if (creatorRoles.Any(role =>
+                        string.Equals(role, "MDO", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(role, "JMDO", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(role, "RMDO", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(role, "MO", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(role, "RM", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(role, "RMM", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(role, "RMD", StringComparison.OrdinalIgnoreCase)))
                 {
                     return "HQ";
                 }
             }
 
-            // Same fallback currently used by CSR-1 scope resolution.
+            // If a historical CSR-1 creator no longer has an Employeelogin row,
+            // infer the workflow family from the current authorized workflow role.
+            // This avoids misclassifying State CSR-1 records merely because they also
+            // contain a HeadquarterId.
+            var currentRoles = await GetEffectiveCSR2RolesAsync();
+            if (HasRole(currentRoles, "SMD", "SMDO", "SMM"))
+                return "State";
+            if (HasRole(currentRoles, "MDO", "JMDO", "RMDO", "MO", "RM", "RMM", "RMD"))
+                return "HQ";
+
+            // Legacy last-resort fallback for roles with no State/HQ identity
+            // (for example MDADMIN/MDHOD). Normal workflow reviewers should have
+            // been resolved above from the CSR-1 creator role.
             return csr1.HeadquarterId > 0 ? "HQ" : "State";
         }
 
-        private bool CanEditCSR2(CSR1 csr1, CSR2 report)
+        private async Task<int> GetCSR2CutoffDayAsync()
         {
-            if (report.Status == CSR2Status.Approved)
+            return await _db.Set<CSRExceedingDaySetting>()
+                .AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderByDescending(x => x.Id)
+                .Select(x => (int?)x.CSR2Day)
+                .FirstOrDefaultAsync(HttpContext.RequestAborted) ?? 0;
+        }
+
+        private async Task<bool> RequiresCSR2MultiLevelApprovalAsync(CSR2? report = null)
+        {
+            var cutoffDay = await GetCSR2CutoffDayAsync();
+            if (cutoffDay <= 0)
                 return false;
 
-            // MD review roles retain the existing Expense & Proof management access.
-            if (IsRole("RMDO", "MDADMIN", "MDHOD"))
+            // CSR2Day ONLY selects the workflow type.
+            // It does not grant/revoke role permissions.
+            //
+            // Draft/not-yet-created CSR-2 has no submission date yet.
+            // Multi-level is selected only after Submit stamps SubmittedAt.
+            if (report == null || report.Status == CSR2Status.Draft)
+                return false;
+
+            // Once submitted, permanently use the actual submission date.
+            // If an old/incomplete row has no SubmittedAt, keep it in the normal workflow
+            // instead of incorrectly switching it based on today's date.
+            if (!report.SubmittedAt.HasValue)
+                return false;
+
+            return report.SubmittedAt.Value.Day > cutoffDay;
+        }
+
+        [HttpGet("workflow-mode/{csr1Id:int}")]
+        public async Task<IActionResult> GetWorkflowMode(int csr1Id)
+        {
+            var csr1 = await ApprovedCsr1Async(csr1Id);
+            if (csr1 == null)
+                return NotFound("Approved CSR1 not available or access denied.");
+
+            var report = await _db.Set<CSR2>()
+                .AsNoTracking()
+                .Where(x => x.CSR1Id == csr1Id)
+                .Select(x => new CSR2
+                {
+                    Id = x.Id,
+                    CSR1Id = x.CSR1Id,
+                    SubmittedAt = x.SubmittedAt,
+                    Status = x.Status
+                })
+                .FirstOrDefaultAsync(HttpContext.RequestAborted);
+
+            var cutoffDay = await GetCSR2CutoffDayAsync();
+            var referenceDay = report?.SubmittedAt?.Day ?? DateTime.Now.Day;
+            var requiresMultiLevelApproval = await RequiresCSR2MultiLevelApprovalAsync(report);
+            var scope = await ResolveCSR2ScopeAsync(csr1);
+            var isState = string.Equals(scope, "State", StringComparison.OrdinalIgnoreCase);
+            var isHq = string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase);
+            var effectiveRoles = await GetEffectiveCSR2RolesAsync();
+
+            var canApply = report == null || report.Status == CSR2Status.Draft
+                ? await CanCreateCSR2DraftAsync(csr1)
+                : false;
+
+            // Validation is mandatory in BOTH normal and exceeded-date workflows.
+            // CSR2Day changes only the approval path after validation.
+            var canValidate = report?.Status == CSR2Status.Submitted &&
+                              !IsResponsiblePerson(csr1) &&
+                              (isState ? HasRole(effectiveRoles, "SMD", "SMDO") : isHq && HasRole(effectiveRoles, "MO"));
+
+            var canApprove = false;
+            var actionLabel = string.Empty;
+            var isResponsiblePerson = IsResponsiblePerson(csr1);
+
+            if (report != null && !isResponsiblePerson)
+            {
+                if (requiresMultiLevelApproval)
+                {
+                    // Exceeded-date workflow still validates first.
+                    // Level 1 approval starts only after Status becomes Validated.
+                    if (report.Status == CSR2Status.Validated)
+                    {
+                        canApprove = isState
+                            ? HasRole(effectiveRoles, "SMM")
+                            : isHq && HasRole(effectiveRoles, "RMM");
+                        if (canApprove) actionLabel = "Approve Level 1";
+                    }
+                    else if (report.Status == CSR2Status.Level1Approved)
+                    {
+                        canApprove = HasRole(effectiveRoles, "MDADMIN");
+                        if (canApprove) actionLabel = "Approve Level 2";
+                    }
+                    else if (report.Status == CSR2Status.Level2Approved)
+                    {
+                        canApprove = HasRole(effectiveRoles, "CSMDHOD", "CSMD-HOD", "MDHOD");
+                        if (canApprove) actionLabel = "Approve Level 3";
+                    }
+                }
+                else if (report.Status == CSR2Status.Validated)
+                {
+                    canApprove = isState
+                        ? HasRole(effectiveRoles, "SMM")
+                        : isHq && HasRole(effectiveRoles, "RM");
+                    if (canApprove) actionLabel = "Approve CSR-2";
+                }
+            }
+
+            if (canValidate)
+                actionLabel = "Validate CSR-2";
+            else if (canApply)
+                actionLabel = "Apply CSR-2";
+
+            return Ok(new
+            {
+                CSR2Day = cutoffDay,
+                ReferenceDay = referenceDay,
+                RequiresMultiLevelApproval = requiresMultiLevelApproval,
+                Scope = scope,
+                Status = report?.Status.ToString() ?? CSR2Status.Draft.ToString(),
+                CanApply = canApply,
+                CanValidate = canValidate,
+                CanApprove = canApprove,
+                ActionLabel = actionLabel
+            });
+        }
+
+        private async Task<bool> CanCreateCSR2DraftAsync(CSR1 csr1)
+        {
+            // Responsible Person can apply in both normal and exceeded-date flows.
+            if (IsResponsiblePerson(csr1))
                 return true;
 
-            if (report.Status == CSR2Status.Draft)
-                return IsResponsiblePerson(csr1);
+            var scope = await ResolveCSR2ScopeAsync(csr1);
+            var effectiveRoles = await GetEffectiveCSR2RolesAsync();
+            var cutoffDay = await GetCSR2CutoffDayAsync();
+            var isExceededDate = cutoffDay > 0 && DateTime.Now.Day > cutoffDay;
 
-            // ApprovedCsr1Async already applies the logged-in user's State/Region/HQ scope.
-            // Therefore role + status is enough here; do not infer workflow from HeadquarterId.
-            if (report.Status == CSR2Status.Submitted)
-                return IsRole("MO", "SMDO");
+            // Normal flow:
+            // State -> SMD/SMDO apply
+            // HQ    -> MDO apply
+            if (!isExceededDate)
+            {
+                if (string.Equals(scope, "State", StringComparison.OrdinalIgnoreCase))
+                    return HasRole(effectiveRoles, "SMD", "SMDO");
 
-            if (report.Status == CSR2Status.Validated)
-                return IsRole("RM", "RMM");
+                if (string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase))
+                    return HasRole(effectiveRoles, "MDO");
 
-            return false;
+                return false;
+            }
+
+            // Exceeded-date flow: MO, SMD/SMDO and RMDO may apply
+            // (subject to the existing CSR-1 visibility/scope authorization).
+            return HasRole(effectiveRoles, "MO", "SMD", "SMDO", "RMDO");
+        }
+
+        private async Task<bool> CanEditCSR2Async(CSR1 csr1, CSR2 report)
+        {
+            // CSR-2 data entry is editable only while the record is Draft.
+            // Use the same role rule as draft creation so exceeded-date MO/RMDO
+            // applicants are not allowed to create a draft and then blocked from editing it.
+            if (report.Status != CSR2Status.Draft)
+                return false;
+
+            return await CanCreateCSR2DraftAsync(csr1);
         }
 
         // IMPORTANT: Replace this with the SAME scope/claims authorization policy as your
@@ -559,8 +749,15 @@ namespace SpicAPI.Controllers
 
             foreach (var participant in report.Participants)
             {
-                string? name = null;
-                string? phone = null;
+                // For manually entered Other participants, Name and PhoneNumber are
+                // stored directly in CSR2Participants. Farmer/Dealer continue to
+                // resolve display details from their existing master tables.
+                string? name = string.Equals(participant.Role, "Other", StringComparison.OrdinalIgnoreCase)
+                    ? participant.Name
+                    : null;
+                string? phone = string.Equals(participant.Role, "Other", StringComparison.OrdinalIgnoreCase)
+                    ? participant.PhoneNumber
+                    : null;
 
                 if (participant.ParticipantSourceId.HasValue)
                 {
@@ -892,10 +1089,10 @@ namespace SpicAPI.Controllers
             if (report != null && dto.Id.HasValue && dto.Id.Value != report.Id)
                 return Conflict("Report ID mismatch.");
 
-            if (report == null && !IsResponsiblePerson(csr1))
-                return StatusCode(StatusCodes.Status403Forbidden, "Only the Responsible Person can create the CSR-2 draft.");
+            if (report == null && !await CanCreateCSR2DraftAsync(csr1))
+                return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to create this CSR-2 draft.");
 
-            if (report != null && !CanEditCSR2(csr1, report))
+            if (report != null && !await CanEditCSR2Async(csr1, report))
                 return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to edit this CSR-2 at the current workflow stage.");
 
             await using var tx = await _db.Database.BeginTransactionAsync(HttpContext.RequestAborted);
@@ -930,20 +1127,81 @@ namespace SpicAPI.Controllers
                 report.UpdatedAt = DateTime.UtcNow;
                 report.UpdatedBy = Actor;
 
-                // Participant name/mobile are display-only and resolved from the source master.
+                // Farmer / Dealer participants keep their master linkage and their
+                // display Name / Phone are resolved from the source master.
+                // Manual/Other participants persist Name + PhoneNumber directly.
+                //
+                // IMPORTANT: Apply CSR-2 calls SaveDraft once more before Submit.
+                // If that second UI payload omits manual Name/Phone, do not erase values
+                // that were already saved in CSR2Participants during the earlier draft save.
+                var existingManualParticipants = report.Participants
+                    .Where(p =>
+                        !p.ParticipantSourceId.HasValue ||
+                        p.ParticipantSourceId.Value <= 0 ||
+                        string.Equals(p.ParticipantSource, "Other", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(p.Role, "Other", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(p => p.Id)
+                    .Select(p => new
+                    {
+                        Name = p.Name,
+                        PhoneNumber = p.PhoneNumber
+                    })
+                    .ToList();
+
                 if (report.Participants.Count > 0)
                     _db.Set<CSR2Participant>().RemoveRange(report.Participants);
 
+                var manualParticipantIndex = 0;
+
                 report.Participants = dto.Participants
-                    .Select(x => new CSR2Participant
+                    .Select(x =>
                     {
-                        CSR2Id = report.Id,
-                        ParticipantSourceId = x.ParticipantSourceId,
-                        ParticipantSource = string.IsNullOrWhiteSpace(x.ParticipantSource)
-                            ? null
-                            : x.ParticipantSource.Trim(),
-                        Role = x.Role.Trim(),
-                        CreatedAt = DateTime.UtcNow
+                        var role = (x.Role ?? string.Empty).Trim();
+                        var source = (x.ParticipantSource ?? string.Empty).Trim();
+
+                        var isMasterParticipant =
+                            x.ParticipantSourceId.HasValue &&
+                            x.ParticipantSourceId.Value > 0 &&
+                            (string.Equals(source, "SasFarmers", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(source, "DealerRegistrations", StringComparison.OrdinalIgnoreCase));
+
+                        if (isMasterParticipant)
+                        {
+                            return new CSR2Participant
+                            {
+                                CSR2Id = report.Id,
+                                ParticipantSourceId = x.ParticipantSourceId,
+                                ParticipantSource = source,
+                                Role = string.IsNullOrWhiteSpace(role) ? "Other" : role,
+                                Name = null,
+                                PhoneNumber = null,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                        }
+
+                        var existingManual = manualParticipantIndex < existingManualParticipants.Count
+                            ? existingManualParticipants[manualParticipantIndex]
+                            : null;
+                        manualParticipantIndex++;
+
+                        var manualName = !string.IsNullOrWhiteSpace(x.Name)
+                            ? x.Name.Trim()
+                            : existingManual?.Name;
+
+                        var manualPhone = !string.IsNullOrWhiteSpace(x.PhoneNumber)
+                            ? x.PhoneNumber.Trim()
+                            : existingManual?.PhoneNumber;
+
+                        return new CSR2Participant
+                        {
+                            CSR2Id = report.Id,
+                            ParticipantSourceId = null,
+                            ParticipantSource = "Other",
+                            Role = string.IsNullOrWhiteSpace(role) ? "Other" : role,
+                            Name = string.IsNullOrWhiteSpace(manualName) ? null : manualName,
+                            PhoneNumber = string.IsNullOrWhiteSpace(manualPhone) ? null : manualPhone,
+                            CreatedAt = DateTime.UtcNow
+                        };
                     })
                     .ToList();
 
@@ -1137,6 +1395,7 @@ namespace SpicAPI.Controllers
             }
         }
 
+
         [HttpPost("{id:int}/submit")]
         public async Task<IActionResult> Submit(int id)
         {
@@ -1152,8 +1411,8 @@ namespace SpicAPI.Controllers
             var csr1 = await ApprovedCsr1Async(report.CSR1Id);
             if (csr1 == null) return NotFound();
 
-            if (!IsResponsiblePerson(csr1))
-                return StatusCode(StatusCodes.Status403Forbidden, "Only the Responsible Person can apply CSR-2.");
+            if (!await CanCreateCSR2DraftAsync(csr1))
+                return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to apply this CSR-2.");
 
             if (report.Status != CSR2Status.Draft)
                 return Conflict("CSR-2 has already been applied.");
@@ -1185,7 +1444,13 @@ namespace SpicAPI.Controllers
             report.UpdatedBy = Actor;
 
             await _db.SaveChangesAsync(HttpContext.RequestAborted);
-            return Ok(new { report.Id, Status = report.Status.ToString() });
+            var requiresMultiLevelApproval = await RequiresCSR2MultiLevelApprovalAsync(report);
+            return Ok(new
+            {
+                report.Id,
+                Status = report.Status.ToString(),
+                RequiresMultiLevelApproval = requiresMultiLevelApproval
+            });
         }
 
         [HttpPost("{id:int}/validate")]
@@ -1200,39 +1465,41 @@ namespace SpicAPI.Controllers
             if (report.Status != CSR2Status.Submitted)
                 return Conflict("Only submitted CSR-2 can be validated.");
 
+            // Validation is required even when CSR2Day is exceeded.
+            // The cutoff changes only what happens AFTER validation.
+            var requiresMultiLevelApproval = await RequiresCSR2MultiLevelApprovalAsync(report);
+
             var scope = await ResolveCSR2ScopeAsync(csr1);
             var isStateScope = string.Equals(scope, "State", StringComparison.OrdinalIgnoreCase);
             var isHqScope = string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase);
+            var effectiveRoles = await GetEffectiveCSR2RolesAsync();
 
             if (isStateScope)
             {
-                if (!IsRole("SMDO"))
+                if (!HasRole(effectiveRoles, "SMD", "SMDO"))
                     return StatusCode(StatusCodes.Status403Forbidden,
-                        "Only SMDO can validate State CSR-2 within the assigned State scope.");
-
-                // State CSR-2 has no separate approval stage.
-                // SMDO validation is the final workflow action.
-                report.Status = CSR2Status.Approved;
+                        "Only SMD/SMDO can validate State CSR-2 within the assigned State scope.");
             }
             else if (isHqScope)
             {
-                if (!IsRole("MO"))
+                if (!HasRole(effectiveRoles, "MO"))
                     return StatusCode(StatusCodes.Status403Forbidden,
                         "Only MO can validate HQ CSR-2 within the assigned Headquarters scope.");
-
-                // HQ CSR-2 still requires RM/RMM approval after MO validation.
-                report.Status = CSR2Status.Validated;
             }
             else
             {
                 return BadRequest("Unable to determine CSR-2 workflow scope.");
             }
 
-            report.UpdatedAt = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            report.Status = CSR2Status.Validated;
+            report.ValidateBy = Actor;
+            report.ValidateAt = now;
+            report.UpdatedAt = now;
             report.UpdatedBy = Actor;
-            await _db.SaveChangesAsync(HttpContext.RequestAborted);
 
-            return Ok(new { report.Id, Scope = scope, Status = report.Status.ToString() });
+            await _db.SaveChangesAsync(HttpContext.RequestAborted);
+            return Ok(new { report.Id, Scope = scope, Status = report.Status.ToString(), RequiresMultiLevelApproval = requiresMultiLevelApproval });
         }
 
         [HttpPost("{id:int}/approve")]
@@ -1244,24 +1511,124 @@ namespace SpicAPI.Controllers
             var csr1 = await ApprovedCsr1Async(report.CSR1Id);
             if (csr1 == null) return NotFound();
 
-            if (report.Status != CSR2Status.Validated)
-                return Conflict("Only validated CSR-2 can be approved.");
-
             var scope = await ResolveCSR2ScopeAsync(csr1);
+            var isStateScope = string.Equals(scope, "State", StringComparison.OrdinalIgnoreCase);
+            var isHqScope = string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase);
+            var effectiveRoles = await GetEffectiveCSR2RolesAsync();
+            var requiresMultiLevel = await RequiresCSR2MultiLevelApprovalAsync(report);
+            var now = DateTime.UtcNow;
 
-            if (!string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase))
-                return Conflict("State CSR-2 does not have a separate approval stage. SMDO validation completes the workflow.");
+            if (requiresMultiLevel)
+            {
+                string approverLevel;
 
-            if (!IsRole("RM", "RMM"))
-                return StatusCode(StatusCodes.Status403Forbidden,
-                    "Only RM/RMM can approve HQ CSR-2 within their assigned Headquarters scope.");
+                if (report.Status == CSR2Status.Validated)
+                {
+                    if (isStateScope)
+                    {
+                        if (!HasRole(effectiveRoles, "SMM"))
+                            return StatusCode(StatusCodes.Status403Forbidden,
+                                "Only SMM can perform Level 1 approval for State CSR-2 after validation.");
+                    }
+                    else if (isHqScope)
+                    {
+                        if (!HasRole(effectiveRoles, "RMM"))
+                            return StatusCode(StatusCodes.Status403Forbidden,
+                                "Only RMM can perform Level 1 approval for HQ CSR-2 after validation.");
+                    }
+                    else
+                    {
+                        return BadRequest("Unable to determine CSR-2 workflow scope.");
+                    }
+
+                    approverLevel = "Level1";
+                    report.Status = CSR2Status.Level1Approved;
+                }
+                else if (report.Status == CSR2Status.Level1Approved)
+                {
+                    if (!HasRole(effectiveRoles, "MDADMIN"))
+                        return StatusCode(StatusCodes.Status403Forbidden,
+                            "Only MDADMIN can perform Level 2 approval for CSR-2.");
+
+                    approverLevel = "Level2";
+                    report.Status = CSR2Status.Level2Approved;
+                }
+                else if (report.Status == CSR2Status.Level2Approved)
+                {
+                    if (!HasRole(effectiveRoles, "CSMDHOD", "CSMD-HOD", "MDHOD"))
+                        return StatusCode(StatusCodes.Status403Forbidden,
+                            "Only CSMD-HOD can perform Level 3 approval for CSR-2.");
+
+                    approverLevel = "Level3";
+                    report.Status = CSR2Status.Approved;
+                    report.ApprovedBy = Actor;
+                    report.ApprovedAt = now;
+                }
+                else
+                {
+                    return Conflict("CSR-2 is not at a valid multi-level approval stage.");
+                }
+
+                _db.Set<CSR2ApprovalDetails>().Add(new CSR2ApprovalDetails
+                {
+                    CSR2Id = report.Id,
+                    ApprovedBy = Actor,
+                    ApprovedAt = now,
+                    ApproverLevel = approverLevel,
+                    CreatedBy = Actor,
+                    CreatedAt = now
+                });
+
+                report.UpdatedAt = now;
+                report.UpdatedBy = Actor;
+
+                await _db.SaveChangesAsync(HttpContext.RequestAborted);
+                return Ok(new
+                {
+                    report.Id,
+                    Scope = scope,
+                    Status = report.Status.ToString(),
+                    RequiresMultiLevelApproval = true,
+                    ApproverLevel = approverLevel
+                });
+            }
+
+            if (report.Status != CSR2Status.Validated)
+                return Conflict("Only validated CSR-2 can be approved in the normal workflow.");
+
+            if (isStateScope)
+            {
+                if (!HasRole(effectiveRoles, "SMM"))
+                    return StatusCode(StatusCodes.Status403Forbidden,
+                        "Only SMM can approve State CSR-2 within the assigned State scope.");
+            }
+            else if (isHqScope)
+            {
+                if (!HasRole(effectiveRoles, "RM"))
+                    return StatusCode(StatusCodes.Status403Forbidden,
+                        "Only RM can approve HQ CSR-2 within the assigned Headquarters scope.");
+            }
+            else
+            {
+                return BadRequest("Unable to determine CSR-2 workflow scope.");
+            }
 
             report.Status = CSR2Status.Approved;
-            report.UpdatedAt = DateTime.UtcNow;
+            report.ApprovedBy = Actor;
+            report.ApprovedAt = now;
+            report.UpdatedAt = now;
             report.UpdatedBy = Actor;
+
+            // Normal approval does NOT write CSR2ApprovalDetails.
             await _db.SaveChangesAsync(HttpContext.RequestAborted);
 
-            return Ok(new { report.Id, Status = report.Status.ToString() });
+            return Ok(new
+            {
+                report.Id,
+                Scope = scope,
+                Status = report.Status.ToString(),
+                RequiresMultiLevelApproval = false
+            });
         }
 
         [HttpPost("{id:int}/media")]
@@ -1278,7 +1645,7 @@ namespace SpicAPI.Controllers
             if (report == null) return NotFound();
             var csr1 = await ApprovedCsr1Async(report.CSR1Id);
             if (csr1 == null) return NotFound();
-            if (!CanEditCSR2(csr1, report))
+            if (!await CanEditCSR2Async(csr1, report))
                 return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to upload media at the current workflow stage.");
 
             var isPhoto = string.Equals(mediaType, "Photo", StringComparison.OrdinalIgnoreCase);
@@ -1347,7 +1714,7 @@ namespace SpicAPI.Controllers
             if (report == null) return NotFound();
             var csr1 = await ApprovedCsr1Async(report.CSR1Id);
             if (csr1 == null) return NotFound();
-            if (!CanEditCSR2(csr1, report))
+            if (!await CanEditCSR2Async(csr1, report))
                 return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to upload expense proofs at the current workflow stage.");
 
             var expense = await _db.Set<CSR2Expense>()
@@ -1428,7 +1795,7 @@ namespace SpicAPI.Controllers
             if (report == null) return NotFound();
             var csr1 = await ApprovedCsr1Async(report.CSR1Id);
             if (csr1 == null) return NotFound();
-            if (!CanEditCSR2(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
+            if (!await CanEditCSR2Async(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
             _db.Remove(media); await _db.SaveChangesAsync();
             System.IO.File.Delete(ResolveStoragePath(media.StorageKey)); return NoContent();
         }
@@ -1441,7 +1808,7 @@ namespace SpicAPI.Controllers
             if (report == null) return NotFound();
             var csr1 = await ApprovedCsr1Async(report.CSR1Id);
             if (csr1 == null) return NotFound();
-            if (!CanEditCSR2(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
+            if (!await CanEditCSR2Async(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
             _db.Remove(proof); await _db.SaveChangesAsync();
             System.IO.File.Delete(ResolveStoragePath(proof.StorageKey)); return NoContent();
         }
@@ -1454,7 +1821,7 @@ namespace SpicAPI.Controllers
             if (report == null) return NotFound();
             var csr1 = await ApprovedCsr1Async(report.CSR1Id);
             if (csr1 == null) return NotFound();
-            if (!CanEditCSR2(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
+            if (!await CanEditCSR2Async(csr1, report)) return StatusCode(StatusCodes.Status403Forbidden);
             media.Caption = patch.Caption;
             await _db.SaveChangesAsync(); return NoContent();
         }
@@ -1548,16 +1915,13 @@ namespace SpicAPI.Controllers
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
-            // Reuse the exact same CSR-1 visibility/workflow rule already used by
-            // the existing CSR-2 create/read/update APIs.
+            // Keep the existing visibility/authorization rule unchanged.
             var visibleCsr1 = await VisibleApprovedCSR1Async();
 
             var query =
                 from csr2 in _db.Set<CSR2>().AsNoTracking()
-                join csr1 in visibleCsr1
-                    on csr2.CSR1Id equals csr1.Id
-                join program in _db.Set<ProgramMaster>().AsNoTracking()
-                    on csr1.ProgramId equals program.Id
+                join csr1 in visibleCsr1 on csr2.CSR1Id equals csr1.Id
+                join program in _db.Set<ProgramMaster>().AsNoTracking() on csr1.ProgramId equals program.Id
                 select new
                 {
                     CSR2 = csr2,
@@ -1606,8 +1970,21 @@ namespace SpicAPI.Controllers
                     (x.CSR2.ActualLocation != null && x.CSR2.ActualLocation.Contains(term)));
             }
 
+            // Keep count queries simple. The expensive child-table aggregates are intentionally
+            // not part of this base query.
             var totalCount = await query.CountAsync(HttpContext.RequestAborted);
 
+            var statusCounts = await query
+                .GroupBy(x => x.CSR2.Status)
+                .Select(g => new
+                {
+                    Status = g.Key.ToString(),
+                    Count = g.Count()
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            // Load only the current page first. This avoids executing several correlated
+            // COUNT/SUM subqueries once per CSR-2 row inside one large SQL statement.
             var rows = await query
                 .OrderByDescending(x => x.CSR2.UpdatedAt ?? x.CSR2.CreatedAt)
                 .ThenByDescending(x => x.CSR2.Id)
@@ -1631,38 +2008,76 @@ namespace SpicAPI.Controllers
                     x.CSR2.EndTime,
                     x.CSR2.EventCoordinatorEmployeeId,
                     x.CSR2.ActualLocation,
-                    x.CSR2.ExpectedParticipantsCount,
-                    x.CSR2.Remarks,
-                    x.CSR2.CreatedAt,
-                    x.CSR2.CreatedBy,
-                    x.CSR2.UpdatedAt,
-                    x.CSR2.UpdatedBy,
                     x.CSR2.SubmittedAt,
-                    x.CSR2.SubmittedBy,
                     ResponsiblePersonId = x.CSR1.ResponsiblePersonId,
-                    CSR1CreatedBy = x.CSR1.CreatedBy,
-                    ParticipantCount = _db.Set<CSR2Participant>()
-                        .Count(p => p.CSR2Id == x.CSR2.Id),
-                    EmployeeCount = _db.Set<CSR2Employee>()
-                        .Count(e => e.CSR2Id == x.CSR2.Id),
-                    PhotoCount = _db.Set<CSR2Media>()
-                        .Count(m => m.CSR2Id == x.CSR2.Id && m.MediaType == "Photo"),
-                    VideoCount = _db.Set<CSR2Media>()
-                        .Count(m => m.CSR2Id == x.CSR2.Id && m.MediaType == "Video"),
-                    ExpenseCount = _db.Set<CSR2Expense>()
-                        .Count(e => e.CSR2Id == x.CSR2.Id),
-                    ActualExpense = _db.Set<CSR2Expense>()
-                        .Where(e => e.CSR2Id == x.CSR2.Id && e.ActualAmount.HasValue)
-                        .Sum(e => (decimal?)e.ActualAmount) ?? 0m,
-                    ProofCount = _db.Set<CSR2ExpenseProof>()
-                        .Count(p => _db.Set<CSR2Expense>()
-                            .Any(e => e.Id == p.CSR2ExpenseId && e.CSR2Id == x.CSR2.Id))
+                    CSR1CreatedBy = x.CSR1.CreatedBy
                 })
                 .ToListAsync(HttpContext.RequestAborted);
 
-            // Determine State/HQ from the CSR-1 applicant role, not from CSR1.HeadquarterId.
-            // State CSR-1 rows can still carry a HeadquarterId, so HeadquarterId > 0 is not
-            // a reliable workflow discriminator.
+            if (rows.Count == 0)
+            {
+                return Ok(new
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize)),
+                    StatusCounts = statusCounts,
+                    Items = Array.Empty<object>()
+                });
+            }
+
+            var csr2Ids = rows.Select(x => x.CSR2Id).ToList();
+
+            // Aggregate child data only for rows on the current page.
+            var participantCounts = await _db.Set<CSR2Participant>()
+                .AsNoTracking()
+                .Where(x => csr2Ids.Contains(x.CSR2Id))
+                .GroupBy(x => x.CSR2Id)
+                .Select(g => new { CSR2Id = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.CSR2Id, x => x.Count, HttpContext.RequestAborted);
+
+            var employeeCounts = await _db.Set<CSR2Employee>()
+                .AsNoTracking()
+                .Where(x => csr2Ids.Contains(x.CSR2Id))
+                .GroupBy(x => x.CSR2Id)
+                .Select(g => new { CSR2Id = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.CSR2Id, x => x.Count, HttpContext.RequestAborted);
+
+            var mediaCounts = await _db.Set<CSR2Media>()
+                .AsNoTracking()
+                .Where(x => csr2Ids.Contains(x.CSR2Id))
+                .GroupBy(x => x.CSR2Id)
+                .Select(g => new
+                {
+                    CSR2Id = g.Key,
+                    PhotoCount = g.Count(x => x.MediaType == "Photo"),
+                    VideoCount = g.Count(x => x.MediaType == "Video")
+                })
+                .ToDictionaryAsync(x => x.CSR2Id, HttpContext.RequestAborted);
+
+            var expenseAggregates = await _db.Set<CSR2Expense>()
+                .AsNoTracking()
+                .Where(x => csr2Ids.Contains(x.CSR2Id))
+                .GroupBy(x => x.CSR2Id)
+                .Select(g => new
+                {
+                    CSR2Id = g.Key,
+                    ExpenseCount = g.Count(),
+                    ActualExpense = g.Sum(x => (decimal?)x.ActualAmount) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.CSR2Id, HttpContext.RequestAborted);
+
+            var proofCounts = await (
+                from proof in _db.Set<CSR2ExpenseProof>().AsNoTracking()
+                join expense in _db.Set<CSR2Expense>().AsNoTracking()
+                    on proof.CSR2ExpenseId equals expense.Id
+                where csr2Ids.Contains(expense.CSR2Id)
+                group proof by expense.CSR2Id into g
+                select new { CSR2Id = g.Key, Count = g.Count() }
+            ).ToDictionaryAsync(x => x.CSR2Id, x => x.Count, HttpContext.RequestAborted);
+
+            // Determine State/HQ from the CSR-1 applicant role, preserving the existing logic.
             var csr1CreatorIds = rows
                 .Select(x => x.CSR1CreatedBy)
                 .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -1671,37 +2086,113 @@ namespace SpicAPI.Controllers
 
             var csr1CreatorRoles = await _db.Set<Employeelogin>()
                 .AsNoTracking()
-                .Where(x =>
-                    x.IsActive &&
-                    csr1CreatorIds.Contains(x.UserId))
-                .Select(x => new
-                {
-                    x.UserId,
-                    x.Role
-                })
+                .Where(x => csr1CreatorIds.Contains(x.UserId))
+                .Select(x => new { x.UserId, x.Role })
                 .ToListAsync(HttpContext.RequestAborted);
 
-            var creatorRoleByUserId = csr1CreatorRoles
+            var creatorRolesByUserId = csr1CreatorRoles
                 .GroupBy(x => x.UserId)
                 .ToDictionary(
                     g => g.Key,
-                    g => g.Select(x => x.Role.ToString()).FirstOrDefault() ?? "",
+                    g => g.Select(x => x.Role.ToString())
+                          .Where(role => !string.IsNullOrWhiteSpace(role))
+                          .ToHashSet(StringComparer.OrdinalIgnoreCase),
                     StringComparer.OrdinalIgnoreCase);
+
+            var effectiveRoles = await GetEffectiveCSR2RolesAsync();
+            var cutoffDay = await GetCSR2CutoffDayAsync();
 
             var items = rows.Select(x =>
             {
+                participantCounts.TryGetValue(x.CSR2Id, out var participantCount);
+                employeeCounts.TryGetValue(x.CSR2Id, out var employeeCount);
+                mediaCounts.TryGetValue(x.CSR2Id, out var mediaCount);
+                expenseAggregates.TryGetValue(x.CSR2Id, out var expenseAggregate);
+                proofCounts.TryGetValue(x.CSR2Id, out var proofCount);
+
+                var photoCount = mediaCount?.PhotoCount ?? 0;
+                var videoCount = mediaCount?.VideoCount ?? 0;
+                var expenseCount = expenseAggregate?.ExpenseCount ?? 0;
+                var actualExpense = expenseAggregate?.ActualExpense ?? 0m;
+
                 var mandatoryComplete = 0;
                 if (x.ActualEventDate.HasValue) mandatoryComplete++;
                 if (x.StartTime.HasValue) mandatoryComplete++;
                 if (x.EndTime.HasValue) mandatoryComplete++;
                 if (!string.IsNullOrWhiteSpace(x.EventCoordinatorEmployeeId)) mandatoryComplete++;
                 if (!string.IsNullOrWhiteSpace(x.ActualLocation)) mandatoryComplete++;
-                if (x.PhotoCount > 0) mandatoryComplete++;
-                if (x.VideoCount > 0) mandatoryComplete++;
-                if (x.ParticipantCount > 0) mandatoryComplete++;
-                if (x.EmployeeCount > 0) mandatoryComplete++;
+                if (photoCount > 0) mandatoryComplete++;
+                if (videoCount > 0) mandatoryComplete++;
+                if (participantCount > 0) mandatoryComplete++;
+                if (employeeCount > 0) mandatoryComplete++;
 
                 var reportCompletion = (int)Math.Round(mandatoryComplete / 9d * 100d);
+
+                var creatorRoles = !string.IsNullOrWhiteSpace(x.CSR1CreatedBy) &&
+                                   creatorRolesByUserId.TryGetValue(x.CSR1CreatedBy, out var roleSet)
+                    ? roleSet
+                    : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                var isState = creatorRoles.Overlaps(new[] { "SMD", "SMDO", "SMM" });
+                var isHq = creatorRoles.Overlaps(new[] { "MDO", "JMDO", "RMDO", "MO", "RM", "RMM", "RMD" });
+
+                if (!isState && !isHq)
+                {
+                    if (HasRole(effectiveRoles, "SMD", "SMDO", "SMM")) isState = true;
+                    else if (HasRole(effectiveRoles, "MDO", "JMDO", "RMDO", "MO", "RM", "RMM", "RMD")) isHq = true;
+                }
+
+                var scope = isState ? "State" : "HQ";
+                var requiresMultiLevelApproval =
+                    cutoffDay > 0 &&
+                    x.SubmittedAt.HasValue &&
+                    x.SubmittedAt.Value.Day > cutoffDay;
+
+                var isResponsiblePerson =
+                    !string.IsNullOrWhiteSpace(CurrentUserId) &&
+                    string.Equals(x.ResponsiblePersonId, CurrentUserId, StringComparison.OrdinalIgnoreCase);
+
+                // Workflow behavior intentionally unchanged by this performance patch.
+                var canValidate =
+                    x.StatusValue == (int)CSR2Status.Submitted &&
+                    !isResponsiblePerson &&
+                    (isState
+                        ? HasRole(effectiveRoles, "SMD", "SMDO")
+                        : HasRole(effectiveRoles, "MO"));
+
+                var canApprove = false;
+                var actionLabel = string.Empty;
+
+                if (!isResponsiblePerson && requiresMultiLevelApproval)
+                {
+                    if (x.StatusValue == (int)CSR2Status.Validated)
+                    {
+                        canApprove = isState
+                            ? HasRole(effectiveRoles, "SMM")
+                            : HasRole(effectiveRoles, "RMM");
+                        if (canApprove) actionLabel = "Approve Level 1";
+                    }
+                    else if (x.StatusValue == (int)CSR2Status.Level1Approved)
+                    {
+                        canApprove = HasRole(effectiveRoles, "MDADMIN");
+                        if (canApprove) actionLabel = "Approve Level 2";
+                    }
+                    else if (x.StatusValue == (int)CSR2Status.Level2Approved)
+                    {
+                        canApprove = HasRole(effectiveRoles, "CSMDHOD", "CSMD-HOD", "MDHOD");
+                        if (canApprove) actionLabel = "Approve Level 3";
+                    }
+                }
+                else if (!isResponsiblePerson && x.StatusValue == (int)CSR2Status.Validated)
+                {
+                    canApprove = isState
+                        ? HasRole(effectiveRoles, "SMM")
+                        : HasRole(effectiveRoles, "RM");
+                    if (canApprove) actionLabel = "Approve CSR-2";
+                }
+
+                if (canValidate)
+                    actionLabel = "Validate CSR-2";
 
                 return new
                 {
@@ -1721,43 +2212,22 @@ namespace SpicAPI.Controllers
                     x.EndTime,
                     x.EventCoordinatorEmployeeId,
                     x.ActualLocation,
-                    x.ExpectedParticipantsCount,
-                    x.Remarks,
-                    x.CreatedAt,
-                    x.CreatedBy,
-                    x.UpdatedAt,
-                    x.UpdatedBy,
-                    x.SubmittedAt,
-                    x.SubmittedBy,
                     x.ResponsiblePersonId,
-                    Scope =
-                        !string.IsNullOrWhiteSpace(x.CSR1CreatedBy) &&
-                        creatorRoleByUserId.TryGetValue(x.CSR1CreatedBy, out var creatorRole) &&
-                        (string.Equals(creatorRole, "SMDO", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(creatorRole, "SMD", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(creatorRole, "SMM", StringComparison.OrdinalIgnoreCase))
-                            ? "State"
-                            : "HQ",
-                    x.ParticipantCount,
-                    x.EmployeeCount,
-                    x.PhotoCount,
-                    x.VideoCount,
-                    x.ExpenseCount,
-                    x.ActualExpense,
-                    x.ProofCount,
+                    Scope = scope,
+                    RequiresMultiLevelApproval = requiresMultiLevelApproval,
+                    CanValidate = canValidate,
+                    CanApprove = canApprove,
+                    ActionLabel = actionLabel,
+                    ParticipantCount = participantCount,
+                    EmployeeCount = employeeCount,
+                    PhotoCount = photoCount,
+                    VideoCount = videoCount,
+                    ExpenseCount = expenseCount,
+                    ActualExpense = actualExpense,
+                    ProofCount = proofCount,
                     ReportCompletion = reportCompletion
                 };
             }).ToList();
-
-            // Counts are calculated after the active filters are applied, but before paging.
-            var statusCounts = await query
-                .GroupBy(x => x.CSR2.Status)
-                .Select(g => new
-                {
-                    Status = g.Key.ToString(),
-                    Count = g.Count()
-                })
-                .ToListAsync(HttpContext.RequestAborted);
 
             return Ok(new
             {
