@@ -24,7 +24,7 @@
     <PageHeader Title="New Sample Collection" Subtitle="Enter the details of the collected sample"
                 BackHref="/SampleCollection">
         <Actions>
-            @if (Api.CanWrite)
+            @if (CanWriteHere)
             {
                 <div class="sas-seg sas-seg--pay" role="group" aria-label="Payment type">
                     <button type="button" class="sas-seg-btn @(IsFree ? "is-on" : "")"
@@ -40,10 +40,10 @@
         </Actions>
     </PageHeader>
 
-    @if (!Api.CanWrite)
+    @if (!CanWriteHere)
     {
-        <EmptyState Icon="bi-lock" Title="You cannot create sample collections"
-                    Message="Only MDO, JMDO and administrator accounts collect samples. You can still open any collection to follow its status.">
+        <EmptyState Icon="bi-lock" Title="@(DraftId is null ? "You cannot create sample collections" : "You cannot edit sample collections")"
+                    Message="Only MDO, JMDO and administrator accounts whose designation grants this action can collect or edit samples. You can still open any collection to follow its status.">
             <a class="sas-btn sas-btn-outline" href="/SampleCollection">Back to the list</a>
         </EmptyState>
     }
@@ -502,9 +502,16 @@
         }
     }
 
+    // DraftId (the ?id= query param) means this navigation is editing an existing draft, so
+    // Update is what the Designation needs to grant; no id means a brand new collection, which
+    // needs Entry. Matches the DigitalLibraryContentForm.razor split for the same reason: this
+    // is a directly-routable page, so hiding the hub's "New Sample Collection" button alone
+    // isn't enough - a direct link must be re-checked here too.
+    private bool CanWriteHere => DraftId is null ? Api.CanCreateCollection : Api.CanEditCollection;
+
     protected override async Task OnParametersSetAsync()
     {
-        if (DraftId is not { } id || _collectionId == id || !Api.CanWrite) return;
+        if (DraftId is not { } id || _collectionId == id || !Api.CanEditCollection) return;
 
         _loadingDraft = true;
         StateHasChanged();
