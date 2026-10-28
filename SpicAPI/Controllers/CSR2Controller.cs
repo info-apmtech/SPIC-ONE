@@ -22,7 +22,7 @@ namespace SpicAPI.Controllers
 
         // CSR-2 records are visible to the Responsible Person and to the workflow
         // validator/approver roles for the corresponding CSR-1 scope.
-        private async Task<IQueryable<CSR1>> VisibleApprovedCSR1Async()
+        private async Task<IQueryable<CSR1>> VisibleApprovedCSR1Async1()
         {
             var query = _db.Set<CSR1>()
                 .AsNoTracking()
@@ -126,6 +126,142 @@ namespace SpicAPI.Controllers
                 User.IsInRole("MDHOD"))
             {
                 return query;
+            }
+
+            return responsiblePredicate;
+        }
+
+        private async Task<IQueryable<CSR1>> VisibleApprovedCSR1Async()
+        {
+            var query = _db.Set<CSR1>()
+                .AsNoTracking()
+                .Where(x =>
+                    x.IsActive &&
+                    x.Status == CSR1Status.Approved);
+
+            // IMPORTANT:
+            // Use the same effective roles used by CSR-2 workflow approval.
+            // Employeelogin role is primary; JWT role is fallback.
+            var effectiveRoles = await GetEffectiveCSR2RolesAsync();
+
+            // Admin / SuperAdmin can see all approved CSR-1 records.
+            if (HasRole(effectiveRoles, "Admin", "SuperAdmin"))
+                return query;
+
+            var userId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(userId))
+                return query.Where(_ => false);
+
+            // Responsible Person must always retain access to own CSR-1/CSR-2.
+            var responsiblePredicate = query.Where(x =>
+                x.ResponsiblePersonId == userId);
+
+            // ============================================================
+            // GLOBAL MULTI-LEVEL CSR-2 APPROVERS
+            // ============================================================
+            // MDADMIN:
+            // Validated -> Level1Approved happens before this role.
+            // MDADMIN must be able to see Level1Approved records for Level 2.
+            //
+            // MDHOD / CSMDHOD:
+            // Must be able to see Level2Approved records for final Level 3.
+            //
+            // They are global approvers, therefore do NOT restrict by
+            // State / Region / Headquarters here.
+            // ============================================================
+            if (HasRole(
+                effectiveRoles,
+                "MDADMIN",
+                "MDHOD",
+                "CSMDHOD",
+                "CSMD-HOD"))
+            {
+                return query;
+            }
+
+            // Other support/global role retained from existing logic.
+            if (HasRole(effectiveRoles, "RMDO"))
+                return query;
+
+            var loginScope = await _db.Set<Employeelogin>()
+                .AsNoTracking()
+                .Where(x =>
+                    x.UserId == userId &&
+                    x.IsActive)
+                .Select(x => new
+                {
+                    x.StateId,
+                    x.RegionId,
+                    x.HeadquartersId
+                })
+                .FirstOrDefaultAsync(HttpContext.RequestAborted);
+
+            // Responsible Person should not lose own record because
+            // Employeelogin scope data is incomplete.
+            if (loginScope == null)
+                return responsiblePredicate;
+
+            // ============================================================
+            // STATE WORKFLOW
+            // SMD / SMDO -> State records
+            // ============================================================
+            if (HasRole(effectiveRoles, "SMD", "SMDO"))
+            {
+                if (loginScope.StateId <= 0)
+                    return responsiblePredicate;
+
+                var stateId = loginScope.StateId;
+
+                return query.Where(csr1 =>
+                    csr1.ResponsiblePersonId == userId ||
+                    _db.Set<Employeelogin>().Any(applicantLogin =>
+                        applicantLogin.IsActive &&
+                        applicantLogin.UserId == csr1.CreatedBy &&
+                        applicantLogin.StateId == stateId));
+            }
+
+            // ============================================================
+            // STATE APPROVER
+            // SMM -> same State
+            // ============================================================
+            if (HasRole(effectiveRoles, "SMM"))
+            {
+                if (loginScope.StateId <= 0)
+                    return responsiblePredicate;
+
+                var stateId = loginScope.StateId;
+
+                return query.Where(csr1 =>
+                    csr1.ResponsiblePersonId == userId ||
+                    _db.Set<Employeelogin>().Any(applicantLogin =>
+                        applicantLogin.IsActive &&
+                        applicantLogin.UserId == csr1.CreatedBy &&
+                        applicantLogin.StateId == stateId));
+            }
+
+            // ============================================================
+            // HQ WORKFLOW
+            // MDO -> MO -> RM/RMM
+            // ============================================================
+            if (HasRole(
+                effectiveRoles,
+                "MDO",
+                "MO",
+                "RM",
+                "RMM"))
+            {
+                if (loginScope.HeadquartersId <= 0)
+                    return responsiblePredicate;
+
+                var headquartersId = loginScope.HeadquartersId;
+
+                return query.Where(csr1 =>
+                    csr1.ResponsiblePersonId == userId ||
+                    _db.Set<Employeelogin>().Any(applicantLogin =>
+                        applicantLogin.IsActive &&
+                        applicantLogin.UserId == csr1.CreatedBy &&
+                        applicantLogin.HeadquartersId == headquartersId));
             }
 
             return responsiblePredicate;
@@ -571,10 +707,12 @@ namespace SpicAPI.Controllers
                 : false;
 
             // Validation is mandatory in BOTH normal and exceeded-date workflows.
-            // CSR2Day changes only the approval path after validation.
+            // The approved CSR-1 visibility check above already enforces record access.
+            // For the Submitted review stage, use the validator role as the final action
+            // authority so legacy/incomplete scope metadata cannot hide a valid action.
             var canValidate = report?.Status == CSR2Status.Submitted &&
-                              !IsResponsiblePerson(csr1) &&
-                              (isState ? HasRole(effectiveRoles, "SMD", "SMDO") : isHq && HasRole(effectiveRoles, "MO"));
+                              (HasRole(effectiveRoles, "SMD", "SMDO") ||
+                               (isHq && HasRole(effectiveRoles, "MO")));
 
             var canApprove = false;
             var actionLabel = string.Empty;
@@ -664,13 +802,28 @@ namespace SpicAPI.Controllers
 
         private async Task<bool> CanEditCSR2Async(CSR1 csr1, CSR2 report)
         {
-            // CSR-2 data entry is editable only while the record is Draft.
-            // Use the same role rule as draft creation so exceeded-date MO/RMDO
-            // applicants are not allowed to create a draft and then blocked from editing it.
-            if (report.Status != CSR2Status.Draft)
-                return false;
+            // Existing Draft behavior remains unchanged.
+            if (report.Status == CSR2Status.Draft)
+                return await CanCreateCSR2DraftAsync(csr1);
 
-            return await CanCreateCSR2DraftAsync(csr1);
+            // Same review pattern as CSR-1: the current validator may edit/save
+            // the Submitted record before Validate. ApprovedCsr1Async has already
+            // enforced per-record visibility, so do not reject a valid SMDO/SMD
+            // merely because legacy CSR-1 scope metadata resolves incorrectly.
+            if (report.Status == CSR2Status.Submitted)
+            {
+                var effectiveRoles = await GetEffectiveCSR2RolesAsync();
+
+                if (HasRole(effectiveRoles, "SMD", "SMDO"))
+                    return true;
+
+                var scope = await ResolveCSR2ScopeAsync(csr1);
+                if (string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase) &&
+                    HasRole(effectiveRoles, "MO"))
+                    return true;
+            }
+
+            return false;
         }
 
         // IMPORTANT: Replace this with the SAME scope/claims authorization policy as your
@@ -1092,8 +1245,26 @@ namespace SpicAPI.Controllers
             if (report == null && !await CanCreateCSR2DraftAsync(csr1))
                 return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to create this CSR-2 draft.");
 
-            if (report != null && !await CanEditCSR2Async(csr1, report))
-                return StatusCode(StatusCodes.Status403Forbidden, "You are not allowed to edit this CSR-2 at the current workflow stage.");
+            if (report != null)
+            {
+                var canEdit = await CanEditCSR2Async(csr1, report);
+
+                if (!canEdit)
+                {
+                    var scope = await ResolveCSR2ScopeAsync(csr1);
+                    var roles = await GetEffectiveCSR2RolesAsync();
+
+                    return StatusCode(
+                        StatusCodes.Status403Forbidden,
+                        $"CSR-2 edit denied. " +
+                        $"CSR2Id={report.Id}; " +
+                        $"CSR1Id={report.CSR1Id}; " +
+                        $"Status={report.Status}; " +
+                        $"Scope={scope}; " +
+                        $"Roles=[{string.Join(",", roles)}]; " +
+                        $"UserId={CurrentUserId}");
+                }
+            }
 
             await using var tx = await _db.Database.BeginTransactionAsync(HttpContext.RequestAborted);
             try
@@ -1470,25 +1641,24 @@ namespace SpicAPI.Controllers
             var requiresMultiLevelApproval = await RequiresCSR2MultiLevelApprovalAsync(report);
 
             var scope = await ResolveCSR2ScopeAsync(csr1);
-            var isStateScope = string.Equals(scope, "State", StringComparison.OrdinalIgnoreCase);
             var isHqScope = string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase);
             var effectiveRoles = await GetEffectiveCSR2RolesAsync();
 
-            if (isStateScope)
+            // Match CSR-1 review behavior: a valid State validator (SMD/SMDO) who
+            // can access this approved CSR-1 may validate the Submitted CSR-2.
+            // This also covers older records whose creator/scope metadata is incomplete.
+            if (HasRole(effectiveRoles, "SMD", "SMDO"))
             {
-                if (!HasRole(effectiveRoles, "SMD", "SMDO"))
-                    return StatusCode(StatusCodes.Status403Forbidden,
-                        "Only SMD/SMDO can validate State CSR-2 within the assigned State scope.");
+                scope = "State";
             }
-            else if (isHqScope)
+            else if (isHqScope && HasRole(effectiveRoles, "MO"))
             {
-                if (!HasRole(effectiveRoles, "MO"))
-                    return StatusCode(StatusCodes.Status403Forbidden,
-                        "Only MO can validate HQ CSR-2 within the assigned Headquarters scope.");
+                scope = "HQ";
             }
             else
             {
-                return BadRequest("Unable to determine CSR-2 workflow scope.");
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    "Only SMD/SMDO can validate State CSR-2, and only MO can validate HQ CSR-2.");
             }
 
             var now = DateTime.UtcNow;
