@@ -210,12 +210,12 @@
 			@if (ActiveTab == "Categories")
 			{
 				<div class="col-md-4">
-					<label class="form-label-custom">Category Name</label>
+					<label class="form-label-custom">Category Name <span class="text-danger">*</span></label>
 					<input type="text" class="form-control-custom w-100" placeholder="Enter Category Name"
 						   @bind="_categoryForm.Name" @ref="_firstInputRef" />
 				</div>
 				<div class="col-md-3">
-					<label class="form-label-custom">Unit</label>
+					<label class="form-label-custom">Unit <span class="text-danger">*</span></label>
 					<select class="form-control-custom w-100" @bind="_categoryForm.UnitId">
 						<option value="0">Select Unit</option>
 						@foreach (var u in _unitsAll)
@@ -238,7 +238,7 @@
 			else if (ActiveTab == "Products")
 				{
 					<div class="col-md-3">
-						<label class="form-label-custom">Category</label>
+						<label class="form-label-custom">Category <span class="text-danger">*</span></label>
 						<select class="form-control-custom w-100" @bind="_productForm.CategoryId" @ref="_firstInputRef">
 							<option value="0">Select Category</option>
 							@foreach (var c in _categoriesAll)
@@ -248,7 +248,7 @@
 						</select>
 					</div>
 					<div class="col-md-3">
-						<label class="form-label-custom">Product Name</label>
+						<label class="form-label-custom">Product Name <span class="text-danger">*</span></label>
 						<input type="text" class="form-control-custom w-100" placeholder="Enter Product Name"
 							   @bind="_productForm.Name" />
 					</div>
@@ -271,7 +271,7 @@
 				else
 				{
 					<div class="col-md-5">
-						<label class="form-label-custom">@GetSingularName(ActiveTab) Name</label>
+						<label class="form-label-custom">@GetSingularName(ActiveTab) Name <span class="text-danger">*</span></label>
 						<input type="text" class="form-control-custom w-100" placeholder="Enter @GetSingularName(ActiveTab) Name"
 							   @bind="_simpleForm.Name" @ref="_firstInputRef" />
 					</div>
@@ -812,6 +812,16 @@
 		{
 			ShowMessage($"{GetSingularName(ActiveTab)} name is required.", true);
 			return;
+		}
+
+		switch (ActiveTab)
+		{
+			case "Categories" when _categoryForm.UnitId <= 0:
+				ShowMessage("Unit is required.", true);
+				return;
+			case "Products" when _productForm.CategoryId <= 0:
+				ShowMessage("Category is required.", true);
+				return;
 		}
 
 		// --- NEW DUPLICATE VALIDATION LOGIC ---

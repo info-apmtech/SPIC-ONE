@@ -1636,8 +1636,8 @@ else
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label class="form-label-custom">State</label>
-                            <select class="form-select-custom w-100"
+                            <label class="form-label-custom">State <span class="text-danger">*</span></label>
+                            <select class="form-select-custom w-100 @(_errors.ContainsKey("StateId") ? "is-invalid" : "")"
                                     @bind="_form.StateId"
                                     @bind:after="OnLocationStateChanged">
                                 <option value="0">-- Select State --</option>
@@ -1646,17 +1646,26 @@ else
                                     <option value="@state.Id">@state.StateName</option>
                                 }
                             </select>
+                            @if (_errors.TryGetValue("StateId", out var portStateError))
+                            {
+                                <div class="lm-field-error">@portStateError</div>
+                            }
                         </div>
 
                         <div class="col-12 col-md-4">
-                            <label class="form-label-custom">District</label>
-                            <select class="form-select-custom w-100" @bind="_form.DistrictId">
+                            <label class="form-label-custom">District <span class="text-danger">*</span></label>
+                            <select class="form-select-custom w-100 @(_errors.ContainsKey("DistrictId") ? "is-invalid" : "")" @bind="_form.DistrictId"
+                                    @bind:after='() => _errors.Remove("DistrictId")'>
                                 <option value="0">-- Select District --</option>
                                 @foreach (var district in _filteredDistricts)
                                 {
                                     <option value="@district.Id">@district.DistrictName</option>
                                 }
                             </select>
+                            @if (_errors.TryGetValue("DistrictId", out var portDistrictError))
+                            {
+                                <div class="lm-field-error">@portDistrictError</div>
+                            }
                         </div>
 
                         <div class="col-12 col-md-4">
@@ -4638,6 +4647,12 @@ else
         {
             if (string.IsNullOrWhiteSpace(_form.Name))
                 _errors["Name"] = "Port name is required.";
+
+            if (_form.StateId <= 0)
+                _errors["StateId"] = "State is required.";
+
+            if (_form.DistrictId <= 0)
+                _errors["DistrictId"] = "District is required.";
 
             return _errors.Count == 0;
         }
