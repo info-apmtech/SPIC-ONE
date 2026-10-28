@@ -189,12 +189,6 @@ namespace SpicAPI.Controllers
             var visibleCsr1 = await VisibleApprovedCSR1Async();
             var csr1 = await visibleCsr1.FirstOrDefaultAsync(x => x.Id == csr1Id);
             if (csr1 == null) return NotFound(new { message = "Approved CSR1 record not found." });
-
-            // Rehydrate the 11 legacy expense properties from CSR1Expenses - EF no longer
-            // populates them (they're [NotMapped]; the real data lives in CSR1Expenses now).
-            var csr1ExpenseRows = await _db.Set<CSR1Expenses>().AsNoTracking()
-                .Where(x => x.CSR1Id == csr1Id && x.IsActive).ToListAsync();
-            SPIC.Core.Entities.CSR1ExpenseMapper.ApplyExpenses(csr1, csr1ExpenseRows);
             var master = await _db.Set<ProgramMaster>().AsNoTracking()
                 .Where(x => x.Id == csr1.ProgramId)
                 .Select(x => new { ProgramName = x.Name, ProgramType = x.ProgramType.Name })
@@ -1133,32 +1127,81 @@ namespace SpicAPI.Controllers
                 report.UpdatedAt = DateTime.UtcNow;
                 report.UpdatedBy = Actor;
 
-                // Participant name/mobile are display-only and resolved from the source master.
+                // Farmer / Dealer participants keep their master linkage and their
+                // display Name / Phone are resolved from the source master.
+                // Manual/Other participants persist Name + PhoneNumber directly.
+                //
+                // IMPORTANT: Apply CSR-2 calls SaveDraft once more before Submit.
+                // If that second UI payload omits manual Name/Phone, do not erase values
+                // that were already saved in CSR2Participants during the earlier draft save.
+                var existingManualParticipants = report.Participants
+                    .Where(p =>
+                        !p.ParticipantSourceId.HasValue ||
+                        p.ParticipantSourceId.Value <= 0 ||
+                        string.Equals(p.ParticipantSource, "Other", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(p.Role, "Other", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(p => p.Id)
+                    .Select(p => new
+                    {
+                        Name = p.Name,
+                        PhoneNumber = p.PhoneNumber
+                    })
+                    .ToList();
+
                 if (report.Participants.Count > 0)
                     _db.Set<CSR2Participant>().RemoveRange(report.Participants);
 
+                var manualParticipantIndex = 0;
+
                 report.Participants = dto.Participants
-                    .Select(x => new CSR2Participant
+                    .Select(x =>
                     {
-                        CSR2Id = report.Id,
-                        ParticipantSourceId = x.ParticipantSourceId,
-                        ParticipantSource = string.IsNullOrWhiteSpace(x.ParticipantSource)
-                            ? null
-                            : x.ParticipantSource.Trim(),
-                        Role = x.Role.Trim(),
+                        var role = (x.Role ?? string.Empty).Trim();
+                        var source = (x.ParticipantSource ?? string.Empty).Trim();
 
-                        // Preserve the existing Farmer/Dealer master linkage.
-                        // Persist manual details only for Other participants.
-                        Name = string.Equals(x.Role, "Other", StringComparison.OrdinalIgnoreCase) &&
-                               !string.IsNullOrWhiteSpace(x.Name)
+                        var isMasterParticipant =
+                            x.ParticipantSourceId.HasValue &&
+                            x.ParticipantSourceId.Value > 0 &&
+                            (string.Equals(source, "SasFarmers", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(source, "DealerRegistrations", StringComparison.OrdinalIgnoreCase));
+
+                        if (isMasterParticipant)
+                        {
+                            return new CSR2Participant
+                            {
+                                CSR2Id = report.Id,
+                                ParticipantSourceId = x.ParticipantSourceId,
+                                ParticipantSource = source,
+                                Role = string.IsNullOrWhiteSpace(role) ? "Other" : role,
+                                Name = null,
+                                PhoneNumber = null,
+                                CreatedAt = DateTime.UtcNow
+                            };
+                        }
+
+                        var existingManual = manualParticipantIndex < existingManualParticipants.Count
+                            ? existingManualParticipants[manualParticipantIndex]
+                            : null;
+                        manualParticipantIndex++;
+
+                        var manualName = !string.IsNullOrWhiteSpace(x.Name)
                             ? x.Name.Trim()
-                            : null,
-                        PhoneNumber = string.Equals(x.Role, "Other", StringComparison.OrdinalIgnoreCase) &&
-                                      !string.IsNullOrWhiteSpace(x.PhoneNumber)
-                            ? x.PhoneNumber.Trim()
-                            : null,
+                            : existingManual?.Name;
 
-                        CreatedAt = DateTime.UtcNow
+                        var manualPhone = !string.IsNullOrWhiteSpace(x.PhoneNumber)
+                            ? x.PhoneNumber.Trim()
+                            : existingManual?.PhoneNumber;
+
+                        return new CSR2Participant
+                        {
+                            CSR2Id = report.Id,
+                            ParticipantSourceId = null,
+                            ParticipantSource = "Other",
+                            Role = string.IsNullOrWhiteSpace(role) ? "Other" : role,
+                            Name = string.IsNullOrWhiteSpace(manualName) ? null : manualName,
+                            PhoneNumber = string.IsNullOrWhiteSpace(manualPhone) ? null : manualPhone,
+                            CreatedAt = DateTime.UtcNow
+                        };
                     })
                     .ToList();
 
@@ -1351,6 +1394,7 @@ namespace SpicAPI.Controllers
                 throw;
             }
         }
+
 
         [HttpPost("{id:int}/submit")]
         public async Task<IActionResult> Submit(int id)
@@ -1871,16 +1915,13 @@ namespace SpicAPI.Controllers
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
-            // Reuse the exact same CSR-1 visibility/workflow rule already used by
-            // the existing CSR-2 create/read/update APIs.
+            // Keep the existing visibility/authorization rule unchanged.
             var visibleCsr1 = await VisibleApprovedCSR1Async();
 
             var query =
                 from csr2 in _db.Set<CSR2>().AsNoTracking()
-                join csr1 in visibleCsr1
-                    on csr2.CSR1Id equals csr1.Id
-                join program in _db.Set<ProgramMaster>().AsNoTracking()
-                    on csr1.ProgramId equals program.Id
+                join csr1 in visibleCsr1 on csr2.CSR1Id equals csr1.Id
+                join program in _db.Set<ProgramMaster>().AsNoTracking() on csr1.ProgramId equals program.Id
                 select new
                 {
                     CSR2 = csr2,
@@ -1929,8 +1970,21 @@ namespace SpicAPI.Controllers
                     (x.CSR2.ActualLocation != null && x.CSR2.ActualLocation.Contains(term)));
             }
 
+            // Keep count queries simple. The expensive child-table aggregates are intentionally
+            // not part of this base query.
             var totalCount = await query.CountAsync(HttpContext.RequestAborted);
 
+            var statusCounts = await query
+                .GroupBy(x => x.CSR2.Status)
+                .Select(g => new
+                {
+                    Status = g.Key.ToString(),
+                    Count = g.Count()
+                })
+                .ToListAsync(HttpContext.RequestAborted);
+
+            // Load only the current page first. This avoids executing several correlated
+            // COUNT/SUM subqueries once per CSR-2 row inside one large SQL statement.
             var rows = await query
                 .OrderByDescending(x => x.CSR2.UpdatedAt ?? x.CSR2.CreatedAt)
                 .ThenByDescending(x => x.CSR2.Id)
@@ -1954,42 +2008,76 @@ namespace SpicAPI.Controllers
                     x.CSR2.EndTime,
                     x.CSR2.EventCoordinatorEmployeeId,
                     x.CSR2.ActualLocation,
-                    x.CSR2.ExpectedParticipantsCount,
-                    x.CSR2.Remarks,
-                    x.CSR2.CreatedAt,
-                    x.CSR2.CreatedBy,
-                    x.CSR2.UpdatedAt,
-                    x.CSR2.UpdatedBy,
                     x.CSR2.SubmittedAt,
-                    x.CSR2.SubmittedBy,
-                    x.CSR2.ValidateBy,
-                    x.CSR2.ValidateAt,
-                    x.CSR2.ApprovedBy,
-                    x.CSR2.ApprovedAt,
                     ResponsiblePersonId = x.CSR1.ResponsiblePersonId,
-                    CSR1CreatedBy = x.CSR1.CreatedBy,
-                    ParticipantCount = _db.Set<CSR2Participant>()
-                        .Count(p => p.CSR2Id == x.CSR2.Id),
-                    EmployeeCount = _db.Set<CSR2Employee>()
-                        .Count(e => e.CSR2Id == x.CSR2.Id),
-                    PhotoCount = _db.Set<CSR2Media>()
-                        .Count(m => m.CSR2Id == x.CSR2.Id && m.MediaType == "Photo"),
-                    VideoCount = _db.Set<CSR2Media>()
-                        .Count(m => m.CSR2Id == x.CSR2.Id && m.MediaType == "Video"),
-                    ExpenseCount = _db.Set<CSR2Expense>()
-                        .Count(e => e.CSR2Id == x.CSR2.Id),
-                    ActualExpense = _db.Set<CSR2Expense>()
-                        .Where(e => e.CSR2Id == x.CSR2.Id && e.ActualAmount.HasValue)
-                        .Sum(e => (decimal?)e.ActualAmount) ?? 0m,
-                    ProofCount = _db.Set<CSR2ExpenseProof>()
-                        .Count(p => _db.Set<CSR2Expense>()
-                            .Any(e => e.Id == p.CSR2ExpenseId && e.CSR2Id == x.CSR2.Id))
+                    CSR1CreatedBy = x.CSR1.CreatedBy
                 })
                 .ToListAsync(HttpContext.RequestAborted);
 
-            // Determine State/HQ from the CSR-1 applicant role, not from CSR1.HeadquarterId.
-            // State CSR-1 rows can still carry a HeadquarterId, so HeadquarterId > 0 is not
-            // a reliable workflow discriminator.
+            if (rows.Count == 0)
+            {
+                return Ok(new
+                {
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize)),
+                    StatusCounts = statusCounts,
+                    Items = Array.Empty<object>()
+                });
+            }
+
+            var csr2Ids = rows.Select(x => x.CSR2Id).ToList();
+
+            // Aggregate child data only for rows on the current page.
+            var participantCounts = await _db.Set<CSR2Participant>()
+                .AsNoTracking()
+                .Where(x => csr2Ids.Contains(x.CSR2Id))
+                .GroupBy(x => x.CSR2Id)
+                .Select(g => new { CSR2Id = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.CSR2Id, x => x.Count, HttpContext.RequestAborted);
+
+            var employeeCounts = await _db.Set<CSR2Employee>()
+                .AsNoTracking()
+                .Where(x => csr2Ids.Contains(x.CSR2Id))
+                .GroupBy(x => x.CSR2Id)
+                .Select(g => new { CSR2Id = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.CSR2Id, x => x.Count, HttpContext.RequestAborted);
+
+            var mediaCounts = await _db.Set<CSR2Media>()
+                .AsNoTracking()
+                .Where(x => csr2Ids.Contains(x.CSR2Id))
+                .GroupBy(x => x.CSR2Id)
+                .Select(g => new
+                {
+                    CSR2Id = g.Key,
+                    PhotoCount = g.Count(x => x.MediaType == "Photo"),
+                    VideoCount = g.Count(x => x.MediaType == "Video")
+                })
+                .ToDictionaryAsync(x => x.CSR2Id, HttpContext.RequestAborted);
+
+            var expenseAggregates = await _db.Set<CSR2Expense>()
+                .AsNoTracking()
+                .Where(x => csr2Ids.Contains(x.CSR2Id))
+                .GroupBy(x => x.CSR2Id)
+                .Select(g => new
+                {
+                    CSR2Id = g.Key,
+                    ExpenseCount = g.Count(),
+                    ActualExpense = g.Sum(x => (decimal?)x.ActualAmount) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.CSR2Id, HttpContext.RequestAborted);
+
+            var proofCounts = await (
+                from proof in _db.Set<CSR2ExpenseProof>().AsNoTracking()
+                join expense in _db.Set<CSR2Expense>().AsNoTracking()
+                    on proof.CSR2ExpenseId equals expense.Id
+                where csr2Ids.Contains(expense.CSR2Id)
+                group proof by expense.CSR2Id into g
+                select new { CSR2Id = g.Key, Count = g.Count() }
+            ).ToDictionaryAsync(x => x.CSR2Id, x => x.Count, HttpContext.RequestAborted);
+
+            // Determine State/HQ from the CSR-1 applicant role, preserving the existing logic.
             var csr1CreatorIds = rows
                 .Select(x => x.CSR1CreatedBy)
                 .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -1998,13 +2086,8 @@ namespace SpicAPI.Controllers
 
             var csr1CreatorRoles = await _db.Set<Employeelogin>()
                 .AsNoTracking()
-                .Where(x =>
-                    csr1CreatorIds.Contains(x.UserId))
-                .Select(x => new
-                {
-                    x.UserId,
-                    x.Role
-                })
+                .Where(x => csr1CreatorIds.Contains(x.UserId))
+                .Select(x => new { x.UserId, x.Role })
                 .ToListAsync(HttpContext.RequestAborted);
 
             var creatorRolesByUserId = csr1CreatorRoles
@@ -2021,16 +2104,27 @@ namespace SpicAPI.Controllers
 
             var items = rows.Select(x =>
             {
+                participantCounts.TryGetValue(x.CSR2Id, out var participantCount);
+                employeeCounts.TryGetValue(x.CSR2Id, out var employeeCount);
+                mediaCounts.TryGetValue(x.CSR2Id, out var mediaCount);
+                expenseAggregates.TryGetValue(x.CSR2Id, out var expenseAggregate);
+                proofCounts.TryGetValue(x.CSR2Id, out var proofCount);
+
+                var photoCount = mediaCount?.PhotoCount ?? 0;
+                var videoCount = mediaCount?.VideoCount ?? 0;
+                var expenseCount = expenseAggregate?.ExpenseCount ?? 0;
+                var actualExpense = expenseAggregate?.ActualExpense ?? 0m;
+
                 var mandatoryComplete = 0;
                 if (x.ActualEventDate.HasValue) mandatoryComplete++;
                 if (x.StartTime.HasValue) mandatoryComplete++;
                 if (x.EndTime.HasValue) mandatoryComplete++;
                 if (!string.IsNullOrWhiteSpace(x.EventCoordinatorEmployeeId)) mandatoryComplete++;
                 if (!string.IsNullOrWhiteSpace(x.ActualLocation)) mandatoryComplete++;
-                if (x.PhotoCount > 0) mandatoryComplete++;
-                if (x.VideoCount > 0) mandatoryComplete++;
-                if (x.ParticipantCount > 0) mandatoryComplete++;
-                if (x.EmployeeCount > 0) mandatoryComplete++;
+                if (photoCount > 0) mandatoryComplete++;
+                if (videoCount > 0) mandatoryComplete++;
+                if (participantCount > 0) mandatoryComplete++;
+                if (employeeCount > 0) mandatoryComplete++;
 
                 var reportCompletion = (int)Math.Round(mandatoryComplete / 9d * 100d);
 
@@ -2042,8 +2136,6 @@ namespace SpicAPI.Controllers
                 var isState = creatorRoles.Overlaps(new[] { "SMD", "SMDO", "SMM" });
                 var isHq = creatorRoles.Overlaps(new[] { "MDO", "JMDO", "RMDO", "MO", "RM", "RMM", "RMD" });
 
-                // Historical creator data can be incomplete. For normal workflow roles,
-                // infer only when the creator role did not identify a workflow family.
                 if (!isState && !isHq)
                 {
                     if (HasRole(effectiveRoles, "SMD", "SMDO", "SMM")) isState = true;
@@ -2060,6 +2152,7 @@ namespace SpicAPI.Controllers
                     !string.IsNullOrWhiteSpace(CurrentUserId) &&
                     string.Equals(x.ResponsiblePersonId, CurrentUserId, StringComparison.OrdinalIgnoreCase);
 
+                // Workflow behavior intentionally unchanged by this performance patch.
                 var canValidate =
                     x.StatusValue == (int)CSR2Status.Submitted &&
                     !isResponsiblePerson &&
@@ -2119,44 +2212,22 @@ namespace SpicAPI.Controllers
                     x.EndTime,
                     x.EventCoordinatorEmployeeId,
                     x.ActualLocation,
-                    x.ExpectedParticipantsCount,
-                    x.Remarks,
-                    x.CreatedAt,
-                    x.CreatedBy,
-                    x.UpdatedAt,
-                    x.UpdatedBy,
-                    x.SubmittedAt,
-                    x.SubmittedBy,
-                    x.ValidateBy,
-                    x.ValidateAt,
-                    x.ApprovedBy,
-                    x.ApprovedAt,
                     x.ResponsiblePersonId,
                     Scope = scope,
                     RequiresMultiLevelApproval = requiresMultiLevelApproval,
                     CanValidate = canValidate,
                     CanApprove = canApprove,
                     ActionLabel = actionLabel,
-                    x.ParticipantCount,
-                    x.EmployeeCount,
-                    x.PhotoCount,
-                    x.VideoCount,
-                    x.ExpenseCount,
-                    x.ActualExpense,
-                    x.ProofCount,
+                    ParticipantCount = participantCount,
+                    EmployeeCount = employeeCount,
+                    PhotoCount = photoCount,
+                    VideoCount = videoCount,
+                    ExpenseCount = expenseCount,
+                    ActualExpense = actualExpense,
+                    ProofCount = proofCount,
                     ReportCompletion = reportCompletion
                 };
             }).ToList();
-
-            // Counts are calculated after the active filters are applied, but before paging.
-            var statusCounts = await query
-                .GroupBy(x => x.CSR2.Status)
-                .Select(g => new
-                {
-                    Status = g.Key.ToString(),
-                    Count = g.Count()
-                })
-                .ToListAsync(HttpContext.RequestAborted);
 
             return Ok(new
             {

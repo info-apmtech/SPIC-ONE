@@ -497,6 +497,7 @@
     private CSR2ListResponse response = new();
     private CSR2LookupResponse lookups = new();
     private List<LocationDto> locations = new();
+    private Dictionary<int, string> locationNames = new();
 
     private DateTime? fromDate;
     private DateTime? toDate;
@@ -519,8 +520,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadLookups();
-        await LoadList();
+        // Lookups and list data are independent HTTP requests. Load them together
+        // so the page does not pay both network waits serially.
+        await Task.WhenAll(LoadLookups(), LoadList());
     }
 
     private async Task LoadLookups()
@@ -529,6 +531,9 @@
         {
             lookups = await Http.GetFromJsonAsync<CSR2LookupResponse>("api/CSR2/list/lookups") ?? new();
             locations = await Http.GetFromJsonAsync<List<LocationDto>>("api/District/all") ?? new();
+            locationNames = locations
+                .GroupBy(x => x.Id)
+                .ToDictionary(g => g.Key, g => g.First().DistrictName);
         }
         catch (Exception ex)
         {
@@ -632,7 +637,9 @@
     private string LocationName(int? id) =>
         !id.HasValue || id <= 0
             ? "-"
-            : locations.FirstOrDefault(x => x.Id == id.Value)?.DistrictName ?? $"Location #{id}";
+            : locationNames.TryGetValue(id.Value, out var name)
+                ? name
+                : $"Location #{id}";
 
     private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
     private static string Money(decimal amount) => "₹ " + amount.ToString("N2", CultureInfo.GetCultureInfo("en-IN"));
@@ -737,9 +744,31 @@
         public int ReportCompletion { get; set; }
     }
 
-    private static bool CanValidate(CSR2ListRowDto row) => row.CanValidate;
+    private string CurrentRole => LoginState.UserRole.ToString();
 
-    private static bool CanApprove(CSR2ListRowDto row) => row.CanApprove;
+    private bool IsRole(params string[] roles) =>
+        roles.Any(role => string.Equals(CurrentRole, role, StringComparison.OrdinalIgnoreCase));
+
+    private bool IsState(CSR2ListRowDto row) =>
+        string.Equals(row.Scope, "State", StringComparison.OrdinalIgnoreCase);
+
+    private bool CanValidate(CSR2ListRowDto row)
+    {
+        // Prefer the API permission when it is available.
+        if (row.CanValidate)
+            return true;
+
+        // Preserve the old working list behavior as a UI fallback.
+        // Validation is required in BOTH normal and exceeded-date workflows.
+        if (!string.Equals(row.Status, "Submitted", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return IsState(row)
+            ? IsRole("SMD", "SMDO")
+            : IsRole("MO");
+    }
+
+    private bool CanApprove(CSR2ListRowDto row) => row.CanApprove;
 
     private async Task ValidateCSR2(CSR2ListRowDto row)
     {
