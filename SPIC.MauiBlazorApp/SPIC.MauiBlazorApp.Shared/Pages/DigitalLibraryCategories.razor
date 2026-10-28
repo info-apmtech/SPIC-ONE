@@ -35,12 +35,15 @@ else
 <div class="lc-page">
     <PageHeader Title="Library Categories" Subtitle="Categories and sub-categories offered on the content forms" BackHref="/DigitalLibrary">
         <Actions>
-            <button type="button" class="lc-btn lc-btn-outline" disabled="@(_busy || !HasCategories)" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, null)">
-                <i class="bi bi-diagram-2" aria-hidden="true"></i> Add Sub-Category
-            </button>
-            <button type="button" class="lc-btn lc-btn-primary" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)">
-                <i class="bi bi-plus-lg" aria-hidden="true"></i> Add Category
-            </button>
+            @if (CanAdd)
+            {
+                <button type="button" class="lc-btn lc-btn-outline" disabled="@(_busy || !HasCategories)" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, null)">
+                    <i class="bi bi-diagram-2" aria-hidden="true"></i> Add Sub-Category
+                </button>
+                <button type="button" class="lc-btn lc-btn-primary" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add Category
+                </button>
+            }
         </Actions>
     </PageHeader>
 
@@ -84,7 +87,10 @@ else
     else if (_tree.Count == 0)
     {
         <EmptyState Icon="bi-tags" Title="No categories yet" Message="Add the first category the content forms should offer.">
-            <button type="button" class="btn btn-success" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)"><i class="bi bi-plus-lg"></i> Add Category</button>
+            @if (CanAdd)
+            {
+                <button type="button" class="btn btn-success" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)"><i class="bi bi-plus-lg"></i> Add Category</button>
+            }
         </EmptyState>
     }
     else if (!Visible.Any())
@@ -151,11 +157,14 @@ else
                                     }
                                 </li>
                             }
-                            <li class="lc-sub-add">
-                                <button type="button" class="lc-link-btn" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, c.Id)">
-                                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Add sub-category to @c.Name
-                                </button>
-                            </li>
+                            @if (CanAdd)
+                            {
+                                <li class="lc-sub-add">
+                                    <button type="button" class="lc-link-btn" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, c.Id)">
+                                        <i class="bi bi-plus-lg" aria-hidden="true"></i> Add sub-category to @c.Name
+                                    </button>
+                                </li>
+                            }
                         </ul>
                     }
                 </li>
@@ -163,18 +172,21 @@ else
         </ul>
     }
 
-    <ActionBar CssClass="lc-actionbar" AriaLabel="Add">
-        <Secondary>
-            <button type="button" class="lc-btn lc-btn-outline" disabled="@(_busy || !HasCategories)" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, null)">
-                <i class="bi bi-diagram-2" aria-hidden="true"></i> Sub-Category
-            </button>
-        </Secondary>
-        <ChildContent>
-            <button type="button" class="lc-btn lc-btn-primary" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)">
-                <i class="bi bi-plus-lg" aria-hidden="true"></i> Category
-            </button>
-        </ChildContent>
-    </ActionBar>
+    @if (CanAdd)
+    {
+        <ActionBar CssClass="lc-actionbar" AriaLabel="Add">
+            <Secondary>
+                <button type="button" class="lc-btn lc-btn-outline" disabled="@(_busy || !HasCategories)" @onclick="() => OpenAdd(LibraryCategoryKind.SubCategory, null)">
+                    <i class="bi bi-diagram-2" aria-hidden="true"></i> Sub-Category
+                </button>
+            </Secondary>
+            <ChildContent>
+                <button type="button" class="lc-btn lc-btn-primary" disabled="@_busy" @onclick="() => OpenAdd(LibraryCategoryKind.Category, null)">
+                    <i class="bi bi-plus-lg" aria-hidden="true"></i> Category
+                </button>
+            </ChildContent>
+        </ActionBar>
+    }
 </div>
 
 <BottomSheet @bind-IsOpen="_dialogOpen" Title="@(_dlgKind == LibraryCategoryKind.Category ? "Add Category" : "Add Sub-Category")"
@@ -224,7 +236,14 @@ else
 @code {
     private static readonly string[] Filters = { "All", "Active", "Inactive" };
 
-    private bool CanEdit => LoginState.CanAccess(PagePermission.DigitalLibrary);
+    // Any one of the three actions is enough to show this management screen at all - which
+    // controls render inside it is then decided by CanAdd/CanUpdate/CanDelete below, the same
+    // split DigitalLibrary.razor/DigitalLibraryContent.razor already use for the hub's buttons.
+    private bool CanEdit => LoginState.CanAccess(PagePermission.DigitalLibrary)
+        && (CanAdd || CanUpdate || CanDelete);
+    private bool CanAdd => LoginState.Can(PagePermission.DigitalLibrary, "Entry");
+    private bool CanUpdate => LoginState.Can(PagePermission.DigitalLibrary, "Update");
+    private bool CanDelete => LoginState.Can(PagePermission.DigitalLibrary, "Delete");
 
     private List<LibraryCategoryDto> _tree = new();
     private readonly HashSet<int> _expanded = new();
@@ -329,17 +348,23 @@ else
     private RenderFragment RowActions(LibraryCategoryDto x) => __builder =>
     {
         <div class="lc-actions">
-            <button type="button" class="lc-icon-btn" title="Edit" aria-label="@("Edit " + x.Name)" disabled="@_busy" @onclick="() => StartEdit(x)">
-                <i class="bi bi-pencil" aria-hidden="true"></i>
-            </button>
-            <button type="button" class="lc-icon-btn @(x.IsActive ? "lc-icon-warn" : "lc-icon-ok")" disabled="@_busy"
-                    title="@(x.IsActive ? "Deactivate" : "Activate")" aria-label="@((x.IsActive ? "Deactivate " : "Activate ") + x.Name)"
-                    @onclick="() => SetActiveAsync(x, !x.IsActive)">
-                <i class="bi @(x.IsActive ? "bi-toggle-on" : "bi-toggle-off")" aria-hidden="true"></i>
-            </button>
-            <button type="button" class="lc-icon-btn lc-icon-danger" title="Delete" aria-label="@("Delete " + x.Name)" disabled="@_busy" @onclick="() => DeleteAsync(x)">
-                <i class="bi bi-trash" aria-hidden="true"></i>
-            </button>
+            @if (CanUpdate)
+            {
+                <button type="button" class="lc-icon-btn" title="Edit" aria-label="@("Edit " + x.Name)" disabled="@_busy" @onclick="() => StartEdit(x)">
+                    <i class="bi bi-pencil" aria-hidden="true"></i>
+                </button>
+                <button type="button" class="lc-icon-btn @(x.IsActive ? "lc-icon-warn" : "lc-icon-ok")" disabled="@_busy"
+                        title="@(x.IsActive ? "Deactivate" : "Activate")" aria-label="@((x.IsActive ? "Deactivate " : "Activate ") + x.Name)"
+                        @onclick="() => SetActiveAsync(x, !x.IsActive)">
+                    <i class="bi @(x.IsActive ? "bi-toggle-on" : "bi-toggle-off")" aria-hidden="true"></i>
+                </button>
+            }
+            @if (CanDelete)
+            {
+                <button type="button" class="lc-icon-btn lc-icon-danger" title="Delete" aria-label="@("Delete " + x.Name)" disabled="@_busy" @onclick="() => DeleteAsync(x)">
+                    <i class="bi bi-trash" aria-hidden="true"></i>
+                </button>
+            }
         </div>
     };
 

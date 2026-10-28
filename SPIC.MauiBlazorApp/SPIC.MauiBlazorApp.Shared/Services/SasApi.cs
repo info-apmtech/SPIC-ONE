@@ -59,6 +59,19 @@ public sealed class SasApi
     public bool CanWrite =>
         _login.UserRole is AppRole.MDO or AppRole.JMDO or AppRole.Admin or AppRole.CorporateAdmin;
 
+    /// <summary>
+    /// May start a NEW Sample Collection - role-eligible (CanWrite) AND the signed-in user's
+    /// Designation grants SampleCollection.Entry (Admin bypasses the designation check, same as
+    /// every other Designation-gated action in the app). CanWrite alone only ever expressed "is
+    /// this role allowed to write at all" - it never distinguished Entry from Update, so a
+    /// designation configured as View-only for SampleCollection had no effect on this page.
+    /// </summary>
+    public bool CanCreateCollection => CanWrite && _login.Can(PagePermission.SampleCollection, "Entry");
+
+    /// <summary>May edit an existing (still-Draft) Sample Collection entry - role-eligible
+    /// (CanWrite) AND the Designation's SampleCollection.Update action.</summary>
+    public bool CanEditCollection => CanWrite && _login.Can(PagePermission.SampleCollection, "Update");
+
     /// <summary>May approve payments, move a consignment on and enter lab results.</summary>
     public bool CanReview => _login.UserRole is AppRole.Admin or AppRole.CorporateAdmin;
 

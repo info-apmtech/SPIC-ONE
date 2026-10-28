@@ -219,12 +219,25 @@
             </div>
         </div>
 
+        @if (_bankAssets.Count == 0 && _landAssets.Count == 0 && _buildingAssets.Count == 0)
+        {
+            <div class="consent-offer-banner mb-4">
+                <div class="consent-offer-inner">
+                    <span class="consent-offer-icon"><i class="bi bi-info-circle-fill"></i></span>
+                    <div class="consent-offer-text">
+                        <strong>Asset Details Required</strong>
+                        <span>Please add details for at least one of Banking, Land, or Building below before proceeding.</span>
+                    </div>
+                </div>
+            </div>
+        }
+
         <div class="row g-4 mb-4">
 
             <!-- Banking Sub-Card -->
             <div class="col-12 col-lg-6">
                 <div class="sub-card">
-                        <div class="sub-card-title"><i class="bi bi-bank icon-blue"></i> Banking <span class="text-danger">*</span></div>
+                        <div class="sub-card-title"><i class="bi bi-bank icon-blue"></i> Banking</div>
                     <div class="row g-3 mb-3 align-items-end">
                         <div class="col-12">
                             <label class="custom-label">Bank Name</label>
@@ -259,7 +272,7 @@
                             <input type="text" class="custom-input" placeholder="Enter Branch" @bind="_bankForm.BankBranch" />
                         </div>
                         <div class="col-12 col-sm-6">
-                            <label class="custom-label">OD Limit (₹) Lakhs</label>
+                            <label class="custom-label">OD Limit (₹) Lakhs @if (BankSectionStarted) { <span class="text-danger">*</span> }</label>
                             <input type="number" class="custom-input" placeholder="0.0" @bind="_bankForm.Value" />
                         </div>
                     </div>
@@ -280,7 +293,7 @@
                 <div class="sub-card">
                     <div class="sub-card-title">
                         <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/Land.svg" class="inv-card-icon" />
-                            Land <span class="text-danger">*</span>
+                            Land
                     </div>
                     <div class="row g-3 mb-3 align-items-end">
                         <div class="col-12 col-sm-6">
@@ -298,7 +311,7 @@
                             <input type="number" class="custom-input" placeholder="Enter In Cent" @bind="_landForm.LandSize" />
                         </div>
                         <div class="col-12 col-sm-6">
-                            <label class="custom-label">Market Value (₹) (In Lakhs)</label>
+                            <label class="custom-label">Market Value (₹) (In Lakhs) @if (LandSectionStarted) { <span class="text-danger">*</span> }</label>
                             <input type="number" class="custom-input" placeholder="Enter Value" @bind="_landForm.PropertyValue" />
                         </div>
                     </div>
@@ -353,7 +366,7 @@
         <div class="sub-card mb-4">
             <div class="sub-card-title">
                 <img src="_content/SPIC.MauiBlazorApp.Shared/Images/FormIcons/Home.svg" class="inv-card-icon" />
-                    Building <span class="text-danger">*</span>
+                    Building
             </div>
             <div class="row g-3 mb-3 align-items-end">
                 <div class="col-12 col-sm-6 col-md-4">
@@ -361,7 +374,7 @@
                     <input type="text" class="custom-input" placeholder="Enter Building Name" @bind="_buildingForm.BuildingName" />
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
-                    <label class="custom-label">Market Value (₹) In Lakhs</label>
+                    <label class="custom-label">Market Value (₹) In Lakhs @if (BuildingSectionStarted) { <span class="text-danger">*</span> }</label>
                     <input type="number" class="custom-input" placeholder="Enter Value" @bind="_buildingForm.PropertyValue" />
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
@@ -697,11 +710,11 @@
 
         <div class="row g-3 mb-3 align-items-end">
             <div class="col-12 col-md-4">
-                <label class="custom-label">Loan Source / Institution *</label>
+                <label class="custom-label">Loan Source / Institution</label>
                 <input type="text" class="custom-input" placeholder="e.g., State Bank Of India" @bind="_loanForm.LoanSource" />
             </div>
             <div class="col-12 col-md-4">
-                <label class="custom-label">Loan Value (₹) In Lakhs *</label>
+                <label class="custom-label">Loan Value (₹) In Lakhs</label>
                 <input type="number" class="custom-input" placeholder="₹ 0.00" @bind="_loanForm.LoanValue" />
             </div>
             <div class="col-12 col-md-4 d-flex align-items-end">
@@ -988,11 +1001,40 @@
         catch (Exception ex) { ShowMessage($"Failed to load loans: {ex.Message}", true); }
     }
 
+    private bool BankSectionStarted =>
+        _bankForm.BankId > 0
+        || !string.IsNullOrWhiteSpace(_bankForm.BankBranch)
+        || !string.IsNullOrWhiteSpace(_bankForm.Remarks);
+
+    private bool LandSectionStarted =>
+        !string.IsNullOrWhiteSpace(_landForm.LandName)
+        || !string.IsNullOrWhiteSpace(_landForm.SurvayNumber)
+        || _landForm.LandSize != 0
+        || !string.IsNullOrWhiteSpace(_landForm.UploadedECDocumentPath)
+        || !string.IsNullOrWhiteSpace(_landForm.UploadedLandDocumentPath)
+        || !string.IsNullOrWhiteSpace(_landForm.UploadedValuationCertificatePath);
+
+    private bool BuildingSectionStarted =>
+        !string.IsNullOrWhiteSpace(_buildingForm.BuildingName)
+        || !string.IsNullOrWhiteSpace(_buildingForm.SurveyNumber)
+        || (_buildingForm.LandSize ?? 0) != 0
+        || !string.IsNullOrWhiteSpace(_buildingForm.Remarks)
+        || !string.IsNullOrWhiteSpace(_buildingForm.ShopNoORRoomNoOrBlockNo)
+        || !string.IsNullOrWhiteSpace(_buildingForm.Street)
+        || !string.IsNullOrWhiteSpace(_buildingForm.SubVillage)
+        || !string.IsNullOrWhiteSpace(_buildingForm.Village)
+        || !string.IsNullOrWhiteSpace(_buildingForm.PinCode)
+        || !string.IsNullOrWhiteSpace(_buildingForm.Block)
+        || !string.IsNullOrWhiteSpace(_buildingForm.Taluk)
+        || _buildingForm.DistrictId > 0
+        || _buildingForm.StateId > 0
+        || !string.IsNullOrWhiteSpace(_buildingForm.UploadedECDocumentPath)
+        || !string.IsNullOrWhiteSpace(_buildingForm.UploadedBuildingDocumentPath)
+        || !string.IsNullOrWhiteSpace(_buildingForm.UploadedValuationCertificatePath);
+
     private async Task SaveBankAsset()
     {
-        if (_bankForm.BankId > 0
-            || !string.IsNullOrWhiteSpace(_bankForm.BankBranch)
-            || !string.IsNullOrWhiteSpace(_bankForm.Remarks))
+        if (BankSectionStarted)
         {
             if (_bankForm.Value == 0)
             {
@@ -1036,12 +1078,7 @@
 
     private async Task SaveLandAsset()
     {
-        if (!string.IsNullOrWhiteSpace(_landForm.LandName)
-            || !string.IsNullOrWhiteSpace(_landForm.SurvayNumber)
-            || _landForm.LandSize != 0
-            || !string.IsNullOrWhiteSpace(_landForm.UploadedECDocumentPath)
-            || !string.IsNullOrWhiteSpace(_landForm.UploadedLandDocumentPath)
-            || !string.IsNullOrWhiteSpace(_landForm.UploadedValuationCertificatePath))
+        if (LandSectionStarted)
         {
             if (_landForm.PropertyValue == 0)
             {
@@ -1086,22 +1123,7 @@
 
     private async Task SaveBuildingAsset()
     {
-        if (!string.IsNullOrWhiteSpace(_buildingForm.BuildingName)
-            || !string.IsNullOrWhiteSpace(_buildingForm.SurveyNumber)
-            || (_buildingForm.LandSize ?? 0) != 0
-            || !string.IsNullOrWhiteSpace(_buildingForm.Remarks)
-            || !string.IsNullOrWhiteSpace(_buildingForm.ShopNoORRoomNoOrBlockNo)
-            || !string.IsNullOrWhiteSpace(_buildingForm.Street)
-            || !string.IsNullOrWhiteSpace(_buildingForm.SubVillage)
-            || !string.IsNullOrWhiteSpace(_buildingForm.Village)
-            || !string.IsNullOrWhiteSpace(_buildingForm.PinCode)
-            || !string.IsNullOrWhiteSpace(_buildingForm.Block)
-            || !string.IsNullOrWhiteSpace(_buildingForm.Taluk)
-            || _buildingForm.DistrictId > 0
-            || _buildingForm.StateId > 0
-            || !string.IsNullOrWhiteSpace(_buildingForm.UploadedECDocumentPath)
-            || !string.IsNullOrWhiteSpace(_buildingForm.UploadedBuildingDocumentPath)
-            || !string.IsNullOrWhiteSpace(_buildingForm.UploadedValuationCertificatePath))
+        if (BuildingSectionStarted)
         {
             if (_buildingForm.PropertyValue == 0)
             {
@@ -1238,6 +1260,12 @@
         if (!DealerId.HasValue || DealerId.Value <= 0)
         {
             ShowMessage("Dealer ID is required.", true);
+            return;
+        }
+
+        if (_bankAssets.Count == 0 && _landAssets.Count == 0 && _buildingAssets.Count == 0)
+        {
+            ShowMessage("Please add details for at least one of Banking, Land, or Building before proceeding.", true);
             return;
         }
 
