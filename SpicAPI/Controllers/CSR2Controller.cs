@@ -802,26 +802,54 @@ namespace SpicAPI.Controllers
 
         private async Task<bool> CanEditCSR2Async(CSR1 csr1, CSR2 report)
         {
-            // Existing Draft behavior remains unchanged.
+            // Draft behavior remains unchanged.
             if (report.Status == CSR2Status.Draft)
                 return await CanCreateCSR2DraftAsync(csr1);
 
-            // Same review pattern as CSR-1: the current validator may edit/save
-            // the Submitted record before Validate. ApprovedCsr1Async has already
-            // enforced per-record visibility, so do not reject a valid SMDO/SMD
-            // merely because legacy CSR-1 scope metadata resolves incorrectly.
+            // Final approved records are always read-only.
+            if (report.Status == CSR2Status.Approved)
+                return false;
+
+            var effectiveRoles = await GetEffectiveCSR2RolesAsync();
+            var scope = await ResolveCSR2ScopeAsync(csr1);
+            var isState = string.Equals(scope, "State", StringComparison.OrdinalIgnoreCase);
+            var isHq = string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase);
+
+            // Validation stage: same behavior as existing working validation flow.
             if (report.Status == CSR2Status.Submitted)
             {
-                var effectiveRoles = await GetEffectiveCSR2RolesAsync();
-
                 if (HasRole(effectiveRoles, "SMD", "SMDO"))
                     return true;
 
-                var scope = await ResolveCSR2ScopeAsync(csr1);
-                if (string.Equals(scope, "HQ", StringComparison.OrdinalIgnoreCase) &&
-                    HasRole(effectiveRoles, "MO"))
-                    return true;
+                return isHq && HasRole(effectiveRoles, "MO");
             }
+
+            var requiresMultiLevel = await RequiresCSR2MultiLevelApprovalAsync(report);
+
+            // Normal approval: Validated -> Approved.
+            if (!requiresMultiLevel && report.Status == CSR2Status.Validated)
+            {
+                return isState
+                    ? HasRole(effectiveRoles, "SMM")
+                    : isHq && HasRole(effectiveRoles, "RM");
+            }
+
+            if (!requiresMultiLevel)
+                return false;
+
+            // Multi-level approval: allow full edit only to the CURRENT approver.
+            if (report.Status == CSR2Status.Validated)
+            {
+                return isState
+                    ? HasRole(effectiveRoles, "SMM")
+                    : isHq && HasRole(effectiveRoles, "RMM");
+            }
+
+            if (report.Status == CSR2Status.Level1Approved)
+                return HasRole(effectiveRoles, "MDADMIN");
+
+            if (report.Status == CSR2Status.Level2Approved)
+                return HasRole(effectiveRoles, "CSMDHOD", "CSMD-HOD", "MDHOD");
 
             return false;
         }
