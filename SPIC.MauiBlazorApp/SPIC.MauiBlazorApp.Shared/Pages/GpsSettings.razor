@@ -141,21 +141,24 @@
                     Reset to Default (20s)
                 </button>
 
-                <button type="button"
-                        class="btn btn-primary px-4 py-2 fw-semibold"
-                        @onclick="HandleSave"
-                        disabled="@_isSaving">
-                    @if (_isSaving)
-                    {
-                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                        <span>Saving Settings...</span>
-                    }
-                    else
-                    {
-                        <i class="bi bi-save me-1"></i>
-                        <span>Save Settings</span>
-                    }
-                </button>
+                @if (LoginState.Can(PagePermission.GpsSettings, "Update"))
+                {
+                    <button type="button"
+                            class="btn btn-primary px-4 py-2 fw-semibold"
+                            @onclick="HandleSave"
+                            disabled="@_isSaving">
+                        @if (_isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Saving Settings...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-save me-1"></i>
+                            <span>Save Settings</span>
+                        }
+                    </button>
+                }
             </div>
         }
 
@@ -176,13 +179,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Strict Admin authorization check
-        if (LoginState.UserRole != AppRole.Admin && LoginState.UserRole != AppRole.SuperAdmin)
-        {
-            Nav.NavigateTo(LoginState.LandingPage, replace: true);
-            return;
-        }
-
+        // Page reachability is PageGuard's job (Designation -> PagePermission.GpsSettings, with
+        // the usual Admin/SuperAdmin bypass) - no page-local role check needed on top of it.
         await LoadSettings();
     }
 

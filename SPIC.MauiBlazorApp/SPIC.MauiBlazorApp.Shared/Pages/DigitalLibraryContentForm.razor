@@ -382,9 +382,13 @@ else
 }
 
 @code {
-    // Adding / editing library content needs the DigitalLibrary page in the user's designation
-    // (Admin / CorporateAdmin bypass). Everything below this line only runs for those users.
-    private bool CanEdit => LoginState.CanAccess(PagePermission.DigitalLibrary);
+    // Adding library content needs Entry, editing needs Update - a direct link to this routed
+    // page (/DigitalLibrary/add/... ) is reachable by anyone the DigitalLibrary page is open to,
+    // so action-level enforcement has to happen here too, not just by hiding the hub's Add/Edit
+    // buttons (CanAdd/CanUpdate on DigitalLibrary.razor / DigitalLibraryContent.razor).
+    // Everything below this line only runs for those users.
+    private bool CanEdit => LoginState.CanAccess(PagePermission.DigitalLibrary)
+        && (IsEdit ? LoginState.Can(PagePermission.DigitalLibrary, "Update") : LoginState.Can(PagePermission.DigitalLibrary, "Entry"));
 
     private static readonly string[] StepNames = { "Content & Details", "Related Content", "Page Layout" };
     private const int PickPageSize = 6;
