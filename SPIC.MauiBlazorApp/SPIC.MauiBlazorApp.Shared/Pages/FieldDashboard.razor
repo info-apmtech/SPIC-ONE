@@ -125,7 +125,7 @@
             }
             else if (_hasAttendanceToday && LoginState.Can(PagePermission.FieldDashboard, "Entry"))
             {
-                <button type="button" class="fd-btn fd-btn-primary fd-update-btn" disabled="@_startingTracking" @onclick="StartLiveTracking">
+                <button type="button" class="fd-btn fd-btn-primary fd-update-btn" disabled="@_startingTracking" @onclick="() => ShowBackgroundLocationDisclosure = true">
                     <i class="bi bi-play-circle-fill"></i> @(_startingTracking ? "Starting..." : "Start Live Tracking")
                 </button>
             }
@@ -257,6 +257,38 @@
         </div>
     </div>
 
+    <!-- Background location disclosure - must be shown before the OS permission prompt (Play policy) -->
+    @if (ShowBackgroundLocationDisclosure)
+    {
+        <div class="fd-modal-backdrop" @onclick="() => ShowBackgroundLocationDisclosure = false">
+            <div class="fd-modal" role="dialog" aria-modal="true" aria-labelledby="fd-bg-location-title" @onclick:stopPropagation="true">
+                <div class="fd-modal-header">
+                    <div class="fd-modal-header-left">
+                        <span class="fd-modal-icon fd-modal-icon-info"><i class="bi bi-geo-alt-fill"></i></span>
+                        <div>
+                            <h4 class="fd-modal-title" id="fd-bg-location-title">Background location access</h4>
+                            <p class="fd-modal-subtitle">Required for Live Tracking</p>
+                        </div>
+                    </div>
+                </div>
+
+                <p class="fd-modal-body-text">
+                    To use Live Tracking, SPIC ONE needs to access your location - including while the
+                    app is in the background or your screen is locked - so your supervisor can confirm
+                    your field visits. A persistent notification stays visible the entire time Live
+                    Tracking is on, and you can stop it anytime from this screen or the notification.
+                </p>
+
+                <div class="fd-modal-footer">
+                    <button type="button" class="fd-btn fd-btn-keep" @onclick="() => ShowBackgroundLocationDisclosure = false">Cancel</button>
+                    <button type="button" class="fd-btn fd-btn-primary" @onclick="ConfirmBackgroundLocationDisclosure">
+                        <i class="bi bi-play-circle-fill"></i> Continue
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
     <!-- Stop-tracking confirmation -->
     @if (ShowStopConfirm)
     {
@@ -298,6 +330,11 @@
 @code {
     private bool IsOnDuty => AttendanceState.IsOnDuty;
     private bool ShowStopConfirm { get; set; }
+
+    // Google Play policy requires a prominent, app-shown disclosure of background location use
+    // BEFORE the OS permission prompt - this must appear every time the OS could ask again this
+    // session, so it is shown on every "Start Live Tracking" tap, not just once.
+    private bool ShowBackgroundLocationDisclosure { get; set; }
 
     [Inject]
     private JmdoTrackingClientLoop TrackingLoop { get; set; } = default!;
@@ -388,6 +425,12 @@
         {
             _isLoadingTracking = false;
         }
+    }
+
+    private Task ConfirmBackgroundLocationDisclosure()
+    {
+        ShowBackgroundLocationDisclosure = false;
+        return StartLiveTracking();
     }
 
     private async Task StartLiveTracking()
