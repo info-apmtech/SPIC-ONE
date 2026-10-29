@@ -599,9 +599,7 @@ namespace SpicAPI.Controllers
 
 			// 3. The account truly doesn't exist. Create it safely.
 			var newUserId = Guid.NewGuid().ToString();
-			var phonePass = string.IsNullOrWhiteSpace(dealer.OfficialContactNumber)
-				? "1234567890"
-				: dealer.OfficialContactNumber;
+			var phonePass = dealer.OfficialContactNumber?.Trim();
 
 			var dealerDesignationId = await ResolveDealerDesignationIdAsync();
 
