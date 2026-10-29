@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
 @inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <PageTitle>Sanction Number Sequence</PageTitle>
 
@@ -16,88 +17,91 @@
         <div class="alert @(Success ? "alert-success" : "alert-danger")" role="alert">@Message</div>
     }
 
-    <section class="sns-panel">
-        <h4>Add Sanction Sequence</h4>
+    @if (CanEntry)
+    {
+        <section class="sns-panel">
+            <h4>Add Sanction Sequence</h4>
 
-        <div class="sns-form-grid">
-            <div class="sns-field">
-                <label for="sns-scope">Sequence Scope <span class="text-danger">*</span></label>
-                <select id="sns-scope" class="sns-control" value="@Scope" @onchange="OnScopeChanged" disabled="@Busy">
-                    <option value="State">State (SMM)</option>
-                    <option value="Region">Region (RM / RMM)</option>
-                </select>
-            </div>
-
-            <div class="sns-field">
-                <label for="sns-state">State <span class="text-danger">*</span></label>
-                <select id="sns-state" class="sns-control" value="@StateId" @onchange="OnStateChanged" disabled="@Busy">
-                    <option value="">Select State</option>
-                    @foreach (var item in States)
-                    {
-                        <option value="@item.Id">@item.Name</option>
-                    }
-                </select>
-            </div>
-
-            @if (Scope == "Region")
-            {
+            <div class="sns-form-grid">
                 <div class="sns-field">
-                    <label for="sns-region">Region <span class="text-danger">*</span></label>
-                    <select id="sns-region" class="sns-control" value="@RegionId" @onchange="OnRegionChanged" disabled="@(Busy || !StateId.HasValue)">
-                        <option value="">Select Region</option>
-                        @foreach (var item in Regions)
+                    <label for="sns-scope">Sequence Scope <span class="text-danger">*</span></label>
+                    <select id="sns-scope" class="sns-control" value="@Scope" @onchange="OnScopeChanged" disabled="@Busy">
+                        <option value="State">State (SMM)</option>
+                        <option value="Region">Region (RM / RMM)</option>
+                    </select>
+                </div>
+
+                <div class="sns-field">
+                    <label for="sns-state">State <span class="text-danger">*</span></label>
+                    <select id="sns-state" class="sns-control" value="@StateId" @onchange="OnStateChanged" disabled="@Busy">
+                        <option value="">Select State</option>
+                        @foreach (var item in States)
                         {
                             <option value="@item.Id">@item.Name</option>
                         }
                     </select>
                 </div>
-            }
 
-            <div class="sns-field">
-                <label for="sns-state-code">State Code</label>
-                <input id="sns-state-code" class="sns-control" value="@SelectedStateCode" readonly
-                       placeholder="@(StateId.HasValue ? "Code not configured in State master" : "Select State")" />
-            </div>
-
-            @if (Scope == "Region")
-            {
-                <div class="sns-field">
-                    <label for="sns-region-code">Region Code</label>
-                    <input id="sns-region-code" class="sns-control" value="@SelectedRegionCode" readonly
-                           placeholder="@(RegionId.HasValue ? "Code not configured in Region master" : "Select Region")" />
-                </div>
-            }
-
-            <div class="sns-field">
-                <label for="sns-starting-value">
-                    @(Scope == "Region" ? "SanctionNumber (Starting Value)" : "SanctionNumberState (Starting Value)")
-                    <span class="text-danger">*</span>
-                </label>
                 @if (Scope == "Region")
                 {
-                    <input id="sns-starting-value" type="number" min="0" class="sns-control" @bind="Form.SanctionNumber" disabled="@Busy" />
+                    <div class="sns-field">
+                        <label for="sns-region">Region <span class="text-danger">*</span></label>
+                        <select id="sns-region" class="sns-control" value="@RegionId" @onchange="OnRegionChanged" disabled="@(Busy || !StateId.HasValue)">
+                            <option value="">Select Region</option>
+                            @foreach (var item in Regions)
+                            {
+                                <option value="@item.Id">@item.Name</option>
+                            }
+                        </select>
+                    </div>
                 }
-                else
-                {
-                    <input id="sns-starting-value" type="number" min="0" class="sns-control" @bind="Form.SanctionNumberState" disabled="@Busy" />
-                }
-            </div>
-        </div>
 
-        <div class="sns-actions">
-            <span class="sns-muted">
-                Codes are maintained in the State and Region masters.
-                State counters are shared by all regions in that state.
-                Counters cannot be changed after creation.
-            </span>
-            <div class="sns-buttons">
-                <button class="sns-btn sns-btn-light" type="button" @onclick="ClearForm" disabled="@Busy">Clear</button>
-                <button class="sns-btn sns-btn-primary" type="button" @onclick="SaveAsync" disabled="@Busy">
-                    @(Saving ? "Saving..." : "Save Sequence")
-                </button>
+                <div class="sns-field">
+                    <label for="sns-state-code">State Code</label>
+                    <input id="sns-state-code" class="sns-control" value="@SelectedStateCode" readonly
+                           placeholder="@(StateId.HasValue ? "Code not configured in State master" : "Select State")" />
+                </div>
+
+                @if (Scope == "Region")
+                {
+                    <div class="sns-field">
+                        <label for="sns-region-code">Region Code</label>
+                        <input id="sns-region-code" class="sns-control" value="@SelectedRegionCode" readonly
+                               placeholder="@(RegionId.HasValue ? "Code not configured in Region master" : "Select Region")" />
+                    </div>
+                }
+
+                <div class="sns-field">
+                    <label for="sns-starting-value">
+                        @(Scope == "Region" ? "SanctionNumber (Starting Value)" : "SanctionNumberState (Starting Value)")
+                        <span class="text-danger">*</span>
+                    </label>
+                    @if (Scope == "Region")
+                    {
+                        <input id="sns-starting-value" type="number" min="0" class="sns-control" @bind="Form.SanctionNumber" disabled="@Busy" />
+                    }
+                    else
+                    {
+                        <input id="sns-starting-value" type="number" min="0" class="sns-control" @bind="Form.SanctionNumberState" disabled="@Busy" />
+                    }
+                </div>
             </div>
-        </div>
-    </section>
+
+            <div class="sns-actions">
+                <span class="sns-muted">
+                    Codes are maintained in the State and Region masters.
+                    State counters are shared by all regions in that state.
+                    Counters cannot be changed after creation.
+                </span>
+                <div class="sns-buttons">
+                    <button class="sns-btn sns-btn-light" type="button" @onclick="ClearForm" disabled="@Busy">Clear</button>
+                    <button class="sns-btn sns-btn-primary" type="button" @onclick="SaveAsync" disabled="@Busy">
+                        @(Saving ? "Saving..." : "Save Sequence")
+                    </button>
+                </div>
+            </div>
+        </section>
+    }
 
     <section class="sns-panel sns-list">
         @{
@@ -181,6 +185,8 @@
 </div>
 
 @code {
+    private bool CanEntry => LoginState.Can(SPIC.Core.Entities.PagePermission.SanctionNumberSequence, "Entry");
+
     private const string Api = "api/SanctionNumberSequence";
     private const string LookupApi = Api;
 
@@ -314,6 +320,11 @@
 
     private async Task SaveAsync()
     {
+        if (!CanEntry)
+        {
+            Fail("You do not have permission to create sanction number sequences.");
+            return;
+        }
         if (Busy) return;
         Message = "";
         if (!StateId.HasValue || !States.Any(x => x.Id == StateId.Value))

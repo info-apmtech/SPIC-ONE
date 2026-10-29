@@ -70,8 +70,10 @@
         Loading.Show();
         try
         {
-            await LoadFinancialYears();
+            // Load the read-only list independently of the Financial Year lookup.
             await LoadBudgets();
+            await LoadFinancialYears();
+            ApplyFilter();
         }
         finally
         {
@@ -156,7 +158,7 @@
 
     private void ToggleFormStatus()
     {
-        if (_isLoading || _isSaving) return;
+        if (_isLoading || _isSaving || (_isEditMode ? !CanEditBudget : !CanAddBudget)) return;
         _model.IsActive = !_model.IsActive;
     }
 
@@ -861,7 +863,7 @@
     }
 
     <!-- ============ Add / Edit Annual Budgeting ============ -->
-    @if (CanAddBudget || _isEditMode)
+    @if ((_isEditMode && CanEditBudget) || (!_isEditMode && CanAddBudget))
     {
         <div class="ab-form-card">
             <div class="ab-form-header">
@@ -957,7 +959,10 @@
                             <th>Updated At</th>
                             <th>Updated By</th>
                             <th>Is Active</th>
-                            <th>Actions</th>
+                            @if (CanEditBudget || CanDeleteBudget)
+                            {
+                                <th>Actions</th>
+                            }
                         </tr>
                     </thead>
                     <tbody>
@@ -976,28 +981,31 @@
                                         @(b.IsActive ? "Active" : "Inactive")
                                     </span>
                                 </td>
-                                <td>
-                                    <div class="ab-action-icons">
-                                        @if (b.IsActive)
-                                        {
-                                            @if (CanDeleteBudget)
+                                @if (CanEditBudget || CanDeleteBudget)
+                                {
+                                    <td>
+                                        <div class="ab-action-icons">
+                                            @if (b.IsActive)
                                             {
-                                                <i class="bi bi-slash-circle ab-icon-delete" title="Deactivate" @onclick="() => OpenDeleteModal(b)"></i>
+                                                @if (CanDeleteBudget)
+                                                {
+                                                    <i class="bi bi-slash-circle ab-icon-delete" title="Deactivate" @onclick="() => OpenDeleteModal(b)"></i>
+                                                }
                                             }
-                                        }
-                                        else
-                                        {
+                                            else
+                                            {
+                                                @if (CanEditBudget)
+                                                {
+                                                    <i class="bi bi-arrow-counterclockwise ab-icon-restore" title="Activate" @onclick="() => ReactivateBudget(b)"></i>
+                                                }
+                                            }
                                             @if (CanEditBudget)
                                             {
-                                                <i class="bi bi-arrow-counterclockwise ab-icon-restore" title="Activate" @onclick="() => ReactivateBudget(b)"></i>
+                                                <i class="bi bi-pencil-square ab-icon-edit" title="Edit" @onclick="() => EditBudget(b)"></i>
                                             }
-                                        }
-                                        @if (CanEditBudget)
-                                        {
-                                            <i class="bi bi-pencil-square ab-icon-edit" title="Edit" @onclick="() => EditBudget(b)"></i>
-                                        }
-                                    </div>
-                                </td>
+                                        </div>
+                                    </td>
+                                }
                             </tr>
                         }
                     </tbody>
@@ -1012,7 +1020,7 @@
 </div>
 
 <!-- ============ Deactivate Confirmation Modal ============ -->
-@if (_showDeleteModal)
+@if (_showDeleteModal && CanDeleteBudget)
 {
     <div class="ab-modal-backdrop" @onclick="CancelDelete">
         <div class="ab-modal" @onclick:stopPropagation="true">

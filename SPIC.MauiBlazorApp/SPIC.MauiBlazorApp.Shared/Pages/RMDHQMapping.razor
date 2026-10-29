@@ -2,6 +2,7 @@
 @using System.Net.Http.Json
 @using SPIC.Core.DTOs
 @inject HttpClient Http
+@inject SPIC.MauiBlazorApp.Shared.Services.LoginState LoginState
 
 <PageTitle>RMD Headquarters Mapping</PageTitle>
 <div class="container-fluid rmd-page">
@@ -15,84 +16,90 @@
         <div class="alert @(Success ? "alert-success" : "alert-danger")" role="alert">@Message</div>
     }
 
-    <section class="rmd-section rmd-panel">
-        <div class="rmd-section-heading">Assign Headquarters</div>
-        <div class="rmd-form-grid">
-            <div class="rmd-form-field">
-                <label>Employee (RMD) <span class="text-danger">*</span></label>
-                <select class="rmd-select" @bind="EmployeeId" disabled="@Busy">
-                    <option value="">Select employee</option>
-                    @foreach (var x in Employees)
-                    {
-                        <option value="@x.Id">@x.Name</option>
-                    }
-                </select>
+    @if (CanEntry || CanUpdate)
+    {
+        <section class="rmd-section rmd-panel">
+            <div class="rmd-section-heading">@(EditingId.HasValue ? "Edit Headquarters Mapping" : "Assign Headquarters")</div>
+            <div class="rmd-form-grid">
+                <div class="rmd-form-field">
+                    <label>Employee (RMD) <span class="text-danger">*</span></label>
+                    <select class="rmd-select" @bind="EmployeeId" disabled="@Busy">
+                        <option value="">Select employee</option>
+                        @foreach (var x in Employees)
+                        {
+                            <option value="@x.Id">@x.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="rmd-form-field">
+                    <label>State <span class="text-danger">*</span></label>
+                    <select class="rmd-select" value="@StateId" @onchange="OnStateChanged" disabled="@Busy">
+                        <option value="">Select state</option>
+                        @foreach (var x in States)
+                        {
+                            <option value="@x.Id">@x.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="rmd-form-field">
+                    <label>Region <span class="text-danger">*</span></label>
+                    <select class="rmd-select" value="@RegionId" @onchange="OnRegionChanged" disabled="@(Busy || !StateId.HasValue)">
+                        <option value="">Select region</option>
+                        @foreach (var x in Regions)
+                        {
+                            <option value="@x.Id">@x.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="rmd-form-field">
+                    <label>Headquarters <span class="text-danger">*</span> <span class="rmd-muted">(@SelectedHQ.Count selected)</span></label>
+                    <div class="rmd-hq-field">
+                        @if (SelectedHQ.Count > 0)
+                        {
+                            <div class="rmd-hq-chips">
+                                @foreach (var h in Headquarters.Where(x => SelectedHQ.Contains(x.Id)))
+                                {
+                                    <span class="rmd-hq-chip" @key="h.Id">
+                                        @h.Name
+                                        <button type="button" title="Remove @h.Name" disabled="@Busy" @onclick="() => ToggleHQ(h.Id, false)">×</button>
+                                    </span>
+                                }
+                            </div>
+                        }
+                        <button type="button" class="rmd-hq-trigger" disabled="@(Busy || !RegionId.HasValue)" @onclick="() => ShowHQDropdown = !ShowHQDropdown">
+                            <span>Select Headquarters</span><span>@(ShowHQDropdown ? "⌃" : "⌄")</span>
+                        </button>
+                        @if (ShowHQDropdown)
+                        {
+                            <div class="rmd-hq-dropdown">
+                                <input class="rmd-search-input w-100" placeholder="Search headquarters..." @bind="HQSearch" @bind:event="oninput" />
+                                <label class="rmd-hq-option"><input type="checkbox" checked="@AllSelected" @onchange="ToggleAll" disabled="@Busy" /> <strong>Select All</strong></label>
+                                @foreach (var h in FilteredHeadquarters)
+                                {
+                                    <label class="rmd-hq-option" @key="h.Id"><input type="checkbox" checked="@SelectedHQ.Contains(h.Id)" @onchange="e => ToggleHQ(h.Id, e.Value is true)" disabled="@Busy" /> @h.Name</label>
+                                }
+                                @if (FilteredHeadquarters.Count == 0)
+                                {
+                                    <p class="rmd-muted m-2">No headquarters found.</p>
+                                }
+                                <button type="button" class="rmd-btn rmd-btn-light w-100" @onclick="() => ShowHQDropdown = false">Done</button>
+                            </div>
+                        }
+                    </div>
+                </div>
             </div>
-            <div class="rmd-form-field">
-                <label>State <span class="text-danger">*</span></label>
-                <select class="rmd-select" value="@StateId" @onchange="OnStateChanged" disabled="@Busy">
-                    <option value="">Select state</option>
-                    @foreach (var x in States)
+            <div class="rmd-form-actions">
+                <span class="rmd-muted">HQ IDs: @string.Join(",", SelectedHQ.OrderBy(x => x))</span>
+                <div class="rmd-action-group">
+                    <button type="button" class="rmd-btn rmd-btn-light" disabled="@Busy" @onclick="Reset">Clear</button>
+                    @if (EditingId.HasValue ? CanUpdate : CanEntry)
                     {
-                        <option value="@x.Id">@x.Name</option>
-                    }
-                </select>
-            </div>
-            <div class="rmd-form-field">
-                <label>Region <span class="text-danger">*</span></label>
-                <select class="rmd-select" value="@RegionId" @onchange="OnRegionChanged" disabled="@(Busy || !StateId.HasValue)">
-                    <option value="">Select region</option>
-                    @foreach (var x in Regions)
-                    {
-                        <option value="@x.Id">@x.Name</option>
-                    }
-                </select>
-            </div>
-            <div class="rmd-form-field">
-                <label>Headquarters <span class="text-danger">*</span> <span class="rmd-muted">(@SelectedHQ.Count selected)</span></label>
-                <div class="rmd-hq-field">
-                    @if (SelectedHQ.Count > 0)
-                    {
-                        <div class="rmd-hq-chips">
-                            @foreach (var h in Headquarters.Where(x => SelectedHQ.Contains(x.Id)))
-                            {
-                                <span class="rmd-hq-chip" @key="h.Id">
-                                    @h.Name
-                                    <button type="button" title="Remove @h.Name" disabled="@Busy" @onclick="() => ToggleHQ(h.Id, false)">×</button>
-                                </span>
-                            }
-                        </div>
-                    }
-                    <button type="button" class="rmd-hq-trigger" disabled="@(Busy || !RegionId.HasValue)" @onclick="() => ShowHQDropdown = !ShowHQDropdown">
-                        <span>Select Headquarters</span><span>@(ShowHQDropdown ? "⌃" : "⌄")</span>
-                    </button>
-                    @if (ShowHQDropdown)
-                    {
-                        <div class="rmd-hq-dropdown">
-                            <input class="rmd-search-input w-100" placeholder="Search headquarters..." @bind="HQSearch" @bind:event="oninput" />
-                            <label class="rmd-hq-option"><input type="checkbox" checked="@AllSelected" @onchange="ToggleAll" disabled="@Busy" /> <strong>Select All</strong></label>
-                            @foreach (var h in FilteredHeadquarters)
-                            {
-                                <label class="rmd-hq-option" @key="h.Id"><input type="checkbox" checked="@SelectedHQ.Contains(h.Id)" @onchange="e => ToggleHQ(h.Id, e.Value is true)" disabled="@Busy" /> @h.Name</label>
-                            }
-                            @if (FilteredHeadquarters.Count == 0)
-                            {
-                                <p class="rmd-muted m-2">No headquarters found.</p>
-                            }
-                            <button type="button" class="rmd-btn rmd-btn-light w-100" @onclick="() => ShowHQDropdown = false">Done</button>
-                        </div>
+                        <button type="button" class="rmd-btn rmd-btn-primary" disabled="@Busy" @onclick="Save">@(Busy ? "Saving..." : EditingId.HasValue ? "Update Mapping" : "Save Mapping")</button>
                     }
                 </div>
             </div>
-        </div>
-        <div class="rmd-form-actions">
-            <span class="rmd-muted">HQ IDs: @string.Join(",", SelectedHQ.OrderBy(x => x))</span>
-            <div class="rmd-action-group">
-                <button type="button" class="rmd-btn rmd-btn-light" disabled="@Busy" @onclick="Reset">Clear</button>
-                <button type="button" class="rmd-btn rmd-btn-primary" disabled="@Busy" @onclick="Save">@(Busy ? "Saving..." : EditingId.HasValue ? "Update Mapping" : "Save Mapping")</button>
-            </div>
-        </div>
-    </section>
+        </section>
+    }
 
     <section class="rmd-section rmd-list-section rmd-panel">
         <div class="rmd-list-top">
@@ -104,35 +111,56 @@
         </div>
         <div class="rmd-table-scroll">
             <table class="rmd-table">
-                <thead><tr><th>S:No</th><th>Employee</th><th>State</th><th>Region</th><th>Headquarters</th><th>Created At</th><th>Updated At</th><th>Action</th></tr></thead>
-                <tbody>
-                    @if (!VisibleMappings.Any())
-                    {
-                        <tr><td colspan="10" class="rmd-empty">No mappings found.</td></tr>
-                    }
-                    @foreach (var item in VisibleMappings.Select((value, index) => new { value, index }))
-                    {
-                        var row = item.value;
-                        <tr @key="row.Id">
-                            <td>@((Math.Min(CurrentPage, TotalPages) - 1) * PageSize + item.index + 1)</td>
-                            <td>@row.EmployeeName</td>
-                            <td>@row.StateName</td>
-                            <td>@row.RegionName</td>
-                            <td><div class="rmd-grid-hq-list">@foreach (var hqName in GetHeadquartersNames(row)) {
-                                <span class="rmd-grid-hq-chip">@hqName</span>
-                            }
-                        </div></td>
+                <thead><tr><th>S:No</th><th>Employee</th><th>State</th><th>Region</th><th>Headquarters</th><th>Created At</th><th>Updated At</th>@if (CanUpdate || CanDelete) {
+                    <th>Action</th>
+                }
+            </tr></thead>
+            <tbody>
+                @if (!VisibleMappings.Any())
+                {
+                    <tr><td colspan="@(CanUpdate || CanDelete ? 8 : 7)" class="rmd-empty">No mappings found.</td></tr>
+                }
+                @foreach (var item in VisibleMappings.Select((value, index) => new { value, index }))
+                {
+                    var row = item.value;
+                    <tr @key="row.Id">
+                        <td>@((Math.Min(CurrentPage, TotalPages) - 1) * PageSize + item.index + 1)</td>
+                        <td>@row.EmployeeName</td>
+                        <td>@row.StateName</td>
+                        <td>@row.RegionName</td>
+                        <td>
+                            <div class="rmd-grid-hq-list">
+                                @foreach (var hqName in GetHeadquartersNames(row))
+                                {
+                                    <span class="rmd-grid-hq-chip">@hqName</span>
+                                }
+                            </div>
+                        </td>
                         <td>@row.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
-                       
+
                         <td>@(row.UpdatedAt?.ToLocalTime().ToString("yyyy-MM-dd") ?? "-")</td>
-                      
-                        <td><div class="rmd-action-group"><button type="button" class="rmd-icon-btn" title="Edit" disabled="@Busy" @onclick="() => Edit(row)">✎</button><button type="button" class="rmd-icon-btn rmd-danger" title="Delete" disabled="@Busy" @onclick="() => Delete(row)">✕</button></div></td>
+
+                        @if (CanUpdate || CanDelete)
+                        {
+                            <td>
+                                <div class="rmd-action-group">
+                                    @if (CanUpdate)
+                                    {
+                                        <button type="button" class="rmd-icon-btn" title="Edit" disabled="@Busy" @onclick="() => Edit(row)">✎</button>
+                                    }
+                                    @if (CanDelete)
+                                    {
+                                        <button type="button" class="rmd-icon-btn rmd-danger" title="Delete" disabled="@Busy" @onclick="() => Delete(row)">✕</button>
+                                    }
+                                </div>
+                            </td>
+                        }
                     </tr>
                 }
             </tbody>
         </table>
     </div>
-    @if (DeletePendingId.HasValue)
+    @if (CanDelete && DeletePendingId.HasValue)
     {
         <div class="alert alert-warning mt-3">
             Delete mapping #@DeletePendingId?
@@ -494,6 +522,7 @@
     .rmd-page-number {
         background: #f2f4f6
     }
+
     @@media(max - width:700px) {
         .rmd-panel {
             padding: 16px 12px
@@ -525,6 +554,10 @@
 </style>
 
 @code {
+    private bool CanEntry => LoginState.Can("RMDHQMapping", "Entry");
+    private bool CanUpdate => LoginState.Can("RMDHQMapping", "Update");
+    private bool CanDelete => LoginState.Can("RMDHQMapping", "Delete");
+
     private List<LookupItem> Employees = new(), States = new(), Regions = new(), Headquarters = new();
     private List<MappingView> Mappings = new();
     private int? EmployeeId, StateId, RegionId, EditingId, DeletePendingId;
@@ -564,7 +597,7 @@
             .Where(id => id > 0);
 
         if (!HQByRegion.TryGetValue(row.RegionId, out var options))
-            return new[] { "Names unavailable" };
+            return ids.Select(id => $"HQ #{id}").ToList();
 
         return ids.Select(id => options.FirstOrDefault(x => x.Id == id)?.Name ?? $"Unknown HQ ({id})").ToList();
     }
@@ -574,9 +607,17 @@
         Mappings = await Http.GetFromJsonAsync<List<MappingView>>("api/RMDHQMapping") ?? new();
         foreach (var regionId in Mappings.Select(x => x.RegionId).Where(x => x > 0).Distinct())
         {
-            // Reload to reflect renamed HQs after saves and refreshes.
-            HQByRegion[regionId] = await Http.GetFromJsonAsync<List<LookupItem>>(
-                $"api/RMDHQMapping/headquarters/{regionId}") ?? new();
+            // A denied lookup must not prevent a View-only user from seeing mappings.
+            try
+            {
+                HQByRegion[regionId] = await Http.GetFromJsonAsync<List<LookupItem>>(
+                    $"api/RMDHQMapping/headquarters/{regionId}") ?? new();
+            }
+            catch (HttpRequestException)
+            {
+                HQByRegion.Remove(regionId);
+                // The mapping row remains visible, with HQ IDs as fallback labels.
+            }
         }
         CurrentPage = Math.Min(CurrentPage, TotalPages);
     }
@@ -586,15 +627,27 @@
         Busy = true;
         try
         {
-            Employees = await Http.GetFromJsonAsync<List<LookupItem>>("api/RMDHQMapping/employees") ?? new();
-            States = await Http.GetFromJsonAsync<List<LookupItem>>("api/RMDHQMapping/states") ?? new();
             await LoadMappings();
+            // Master lookups are needed only for creating/editing, not for viewing the list.
+            if (CanEntry || CanUpdate)
+            {
+                try
+                {
+                    Employees = await Http.GetFromJsonAsync<List<LookupItem>>("api/RMDHQMapping/employees") ?? new();
+                    States = await Http.GetFromJsonAsync<List<LookupItem>>("api/RMDHQMapping/states") ?? new();
+                }
+                catch (HttpRequestException ex)
+                {
+                    Error($"Mapping list loaded, but form lookups failed: {ex.Message}");
+                }
+            }
         }
         catch (Exception ex) { Error(ex.Message); }
         finally { Busy = false; }
     }
     private async Task OnStateChanged(ChangeEventArgs e)
     {
+        if (Busy || !(EditingId.HasValue ? CanUpdate : CanEntry)) return;
         StateId = ParseId(e.Value); RegionId = null; Regions.Clear(); Headquarters.Clear(); SelectedHQ.Clear(); ShowHQDropdown = false; HQSearch = "";
         if (!StateId.HasValue) return;
         try { Regions = await Http.GetFromJsonAsync<List<LookupItem>>($"api/RMDHQMapping/regions/{StateId}") ?? new(); }
@@ -602,18 +655,25 @@
     }
     private async Task OnRegionChanged(ChangeEventArgs e)
     {
+        if (Busy || !(EditingId.HasValue ? CanUpdate : CanEntry)) return;
         RegionId = ParseId(e.Value); Headquarters.Clear(); SelectedHQ.Clear(); ShowHQDropdown = false; HQSearch = "";
         if (!RegionId.HasValue) return;
         try { Headquarters = await Http.GetFromJsonAsync<List<LookupItem>>($"api/RMDHQMapping/headquarters/{RegionId}") ?? new(); HQByRegion[RegionId.Value] = Headquarters.ToList(); }
         catch (Exception ex) { Error(ex.Message); }
     }
     private static int? ParseId(object? v) => int.TryParse(v?.ToString(), out var id) && id > 0 ? id : null;
-    private void ToggleHQ(int id, bool yes) { if (yes) SelectedHQ.Add(id); else SelectedHQ.Remove(id); }
-    private void ToggleAll(ChangeEventArgs e) { SelectedHQ = e.Value is true ? Headquarters.Select(x => x.Id).ToHashSet() : new(); }
+    private void ToggleHQ(int id, bool yes) { if (Busy || !(EditingId.HasValue ? CanUpdate : CanEntry)) return; if (yes) SelectedHQ.Add(id); else SelectedHQ.Remove(id); }
+    private void ToggleAll(ChangeEventArgs e) { if (Busy || !(EditingId.HasValue ? CanUpdate : CanEntry)) return; SelectedHQ = e.Value is true ? Headquarters.Select(x => x.Id).ToHashSet() : new(); }
     private void Error(string message) { Success = false; Message = message; }
     private void Reset() { EditingId = EmployeeId = StateId = RegionId = null; Regions.Clear(); Headquarters.Clear(); SelectedHQ.Clear(); Message = ""; ShowHQDropdown = false; HQSearch = ""; }
     private async Task Save()
     {
+        if (Busy) return;
+        if (EditingId.HasValue ? !CanUpdate : !CanEntry)
+        {
+            Error("You do not have permission to save this mapping.");
+            return;
+        }
         if (!EmployeeId.HasValue || !StateId.HasValue || !RegionId.HasValue || SelectedHQ.Count == 0) { Error("Select employee, state, region, and at least one HQ."); return; }
         Busy = true;
         try
@@ -629,6 +689,7 @@
     }
     private async Task Edit(MappingView row)
     {
+        if (Busy || !CanUpdate) return;
         Message = ""; EditingId = row.Id; EmployeeId = row.EmployeeId; StateId = row.StateId;
         Busy = true;
         try
@@ -643,10 +704,10 @@
         catch (Exception ex) { Error(ex.Message); }
         finally { Busy = false; }
     }
-    private void Delete(MappingView row) { DeletePendingId = row.Id; }
+    private void Delete(MappingView row) { if (Busy || !CanDelete) return; DeletePendingId = row.Id; }
     private async Task ConfirmDelete()
     {
-        if (!DeletePendingId.HasValue) return;
+        if (Busy || !CanDelete || !DeletePendingId.HasValue) return;
         Busy = true;
         try
         {
