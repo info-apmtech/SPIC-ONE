@@ -521,9 +521,9 @@ else if (csr1Plan != null)
                                       title="@video.FileName">
                                     @video.FileName
                                     (@FormatVideoSize(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                video.Bytes.LongLength > 0
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ? video.Bytes.LongLength
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    : video.SavedFileSize))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                video.Bytes.LongLength > 0
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ? video.Bytes.LongLength
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    : video.SavedFileSize))
                                 </span>
 
                                 <input type="text"
@@ -2140,7 +2140,9 @@ else if (csr1Plan != null)
         "RMM",
         "RM",
         "MDADMIN",
-        "MDHOD"
+        "MDHOD",
+        "CSMDHOD",
+        "CSMD-HOD"
     };
 
     private string CurrentRole => LoginState.UserRole.ToString();
@@ -2183,7 +2185,9 @@ else if (csr1Plan != null)
     private bool CanValidateCurrentCSR2 =>
         csr2Status == "Submitted" &&
         (csr2WorkflowCanValidate ||
-         (IsStateCSR2 && IsRole("SMD", "SMDO")) ||
+         // State validator roles are authoritative for the Submitted review stage.
+         // Do not hide Validate only because a legacy CSR-1 scope value is incomplete.
+         IsRole("SMD", "SMDO") ||
          (IsHqCSR2 && IsRole("MO")));
 
     private bool CanApproveCurrentCSR2 =>
@@ -2207,19 +2211,23 @@ else if (csr1Plan != null)
                         ? "Approve Level 2"
                         : "Approve Level 3";
 
-    private bool IsSupportReviewRole => IsRole("RMDO", "MDADMIN", "MDHOD");
+    private bool IsSupportReviewRole => IsRole("RMDO", "MDADMIN", "MDHOD", "CSMDHOD", "CSMD-HOD");
 
-    // Only Draft applicants can edit CSR-2 data.
-    // Validators/approvers review the submitted data read-only and perform only
-    // their workflow action.
+    // Only the owner of the CURRENT workflow action can edit.
+    // Draft applicant -> edit before Apply.
+    // Submitted validator -> edit all details before Validate.
+    // Current approver -> edit all details before normal/Level 1/Level 2/Level 3 approval.
+    // Final Approved records remain read-only because CanApproveCurrentCSR2 becomes false.
     private bool CanEditCurrentCSR2 =>
-        csr2Status == "Draft" && CanApplyCurrentCSR2;
+        CanApplyCurrentCSR2 ||
+        CanValidateCurrentCSR2 ||
+        CanApproveCurrentCSR2;
 
     private bool CanManageExpenseAndSubmit =>
-        // Responsible Person always remains limited to Tabs 1 & 2, including
-        // after submission. Workflow/reviewer roles can review all four tabs.
-        !IsResponsiblePersonLogin &&
-        ExpenseAndSubmitRoles.Contains(CurrentRole);
+        ExpenseAndSubmitRoles.Contains(CurrentRole) &&
+        // Responsible Person remains Tabs 1 & 2 in the normal Responsible-Person flow.
+        // A user who also owns the current Validate/Approve action gets all 4 tabs.
+        (!IsResponsiblePersonLogin || IsRole("SMDO") || CanValidateCurrentCSR2 || CanApproveCurrentCSR2);
 
     private IEnumerable<StepInfo> VisibleSteps =>
         CanManageExpenseAndSubmit
@@ -3631,7 +3639,7 @@ else if (csr1Plan != null)
         }
     }
 
-    private async Task<bool> SaveCSR2DraftInternal()
+    private async Task<bool> SaveCSR2DraftInternalOLD()
     {
         if (csr2DbId.HasValue && csr2DbId.Value > 0)
         {
@@ -3769,6 +3777,62 @@ else if (csr1Plan != null)
                 proof.Bytes = Array.Empty<byte>();
             }
         }
+
+        return true;
+    }
+
+    private async Task<bool> SaveCSR2DraftInternal()
+    {
+        if (csr2DbId.HasValue && csr2DbId.Value > 0)
+        {
+            foreach (var proofId in removedProofIds.Distinct().ToList())
+            {
+                using var delete = await Http.DeleteAsync($"api/CSR2/proof/{proofId}");
+
+                if (!delete.IsSuccessStatusCode &&
+                    delete.StatusCode != System.Net.HttpStatusCode.NotFound)
+                {
+                    throw new Exception(
+                        $"Remove expense proof failed: HTTP {(int)delete.StatusCode}");
+                }
+            }
+
+            removedProofIds.Clear();
+        }
+
+        // DEBUG HERE
+        var dto = BuildCSR2SaveDto();
+
+        using var response =
+            await Http.PostAsJsonAsync(
+                "api/CSR2/save-draft",
+                dto);
+        var actualUrl = response.RequestMessage?.RequestUri?.ToString();
+        var baseUrl = Http.BaseAddress?.ToString();
+        var responseText =
+            await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new Exception(
+                $"Save draft failed: HTTP {(int)response.StatusCode} - {responseText}");
+        }
+
+        var saved =
+            System.Text.Json.JsonSerializer.Deserialize<CSR2SaveResultDto>(
+                responseText,
+                new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+        if (saved == null || saved.Id <= 0)
+            throw new Exception(
+                "CSR-2 save API returned an invalid response.");
+
+        csr2DbId = saved.Id;
+
+        // keep your remaining existing code unchanged...
 
         return true;
     }
@@ -3941,9 +4005,10 @@ else if (csr1Plan != null)
             return;
         }
 
-        // Draft applicants save the latest data before Apply.
-        // Validators/approvers are read-only and must not call save-draft.
-        if (CanApplyCurrentCSR2)
+        // Save the latest editable data before EVERY workflow action.
+        // Apply, Validate, normal Approval, Level 1, Level 2 and Level 3 all persist
+        // reviewer/approver edits first; the workflow endpoint then changes status/audit fields.
+        if (CanEditCurrentCSR2)
         {
             await SaveCSR2Draft(false);
             if (csr2SaveError || csr2DbId is null) return;

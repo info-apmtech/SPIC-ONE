@@ -921,7 +921,7 @@ public class SubDealerRegistrationController : ControllerBase
                 return Ok(result);
             }
 
-            var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenTextRows = new Dictionary<string, (int RowNumber, string Name, string Hq, string Region, string State)>(StringComparer.OrdinalIgnoreCase);
 
             for (var rowNumber = headerRowNumber + 1;
                  rowNumber <= lastRow.RowNumber();
@@ -966,8 +966,26 @@ public class SubDealerRegistrationController : ControllerBase
                     if (string.IsNullOrWhiteSpace(state))
                         result.Errors.Add($"Excel row {rowNumber}: State is required.");
 
-                    if (!string.IsNullOrWhiteSpace(code) && !seenCodes.Add(code))
-                        result.Errors.Add($"Excel row {rowNumber}: duplicate Sub Dealer Code '{code}'.");
+                    if (!string.IsNullOrWhiteSpace(code))
+                    {
+                        if (seenTextRows.TryGetValue(code, out var earlier))
+                        {
+                            bool sameMapping =
+                                string.Equals(earlier.Name, name, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(earlier.Hq, hq, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(earlier.Region, region, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(earlier.State, state, StringComparison.OrdinalIgnoreCase);
+
+                            if (!sameMapping)
+                            {
+                                result.Errors.Add($"Excel row {rowNumber}: Sub Dealer Code {code} already appears in this Excel with a different Firm / State / Region / HQ mapping.");
+                            }
+                        }
+                        else
+                        {
+                            seenTextRows[code] = (rowNumber, name, hq, region, state);
+                        }
+                    }
                 }
 
                 result.Rows.Add(new SubDealerExcelRowDto
@@ -1024,7 +1042,6 @@ public class SubDealerRegistrationController : ControllerBase
         };
 
         var rows = new List<SubDealerBulkImportRowDto>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
 
         void Reject(SubDealerBulkImportRowDto row, string category, string reason)
         {
@@ -1071,6 +1088,7 @@ public class SubDealerRegistrationController : ControllerBase
                                   .ToDictionaryAsync(x => x.HqId, cancellationToken);
 
             var valid = new List<SubDealerBulkImportRowDto>();
+            var seenInRequest = new Dictionary<string, SubDealerBulkImportRowDto>(StringComparer.Ordinal);
             foreach (var row in rows)
             {
                 if (!hierarchy.TryGetValue(row.HQId, out var master) ||
@@ -1084,15 +1102,33 @@ public class SubDealerRegistrationController : ControllerBase
                     continue;
                 }
 
-                if (!seen.Add(NormalizeCode(row.SubDealerCode)))
+                var codeKey = NormalizeCode(row.SubDealerCode);
+                if (seenInRequest.TryGetValue(codeKey, out var earlierRow))
                 {
-                    Reject(
-                        row,
-                        SubDealerImportRejectCategory.Duplicate,
-                        "Duplicate Sub Dealer Code in Excel; an earlier valid row has this code.");
+                    bool sameMapping =
+                        string.Equals((earlierRow.FirmName ?? string.Empty).Trim(), (row.FirmName ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase) &&
+                        earlierRow.StateId == row.StateId &&
+                        earlierRow.RegionId == row.RegionId &&
+                        earlierRow.HQId == row.HQId;
+
+                    if (sameMapping)
+                    {
+                        Reject(
+                            row,
+                            SubDealerImportRejectCategory.Duplicate,
+                            $"Sub Dealer Code {row.SubDealerCode} already appears in this Excel with the same mapping; row {earlierRow.ExcelRowNumber} was processed.");
+                    }
+                    else
+                    {
+                        Reject(
+                            row,
+                            SubDealerImportRejectCategory.Duplicate,
+                            $"Sub Dealer Code {row.SubDealerCode} already appears in this Excel with a different Firm / State / Region / HQ mapping.");
+                    }
                     continue;
                 }
 
+                seenInRequest[codeKey] = row;
                 valid.Add(row);
             }
 
@@ -1135,6 +1171,20 @@ public class SubDealerRegistrationController : ControllerBase
             rows = valid;
             if (rows.Count == 0) return Ok(result);
 
+            var existingStateIds = existing.Select(x => x.StateId).Distinct().ToList();
+            var existingRegionIds = existing.Select(x => x.Region).Distinct().ToList();
+            var existingHqIds = existing.Select(x => x.HQ).Distinct().ToList();
+
+            var stateMap = await _db.States
+                .Where(s => existingStateIds.Contains(s.Id))
+                .ToDictionaryAsync(s => s.Id, s => s.StateName, cancellationToken);
+            var regionMap = await _db.Regions
+                .Where(r => existingRegionIds.Contains(r.Id))
+                .ToDictionaryAsync(r => r.Id, r => r.RegionName, cancellationToken);
+            var hqMap = await _db.Headquarters
+                .Where(h => existingHqIds.Contains(h.Id))
+                .ToDictionaryAsync(h => h.Id, h => h.HeadquarterName, cancellationToken);
+
             foreach (var row in rows)
             {
                 var key = NormalizeCode(row.SubDealerCode);
@@ -1158,16 +1208,28 @@ public class SubDealerRegistrationController : ControllerBase
                         continue;
                     }
 
-                    result.Updated++;
-                    if (previewOnly)
-                        continue;
+                    // Any difference in FirmName, StateId, RegionId, HQId is rejected!
+                    // Bulk Upload must never update an existing Sub Dealer record.
+                    var exStateName = stateMap.TryGetValue(entity.StateId, out var sn) && !string.IsNullOrWhiteSpace(sn) ? sn : $"State {entity.StateId}";
+                    var exRegionName = regionMap.TryGetValue(entity.Region, out var rn) && !string.IsNullOrWhiteSpace(rn) ? rn : $"Region {entity.Region}";
+                    var exHqName = hqMap.TryGetValue(entity.HQ, out var hn) && !string.IsNullOrWhiteSpace(hn) ? hn : $"HQ {entity.HQ}";
 
-                    entity.FirmName = targetFirmName;
-                    entity.StateId = row.StateId;
-                    entity.Region = row.RegionId;
-                    entity.HQ = row.HQId;
-                    // Do NOT replace stored code, status, GST/contact/location data or creation audit.
-                    StampModified(_db, _configuration, entity, actor);
+                    var warningReason =
+                        $"Sub Dealer Code {row.SubDealerCode} is already available.\n\n" +
+                        $"Existing mapping:\n" +
+                        $"Firm Name : {entity.FirmName}\n" +
+                        $"State     : {exStateName}\n" +
+                        $"Region    : {exRegionName}\n" +
+                        $"HQ        : {exHqName}\n\n" +
+                        $"Uploaded file contains a different Firm / State / Region / HQ mapping.\n\n" +
+                        $"Bulk Upload cannot modify an existing Sub Dealer master.\n" +
+                        $"If you want to change this mapping, please contact Admin.";
+
+                    Reject(
+                        row,
+                        SubDealerImportRejectCategory.Validation,
+                        warningReason);
+                    continue;
                 }
                 else
                 {
@@ -1198,7 +1260,7 @@ public class SubDealerRegistrationController : ControllerBase
 
             if (previewOnly)
             {
-                result.RequiresConfirmation = result.Inserted + result.Updated + result.Unchanged > 0;
+                result.RequiresConfirmation = result.Inserted + result.Unchanged > 0;
                 await transaction.RollbackAsync(cancellationToken);
                 return Ok(result);
             }
@@ -1557,9 +1619,13 @@ public class SubDealerRegistrationController : ControllerBase
     {
         var mapped = db.Model.FindEntityType(typeof(SubDealerRegistration))?.FindProperty(property);
         if (mapped == null) throw new InvalidOperationException("SubDealer audit property mapping is missing.");
-        var storeType = mapped.GetColumnType() ?? mapped.GetRelationalTypeMapping().StoreType;
-        if (storeType.Contains("with time zone", StringComparison.OrdinalIgnoreCase) ||
-            storeType.StartsWith("timestamptz", StringComparison.OrdinalIgnoreCase))
+        string? storeType = null;
+        if (db.Database.IsRelational())
+        {
+            storeType = mapped.GetColumnType();
+        }
+        if (storeType != null && (storeType.Contains("with time zone", StringComparison.OrdinalIgnoreCase) ||
+            storeType.StartsWith("timestamptz", StringComparison.OrdinalIgnoreCase)))
             return new DateTime(utc.Ticks / 10 * 10, DateTimeKind.Utc);
 
         // The supplied historical model uses timestamp WITHOUT time zone.

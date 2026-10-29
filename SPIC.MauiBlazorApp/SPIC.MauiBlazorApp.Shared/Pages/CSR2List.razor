@@ -147,11 +147,18 @@
                                     <td>@(row.PhotoCount + row.VideoCount)</td>
                                     <td>@Money(row.ActualExpense)</td>
                                     <td>
+                                        @{
+                                            var completion = GetReportCompletion(row);
+                                        }
+
                                         <div class="completion-wrap">
                                             <div class="progress completion-progress">
-                                                <div class="progress-bar" style="width:@row.ReportCompletion%"></div>
+                                                <div class="progress-bar"
+                                                     style="width:@completion%">
+                                                </div>
                                             </div>
-                                            <span>@row.ReportCompletion%</span>
+
+                                            <span>@completion%</span>
                                         </div>
                                     </td>
                                     <td><span class="csr2-status @StatusClass(row.Status)">@row.Status</span></td>
@@ -864,5 +871,20 @@
         {
             workflowActionBusy = false;
         }
+    }
+
+    private static int GetReportCompletion(CSR2ListRowDto row)
+    {
+        return row.StatusValue switch
+        {
+            (int)CSR2StatusValue.Draft => 0,
+            (int)CSR2StatusValue.Submitted => 20,
+            (int)CSR2StatusValue.Validated => 40,
+            (int)CSR2StatusValue.Level1Approved => 60,
+            (int)CSR2StatusValue.Level2Approved => 80,
+            (int)CSR2StatusValue.Approved => 100,
+            (int)CSR2StatusValue.Rejected => 0,
+            _ => 0
+        };
     }
 }

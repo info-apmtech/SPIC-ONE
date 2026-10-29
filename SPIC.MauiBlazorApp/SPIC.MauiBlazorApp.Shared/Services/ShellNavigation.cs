@@ -93,12 +93,12 @@ public static class ShellNavigation
             // change to route authorization.
             Rule = s => s.CanSeeMenu(PagePermission.Dashboard)
         },
-        /*
+
         new("SubDealerList", "Sub Dealer Master", "bi-people-fill", "/SubDealerList", nameof(PagePermission.SubDealerList))
         {
             ShortLabel = "Dealers"
         },
-        */
+
         new("DigitalLibrary", "Digital Library", "bi-collection-play", "/DigitalLibrary", "DigitalLibrary")
         {
             ShortLabel = "Library",
