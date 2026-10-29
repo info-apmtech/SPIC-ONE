@@ -838,7 +838,25 @@
             // Dealer Master needs fields that are not guaranteed to be included in
             // the lightweight submitted-list response. Load them only for export so
             // normal Dashboard loading and role filtering stay unchanged.
-            var exportRows = await LoadDealerMasterExportRows(data);
+            var usersTask = SafeGet<UserInfoDto>("api/UserInfo/all");
+            var exportRowsTask = LoadDealerMasterExportRows(data);
+
+            await Task.WhenAll(usersTask, exportRowsTask);
+
+            var users = await usersTask;
+            var exportRows = await exportRowsTask;
+
+            var userByGuid = new Dictionary<string, UserInfoDto>(StringComparer.OrdinalIgnoreCase);
+            var userByCode = new Dictionary<string, UserInfoDto>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var u in users)
+            {
+                if (!string.IsNullOrWhiteSpace(u.Id))
+                    userByGuid.TryAdd(u.Id, u);
+
+                if (!string.IsNullOrWhiteSpace(u.UserName))
+                    userByCode.TryAdd(u.UserName, u);
+            }
 
             using var workbook = new XLWorkbook();
             var ws = workbook.Worksheets.Add("DealerMaster");
@@ -850,7 +868,8 @@
                 "DoorNo", "Street", "SubVillage", "PinCode", "Village", "Block", "Taluk",
                 "Dealer Type", "Wholesaler ID", "Retailer ID", "GST No", "Aadhaar No", "PAN No", "SDWA Status",
                 "Authorized Person Name", "Authorized Person Email", "Authorized Person Contact",
-                "Latitude", "Longitude"
+                "Latitude", "Longitude",
+                "Username", "Password"
             };
 
             for (int c = 0; c < headers.Length; c++)
@@ -921,6 +940,22 @@
 
                 if (longitude.HasValue)
                     ws.Cell(r + 2, 29).Value = longitude.Value;
+
+                var userTableId = FirstNonEmpty(detail.UserTableId, d.UserTableId);
+                var dealerCode = FirstNonEmpty(detail.DealerCode, d.DealerCode);
+
+                UserInfoDto? matchedUser = null;
+                if (!string.IsNullOrWhiteSpace(userTableId) && userByGuid.TryGetValue(userTableId, out var u1))
+                {
+                    matchedUser = u1;
+                }
+                else if (!string.IsNullOrWhiteSpace(dealerCode) && userByCode.TryGetValue(dealerCode, out var u2))
+                {
+                    matchedUser = u2;
+                }
+
+                ws.Cell(r + 2, 30).Value = matchedUser?.UserName ?? "";
+                ws.Cell(r + 2, 31).Value = matchedUser?.Password ?? "";
             }
 
             ws.Columns().AdjustToContents();
@@ -1947,9 +1982,17 @@ private string GetStatusName(int status) => status switch
         public DealerOwnershipInfo? AuthorizedPerson { get; set; }
     }
 
+    private sealed class UserInfoDto
+    {
+        public string Id { get; set; } = "";
+        public string UserName { get; set; } = "";
+        public string? Password { get; set; }
+    }
+
     public class DealerDto
     {
         public int Id { get; set; }
+        public string? UserTableId { get; set; }
         public bool IsDealer { get; set; }
         public bool InSpic { get; set; }
         public bool InGreenStar { get; set; }
