@@ -521,9 +521,9 @@ else if (csr1Plan != null)
                                       title="@video.FileName">
                                     @video.FileName
                                     (@FormatVideoSize(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            video.Bytes.LongLength > 0
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ? video.Bytes.LongLength
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                : video.SavedFileSize))
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                video.Bytes.LongLength > 0
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ? video.Bytes.LongLength
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    : video.SavedFileSize))
                                 </span>
 
                                 <input type="text"
@@ -2140,7 +2140,9 @@ else if (csr1Plan != null)
         "RMM",
         "RM",
         "MDADMIN",
-        "MDHOD"
+        "MDHOD",
+        "CSMDHOD",
+        "CSMD-HOD"
     };
 
     private string CurrentRole => LoginState.UserRole.ToString();
@@ -2209,21 +2211,23 @@ else if (csr1Plan != null)
                         ? "Approve Level 2"
                         : "Approve Level 3";
 
-    private bool IsSupportReviewRole => IsRole("RMDO", "MDADMIN", "MDHOD");
+    private bool IsSupportReviewRole => IsRole("RMDO", "MDADMIN", "MDHOD", "CSMDHOD", "CSMD-HOD");
 
-    // Draft applicant can edit before Apply.
-    // Submitted validator can edit all CSR-2 details before Validate, same as CSR-1 review.
-    // Approval-stage edit behavior is intentionally left unchanged here.
+    // Only the owner of the CURRENT workflow action can edit.
+    // Draft applicant -> edit before Apply.
+    // Submitted validator -> edit all details before Validate.
+    // Current approver -> edit all details before normal/Level 1/Level 2/Level 3 approval.
+    // Final Approved records remain read-only because CanApproveCurrentCSR2 becomes false.
     private bool CanEditCurrentCSR2 =>
         CanApplyCurrentCSR2 ||
-        CanValidateCurrentCSR2;
+        CanValidateCurrentCSR2 ||
+        CanApproveCurrentCSR2;
 
     private bool CanManageExpenseAndSubmit =>
         ExpenseAndSubmitRoles.Contains(CurrentRole) &&
         // Responsible Person remains Tabs 1 & 2 in the normal Responsible-Person flow.
-        // SMDO is a workflow role, so SMDO gets all 4 tabs even when the same user
-        // is also the CSR-1 Responsible Person.
-        (!IsResponsiblePersonLogin || IsRole("SMDO") || CanValidateCurrentCSR2);
+        // A user who also owns the current Validate/Approve action gets all 4 tabs.
+        (!IsResponsiblePersonLogin || IsRole("SMDO") || CanValidateCurrentCSR2 || CanApproveCurrentCSR2);
 
     private IEnumerable<StepInfo> VisibleSteps =>
         CanManageExpenseAndSubmit
@@ -4001,10 +4005,10 @@ else if (csr1Plan != null)
             return;
         }
 
-        // Save the latest editable data before Apply or Validate.
-        // This mirrors CSR-1 review behavior: reviewer edits are persisted first,
-        // then the workflow endpoint stamps validation status/audit fields.
-        if (CanApplyCurrentCSR2 || CanValidateCurrentCSR2)
+        // Save the latest editable data before EVERY workflow action.
+        // Apply, Validate, normal Approval, Level 1, Level 2 and Level 3 all persist
+        // reviewer/approver edits first; the workflow endpoint then changes status/audit fields.
+        if (CanEditCurrentCSR2)
         {
             await SaveCSR2Draft(false);
             if (csr2SaveError || csr2DbId is null) return;
